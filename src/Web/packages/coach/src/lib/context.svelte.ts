@@ -9,7 +9,13 @@ import type {
   MarkStatus,
   SequenceConfig,
 } from "./types.js";
-import { selectActiveMark, isPrerequisiteMet, sequenceProgress, type SelectionResult } from "./sequencing.js";
+import {
+  selectActiveMark,
+  isForAudience,
+  isPrerequisiteMet,
+  sequenceProgress,
+  type SelectionResult,
+} from "./sequencing.js";
 
 const COACH_CONTEXT_KEY = "nocturne:coach:mark-context";
 const DISABLED_STORAGE_KEY = "nocturne:coach-marks-disabled";
@@ -67,6 +73,7 @@ export class CoachMarkContext {
   private settleDelay: number;
   private seenDwellMs: number;
   private gates: () => CoachGates;
+  private audience: () => string | undefined;
   private _keyToSequence: ReadonlyMap<string, string>;
 
   private _states = $state<MarkStates>(noMarkStates());
@@ -94,6 +101,7 @@ export class CoachMarkContext {
     settleDelay = 500,
     seenDwellMs = 2000,
     gates: () => CoachGates = () => ({}),
+    audience: () => string | undefined = () => undefined,
   ) {
     this.adapter = adapter;
     this.labels = $state.raw(labels);
@@ -101,6 +109,7 @@ export class CoachMarkContext {
     this.settleDelay = settleDelay;
     this.seenDwellMs = seenDwellMs;
     this.gates = gates;
+    this.audience = audience;
 
     this._keyToSequence = indexSequences(sequences);
     // Read here rather than in initialize: marks register before the provider mounts, and a
@@ -272,6 +281,7 @@ export class CoachMarkContext {
       this._registrations,
       this.sequences,
       this.gates(),
+      this.audience(),
     );
   }
 
@@ -296,6 +306,7 @@ export class CoachMarkContext {
     if (!seqName) return true; // standalone marks are always eligible
 
     const seq = this.sequences[seqName];
+    if (!isForAudience(seq, this.audience())) return false;
     if (seq.startOnly) return this._forcedSequence === seqName;
     if (
       seq.prerequisite &&
@@ -305,6 +316,12 @@ export class CoachMarkContext {
     }
 
     return true;
+  }
+
+  /** Whether the sequence exists and is written for the reader on this page. */
+  isSequenceForReader(name: string): boolean {
+    const seq = this.sequences[name];
+    return seq !== undefined && isForAudience(seq, this.audience());
   }
 
   inSameSequence(a: string, b: string): boolean {
@@ -329,11 +346,11 @@ export class CoachMarkContext {
   /** Force-activate a named sequence, overriding quiet mode if set. */
   startSequence(name: string): void {
     if (this._disabled) return;
-    const seq = this.sequences[name];
-    if (!seq) {
+    if (!this.sequences[name]) {
       console.warn(`[coach] Sequence "${name}" not found.`);
       return;
     }
+    if (!this.isSequenceForReader(name)) return;
 
     this._forcedSequence = name;
     this._replayQueue = null;
@@ -355,6 +372,7 @@ export class CoachMarkContext {
       console.warn(`[coach] Sequence "${missing}" not found.`);
       return;
     }
+    if (!names.every((name) => this.isSequenceForReader(name))) return;
 
     if (this._activeSelection) this.markSeen(this._activeSelection.key);
     this._forcedSequence = names[0];
@@ -518,8 +536,9 @@ export function createCoachMarkContext(
   settleDelay = 500,
   seenDwellMs = 2000,
   gates: () => CoachGates = () => ({}),
+  audience: () => string | undefined = () => undefined,
 ): CoachMarkContext {
-  const ctx = new CoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, gates);
+  const ctx = new CoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, gates, audience);
   setContext(COACH_CONTEXT_KEY, ctx);
   return ctx;
 }

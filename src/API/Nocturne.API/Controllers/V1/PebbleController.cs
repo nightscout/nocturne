@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
-using Nocturne.API.Extensions;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
@@ -12,6 +11,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Controllers.V1;
@@ -213,7 +213,7 @@ public class PebbleController : ControllerBase
     private async Task<bool> ResolveUseMmolAsync(string? units, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(units))
-            return GlucoseUnits.IsMmol(units);
+            return GlucoseUnits.Parse(units) == GlucoseUnit.Mmol;
 
         return await _glucoseUnits.UsesMmolAsync(cancellationToken);
     }

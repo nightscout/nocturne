@@ -43,7 +43,16 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
+    /// <param name="configurations">The tenant's stored connector configurations, secrets and health.</param>
+    /// <param name="subjects">Tells whether the caller is the demo account, and gives the device subject an adopted secret belongs to.</param>
     /// <param name="grants">The stored grants, which a saved Nightscout secret is adopted into.</param>
+    /// <param name="encryptionService">Encrypts connector secrets on save and decrypts them on read.</param>
+    /// <param name="broadcastService">Broadcasts each configuration change to connected clients.</param>
+    /// <param name="auditContext">Gives the calling subject, which a demo account's write and a secret's adoption are decided on.</param>
+    /// <param name="configuration">The application configuration a connector's effective configuration is bound from.</param>
+    /// <param name="environment">The host environment.</param>
+    /// <param name="cacheInvalidators">Each is told the connector and tenant of a written configuration.</param>
+    /// <param name="logger">Logs configuration and secret writes, refusals and unknown connectors.</param>
     public ConnectorConfigurationService(
         IConnectorConfigurationRepository configurations,
         ISubjectRepository subjects,
@@ -110,11 +119,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// country here after a Medtronic sign-in: a real person's health-account identifier, handed
     /// to every later visitor, with their CGM data pulled into the shared tenant. Anything that
     /// writes connector configuration in future is covered without needing to remember an
-    /// attribute. Applied to all four write methods on
+    /// attribute. Applied to every write method on
     /// <see cref="Nocturne.Core.Contracts.Connectors.IConnectorConfigurationService"/> —
-    /// <c>SaveConfigurationAsync</c>, <c>SaveSecretsAsync</c>, <c>SetActiveAsync</c> and
-    /// <c>DeleteConfigurationAsync</c>. Enabling a connector or deleting its configuration are as
-    /// much a shared-account concern as writing a URL is.
+    /// <c>SaveConfigurationAsync</c>, <c>SaveSecretsAsync</c>, <c>SaveRuntimeSecretsAsync</c>,
+    /// <c>SetActiveAsync</c> and <c>DeleteConfigurationAsync</c>. Enabling a connector or deleting its
+    /// configuration are as much a shared-account concern as writing a URL is.
     /// <para>
     /// The subject comes from <see cref="IAuditContext"/>, which
     /// <c>AuditContextMiddleware</c> populates from the request's auth context. A caller with no
@@ -180,20 +189,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
-        await EnsureNotDemoSubjectAsync(connectorName, ct);
-
-        if (!_encryptionService.IsConfigured)
-        {
-            throw new InvalidOperationException(
-                "Secret encryption is not configured. Ensure api-secret is set in configuration.");
-        }
-
-        var canonicalName = ConnectorNames.Canonical(connectorName);
-        var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
-        var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
-
-        var entity = await _configurations.SaveSecretsAsync(canonicalName, secretsJson, modifiedBy, ct);
-        _logger.LogInformation("Saved secrets for connector {ConnectorName}", connectorName);
+        var entity = await StoreSecretsAsync(connectorName, secrets, modifiedBy, ct);
         InvalidateCaches(entity);
 
         // When saving Nightscout connector secrets that include an API secret,
@@ -203,10 +199,42 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
-            ConnectorName = canonicalName,
+            ConnectorName = entity.ConnectorName,
             ChangeType = "secrets_updated",
             ModifiedBy = modifiedBy
         });
+    }
+
+    /// <inheritdoc />
+    public async Task SaveRuntimeSecretsAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        CancellationToken ct = default)
+    {
+        await StoreSecretsAsync(connectorName, secrets, IConnectorConfigurationService.RuntimeModifiedBy, ct);
+    }
+
+    private async Task<ConnectorConfigurationRecord> StoreSecretsAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        string? modifiedBy,
+        CancellationToken ct)
+    {
+        await EnsureNotDemoSubjectAsync(connectorName, ct);
+
+        if (!_encryptionService.IsConfigured)
+        {
+            throw new InvalidOperationException(
+                "Secret encryption is not configured. Ensure api-secret is set in configuration.");
+        }
+
+        var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
+        var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
+
+        var entity = await _configurations.SaveSecretsAsync(
+            ConnectorNames.Canonical(connectorName), secretsJson, modifiedBy, ct);
+        _logger.LogInformation("Saved secrets for connector {ConnectorName}", connectorName);
+        return entity;
     }
 
     /// <summary>
@@ -312,6 +340,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         var schema = GenerateSchemaFromType(configType);
         return Task.FromResult(schema);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default)
+    {
+        var configType = FindConfigurationType(connectorName, _logger);
+        return Task.FromResult<IReadOnlyDictionary<string, Type>?>(configType is null ? null : ConnectorConfigurationBinder.BoundKeyTypes(configType));
     }
 
     /// <inheritdoc />
@@ -697,6 +732,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         if (connectorAttr.AllowedValues != null && connectorAttr.AllowedValues.Length > 0)
         {
             schema["enum"] = connectorAttr.AllowedValues;
+        }
+
+        if (connectorAttr.AllowedNumbers is { Length: > 0 })
+        {
+            schema["enum"] = connectorAttr.AllowedNumbers;
         }
 
         if (!string.IsNullOrEmpty(connectorAttr.Format))

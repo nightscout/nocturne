@@ -23,6 +23,7 @@ public class CoachMarkService : ICoachMarkService
     /// <summary>
     /// Initializes a new instance of <see cref="CoachMarkService"/>.
     /// </summary>
+    /// <param name="contexts">Opens the context each call reads and writes coach mark states through.</param>
     /// <param name="httpContextAccessor">Accessor for the current HTTP context and authenticated subject.</param>
     /// <param name="timeProvider">Clock that stamps seen and completed times.</param>
     /// <param name="logger">The logger instance.</param>

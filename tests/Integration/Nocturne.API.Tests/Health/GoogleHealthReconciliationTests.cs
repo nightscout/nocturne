@@ -3,9 +3,11 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Microsoft.EntityFrameworkCore;
@@ -78,8 +80,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         });
         await db.SaveChangesAsync();
         await UseTenantAsync(db, tenantId);
-        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<HeartRateService>.Instance);
+        var service = new HeartRateService(new HeartRateRepository(db.AsFactory(), TimeProvider.System), Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>());
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(start, end)).ToArray();
 
@@ -109,8 +111,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
                 DataSource = GoogleHealthReadingWriter.Source
             });
         await db.SaveChangesAsync();
-        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<HeartRateService>.Instance);
+        var service = new HeartRateService(new HeartRateRepository(db.AsFactory(), TimeProvider.System), Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>());
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(
             new DateTime(2025, 11, 2, 5, 0, 0, DateTimeKind.Utc),
@@ -304,6 +306,52 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Equal(4, await db.BodyWeights.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
         Assert.Equal(2, await db.SleepSessions.CountAsync());
         Assert.Single(await db.SleepStages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task A_failed_health_record_transaction_keeps_the_rows_its_repository_purged()
+    {
+        await using var db = Context();
+        db.TenantId = tenantId;
+        db.HeartRates.Add(new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Bpm = 60,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "kept" });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Transactions(db).CommitAsync(async (records, ct) =>
+        {
+            await records.HeartRateRecords.PurgeSourceAsync(GoogleHealthReadingWriter.Source, ct);
+            throw new InvalidOperationException("the next write failed");
+        }));
+
+        await using var read = Context();
+        read.TenantId = tenantId;
+        Assert.Equal("kept", (await read.HeartRates.AsNoTracking().SingleAsync()).SyncIdentifier);
+    }
+
+    [Fact]
+    public async Task A_failed_health_record_transaction_shows_no_write_of_any_of_its_repositories()
+    {
+        await using var db = Context();
+        db.TenantId = tenantId;
+        db.StepCounts.Add(new StepCountEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Metric = 42,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "kept" });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Transactions(db).CommitAsync(async (records, ct) =>
+        {
+            await records.HeartRateRecords.UpsertAsync([new HeartRate
+            {
+                Mills = from.ToUnixTimeMilliseconds(), Bpm = 70,
+                DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "written"
+            }], ct);
+            await records.StepCountRecords.PurgeSourceAsync(GoogleHealthReadingWriter.Source, ct);
+            throw new InvalidOperationException("the next write failed");
+        }));
+
+        await using var read = Context();
+        read.TenantId = tenantId;
+        Assert.Empty(await read.HeartRates.AsNoTracking().ToListAsync());
+        Assert.Equal("kept", (await read.StepCounts.AsNoTracking().SingleAsync()).SyncIdentifier);
     }
 
     [Fact]
@@ -561,13 +609,17 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         db.TenantId = tenant;
     }
 
+    private static HealthRecordTransactions Transactions(NocturneDbContext db) =>
+        new(db.AsFactory(), TimeProvider.System);
+
     private static GoogleHealthReadingWriter Writer(NocturneDbContext db)
     {
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(a => a.TenantId).Returns(() => db.TenantId);
         return new(
             Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
-            Mock.Of<ISleepService>(), db.AsFactory(), tenant.Object, TimeProvider.System,
+            Mock.Of<ISleepService>(), Transactions(db),
+            new SleepSessionRepository(db.AsFactory()), tenant.Object, TimeProvider.System,
             NullLogger<GoogleHealthReadingWriter>.Instance);
     }
 

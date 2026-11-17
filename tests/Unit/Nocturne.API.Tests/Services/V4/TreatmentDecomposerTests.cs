@@ -43,7 +43,7 @@ public class TreatmentDecomposerTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var mockDedup = new Mock<IDeduplicationService>();
+        var mockDedup = new Mock<IDuplicateLinker>();
         var mockAudit = new Mock<IAuditContext>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusRepository>.Instance);
@@ -65,7 +65,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             bolusRepo, _tempBasalRepoMock.Object,
             carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             _stateSpanServiceMock.Object,
@@ -1283,14 +1283,6 @@ public class TreatmentDecomposerTests : IDisposable
         TreatmentDecomposer.ParseGlucoseType(input).Should().BeNull();
     }
 
-    [Theory]
-    [InlineData("0")]
-    [InlineData("MgDl, Mmol")]
-    public void ParseGlucoseUnit_NumericOrCommaList_ReturnsNull(string input)
-    {
-        TreatmentDecomposer.ParseGlucoseUnit(input).Should().BeNull();
-    }
-
     [Fact]
     public void ParseGlucoseType_Null_ReturnsNull()
     {
@@ -1303,15 +1295,19 @@ public class TreatmentDecomposerTests : IDisposable
     [InlineData("mg", V4Models.GlucoseUnit.MgDl)]
     [InlineData("mmol", V4Models.GlucoseUnit.Mmol)]
     [InlineData("mmol/l", V4Models.GlucoseUnit.Mmol)]
-    public void ParseGlucoseUnit_KnownValues_MapsCorrectly(string input, V4Models.GlucoseUnit expected)
+    [InlineData("mmol/L ", V4Models.GlucoseUnit.Mmol)]
+    [InlineData("MMOLL", V4Models.GlucoseUnit.Mmol)]
+    [InlineData("MgDl", V4Models.GlucoseUnit.MgDl)]
+    [InlineData("0", null)]
+    [InlineData("MgDl, Mmol", null)]
+    [InlineData("g/L", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void MapToBGCheck_ReadsTheTreatmentUnits(string? units, V4Models.GlucoseUnit? expected)
     {
-        TreatmentDecomposer.ParseGlucoseUnit(input).Should().Be(expected);
-    }
+        var treatment = new Treatment { Id = "units", Mills = 1700000000000, Glucose = 5, Units = units };
 
-    [Fact]
-    public void ParseGlucoseUnit_Null_ReturnsNull()
-    {
-        TreatmentDecomposer.ParseGlucoseUnit(null).Should().BeNull();
+        TreatmentDecomposer.MapToBGCheck(treatment, Guid.CreateVersion7()).Units.Should().Be(expected);
     }
 
     [Theory]
@@ -2446,9 +2442,9 @@ public class TreatmentDecomposerTests : IDisposable
         var factory = new TestNocturneDbContextFactory(_context);
         var group = Guid.CreateVersion7();
         var at = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime;
-        await new BolusRepository(factory, Mock.Of<IDeduplicationService>(), Mock.Of<IAuditContext>(), NullLogger<BolusRepository>.Instance)
+        await new BolusRepository(factory, Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(), NullLogger<BolusRepository>.Instance)
             .CreateAsync(new V4Models.Bolus { LegacyId = "native-meal", Timestamp = at, Insulin = 2, CorrelationId = group }, WriteOrigin.Live);
-        var stored = await new CarbIntakeRepository(factory, Mock.Of<IDeduplicationService>(), Mock.Of<IAuditContext>(), NullLogger<CarbIntakeRepository>.Instance)
+        var stored = await new CarbIntakeRepository(factory, Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(), NullLogger<CarbIntakeRepository>.Instance)
             .CreateAsync(new V4Models.CarbIntake { Timestamp = at, Carbs = 20, CorrelationId = group }, WriteOrigin.Live);
 
         await _decomposer.DecomposeOneAsync(
@@ -2862,18 +2858,6 @@ public class TreatmentDecomposerTests : IDisposable
     public void ParseGlucoseType_UnknownNonEmpty_ReturnsNull()
     {
         TreatmentDecomposer.ParseGlucoseType("Interstitial").Should().BeNull();
-    }
-
-    [Fact]
-    public void ParseGlucoseUnit_UnknownNonEmpty_ReturnsNull()
-    {
-        TreatmentDecomposer.ParseGlucoseUnit("g/L").Should().BeNull();
-    }
-
-    [Fact]
-    public void ParseGlucoseUnit_EmptyString_ReturnsNull()
-    {
-        TreatmentDecomposer.ParseGlucoseUnit("").Should().BeNull();
     }
 
     [Fact]

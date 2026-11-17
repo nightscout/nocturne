@@ -20,10 +20,11 @@ public class BaseConnectorServiceTests
             HttpClient httpClient,
             ILogger<TestConnectorService> logger,
             IConnectorPublisher? publisher = null,
-            TimeProvider? timeProvider = null)
+            TimeProvider? timeProvider = null,
+            IRetryDelayStrategy? retryDelayStrategy = null)
             : base(httpClient,
                 new ConnectorServerResolver<TestConfig>(null, null, null),
-                logger, publisher, timeProvider)
+                logger, retryDelayStrategy ?? new RecordingRetryDelayStrategy(), publisher, timeProvider)
         {
         }
 
@@ -42,11 +43,11 @@ public class BaseConnectorServiceTests
         // Exposes the protected retry helper so its attempt-count behaviour can be tested directly.
         public Task<string?> InvokeExecuteWithRetryAsync(
             Func<Task<string?>> operation,
-            IRetryDelayStrategy retryDelayStrategy,
             int maxRetries,
-            Func<Task<bool>>? reAuthenticateOnUnauthorized = null)
+            Func<Task<bool>>? reAuthenticateOnUnauthorized = null,
+            CancellationToken cancellationToken = default)
             => ExecuteWithRetryAsync(
-                operation, retryDelayStrategy, reAuthenticateOnUnauthorized, maxRetries);
+                operation, reAuthenticateOnUnauthorized, maxRetries, cancellationToken: cancellationToken);
 
         // Expose the protected per-run publish-origin resolvers so the watermark→origin mapping
         // and the per-run memoization (anti-flood guard) can be asserted directly.
@@ -87,6 +88,7 @@ public class BaseConnectorServiceTests
             new HttpClient(),
             new ConnectorServerResolver<TestConfig>(null, null, null),
             NullLogger<ScriptedConnectorService>.Instance,
+            new RecordingRetryDelayStrategy(),
             publisher)
     {
         protected override string ConnectorSource => "test";
@@ -163,7 +165,9 @@ public class BaseConnectorServiceTests
     public async Task ExecuteWithRetryAsync_RetryableError_AttemptsUpToMaxRetries()
     {
         // Arrange: a connector configured to attempt 5 times, hitting a retryable 503 every time
-        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
         var attempts = 0;
         Func<Task<string?>> alwaysFails = () =>
         {
@@ -171,11 +175,9 @@ public class BaseConnectorServiceTests
             throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
         };
 
-        var delays = new RecordingRetryDelayStrategy();
-
         // Act: the helper exhausts every attempt then surfaces the last error
         var act = async () =>
-            await service.InvokeExecuteWithRetryAsync(alwaysFails, delays, maxRetries: 5);
+            await service.InvokeExecuteWithRetryAsync(alwaysFails, maxRetries: 5);
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>();
@@ -188,7 +190,9 @@ public class BaseConnectorServiceTests
     {
         // Arrange: MaxRetryAttempts of 0 must still try once (clamped to a floor of 1),
         // not skip the operation entirely
-        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
         var attempts = 0;
         Func<Task<string?>> alwaysFails = () =>
         {
@@ -196,11 +200,9 @@ public class BaseConnectorServiceTests
             throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
         };
 
-        var delays = new RecordingRetryDelayStrategy();
-
         // Act
         var act = async () =>
-            await service.InvokeExecuteWithRetryAsync(alwaysFails, delays, maxRetries: 0);
+            await service.InvokeExecuteWithRetryAsync(alwaysFails, maxRetries: 0);
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>();
@@ -213,8 +215,9 @@ public class BaseConnectorServiceTests
     {
         // Arrange: every attempt 401s and every re-authentication succeeds, so the run only ends
         // when the attempt budget does
-        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
         var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
         var attempts = 0;
         var reAuthentications = 0;
 
@@ -227,7 +230,6 @@ public class BaseConnectorServiceTests
         // Act
         var result = await service.InvokeExecuteWithRetryAsync(
             alwaysUnauthorized,
-            delays,
             maxRetries: 3,
             () =>
             {
@@ -247,8 +249,9 @@ public class BaseConnectorServiceTests
     public async Task ExecuteWithRetryAsync_UnauthorizedWithFailedReauth_StopsWithoutSpendingAnotherAttempt()
     {
         // Arrange: re-authentication fails, so retrying the same rejected credentials is pointless
-        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
         var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
         var attempts = 0;
 
         Func<Task<string?>> alwaysUnauthorized = () =>
@@ -259,11 +262,80 @@ public class BaseConnectorServiceTests
 
         // Act
         var result = await service.InvokeExecuteWithRetryAsync(
-            alwaysUnauthorized, delays, maxRetries: 3, () => Task.FromResult(false));
+            alwaysUnauthorized, maxRetries: 3, () => Task.FromResult(false));
 
         // Assert
         result.Should().BeNull();
         attempts.Should().Be(1, "there is nothing to retry with once re-authentication fails");
+        delays.DelayedAttempts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_TimeoutOnALiveToken_IsRetriedAndCanSucceed()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
+        var attempts = 0;
+        Func<Task<string?>> timesOutOnce = () =>
+        {
+            attempts++;
+            if (attempts == 1)
+                throw new TaskCanceledException("HttpClient.Timeout");
+            return Task.FromResult<string?>("ok");
+        };
+
+        var result = await service.InvokeExecuteWithRetryAsync(timesOutOnce, maxRetries: 3);
+
+        result.Should().Be("ok");
+        attempts.Should().Be(2);
+        delays.DelayedAttempts.Should().Equal([0], "the timeout waits out the same backoff as any transient failure");
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_TimeoutOnEveryAttempt_EndsLikeAnyExhaustedTransientFailure()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
+        var attempts = 0;
+        Func<Task<string?>> alwaysTimesOut = () =>
+        {
+            attempts++;
+            throw new TaskCanceledException("HttpClient.Timeout");
+        };
+        using var live = new CancellationTokenSource();
+
+        var act = async () =>
+            await service.InvokeExecuteWithRetryAsync(alwaysTimesOut, maxRetries: 4, cancellationToken: live.Token);
+
+        var thrown = await act.Should().ThrowAsync<TaskCanceledException>();
+        thrown.Which.Message.Should().Be("HttpClient.Timeout");
+        attempts.Should().Be(4);
+        delays.DelayedAttempts.Should().Equal([0, 1, 2]);
+        live.IsCancellationRequested.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_CancelledToken_StopsAtOnceWithoutRetrying()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), retryDelayStrategy: delays);
+        using var cts = new CancellationTokenSource();
+        var attempts = 0;
+        Func<Task<string?>> cancelsMidRequest = () =>
+        {
+            attempts++;
+            cts.Cancel();
+            throw new TaskCanceledException("cancelled", null, cts.Token);
+        };
+
+        var act = async () =>
+            await service.InvokeExecuteWithRetryAsync(cancelsMidRequest, maxRetries: 5, cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        attempts.Should().Be(1);
         delays.DelayedAttempts.Should().BeEmpty();
     }
 

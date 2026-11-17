@@ -76,8 +76,8 @@ public sealed class ActogramReportService : IActogramReportService
         var summaryStart = summaryStartTime ?? startTime;
         var summaryEnd = summaryEndTime ?? endTime;
 
-        var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
-        var toDt = DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime;
+        var fromDt = startTime.ToUtcDateTime();
+        var toDt = endTime.ToUtcDateTime();
 
         var glucoseRecords = await _sensorGlucoseRepository.GetForAnalyticsAsync(
             from: fromDt,
@@ -220,8 +220,8 @@ public sealed class ActogramReportService : IActogramReportService
     {
         var total = stepCounts.Where(s => s.Time >= start && s.Time < end).Sum(s => s.Steps);
         var dayCount = StatisticsService.WindowDays(
-            DateTimeOffset.FromUnixTimeMilliseconds(start).UtcDateTime,
-            DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime);
+            start.ToUtcDateTime(),
+            end.ToUtcDateTime());
 
         return new ActogramStepSummary
         {

@@ -185,6 +185,49 @@ public class MyLifeConnectorServiceSyncWindowTests
         fixture.Sync.Since.Should().Be(clock.GetUtcNow().UtcDateTime.AddMonths(-6));
     }
 
+    /// <summary>
+    /// MyLife gates its temp basals as state spans, so the sync card counts them there and a tenant
+    /// who switched state spans off gets none published.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CountsTempBasalsUnderStateSpans()
+    {
+        var fixture = new Fixture(TempBasalAt(new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc)));
+
+        var result = await fixture.RunAsync(new SyncRequest
+        {
+            From = TreatmentWatermark,
+            DataTypes = [SyncDataType.StateSpans],
+        });
+
+        fixture.TempBasals.Should().ContainSingle();
+        result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int> { [SyncDataType.StateSpans] = 1 });
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WithStateSpansSwitchedOff_PublishesNoTempBasals()
+    {
+        var fixture = new Fixture(TempBasalAt(new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc)));
+
+        var result = await fixture.RunAsync(new SyncRequest
+        {
+            From = TreatmentWatermark,
+            DataTypes = [SyncDataType.TempBasals],
+        });
+
+        fixture.TempBasals.Should().BeEmpty();
+        result.ItemsSynced.Should().NotContainKey(SyncDataType.TempBasals);
+    }
+
+    private static MyLifeEvent TempBasalAt(DateTime at) => new()
+    {
+        EventTypeId = MyLifeEventType.TempBasal,
+        EventDateTime = new DateTimeOffset(at).ToUnixTimeMilliseconds() * 10_000,
+        InformationFromDevice = "{\"ValueInUperH\": 1.5, \"Minutes\": 30}",
+        PatientId = "patient-1",
+        DeviceId = "device-1",
+    };
+
     private static MyLifeEvent BolusAt(DateTime at) => new()
     {
         EventTypeId = MyLifeEventType.BolusNormal,
@@ -208,6 +251,8 @@ public class MyLifeConnectorServiceSyncWindowTests
 
         public List<Bolus> Boluses { get; } = [];
 
+        public List<TempBasal> TempBasals { get; } = [];
+
         public Fixture(params MyLifeEvent[] events)
             : this(GlucoseWatermark, TreatmentWatermark, null, events)
         {
@@ -230,6 +275,13 @@ public class MyLifeConnectorServiceSyncWindowTests
                     It.IsAny<CancellationToken>()))
                 .Callback<IEnumerable<Bolus>, string, WriteOrigin, CancellationToken>(
                     (records, _, _, _) => Boluses.AddRange(records))
+                .ReturnsAsync(true);
+            treatments
+                .Setup(p => p.PublishTempBasalsAsync(
+                    It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                    It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<TempBasal>, string, WriteOrigin, CancellationToken>(
+                    (records, _, _, _) => TempBasals.AddRange(records))
                 .ReturnsAsync(true);
 
             var glucose = new Mock<IGlucosePublisher>();

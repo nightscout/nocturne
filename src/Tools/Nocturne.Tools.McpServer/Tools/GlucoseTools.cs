@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Tools.McpServer.Tools;
 
@@ -114,12 +115,12 @@ public static class GlucoseTools
             {
                 Period = $"Last {hours} hours",
                 TotalReadings = values.Count,
-                Average = Math.Round(mean, 1),
-                Median = Math.Round(median, 1),
+                Average = ScaledRounding.Round(mean, 1),
+                Median = ScaledRounding.Round(median, 1),
                 Min = sorted[0],
                 Max = sorted[^1],
-                StandardDeviation = Math.Round(stdDev, 1),
-                CoefficientOfVariation = Math.Round(stdDev / mean * 100, 1),
+                StandardDeviation = ScaledRounding.Round(stdDev, 1),
+                CoefficientOfVariation = ScaledRounding.Round(stdDev / mean * 100, 1),
                 TimeInRangeMinutes = timeInRange.Minutes,
                 TimeInRangePercent = timeInRange.Percent,
             };

@@ -1,10 +1,11 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.5.4">
+<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsAspireHost>true</IsAspireHost>
+        <AspireUseCliBundle>true</AspireUseCliBundle>
         <UserSecretsId>fc8953f8-4895-4099-877b-2727f26f4a3f</UserSecretsId>
     </PropertyGroup>
     <ItemGroup>
@@ -26,8 +27,6 @@
         <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\Nocturne.Aspire.Hosting\Nocturne.Aspire.Hosting.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\..\Services\Nocturne.Services.Demo\Nocturne.Services.Demo.csproj" />
-        <!-- Source generator for automatic connector extension generation -->
-        <ProjectReference Include="..\Nocturne.Aspire.SourceGenerators\Nocturne.Aspire.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" IsAspireProjectResource="false" />
     </ItemGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Aspire.Host.Tests" />

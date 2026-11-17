@@ -1,7 +1,11 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Multitenancy;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Models.Identity;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -305,11 +309,91 @@ public class TenantSettingsControllerTests
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
-        var controller = new TenantSettingsController(tenants.Object, accessor.Object, records.Object, units.Object)
+        var controller = new TenantSettingsController(
+            tenants.Object, accessor.Object, records.Object, units.Object, PolicyAllowing(false).Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
 
         return (controller, tenants, records, units);
+    }
+
+    private static Mock<IPlatformPolicyRepository> PolicyAllowing(bool allowOwnerSlugChange)
+    {
+        var policy = new Mock<IPlatformPolicyRepository>();
+        policy.Setup(p => p.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlatformPolicy(allowOwnerSlugChange));
+        return policy;
+    }
+
+    private static (TenantSettingsController Controller, Mock<ITenantService> Tenants) BuildForSubdomain(
+        bool policyAllows, bool isPlatformAdmin, params string[] grantedScopes)
+    {
+        var tenants = new Mock<ITenantService>();
+        tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantSettingsDto(false, "old", "Old", DateTime.UtcNow));
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.SetupGet(a => a.TenantId).Returns(TenantId);
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
+        httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, IsPlatformAdmin = isPlatformAdmin };
+
+        var controller = new TenantSettingsController(
+            tenants.Object, accessor.Object, Mock.Of<IPatientRecordRepository>(), Mock.Of<IUnitsAndTimezoneService>(),
+            PolicyAllowing(policyAllows).Object, Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }))
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+        return (controller, tenants);
+    }
+
+    [Fact]
+    public async Task An_owner_cannot_change_the_subdomain_while_the_platform_policy_forbids_it()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: false, isPlatformAdmin: false, Scope.FullAccess);
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
+        tenants.Verify(t => t.ChangeSlugAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        var read = await controller.GetSubdomain(CancellationToken.None);
+        ((TenantSubdomainDto)((OkObjectResult)read.Result!).Value!).CanChange.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_owner_changes_the_subdomain_when_the_platform_policy_allows_it()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: false, Scope.FullAccess);
+        tenants.Setup(t => t.ChangeSlugAsync(TenantId, "new", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        var dto = (TenantSubdomainDto)((OkObjectResult)result.Result!).Value!;
+        dto.Address.Should().Be("https://new.nocturne.example");
+    }
+
+    [Fact]
+    public async Task A_platform_admin_owner_changes_the_subdomain_whatever_the_policy()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: false, isPlatformAdmin: true, Scope.FullAccess);
+        tenants.Setup(t => t.ChangeSlugAsync(TenantId, "new", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_member_who_is_not_an_owner_cannot_change_the_subdomain()
+    {
+        var (controller, _) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: true, Scope.TenantSettings);
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
     }
 }

@@ -91,6 +91,19 @@ public class ProfileParityTests : ParityTestBase
         await AssertGetParityAsync("/api/v1/profile");
     }
 
+    [Fact]
+    public async Task GetProfile_ZeroCount_ReturnsSameShape()
+    {
+        var profile1 = TestDataFactory.CreateProfile(defaultProfile: "Day");
+        var profile2 = TestDataFactory.CreateProfile(
+            defaultProfile: "Night", timestamp: TestTimeProvider.GetTestTime(minutesOffset: 1));
+
+        await SeedProfileAsync(profile1);
+        await SeedProfileAsync(profile2);
+
+        await AssertGetParityAsync("/api/v1/profile?count=0");
+    }
+
     #endregion
 
     #region GET /api/v1/profile/current

@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -80,16 +81,11 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
             context.Notes.AddRange(
                 new NoteEntity { Id = duplicateId, Timestamp = timestamp, DataSource = "vendor-a" },
                 new NoteEntity { Id = Guid.NewGuid(), Timestamp = timestamp, DataSource = "vendor-a", DeletedAt = timestamp });
-            context.LinkedRecords.Add(new LinkedRecordEntity
-            {
-                Id = Guid.NewGuid(), CanonicalId = Guid.NewGuid(), RecordId = duplicateId,
-                RecordType = "note", IsPrimary = false, DataSource = "vendor-a",
-            });
             context.ApsSnapshots.Add(new ApsSnapshotEntity
             {
                 Id = Guid.NewGuid(), Timestamp = timestamp, AidAlgorithm = "Loop", DeletedAt = timestamp,
             });
-            await context.SaveChangesAsync();
+            await DuplicateGroups.LinkAsync(context, RecordType.Note, primary: null, duplicateId);
             return true;
         });
 

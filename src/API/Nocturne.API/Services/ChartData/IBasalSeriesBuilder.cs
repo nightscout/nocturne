@@ -22,6 +22,7 @@ public interface IBasalSeriesBuilder
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
     /// <param name="defaultBasalRate">Fallback basal rate when no profile data exists</param>
     /// <param name="overrides">The override scale factors that scale the profile's rate, as <see cref="ScheduledBasal"/> reads them</param>
+    /// <param name="ct">Cancels the operation</param>
     Task<List<BasalPoint>> BuildAsync(
         List<TempBasal> tempBasals,
         long startTime,

@@ -43,6 +43,7 @@ export const logoExtensions: Record<string, string> = {
   nightscout: "png",
   nocturne: "png",
   omnipod: "png",
+  oura: "png",
   slack: "png",
   spike: "png",
   sugarmate: "png",

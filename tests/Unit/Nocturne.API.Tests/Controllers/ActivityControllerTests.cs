@@ -100,7 +100,7 @@ public class ActivityControllerTests
 
         _mockActivityService
             .Setup(x =>
-                x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>())
+                x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedActivities);
 
@@ -120,7 +120,7 @@ public class ActivityControllerTests
         // Arrange
         _mockActivityService
             .Setup(x =>
-                x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>())
+                x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Activity>());
 
@@ -149,7 +149,7 @@ public class ActivityControllerTests
                     It.IsAny<string?>(),
                     count,
                     skip,
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(expectedActivities);
@@ -164,7 +164,7 @@ public class ActivityControllerTests
                     It.IsAny<string?>(),
                     count,
                     skip,
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 ),
             Times.Once
         );
@@ -241,7 +241,7 @@ public class ActivityControllerTests
         });
         GrantScopes(Scope.HeartRateRead);
         _mockActivityService
-            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(merged);
 
         var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
@@ -269,7 +269,7 @@ public class ActivityControllerTests
         });
         GrantScopes(Scope.TreatmentsRead);
         _mockActivityService
-            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(merged);
 
         var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
@@ -785,7 +785,7 @@ public class ActivityControllerTests
                     It.IsAny<string?>(),
                     It.IsAny<int>(),
                     It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .ThrowsAsync(new Exception("Database error"));

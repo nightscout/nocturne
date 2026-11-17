@@ -146,7 +146,9 @@ public class SettingsRepository : ISettingsRepository
             var key = entity.Key;
             if (await db.Settings.AnyAsync(
                     s => (s.Id == entityId || (originalId != null && s.OriginalId == originalId))
-                         && (s.Key.StartsWith(SettingsKeys.UiSettingsPrefix) || s.Key.StartsWith(SettingsKeys.ConnectorsPrefix)),
+                         && (s.Key.StartsWith(SettingsKeys.UiSettingsPrefix)
+                             || s.Key.StartsWith(SettingsKeys.ConnectorsPrefix)
+                             || s.Key.StartsWith(SettingsKeys.SampleDataPrefix)),
                     cancellationToken))
                 throw new ArgumentException("The settings id names a reserved row.", nameof(settings));
 
@@ -360,12 +362,10 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken
     )
     {
-        var entity = await settings.FirstOrDefaultAsync(s => s.OriginalId == id, cancellationToken);
-
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await settings.FirstOrDefaultAsync(s => s.Id == guid, cancellationToken);
-        }
+        var entity = await settings.FirstOrDefaultAsync(
+            RecordIdKey.Matching<SettingsEntity>(id),
+            cancellationToken
+        );
 
         return entity ?? await settings.FirstOrDefaultAsync(s => s.Key == id, cancellationToken);
     }

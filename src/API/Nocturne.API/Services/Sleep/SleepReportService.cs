@@ -4,7 +4,6 @@ using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Sleep;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -22,7 +21,7 @@ namespace Nocturne.API.Services.Sleep;
 /// <remarks>
 /// Overnight TIR and hypo events use the clinical consensus bands, not the profile's
 /// personal target, so they agree with every other report. Glucose is the canonical stream
-/// (<see cref="ICanonicalGlucoseService.SelectAsync"/>), as the other reports read it, so a
+/// (<see cref="GlucoseStreams.Canonical"/>), as the other reports read it, so a
 /// reading posted by two uploaders counts once. Weekly buckets start on the caller's regional
 /// first day of the week (<see cref="FirstDayOfWeek"/>), Monday for a caller with no preferences.
 /// </remarks>
@@ -30,7 +29,6 @@ public class SleepReportService : ISleepReportService
 {
     private readonly ISleepSessionRepository _sessions;
     private readonly ISensorGlucoseRepository _glucose;
-    private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IPatientRecordRepository _patientRecord;
     private readonly ISubjectRepository _subjects;
     private readonly IAuditContext _caller;
@@ -40,7 +38,6 @@ public class SleepReportService : ISleepReportService
     public SleepReportService(
         ISleepSessionRepository sessions,
         ISensorGlucoseRepository glucose,
-        ICanonicalGlucoseService canonicalGlucose,
         IPatientRecordRepository patientRecord,
         ISubjectRepository subjects,
         IAuditContext caller,
@@ -49,7 +46,6 @@ public class SleepReportService : ISleepReportService
     {
         _sessions = sessions;
         _glucose  = glucose;
-        _canonicalGlucose = canonicalGlucose;
         _patientRecord = patientRecord;
         _subjects = subjects;
         _caller = caller;
@@ -151,8 +147,9 @@ public class SleepReportService : ISleepReportService
             descending:     false,
             afterTimestamp: null,
             afterId:        null,
-            ct:             ct);
-        return await _canonicalGlucose.SelectAsync(raw.ToList(), ct);
+            ct:             ct,
+            streams:        GlucoseStreams.Canonical);
+        return raw.ToList();
     }
 
     private async Task<SleepSingleNightReport> BuildSingleNightReportAsync(

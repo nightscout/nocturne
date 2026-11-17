@@ -4,6 +4,7 @@
   import type {
     EntryCategoryId,
   } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Utensils from "@lucide/svelte/icons/utensils";
@@ -55,7 +56,7 @@
       {@const Icon = categoryIcons[cat.id]}
       <Tabs.Trigger value={cat.id}>
         <Icon class="h-5 w-5 {cat.colorClass}" />
-        <span class="text-center text-xs leading-tight font-medium">{cat.name}</span>
+        <span class="text-center text-xs leading-tight font-medium">{entryCategoryName(cat.id)}</span>
         <Badge variant="secondary" size="sm">
           {categoryCounts[cat.id]}
         </Badge>

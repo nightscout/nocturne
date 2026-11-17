@@ -12,7 +12,7 @@ namespace Nocturne.API.Services.Auth;
 /// <remarks>
 /// Only successful lookups are cached (2-minute TTL). Misses are never cached: a brute-force
 /// sweep uses distinct tokens, so caching misses would bloat memory without preventing the
-/// per-token database hit — that is the job of rate limiting. Call <see cref="EvictByHash"/> when a
+/// per-token database hit — that is the job of rate limiting. Call <see cref="EvictByHash(string)"/> when a
 /// token is rotated or removed so the previous link stops resolving immediately.
 ///
 /// The token is only ever stored and cached as its SHA-256 digest, so neither the database nor the

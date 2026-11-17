@@ -282,7 +282,7 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new SensorGlucoseRepository(
             contextFactory,
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             auditContext,
             Logger<SensorGlucoseRepository>(),
             entrySink: EntrySink.Object);

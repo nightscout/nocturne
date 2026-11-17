@@ -78,6 +78,7 @@ public class V3CacheControlTests
 
         var controller = new FoodController(
             foods.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

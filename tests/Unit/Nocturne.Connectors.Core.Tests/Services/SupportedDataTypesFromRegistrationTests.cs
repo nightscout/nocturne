@@ -26,7 +26,8 @@ public class SupportedDataTypesFromRegistrationTests
     public class DerivedFromRegisteredConfig : RegisteredConfig;
 
     private class Service<TConfig>(ConnectorServerResolver<TConfig> resolver)
-        : BaseConnectorService<TConfig>(new HttpClient(), resolver, NullLogger.Instance)
+        : BaseConnectorService<TConfig>(
+            new HttpClient(), resolver, NullLogger.Instance, new RecordingRetryDelayStrategy())
         where TConfig : BaseConnectorConfiguration
     {
         protected override string ConnectorSource => "test";

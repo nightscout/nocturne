@@ -37,9 +37,13 @@ public class PasskeyService : IPasskeyService
     private readonly ILogger<PasskeyService> _logger;
     private readonly IHostEnvironment _environment;
 
+    /// <param name="passkeys">Repository for the stored passkey credentials.</param>
+    /// <param name="subjects">Repository for finding the tenant member a username names.</param>
+    /// <param name="members">Service for checking that a credential's owner is a member of the tenant.</param>
     /// <param name="fido2">The Fido2NetLib instance for ceremony execution.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting challenge tokens.</param>
     /// <param name="fido2Options">FIDO2 configuration options (rpId, rpName, allowed origins, attestation preference).</param>
+    /// <param name="logger">Logger for credential registration, assertion and removal, and challenge token failures.</param>
     /// <param name="environment">The hosting environment used to adjust origin validation in development.</param>
     public PasskeyService(
         IPasskeyCredentialRepository passkeys,
@@ -73,7 +77,7 @@ public class PasskeyService : IPasskeyService
     /// </remarks>
     private bool CanUseConfiguredRpId(string host)
     {
-        var rpId = _fido2Config.ServerDomain;
+        var rpId = _fido2Config.RPID;
         return _environment.IsDevelopment()
             || string.Equals(host, rpId, StringComparison.OrdinalIgnoreCase)
             || host.EndsWith($".{rpId}", StringComparison.OrdinalIgnoreCase);
@@ -85,7 +89,7 @@ public class PasskeyService : IPasskeyService
         if (CanUseConfiguredRpId(requestHost))
             return null;
 
-        return $"Passkeys on this server are set up for '{_fido2Config.ServerDomain}', but this "
+        return $"Passkeys on this server are set up for '{_fido2Config.RPID}', but this "
             + $"page is served from '{requestHost}'. A browser will only create or use a passkey "
             + "when those match. Whoever runs this server needs to set "
             + $"{BaseDomainOptions.ConfigKey} to the address people browse to, then restart it.";

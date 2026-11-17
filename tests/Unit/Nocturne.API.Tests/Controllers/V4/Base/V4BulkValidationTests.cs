@@ -23,6 +23,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -519,14 +520,13 @@ public class V4BulkValidationTests
     private static UploaderSnapshotController UploaderController() =>
         WithContext(new UploaderSnapshotController(Mock.Of<IUploaderSnapshotRepository>()));
 
-    // The database context is only reached past the preamble, which is all these tests exercise.
     private static NutritionController CarbIntakes() =>
         WithContext(new NutritionController(
             Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBolusRepository>(),
             Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IDemoModeService>(),
-            contexts: Mock.Of<INocturneDbContextFactory>()));
+            Mock.Of<IFoodRepository>(),
+            Mock.Of<IMealReadService>()));
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));

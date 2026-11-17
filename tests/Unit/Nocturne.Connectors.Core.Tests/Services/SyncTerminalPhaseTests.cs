@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -18,7 +19,33 @@ namespace Nocturne.Connectors.Core.Tests.Services;
 /// </summary>
 public class SyncTerminalPhaseTests
 {
+    [ConnectorRegistration("Probe", "probe", "PROBE", "Probe")]
     private sealed class TestConfig : BaseConnectorConfiguration;
+
+    private sealed class UnregisteredConfig : BaseConnectorConfiguration;
+
+    private sealed class UnregisteredConnectorService : BaseConnectorService<UnregisteredConfig>
+    {
+        public UnregisteredConnectorService()
+            : base(new HttpClient(),
+                new ConnectorServerResolver<UnregisteredConfig>(null, null, null),
+                NullLogger<UnregisteredConnectorService>.Instance,
+                new RecordingRetryDelayStrategy())
+        {
+        }
+
+        protected override string ConnectorSource => "unregistered-source";
+        public override string ServiceName => "Unregistered";
+
+        protected override Task<bool> EnsureAuthenticatedAsync(
+            UnregisteredConfig config,
+            CancellationToken cancellationToken) => Task.FromResult(true);
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request,
+            UnregisteredConfig config,
+            CancellationToken cancellationToken) => Task.FromResult(new SyncResult { Success = true });
+    }
 
     private sealed class TestConnectorService : BaseConnectorService<TestConfig>
     {
@@ -28,6 +55,7 @@ public class SyncTerminalPhaseTests
             : base(new HttpClient(),
                 new ConnectorServerResolver<TestConfig>(null, null, null),
                 NullLogger<TestConnectorService>.Instance,
+                new RecordingRetryDelayStrategy(),
                 timeProvider: timeProvider)
         {
             _syncBody = syncBody;
@@ -42,6 +70,9 @@ public class SyncTerminalPhaseTests
 
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
+
+        public Task<string?> RetryAsync(Func<Task<string?>> operation, CancellationToken cancellationToken)
+            => ExecuteWithRetryAsync(operation, maxRetries: 3, cancellationToken: cancellationToken);
 
         public override Task<bool> AuthenticateAsync()
         {
@@ -113,7 +144,23 @@ public class SyncTerminalPhaseTests
         reported[0].MessageType.Should().Be(SyncMessageType.SyncComplete);
         reported[0].Phase.Should().Be(SyncPhase.Completed);
         reported[0].ErrorMessage.Should().BeNull();
-        reported[0].ConnectorId.Should().Be("test");
+        reported[0].ConnectorId.Should().Be("probe");
+    }
+
+    [Fact]
+    public async Task ConfigWithNoRegistration_ReportsProgressUnderItsConnectorSource()
+    {
+        var (reporter, reported) = BuildReporter();
+
+        var result = await new UnregisteredConnectorService().SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            new UnregisteredConfig(),
+            CancellationToken.None,
+            reporter.Object);
+
+        result.Success.Should().BeTrue();
+        reported.Should().NotBeEmpty();
+        reported.Should().OnlyContain(e => e.ConnectorId == "unregistered-source");
     }
 
     [Fact]
@@ -262,6 +309,53 @@ public class SyncTerminalPhaseTests
         result.Errors.Should().ContainSingle().Which.Should().Be("HttpClient.Timeout");
         reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
         reported[0].ErrorMessage.Should().Be("HttpClient.Timeout");
+    }
+
+    [Fact]
+    public async Task SourceTimingOutOnEveryAttempt_IsAFailedResultNotACancelledRun()
+    {
+        var (reporter, reported) = BuildReporter();
+        var attempts = 0;
+        TestConnectorService? service = null;
+        service = new TestConnectorService(_ => service!.RetryAsync(
+            () =>
+            {
+                attempts++;
+                throw new TaskCanceledException("HttpClient.Timeout");
+            },
+            CancellationToken.None));
+
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        result.Success.Should().BeFalse();
+        attempts.Should().Be(3);
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().Be("HttpClient.Timeout");
+    }
+
+    [Fact]
+    public async Task CancelledDuringARetriedRequest_StopsWithoutRetryAndReportsOneTerminalFailure()
+    {
+        var (reporter, reported) = BuildReporter();
+        using var cts = new CancellationTokenSource();
+        var attempts = 0;
+        TestConnectorService? service = null;
+        service = new TestConnectorService(_ => service!.RetryAsync(
+            () =>
+            {
+                attempts++;
+                cts.Cancel();
+                throw new TaskCanceledException("cancelled", null, cts.Token);
+            },
+            cts.Token));
+
+        var act = async () =>
+            await service.SyncDataAsync(new TestConfig(), cts.Token, null, reporter.Object);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        attempts.Should().Be(1);
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().BeNull();
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
@@ -84,6 +85,7 @@ public class MealMatchingServiceTests
         return new TenantClockResolver(
             therapy.Object,
             Mock.Of<ICategoryReadContext>(),
+            new ShareClockDouble(therapy.Object),
             Mock.Of<ILogger<TenantClockResolver>>());
     }
 

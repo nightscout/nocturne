@@ -9,6 +9,10 @@ export type PropertyMeta = {
   label: string;
   description: string;
   category: PropertyCategory;
+  /** What to call each value of a property the schema offers as a choice, keyed by the value. */
+  optionLabels?: Record<string, string>;
+  /** Stands in for `description` where the schema offers the property as a choice. */
+  choiceDescription?: string;
 };
 
 /**
@@ -41,6 +45,13 @@ export const connectorPropertyMeta = {
     label: 'Sync interval',
     description: 'How often to sync data from the source (in minutes)',
     category: 'Sync',
+    optionLabels: {
+      1: '1 minute',
+      5: '5 minutes',
+      60: '1 hour',
+      240: '4 hours',
+    },
+    choiceDescription: 'How often to sync data from the source',
   },
 
   // Sync toggles
@@ -227,6 +238,19 @@ export const connectorPropertyMeta = {
     label: 'Max count',
     description: 'Maximum number of records to fetch per request',
     category: 'Advanced',
+  },
+  HistoryDays: {
+    label: 'History to import',
+    description: 'How many days of history Nocturne imports the first time',
+    category: 'Sync',
+    optionLabels: {
+      30: 'Last 30 days',
+      90: 'Last 90 days',
+      365: 'Last year',
+      0: 'All history',
+    },
+    choiceDescription:
+      'How much history Nocturne imports the first time. A shorter range is imported sooner. To add older history later, run an import with a date range from Move from Nightscout in Settings.',
   },
 
   // Glooko-specific

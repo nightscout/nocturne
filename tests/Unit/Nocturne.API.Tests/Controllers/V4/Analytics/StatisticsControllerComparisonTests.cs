@@ -28,8 +28,8 @@ public partial class StatisticsControllerTests
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((DateTime? from, DateTime? _, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .ReturnsAsync((DateTime? from, DateTime? _, string? _, string? _, int _, int _, bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _, GlucoseStreams _) =>
                 from == PeriodAStart
                     ? Readings(PeriodAStart, mgdlA)
                     : mgdlB is { } b ? Readings(PeriodBStart, b) : []);

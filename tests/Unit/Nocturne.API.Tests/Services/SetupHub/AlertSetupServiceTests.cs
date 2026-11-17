@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Tests.Services.SetupHub;
 
@@ -124,7 +125,7 @@ public class AlertSetupServiceTests : IDisposable
     public void AThresholdOutsideWhatARuleAcceptsFallsBackToTheDefault(double mgdl)
     {
         var points = AlertSetupService.StartingPoints(
-            new NightscoutAlarmSettings((decimal)mgdl, (decimal)mgdl, (decimal)mgdl, null, null, null, null, null, null));
+            new NightscoutAlarmSettings(mgdl.ToDecimal(), mgdl.ToDecimal(), mgdl.ToDecimal(), null, null, null, null, null, null));
 
         points[StarterAlertKind.UrgentLow].Mgdl.Should().Be(55);
         points[StarterAlertKind.Low].Mgdl.Should().Be(70);
@@ -138,9 +139,9 @@ public class AlertSetupServiceTests : IDisposable
     public void AThresholdAtEitherEdgeOfTheAcceptedRangeIsKept(double mgdl)
     {
         var points = AlertSetupService.StartingPoints(
-            new NightscoutAlarmSettings((decimal)mgdl, null, null, null, null, null, null, null, null));
+            new NightscoutAlarmSettings(mgdl.ToDecimal(), null, null, null, null, null, null, null, null));
 
-        points[StarterAlertKind.UrgentLow].Should().Be(new AlertSetupService.StartingPoint((decimal)mgdl, true, true));
+        points[StarterAlertKind.UrgentLow].Should().Be(new AlertSetupService.StartingPoint(mgdl.ToDecimal(), true, true));
     }
 
     [Fact]

@@ -10,13 +10,14 @@ public static class GlookoConstants
     // -- Regions --------------------------------------------------------------
 
     public const string RegionCA = "CA";
+    public const string RegionDEFR = "DE-FR";
     public const string RegionEU = "EU";
     public const string RegionUS = "US";
 
     /// <summary>
     ///     All supported region codes (runtime list for validation).
     /// </summary>
-    public static readonly string[] AllowedRegions = [RegionCA, RegionEU, RegionUS];
+    public static readonly string[] AllowedRegions = [RegionCA, RegionDEFR, RegionEU, RegionUS];
 
     /// <summary>
     ///     Default region when none is configured.
@@ -32,6 +33,7 @@ public static class GlookoConstants
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [RegionCA] = "ca.api.glooko.com",
+            [RegionDEFR] = "de-fr.api.glooko.com",
             [RegionEU] = "eu.api.glooko.com",
             [RegionUS] = "api.glooko.com",
         };
@@ -43,6 +45,7 @@ public static class GlookoConstants
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [RegionCA] = "https://ca.my.glooko.com",
+            [RegionDEFR] = "https://de-fr.my.glooko.com",
             [RegionEU] = "https://eu.my.glooko.com",
             [RegionUS] = "https://my.glooko.com",
         };
@@ -281,6 +284,26 @@ public static class GlookoConstants
     ///     short lookback every run and this whole span once per <see cref="FullWalkInterval"/>.
     /// </summary>
     public const int FullWalkMonths = 6;
+
+    /// <summary>
+    ///     How far back a scheduled run reaches between lookback reads. Re-reading the whole
+    ///     <see cref="GlookoConnectorConfiguration.LookbackDays"/> window every five minutes refetches,
+    ///     skip-checks and reconciles thousands of unchanged records; late pump data is still caught,
+    ///     within <see cref="LookbackReadInterval"/> of reaching Glooko.
+    /// </summary>
+    public static readonly TimeSpan ShortWindow = TimeSpan.FromDays(1);
+
+    /// <summary>
+    ///     How often a scheduled run reads the whole <see cref="GlookoConnectorConfiguration.LookbackDays"/>
+    ///     window instead of <see cref="ShortWindow"/>.
+    /// </summary>
+    public static readonly TimeSpan LookbackReadInterval = TimeSpan.FromHours(3);
+
+    /// <summary>
+    ///     The sync-cursor resource under which the last completed lookback read is recorded. A failed
+    ///     read is not recorded, so the next cycle reads the lookback again.
+    /// </summary>
+    public const string LookbackReadCursorResource = "lookback-read";
 
     /// <summary>
     ///     How often a background sync sets its lookback aside and walks <see cref="FullWalkMonths"/>

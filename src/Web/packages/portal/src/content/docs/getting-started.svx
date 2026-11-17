@@ -14,15 +14,23 @@ Get Nocturne up and running in just a few minutes.
 
 Before you begin, make sure you have:
 
-- Docker and Docker Compose installed
-- A server or VPS with at least 2 GB RAM and 10 GB of free storage
-- A domain name with a DNS record pointing at the server
+- A Linux server or VPS with at least 2 GB RAM and 10 GB of free storage
+- A domain name. A free name from DuckDNS is sufficient
 
 ## Step 1: Deploy
 
-Follow one of the [installation guides](/docs/installation). The Docker Compose
-guide takes you from an empty directory to a running stack: two files from the
-release page, a handful of values in `.env`, and `docker compose up -d`.
+Run the [install script](/docs/installation/install-script) on your server. It
+installs Docker, makes the keys and passwords, and starts Nocturne. Replace
+`nocturne.example.com` with your domain:
+
+```
+curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/install.sh -o install.sh
+sudo BASE_DOMAIN=nocturne.example.com bash install.sh
+```
+
+The guide has the DNS records to create first. The other
+[installation guides](/docs/installation) are for Portainer, for a free Oracle
+Cloud server, and for the same steps by hand with Docker Compose.
 
 ## Step 2: Open your instance
 
@@ -33,7 +41,7 @@ server, so once the containers are running your instance is at:
 https://your-domain
 ```
 
-where `your-domain` is the `BASE_DOMAIN` you set in `.env`. Sign in and you land
+where `your-domain` is the domain you gave the installer. Sign in and you land
 on the home screen. It stays empty until a device or an app
 starts sending readings:
 

@@ -925,20 +925,6 @@ public class StatisticsServiceClinicalAccuracyTests
 
     #region Unit Conversion Tests
 
-    /// <summary>
-    /// Conversion factor: 1 mmol/L = 18.0182 mg/dL
-    /// </summary>
-    [Theory]
-    [InlineData(90, 5.0)]
-    [InlineData(180, 10.0)]
-    [InlineData(270, 15.0)]
-    public void MgdlToMMOL_ShouldConvertCorrectly(double mgdl, double expectedMmol)
-    {
-        var result = _sut.MgdlToMMOL(mgdl);
-
-        result.Should().BeApproximately(expectedMmol, 0.1);
-    }
-
     [Theory]
     [InlineData(5.0, 90)]
     [InlineData(10.0, 180)]
@@ -954,7 +940,7 @@ public class StatisticsServiceClinicalAccuracyTests
     public void UnitConversions_ShouldRoundTrip()
     {
         var originalMgdl = 150.0;
-        var mmol = _sut.MgdlToMMOL(originalMgdl);
+        var mmol = GlucoseUnits.FromMgdl(originalMgdl, GlucoseUnit.Mmol);
         var backToMgdl = _sut.MmolToMGDL(mmol);
 
         backToMgdl.Should().BeApproximately(originalMgdl, 1);

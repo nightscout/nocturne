@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// <see cref="SharedPostgres"/> (production role bootstrap, migrations and startup reconcilers) and stands up the production
 /// data-layer DI container via <see cref="ServiceCollectionExtensions.AddPostgreSqlInfrastructure"/>
 /// pointed at that database — so goldens exercise the real repositories AND the real
-/// <c>DeduplicationService</c> against real Postgres, not mocks. These goldens capture current
+/// the duplicate linker against real Postgres, not mocks. These goldens capture current
 /// behaviour and are held identical across the V4RepositoryBase refactor.
 /// </summary>
 public class V4GoldenFixture : IAsyncLifetime

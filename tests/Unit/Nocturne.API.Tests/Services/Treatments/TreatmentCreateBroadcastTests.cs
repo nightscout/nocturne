@@ -49,7 +49,7 @@ public class TreatmentCreateBroadcastTests
         _carbs.AnswersServedIdsPerKey<ICarbIntakeRepository, CarbIntake>();
         _notes.AnswersServedIdsPerKey<INoteRepository, Note>();
         _activations.AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>();
-        _projection.AnswersSpanIdsPerId();
+        _projection.AnswersSpanIdsPerId().AnswersProjectedSpansPerId();
         LegacyTreatmentRepositoryMockExtensions.AnswersCorrelationIdsPerId(_boluses, _carbs);
         var store = new TreatmentReadService(
             _projection.Object,
@@ -531,7 +531,7 @@ public class TreatmentCreateBroadcastTests
     private static IEnumerable<IReadOnlyCollection<long>> InstantsRead(IEnumerable<IInvocation> reads) =>
         reads
             .Where(i => i.Method.Name == nameof(IV4ToLegacyProjectionService.GetProjectedTreatmentsAtAsync))
-            .Select(i => (IReadOnlyCollection<long>)i.Arguments[0]);
+            .Select(i => (IReadOnlyCollection<long>)i.Arguments[0]!);
 
     private static JsonElement Wire(object doc) => JsonSerializer.SerializeToElement(doc, doc.GetType());
 }

@@ -50,7 +50,7 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
 
     private const int Tenants = 50;
 
-    /// <summary>The merge lock class <c>DeduplicationService</c> takes per tenant.</summary>
+    /// <summary>The merge lock class <c>DuplicateReconciler</c> takes per tenant.</summary>
     private const int MergeLockClass = 0x4E44_5550;
 
     private readonly List<ServiceProvider> _providers = [];

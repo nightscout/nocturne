@@ -1725,6 +1725,35 @@ public class DeviceStatusDecomposerTests : IDisposable
         result.Should().Be(V4Models.AidAlgorithm.OpenAps);
     }
 
+    [Fact]
+    public void DetectOpenApsVariant_AapsAppWithEmptyUploader_IsAndroidAps()
+    {
+        // NSClientV3 (AAPS 4.0) names itself only in the top-level "app" field.
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(
+            """
+            {"device":"openaps://Pixel","app":"AAPS","uploader":{},"openaps":{"suggested":{"bg":115}}}
+            """
+        )!;
+
+        var result = DeviceStatusDecomposer.DetectOpenApsVariant(ds);
+
+        result.Should().Be(V4Models.AidAlgorithm.AndroidAps);
+    }
+
+    [Fact]
+    public void DetectOpenApsVariant_OtherApp_DoesNotMatchAndroidAps()
+    {
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(
+            """
+            {"device":"openaps://rig","app":"oref0","openaps":{"suggested":{"bg":115}}}
+            """
+        )!;
+
+        var result = DeviceStatusDecomposer.DetectOpenApsVariant(ds);
+
+        result.Should().Be(V4Models.AidAlgorithm.OpenAps);
+    }
+
     #endregion
 
     #region Trio Prediction Mapping

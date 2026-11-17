@@ -72,8 +72,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
-            new TenantMembershipRepository(_dbContext.AsFactory()),
-            Mock.Of<IAuthAuditService>())
+            new TenantMembershipRepository(_dbContext.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

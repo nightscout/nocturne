@@ -14,7 +14,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing therapy settings in the database. A LegacyId-only type (no SyncId-upsert,
-/// no DeduplicationService participation), so it uses the shared
+/// no deduplication), so it uses the shared
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the therapy-settings-specific
 /// queries below.
 /// </summary>
@@ -24,8 +24,8 @@ public class TherapySettingsRepository : ProfileScopedRepositoryBase<TherapySett
     /// Initializes a new instance of the <see cref="TherapySettingsRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TherapySettingsRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+    public TherapySettingsRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
     {
     }
 
@@ -199,5 +199,6 @@ public class TherapySettingsRepository : ProfileScopedRepositoryBase<TherapySett
         foreach (var entity in affected)
             entity.IsDefault = entity.Id == id;
         await ctx.SaveChangesAsync(ct);
+        await ReportWrittenAsync();
     }
 }

@@ -18,6 +18,7 @@
     parseDate,
     today,
   } from "@internationalized/date";
+  import { outsideDaySpan } from "#lib/utils/date-range.js";
   import GlucoseMonthGrid from "#lib/components/alerts/GlucoseMonthGrid.svelte";
   import GlucosePickerCell from "#lib/components/alerts/GlucosePickerCell.svelte";
 
@@ -30,6 +31,8 @@
     onRangeChange?: (start: string, end: string) => void;
     /** Days strictly after this value are disabled. Defaults to today. */
     maxDate?: string;
+    /** The most days a confirmed range may cover. No limit when undefined. */
+    maxDays?: number;
     /**
      * Locale tag used for week-start and weekday labels. Defaults to the user's
      * regional format, so a European format gives Monday-first weeks.
@@ -42,6 +45,7 @@
     endDate,
     onRangeChange,
     maxDate,
+    maxDays,
     locale,
   }: Props = $props();
 
@@ -100,7 +104,10 @@
     return d.compare(rangeStart) > 0 && d.compare(rangeEnd) < 0;
   }
 
+  const isOutsideSpan = $derived(outsideDaySpan(pendingStart ?? undefined, maxDays));
+
   function pick(d: DateValue): void {
+    if (isOutsideSpan(d)) return;
     if (!pendingStart) {
       // Start a new selection.
       pendingStart = d;
@@ -149,7 +156,7 @@
         {date}
         {entries}
         {inMonth}
-        {disabled}
+        disabled={disabled || isOutsideSpan(date)}
         isStart={isRangeStart(date)}
         isEnd={isRangeEnd(date)}
         inRange={isInRange(date)}

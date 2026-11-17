@@ -29,26 +29,22 @@ public readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailabl
 
 /// <summary>
 /// Resolves the tenant's timezone for the reports that place readings on its local clock: none is
-/// set, the stored one does not resolve, the request is a public share, or the lookup threw.
+/// set, the stored one does not resolve, or the lookup threw.
 /// </summary>
-/// <remarks>
-/// A share gets no zone and the reason <see cref="TimeZoneUnavailableReason.Share"/> without a
-/// lookup. The zone is a therapy setting, and therapy is not a share category, so a share can never
-/// read it.
-/// </remarks>
+/// <remarks>A share reads the zone id through <see cref="IShareClockReader"/>.</remarks>
 public sealed class TenantClockResolver(
     ITherapySettingsResolver therapySettingsResolver,
     ICategoryReadContext categoryReadContext,
+    IShareClockReader shareClockReader,
     ILogger<TenantClockResolver> logger)
 {
     public async Task<TenantClock> ResolveAsync(CancellationToken ct)
     {
-        if (categoryReadContext.IsShare)
-            return new TenantClock(null, TimeZoneUnavailableReason.Share);
-
         try
         {
-            var id = await therapySettingsResolver.GetTimezoneAsync(ct: ct);
+            var id = categoryReadContext.IsShare
+                ? await shareClockReader.ReadTimezoneAsync(ct)
+                : await therapySettingsResolver.GetTimezoneAsync(ct: ct);
             if (TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz))
                 return new TenantClock(tz, null);
 

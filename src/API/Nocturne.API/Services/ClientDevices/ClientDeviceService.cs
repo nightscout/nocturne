@@ -22,7 +22,10 @@ public class ClientDeviceService : IClientDeviceService
     private readonly ILogger<ClientDeviceService> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="ClientDeviceService"/> class.</summary>
+    /// <param name="contexts">Opens the context each operation reads and writes device registrations on.</param>
     /// <param name="grants">The grants devices registered under, for the app name a device is shown with.</param>
+    /// <param name="timeProvider">The clock for last-seen and update stamps, and for which excursions are still active.</param>
+    /// <param name="logger">Logs registrations, dropped capabilities and concurrent registrations.</param>
     public ClientDeviceService(
         INocturneDbContextFactory contexts,
         IOAuthGrantRepository grants,

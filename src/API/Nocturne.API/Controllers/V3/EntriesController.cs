@@ -44,6 +44,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
     /// <summary>
     /// Get entries with V3 API features including pagination, field selection, and advanced filtering.
+    /// Honors <c>If-None-Match</c> and <c>If-Modified-Since</c>, returning 304 when nothing changed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
@@ -168,6 +169,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
     /// <summary>
     /// Create a new entry via V3 API.
+    /// An entry with the same device, type and timestamp as a stored one is not duplicated: the response is 200 with <c>isDeduplication: true</c>.
     /// </summary>
     /// <param name="entry">The <see cref="Entry"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -395,7 +397,7 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     /// <summary>
-    /// Partially update an entry via V3 API (JSON merge-patch).
+    /// Partially update an entry via V3 API (JSON merge-patch). Accepts <c>PATCH</c> as AAPS NSClientV3 sends it.
     /// </summary>
     /// <remarks>
     /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries (e.g. marking
@@ -489,34 +491,20 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetEntryHistory(
+    public Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 entry history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var page = await _entryService.GetEntriesModifiedSinceAsync(
+        =>
+        CreateV3HistoryResponseAsync(
+            "entry",
             lastModified,
             limit,
-            cancellationToken
+            (since, take) =>
+                _entryService.GetEntriesModifiedSinceAsync(since, take, cancellationToken),
+            records => records.ToV3Responses().ToList()
         );
-
-        if (page.CursorMills is { } cursor)
-        {
-            SetHistoryCursorHeaders(cursor);
-        }
-
-        var v3Entries = page.Records.ToV3Responses().ToList();
-        return CreateV3SuccessResponse(v3Entries);
-    }
 
     #region Helper Methods
 

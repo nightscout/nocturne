@@ -79,6 +79,13 @@ internal interface IV4ToLegacyProjectionService
         IReadOnlyCollection<string> ids, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="GetProjectedStateSpanTreatmentAsync"/> for each of <paramref name="ids"/> some span
+    /// has, with the reads it takes to find them in batches and to project them together.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, Treatment>> GetProjectedStateSpanTreatmentsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default);
+
+    /// <summary>
     /// Whether a state span decomposed from a treatment that has that id, by any id a client may hold
     /// for it, was deleted by the user.
     /// </summary>

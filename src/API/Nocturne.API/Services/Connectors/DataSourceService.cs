@@ -85,13 +85,6 @@ public class DataSourceService : IDataSourceService
     /// </remarks>
     private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
 
-    /// <summary>The types a source's treatment totals and first and last treatment times span.</summary>
-    private static readonly string[] TreatmentTypes =
-    [
-        SourceDataTypes.Boluses, SourceDataTypes.CarbIntake, SourceDataTypes.BolusCalculations, SourceDataTypes.Notes,
-        SourceDataTypes.DeviceEvents, SourceDataTypes.BGChecks, SourceDataTypes.TempBasals,
-    ];
-
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
     {
         var minutesSinceLast = info.LastSeen.HasValue
@@ -245,7 +238,7 @@ public class DataSourceService : IDataSourceService
         // parses for name, category and icon, so a connector-imported snapshot still lists its rig.
         // The connector keeps its own entry via GetNonGlucoseStatsAsync, which keys on DataSource.
         var deviceStatusDevices = (await _sourceData.ApsSnapshotDevicesAsync(windowStart, cancellationToken))
-            .Select(d => new { d.Device, d.DataSource, LastMills = d.Latest.ToMills() })
+            .Select(d => new { d.Device, d.DataSource, d.AidAlgorithm, LastMills = d.Latest.ToMills() })
             .ToList();
 
         // Batch-aggregate non-glucose tables
@@ -342,6 +335,8 @@ public class DataSourceService : IDataSourceService
             if (!dataSources.Any(d => d.DeviceId == dsDevice.Device))
             {
                 var info = CreateDataSourceInfo(dsDevice.Device, dsDevice.DataSource, SourceHandle.Device);
+                if (IsAndroidAps(dsDevice.AidAlgorithm))
+                    DescribeAsAndroidAps(info);
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
                 info.FirstSeen = info.LastSeen;
                 info.TotalEntries = 0;
@@ -402,7 +397,7 @@ public class DataSourceService : IDataSourceService
                 Available = true,
                 RequiresServerConfig = true,
                 DataSourceId = connector.DataSourceId,
-                DocumentationUrl = GetConnectorDocumentationUrl(connector.ConnectorName),
+                DocumentationUrl = connector.DocumentationUrl,
                 ConfigFields = null,
             })
             .OrderBy(connector => connector.Name)
@@ -419,17 +414,6 @@ public class DataSourceService : IDataSourceService
         }
 
         return connectors;
-    }
-
-    private static string? GetConnectorDocumentationUrl(string connectorName)
-    {
-        return connectorName.ToLowerInvariant() switch
-        {
-            "dexcom" => UrlConstants.External.DocsDexcom,
-            "librelinkup" => UrlConstants.External.DocsLibre,
-            "glooko" => UrlConstants.External.DocsGlooko,
-            _ => null,
-        };
     }
 
     /// <inheritdoc />
@@ -585,7 +569,7 @@ public class DataSourceService : IDataSourceService
     /// <summary>
     /// Create a DataSourceInfo from a device identifier
     /// </summary>
-    private DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
+    internal static DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
     {
         var info = new DataSourceInfo
         {
@@ -649,11 +633,7 @@ public class DataSourceService : IDataSourceService
         }
         else if (lowerDevice.Contains("aaps") || lowerDevice.Contains("androidaps"))
         {
-            info.Name = "AndroidAPS";
-            info.SourceType = "aaps";
-            info.Category = "aid-system";
-            info.Icon = "aaps";
-            info.Description = "AndroidAPS AID System";
+            DescribeAsAndroidAps(info);
         }
         else if (lowerDevice.Contains("openaps") || lowerDevice.Contains("oref"))
         {
@@ -752,6 +732,23 @@ public class DataSourceService : IDataSourceService
         }
 
         return info;
+    }
+
+    /// <summary>
+    /// Whether an APS snapshot's stored algorithm is AndroidAPS. AndroidAPS uploads its loop status as
+    /// <c>openaps://&lt;phone model&gt;</c>, the device string an OpenAPS rig uses too, so for those rows
+    /// only the snapshot's attribution tells the two apart.
+    /// </summary>
+    internal static bool IsAndroidAps(string? aidAlgorithm) =>
+        aidAlgorithm == nameof(Core.Models.V4.AidAlgorithm.AndroidAps);
+
+    internal static void DescribeAsAndroidAps(DataSourceInfo info)
+    {
+        info.Name = "AndroidAPS";
+        info.SourceType = "aaps";
+        info.Category = "aid-system";
+        info.Icon = "aaps";
+        info.Description = "AndroidAPS AID System";
     }
 
 
@@ -886,12 +883,19 @@ public class DataSourceService : IDataSourceService
         };
     }
 
+    /// <remarks>
+    /// The connector's crawl state goes with its data: a resume point it kept would answer the next
+    /// sync's re-import with only what arrived since, and report that as a success. It is cleared
+    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import.
+    /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
         bool allowReimport,
         CancellationToken cancellationToken
     )
     {
+        await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
+
         var deletedCounts = await DeleteAllSourceDataAsync(metadata.DataSourceId, allowReimport, cancellationToken);
         foreach (var purge in PurgesOf(metadata))
         {
@@ -937,12 +941,27 @@ public class DataSourceService : IDataSourceService
         var purged = await _sourcePurge.SoftDeleteBySourceAsync(source, scope, cancellationToken);
         foreach (var (type, deleted) in purged.DeletedCounts)
             Add(type, deleted);
-        await _profileActivationWriter.AfterBulkRemovalAsync(purged.ProfileNames, cancellationToken);
+        await _profileActivationWriter.AfterBulkRemovalAsync(cancellationToken);
 
         if (allowReimport)
             await _sourcePurge.AllowReimportBySourceAsync(source, scope, cancellationToken);
 
         return deletedCounts;
+    }
+
+    /// <summary>
+    /// The source <paramref name="key"/> names among the records no credential is recorded as the
+    /// writer of, which the connections list shows under either origin handle.
+    /// </summary>
+    private async Task<DataSourceInfo?> FindUnwrittenSourceAsync(string key, CancellationToken ct)
+    {
+        var now = _time.GetUtcNow();
+        var buckets = await _sourceData.WriterBucketsAsync(
+            now.AddDays(-DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+
+        return buckets.Any(b => b.WriterGrantId is null && (b.DataSource == key || b.Device == key))
+            ? CreateDataSourceInfo(key, key, SourceHandle.Unknown)
+            : null;
     }
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
@@ -983,6 +1002,8 @@ public class DataSourceService : IDataSourceService
             var source = sources.FirstOrDefault(s =>
                 s.Id == dataSourceId || s.DeviceId == dataSourceId
             );
+
+            source ??= await FindUnwrittenSourceAsync(dataSourceId, cancellationToken);
 
             if (source == null)
             {
@@ -1088,10 +1109,7 @@ public class DataSourceService : IDataSourceService
 
         var sgStats = Of(SourceDataTypes.Glucose);
         var stateSpanStats = Of(SourceDataTypes.StateSpans);
-        var treatments = TreatmentTypes.Select(Of).ToList();
-
-        // Treatment totals cover exactly the types the first/last treatment timestamps span, so a
-        // source with only one of them cannot report zero treatments alongside a treatment time.
+        var treatments = _sourceData.TreatmentDataTypes.Select(Of).ToList();
         var totalTreatments = treatments.Sum(t => t.Count);
         var treatments24h = treatments.Sum(t => t.CountLast24Hours);
         var lastTreatmentTime = await GetLatestTreatmentTimestampBySourceAsync(dataSource, cancellationToken);

@@ -16,17 +16,19 @@ To connect an app that signs in with OAuth, see [Connecting your app](/docs/conn
 ## Create the key
 
 1. Open **Settings**, then **Connectors & apps**.
-2. In the **API tokens** card, select **Create token**.
-   If the page shows an **API information** card, its **Create API key** button opens the same dialog.
-3. Enter a label that names the app and the phone, for example `Loop on my phone`.
-4. Set the permissions as the section for your app says.
-5. Leave **Only last 24 hours** off. That option limits what the key can read to the last 24 hours.
-6. Select **Create token**, and copy the token. Nocturne shows it one time.
+2. In the **Connections** card, select **Add a connection**.
+3. Select **An app on your phone or computer**.
+   If Nocturne does not show this choice, go to the next step.
+4. Below **Set up manually**, select **Create API token**.
+5. Enter a label that names the app and the phone, for example `Loop on my phone`.
+6. Set the permissions as the section for your app says.
+7. Leave **Only last 24 hours** off. That option limits what the key can read to the last 24 hours.
+8. Select **Create token**, and copy the token. Nocturne shows it one time.
 
 Enter the token in the app, in the field for the API secret or the access token.
 Nocturne accepts the same token in both places.
 
-The **Create API key** button fills in **All health data** with **Read & write**.
+The dialog opens with **All health data** set to **Read & write**.
 That is more than Loop or AAPS needs.
 To narrow it, set **All health data** to **No access**.
 Then set the rows that your app needs.
@@ -74,7 +76,7 @@ The last-modified answer lists only the collections that the key can read.
 
 ## Trio, iAPS, and xDrip+
 
-Set **All health data** to **Read & write**. The **Create API key** button fills this in.
+Set **All health data** to **Read & write**. The dialog opens with this setting.
 That covers every area these apps upload.
 This page does not yet give a narrower list for these apps.
 
@@ -96,7 +98,8 @@ Nocturne does not change the permissions of an existing key.
 
 <Callout type="info" title="Check what a key can do">
 
-  The **API tokens** card lists the scopes of each key, for example `glucose.readwrite`.
-  It shows the time of last use. If there is no time, the app has not reached Nocturne with that key.
+  In the **Connections** card, select the key. A key that an app did not use recently is in the **Not in use** group.
+  Nocturne lists the permissions of the key and the time of last use.
+  If the time is **Never**, the app has not reached Nocturne with that key.
 
 </Callout>

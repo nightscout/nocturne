@@ -145,22 +145,43 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         var glucose = new DateTime(2024, 6, 1, 12, 30, 15, 123, DateTimeKind.Utc);
         var treatments = new DateTime(2024, 5, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        (await configurations.SetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", glucose, CancellationToken.None))
+        (await SetMarkAsync(configurations, "nightscout-connector", "Glucose", glucose))
             .Should().BeTrue();
-        await configurations.SetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments", treatments, CancellationToken.None);
+        await SetMarkAsync(configurations, "nightscout-connector", "Treatments", treatments);
 
-        var read = await configurations.GetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", CancellationToken.None);
+        var read = await GetMarkAsync(configurations, "nightscout-connector", "Glucose");
         read.Should().Be(glucose);
         read!.Value.Kind.Should().Be(DateTimeKind.Utc);
 
-        await configurations.SetBackfillLowWaterMarkAsync("nightscout", "Glucose", null, CancellationToken.None);
-        (await configurations.GetBackfillLowWaterMarkAsync("nightscout-connector", "Glucose", CancellationToken.None)).Should().BeNull();
-        (await configurations.GetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments", CancellationToken.None)).Should().Be(treatments);
+        await SetMarkAsync(configurations, "nightscout", "Glucose", null);
+        (await GetMarkAsync(configurations, "nightscout-connector", "Glucose")).Should().BeNull();
+        (await GetMarkAsync(configurations, "nightscout-connector", "Treatments")).Should().Be(treatments);
 
-        await configurations.SetBackfillLowWaterMarkAsync("nightscout-connector", "Treatments", null, CancellationToken.None);
+        await SetMarkAsync(configurations, "nightscout-connector", "Treatments", null);
         (await configurations.FindAsync("nightscout", CancellationToken.None))!.BackfillLowWaterMarks.Should().BeNull();
-        (await configurations.SetBackfillLowWaterMarkAsync("dexcom-connector", "Glucose", glucose, CancellationToken.None))
+        (await SetMarkAsync(configurations, "dexcom-connector", "Glucose", glucose))
             .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OneLowWaterMarkStatementStoresAndRemovesSeveralKeysTogether()
+    {
+        var a = await SeedTenantAsync();
+        await Configurations(a).SaveConfigurationAsync("nocturneremote", "{}", null, CancellationToken.None);
+        var configurations = Configurations(a);
+        var mark = new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var gapFrom = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var gapTo = new DateTime(2025, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await configurations.SetBackfillLowWaterMarksAsync("nocturne-remote-connector",
+            new Dictionary<string, DateTime?> { ["DeviceStatus"] = mark, ["DeviceStatus.GapFrom"] = gapFrom, ["DeviceStatus.GapTo"] = gapTo },
+            CancellationToken.None);
+        await configurations.SetBackfillLowWaterMarksAsync("nocturne-remote-connector",
+            new Dictionary<string, DateTime?> { ["DeviceStatus.GapFrom"] = null, ["DeviceStatus.GapTo"] = null },
+            CancellationToken.None);
+
+        (await configurations.GetBackfillLowWaterMarksAsync("nocturne-remote-connector", CancellationToken.None))
+            .Should().BeEquivalentTo(new Dictionary<string, DateTime> { ["DeviceStatus"] = mark });
     }
 
     [Fact]
@@ -368,4 +389,10 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
 
         (await jobs.FindAsync(job.Id, CancellationToken.None)).Should().Be(job with { State = "Completed", CompletedConnectors = 1 });
     }
+
+    private static Task<bool> SetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key, DateTime? mark) =>
+        configurations.SetBackfillLowWaterMarksAsync(source, new Dictionary<string, DateTime?> { [key] = mark }, CancellationToken.None);
+
+    private static async Task<DateTime?> GetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key) =>
+        (await configurations.GetBackfillLowWaterMarksAsync(source, CancellationToken.None)).TryGetValue(key, out var mark) ? mark : null;
 }

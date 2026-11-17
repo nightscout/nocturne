@@ -177,7 +177,6 @@ public class PatientDeviceLocalDateTests
             Mock.Of<ITempBasalRepository>(),
             Mock.Of<IDeviceEventRepository>(),
             Mock.Of<ISensorGlucoseRepository>(),
-            CanonicalGlucosePassThrough.Create(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IActiveProfileResolver>(),
             statistics.Object,

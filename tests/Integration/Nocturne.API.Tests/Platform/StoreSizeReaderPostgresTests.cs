@@ -83,9 +83,22 @@ public sealed class StoreSizeReaderPostgresTests(StoreSizePostgresFixture fixtur
         SetTenant(scope, _large);
         var reader = ReaderIn(scope, out var cache);
 
+        DbStats? stored = null;
+        cache
+            .Setup(x => x.GetOrSetAsync(It.IsAny<string>(), It.IsAny<Func<Task<DbStats>>>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, Func<Task<DbStats>> factory, TimeSpan _, CancellationToken _) => stored = await factory());
+
         var viaCache = await reader.ReadAsync();
 
-        viaCache.Should().BeEquivalentTo(await reader.EstimateAsync(_large));
+        var large = await reader.EstimateAsync(_large);
+        var small = await reader.EstimateAsync(_small);
+        var largeBytes = large.DataSize + large.IndexSize;
+        var smallBytes = small.DataSize + small.IndexSize;
+        viaCache.Should().BeSameAs(stored);
+        (viaCache.DataSize + viaCache.IndexSize).Should().BeCloseTo(
+            largeBytes,
+            (ulong)((largeBytes - smallBytes) / 2),
+            "the cached estimate is the scope's tenant's, not the smaller tenant's");
         cache.Verify(
             x => x.GetOrSetAsync(It.IsAny<string>(), It.IsAny<Func<Task<DbStats>>>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
             Times.Once);

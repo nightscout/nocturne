@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -35,7 +36,7 @@ public class SoftDeleteCleanupJob(
             .Where(t => typeof(ISoftDeletable).IsAssignableFrom(t.ClrType)
                         && typeof(ITenantScoped).IsAssignableFrom(t.ClrType)
                         && t.GetTableName() is not null)
-            .Select(t => new PurgeTable(t.GetTableName()!, DeduplicationService.LinkedRecordTypeKeyOf(t.ClrType)))
+            .Select(t => new PurgeTable(t.GetTableName()!, LinkedRecordTypes.LinkedRecordTypeKeyOf(t.ClrType)))
             .Distinct()
             .OrderBy(t => t.Table, StringComparer.Ordinal)];
 

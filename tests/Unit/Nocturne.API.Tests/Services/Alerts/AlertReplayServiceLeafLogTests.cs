@@ -1,3 +1,5 @@
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
@@ -60,7 +62,8 @@ public class AlertReplayServiceLeafLogTests
 
         var enricherDeps = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
-                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
@@ -88,7 +91,6 @@ public class AlertReplayServiceLeafLogTests
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             enricher,
             _tenantAccessor.Object,
             Options.Create(new AlertEvaluationOptions()),
@@ -149,7 +151,7 @@ public class AlertReplayServiceLeafLogTests
         _glucoseRepository.Setup(g => g.GetAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -191,7 +193,7 @@ public class AlertReplayServiceLeafLogTests
         _glucoseRepository.Setup(g => g.GetAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -230,7 +232,7 @@ public class AlertReplayServiceLeafLogTests
         _glucoseRepository.Setup(g => g.GetAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);

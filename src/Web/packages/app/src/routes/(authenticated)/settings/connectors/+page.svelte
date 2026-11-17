@@ -3,64 +3,69 @@
   import { getStatus as getConnectorStatuses } from "#lib/api/generated/connectorStatus.generated.remote.js";
   import { getGoogleHealth } from "#lib/api/generated/googleHealths.generated.remote.js";
   import {
+    getConnections,
     getServicesOverview,
     getConnectorCapabilities,
     triggerConnectorSync,
   } from "#lib/api/generated/services.generated.remote.js";
-  import type {
-    ServicesOverview,
-    UploaderApp,
-    DataSourceInfo,
-    ConnectorStatusDto,
-    ConnectorCapabilities,
-    SyncResult,
+  import {
+    ConnectionKind,
+    ConnectionStatus,
+    GoogleHealthConnectionState,
+    type Connection,
+    type ConnectionStream,
+    type ConnectorStatusDto,
+    type SyncResult,
+    type UploaderApp,
   } from "#lib/api/generated/nocturne-api-client.js";
 
-  import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-  } from "#lib/components/ui/card/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
 
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import AlertCircle from "@lucide/svelte/icons/circle-alert";
-  import Wifi from "@lucide/svelte/icons/wifi";
-  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Database from "@lucide/svelte/icons/database";
-  import Copy from "@lucide/svelte/icons/copy";
-  import Check from "@lucide/svelte/icons/check";
-  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Download from "@lucide/svelte/icons/download";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Plus from "@lucide/svelte/icons/plus";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Wifi from "@lucide/svelte/icons/wifi";
+  import X from "@lucide/svelte/icons/x";
   import { EmptyState } from "#lib/components/shared/index.js";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
   import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
-  import DataSourceRow from "#lib/components/settings/DataSourceRow.svelte";
-  import GoogleHealthSourceRow from "#lib/components/connectors/GoogleHealthSourceRow.svelte";
-  import type { DataSourceStatus } from "#lib/components/settings/DataSourceRow.svelte";
-  import ConnectedApps from "#lib/components/settings/ConnectedApps.svelte";
+  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import ClientDevices from "#lib/components/settings/ClientDevices.svelte";
-  import ApiTokens from "#lib/components/settings/ApiTokens.svelte";
+  import ApiTokenCreateDialog from "#lib/components/settings/ApiTokenCreateDialog.svelte";
+  import AddConnectionDialog from "#lib/components/connectors/AddConnectionDialog.svelte";
+  import ConnectionDetailDialog from "#lib/components/connectors/ConnectionDetailDialog.svelte";
+  import ConnectionRow, {
+    connectionRowId,
+  } from "#lib/components/connectors/ConnectionRow.svelte";
+  import ConnectionTime from "#lib/components/connectors/ConnectionTime.svelte";
   import UploaderSetupDialog from "#lib/components/connectors/UploaderSetupDialog.svelte";
-  import ConnectorDetailsDialog from "#lib/components/connectors/ConnectorDetailsDialog.svelte";
+  import ConnectorDetailsDialog, {
+    type ConnectorStatusWithDescription,
+  } from "#lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog from "#lib/components/connectors/ManualSyncDialog.svelte";
-  import UploaderAppsCard from "#lib/components/connectors/UploaderAppsCard.svelte";
-  import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "#lib/components/connectors/ServerConnectorsCard.svelte";
   import DataSourceManageDialog from "#lib/components/connectors/DataSourceManageDialog.svelte";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { toast } from "svelte-sonner";
-  import { getUploaderName } from "#lib/utils/uploader-labels.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
   import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
-  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import type { SettingsLink } from "#lib/navigation/settings-navigation.svelte.js";
-  import { fresh } from "#lib/api/fresh-query.js";
+  import { formatNumber } from "#lib/utils/formatting.js";
+
+  const GOOGLE_HEALTH_CONNECTOR_ID = "googlehealth";
 
   // The migration endpoints are RequireSuperuser, which resolves to the wildcard.
   const canMoveFromNightscout = $derived(
@@ -74,6 +79,7 @@
   };
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
+  const connectionsQuery = getConnections();
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
   const canManage = $derived(
@@ -84,64 +90,122 @@
   );
   const googleHealthQuery = $derived(canManage ? getGoogleHealth() : null);
 
-  const servicesOverview = $derived<ServicesOverview | null>(
-    servicesOverviewQuery.current ?? null,
+  const overview = $derived(connectionsQuery.current ?? null);
+  const connections = $derived(overview?.connections ?? []);
+  const otherSources = $derived(overview?.otherSources ?? []);
+  const windowDays = $derived(overview?.windowDays);
+  const loadError = $derived(
+    connectionsQuery.error == null
+      ? null
+      : remoteErrorMessage(
+          connectionsQuery.error,
+          "Could not load your connections."
+        )
+  );
+  const isLoading = $derived(overview === null && loadError === null);
+  let isRefreshing = $state(false);
+  let dismissedLoadError = $state<unknown>(null);
+  const showLoadError = $derived(
+    loadError !== null && connectionsQuery.error !== dismissedLoadError
+  );
+
+  function isNotInUse(connection: Connection): boolean {
+    return (
+      connection.status === ConnectionStatus.Quiet ||
+      connection.status === ConnectionStatus.Disabled ||
+      connection.status === ConnectionStatus.Revoked
+    );
+  }
+  const listedConnections = $derived(connections.filter((c) => !isNotInUse(c)));
+  const unusedConnections = $derived(connections.filter(isNotInUse));
+  const hasConnector = $derived(
+    connections.some((c) => c.kind === ConnectionKind.Connector)
+  );
+
+  const servicesOverview = $derived(servicesOverviewQuery.current ?? null);
+  const servicesFailed = $derived(
+    servicesOverview === null &&
+      (servicesOverviewQuery.error != null ||
+        servicesOverviewQuery.current === null)
   );
   const connectorStatuses = $derived<ConnectorStatusDto[]>(
-    connectorStatusesQuery.current ?? [],
+    connectorStatusesQuery.current ?? []
   );
+
   const googleHealth = $derived(googleHealthQuery?.current ?? null);
   const googleHealthLoading = $derived(googleHealthQuery?.loading ?? false);
   const googleHealthFailed = $derived(!!googleHealthQuery?.error);
-  const hasGoogleHealthStatus = $derived(
-    !!googleHealth?.configured && !googleHealthLoading && !googleHealthFailed,
+  const googleHealthOffered = $derived(
+    canManage &&
+      (servicesOverview?.availableConnectors ?? []).some(
+        (c) => c.id === GOOGLE_HEALTH_CONNECTOR_ID
+      ) &&
+      !connections.some((c) => c.connectorId === GOOGLE_HEALTH_CONNECTOR_ID)
   );
-  const otherDataSources = $derived(
-    (servicesOverview?.activeDataSources ?? []).filter(
-      (source) => !hasGoogleHealthStatus || (source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector"),
-    ),
+  const googleHealthConnection = $derived(
+    googleHealthOffered &&
+      googleHealth &&
+      !googleHealthLoading &&
+      !googleHealthFailed &&
+      (googleHealth.connected || googleHealth.configured)
+      ? googleHealth
+      : null
   );
-  const isLoading = $derived(
-    servicesOverviewQuery.current === undefined,
-  );
-  const isLoadingConnectorStatuses = $derived(
-    connectorStatusesQuery.current === undefined,
+  const unconfiguredConnectors = $derived(
+    servicesOverview
+      ? (servicesOverview.availableConnectors ?? []).filter(
+          (c) => c.id !== GOOGLE_HEALTH_CONNECTOR_ID && !c.isConfigured
+        )
+      : undefined
   );
 
-  const error = $derived<string | null>(
-    !isLoading && !servicesOverview ? "Failed to load services" : null,
+  const hasNoConnections = $derived(
+    connections.length === 0 && googleHealthConnection === null
   );
+
+  // Dialog state
+  let showAddDialog = $state(false);
   let selectedUploader = $state<UploaderApp | null>(null);
   let showSetupDialog = $state(false);
-  const copy = createCopyFeedback();
+  let apiTokenCreateOpen = $state(false);
 
-  // Data source management dialog state
-  let selectedDataSource = $state<DataSourceInfo | null>(null);
-  let showManageDataSourceDialog = $state(false);
+  let selectedConnectionId = $state<string | null>(null);
+  let showDetailDialog = $state(false);
+  const selectedConnection = $derived<Connection | null>(
+    connections.find((c) => c.id === selectedConnectionId) ?? null
+  );
+  const selectedConnectorId = $derived(
+    selectedConnection?.kind === ConnectionKind.Connector
+      ? (selectedConnection.connectorId ?? null)
+      : null
+  );
+  const selectedConnectorCapabilities = $derived(
+    selectedConnectorId
+      ? (getConnectorCapabilities(selectedConnectorId).current ?? null)
+      : null
+  );
+  const selectedConnectorStatus = $derived.by<ConnectorStatusWithDescription | null>(() => {
+    if (!selectedConnectorId) return null;
+    const status = connectorStatuses.find((s) => s.id === selectedConnectorId);
+    if (!status) return null;
+    return {
+      ...status,
+      name: selectedConnection?.name ?? status.name,
+      description: servicesOverview?.availableConnectors?.find(
+        (c) => c.id === selectedConnectorId
+      )?.description,
+    };
+  });
+  let showConnectorDialog = $state(false);
 
-  // Manual sync state
+  let selectedStream = $state<ConnectionStream | null>(null);
+  let streamOpenedFromDetail = false;
+  let showManageStreamDialog = $state(false);
+
   let isManualSyncing = $state(false);
   let showManualSyncDialog = $state(false);
   let manualSyncResults = $state<Record<string, SyncResult> | null>(null);
-
-  // Connector heartbeat metrics state
-  let selectedConnector = $state<ConnectorStatusWithDescription | null>(null);
-  let selectedConnectorCapabilities = $state<ConnectorCapabilities | null>(null);
-  // Capability descriptors per connector, keyed by connector id.
-  const connectorCapabilitiesById = $derived.by(() => {
-    const overview = servicesOverviewQuery.current;
-    const result: Record<string, ConnectorCapabilities | null> = {};
-    if (!overview?.availableConnectors?.length) return result;
-    for (const connector of overview.availableConnectors) {
-      if (connector.id) {
-        result[connector.id] =
-          getConnectorCapabilities(connector.id).current ?? null;
-      }
-    }
-    return result;
-  });
   let quickSyncingById = $state<Record<string, boolean>>({});
-  let showConnectorDialog = $state(false);
 
   // Realtime sync progress from WebSocket
   const realtimeStore = getRealtimeStore();
@@ -151,6 +215,14 @@
     return entries.find((p) => p.phase === SyncPhase.Syncing) ?? entries.at(-1) ?? null;
   });
 
+  function isSyncing(connection: Connection | null): boolean {
+    return (
+      !!connection?.connectorId &&
+      syncProgressByConnector[connection.connectorId]?.phase ===
+        SyncPhase.Syncing
+    );
+  }
+
   const terminalRuns = createTerminalRunTracker();
   $effect(() => {
     if (terminalRuns.hasNewlyFinishedRun(syncProgressByConnector)) {
@@ -158,13 +230,8 @@
     }
   });
 
-  // API token create dialog, opened from the connection details card
-  let apiTokenCreateOpen = $state(false);
-  let apiTokenPrefillLabel = $state("");
-  let apiTokenPrefillScopes = $state<string[]>([]);
-
   // Whether the user has already been told these lists are stale. The effect
-  // below refreshes once per finished run, so a batch of them and the refresh
+  // above refreshes once per finished run, so a batch of them and the refresh
   // that follows are one thing going wrong reported many times over.
   let staleListReported = false;
 
@@ -174,7 +241,7 @@
    * the refresh's, so the staleness is reported on its own and swallowed. It is
    * reported once until a refresh gets through again.
    */
-  async function refreshQuietly(...refreshes: Array<() => Promise<void>>) {
+  async function refreshQuietly(...refreshes: Array<() => Promise<unknown>>) {
     const outcomes = await Promise.allSettled(
       refreshes.map((refresh) => refresh())
     );
@@ -197,50 +264,84 @@
     staleListReported = false;
   }
 
-  async function refreshAll() {
-    await refreshQuietly(
-      () => servicesOverviewQuery.refresh(),
-      () => connectorStatusesQuery.refresh(),
-      () => googleHealthQuery?.refresh() ?? Promise.resolve()
-    );
+  /** A failed load of the connections shows in the page's own message, so it is not also a toast. */
+  async function loadConnections() {
+    isRefreshing = true;
+    try {
+      await connectionsQuery.refresh();
+    } catch {
+      // `connectionsQuery.error` carries the failure to the page.
+    } finally {
+      isRefreshing = false;
+    }
   }
 
-  async function loadServices() {
-    await refreshQuietly(() => servicesOverviewQuery.refresh());
+  async function refreshAll() {
+    await Promise.all([
+      loadConnections(),
+      refreshQuietly(
+        () => servicesOverviewQuery.refresh(),
+        () => connectorStatusesQuery.refresh(),
+        () => googleHealthQuery?.refresh() ?? Promise.resolve()
+      ),
+    ]);
   }
 
   async function loadConnectorStatuses() {
-    await refreshQuietly(
-      () => connectorStatusesQuery.refresh(),
-      () => googleHealthQuery?.refresh() ?? Promise.resolve()
-    );
+    await Promise.all([
+      loadConnections(),
+      refreshQuietly(
+        () => connectorStatusesQuery.refresh(),
+        () => googleHealthQuery?.refresh() ?? Promise.resolve()
+      ),
+    ]);
   }
 
-  async function loadConnectorCapabilitiesFor(connectorId?: string) {
-    if (!connectorId) {
-      selectedConnectorCapabilities = null;
-      return;
-    }
-    try {
-      selectedConnectorCapabilities = await fresh(getConnectorCapabilities(connectorId));
-    } catch (e) {
-      console.error("Failed to load connector capabilities", e);
-      selectedConnectorCapabilities = null;
-    }
+  function openConnection(connection: Connection) {
+    selectedConnectionId = connection.id ?? null;
+    showDetailDialog = true;
+  }
+
+  function openStream(stream: ConnectionStream) {
+    streamOpenedFromDetail = showDetailDialog;
+    showDetailDialog = false;
+    selectedStream = stream;
+    showManageStreamDialog = true;
+  }
+
+  function returnFromStream() {
+    if (streamOpenedFromDetail && selectedConnection) showDetailDialog = true;
+  }
+
+  const connectorNames = $derived(
+    Object.fromEntries(connectorStatuses.map((status) => [status.id, status.name]))
+  );
+
+  let createdGrantId: string | undefined;
+
+  /** Hands focus to the row of the token the dialog made, in place of the page top. */
+  function focusCreatedToken(event: Event) {
+    const grantId = createdGrantId;
+    createdGrantId = undefined;
+    if (!grantId) return;
+
+    const created = connections.find((c) =>
+      c.credentials?.some((credential) => credential.grantId === grantId)
+    );
+    const row = created?.id
+      ? document.getElementById(connectionRowId(created.id))
+      : null;
+    if (!row) return;
+
+    event.preventDefault();
+    row.scrollIntoView({ block: "nearest" });
+    row.focus();
   }
 
   function openUploaderSetup(uploader: UploaderApp) {
+    showAddDialog = false;
     selectedUploader = uploader;
     showSetupDialog = true;
-  }
-
-  function openDataSourceDialog(source: DataSourceInfo) {
-    selectedDataSource = source;
-    showManageDataSourceDialog = true;
-  }
-
-  function isDemoDataSource(source: DataSourceInfo): boolean {
-    return source.category === "demo" || source.sourceType === "demo";
   }
 
   async function triggerManualSync() {
@@ -305,70 +406,62 @@
       quickSyncingById = { ...quickSyncingById, [connectorId]: false };
     }
   }
-
-  function getMatchingUploader(source: DataSourceInfo): UploaderApp | null {
-    if (!servicesOverview?.uploaderApps) return null;
-
-    const sourceLower = (source.sourceType ?? source.name ?? "").toLowerCase();
-    const deviceLower = (source.deviceId ?? "").toLowerCase();
-
-    for (const uploader of servicesOverview.uploaderApps) {
-      const uploaderIdLower = (uploader.id ?? "").toLowerCase();
-
-      if (sourceLower === uploaderIdLower) return uploader;
-
-      if (uploaderIdLower === "xdrip") {
-        if (sourceLower.includes("xdrip") || deviceLower.includes("xdrip")) return uploader;
-      }
-      if (uploaderIdLower === "loop") {
-        if ((sourceLower === "loop" || deviceLower.includes("loop")) && !sourceLower.includes("openaps")) return uploader;
-      }
-      if (uploaderIdLower === "aaps") {
-        if (sourceLower.includes("aaps") || sourceLower.includes("androidaps") || deviceLower.includes("aaps") || deviceLower.includes("androidaps")) return uploader;
-      }
-      if (uploaderIdLower === "trio") {
-        if (sourceLower === "trio" || deviceLower.includes("trio")) return uploader;
-      }
-      if (uploaderIdLower === "iaps") {
-        if (sourceLower === "iaps" || deviceLower.includes("iaps")) return uploader;
-      }
-      if (uploaderIdLower === "spike") {
-        if (sourceLower.includes("spike") || deviceLower.includes("spike")) return uploader;
-      }
-    }
-
-    return null;
-  }
-
-  function isUploaderActive(uploader: UploaderApp): boolean {
-    if (!servicesOverview?.activeDataSources) return false;
-    for (const source of servicesOverview.activeDataSources) {
-      const matchingUploader = getMatchingUploader(source);
-      if (matchingUploader?.id === uploader.id) return true;
-    }
-    return false;
-  }
-
-  function mapDataSourceStatus(source: DataSourceInfo): DataSourceStatus {
-    if (isDemoDataSource(source)) return "demo";
-    switch (source.status) {
-      case "active":
-        return "active";
-      case "stale":
-        return "stale";
-      default:
-        return "inactive";
-    }
-  }
-
 </script>
 
 <svelte:head>
   <title>Connectors & apps - Settings - Nocturne</title>
 </svelte:head>
 
+{#snippet googleHealthRow(status: NonNullable<typeof googleHealthConnection>)}
+  {@const state = status.connectionState ?? GoogleHealthConnectionState.Disconnected}
+  {@const offline =
+    state === GoogleHealthConnectionState.Unavailable ||
+    state === GoogleHealthConnectionState.Disconnected}
+  {@const failed =
+    !!status.errorCode && !offline && state !== GoogleHealthConnectionState.Syncing}
+  <li>
+    <Item variant="row" href={resolve("settings/connectors/google-health")}>
+      <span
+        class="flex size-8 shrink-0 items-center justify-center text-muted-foreground"
+        aria-hidden="true"
+      >
+        <HeartPulse class="size-5" />
+      </span>
+      <span class="min-w-0 flex-1 space-y-0.5">
+        <span class="block font-medium">Google Health</span>
+        {#if failed}
+          <span class="flex items-start gap-1.5 text-sm text-destructive">
+            <CircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            Google Health needs attention. Open the connector for details and
+            recovery options.
+          </span>
+        {:else}
+          <span class="block text-sm text-muted-foreground">
+            {#if state === GoogleHealthConnectionState.Unavailable}
+              Not enabled on this Nocturne server
+            {:else if state === GoogleHealthConnectionState.Disconnected}
+              Reconnect to resume importing
+            {:else if state === GoogleHealthConnectionState.ReviewRequired}
+              Review available data and confirm the import selection
+            {:else if state === GoogleHealthConnectionState.NothingSelected}
+              Choose at least one data type to start importing
+            {:else if status.lastSync}
+              <ConnectionTime label="Last sync" at={status.lastSync} />
+            {:else}
+              Waiting for the first successful sync
+            {/if}
+          </span>
+        {/if}
+      </span>
+      <ChevronRight
+        class="size-4 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </Item>
+  </li>
+{/snippet}
+
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
-  <!-- Header -->
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div class="flex min-w-0 items-center gap-3">
       <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
@@ -377,211 +470,295 @@
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Connectors & apps</h1>
         <p class="text-muted-foreground">
-          Manage data sources, add new connections, and control app access
+          The apps, API tokens, and connectors that send data to Nocturne or
+          read data from it
         </p>
       </div>
     </div>
     <Button variant="outline" size="sm" onclick={refreshAll}>
-      <RefreshCw
-        class="h-4 w-4 {isLoading || isLoadingConnectorStatuses
-          ? 'animate-spin'
-          : ''}"
-      />
+      <RefreshCw class="h-4 w-4 {isLoading || isRefreshing ? 'animate-spin' : ''}" />
       Refresh
     </Button>
   </div>
 
-  {#if isLoading && !servicesOverview}
-    <SettingsPageSkeleton cardCount={3} />
-  {:else if error}
-    <Card variant="destructive">
-      <CardContent class="py-8">
-        <div class="text-center">
-          <AlertCircle class="h-12 w-12 mx-auto mb-4 text-destructive" />
-          <p class="font-medium">Failed to load services</p>
-          <p class="text-sm text-muted-foreground mt-1">{error}</p>
-          <Button class="mt-4" onclick={loadServices}>Try again</Button>
-        </div>
-      </CardContent>
-    </Card>
-  {:else if servicesOverview}
-    <!-- Active Data Sources -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Wifi class="h-5 w-5" />
-          Active data sources
-        </CardTitle>
-        <CardDescription>
-          Devices and apps currently sending data to this Nocturne instance
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {#if !hasGoogleHealthStatus && otherDataSources.length === 0}
-          <EmptyState
-            art="plug"
-            title="No data sources detected"
-            body="Add an uploader app to start sending data to Nocturne"
-          />
-        {:else}
-          <div class="space-y-3">
-            {#if hasGoogleHealthStatus && googleHealth}
-              <GoogleHealthSourceRow connection={googleHealth} />
-            {/if}
-            {#each otherDataSources as source (source.id)}
-              {@const matchingUploader = getMatchingUploader(source)}
-              {@const isDemo = isDemoDataSource(source)}
-              <DataSourceRow
-                name={source.name ?? "Unknown"}
-                icon={source.icon}
-                status={mapDataSourceStatus(source)}
-                totalEntries={source.totalEntries}
-                totalEntriesWindowDays={source.totalEntriesWindowDays}
-                entriesLast24h={source.entriesLast24h}
-                lastSeen={source.lastSeen}
-                subtitle={source.name !== source.deviceId ? source.deviceId : undefined}
-                onclick={() => openDataSourceDialog(source)}
-              >
-                {#snippet badges()}
-                  {#if isDemo}
-                    <Badge variant="demo">
-                      <Sparkles class="h-3 w-3 mr-1" />
-                      Demo
-                    </Badge>
-                  {/if}
-                  {#if matchingUploader}
-                    <Badge variant="outline">
-                      {getUploaderName(matchingUploader)}
-                    </Badge>
-                  {/if}
-                {/snippet}
-              </DataSourceRow>
-            {/each}
-          </div>
-        {/if}
-      </CardContent>
-    </Card>
-
-    <!-- Uploader Apps -->
-    <UploaderAppsCard
-      uploaderApps={servicesOverview.uploaderApps ?? []}
-      {isUploaderActive}
-      onSetup={openUploaderSetup}
-    />
-
-    <!-- Server-Side Connectors -->
-    <div>
-      <ServerConnectorsCard
-        availableConnectors={servicesOverview.availableConnectors ?? []}
-        {connectorStatuses}
-        {connectorCapabilitiesById}
-        {syncProgressByConnector}
-        activeDataSources={servicesOverview.activeDataSources ?? []}
-        {isLoadingConnectorStatuses}
-        {isManualSyncing}
-        {quickSyncingById}
-        onRefreshStatuses={loadConnectorStatuses}
-        onManualSync={triggerManualSync}
-        onQuickSync={triggerQuickSync}
-        onConnectorClick={async (connector, connectorId) => {
-          selectedConnector = connector;
-          await loadConnectorCapabilitiesFor(connectorId);
-          showConnectorDialog = true;
-        }}
-        {googleHealth}
-        {googleHealthLoading}
-        {googleHealthFailed}
-      />
-    </div>
-
-    <!-- API Info -->
-    {#if servicesOverview.apiEndpoint}
-      <Card>
-        <CardHeader>
-          <CardTitle class="flex items-center gap-2">
-            <Database class="h-5 w-5" />
-            API information
-          </CardTitle>
-          <CardDescription>
-            Use these endpoints to configure uploaders manually
-          </CardDescription>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          <div class="space-y-2">
-            <span class="text-sm font-medium">Base URL</span>
-            <div class="flex gap-2">
-              <code
-                class="flex-1 px-3 py-2 rounded-md bg-muted text-sm font-mono truncate"
-              >
-                {window.location.origin}
-              </code>
-              <Button
-                variant="outline"
-                size="icon"
-                onclick={() => copy.copy(window.location.origin, "baseUrl")}
-              >
-                {#if copy.isCopied("baseUrl")}
-                  <Check class="h-4 w-4 text-success" />
-                {:else}
-                  <Copy class="h-4 w-4" />
-                {/if}
-              </Button>
-            </div>
-          </div>
-          <Separator />
-          <p class="text-sm text-muted-foreground">
-            Create an API key below to authenticate uploaders. Each key is
-            scoped to specific permissions and can be revoked independently.
-          </p>
+  {#if showLoadError}
+    <Card.Root variant="destructive" size="sm">
+      <div role="alert" class="flex flex-wrap items-center gap-3">
+        <CircleAlert class="size-5 shrink-0 text-destructive" aria-hidden="true" />
+        <p class="min-w-0 flex-1 text-sm font-medium">{loadError}</p>
+        <Button size="sm" onclick={loadConnections} disabled={isRefreshing}>
+          Try again
+        </Button>
+        {#if overview}
           <Button
-            variant="outline"
-            onclick={() => {
-              apiTokenPrefillLabel = "";
-              apiTokenPrefillScopes = ["health.readwrite"];
-              apiTokenCreateOpen = true;
-              document.getElementById("api-tokens-section")?.scrollIntoView({ behavior: "smooth" });
-            }}
+            variant="ghost"
+            size="icon"
+            aria-label="Dismiss"
+            onclick={() => (dismissedLoadError = connectionsQuery.error)}
           >
-            <KeyRound class="mr-1.5 h-4 w-4" />
-            Create API key
+            <X class="size-4" aria-hidden="true" />
           </Button>
-        </CardContent>
-      </Card>
+        {/if}
+      </div>
+    </Card.Root>
+  {/if}
+
+  {#if isLoading}
+    <SettingsPageSkeleton cardCount={3} />
+  {:else if overview}
+    {#if hasNoConnections && canMoveFromNightscout}
+      <SettingsLinkCard link={moveFromNightscoutLink} />
     {/if}
 
-    <!-- Connected Apps Section -->
-    <ConnectedApps />
+    <!-- The dashboard's first-reading state links to this anchor. -->
+    <Card.Root id="api-tokens-section">
+      <Card.Header>
+        <h2 class="font-semibold leading-none">Connections</h2>
+        <Card.Description>
+          Each app, API token, and connector that you added.
+        </Card.Description>
+        <Card.Action>
+          <div class="flex flex-wrap justify-end gap-2">
+            {#if canManage && hasConnector}
+              <Button
+                variant="outline"
+                size="sm"
+                onclick={triggerManualSync}
+                disabled={isManualSyncing}
+              >
+                {#if isManualSyncing}
+                  <Loader2 class="h-4 w-4 animate-spin" />
+                {:else}
+                  <Download class="h-4 w-4" />
+                {/if}
+                Sync all connectors
+              </Button>
+            {/if}
+            <Button size="sm" onclick={() => (showAddDialog = true)}>
+              <Plus class="h-4 w-4" />
+              Add a connection
+            </Button>
+          </div>
+        </Card.Action>
+      </Card.Header>
+      <Card.Content class="space-y-4">
+        {#if hasNoConnections}
+          <EmptyState
+            art="plug"
+            title="No connections"
+            body={canManage
+              ? "Add an app or a cloud account to send data to Nocturne."
+              : "Add an app to send data to Nocturne."}
+          />
+        {:else}
+          {#if listedConnections.length > 0 || googleHealthConnection}
+            <ul class="divide-y border-y">
+              {#each listedConnections as connection (connection.id)}
+                <ConnectionRow
+                  {connection}
+                  {windowDays}
+                  syncing={isSyncing(connection)}
+                  onclick={() => openConnection(connection)}
+                />
+              {/each}
+              {#if googleHealthConnection}
+                {@render googleHealthRow(googleHealthConnection)}
+              {/if}
+            </ul>
+          {:else}
+            <p class="text-sm text-muted-foreground">
+              No connection is active.
+            </p>
+          {/if}
 
-    <!-- Devices Section -->
+          {#if unusedConnections.length > 0}
+            <Collapsible.Root>
+              <Collapsible.Trigger>
+                {#snippet child({ props }: { props: Record<string, unknown> })}
+                  <Button {...props} variant="subtle" size="inline" class="group">
+                    Not in use ({unusedConnections.length})
+                    <ChevronDown
+                      class="size-4 transition-transform group-data-[state=open]:rotate-180"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                {/snippet}
+              </Collapsible.Trigger>
+              <Collapsible.Content>
+                <ul class="mt-3 divide-y border-y">
+                  {#each unusedConnections as connection (connection.id)}
+                    <ConnectionRow
+                      {connection}
+                      {windowDays}
+                      syncing={isSyncing(connection)}
+                      onclick={() => openConnection(connection)}
+                    />
+                  {/each}
+                </ul>
+              </Collapsible.Content>
+            </Collapsible.Root>
+          {/if}
+        {/if}
+      </Card.Content>
+    </Card.Root>
+
+    {#if otherSources.length > 0}
+      <Card.Root>
+        <Card.Header>
+          <h2 class="font-semibold leading-none">Other sources</h2>
+          <Card.Description>
+            Records in the last {windowDays} days that no connection wrote.
+          </Card.Description>
+        </Card.Header>
+        <Card.Content>
+          <Collapsible.Root>
+            <Collapsible.Trigger>
+              {#snippet child({ props }: { props: Record<string, unknown> })}
+                <Button {...props} variant="subtle" size="inline" class="group">
+                  {#if otherSources.length === 1}
+                    1 source
+                  {:else}
+                    {otherSources.length} sources
+                  {/if}
+                  <ChevronDown
+                    class="size-4 transition-transform group-data-[state=open]:rotate-180"
+                    aria-hidden="true"
+                  />
+                </Button>
+              {/snippet}
+            </Collapsible.Trigger>
+            <Collapsible.Content>
+              <ul class="mt-3 divide-y border-y">
+                {#each otherSources as stream (`${stream.key}|${stream.dataSource ?? ""}|${stream.device ?? ""}`)}
+                  {@const canDelete = canManage && stream.canDelete === true}
+                  <li>
+                    <Item
+                      variant="row"
+                      onclick={canDelete ? () => openStream(stream) : undefined}
+                    >
+                      <span
+                        class="flex size-8 shrink-0 items-center justify-center"
+                        aria-hidden="true"
+                      >
+                        <AppLogo
+                          icon={stream.icon}
+                          invertMode
+                          class="size-8 object-contain"
+                        />
+                      </span>
+                      <span class="min-w-0 flex-1 space-y-0.5">
+                        <span class="block truncate font-medium">
+                          {stream.device ?? stream.name ?? stream.key}
+                        </span>
+                        <span
+                          class="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground"
+                        >
+                          <span>
+                            {formatNumber(stream.totalRecords)} records in the last {windowDays} days
+                          </span>
+                          <ConnectionTime
+                            label="Last record"
+                            at={stream.lastRecordAt}
+                          />
+                        </span>
+                        {#if !stream.canDelete}
+                          <span class="block text-sm text-muted-foreground">
+                            A connection also sends records under this name.
+                          </span>
+                        {/if}
+                      </span>
+                      {#if canDelete}
+                        <ChevronRight
+                          class="size-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      {/if}
+                    </Item>
+                  </li>
+                {/each}
+              </ul>
+            </Collapsible.Content>
+          </Collapsible.Root>
+        </Card.Content>
+      </Card.Root>
+    {/if}
+
     <ClientDevices />
 
-    <!-- API Tokens Section -->
-    <div id="api-tokens-section">
-      <ApiTokens
-        bind:createOpen={apiTokenCreateOpen}
-        prefillLabel={apiTokenPrefillLabel}
-        prefillScopes={apiTokenPrefillScopes}
-      />
-    </div>
-
-    {#if canMoveFromNightscout}
+    {#if !hasNoConnections && canMoveFromNightscout}
       <SettingsLinkCard link={moveFromNightscoutLink} />
     {/if}
   {/if}
 </div>
 
-<!-- Setup Instructions Dialog -->
-<UploaderSetupDialog bind:open={showSetupDialog} {selectedUploader} />
-
-<!-- Data Source Management Dialog -->
-<DataSourceManageDialog
-  bind:open={showManageDataSourceDialog}
-  {selectedDataSource}
-  onDeleteComplete={loadServices}
+<AddConnectionDialog
+  bind:open={showAddDialog}
+  canAddCloudAccount={canManage}
+  uploaderApps={servicesOverview ? (servicesOverview.uploaderApps ?? []) : undefined}
+  connectors={unconfiguredConnectors}
+  listFailed={servicesFailed}
+  googleHealth={googleHealthOffered && !googleHealthConnection
+    ? {
+        status: googleHealth,
+        loading: googleHealthLoading,
+        failed: googleHealthFailed,
+      }
+    : null}
+  baseUrl={servicesOverview?.apiEndpoint?.baseUrl}
+  onSelectUploader={openUploaderSetup}
+  onCreateToken={() => {
+    showAddDialog = false;
+    apiTokenCreateOpen = true;
+  }}
 />
 
-<ManualSyncDialog bind:open={showManualSyncDialog} {isManualSyncing} {manualSyncResults} syncProgress={isManualSyncing ? activeSyncProgress : null} />
+<UploaderSetupDialog bind:open={showSetupDialog} {selectedUploader} />
 
-<!-- Connector Details Dialog -->
-<ConnectorDetailsDialog bind:open={showConnectorDialog} {selectedConnector} {selectedConnectorCapabilities} onSyncComplete={loadConnectorStatuses} />
+<ApiTokenCreateDialog
+  bind:open={apiTokenCreateOpen}
+  prefillScopes={["health.readwrite"]}
+  baseUrl={servicesOverview?.apiEndpoint?.baseUrl}
+  onCreated={(grantId) => (createdGrantId = grantId)}
+  onCloseAutoFocus={focusCreatedToken}
+/>
 
+<ConnectionDetailDialog
+  bind:open={showDetailDialog}
+  connection={selectedConnection}
+  {windowDays}
+  {canManage}
+  syncing={isSyncing(selectedConnection)}
+  quickSyncing={!!selectedConnectorId && quickSyncingById[selectedConnectorId] === true}
+  supportsManualSync={selectedConnectorCapabilities?.supportsManualSync ?? true}
+  onQuickSync={triggerQuickSync}
+  onConnectorDetails={selectedConnectorStatus
+    ? () => {
+        showDetailDialog = false;
+        showConnectorDialog = true;
+      }
+    : undefined}
+  onDeleteStream={openStream}
+/>
+
+<DataSourceManageDialog
+  bind:open={showManageStreamDialog}
+  source={selectedStream}
+  onCancel={returnFromStream}
+  {windowDays}
+  onDeleteComplete={loadConnections}
+/>
+
+<ManualSyncDialog
+  bind:open={showManualSyncDialog}
+  {isManualSyncing}
+  {manualSyncResults}
+  {connectorNames}
+  syncProgress={isManualSyncing ? activeSyncProgress : null}
+/>
+
+<ConnectorDetailsDialog
+  bind:open={showConnectorDialog}
+  selectedConnector={selectedConnectorStatus}
+  {selectedConnectorCapabilities}
+  onSyncComplete={loadConnectorStatuses}
+/>

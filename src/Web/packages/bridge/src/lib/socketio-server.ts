@@ -12,6 +12,7 @@ import {
   type RealtimeGrant,
 } from './handshake-ticket.js';
 import { isRecord, stringField, type Payload } from './payload.js';
+import { LegacyDeltaBuffer, legacyFamilies, type LegacyFamily } from './legacy-delta.js';
 
 /** What a socket carries from its handshake to its handlers. */
 interface BridgeSocketData {
@@ -38,6 +39,10 @@ interface BridgeSocketData {
   subjectId?: string;
   /** The API broadcast categories whose storage events the socket receives. */
   categories?: string[];
+  /** Whether the socket was admitted through the classic `authorize` exchange. */
+  legacy?: boolean;
+  /** Whether the socket has been sent `connected` (see {@link SocketIOServer.announceConnected}). */
+  connectedAnnounced?: boolean;
   /** Whether an `/alarm` socket's credential may silence the tenant's alarms. */
   mayAck?: boolean;
   /** How the socket proves its admission again; absent until it is admitted. */
@@ -105,6 +110,16 @@ function categoryRoom(tenantSlug: string, category: string): string {
   return `tenant:${tenantSlug}:category:${category}`;
 }
 
+/** Room a classic socket in the tenant-wide room also joins, which keeps the web app's `dataUpdate` from it. */
+function legacyRoom(tenantSlug: string): string {
+  return `tenant:${tenantSlug}:legacy`;
+}
+
+/** Room a classic socket joins for one v1 collection's `dataUpdate` deltas within a tenant. */
+function legacyFamilyRoom(tenantSlug: string, family: LegacyFamily): string {
+  return `tenant:${tenantSlug}:legacy:${family}`;
+}
+
 /**
  * The categories a grant's socket receives storage events for. A storage event
  * carries whatever record was just written, backdated or not, so a
@@ -123,9 +138,13 @@ function grantedRooms(data: BridgeSocketData): string[] {
   const { tenantSlug, tenantRelay, subjectId, categories = [] } = data;
   if (!tenantSlug) return [];
   const rooms = categories.map((category) => categoryRoom(tenantSlug, category));
+  if (data.legacy) {
+    rooms.push(...legacyFamilies(categories).map((family) => legacyFamilyRoom(tenantSlug, family)));
+  }
   if (tenantRelay !== true) return rooms;
   return [
     `tenant:${tenantSlug}`,
+    ...(data.legacy ? [legacyRoom(tenantSlug)] : []),
     ...rooms,
     ...(subjectId ? [subjectRoom(tenantSlug, subjectId)] : []),
   ];
@@ -299,6 +318,11 @@ class SocketIOServer {
    *  start() attaches them to the same httpServer as the default namespace. */
   private storageNsp: BridgeNamespace | null = null;
   private alarmNsp: BridgeNamespace | null = null;
+  /** The relay each tenant's storage events are reaching the bridge through. */
+  private readonly relays = new Map<string, object>();
+  private readonly legacyDeltas = new LegacyDeltaBuffer((tenantSlug, family, delta) => {
+    this.io?.to(legacyFamilyRoom(tenantSlug, family)).emit('dataUpdate', delta);
+  });
 
   constructor(
     httpServer: HttpServer,
@@ -596,6 +620,12 @@ class SocketIOServer {
           return null;
         }
         this.regrant(socket, tenantSlug, admission);
+        if (socket.data.connectedAnnounced && legacyFamilies(socket.data.categories ?? []).length === 0) {
+          logger.info(`Client ${socket.id} no longer receives deltas for tenant ${tenantSlug}; closing its transport`);
+          this.disconnectSocket(socket);
+          return null;
+        }
+        this.announceConnected(socket);
         return ADMISSION_RECHECK_INTERVAL_MS;
       }
       case 'storage': {
@@ -703,12 +733,52 @@ class SocketIOServer {
     if (admission === null || admission === UNANSWERED) return deny('API denied the credential');
 
     this.setGrant(socket, tenantSlug, admission);
+    socket.data.legacy = true;
     socket.data.handshakeToken = undefined;
     this.joinTenantRoom(socket);
     socket.data.readmission = { kind: 'credential', ...credential };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
+    this.announceConnected(socket);
     callback?.({ read: true, write: false, write_treatment: false });
+  }
+
+  /**
+   * Sends a classic socket the `connected` event upstream Nightscout sends once `authorize`
+   * succeeds. LoopFollow takes it as a promise that every write arrives as a `dataUpdate` delta and
+   * polls three times slower from then on, so it is sent only while that holds: the socket is
+   * granted a v1 collection's deltas (a history-clamped credential is granted none) and the
+   * tenant's storage events are reaching the bridge. A socket that is not sent it keeps its
+   * client polling at its own pace.
+   */
+  private announceConnected(socket: BridgeSocket): void {
+    const { tenantSlug, legacy, connectedAnnounced, categories = [] } = socket.data;
+    if (!legacy || connectedAnnounced || !tenantSlug) return;
+    if (!this.relays.has(tenantSlug) || legacyFamilies(categories).length === 0) return;
+
+    socket.data.connectedAnnounced = true;
+    socket.emit('connected');
+  }
+
+  /**
+   * Records whether a tenant's storage events are reaching the bridge. A classic socket waiting
+   * for them is sent `connected` once they are; one already sent it is disconnected when they
+   * stop, since it would otherwise wait on deltas that cannot arrive (see {@link announceConnected}).
+   * Its transport is closed, as {@link disconnectTenant} closes one, so its client reconnects and
+   * authorizes again. `relay` names the reporter: a relay that closes after another took over its
+   * slug does not end the other's.
+   */
+  setRelayState(tenantSlug: string | undefined, relayed: boolean, relay: object = this): void {
+    if (!tenantSlug) return;
+    if (relayed) this.relays.set(tenantSlug, relay);
+    else if (this.relays.get(tenantSlug) === relay) this.relays.delete(tenantSlug);
+    else return;
+
+    for (const socket of this.io?.of('/').sockets.values() ?? []) {
+      if (socket.data.tenantSlug !== tenantSlug || !socket.data.legacy) continue;
+      if (relayed) this.announceConnected(socket);
+      else if (socket.data.connectedAnnounced) this.disconnectSocket(socket);
+    }
   }
 
   /** Replays a client credential against the API's realtime admission endpoint,
@@ -771,10 +841,11 @@ class SocketIOServer {
   // Methods to broadcast messages to clients
   broadcastDataUpdate(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+    if (!target || !tenantSlug) return;
 
-    logger.debug(`Broadcasting dataUpdate${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('dataUpdate', data);
+    logger.debug(`Broadcasting dataUpdate to tenant ${tenantSlug}`);
+    // A classic socket reads `dataUpdate` as a delta, which it is sent from the storage events.
+    target.except(legacyRoom(tenantSlug)).emit('dataUpdate', data);
   }
 
   broadcastTrackerUpdate(data: unknown, tenantSlug?: string): void {
@@ -863,6 +934,7 @@ class SocketIOServer {
     if (!broadcastCollection) return;
 
     this.io.to(categoryRoom(tenantSlug, broadcastCollection)).emit(eventType, data);
+    this.legacyDeltas.add(tenantSlug, eventType, data);
 
     // Fan out to v3 `/storage` namespace clients (AAPS, xDrip+, ...). Each
     // spelling of the collection has its own room and its own `colName`, since
@@ -1315,6 +1387,7 @@ class SocketIOServer {
   }
 
   async stop(): Promise<void> {
+    this.legacyDeltas.clear();
     if (this.io) {
       await this.io.close();
       logger.info('Socket.IO server stopped');

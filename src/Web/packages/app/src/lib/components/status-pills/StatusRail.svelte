@@ -10,6 +10,7 @@
   import IOBPill from "./IOBPill.svelte";
   import LoopPill from "./LoopPill.svelte";
   import ReservoirPill from "./ReservoirPill.svelte";
+  import LinkBatteryPill from "./LinkBatteryPill.svelte";
   import TrackerPillBar from "./TrackerPillBar.svelte";
   import { visibleLegacyFallbacks, visibleTrackerInstances } from "./tracker-pill-visibility";
   import { writePillRows, type PillRail } from "./pill-rows";
@@ -76,9 +77,11 @@
     items.filter((item) =>
       item === RailItemId.Reservoir
         ? realtimeStore.currentReservoir !== null
-        : item === RailItemId.Trackers
-          ? hasTrackerPills
-          : true
+        : item === RailItemId.LinkBattery
+          ? realtimeStore.currentLinkBatteryVoltage !== null
+          : item === RailItemId.Trackers
+            ? hasTrackerPills
+            : true
     )
   );
 
@@ -149,6 +152,8 @@
             <LoopPill data={realtimeStore.pillsData.loop} />
           {:else if item === RailItemId.Reservoir && realtimeStore.currentReservoir !== null}
             <ReservoirPill reservoir={realtimeStore.currentReservoir} />
+          {:else if item === RailItemId.LinkBattery && realtimeStore.currentLinkBatteryVoltage !== null}
+            <LinkBatteryPill voltage={realtimeStore.currentLinkBatteryVoltage} />
           {:else if item === RailItemId.Trackers}
             <TrackerPillBar
               instances={realtimeStore.trackerInstances}

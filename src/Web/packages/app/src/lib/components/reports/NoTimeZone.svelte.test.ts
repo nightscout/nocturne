@@ -9,7 +9,6 @@ const pageSentence = createRawSnippet(() => ({ render: () => "<span>This page se
 
 describe("NoTimeZone", () => {
   it.each([
-    [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/, undefined],
     [TimeZoneUnavailableReason.LookupFailed, /The time zone of this data did not load/, /reload the report later/],
     [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/, /correct the time zone/],
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/, /set a time zone/],

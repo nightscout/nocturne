@@ -33,7 +33,7 @@ internal static class WritingTreatmentService
         ITreatmentFoodService? foods = null)
     {
         IV4ToLegacyProjectionService projection = contexts is null
-            ? new Mock<IV4ToLegacyProjectionService>().AnswersSpanIdsPerId().Object
+            ? new Mock<IV4ToLegacyProjectionService>().AnswersSpanIdsPerId().AnswersProjectedSpansPerId().Object
             : new V4ToLegacyProjectionService(
                 boluses, carbs, bgChecks, notes, deviceEvents, tempBasals, calculations,
                 Mock.Of<IProfileActivationRepository>(), foods ?? Mock.Of<ITreatmentFoodService>(), contexts,

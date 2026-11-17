@@ -26,7 +26,7 @@ public class StateSpanRepositoryTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<IDeduplicationService> _mockDedup;
+    private readonly Mock<IDuplicateLinker> _mockDedup;
     private readonly StateSpanRepository _repository;
     private readonly Mock<ILogger<StateSpanRepository>> _logger = new();
     private readonly SaveCounter _saves = new();
@@ -55,7 +55,7 @@ public class StateSpanRepositoryTests : IDisposable
 
         _context = _db.CreateContext();
         _context.AttributedTo(_auditContext);
-        _mockDedup = new Mock<IDeduplicationService>();
+        _mockDedup = new Mock<IDuplicateLinker>();
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new StateSpanRepository(
             _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object);
@@ -450,18 +450,17 @@ public class StateSpanRepositoryTests : IDisposable
         var primaryEntity = SpanEntity(
             _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Automatic.ToString(),
             new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), null);
-        primaryEntity.OriginalId = "pm-primary";
+        primaryEntity.LegacyId = "pm-primary";
         primaryEntity.Source = "primary";
 
         var duplicateEntity = SpanEntity(
             _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Manual.ToString(),
             new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc), null);
-        duplicateEntity.OriginalId = "pm-duplicate";
+        duplicateEntity.LegacyId = "pm-duplicate";
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var current = await _repository.GetCurrentPumpModeAsync();
 
@@ -480,11 +479,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        var canonicalId = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(canonicalId, primaryEntity.Id, isPrimary: true),
-            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var spans = (await _repository.GetStateSpansAsync()).ToList();
 
@@ -501,8 +496,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var spans = await _repository.GetActivityStateSpansAsync();
 
@@ -520,11 +514,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        var canonicalId = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(canonicalId, primaryEntity.Id, isPrimary: true),
-            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var active = await _repository.GetActiveAtAsync(
             StateSpanCategory.Override, null, new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -549,14 +539,8 @@ public class StateSpanRepositoryTests : IDisposable
         windowDuplicate.Source = "duplicate";
 
         _context.StateSpans.AddRange(carriedPrimary, carriedDuplicate, windowPrimary, windowDuplicate);
-        var carriedGroup = Guid.NewGuid();
-        var windowGroup = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(carriedGroup, carriedPrimary.Id, isPrimary: true),
-            Link(carriedGroup, carriedDuplicate.Id, isPrimary: false),
-            Link(windowGroup, windowPrimary.Id, isPrimary: true),
-            Link(windowGroup, windowDuplicate.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, carriedPrimary.Id, carriedDuplicate.Id);
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, windowPrimary.Id, windowDuplicate.Id);
 
         var result = await _repository.GetByCategories(
             [StateSpanCategory.Override, StateSpanCategory.PumpMode], from, from.AddDays(1));
@@ -564,18 +548,6 @@ public class StateSpanRepositoryTests : IDisposable
         result[StateSpanCategory.Override].Should().ContainSingle().Which.Source.Should().Be("primary");
         result[StateSpanCategory.PumpMode].Should().ContainSingle().Which.Source.Should().Be("primary");
     }
-
-    private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
-    {
-        Id = Guid.NewGuid(),
-        CanonicalId = canonicalId,
-        RecordType = "statespan",
-        RecordId = recordId,
-        SourceTimestamp = 0,
-        DataSource = isPrimary ? "primary" : "duplicate",
-        IsPrimary = isPrimary,
-        SysCreatedAt = DateTime.UtcNow,
-    };
 
     // --- GetActiveAtAsync ---
 
@@ -879,7 +851,7 @@ public class StateSpanRepositoryTests : IDisposable
     /// <summary>Primary keys of every row carrying <paramref name="originalId"/>, deleted included.</summary>
     private Task<List<StateSpanEntity>> RowsForAsync(string originalId) =>
         _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
-            .Where(s => s.OriginalId == originalId)
+            .Where(s => s.LegacyId == originalId)
             .ToListAsync();
 
     [Fact]
@@ -900,6 +872,47 @@ public class StateSpanRepositoryTests : IDisposable
         rows.Should().ContainSingle("the resync must not insert a second row")
             .Which.Id.Should().Be(originalRowId);
         rows[0].DeletedAt.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(null, "nocturne")]
+    [InlineData("glooko-exercise-1", "nightscout")]
+    public async Task UpdateActivityStateSpanAsync_KeepsTheStoredKeyAndSource_SoAResyncUpdatesIt(
+        string? editedOriginalId, string editedSource)
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        var edited = ConnectorSpan();
+        edited.State = "Cycling";
+        edited.OriginalId = editedOriginalId;
+        edited.Source = editedSource;
+        var updated = await _repository.UpdateActivityStateSpanAsync("glooko-exercise-1", edited);
+
+        updated.Should().NotBeNull();
+        updated!.OriginalId.Should().Be("glooko-exercise-1");
+        updated.Source.Should().Be("glooko-connector");
+        updated.State.Should().Be("Cycling");
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _context.StateSpans.AsNoTracking().Where(s => s.DeletedAt == null).ToListAsync())
+            .Should().ContainSingle("the resync updates the edited row rather than inserting a second span")
+            .Which.State.Should().Be("Running");
+    }
+
+    [Fact]
+    public async Task UpdateActivityStateSpanAsync_ByRowId_KeepsTheStoredKeyAndSource()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var rowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        var edited = ConnectorSpan();
+        edited.OriginalId = rowId.ToString();
+        edited.Source = "nightscout";
+        var updated = await _repository.UpdateActivityStateSpanAsync(rowId.ToString(), edited);
+
+        updated!.OriginalId.Should().Be("glooko-exercise-1");
+        updated.Source.Should().Be("glooko-connector");
     }
 
     [Fact]
@@ -1151,7 +1164,7 @@ public class StateSpanRepositoryTests : IDisposable
     };
 
     private Task<Dictionary<string, StateSpanEntity>> LiveRowsAsync() =>
-        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.OriginalId!);
+        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.LegacyId!);
 
     /// <summary>
     /// Ending each inserted open span at its stored successor reads the store once for the batch, so a
@@ -1190,7 +1203,7 @@ public class StateSpanRepositoryTests : IDisposable
             _context, [Span(StateSpanCategory.TemporaryTarget, "Custom", 1, "tt-backfill")], [], CancellationToken.None);
 
         successors.Later.Values.Should().ContainSingle()
-            .Which.Select(s => s.OriginalId).Should().Equal(
+            .Which.Select(s => s.LegacyId).Should().Equal(
                 Enumerable.Range(0, StateSpanRepository.SuccessorCandidates).Select(i => $"tt-history-{i}"));
     }
 
@@ -1393,7 +1406,7 @@ public class StateSpanRepositoryTests : IDisposable
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
-        stalePointer.OriginalId = "pr-x";
+        stalePointer.LegacyId = "pr-x";
         stalePointer.SupersededById = successorId;
         _context.StateSpans.Add(stalePointer);
         await _context.SaveChangesAsync();
@@ -1413,7 +1426,7 @@ public class StateSpanRepositoryTests : IDisposable
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
-        stalePointer.OriginalId = "pr-x";
+        stalePointer.LegacyId = "pr-x";
         stalePointer.SupersededById = successorId;
         _context.StateSpans.Add(stalePointer);
         await _context.SaveChangesAsync();
@@ -1590,7 +1603,7 @@ public class StateSpanRepositoryTests : IDisposable
         {
             var tombstone = SpanEntity(
                 _context.TenantId, StateSpanCategory.Exercise, "Running", BatchDay.AddHours(hour), null);
-            tombstone.OriginalId = "ex-twice-deleted";
+            tombstone.LegacyId = "ex-twice-deleted";
             tombstone.DeletedAt = BatchDay.AddHours(hour + 1);
             _context.StateSpans.Add(tombstone);
             _context.Entry(tombstone).Property("DeletedByUser").CurrentValue = true;
@@ -1647,6 +1660,68 @@ public class StateSpanRepositoryTests : IDisposable
                 inputs.Select(i => i.RecordId).SequenceEqual(expectedIds)),
             It.IsAny<CancellationToken>()), Times.Once);
         _mockDedup.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ACancelledDedup_PropagatesAfterReportingTheCommittedWrite()
+    {
+        var legacyReads = new Mock<ILegacyReadCacheInvalidation>();
+        legacyReads.Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>())).Returns(Task.CompletedTask);
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+        var repository = new StateSpanRepository(
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object, legacyReads.Object);
+
+        var act = () => repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-cancelled")]);
+
+        var thrown = (await act.Should().ThrowAsync<OperationCanceledException>()).Which;
+        legacyReads.Verify(r => r.WrittenAsync(It.Is<IReadOnlyCollection<Type>>(t => t.Contains(typeof(StateSpan)))), Times.Once);
+        CommittedWrite.TryGet<IReadOnlyList<StateSpanUpsert>>(thrown, out var committed).Should().BeTrue();
+        committed!.Should().ContainSingle().Which.Span.OriginalId.Should().Be("ov-cancelled");
+        (await LiveRowsAsync()).Should().ContainKey("ov-cancelled");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ALinkedWrite_TellsTheLegacyReadCacheAgainAfterTheLink()
+    {
+        var order = new List<string>();
+        var legacyReads = new Mock<ILegacyReadCacheInvalidation>();
+        legacyReads
+            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
+            .Callback(() => order.Add("reported"))
+            .Returns(Task.CompletedTask);
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("linked"))
+            .ReturnsAsync(new DeduplicationBatchResult(0, 0, 0, 0));
+        var repository = new StateSpanRepository(
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object, legacyReads.Object);
+
+        await repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-linked")]);
+
+        order.Should().Equal("reported", "linked", "reported");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ADedupThatFails_IsLoggedAndTheUpsertReturns()
+    {
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("dedup failed"));
+
+        var written = await _repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-failed")]);
+
+        written.Should().ContainSingle().Which.Outcome.Should().Be(UpsertOutcome.Created);
+        _logger.Verify(l => l.Log(
+            LogLevel.Warning,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<InvalidOperationException>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     [Fact]

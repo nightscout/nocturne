@@ -51,7 +51,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TestTenantCache.DefaultTenantId;
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var audit = new Mock<IAuditContext>().Object;
         var factory = new TestNocturneDbContextFactory(_context);
 
@@ -61,7 +61,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         _decomposer = new TreatmentDecomposer(
-            factory,
+            factory, new DecomposedTreatmentKeys(factory),
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
             new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord().Object,
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),

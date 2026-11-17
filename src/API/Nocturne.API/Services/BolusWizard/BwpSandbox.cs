@@ -20,8 +20,10 @@ public sealed record BwpProfile(double Sensitivity, double LowTarget, double Hig
 /// <summary>
 /// The parts of Nightscout's sandbox <c>boluswizardpreview.js</c> reads, in mg/dl.
 /// </summary>
+/// <param name="Time">The sandbox's time in Unix milliseconds, which a reading is current against.</param>
 /// <param name="LastSgv">The newest reading, Nightscout's <c>_.last(sbx.data.sgvs)</c>.</param>
 /// <param name="Iob">The <c>iob</c> property; null when it is not offered.</param>
+/// <param name="CarbIntakes">The carb intakes the preview reads.</param>
 /// <param name="Profile">Null when there is no treatment profile.</param>
 public sealed record BwpSandbox(
     long Time,

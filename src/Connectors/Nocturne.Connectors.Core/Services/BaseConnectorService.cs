@@ -12,7 +12,7 @@ using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
-public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
+public abstract partial class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {
     protected readonly HttpClient _httpClient;
@@ -22,6 +22,12 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     /// <summary>The only clock derived connectors read, so a test can drive it.</summary>
     protected TimeProvider Clock { get; }
+
+    /// <summary>
+    ///     The delay between attempts of <see cref="ExecuteWithRetryAsync{T}"/>, for a connector that
+    ///     runs <see cref="ConnectorRetryLoop"/> itself.
+    /// </summary>
+    protected IRetryDelayStrategy RetryDelayStrategy { get; }
 
     /// <summary>The API publisher, or <c>null</c> when running detached (e.g. dry-run tooling).</summary>
     protected IConnectorPublisher? Publisher => _publisher;
@@ -45,6 +51,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         HttpClient httpClient,
         IConnectorServerResolver<TConfig> serverResolver,
         ILogger logger,
+        IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
@@ -52,11 +59,32 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _serverResolver = serverResolver ?? throw new ArgumentNullException(nameof(serverResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        RetryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _publisher = publisher;
         Clock = timeProvider ?? TimeProvider.System;
     }
 
-    protected abstract string ConnectorSource { get; }
+    /// <summary>
+    ///     The data source id every record this connector imports is stored under, and that its
+    ///     resume watermarks are read by: the <see cref="ConnectorRegistrationAttribute.DataSourceId"/>
+    ///     on <typeparamref name="TConfig"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     <typeparamref name="TConfig"/> declares no data source id, so nothing the connector
+    ///     stores could be found again.
+    /// </exception>
+    protected virtual string ConnectorSource =>
+        Registration?.DataSourceId is { Length: > 0 } dataSourceId
+            ? dataSourceId
+            : throw new InvalidOperationException(
+                $"{typeof(TConfig).Name} declares no {nameof(ConnectorRegistrationAttribute.DataSourceId)}.");
+
+    /// <summary>
+    ///     The id the connector list carries for this connector, which its progress events carry
+    ///     too. A <typeparamref name="TConfig"/> with no registration is in no list and reports under
+    ///     <see cref="ConnectorSource"/>.
+    /// </summary>
+    private string ConnectorId => Registration?.ConnectorId ?? ConnectorSource;
 
     public abstract string ServiceName { get; }
 
@@ -66,16 +94,15 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// this property drives the sync loop, so stating them separately lets a connector advertise a
     /// toggle it never acts on, or act on data the tenant has no way to turn off.
     /// </summary>
-    public virtual List<SyncDataType> SupportedDataTypes => [.. RegisteredDataTypes];
+    public virtual List<SyncDataType> SupportedDataTypes => [.. Registration?.SupportedDataTypes ?? [SyncDataType.Glucose]];
 
     /// <remarks>
     ///     Not <see cref="ConnectorRegistrationAttribute.DeclaredOn"/>: a connector service may be
-    ///     closed over a configuration carrying no registration at all, which defaults to glucose
-    ///     rather than failing. The inherit rule is the same one.
+    ///     closed over a configuration carrying no registration at all, whose data types default
+    ///     to glucose rather than failing. The inherit rule is the same one.
     /// </remarks>
-    private static readonly SyncDataType[] RegisteredDataTypes =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.SupportedDataTypes
-        ?? [SyncDataType.Glucose];
+    private static readonly ConnectorRegistrationAttribute? Registration =
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false);
 
     /// <summary>
     ///     The pre-flight <see cref="RunBackgroundSyncAsync"/> runs before it fetches anything.
@@ -152,6 +179,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         _progressReporter = progressReporter;
+        _marks = null;
         var skippedBefore = _publisher?.SkippedDeleted ?? 0;
         var refusedBefore = _publisher?.Refused ?? 0;
         try
@@ -165,7 +193,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
         // A run the caller withdrew still resolves the tenant's in-progress indicator: report one
         // reasonless terminal failure under CancellationToken.None, then let the cancellation travel.
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             await ReportSyncOutcomeAsync(false, null, CancellationToken.None);
             throw;
@@ -352,10 +380,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Calculate an independent catch-up "since" timestamp for device status.
-    ///     Returns the most recent device-status timestamp (minus a small overlap), or
-    ///     <c>null</c> when none exists — letting the caller decide its own fallback
-    ///     rather than forcing a full initial-window re-fetch of high-volume telemetry.
+    ///     The device-status family's resume point: the most recent stored device status (minus the
+    ///     catch-up overlap), or <c>null</c> — the whole history, whatever
+    ///     <see cref="InitialSyncFloor"/> says — when none is stored.
     /// </summary>
     protected async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
     {
@@ -364,9 +391,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Calculate an independent catch-up "since" timestamp for activity.
-    ///     Returns the most recent activity timestamp (minus a small overlap), or
-    ///     <c>null</c> when none exists so the caller can choose its own fallback.
+    ///     The activity family's resume point, read as
+    ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> reads device status.
     /// </summary>
     protected async Task<DateTime?> CalculateActivityCatchUpSinceAsync(TConfig config)
     {
@@ -421,17 +447,12 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Neither bound may narrow the other. The resume point cannot narrow the caller's, because
     ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
     ///     answering that from the watermark returns nothing and reports it as a success. The
-    ///     caller's cannot narrow the resume point either, because on a background catch-up the
-    ///     caller's bound is the glucose watermark, and honouring it alone is what strands the other
-    ///     families behind glucose — a resume point left open by an unbounded
-    ///     <see cref="InitialSyncFloor"/> included, since that is a family with nothing stored at
-    ///     all asking for the source's whole history.
+    ///     caller's cannot narrow the resume point either, since a family whose last crawl failed
+    ///     still owes the range below it — an open resume point included, since that is a family
+    ///     with nothing stored asking for the source's whole history.
     ///     <para>
-    ///     A caller that supplies no bound is not asking for everything: a background cycle whose
-    ///     glucose watermark is null reaches here, as does the tenant's own sync button, and a
-    ///     family with a resume point still stands on it. A resume point that is absent rather than
-    ///     open is resolved by the caller before it gets here — see
-    ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> for the two that answer that way.
+    ///     A caller that supplies no bound is not asking for everything: the tenant's own sync
+    ///     button sends none, and a family with a resume point still stands on it.
     ///     </para>
     /// </remarks>
     protected static DateTime? ResumeFrom(DateTime? requested, DateTime? resumePoint)
@@ -452,6 +473,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </summary>
     protected static DateTime ResumeFrom(DateTime? requested, DateTime resumePoint) =>
         ResumeFrom(requested, (DateTime?)resumePoint) ?? resumePoint;
+
+    /// <summary>
+    ///     The lower bound a family other than glucose crawls from on an open-ended request: as
+    ///     <see cref="ResumeFrom(DateTime?, DateTime?)"/>, except that a background run's derived
+    ///     glucose resume point is no bound at all.
+    /// </summary>
+    /// <remarks>
+    ///     Widening a family to the glucose resume point ties it to glucose succeeding: a glucose
+    ///     endpoint that fails every run, or nothing stored for glucose, keeps that point at the
+    ///     initial floor, and every other family re-crawls everything above it on every run.
+    /// </remarks>
+    protected static DateTime? ResumeFrom(SyncRequest request, DateTime? resumePoint) =>
+        request.FromIsGlucoseResumePoint ? resumePoint : ResumeFrom(request.From, resumePoint);
 
     /// <summary>
     ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
@@ -561,11 +595,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return request.DataTypes.Count == 0 ? enabled : [.. request.DataTypes.Where(enabled.Contains)];
     }
 
-    protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
-    {
-        return Task.FromResult(Enumerable.Empty<Profile>());
-    }
-
     /// <summary>
     ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
     ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
@@ -614,178 +643,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await latestTimestamp() is null ? WriteOrigin.Backfill : WriteOrigin.Live;
     }
 
-    protected virtual async Task<bool> PublishGlucoseDataAsync(
-        IEnumerable<Entry> entries,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for glucose data submission");
-            return false;
-        }
-
-        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishTreatmentDataAsync(
-        IEnumerable<Treatment> treatments,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for treatment data submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishTreatmentsAsync(
-            treatments,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishDeviceStatusAsync(
-        IEnumerable<DeviceStatus> deviceStatuses,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for device status submission");
-            return false;
-        }
-
-        return await _publisher.Device.PublishDeviceStatusAsync(
-            deviceStatuses,
-            ConnectorSource, await DevicePublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishProfileDataAsync(
-        IEnumerable<Profile> profiles,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for profile data submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    protected virtual async Task<bool> PublishFoodDataAsync(
-        IEnumerable<Food> foods,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for food data submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    protected virtual async Task<bool> PublishActivityDataAsync(
-        IEnumerable<Activity> activities,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for activity data submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishActivityAsync(
-            activities,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    protected virtual async Task<bool> PublishStateSpanDataAsync(
-        IEnumerable<StateSpan> stateSpans,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for state span submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishStateSpansAsync(
-            stateSpans,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
     /// <summary>
-    ///     Profile activations derive from what a connector reads as the pump's active program and gate
-    ///     and count under <see cref="SyncDataType.StateSpans"/>, as the Profile spans they replace did.
+    ///     Publishes one record type's batch through its <see cref="PublishRoutes"/> entry when the
+    ///     type is active, reporting progress and recording the outcome through <see cref="RecordPublishOutcome"/>.
     /// </summary>
-    protected virtual async Task<bool> PublishProfileActivationDataAsync(
-        IEnumerable<ProfileActivation> activations,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for profile activation submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishProfileActivationsAsync(
-            activations,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        );
-    }
-
-    /// <summary>
-    ///     System events have no <see cref="SyncDataType"/> of their own, so a connector routing them through
-    ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
-    ///     <see cref="SyncDataType.DeviceEvents"/>.
-    /// </summary>
-    protected virtual async Task<bool> PublishSystemEventDataAsync(
-        IEnumerable<SystemEvent> systemEvents,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for system event submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishSystemEventsAsync(
-            systemEvents,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
-    }
-
-    /// <summary>
-    ///     Publishes one record type's batch when the type is active, reporting progress and
-    ///     recording the outcome through <see cref="RecordPublishOutcome"/>.
-    /// </summary>
+    /// <param name="dataType">The type to gate and count under when more than one governs the record type.</param>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log
     ///     in parentheses.
@@ -796,29 +658,113 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </returns>
     protected async Task<bool> PublishRecordTypeAsync<T>(
         SyncResult result,
-        SyncDataType dataType,
         HashSet<SyncDataType> activeTypes,
         List<T> records,
-        Func<List<T>, TConfig, CancellationToken, Task<bool>> publishFunc,
         TConfig config,
         CancellationToken cancellationToken,
-        string? context = null) where T : class
+        string? context = null,
+        SyncDataType? dataType = null) where T : class
     {
-        if (!activeTypes.Contains(dataType)) return false;
+        var route = PublishRoutes.For<T>();
+        var type = dataType ?? route.DefaultDataType;
+        if (!route.DataTypes.Contains(type))
+            throw new ArgumentException(
+                $"{typeof(T).Name} is not published under {type}.", nameof(dataType));
+
+        if (!activeTypes.Contains(type)) return false;
 
         if (records.Count == 0)
         {
-            RecordPublishOutcome(result, dataType, 0, success: true);
+            RecordPublishOutcome(result, type, 0, success: true);
             return false;
         }
 
         await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
-            new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
+            new() { ["count"] = records.Count.ToString(), ["dataType"] = type.ToString() },
             cancellationToken);
 
-        var success = await publishFunc(records, config, cancellationToken);
-        RecordPublishOutcome(result, dataType, records.Count, success, context);
+        var success = await PublishByRouteAsync(records, config, cancellationToken);
+        RecordPublishOutcome(result, type, records.Count, success, context);
         return success;
+    }
+
+    /// <summary>
+    ///     Publishes a batch through its record type's route without the per-type bookkeeping of
+    ///     <see cref="PublishRecordTypeAsync{T}"/>: no count, no progress message. Every route dispatch
+    ///     goes through <see cref="DispatchAsync{T, TOut}"/>.
+    /// </summary>
+    protected async Task<bool> PublishByRouteAsync<T>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class
+    {
+        var route = PublishRoutes.For<T>();
+        return await DispatchAsync(route, records, config, false,
+            (publisher, origin) => route.Publish(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Publishes through a route that hands back its publisher's result, for a caller that needs
+    ///     more than whether it landed.
+    /// </summary>
+    /// <returns>The result, or null when the publisher is unavailable or reported a failure.</returns>
+    protected async Task<TResult?> PublishByRouteForResultAsync<T, TResult>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class where TResult : class
+    {
+        var route = PublishRoutes.ForResult<T, TResult>();
+        return await DispatchAsync<T, TResult?>(route, records, config, null,
+            (publisher, origin) => route.PublishForResult(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Writes through the record type's "recent" member only what the store does not already hold.
+    /// </summary>
+    /// <returns>How many records were written, or null when the publisher is unavailable or reported a failure.</returns>
+    /// <exception cref="InvalidOperationException">The record type's route has no recent member.</exception>
+    protected async Task<int?> PublishRecentByRouteAsync<T>(
+        IEnumerable<T> records,
+        TConfig config,
+        CancellationToken cancellationToken) where T : class
+    {
+        var route = PublishRoutes.For<T>();
+        var publishRecent = route.PublishRecent
+            ?? throw new InvalidOperationException($"{typeof(T).Name} has no recent publish member.");
+        return await DispatchAsync<T, int?>(route, records, config, null,
+            (publisher, origin) => publishRecent(publisher, records, ConnectorSource, origin, cancellationToken));
+    }
+
+    /// <summary>
+    ///     The one place the publisher is checked for availability, the route's preparation step is run
+    ///     and its origin family is resolved.
+    /// </summary>
+    /// <param name="unavailable">What a caller gets when the publisher is unavailable.</param>
+    private async Task<TOut> DispatchAsync<T, TOut>(
+        PublishRoute<T> route,
+        IEnumerable<T> records,
+        TConfig config,
+        TOut unavailable,
+        Func<IConnectorPublisher, WriteOrigin, Task<TOut>> publish) where T : class
+    {
+        if (_publisher is not { IsAvailable: true } publisher)
+        {
+            _logger?.LogWarning("Publisher not available for {RecordType} submission", typeof(T).Name);
+            return unavailable;
+        }
+
+        if (route.Prepare is { } prepare)
+            foreach (var record in records)
+                prepare(record, config);
+
+        var origin = route.Origin switch
+        {
+            PublishOriginFamily.Glucose => await GlucosePublishOriginAsync(),
+            PublishOriginFamily.Treatment => await TreatmentPublishOriginAsync(),
+            PublishOriginFamily.Device => await DevicePublishOriginAsync(),
+            _ => WriteOrigin.Live,
+        };
+        return await publish(publisher, origin);
     }
 
     /// <summary>
@@ -972,7 +918,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return _progressReporter.ReportProgressAsync(new SyncProgressEvent
         {
-            ConnectorId = ConnectorSource,
+            ConnectorId = ConnectorId,
             ConnectorName = ServiceName,
             Phase = PhaseOf(messageType),
             ErrorMessage = errorMessage,
@@ -989,309 +935,38 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         _ => SyncPhase.Syncing,
     };
 
-    protected virtual async Task<bool> PublishSensorGlucoseDataAsync(
-        IEnumerable<SensorGlucose> records,
+    protected async Task<bool> PublishInBatchesAsync<T>(
+        IEnumerable<T> records,
         TConfig config,
         CancellationToken cancellationToken = default
-    )
+    ) where T : class
     {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for SensorGlucose submission");
-            return false;
-        }
-
-        var processing = config.GlucoseProcessing;
-        foreach (var record in records)
-        {
-            record.GlucoseProcessing = processing;
-            record.SmoothedMgdl ??= processing == GlucoseProcessing.Smoothed ? record.Mgdl : null;
-        }
-
-        return await _publisher.Glucose.PublishSensorGlucoseAsync(
-            records,
-            ConnectorSource, await GlucosePublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishBolusDataAsync(
-        IEnumerable<Bolus> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for Bolus submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishCarbIntakeDataAsync(
-        IEnumerable<CarbIntake> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for CarbIntake submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishCarbIntakesAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishBGCheckDataAsync(
-        IEnumerable<BGCheck> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BGCheck submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishBolusCalculationDataAsync(
-        IEnumerable<BolusCalculation> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BolusCalculation submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBolusCalculationsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishNoteDataAsync(
-        IEnumerable<Note> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for Note submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits body-weight measurements to the API (upserted by deterministic Id).
-    /// </summary>
-    protected virtual async Task<bool> PublishBodyWeightDataAsync(
-        IEnumerable<BodyWeight> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BodyWeight submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishBodyWeightsAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits step-count records to the API (upserted by deterministic Id).
-    /// </summary>
-    protected virtual async Task<bool> PublishStepCountDataAsync(
-        IEnumerable<StepCount> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for StepCount submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishStepCountsAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits heart-rate records to the API (upserted by deterministic Id).
-    /// </summary>
-    protected virtual async Task<bool> PublishHeartRateDataAsync(
-        IEnumerable<HeartRate> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for HeartRate submission");
-            return false;
-        }
-
-        return await _publisher.Metadata.PublishHeartRatesAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    protected virtual async Task<bool> PublishDeviceEventDataAsync(
-        IEnumerable<DeviceEvent> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for DeviceEvent submission");
-            return false;
-        }
-
-        return await _publisher.Device.PublishDeviceEventsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishTempBasalDataAsync(
-        IEnumerable<TempBasal> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for TempBasal submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishTempBasalsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishBasalInjectionDataAsync(
-        IEnumerable<BasalInjection> records,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for BasalInjection submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishBasalInjectionsAsync(
-            records,
-            ConnectorSource, await TreatmentPublishOriginAsync(),
-            cancellationToken
-        );
-    }
-
-    protected virtual async Task<bool> PublishGlucoseDataInBatchesAsync(
-        IEnumerable<Entry> entries,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var entriesArray = entries.ToArray();
-        if (entriesArray.Length == 0)
+        var array = records.ToArray();
+        if (array.Length == 0)
             return true;
-
-        var batchSize = Math.Max(1, config.BatchSize);
-        var batches = entriesArray
-            .Select((entry, index) => new { entry, index })
-            .GroupBy(x => x.index / batchSize)
-            .Select(g => g.Select(x => x.entry).ToArray());
 
         var allSuccessful = true;
         var batchNumber = 1;
 
-        foreach (var batch in batches)
+        foreach (var batch in array.Chunk(Math.Max(1, config.BatchSize)))
         {
             _logger?.LogDebug(
-                "Publishing batch {BatchNumber} with {Count} entries",
+                "Publishing {RecordType} batch {BatchNumber} with {Count} entries",
+                typeof(T).Name,
                 batchNumber,
                 batch.Length
             );
 
-            var success = await PublishGlucoseDataAsync(batch, config, cancellationToken);
-            if (!success)
+            if (!await PublishByRouteAsync(batch, config, cancellationToken))
             {
                 allSuccessful = false;
-                _logger?.LogWarning("Failed to publish batch {BatchNumber}", batchNumber);
+                _logger?.LogWarning("Failed to publish {RecordType} batch {BatchNumber}", typeof(T).Name, batchNumber);
             }
 
             batchNumber++;
 
             // Small delay between batches to avoid overwhelming the message bus
-            if (batchNumber > 1)
-                await Task.Delay(10, cancellationToken);
-        }
-
-        return allSuccessful;
-    }
-
-    protected virtual async Task<bool> PublishTreatmentDataInBatchesAsync(
-        IEnumerable<Treatment> treatments,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var treatmentsArray = treatments.ToArray();
-        if (treatmentsArray.Length == 0)
-            return true;
-
-        var batchSize = Math.Max(1, config.BatchSize);
-        var batches = treatmentsArray
-            .Select((treatment, index) => new { treatment, index })
-            .GroupBy(x => x.index / batchSize)
-            .Select(g => g.Select(x => x.treatment).ToArray());
-
-        var allSuccessful = true;
-        var batchNumber = 1;
-
-        foreach (var batch in batches)
-        {
-            _logger?.LogDebug(
-                "Publishing treatment batch {BatchNumber} with {Count} entries",
-                batchNumber,
-                batch.Length
-            );
-
-            var success = await PublishTreatmentDataAsync(batch, config, cancellationToken);
-            if (!success)
-            {
-                allSuccessful = false;
-                _logger?.LogWarning("Failed to publish treatment batch {BatchNumber}", batchNumber);
-            }
-
-            batchNumber++;
-
-            // Small delay between batches to avoid overwhelming the message bus
-            if (batchNumber > 1)
-                await Task.Delay(10, cancellationToken);
+            await Task.Delay(10, cancellationToken);
         }
 
         return allSuccessful;
@@ -1318,6 +993,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             "Starting background data sync for {ConnectorSource}",
             ConnectorSource
         );
+        _backfillDeadline = Clock.GetUtcNow() + BackfillBudget;
         try
         {
             if (!await AuthenticateAsync())
@@ -1326,9 +1002,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 return AuthenticationFailedResult();
             }
 
-            var sinceTimestamp = since ?? await CalculateSinceTimestampAsync(config);
-
-            var request = CreateBackgroundSyncRequest(sinceTimestamp);
+            var request = CreateBackgroundSyncRequest(since ?? await CalculateSinceTimestampAsync(config));
+            request.FromIsGlucoseResumePoint = since is null;
 
             var result = await PerformSyncInternalAsync(request, config, cancellationToken);
 
@@ -1358,7 +1033,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogError(
                 ex,
@@ -1370,6 +1045,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 Success = false,
                 Errors = { ex.Message }
             };
+        }
+        finally
+        {
+            _backfillDeadline = null;
         }
     }
 
@@ -1429,7 +1108,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <returns><c>default</c> when the operation failed.</returns>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<Task<T?>> operation,
-        IRetryDelayStrategy retryStrategy,
         Func<Task<bool>>? reAuthenticateOnUnauthorized = null,
         int maxRetries = 3,
         string? operationName = null,
@@ -1437,7 +1115,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         var opName = operationName ?? "operation";
-        HttpRequestException? lastException = null;
+        Exception? lastException = null;
 
         return await ConnectorRetryLoop.RunAsync<T>(
             async (attempt, attempts) =>
@@ -1518,7 +1196,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     TrackFailedRequest("JSON parsing error");
                     return RetryStep<T>.Complete(default);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
+                {
+                    lastException = ex;
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] {Operation} timed out (attempt {Attempt})",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1
+                    );
+
+                    return RetryStep<T>.RetryAfterDelay;
+                }
+                catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
                 {
                     _logger.LogInformation(
                         "[{ConnectorSource}] {Operation} was cancelled",
@@ -1539,7 +1229,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     return RetryStep<T>.Complete(default);
                 }
             },
-            retryStrategy,
+            RetryDelayStrategy,
             maxRetries,
             attempts =>
             {
@@ -1559,24 +1249,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             cancellationToken
         );
     }
-
-    /// <summary>
-    ///     The <c>reAuthenticateOnUnauthorized</c> answer to <see cref="ExecuteWithRetryAsync{T}"/> for a
-    ///     connector holding a cached token: drop the token the source refused, sign in again, and
-    ///     hand the retry the new one through <paramref name="useToken"/>.
-    /// </summary>
-    protected static Func<Task<bool>> ReauthenticateWith(
-        AuthTokenProviderBase<TConfig> tokenProvider,
-        TConfig config,
-        Action<string> useToken,
-        CancellationToken cancellationToken = default) => async () =>
-    {
-        tokenProvider.InvalidateToken();
-        var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token)) return false;
-        useToken(token);
-        return true;
-    };
 
     protected async Task<HttpResponseMessage> SendWithHeadersAsync(
         HttpMethod method,

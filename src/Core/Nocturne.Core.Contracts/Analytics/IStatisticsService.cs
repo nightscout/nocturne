@@ -316,11 +316,6 @@ public interface IStatisticsService
 
     // Unit Conversions
 
-    /// <summary>Convert a glucose value from mg/dL to mmol/L.</summary>
-    /// <param name="mgdl">Glucose value in mg/dL.</param>
-    /// <returns>Glucose value in mmol/L.</returns>
-    double MgdlToMMOL(double mgdl);
-
     /// <summary>Convert a glucose value from mmol/L to mg/dL.</summary>
     /// <param name="mmol">Glucose value in mmol/L.</param>
     /// <returns>Glucose value in mg/dL.</returns>
@@ -439,11 +434,12 @@ public interface IStatisticsService
         IEnumerable<BasalSegment>? profileBasalSegments = null);
 
     /// <summary>
-    /// The registered CGMs that contributed <paramref name="readings"/>, each with its reading count,
-    /// then a nameless entry with no device id when any reading has no device.
+    /// The registered CGMs among <paramref name="readingCounts"/> (readings per device, a null device
+    /// for the unattributed ones), each with its reading count, then a nameless entry with no device
+    /// id when any reading has no device.
     /// </summary>
     IEnumerable<ContributingDevice> CalculateContributingDevices(
-        IReadOnlyCollection<SensorGlucose> readings,
+        IReadOnlyCollection<(Guid? PatientDeviceId, int Count)> readingCounts,
         IEnumerable<PatientDevice> devices);
 
     /// <summary>

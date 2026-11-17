@@ -29,7 +29,8 @@ public sealed class GoogleHealthCoordinator(IServiceScopeFactory scopes, TimePro
     private enum Gate { Operation, State, Worker }
 
     public sealed record DisconnectRequest(Guid RequestId, Guid SubjectId);
-    internal sealed record Flow(string State, string Verifier, Guid SubjectId, DateTimeOffset Expires);
+    internal sealed record Flow(string State, string Verifier, Guid SubjectId, DateTimeOffset Expires,
+        string? ClientId = null, string? RedirectUri = null);
     public sealed record SyncProgress(GoogleHealthSyncPhase Phase, string? DataType,
         int CompletedDataTypes, int TotalDataTypes, int PagesRead, bool WorkerOwned = false);
 

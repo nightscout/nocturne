@@ -22,6 +22,7 @@ public class ExperimentsController : ControllerBase
 {
     /// <summary>
     /// Confirms the request carries valid, authorized credentials.
+    /// Like Nightscout, it returns <c>{ status: "ok" }</c> to any credential with read access to glucose, treatments or devices, including scoped uploader tokens.
     /// </summary>
     /// <returns>200 with <c>{ status: "ok" }</c> when authorized; 401 otherwise.</returns>
     /// <remarks>

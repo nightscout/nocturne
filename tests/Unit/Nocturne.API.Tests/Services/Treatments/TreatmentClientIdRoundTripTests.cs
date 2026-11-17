@@ -70,7 +70,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             Endpoint = "DELETE /api/v1/treatments",
         };
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<BolusRepository>.Instance);
         var carbRepo = _carbRepo = new CarbIntakeRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<CarbIntakeRepository>.Instance);
@@ -99,7 +99,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             bolusRepo, tempBasalRepo.Object,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),

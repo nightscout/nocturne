@@ -24,7 +24,6 @@ public class SleepReportServiceTests
     private readonly Mock<ISleepSessionRepository> _sessionRepo = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecord = new();
-    private readonly Mock<IPatientDeviceRepository> _patientDevices = new();
     private readonly Mock<IAuditContext> _caller = new();
     private readonly NocturneDbContext _db = TestDbContextFactory.CreateInMemoryContext();
     private readonly SleepReportService _sut;
@@ -38,16 +37,9 @@ public class SleepReportServiceTests
 
         _db.TenantId = Guid.NewGuid();
 
-        _patientDevices
-            .Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<PatientDevice>());
-        var demoMode = new Mock<IDemoModeService>();
-        demoMode.Setup(d => d.IsEnabled).Returns(false);
-
         _sut = new SleepReportService(
             _sessionRepo.Object,
             _glucoseRepo.Object,
-            new CanonicalGlucoseService(_glucoseRepo.Object, _patientDevices.Object, demoMode.Object),
             _patientRecord.Object,
             new SubjectRepository(_db.AsFactory()),
             _caller.Object,
@@ -57,7 +49,8 @@ public class SleepReportServiceTests
 
     /// <summary>
     /// Two uploaders posting the same two-hour low, one of them <paramref name="offsetSeconds"/>
-    /// behind the other, then a return to range.
+    /// behind the other, then a return to range. A canonical read serves what the stored stream
+    /// flags leave (<see cref="CanonicalGlucoseStream.Select"/>); any other read serves both.
     /// </summary>
     private void SetupTwoSourceLow(DateTime lowStart, int offsetSeconds)
     {
@@ -81,12 +74,19 @@ public class SleepReportServiceTests
             });
         }
 
+        var ordered = readings.OrderBy(r => r.Mills).ToArray();
         _glucoseRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(readings.OrderBy(r => r.Mills).ToArray());
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .ReturnsAsync(ordered);
+        _glucoseRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), null, GlucoseStreams.Canonical))
+            .ReturnsAsync(CanonicalGlucoseStream.Select(ordered, []));
     }
 
     [Theory]
@@ -182,7 +182,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var result = await _sut.GetSingleNightReportAsync(Guid.NewGuid());
@@ -217,7 +217,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         await _sut.GetSingleNightReportAsync(Guid.NewGuid());
@@ -225,7 +225,7 @@ public class SleepReportServiceTests
         _glucoseRepo.Verify(r => r.GetAsync(
             start, end, null, null,
             int.MaxValue, 0, false, null, null,
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()), Times.Once);
     }
 
     // ── GetSingleNightReportByDateAsync ────────────────────────────────────
@@ -242,7 +242,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
     }
 
@@ -355,7 +355,7 @@ public class SleepReportServiceTests
         _glucoseRepo.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()),
             Times.Never);
     }
 
@@ -395,7 +395,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -432,7 +432,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         // Sydney is UTC+11 in January, so these bounds are Sydney 10 Jan 00:00 to 12 Jan 23:59:59.999,
@@ -520,7 +520,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -556,7 +556,7 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
     }
 

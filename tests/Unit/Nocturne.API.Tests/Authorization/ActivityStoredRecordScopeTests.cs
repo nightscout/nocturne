@@ -17,6 +17,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 using V1 = Nocturne.API.Controllers.V1;
 using V4 = Nocturne.API.Controllers.V4.Health;
 
@@ -36,15 +37,16 @@ public class ActivityStoredRecordScopeTests
     private readonly Mock<ISleepService> _sleep = new();
     private readonly Mock<IHeartRateService> _heartRates = new();
     private readonly Mock<IStepCountService> _stepCounts = new();
-    private readonly ActivityDecomposer _decomposer = new(
-        Mock.Of<INocturneDbContextFactory>(),
-        Mock.Of<IStateSpanRepository>(),
-        TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+    private readonly ActivityDecomposer _decomposer;
     private readonly ActivityService _service;
     private readonly DefaultHttpContext _httpContext = new();
 
     public ActivityStoredRecordScopeTests()
     {
+        _decomposer = new(
+            new ActivityRecordRepository(Mock.Of<INocturneDbContextFactory>(), TimeProvider.System),
+            Mock.Of<IStateSpanRepository>(),
+            _sleep.Object, NullLogger<ActivityDecomposer>.Instance);
         var documents = new Mock<IDocumentProcessingService>();
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> a) => a);

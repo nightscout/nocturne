@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.DeviceStatuses;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -148,22 +149,35 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
     private const int OverrideQueryLimit = 10;
 
-    private static StateSpan BuildOverrideSpan(DeviceStatus ds, DateTime timestamp, string? legacyId)
+    /// <summary>
+    /// The end the observation declares, or <see langword="null"/> for one with no duration or one whose
+    /// end is not after the status time. The span starts at the status time, so an end already past it
+    /// cannot be stored as-is.
+    /// </summary>
+    private static DateTime? DeclaredOverrideEnd(DeviceStatus ds, DateTime timestamp)
     {
         DateTime? end = ds.Override!.Duration is > 0
             ? (ParseTimestampToDateTime(ds.Override.Timestamp) ?? timestamp)
                 .AddSeconds(ds.Override.Duration.Value)
             : null;
+        return end > timestamp ? end : null;
+    }
+
+    /// <summary>The end of a span, held back to the first later contrary observation or span start.</summary>
+    private static DateTime? BoundedEnd(DateTime? end, DateTime? firstLater) =>
+        firstLater < (end ?? DateTime.MaxValue) ? firstLater : end;
+
+    private static StateSpan BuildOverrideSpan(DeviceStatus ds, DateTime timestamp, string? legacyId)
+    {
         return new StateSpan
         {
             Category = StateSpanCategory.Override,
             State = OverrideState.Custom.ToString(),
             StartTimestamp = timestamp,
-            // The span starts at the status time, so an end already past it cannot be stored as-is.
-            EndTimestamp = end > timestamp ? end : null,
+            EndTimestamp = DeclaredOverrideEnd(ds, timestamp),
             Source = ds.Device,
             OriginalId = legacyId,
-            Metadata = BuildOverrideMetadata(ds.Override),
+            Metadata = BuildOverrideMetadata(ds.Override!),
         };
     }
 
@@ -398,12 +412,40 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         foreach (var ds in statuses)
             NormalizeMills(ds);
 
+        var echoes = await PointAtStoredStatusesAsync(statuses, source, ct);
+        if (echoes.Count > 0)
+            statuses = [.. statuses.Where(s => !echoes.Contains(s))];
+        if (statuses.Count == 0)
+            return into ?? new DeviceStatusDecomposition();
+
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses.Select(s => s.Id), SnapshotTables, ct);
         var batch = statuses
             .Select(ds => new BatchStatus(ds, ds.Id, CorrelationIdFor(ds.Id, correlationIds), ResolveTimestamp(ds)))
             .ToList();
         return await DecomposeAsync(batch, source, group: null, origin, into ?? new DeviceStatusDecomposition(), ct);
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
+    /// </summary>
+    /// <remarks>
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private Task<IReadOnlySet<DeviceStatus>> PointAtStoredStatusesAsync(
+        IEnumerable<DeviceStatus> statuses, string? source, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, WireForms.UuidPrefix),
+                Table(_pumpRepo, WireForms.UuidPrefix),
+                Table(_uploaderRepo, WireForms.UuidPrefix),
+            ],
+            _ => source == DataSources.NightscoutConnector,
+            ct);
 
     /// <summary>
     /// The snapshot tables a status's stored correlation id is read from, in the APS, pump, uploader
@@ -687,15 +729,22 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                   && metadata.OverrideScaleFactor() == observed.OverrideScaleFactor());
 
         var covered = false;
+        var conflicted = false;
+        var restated = new List<StateSpan>();
         var containing = spans[StateSpanCategory.Override]
             .Where(s => s.StartTimestamp <= at && (s.EndTimestamp == null || s.EndTimestamp >= at))
             .ToList();
         foreach (var span in containing)
         {
+            var unchanged = Unchanged(span);
             // Of two conflicting observations at one instant, the first decomposed wins.
-            if (Unchanged(span) || span.StartTimestamp >= at)
+            if (unchanged || span.StartTimestamp >= at)
             {
-                covered |= IsUploaderSpan(span, device);
+                var uploaders = IsUploaderSpan(span, device);
+                covered |= uploaders;
+                conflicted |= !unchanged;
+                if (uploaders && unchanged)
+                    restated.Add(span);
                 continue;
             }
 
@@ -707,7 +756,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             touched.Add(span);
         }
 
-        if (observed is null || covered)
+        if (observed is null)
             return touched;
 
         var next = spans[StateSpanCategory.Override]
@@ -723,6 +772,23 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             .OrderBy(m => m.Timestamp).ThenBy(m => m.Id)
             .FirstOrDefault()?.Timestamp;
 
+        var firstLater = contraryAt ?? next?.StartTimestamp;
+
+        if (covered)
+        {
+            // A conflict decomposed at this instant ends the restated span here. An extension outlives the
+            // status that made it, as a span it ended stays ended.
+            var end = BoundedEnd(DeclaredOverrideEnd(ds, at), firstLater);
+            foreach (var span in restated.Where(s => !conflicted && s.EndTimestamp is not null && (end is null || end > s.EndTimestamp)))
+            {
+                span.EndTimestamp = end;
+                spans.Change(span);
+                touched.Add(span);
+            }
+
+            return touched;
+        }
+
         var opened = BuildOverrideSpan(ds, at, key);
 
         if (next is not null
@@ -736,9 +802,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             return touched;
         }
 
-        var firstLater = contraryAt ?? next?.StartTimestamp;
-        if (firstLater < (opened.EndTimestamp ?? DateTime.MaxValue))
-            opened.EndTimestamp = firstLater;
+        opened.EndTimestamp = BoundedEnd(opened.EndTimestamp, firstLater);
 
         spans.Open(opened);
         touched.Add(opened);
@@ -946,7 +1010,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        var command = ApsSnapshotCurves.FreshestOpenApsCommand(ds.OpenAps!);
+        var openAps = ds.OpenAps!;
+        var command = ApsSnapshotCurves.FreshestOpenApsCommand(openAps);
         var apsSystem = DetectOpenApsVariant(ds);
 
         var snapshot = new V4Models.ApsSnapshot
@@ -958,27 +1023,27 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             DataSource = source,
             CorrelationId = correlationId,
             AidAlgorithm = apsSystem,
-            Iob = ds.OpenAps.Iob?.Iob,
-            BasalIob = ds.OpenAps.Iob?.BasalIob,
-            BolusIob = ds.OpenAps.Iob?.BolusIob,
-            Cob = ds.OpenAps.Cob ?? command?.COB,
+            Iob = openAps.Iob?.Iob,
+            BasalIob = openAps.Iob?.BasalIob,
+            BolusIob = openAps.Iob?.BolusIob,
+            Cob = openAps.Cob ?? command?.COB,
             CurrentBg = command?.Bg,
             EventualBg = command?.EventualBG,
             TargetBg = command?.TargetBG,
             RecommendedBolus = command?.InsulinReq,
             SensitivityRatio = command?.SensitivityRatio,
-            Enacted = ds.OpenAps.Enacted != null
-                && (ds.OpenAps.Enacted.Received == true || ds.OpenAps.Enacted.Recieved == true),
-            EnactedRate = ds.OpenAps.Enacted?.Rate,
-            EnactedDuration = ds.OpenAps.Enacted?.Duration,
-            EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
-                ? ds.OpenAps.Enacted.Smb
-                : ds.OpenAps.Enacted?.Units,
-            AidVersion = ds.OpenAps?.Version,
+            Enacted = openAps.Enacted != null
+                && (openAps.Enacted.Received == true || openAps.Enacted.Recieved == true),
+            EnactedRate = openAps.Enacted?.Rate,
+            EnactedDuration = openAps.Enacted?.Duration,
+            EnactedBolusVolume = openAps.Enacted?.Smb is > 0
+                ? openAps.Enacted.Smb
+                : openAps.Enacted?.Units,
+            AidVersion = openAps.Version,
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
-        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Suggested, snapshot, JsonOptions);
-        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Enacted, snapshot, JsonOptions);
+        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
+        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(openAps.Enacted, snapshot, JsonOptions);
         return snapshot;
     }
 
@@ -1069,13 +1134,15 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// <summary>
     /// Distinguishes between vanilla OpenAPS, AAPS, and Trio based on payload heuristics.
     /// All three post under the "openaps" devicestatus key.
-    /// - AAPS: uploader name contains "AndroidAPS"
+    /// - AAPS: uploader name contains "AndroidAPS", or the top-level <c>app</c> is "AAPS" (what
+    ///   NSClientV3 sends, with an empty uploader block)
     /// - Trio: openaps block includes a version field
     /// - Vanilla OpenAPS: neither of the above
     /// </summary>
     internal static V4Models.AidAlgorithm DetectOpenApsVariant(DeviceStatus ds)
     {
-        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true)
+        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true
+            || IsAapsApp(ds))
             return V4Models.AidAlgorithm.AndroidAps;
 
         if (!string.IsNullOrEmpty(ds.OpenAps?.Version))
@@ -1083,6 +1150,13 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         return V4Models.AidAlgorithm.OpenAps;
     }
+
+    private static bool IsAapsApp(DeviceStatus ds) =>
+        ds.ExtensionData?.TryGetValue("app", out var app) == true
+        && app.ValueKind == JsonValueKind.String
+        && app.GetString() is { } name
+        && (name.Equals("AAPS", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("AndroidAPS", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Resolves the best available timestamp for a device status record.
@@ -1093,7 +1167,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     internal DateTime ResolveTimestamp(DeviceStatus ds)
     {
         if (ds.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(ds.Mills).UtcDateTime;
+            return ds.Mills.ToUtcDateTime();
 
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;

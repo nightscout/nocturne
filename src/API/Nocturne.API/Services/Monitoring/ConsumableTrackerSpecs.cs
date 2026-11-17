@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using System.Text.Json;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
@@ -7,6 +8,10 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.API.Services.Monitoring;
 
 /// <summary>A Duration tracker definition for a piece of hardware that wears out.</summary>
+/// <param name="Name">The name the tracker definition is created with.</param>
+/// <param name="Category">The tracker category it is filed under.</param>
+/// <param name="Icon">The name of the icon it is shown with.</param>
+/// <param name="LifespanHours">Hours the hardware is expected to last, at which its hazard threshold falls.</param>
 /// <param name="Triggers">The device event types, in their canonical spelling, that restart it.</param>
 /// <param name="Ends">The device event types, in their canonical spelling, that end it.</param>
 /// <param name="Covers">What the hardware it follows provides; empty when that is not known.</param>
@@ -152,7 +157,7 @@ public static class ConsumableTrackerSpecs
 
     /// <summary>The spelling of <paramref name="type"/> a definition's trigger or end list stores.</summary>
     private static string CanonicalName(DeviceEventType type) =>
-        TreatmentTypes.DeviceEventTypeMap.First(pair => pair.Value == type).Key;
+        TreatmentTypeMaps.DeviceEventTypeMap.First(pair => pair.Value == type).Key;
 
     /// <summary>
     /// The spec for <paramref name="kind"/>: the first, by rank, of the specs of

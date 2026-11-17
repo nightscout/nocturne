@@ -6,11 +6,14 @@ import { error, isHttpError, isRedirect, redirect } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
 import {
   describeSubmitError,
+  errorCode,
+  errorIssues,
+  errorMessage,
   errorStatus,
 } from "../forms/submit-error";
 import { missingItemError, rateLimitedError } from "../forms/submit-messages.svelte";
 import { remoteErrorMessage } from "./remote-error";
-import { parseErrorBody, parseIssues } from "./error-body";
+import { parseCode, parseErrorBody, parseIssues } from "./error-body";
 import { TotpSetupFailure, type ReferencingRulesResponse } from "#lib/api/generated/nocturne-api-client.js";
 import {
   describeTotpSetupError,
@@ -33,7 +36,7 @@ import {
  */
 async function crossTheBoundary(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, status, error, parseErrorBody, parseIssues) => { ${config.errorHandling.on500("get invite info")}; }`,
+    `(err, status, error, parseErrorBody, parseIssues, parseCode) => { ${config.errorHandling.on500("get invite info")}; }`,
     "on500.ts",
     { loader: "ts" }
   );
@@ -45,11 +48,12 @@ async function crossTheBoundary(thrown: unknown): Promise<unknown> {
     status: unknown,
     error: typeof import("@sveltejs/kit").error,
     parseErrorBody: typeof import("./error-body").parseErrorBody,
-    parseIssues: typeof import("./error-body").parseIssues
+    parseIssues: typeof import("./error-body").parseIssues,
+    parseCode: typeof import("./error-body").parseCode
   ) => never = new Function(`return ${source}`)();
 
   try {
-    flatten(thrown, errorStatus(thrown), error, parseErrorBody, parseIssues);
+    flatten(thrown, errorStatus(thrown), error, parseErrorBody, parseIssues, parseCode);
   } catch (crossed) {
     return crossed;
   }
@@ -271,6 +275,80 @@ describe("the status a generated remote function lets through", () => {
     expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
       "Couldn't load the invite."
     );
+  });
+});
+
+describe("the problem code a generated remote function forwards", () => {
+  it.each([400, 404, 409, 429])("carries a well-formed code on a %i", async (status) => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(status, "Some server text"),
+      code: "role_name_taken",
+    });
+
+    expect(errorStatus(crossed)).toBe(status);
+    expect(errorCode(crossed)).toBe("role_name_taken");
+  });
+
+  it("recovers the code from a body NSwag left unparsed", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        409,
+        JSON.stringify({ ...problemDetails(409, "Taken.", "Conflict"), code: "role_name_taken" })
+      )
+    );
+
+    expect(errorCode(crossed)).toBe("role_name_taken");
+  });
+
+  it.each(["Role Name Taken", "role-name-taken", "", 7, null, ["role_name_taken"]])(
+    "drops a malformed code (%j)",
+    async (code) => {
+      const crossed = await crossTheBoundary({
+        ...problemDetails(409, "Taken.", "Conflict"),
+        code,
+      });
+
+      expect(errorStatus(crossed)).toBe(409);
+      expect(errorCode(crossed)).toBeUndefined();
+    }
+  );
+
+  it("sends no code when the body has none", async () => {
+    const crossed = await crossTheBoundary(problemDetails(409, "Taken.", "Conflict"));
+
+    expect(errorCode(crossed)).toBeUndefined();
+  });
+
+  it("keeps the fixed message on a 404 that carries a detail and a code", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(404, "Data source not found: dexcom"),
+      code: "unknown_target",
+    });
+
+    expect(errorMessage(crossed)).toBe("Not found");
+    expect(errorCode(crossed)).toBe("unknown_target");
+  });
+
+  it("keeps the fixed message on a 429 that carries a detail and a code", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(429, "GitHub said slow down", "Too Many Requests"),
+      code: "github_rate_limited",
+    });
+
+    expect(errorMessage(crossed)).toBe("Too many requests");
+    expect(errorCode(crossed)).toBe("github_rate_limited");
+  });
+
+  it("keeps the issues beside the code on a 400", async () => {
+    const issues = [{ scope: "condition", path: "root", reason: "list_empty", field: "conditions" }];
+    const crossed = await crossTheBoundary({
+      ...problemDetails(400, "Invalid.", "Bad Request"),
+      issues,
+      code: "invalid_conditions",
+    });
+
+    expect(errorIssues(crossed)).toEqual(issues);
+    expect(errorCode(crossed)).toBe("invalid_conditions");
   });
 });
 

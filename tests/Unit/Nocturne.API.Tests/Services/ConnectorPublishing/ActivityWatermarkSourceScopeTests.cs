@@ -1,4 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Caching;
@@ -111,7 +112,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
 
         var stateSpanRepository = new StateSpanRepository(
             _context.AsFactory(),
-            Mock.Of<IDeduplicationService>(),
+            Mock.Of<IDuplicateLinker>(),
             Mock.Of<IAuditContext>(),
             NullLogger<StateSpanRepository>.Instance);
 
@@ -119,21 +120,20 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             stateSpanRepository, NullLogger<StateSpanService>.Instance);
 
         var heartRateService = new HeartRateService(
-            _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
-            TimeProvider.System, NullLogger<HeartRateService>.Instance);
+            new HeartRateRepository(_context.AsFactory(), TimeProvider.System), processing.Object, Mock.Of<ISignalRBroadcastService>());
 
         var stepCountService = new StepCountService(
-            _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
-            TimeProvider.System, NullLogger<StepCountService>.Instance);
+            new StepCountRepository(_context.AsFactory(), TimeProvider.System), processing.Object, Mock.Of<ISignalRBroadcastService>());
 
+        var sleepService = Mock.Of<ISleepService>();
         var activityService = new ActivityService(
             _stateSpanService,
-            Mock.Of<ISleepService>(),
+            sleepService,
             processing.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IDataEventSink<Activity>>(),
             new ActivityDecomposer(
-                _context.AsFactory(), stateSpanRepository, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance),
+                new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), stateSpanRepository, sleepService, NullLogger<ActivityDecomposer>.Instance),
             heartRateService,
             stepCountService,
             NullLogger<ActivityService>.Instance);
@@ -154,7 +154,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             new ActivityDedupRepository(_context.AsFactory()),
             new ConnectorConfigurationRepository(_context.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
-            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);

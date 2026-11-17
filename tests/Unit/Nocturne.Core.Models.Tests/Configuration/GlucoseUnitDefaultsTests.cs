@@ -35,6 +35,8 @@ public class GlucoseUnitDefaultsTests
     [InlineData("MMOL/l", "mmol")]
     [InlineData("mg/dL", "mg/dl")]
     [InlineData("mgdl", "mg/dl")]
+    [InlineData("mg", "mg/dl")]
+    [InlineData(" MMOLL ", "mmol")]
     [InlineData("mg/dl", "mg/dl")]
     [InlineData("g/L", null)]
     [InlineData(" ", null)]

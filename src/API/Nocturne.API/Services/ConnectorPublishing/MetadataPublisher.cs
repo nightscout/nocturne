@@ -137,7 +137,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         var foodList = foods.ToList();
         try
         {
-            await _foodService.CreateFoodAsync(foodList, cancellationToken);
+            await _foodService.CreateFoodAsync(foodList, FoodWriteMode.Native, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -232,7 +232,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            activities, a => a.Id,
+            activities,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
             ids => _activityDedup.GetHeldIdsAsync(ids, cancellationToken));
@@ -429,26 +429,23 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         => _stateSpanService.GetLatestNonActivityTimestampAsync(source, cancellationToken);
 
     /// <inheritdoc />
-    public Task<DateTime?> GetBackfillLowWaterMarkAsync(
+    public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
         string source,
-        string collection,
         CancellationToken cancellationToken = default)
-        => _configurations.GetBackfillLowWaterMarkAsync(source, collection, cancellationToken);
+        => _configurations.GetBackfillLowWaterMarksAsync(source, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
     /// Same-key races (a manual sync or cursor-reset job racing the background sync) stay
-    /// last-writer-wins: any surviving mark is a valid resume point because the resume crawl is
-    /// unbounded below it. Different keys on the same row keep each other; see
+    /// last-writer-wins per key; keys a write does not name keep their values; see
     /// <see cref="Infrastructure.Data.Repositories.ConnectorConfigurationRepository"/>.
     /// </remarks>
-    public async Task SetBackfillLowWaterMarkAsync(
+    public async Task SetBackfillLowWaterMarksAsync(
         string source,
-        string collection,
-        DateTime? lowWaterMark,
+        IReadOnlyDictionary<string, DateTime?> changes,
         CancellationToken cancellationToken = default)
     {
-        if (!await _configurations.SetBackfillLowWaterMarkAsync(source, collection, lowWaterMark, cancellationToken))
+        if (!await _configurations.SetBackfillLowWaterMarksAsync(source, changes, cancellationToken))
         {
             Logger.LogWarning(
                 "No connector configuration found for {Source}; cannot persist backfill low-water mark",

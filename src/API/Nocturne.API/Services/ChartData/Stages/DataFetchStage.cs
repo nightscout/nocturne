@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Treatments;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
@@ -26,15 +25,10 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// readings per hour (5-minute intervals) with a 50% safety margin.
 /// </para>
 /// <para>
-/// Bolus and carb data are fetched from an extended window beginning at
-/// <see cref="ChartDataContext.BufferStartTime"/> (8 hours before <see cref="ChartDataContext.StartTime"/>)
-/// so that IOB and COB calculations account for insulin and carbs administered before the
-/// visible chart window. <see cref="ChartDataContext.DisplayBoluses"/> and
-/// <see cref="ChartDataContext.DisplayCarbIntakes"/> are derived subsets trimmed to the display window.
-/// </para>
-/// <para>
-/// TempBasal records are fetched from <see cref="ChartDataContext.BufferStartTime"/> like boluses so
-/// basal IOB sees temp basals that began before the window, under the same cap as
+/// The reads the IOB/COB series feeds on take their bounds from <see cref="ChartDataContext.SeriesWindow"/>
+/// (<see cref="IobCobSeriesWindow"/>). <see cref="ChartDataContext.DisplayBoluses"/> and
+/// <see cref="ChartDataContext.DisplayCarbIntakes"/> are subsets trimmed to the display window.
+/// Temp basals are read under the same cap as
 /// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> because the ascending read truncates the newest
 /// rows. Consumers sort for themselves. <see cref="ChartDataContext.DisplayTempBasals"/> is the
 /// delivered pieces of the whole fetch that overlap the display window, chosen by
@@ -50,7 +44,6 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <seealso cref="ChartDataContext"/>
 internal sealed class DataFetchStage(
     ISensorGlucoseRepository sensorGlucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     IBGCheckRepository bgCheckRepository,
@@ -74,20 +67,15 @@ internal sealed class DataFetchStage(
     {
         var startTime = context.StartTime;
         var endTime = context.EndTime;
-        var bufferStartTime = context.BufferStartTime;
-
-        // Helper to convert mills to DateTime for V4 repository calls
-        static DateTime? MillsToDateTime(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        var window = context.SeriesWindow;
 
         // Calculate reasonable limits based on the actual time range
         var rangeHours = (endTime - startTime) / (60.0 * 60 * 1000);
-        // 3 sensors × 60 readings/hour (1-minute resolution) = 4 320 for a 24-hour window.
-        // Covers the realistic worst case of multiple simultaneous high-frequency sources
-        // without removing the limit entirely.
-        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 3 * 60));
-        // Treatments are less frequent but include the buffer window
-        var bufferMs = startTime - bufferStartTime;
-        var treatmentRangeHours = (endTime - (startTime - bufferMs)) / (60.0 * 60 * 1000);
+        // The canonical read returns one stream per bucket: twice a 1-minute stream's 60 readings an
+        // hour leaves room for a denser uploader without removing the limit entirely.
+        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 2 * 60));
+        // Treatments are less frequent but are read from the series' insulin look-back.
+        var treatmentRangeHours = (window.ReadEnd - window.InsulinReadStart) / (60.0 * 60 * 1000);
         var treatmentLimit = (int)Math.Max(500, Math.Ceiling(treatmentRangeHours * 10));
         var displayRangeLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 10));
 
@@ -95,25 +83,21 @@ internal sealed class DataFetchStage(
         // stream, not blended concurrent CGMs.
         var sensorGlucoseTask = FetchCanonicalGlucoseAsync();
         async Task<List<SensorGlucose>> FetchCanonicalGlucoseAsync() =>
-            (
-                await canonicalGlucose.SelectAsync(
-                    (await sensorGlucoseRepository.GetForAnalyticsAsync(
-                        from: MillsToDateTime(startTime),
-                        to: MillsToDateTime(endTime),
-                        device: null,
-                        source: null,
-                        limit: entryLimit,
-                        offset: 0,
-                        descending: true,
-                        ct: cancellationToken
-                    )).ToList(),
-                    cancellationToken)
-            ).ToList();
+            (await sensorGlucoseRepository.GetForAnalyticsAsync(
+                from: startTime.ToUtcDateTime(),
+                to: endTime.ToUtcDateTime(),
+                device: null,
+                source: null,
+                limit: entryLimit,
+                offset: 0,
+                descending: true,
+                ct: cancellationToken,
+                streams: GlucoseStreams.Canonical
+            )).ToList();
 
-        // Fetch bolus data from v4 Bolus table — extended range for IOB calculation
         var bolusTask = bolusRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
+            from: window.InsulinReadStart.ToUtcDateTime(),
+            to: window.ReadEnd.ToUtcDateTime(),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -122,10 +106,9 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         );
 
-        // Fetch carb data from v4 CarbIntake table — extended range for COB calculation
         var carbIntakeTask = carbIntakeRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
+            from: window.InsulinReadStart.ToUtcDateTime(),
+            to: window.ReadEnd.ToUtcDateTime(),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -136,8 +119,8 @@ internal sealed class DataFetchStage(
 
         // Fetch BG checks from v4 BGCheck table (display range only)
         var bgCheckTask = bgCheckRepository.GetAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: treatmentLimit,
@@ -148,8 +131,8 @@ internal sealed class DataFetchStage(
 
         // Fetch device events from v4 DeviceEvent table (display range only)
         var deviceEventTask = deviceEventRepository.GetAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: displayRangeLimit,
@@ -160,8 +143,8 @@ internal sealed class DataFetchStage(
 
         // Fetch basal injections from v4 BasalInjection table (display range only)
         var basalInjectionTask = basalInjectionRepository.GetAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: displayRangeLimit,
@@ -171,8 +154,8 @@ internal sealed class DataFetchStage(
         );
 
         var tempBasalTask = tempBasalRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
+            from: window.TempBasalReadStart.ToUtcDateTime(),
+            to: window.ReadEnd.ToUtcDateTime(),
             device: null,
             source: null,
             limit: Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit,
@@ -181,32 +164,28 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         );
 
-        // APS and pump snapshot points (ascending) so the IOB/COB series can prefer the values the
-        // devices reported. The buffer start lets a tick at the very left edge resolve a snapshot
-        // uploaded just before it, and the skew allowance past the end lets the live tick take one
-        // stamped by a device clock running ahead. The slim projections are deliberate: full
-        // snapshots carry multi-KB JSON blob columns, and a limit heuristic would truncate the
-        // newest rows for high-cadence uploaders.
-        var deviceReadUntil = MillsToDateTime(endTime + DeviceReportedValues.FutureSkewToleranceMs)!.Value;
+        // The slim projections are deliberate: full snapshots carry multi-KB JSON blob columns, and
+        // a limit heuristic would truncate the newest rows for high-cadence uploaders.
+        var deviceReadUntil = window.DeviceReadEnd.ToUtcDateTime();
         var apsSnapshotTask = apsSnapshotRepository.GetIobCobPointsAsync(
-            from: MillsToDateTime(bufferStartTime)!.Value,
+            from: window.DeviceReadStart.ToUtcDateTime(),
             to: deviceReadUntil,
             ct: cancellationToken
         );
         var pumpIobTask = pumpSnapshotRepository.GetIobPointsAsync(
-            from: MillsToDateTime(bufferStartTime)!.Value,
+            from: window.DeviceReadStart.ToUtcDateTime(),
             to: deviceReadUntil,
             ct: cancellationToken
         );
 
         var latestPumpSnapshotTask = pumpSnapshotRepository.GetLatestAsync(
-            asOf: MillsToDateTime(endTime),
+            asOf: endTime.ToUtcDateTime(),
             ct: cancellationToken
         );
 
         var sleepSessionTask = sleepService.GetSessionsAsync(
-            from: MillsToDateTime(startTime),
-            to: MillsToDateTime(endTime),
+            from: startTime.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             limit: displayRangeLimit,
             cancellationToken: cancellationToken
         );
@@ -222,13 +201,13 @@ internal sealed class DataFetchStage(
 
             var allStateSpans = await stateSpanRepository.GetByCategories(
                 stateSpanCategories,
-                MillsToDateTime(startTime),
-                MillsToDateTime(endTime),
+                startTime.ToUtcDateTime(),
+                endTime.ToUtcDateTime(),
                 cancellationToken
             );
 
             var overrides = await ScheduledBasal.OverridesAsync(
-                stateSpanRepository, bufferStartTime, endTime, cancellationToken);
+                stateSpanRepository, window.TherapyStart, window.OverrideEnd, cancellationToken);
 
             var profileSegments = await profileActivationResolver.GetRangeAsync(startTime, endTime, cancellationToken);
 
@@ -251,14 +230,14 @@ internal sealed class DataFetchStage(
             if (context.IncludeHealthSeries)
             {
                 heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
-                    MillsToDateTime(startTime)!.Value,
-                    MillsToDateTime(endTime)!.Value,
+                    startTime.ToUtcDateTime(),
+                    endTime.ToUtcDateTime(),
                     cancellationToken: cancellationToken
                 )).ToList();
 
                 stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
-                    MillsToDateTime(startTime)!.Value,
-                    MillsToDateTime(endTime)!.Value,
+                    startTime.ToUtcDateTime(),
+                    endTime.ToUtcDateTime(),
                     cancellationToken: cancellationToken
                 )).ToList();
             }

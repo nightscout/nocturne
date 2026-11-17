@@ -112,12 +112,12 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             Mock.Of<ICompressionLowRepository>(),
             new TreatmentFoodRepository(_db.ContextFactory.AsNocturneFactory()),
             new StateSpanRepository(
-                _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDeduplicationService>(), new SystemAuditContext(),
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
                 NullLogger<StateSpanRepository>.Instance),
             new ProfileActivationRepository(
                 _db.ContextFactory.AsNocturneFactory(), new SystemAuditContext(), NullLogger<ProfileActivationRepository>.Instance),
             new TempBasalRepository(
-                _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDeduplicationService>(), new SystemAuditContext(),
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
                 NullLogger<TempBasalRepository>.Instance),
             _time,
             NullLoggerFactory.Instance,

@@ -22,12 +22,10 @@ public class TidepoolAuthTokenProvider(
     ILogger<TidepoolAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
-    : AuthTokenProviderBase<TidepoolConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<TidepoolConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     /// <summary>
     ///     Tidepool sessions last ~24 hours. Refresh at 23 hours.
@@ -56,7 +54,6 @@ public class TidepoolAuthTokenProvider(
                 authUserId = userId;
                 return (token, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Tidepool authentication",
             cancellationToken

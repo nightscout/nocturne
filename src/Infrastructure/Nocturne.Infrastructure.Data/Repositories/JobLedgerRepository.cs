@@ -241,18 +241,26 @@ public class JobLedgerRepository : IJobLedger
         ExecuteAsync(EnrolPlatformSql, ct, Id(Guid.CreateVersion7()), Text("job", job), Timestamp("due", dueAt));
 
     /// <inheritdoc/>
-    public Task RequestAsync(string job, Guid? tenantId, TimeSpan after, CancellationToken ct)
-    {
-        var now = _time.GetUtcNow();
-        return ExecuteAsync(
-            RequestSql,
-            ct,
-            Id(Guid.CreateVersion7()),
-            Text("job", job),
-            new NpgsqlParameter("tenant", NpgsqlDbType.Uuid) { Value = (object?)tenantId ?? DBNull.Value },
-            Timestamp("now", now),
-            Timestamp("due", now + (after > TimeSpan.Zero ? after : TimeSpan.Zero)));
-    }
+    public Task RequestAsync(string job, Guid? tenantId, TimeSpan after, CancellationToken ct) =>
+        ExecuteAsync(RequestSql, ct, RequestParameters(job, tenantId, _time.GetUtcNow(), after));
+
+    /// <summary>
+    /// An immediate <see cref="RequestAsync(string, Guid?, TimeSpan, CancellationToken)"/> of
+    /// <paramref name="job"/> for <paramref name="db"/>'s tenant, written in its open transaction, so the
+    /// request commits or rolls back with the write that needs the job. PostgreSQL only.
+    /// </summary>
+    internal static Task RequestInTransactionAsync(NocturneDbContext db, string job, CancellationToken ct) =>
+        db.Database.ExecuteSqlRawAsync(
+            RequestSql, RequestParameters(job, db.TenantId, DateTimeOffset.UtcNow, TimeSpan.Zero), ct);
+
+    private static NpgsqlParameter[] RequestParameters(string job, Guid? tenantId, DateTimeOffset now, TimeSpan after) =>
+    [
+        Id(Guid.CreateVersion7()),
+        Text("job", job),
+        new NpgsqlParameter("tenant", NpgsqlDbType.Uuid) { Value = (object?)tenantId ?? DBNull.Value },
+        Timestamp("now", now),
+        Timestamp("due", now + (after > TimeSpan.Zero ? after : TimeSpan.Zero)),
+    ];
 
     /// <inheritdoc/>
     public async Task<JobLedgerListing> ListAsync(int limit, CancellationToken ct)

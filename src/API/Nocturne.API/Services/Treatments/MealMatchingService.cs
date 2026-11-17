@@ -215,7 +215,7 @@ public class MealMatchingService : IMealMatchingService
                     Carbs: entry.Carbs,
                     ConsumedAt: entry.ConsumedAt,
                     CarbIntakeId: carbIntake.Id,
-                    CarbIntakeCarbs: (decimal)carbIntake.Carbs,
+                    CarbIntakeCarbs: carbIntake.Carbs.ToDecimal(),
                     CarbIntakeMills: carbIntake.Mills,
                     MatchScore: CalculateMatchScore(entry, carbIntake, settings)
                 ));

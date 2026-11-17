@@ -33,7 +33,7 @@ public class TreatmentReadServiceTests
     {
         LegacyTreatmentRepositoryMockExtensions.AnswerServedIdsPerKey(
             _tempBasalRepo, _bolusRepo, _carbIntakeRepo, _bgCheckRepo, _noteRepo, _deviceEventRepo, _bolusCalcRepo);
-        _projection.AnswersSpanIdsPerId();
+        _projection.AnswersSpanIdsPerId().AnswersProjectedSpansPerId();
         _service = new TreatmentReadService(
             _projection.Object,
             _decomposer.Object,
@@ -455,6 +455,60 @@ public class TreatmentReadServiceTests
         stored.Select(t => t.Created.Id).Should().Equal(note.Id.ToString());
     }
 
+    /// <summary>
+    /// A create whose decomposition updated a stored record rather than inserting one is reported
+    /// as an update, so it is announced as one; one that inserted is not.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ReportsATreatmentThatUpdatedAStoredRecordAsUpdated()
+    {
+        var resent = new Treatment { Id = "65a1b2c3d4e5f60718293a4b", Mills = 1000, EventType = "Note", Notes = "resent" };
+        var fresh = new Treatment { Id = "65a1b2c3d4e5f60718293a4c", Mills = 2000, EventType = "Note", Notes = "fresh" };
+        var resentResult = new DecompositionResult();
+        resentResult.UpdatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = resent.Id });
+        var freshResult = new DecompositionResult();
+        freshResult.CreatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = fresh.Id });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resent, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resentResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(fresh, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(freshResult);
+        var stored = new List<StoredTreatment>();
+
+        await _service.CreateAsync([resent, fresh], WriteOrigin.Live, CancellationToken.None, stored);
+
+        stored.Select(t => t.Updated).Should().Equal(true, false);
+    }
+
+    /// <summary>
+    /// A treatment stored as a span (an override here) whose re-upload updated that span is reported
+    /// updated. A pump resume that closed another treatment's suspension span created its own record,
+    /// so it is not.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ReportsATreatmentThatUpdatedItsOwnSpanAsUpdated()
+    {
+        var resentOverride = new Treatment { Id = "override-1", Mills = 1000, EventType = "Temporary Override", Duration = 30 };
+        var resume = new Treatment { Id = "resume-1", Mills = 2000, EventType = "Pump Resume" };
+        var overrideResult = new DecompositionResult();
+        overrideResult.UpdatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = resentOverride.Id });
+        var resumeResult = new DecompositionResult();
+        resumeResult.CreatedRecords.Add(new DeviceEvent { Id = Guid.CreateVersion7(), LegacyId = resume.Id });
+        resumeResult.UpdatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = "pump-suspended-tx:suspend-1" });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resentOverride, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(overrideResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resume, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resumeResult);
+        var stored = new List<StoredTreatment>();
+
+        await _service.CreateAsync([resentOverride, resume], WriteOrigin.Live, CancellationToken.None, stored);
+
+        stored.Select(t => t.Updated).Should().Equal(true, false);
+    }
+
     [Fact]
     public async Task CreateAsync_DoesNotReportATreatmentTheUserDeletedAsStored()
     {
@@ -501,6 +555,42 @@ public class TreatmentReadServiceTests
         failed.Written.Select(t => t.Id).Should().Equal("t1", "t2");
         failed.Message.Should().Contain("was stored but could not be read back");
         failed.FailedIndex.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenASpanCannotBeReadBack_NamesTheStoredTreatmentsBeforeItWithoutReading()
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var span = new Treatment { Id = "t2", Mills = 2000, EventType = "Temporary Target" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll(writes: true);
+        var noteId = Guid.CreateVersion7();
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t2", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(first, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var written = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+                written.CreatedRecords.Add(new Note { Id = noteId, CorrelationId = written.CorrelationId });
+                return written;
+            });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+        var stored = new List<StoredTreatment>();
+
+        var act = () => _service.CreateAsync([first, span, last], WriteOrigin.Live, CancellationToken.None, stored);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.FailedIndex.Should().Be(1);
+        failed.Written.Select(t => t.Id).Should().Equal(noteId.ToString(), "t2", "t3");
+        stored.Should().HaveCount(3);
+        stored[0].Should().BeOfType<StoredTreatment.Named>().Which.Created.Id.Should().Be(noteId.ToString());
+        stored.Skip(1).Should().AllBeOfType<StoredTreatment.Unnamed>();
     }
 
     /// <param name="writes">Whether each treatment writes a record, so a batch that fails after it carries it as stored.</param>

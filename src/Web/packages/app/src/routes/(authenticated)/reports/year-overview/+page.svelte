@@ -264,6 +264,7 @@
     "Notes",
     "DeviceEvents",
     "TempBasals",
+    "BasalInjections",
     "StateSpans",
     "Activity",
     "DeviceStatus",

@@ -37,16 +37,16 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
         : base(fixture, output) { }
 
     /// <remarks>
-    /// The generated input differs from a connector's catch-up batch in three ways, each a case where
-    /// the batch is the more correct of the two, since a status decomposed on its own sees only what
-    /// was decomposed before it:
+    /// The generated input differs from a connector's catch-up batch in three ways, since a status
+    /// decomposed on its own sees only what was decomposed before it. In the first two the batch is the
+    /// more correct of the two:
     /// timestamps ascend, because a resume decomposed before the suspension it ends leaves that
     /// suspension open for good where the batch closes it;
     /// a re-send never changes the pump's state, because the batch keeps only the latest version of a
-    /// status where one at a time leaves the spans the superseded version opened;
-    /// an override's timestamp is its start, as Loop sends it, because a status restating it with a
-    /// later start and an end past the next status is covered without extending the span one at a
-    /// time, leaving a gap the batch fills.
+    /// status where one at a time leaves the spans the superseded version opened.
+    /// An override also keeps one duration and one start rule for its whole period, because one at a
+    /// time never moves a span's end earlier, nor gives an open span an end, where the batch takes both
+    /// from the newest status.
     /// </remarks>
     [Theory]
     [MemberData(nameof(Seeds))]
@@ -245,6 +245,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
         var overrideName = "Workout";
         DateTime overrideStart = start;
         double? overrideDuration = null;
+        var overrideStartMoves = false;
 
         var sequence = new List<string>();
         for (var i = 0; i < 30; i++)
@@ -336,6 +337,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
                         overrideName = random.NextDouble() < 0.5 ? "Workout" : "Pre-Meal";
                         overrideStart = at;
                         overrideDuration = random.NextDouble() < 0.5 ? null : random.Next(600, 3600);
+                        overrideStartMoves = random.NextDouble() < 0.5;
                     }
                 }
 
@@ -347,7 +349,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
                     Active = overrideActive,
                     Name = overrideActive ? overrideName : null,
                     Multiplier = overrideActive ? (overrideName == "Workout" ? 0.5 : 1.2) : null,
-                    Timestamp = overrideActive ? Iso(overrideStart) : null,
+                    Timestamp = overrideActive ? Iso(overrideStartMoves ? at : overrideStart) : null,
                     Duration = overrideActive ? overrideDuration : null,
                 };
             }

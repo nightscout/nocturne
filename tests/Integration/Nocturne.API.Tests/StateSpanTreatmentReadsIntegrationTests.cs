@@ -14,6 +14,9 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -114,6 +117,27 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
         (await CountAsync(client)).Should().Be(1);
         (await CountAsync(client, $"?find[eventType]={Uri.EscapeDataString(eventType)}")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_state_span_treatment_deduplication_linked_to_another_is_served_once()
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 31));
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 30));
+        await WithTenantScopeAsync(async sp =>
+        {
+            await using var db = await sp.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+            var spans = await db.StateSpans.OrderBy(s => s.StartTimestamp).Select(s => s.Id).ToListAsync();
+            spans.Should().HaveCount(2);
+            await db.LinkedRecords.Where(l => spans.Contains(l.RecordId)).ExecuteDeleteAsync();
+            return await DuplicateGroups.LinkAsync(db, RecordType.StateSpan, spans[0], spans[1]);
+        });
+
+        (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle();
+        (await CountAsync(client)).Should().Be(1);
+        (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle();
+        (await GetV3ResultAsync(client, "/api/v3/treatments/history/0")).Should().ContainSingle();
     }
 
     [Theory]
@@ -391,7 +415,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         (await delete.Content.ReadFromJsonAsync<JsonNode>())!["deletedCount"]!.GetValue<long>().Should().Be(1);
         (await GetArrayAsync(client, "/api/v1/treatments")).Should().BeEmpty();
         (await CountAsync(client)).Should().Be(0);
-        (await WithScopeAsync(async sp => await sp.GetRequiredService<INoteRepository>()
+        (await WithTenantScopeAsync(async sp => await sp.GetRequiredService<INoteRepository>()
             .GetByIdAsync(noteId))).Should().BeNull();
     }
 
@@ -419,7 +443,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
     /// <summary>The Note an older version of the treatment decomposer wrote beside a span.</summary>
     private Task<Guid> WriteNoteBesideAsync(string treatmentId, string eventType, string createdAt) =>
-        WithScopeAsync(async sp => (await sp.GetRequiredService<INoteRepository>().CreateAsync(
+        WithTenantScopeAsync(async sp => (await sp.GetRequiredService<INoteRepository>().CreateAsync(
             new Note
             {
                 LegacyId = treatmentId,
@@ -739,7 +763,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         });
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var resolved = await WithScopeAsync(async sp => (
+        var resolved = await WithTenantScopeAsync(async sp => (
             Profile: await sp.GetRequiredService<IActiveProfileResolver>().GetActiveProfileNameAsync(now),
             Basal: await sp.GetRequiredService<IBasalRateResolver>().GetBasalRateAsync(now),
             CarbRatio: await sp.GetRequiredService<ICarbRatioResolver>().GetCarbRatioAsync(now),
@@ -770,7 +794,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
             $"glooko_active_profile_{Guid.NewGuid()}_{start.Ticks}",
             $"mylife_active_profile_pump_{start.Ticks}",
         ];
-        await WithScopeAsync(async sp =>
+        await WithTenantScopeAsync(async sp =>
         {
             var activations = sp.GetRequiredService<IProfileActivationRepository>();
             await activations.UpsertAsync(ConnectorProfile(connectorIds[0], DataSources.GlookoConnector, start), WriteOrigin.Live);
@@ -798,7 +822,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
             (await delete.Content.ReadFromJsonAsync<JsonNode>())!["deletedCount"]!.GetValue<long>().Should().Be(0);
         }
 
-        var stored = await WithScopeAsync(async sp => (await sp.GetRequiredService<IProfileActivationRepository>()
+        var stored = await WithTenantScopeAsync(async sp => (await sp.GetRequiredService<IProfileActivationRepository>()
             .GetOverlappingAsync(start.AddHours(-1), DateTime.UtcNow, 100)).ToList());
         stored.Select(a => a.SyncIdentifier).Should().Contain(connectorIds);
     }
@@ -812,14 +836,6 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         DataSource = source,
         BaseProfileName = "Unknown",
     };
-
-    private async Task<T> WithScopeAsync<T>(Func<IServiceProvider, Task<T>> action)
-    {
-        using var scope = Fixture.Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
-            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
-        return await action(scope.ServiceProvider);
-    }
 
     /// <summary>Loop's upload format: NightscoutKit's <c>TimeFormat.timestampStrFromDate</c>.</summary>
     private static string LoopTimestamp(int minutesAgo) =>

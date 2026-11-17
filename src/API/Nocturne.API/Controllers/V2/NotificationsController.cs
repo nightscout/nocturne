@@ -44,6 +44,7 @@ public class NotificationsController : ControllerBase
     /// <summary>
     /// Pushes a Loop remote command (override, override cancel, remote carbs, remote bolus) to the
     /// phone named by the current profile's <c>loopSettings</c>.
+    /// The body can be JSON or form-urlencoded.
     /// </summary>
     /// <remarks>
     /// The body is read by hand because Nightscout's careportal posts it form-urlencoded while
