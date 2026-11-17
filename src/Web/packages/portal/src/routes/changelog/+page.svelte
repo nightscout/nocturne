@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { getChangelog, type ChangelogRelease } from "$lib/data/portal";
+    import { Artwork } from "water-ui";
+    import { getChangelog, type ChangelogRelease } from "#lib/data/portal.js";
     import { Button } from "@nocturne/ui/ui/button";
-    import { renderReleaseMarkdown } from "$lib/utils/release-markdown";
+    import { renderReleaseMarkdown } from "#lib/utils/release-markdown.js";
     import ExternalLink from "@lucide/svelte/icons/external-link";
     import Loader2 from "@lucide/svelte/icons/loader-circle";
     import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -75,6 +76,13 @@
 
 <div class="container mx-auto px-4 py-12">
     <div class="text-center mb-12">
+        <Artwork
+            artwork="sunrise"
+            palette="ember"
+            motion="auto"
+            autoplay="once"
+            class="mx-auto mb-4 size-48 sm:size-56 lg:size-64"
+        />
         <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
             Changelog
         </h1>
@@ -122,6 +130,7 @@
         </div>
     {:else if releases.length === 0}
         <div class="flex flex-col items-center justify-center py-20">
+            <Artwork artwork="report-pages" palette="slate" motion="auto" autoplay="once" class="mb-4 size-48" />
             <p class="text-muted-foreground">No releases found</p>
         </div>
     {:else}

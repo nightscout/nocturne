@@ -1,8 +1,9 @@
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
@@ -28,9 +29,7 @@ public class ExcursionTrackerTests
         _mockRepo = new Mock<IAlertTrackerRepository> { CallBase = true };
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
 
-        var logger = new Mock<ILogger<ExcursionTracker>>();
-        _tracker = new ExcursionTracker(
-            _mockRepo.Object, new AlertRuleEvaluationGate(), _timeProvider, logger.Object);
+        _tracker = EngineTestHarness.BuildRustTracker(_timeProvider, _mockRepo.Object);
 
         _defaultRule = new AlertRule
         {
@@ -56,7 +55,7 @@ public class ExcursionTrackerTests
 
     #region IDLE state transitions
 
-    [Fact]
+    [NativeFact]
     public async Task Idle_FalseEvaluation_StaysIdle()
     {
         SetupRule();
@@ -70,7 +69,7 @@ public class ExcursionTrackerTests
         result.ExcursionId.Should().BeNull();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Idle_TrueEvaluation_WithConfirmationGreaterThan1_TransitionsToConfirming()
     {
         SetupRule();
@@ -88,7 +87,7 @@ public class ExcursionTrackerTests
         savedState.ConfirmationCount.Should().Be(1);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Idle_TrueEvaluation_WithConfirmation1_GoesDirectlyToActive()
     {
         var rule = new AlertRule
@@ -123,7 +122,7 @@ public class ExcursionTrackerTests
 
     #region CONFIRMING state transitions
 
-    [Fact]
+    [NativeFact]
     public async Task Confirming_FalseEvaluation_ResetsToIdle()
     {
         SetupRule();
@@ -146,7 +145,7 @@ public class ExcursionTrackerTests
         savedState.ConfirmationCount.Should().Be(0);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Confirming_TrueEvaluation_IncreasesCounter()
     {
         SetupRule(); // confirmation_readings = 3
@@ -169,7 +168,7 @@ public class ExcursionTrackerTests
         savedState.ConfirmationCount.Should().Be(2);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Confirming_ReachesThreshold_OpensExcursion()
     {
         SetupRule(); // confirmation_readings = 3
@@ -197,7 +196,7 @@ public class ExcursionTrackerTests
         savedState.ActiveExcursionId.Should().Be(excursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ConfirmationCounter_PreservedBetweenCalls()
     {
         SetupRule(); // confirmation_readings = 3
@@ -246,7 +245,7 @@ public class ExcursionTrackerTests
 
     #region ACTIVE state transitions
 
-    [Fact]
+    [NativeFact]
     public async Task Active_TrueEvaluation_ContinuesExcursion()
     {
         SetupRule();
@@ -266,7 +265,7 @@ public class ExcursionTrackerTests
         result.ExcursionId.Should().Be(excursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Active_FalseEvaluation_StartsHysteresis()
     {
         SetupRule();
@@ -298,7 +297,7 @@ public class ExcursionTrackerTests
 
     #region HYSTERESIS state transitions
 
-    [Fact]
+    [NativeFact]
     public async Task Hysteresis_TrueEvaluation_ResumesExcursion()
     {
         SetupRule();
@@ -332,7 +331,7 @@ public class ExcursionTrackerTests
             Times.Once);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Hysteresis_FalseEvaluation_BeforeExpiry_NoTransition()
     {
         SetupRule(); // hysteresis_minutes = 5
@@ -357,7 +356,7 @@ public class ExcursionTrackerTests
         result.Type.Should().Be(ExcursionTransitionType.None);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Hysteresis_FalseEvaluation_AfterExpiry_ClosesExcursion()
     {
         SetupRule(); // hysteresis_minutes = 5
@@ -397,7 +396,7 @@ public class ExcursionTrackerTests
 
     #region Edge cases
 
-    [Fact]
+    [NativeFact]
     public async Task MissingRule_ReturnsNone()
     {
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
@@ -408,7 +407,7 @@ public class ExcursionTrackerTests
         result.Type.Should().Be(ExcursionTransitionType.None);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ExcursionOpened_ReturnsNewExcursionId()
     {
         var rule = new AlertRule
@@ -434,7 +433,7 @@ public class ExcursionTrackerTests
         result.ExcursionId.Should().Be(newExcursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ExcursionClosed_ReturnsExcursionId()
     {
         SetupRule(); // hysteresis_minutes = 5
@@ -461,7 +460,7 @@ public class ExcursionTrackerTests
         result.ExcursionId.Should().Be(excursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task FullLifecycle_IdleToActiveToClosedViaHysteresis()
     {
         var rule = new AlertRule
@@ -556,7 +555,7 @@ public class ExcursionTrackerTests
             CancellationToken.None);
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData(0, 10)]
     [InlineData(-5, 10)]
     [InlineData(5, 10)]
@@ -579,7 +578,7 @@ public class ExcursionTrackerTests
         close.CloseReason.Should().Be(ExcursionCloseReason.Hysteresis);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task HysteresisEntry_RecordsItsStart_AndLaterEvaluationsKeepIt()
     {
         UseStatefulRepository(30);
@@ -593,7 +592,7 @@ public class ExcursionTrackerTests
             "an evaluation that changes nothing but the timestamp is not written");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task HysteresisReentry_ResumesSameExcursion_AndRestartsTheWindow()
     {
         UseStatefulRepository(30);
@@ -613,7 +612,7 @@ public class ExcursionTrackerTests
         closed.ExcursionId.Should().Be(opened.ExcursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task HysteresisWithoutStart_AdoptsUpdatedAtOnce()
     {
         UseStatefulRepository(30, new AlertTrackerState
@@ -641,7 +640,7 @@ public class ExcursionTrackerTests
         return await _tracker.CloseElapsedHysteresisAsync(_ruleId, CancellationToken.None);
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData(0, 5)]
     [InlineData(5, 10)]
     [InlineData(30, 35)]
@@ -673,7 +672,7 @@ public class ExcursionTrackerTests
             Times.Once);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task CloseElapsedHysteresis_IgnoresAnActiveExcursion()
     {
         UseStatefulRepository(0);
@@ -683,7 +682,7 @@ public class ExcursionTrackerTests
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.State.Should().Be("active");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task CloseElapsedHysteresis_WithoutStart_PersistsTheAdoptedStart()
     {
         UseStatefulRepository(30, new AlertTrackerState
@@ -710,7 +709,7 @@ public class ExcursionTrackerTests
         return await _tracker.ForceCloseAsync(_ruleId, reason, CancellationToken.None);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task AutoResolve_OfAnActiveExcursion_OpensNothingUntilTheConditionIsFalse()
     {
         UseStatefulRepository(0);
@@ -729,7 +728,7 @@ public class ExcursionTrackerTests
             Times.Exactly(2));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task AutoResolve_OfAnActiveExcursion_ReopensAtOnceWhenTheResolveTreeGoesFalse()
     {
         UseStatefulRepository(0);
@@ -741,7 +740,7 @@ public class ExcursionTrackerTests
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task AutoResolve_IsReadOnlyWhileAwaitingRearm()
     {
         UseStatefulRepository(0);
@@ -762,7 +761,7 @@ public class ExcursionTrackerTests
         reads.Should().Be(1);
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData(true, ExcursionCloseReason.Manual)]
     [InlineData(false, ExcursionCloseReason.AutoResolve)]
     public async Task OtherCloses_LeaveTheRuleArmed(bool active, ExcursionCloseReason reason)
@@ -781,7 +780,7 @@ public class ExcursionTrackerTests
 
     #region ForceCloseAsync
 
-    [Fact]
+    [NativeFact]
     public async Task ForceClose_FromActive_ClosesExcursionAndResetsToIdle()
     {
         var excursionId = Guid.NewGuid();
@@ -813,7 +812,7 @@ public class ExcursionTrackerTests
             Times.Once);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ForceClose_FromHysteresis_ClosesExcursionAndResetsToIdle()
     {
         var excursionId = Guid.NewGuid();
@@ -841,7 +840,7 @@ public class ExcursionTrackerTests
             Times.Once);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ForceClose_FromIdle_NoOp()
     {
         SetupTrackerState(null);
@@ -860,7 +859,7 @@ public class ExcursionTrackerTests
             Times.Never);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ForceClose_FromConfirming_NoOp()
     {
         // confirming has no excursion id yet
@@ -881,7 +880,7 @@ public class ExcursionTrackerTests
             Times.Never);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task HysteresisExpiry_Close_CarriesHysteresisReason()
     {
         SetupRule(); // hysteresis_minutes = 5
@@ -910,7 +909,7 @@ public class ExcursionTrackerTests
 
     #region GetActiveExcursionIdAsync
 
-    [Fact]
+    [NativeFact]
     public async Task GetActiveExcursionId_FromActive_ReturnsId()
     {
         var excursionId = Guid.NewGuid();
@@ -926,7 +925,7 @@ public class ExcursionTrackerTests
         result.Should().Be(excursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task GetActiveExcursionId_FromHysteresis_ReturnsId()
     {
         var excursionId = Guid.NewGuid();
@@ -942,7 +941,7 @@ public class ExcursionTrackerTests
         result.Should().Be(excursionId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task GetActiveExcursionId_FromIdle_ReturnsNull()
     {
         SetupTrackerState(null);
@@ -952,7 +951,7 @@ public class ExcursionTrackerTests
         result.Should().BeNull();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task GetActiveExcursionId_FromConfirming_ReturnsNull()
     {
         SetupTrackerState(new AlertTrackerState
@@ -983,7 +982,7 @@ public class ExcursionTrackerTests
             ActiveExcursionId = excursionId,
         });
 
-    [Fact]
+    [NativeFact]
     public async Task ForceClose_OfASnapshotWhoseRuleIsGone_WritesNothing()
     {
         SetupActive(Guid.NewGuid());
@@ -998,7 +997,7 @@ public class ExcursionTrackerTests
         _mockRepo.Verify(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData("enabled")]
     [InlineData("type")]
     [InlineData("body")]
@@ -1027,7 +1026,7 @@ public class ExcursionTrackerTests
         _mockRepo.Verify(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ForceClose_OfASnapshotTheRuleMatches_Closes()
     {
         var excursionId = Guid.NewGuid();
@@ -1041,7 +1040,7 @@ public class ExcursionTrackerTests
             ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ProcessEvaluation_OfASnapshotTheRuleNoLongerMatches_OpensNothing()
     {
         SetupTrackerState(null);

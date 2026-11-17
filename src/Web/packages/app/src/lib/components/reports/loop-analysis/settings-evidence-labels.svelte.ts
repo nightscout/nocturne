@@ -4,9 +4,9 @@ import {
   SettingsEvidenceConfidenceReason,
   SettingsEvidenceRule,
   SettingsEvidenceUnavailableReason,
-} from "$lib/api";
-import { bg, bgLabel } from "$lib/utils/formatting";
-import { plural } from "$lib/utils/plural";
+} from "#lib/api/index.js";
+import { bg, bgLabel } from "#lib/utils/formatting.js";
+import { plural } from "#lib/utils/plural.js";
 
 const HOUR_MS = 3_600_000;
 
@@ -68,7 +68,7 @@ export function reasonText(reason: SettingsEvidenceConfidenceReason): { why: str
     case SettingsEvidenceConfidenceReason.MoreInsulinOnBorrowedInput:
       return {
         // "Points to" on purpose: "shows" would claim more than the evidence gives.
-        why: "This figure points to more insulin. Part of it depends on something that this block cannot check with its own data: another figure, the profile, or the estimate of the insulin curve.",
+        why: "This figure points to more insulin. Part of it depends on something that this block cannot check with its own data. It can be another figure, the profile, or the estimate of the insulin curve.",
         raise: "Confidence increases when this block has its own evidence.",
       };
     case SettingsEvidenceConfidenceReason.StillMovingAtEnd:

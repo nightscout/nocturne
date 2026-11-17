@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
-  import { buildXdripDeepLink } from "$lib/utils/xdrip-links";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { buildXdripDeepLink } from "#lib/utils/xdrip-links.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   const copy = createCopyFeedback();
   let viewState: "redirecting" | "fallback" = $state("redirecting");
@@ -49,7 +49,7 @@
       <CardHeader>
         <CardTitle>Connect xDrip+</CardTitle>
         <CardDescription>
-          xDrip+ didn't open automatically. You can try these options:
+          xDrip+ did not open automatically. You can try these options:
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -76,12 +76,12 @@
             </Button>
           </div>
           <p class="text-muted-foreground text-sm">
-            Then tap "Connect to Nocturne" to authorize.
+            Then select "Connect to Nocturne" to authorize.
           </p>
         </div>
 
         <div class="pt-2">
-          <p class="text-muted-foreground text-sm">Don't have xDrip+ installed?</p>
+          <p class="text-muted-foreground text-sm">xDrip+ not installed?</p>
           <Button
             href="https://github.com/NightscoutFoundation/xDrip/releases"
             target="_blank"

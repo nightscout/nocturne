@@ -5,6 +5,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using OpenApi.Remote.Attributes;
@@ -52,6 +53,7 @@ public class ProfileActivationsController : ControllerBase
     /// Only the activations in force at some moment of the window, as the profile resolvers select them,
     /// each whole: what another instance replicates to read the same profile at every moment.
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RemoteQuery]
     [RequireScope(Scope.TherapyRead)]
@@ -64,14 +66,14 @@ public class ProfileActivationsController : ControllerBase
         [FromQuery] bool applied = false,
         CancellationToken ct = default)
     {
-        var end = to?.ToUniversalTime() ?? DateTime.UtcNow;
-        var start = from?.ToUniversalTime() ?? end - DefaultWindow;
+        var end = to?.AsUtc() ?? DateTime.UtcNow;
+        var start = from?.AsUtc() ?? end - DefaultWindow;
         if (start > end)
             return BadRequest("from must not be after to");
 
         if (applied)
         {
-            var segments = await _resolver.GetRangeAsync(ToMills(start), ToMills(end), ct);
+            var segments = await _resolver.GetRangeAsync(start.ToMills(), end.ToMills(), ct);
             return Ok(segments
                 .Select(s => s.Active.Activation)
                 .DistinctBy(a => a.Id)
@@ -86,6 +88,7 @@ public class ProfileActivationsController : ControllerBase
 
     /// <summary>The activation in force at <paramref name="at"/>, or no content when the profile store's default is.</summary>
     /// <param name="at">The moment; now when omitted.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("active")]
     [RequireScope(Scope.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -95,7 +98,7 @@ public class ProfileActivationsController : ControllerBase
         [FromQuery] DateTime? at = null,
         CancellationToken ct = default)
     {
-        var moment = ToMills((at ?? DateTime.UtcNow).ToUniversalTime());
+        var moment = (at ?? DateTime.UtcNow).ToMills();
         return await _resolver.GetAtAsync(moment, ct) is { } active
             ? Ok(ProfileActivationDto.From(active.Activation))
             : NoContent();
@@ -188,6 +191,4 @@ public class ProfileActivationsController : ControllerBase
             detail: "This switch was reported by a connector or uploader and belongs to it. Change it there."),
         _ => Problem(statusCode: StatusCodes.Status404NotFound, title: "Switch not found"),
     };
-
-    private static long ToMills(DateTime utc) => new DateTimeOffset(utc).ToUnixTimeMilliseconds();
 }

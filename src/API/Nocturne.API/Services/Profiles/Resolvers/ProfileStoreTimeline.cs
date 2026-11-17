@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
@@ -29,10 +30,12 @@ internal sealed class ProfileStoreTimeline
     private const string ImplicitDefault = "Default";
 
     private readonly Epoch[] _epochs;
+    private readonly Dictionary<string, string> _documentDefaults;
 
-    private ProfileStoreTimeline(Epoch[] epochs)
+    private ProfileStoreTimeline(Epoch[] epochs, Dictionary<string, string> documentDefaults)
     {
         _epochs = epochs;
+        _documentDefaults = documentDefaults;
     }
 
     /// <summary>The time from <paramref name="StartMills"/> on, until the next epoch starts.</summary>
@@ -50,6 +53,7 @@ internal sealed class ProfileStoreTimeline
         var chosen = rows.Where(r => r.IsDefault).MaxBy(r => r.Timestamp)?.ProfileName;
 
         var epochs = new Epoch[documents.Count];
+        var documentDefaults = new Dictionary<string, string>(documents.Count, StringComparer.Ordinal);
         var stores = new HashSet<string>(StringComparer.Ordinal);
         string? previous = null;
         for (var i = 0; i < documents.Count; i++)
@@ -75,11 +79,12 @@ internal sealed class ProfileStoreTimeline
             if (!stores.Contains(defaultStore))
                 stores = new HashSet<string>(stores.Append(defaultStore), StringComparer.Ordinal);
 
-            epochs[i] = new Epoch(ToMills(document.Start), stores, defaultStore);
+            epochs[i] = new Epoch(document.Start.ToMills(), stores, defaultStore);
+            documentDefaults[document.Id] = defaultStore;
             previous = defaultStore;
         }
 
-        return new ProfileStoreTimeline(epochs);
+        return new ProfileStoreTimeline(epochs, documentDefaults);
     }
 
     private static string DocumentDefault(
@@ -97,6 +102,12 @@ internal sealed class ProfileStoreTimeline
             .First()
             .ProfileName;
     }
+
+    /// <summary>
+    /// The store the document <paramref name="documentId"/> defaults to while it is in force, or
+    /// <c>null</c> when no row of the timeline belongs to it.
+    /// </summary>
+    public string? DocumentDefaultOf(string documentId) => _documentDefaults.GetValueOrDefault(documentId);
 
     /// <summary>The store read at <paramref name="timeMills"/> when no profile switch names one.</summary>
     public string DefaultAt(long timeMills) => EpochAt(timeMills)?.Default ?? ImplicitDefault;
@@ -148,9 +159,6 @@ internal sealed class ProfileStoreTimeline
             return _epochs[found];
         return newestBeforeFirst && _epochs.Length > 0 ? _epochs[^1] : null;
     }
-
-    private static long ToMills(DateTime utc) =>
-        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 }
 
 /// <summary>The tenant's <see cref="ProfileStoreTimeline"/>, read once per scope.</summary>

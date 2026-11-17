@@ -21,7 +21,8 @@ public static class TestTenantCache
         ICacheService? distributed = null,
         Guid? tenantId = null,
         string? partition = "full",
-        bool demo = false)
+        bool demo = false,
+        CacheFlights? flights = null)
     {
         local ??= new MemoryCache(new MemoryCacheOptions());
         distributed ??= Distributed(local);
@@ -35,6 +36,7 @@ public static class TestTenantCache
         return new TenantCache(
             distributed,
             local,
+            flights ?? new CacheFlights(),
             tenant.Object,
             Mock.Of<IReaderCachePartition>(p => p.Current == partition),
             Mock.Of<IDemoModeService>(d => d.IsEnabled == demo));

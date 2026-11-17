@@ -12,7 +12,8 @@ namespace Nocturne.API.Services.AidDetection;
 /// Each loop cycle stands for the time from its timestamp to the next cycle, up to one 5-minute
 /// cycle interval, so a gap between cycles is uncredited and a cycle repeated by a second uploader
 /// or run at a faster cadence covers no extra time. AID-active percentage is the
-/// <see cref="IntervalUnion"/> of enacted cycles' time; pump-use percentage that of every cycle.
+/// <see cref="IntervalUnion"/> of the time of cycles enacted with the loop closed
+/// (<see cref="ApsLoopCycle.EnactedClosedLoop"/>); pump-use percentage that of every cycle.
 /// </remarks>
 /// <seealso cref="IAidDetectionStrategy"/>
 public class ApsSnapshotStrategy : IAidDetectionStrategy
@@ -36,8 +37,8 @@ public class ApsSnapshotStrategy : IAidDetectionStrategy
     /// </remarks>
     public AidSegmentMetrics CalculateMetrics(AidDetectionContext context)
     {
-        // Of cycles at one instant only the last is credited, so an enacted copy goes last.
-        var snapshots = context.LoopCycles.OrderBy(s => s.Timestamp).ThenBy(s => s.Enacted).ToList();
+        // Of cycles at one instant only the last is credited, so a closed-loop copy goes last.
+        var snapshots = context.LoopCycles.OrderBy(s => s.Timestamp).ThenBy(s => s.EnactedClosedLoop).ToList();
 
         if (snapshots.Count == 0)
         {
@@ -46,7 +47,8 @@ public class ApsSnapshotStrategy : IAidDetectionStrategy
 
         var total = context.EndDate - context.StartDate;
         var cycles = new List<(DateTime Start, DateTime End)>(snapshots.Count);
-        var enactedCycles = new List<(DateTime Start, DateTime End)>();
+        var closedCycles = new List<(DateTime Start, DateTime End)>();
+        var enactedCount = 0;
 
         for (var i = 0; i < snapshots.Count; i++)
         {
@@ -61,14 +63,17 @@ public class ApsSnapshotStrategy : IAidDetectionStrategy
 
             cycles.Add(cycle);
             if (snapshots[i].Enacted)
-                enactedCycles.Add(cycle);
+                enactedCount++;
+            if (snapshots[i].EnactedClosedLoop)
+                closedCycles.Add(cycle);
         }
 
         return new AidSegmentMetrics
         {
             LoopCycleCount = snapshots.Count,
-            EnactedCount = enactedCycles.Count,
-            AidActivePercent = IntervalUnion.Length(enactedCycles) / total * 100.0,
+            EnactedCount = enactedCount,
+            ClosedLoopCount = closedCycles.Count,
+            AidActivePercent = IntervalUnion.Length(closedCycles) / total * 100.0,
             PumpUsePercent = IntervalUnion.Length(cycles) / total * 100.0
         };
     }

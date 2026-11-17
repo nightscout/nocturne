@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import Weight from "@lucide/svelte/icons/weight";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import * as bw from "$api/generated/bodyWeights.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { BodyWeight } from "$api";
+  import { Artwork } from "water-ui";
+  import { weightScaleArtwork } from "#lib/watercolour-icons.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import * as bw from "#lib/api/generated/bodyWeights.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import type { BodyWeight } from "#lib/api/index.js";
 
-  // create/deleteBodyWeight declare a GetBodyWeights invalidation, but it refreshes
-  // getBodyWeights(undefined) — a different cache key from this subscription — so each
-  // mutation below refreshes this query itself.
   const weightsQuery = bw.getBodyWeights({ count: 100, skip: 0 });
   const entries = $derived<BodyWeight[]>(weightsQuery.current ?? []);
 
@@ -37,11 +37,12 @@
     saving = true;
     errorMessage = null;
     try {
-      await bw.create({
-        weightKg: kg,
-        mills: newDate ? new Date(newDate).getTime() : Date.now(),
-      });
-      await weightsQuery.refresh();
+      await bw
+        .create({
+          weightKg: kg,
+          mills: newDate ? new Date(newDate).getTime() : Date.now(),
+        })
+        .updates(bw.getBodyWeights);
       newWeightKg = "";
       newDate = "";
     } catch (e) {
@@ -56,8 +57,9 @@
     pendingDelete = null;
     if (!entry?._id) return;
     try {
-      await bw.deleteBodyWeight(entry._id);
-      await weightsQuery.refresh();
+      await bw.deleteBodyWeight(entry._id).updates(
+        weightsQuery.withOverride((current) => current.filter((e) => e._id !== entry._id))
+      );
     } catch (e) {
       errorMessage = describeSubmitError(e, "Failed to delete entry");
     }
@@ -65,16 +67,25 @@
 </script>
 
 <svelte:head>
-  <title>Weight History - Settings - Nocturne</title>
+  <title>Weight history - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="mx-auto max-w-2xl space-y-6 p-4">
-  <div class="space-y-1">
-    <h1 class="text-xl font-semibold">Weight history</h1>
-    <p class="text-muted-foreground text-sm">
-      Your weight over time. Each entry is dated when it was recorded — editing your current weight
-      on the Patient Record page adds a new entry here rather than overwriting the last one.
-    </p>
+<div class="@container mx-auto max-w-2xl space-y-6 p-4">
+  <div class="flex items-center gap-4">
+    <Artwork
+      icon={weightScaleArtwork}
+      palette="moss"
+      motion="auto"
+      autoplay="once"
+      class="size-20 shrink-0 @md:size-48"
+    />
+    <div class="space-y-1">
+      <h1 class="text-xl font-semibold">Weight history</h1>
+      <p class="text-muted-foreground text-sm">
+        Your weight over time. Each entry is dated when it was recorded. When you edit your current weight
+        on the Patient record page, a new entry is added here. The last entry is not overwritten.
+      </p>
+    </div>
   </div>
 
   <Card.Root>
@@ -83,7 +94,7 @@
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if entries.length === 0}
-        <p class="text-muted-foreground text-sm">No entries yet.</p>
+        <EmptyState art={weightScaleArtwork} title="No entries yet" />
       {:else}
         <ul class="divide-border divide-y">
           {#each entries as entry (entry._id)}
@@ -115,7 +126,7 @@
       <Card.Title>Add an entry</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid gap-3 @md:grid-cols-2">
         <div class="space-y-1.5">
           <Label for="weight-kg">Weight (kg)</Label>
           <Input id="weight-kg" type="number" step="0.1" min="0" bind:value={newWeightKg} placeholder="e.g. 70" />

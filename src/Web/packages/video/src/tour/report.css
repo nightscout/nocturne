@@ -1,0 +1,43 @@
+@import "../../../app/src/app.css";
+/* This package sits outside the app, where Tailwind's source detection does not reach. */
+@source "../../../app/src";
+
+/*
+ * The app's transitions run on the browser clock; every change in a film comes from the timeline.
+ * Global, since dialogs and popovers portal out of the page to the document body.
+ */
+*,
+*::before,
+*::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* A dialog or sheet a film opens stays above the band its heading and notes sit in. */
+:is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="sheet-overlay"], [data-slot="drawer-overlay"]) {
+  bottom: auto !important;
+  height: 860px !important;
+}
+:is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  top: 430px !important;
+  max-height: 820px;
+  overflow-y: auto;
+}
+:is([data-slot="sheet-content"], [data-slot="drawer-content"]) {
+  max-height: 860px;
+  overflow-y: auto;
+}
+
+/* A chart keeps the tooltip and highlights the cursor last left; only the chart under the cursor shows them. */
+[data-tour] :is(.lc-tooltip-root, [class*="lc-highlight"]) {
+  visibility: hidden;
+}
+[data-tour] [data-tour-hover] :is(.lc-tooltip-root, [class*="lc-highlight"]) {
+  visibility: visible;
+}
+
+/* The year heatmap's scroll box would clip its day tooltip, which opens upward: clip only sideways. */
+[data-tour] .overflow-x-auto.overflow-y-visible {
+  overflow-x: clip;
+  overflow-y: visible;
+}

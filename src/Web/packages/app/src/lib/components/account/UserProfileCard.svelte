@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { isRecord } from "$lib/utils/type-guards";
-  import * as Card from "$lib/components/ui/card";
-  import * as Avatar from "$lib/components/ui/avatar";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  import { isRecord } from "#lib/utils/type-guards.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import UserAvatar from "./UserAvatar.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Mail from "@lucide/svelte/icons/mail";
   import Shield from "@lucide/svelte/icons/shield";
   import Clock from "@lucide/svelte/icons/clock";
@@ -14,10 +14,10 @@
   import Camera from "@lucide/svelte/icons/camera";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { formatSessionExpiry, getAuthStore } from "$lib/stores/auth-store.svelte";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import { upload as uploadAvatar, remove as deleteAvatar } from "$lib/api/generated/avatars.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { formatSessionExpiry, getAuthStore } from "#lib/stores/auth-store.svelte.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { upload as uploadAvatar, remove as deleteAvatar } from "#lib/api/generated/avatars.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   interface User {
     name: string;
@@ -47,15 +47,6 @@
   let localAvatarUrl = $derived(user.avatarUrl);
 
   /** Get initials from user name */
-  function getInitials(name: string): string {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }
-
   /** Open file picker when avatar is clicked */
   function handleAvatarClick() {
     if (isUploading || isDeleting) return;
@@ -106,12 +97,7 @@
           disabled={isUploading || isDeleting}
           title="Change avatar"
         >
-          <Avatar.Root class="h-16 w-16">
-            <Avatar.Image src={localAvatarUrl} alt={user.name} />
-            <Avatar.Fallback variant="primary" class="text-xl">
-              {getInitials(user.name)}
-            </Avatar.Fallback>
-          </Avatar.Root>
+          <UserAvatar name={user.name} src={localAvatarUrl} size="lg" />
           <div class="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
             {#if isUploading}
               <Loader2 class="h-5 w-5 text-white animate-spin" />
@@ -159,7 +145,7 @@
           <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the avatar -->
           <input
             type="file"
-            name="file"
+            name={uploadAvatar.fields.file.as("file").name}
             accept="image/png,image/jpeg,image/webp"
             class="hidden"
             bind:this={fileInput}
@@ -187,7 +173,7 @@
       <h3
         class="text-sm font-medium text-muted-foreground uppercase tracking-wider"
       >
-        Account Details
+        Account details
       </h3>
 
       <div class="grid gap-4 @sm:grid-cols-2">
@@ -200,7 +186,7 @@
 
         {#if user.expiresAt}
           <div class="space-y-1">
-            <p class="text-sm text-muted-foreground">Session Expires</p>
+            <p class="text-sm text-muted-foreground">Session expires</p>
             <p class="text-sm flex items-center gap-2">
               <Clock class="h-4 w-4 text-muted-foreground" />
               {formatMediumDateTime(user.expiresAt)}
@@ -266,12 +252,12 @@
   <Card.Footer class="flex flex-col @sm:flex-row gap-2 border-t pt-6">
     <Button variant="outline" href="/settings" class="w-full @sm:w-auto">
       <Settings class="mr-2 h-4 w-4" />
-      Back to Settings
+      Back to settings
     </Button>
     <form method="POST" action="/auth/logout" class="w-full @sm:w-auto">
       <Button variant="destructive" type="submit" class="w-full">
         <LogOut class="mr-2 h-4 w-4" />
-        Log Out
+        Sign out
       </Button>
     </form>
   </Card.Footer>

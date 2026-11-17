@@ -96,6 +96,28 @@ public class ScheduleResolutionTests
             ScheduleResolution.FindValueAtTime(entries, ThreeAm).Should().Be(1.0);
             ScheduleResolution.FindValueAtTime(entries, Noon).Should().Be(0.8);
         }
+
+        [Fact]
+        public void EntriesCarryingOnlyTime_ResolveAsTheSameEntriesWithTimeAsSeconds()
+        {
+            var timeOnly = new List<ScheduleEntry>
+            {
+                new() { Time = "22:00", Value = 1.2 },
+                new() { Time = "06:00", Value = 0.8 },
+                new() { Time = "00:00", Value = 1.0 },
+            };
+            var withSeconds = new List<ScheduleEntry>
+            {
+                new() { Time = "22:00", Value = 1.2, TimeAsSeconds = TenPm },
+                new() { Time = "06:00", Value = 0.8, TimeAsSeconds = SixAm },
+                new() { Time = "00:00", Value = 1.0, TimeAsSeconds = Midnight },
+            };
+
+            foreach (var at in new[] { Midnight, ThreeAm, SixAm, Noon, TenPm, ElevenPm })
+                ScheduleResolution.FindValueAtTime(timeOnly, at).Should().Be(ScheduleResolution.FindValueAtTime(withSeconds, at));
+
+            ScheduleResolution.FindValueAtTime(timeOnly, Noon).Should().Be(0.8);
+        }
     }
 
     public class FindRangeAtTime : ScheduleResolutionTests
@@ -170,6 +192,28 @@ public class ScheduleResolutionTests
             ScheduleResolution.FindRangeAtTime(entries, ThreeAm).Should().Be((70.0, 180.0));
             ScheduleResolution.FindRangeAtTime(entries, Noon).Should().Be((80.0, 140.0));
             ScheduleResolution.FindRangeAtTime(entries, ElevenPm).Should().Be((90.0, 160.0));
+        }
+
+        [Fact]
+        public void EntriesCarryingOnlyTime_ResolveAsTheSameEntriesWithTimeAsSeconds()
+        {
+            var timeOnly = new List<TargetRangeEntry>
+            {
+                new() { Time = "22:00", Low = 90, High = 160 },
+                new() { Time = "06:00", Low = 80, High = 140 },
+                new() { Time = "00:00", Low = 70, High = 180 },
+            };
+            var withSeconds = new List<TargetRangeEntry>
+            {
+                new() { Time = "22:00", Low = 90, High = 160, TimeAsSeconds = TenPm },
+                new() { Time = "06:00", Low = 80, High = 140, TimeAsSeconds = SixAm },
+                new() { Time = "00:00", Low = 70, High = 180, TimeAsSeconds = Midnight },
+            };
+
+            foreach (var at in new[] { Midnight, ThreeAm, SixAm, Noon, TenPm, ElevenPm })
+                ScheduleResolution.FindRangeAtTime(timeOnly, at).Should().Be(ScheduleResolution.FindRangeAtTime(withSeconds, at));
+
+            ScheduleResolution.FindRangeAtTime(timeOnly, Noon).Should().Be((80.0, 140.0));
         }
     }
 }

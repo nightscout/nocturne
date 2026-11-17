@@ -16,11 +16,9 @@ public class TwiistInsulinMapper(ILogger logger)
     /// <summary>
     /// Maps Twiist insulin doses to Bolus records, filtering to bolus-type doses only.
     /// </summary>
-    public IEnumerable<Bolus> MapBoluses(List<TwiistInsulinDose>? doses)
+    public IEnumerable<Bolus> MapBoluses(List<TwiistInsulinDose>? doses, DateTime now)
     {
         if (doses == null || doses.Count == 0) return [];
-
-        var now = DateTime.UtcNow;
 
         return doses
             .Where(d => IsBolusDose(d.DoseType))

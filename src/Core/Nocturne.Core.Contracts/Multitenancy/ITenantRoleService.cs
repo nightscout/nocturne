@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Contracts.Multitenancy;
 
 /// <summary>
@@ -8,7 +10,12 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// <seealso cref="IMemberInviteService"/>
 public interface ITenantRoleService
 {
-    Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default);
+    /// <summary>
+    /// Every role of <paramref name="tenantId"/>, each marked with whether
+    /// <paramref name="granterScopes"/> could confer it.
+    /// </summary>
+    Task<List<TenantRoleDto>> GetRolesAsync(
+        Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default);
 
     /// <summary>
     /// The roles of <paramref name="tenantId"/> that <paramref name="granterScopes"/> could confer:
@@ -21,16 +28,35 @@ public interface ITenantRoleService
     /// Returns a role by its ID within <paramref name="tenantId"/>, or null if the tenant has
     /// no such role. A role ID belonging to another tenant resolves to null.
     /// </summary>
-    Task<TenantRoleDto?> GetRoleByIdAsync(Guid tenantId, Guid roleId, CancellationToken ct = default);
+    Task<TenantRoleDto?> GetRoleByIdAsync(
+        Guid tenantId, Guid roleId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default);
 
-    /// <summary>Creates a new custom role with the specified permissions.</summary>
-    Task<TenantRoleDto> CreateRoleAsync(Guid tenantId, string name, string? description, List<string> permissions, CancellationToken ct = default);
+    /// <summary>
+    /// Creates a new custom role with the specified permissions. A name whose slug is reserved or
+    /// already used by another role of the tenant is refused with <see cref="SaveRoleResult"/>.
+    /// </summary>
+    Task<SaveRoleResult> CreateRoleAsync(
+        Guid tenantId,
+        string name,
+        string? description,
+        List<string> permissions,
+        IReadOnlyCollection<string> granterScopes,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Updates a role's name, description, and permissions. Returns null when
-    /// <paramref name="tenantId"/> has no role with that ID.
+    /// <paramref name="tenantId"/> has no role with that ID. A new name whose slug is reserved or
+    /// already used by another role of the tenant is refused with <see cref="SaveRoleResult"/>; a
+    /// name that keeps the role's own slug is not.
     /// </summary>
-    Task<TenantRoleDto?> UpdateRoleAsync(Guid tenantId, Guid roleId, string name, string? description, List<string> permissions, CancellationToken ct = default);
+    Task<SaveRoleResult?> UpdateRoleAsync(
+        Guid tenantId,
+        Guid roleId,
+        string name,
+        string? description,
+        List<string> permissions,
+        IReadOnlyCollection<string> granterScopes,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Deletes a role if it is not a system role and has no members assigned. A role ID
@@ -99,6 +125,10 @@ public record RoleGrantValidation(bool Ok, string? ErrorCode, string? ErrorDescr
 /// <summary>
 /// Projection of a tenant role including its permission set and member count.
 /// </summary>
+/// <param name="CanGrant">
+/// Whether the caller the role was read for may confer it: what
+/// <see cref="ITenantRoleService.ValidateRoleGrantAsync"/> would say for this role alone.
+/// </param>
 public record TenantRoleDto(
     Guid Id,
     string Name,
@@ -107,8 +137,33 @@ public record TenantRoleDto(
     List<string> Permissions,
     bool IsSystem,
     int MemberCount,
-    DateTime SysCreatedAt
-);
+    DateTime SysCreatedAt,
+    bool CanGrant
+)
+{
+    public RoleAccessLevel? AccessLevel => RoleAccessLevels.Of(Permissions);
+}
+
+/// <summary>
+/// Outcome of creating or renaming a role. <c>Role</c> is set exactly when the save succeeded;
+/// otherwise <c>ErrorCode</c> is one of <see cref="NameTaken"/> and <see cref="NameReserved"/>.
+/// </summary>
+public record SaveRoleResult(TenantRoleDto? Role, string? ErrorCode, string? ErrorDescription)
+{
+    /// <summary>Another role of the tenant already has this name's slug.</summary>
+    public const string NameTaken = "role_name_taken";
+
+    /// <summary>The slug belongs to a seed role, whether or not the tenant still holds it.</summary>
+    public const string NameReserved = "role_name_reserved";
+
+    public static SaveRoleResult Saved(TenantRoleDto role) => new(role, null, null);
+
+    public static SaveRoleResult Taken { get; } =
+        new(null, NameTaken, "A role with this name already exists.");
+
+    public static SaveRoleResult Reserved { get; } =
+        new(null, NameReserved, "This name is reserved.");
+}
 
 /// <summary>
 /// Result of a role deletion attempt. Deletion fails if the role is a system role

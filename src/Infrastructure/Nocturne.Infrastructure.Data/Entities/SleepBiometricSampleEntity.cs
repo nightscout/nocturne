@@ -67,6 +67,5 @@ public class SleepBiometricSampleEntity : ITenantScoped
     /// <summary>
     /// Navigation to the parent sleep session.
     /// </summary>
-    [ForeignKey(nameof(SleepSessionId))]
     public SleepSessionEntity SleepSession { get; set; } = null!;
 }

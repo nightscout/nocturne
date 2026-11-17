@@ -47,7 +47,7 @@ public class TandemProfileAndUserModeTests
             },
         };
 
-        var profile = new TandemProfileMapper(NullLogger.Instance).Map(settings);
+        var profile = new TandemProfileMapper(NullLogger.Instance).Map(settings, TandemTestClock.Now);
 
         profile.Should().NotBeNull();
         profile!.DefaultProfile.Should().Be("Default");

@@ -1,20 +1,18 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Tenant-level alert configuration: Do Not Disturb (manual toggle with optional
+/// Tenant-level alert configuration: Do not disturb (manual toggle with optional
 /// auto-expire and a recurring scheduled window). The schedule is interpreted in the
 /// patient's timezone (<see cref="Nocturne.Core.Models.V4.PatientRecord.Timezone"/>) — set there, not here.
 /// The row is created lazily on first access.
@@ -23,33 +21,36 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// The request/response shape is unchanged, but manual DND is now backed by a
 /// <c>scope=all</c> row in <c>dnd_windows</c> (ADR 0004 D5) rather than columns on this row:
 /// the toggle creates/clears that window and <c>dndManual*</c> is computed from it. Scheduled
-/// DND stays here. The per-rule <see cref="AlertRuleEntity.AllowThroughDnd"/> bypass and the
+/// DND stays here. The per-rule <see cref="AlertRuleSnapshot.AllowThroughDnd"/> bypass and the
 /// <c>do_not_disturb</c> condition apply to both paths; critical rules implicitly bypass DND.
 /// </remarks>
 [ApiController]
 [Authorize]
 [Route("api/v4/tenant-alert-settings")]
+[DenyNoAccountViewer]
 [Tags("Monitoring")]
 public class TenantAlertSettingsController : ControllerBase
 {
-    private const string ManualSource = "web";
-
-    private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ITenantAlertSettingsRepository _settings;
+    private readonly IDndWindowRepository _windows;
     private readonly ITherapySettingsResolver _therapySettings;
     private readonly TimeProvider _timeProvider;
 
     public TenantAlertSettingsController(
-        INocturneDbContextFactory contextFactory,
+        ITenantAlertSettingsRepository settings,
+        IDndWindowRepository windows,
         ITherapySettingsResolver therapySettings,
         TimeProvider timeProvider)
     {
-        _contextFactory = contextFactory;
+        _settings = settings;
+        _windows = windows;
         _therapySettings = therapySettings;
         _timeProvider = timeProvider;
     }
 
     /// <summary>
     /// Get the current tenant's alert settings, creating a default row if one does not exist.
+    /// Read-only credentials may call it; a repeat call stores nothing further.
     /// </summary>
     /// <remarks>
     /// The get-or-create is a write, but of server-defined defaults and idempotently, so it carries
@@ -57,31 +58,26 @@ public class TenantAlertSettingsController : ControllerBase
     /// stores and a repeat call stores nothing further.
     /// </remarks>
     [HttpGet]
+    [RequireScope(Scope.AlertsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantAlertSettingsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<TenantAlertSettingsResponse>> Get(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
-
-        var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
-        if (entity is null)
-        {
-            entity = new TenantAlertSettingsEntity { TenantId = db.TenantId };
-            db.TenantAlertSettings.Add(entity);
-            await db.SaveChangesAsync(ct);
-        }
+        var settings = await _settings.GetOrCreateAsync(ct);
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var manual = await ActiveManualWindowAsync(db, now, ct);
-        return Ok(MapToResponse(entity, manual, await ScheduleActiveNowAsync(entity, now, ct)));
+        var manual = await ActiveManualWindowAsync(ct);
+        return Ok(MapToResponse(settings, manual, await ScheduleActiveNowAsync(settings, now, ct)));
     }
 
     /// <summary>
     /// Replace the current tenant's alert settings. Upserts on first call. The manual-DND toggle
     /// creates/clears the tenant's <c>scope=all</c> window; scheduled fields persist on the row.
+    /// Needs <c>alerts.readwrite</c>: the toggle suppresses delivery of every non-critical alert
+    /// tenant-wide, and read-only credentials such as a guest-link session are refused.
     /// </summary>
     /// <remarks>
-    /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do Not Disturb,
+    /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do not disturb,
     /// which suppresses delivery of every non-critical alert. The class-level <c>[Authorize]</c>
     /// alone is satisfied by read-only credentials such as a guest-link session, which holds
     /// <c>alerts.read</c>.
@@ -94,7 +90,6 @@ public class TenantAlertSettingsController : ControllerBase
     public async Task<ActionResult<TenantAlertSettingsResponse>> Update(
         [FromBody] UpdateTenantAlertSettingsRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         // A manual mute must end in the future (mirrors DndWindowsController's ends_at
@@ -106,107 +101,40 @@ public class TenantAlertSettingsController : ControllerBase
         if (request.DndManualActive == true && request.DndManualUntil?.AsUtc() is { } until && until <= now)
             return BadRequest("dnd_manual_until must be in the future.");
 
-        var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
-        var isNew = entity is null;
-        entity ??= new TenantAlertSettingsEntity { TenantId = db.TenantId };
-
-        entity.DndScheduleEnabled = request.DndScheduleEnabled;
-        entity.DndScheduleStart = request.DndScheduleStart;
-        entity.DndScheduleEnd = request.DndScheduleEnd;
-        entity.UpdatedAt = now;
-        if (isNew) db.TenantAlertSettings.Add(entity);
+        var settings = new TenantAlertSettingsSnapshot(
+            request.DndScheduleEnabled, request.DndScheduleStart, request.DndScheduleEnd);
 
         // Manual DND is a scope=all window in a table this controller shares with
         // DndWindowsController (which devices post to directly). An absent dndManualActive
         // therefore means "leave the mute alone", not false: treating it as false would make
         // saving a *schedule* change silently cancel a mute a device had taken out, and would
         // rewrite that window's expiry on the way through.
-        if (request.DndManualActive is { } manualActive)
-        {
-            // Toggling on ensures exactly one active all-window (anchoring StartedAt on the
-            // existing one so a re-PUT doesn't reset the for_minutes anchor). Toggling off is an
-            // explicit "DND off" and clears every uncleared all-window (user-clear, cleared_by
-            // null) — including future-started ones, so it also cancels a pending mute rather
-            // than letting it silently activate later.
-            var activeAll = await ActiveAllWindowsAsync(db, now, ct);
-            if (manualActive)
-            {
-                var endsAt = request.DndManualUntil?.AsUtc();
-                if (activeAll.Count == 0)
-                {
-                    db.DndWindows.Add(new DndWindowEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        TenantId = db.TenantId,
-                        Scope = DndScope.All,
-                        StartedAt = now,
-                        EndsAt = endsAt,
-                        Source = ManualSource,
-                    });
-                }
-                else
-                {
-                    var keep = activeAll.OrderBy(w => w.StartedAt).First();
-                    keep.EndsAt = endsAt;
-                    foreach (var extra in activeAll.Where(w => !ReferenceEquals(w, keep)))
-                    {
-                        extra.ClearedAt = now;
-                        extra.ClearedBy = DndWindowsController.SupersededBy;
-                    }
-                }
-            }
-            else
-            {
-                // Every uncleared all-window, not just the active ones: an explicit "DND off"
-                // should also cancel a mute that has not started yet rather than let it activate
-                // later. (DndWindowsController's overlap supersede leaves such a window alone,
-                // because adding one mute is not a statement about another span.)
-                var uncleared = await db.DndWindows
-                    .Where(w => w.Scope == DndScope.All && w.ClearedAt == null)
-                    .ToListAsync(ct);
-                foreach (var w in uncleared)
-                    w.ClearedAt = now;
-            }
-        }
+        var manual = request.DndManualActive is { } manualActive
+            ? new ManualDndToggle(manualActive, request.DndManualUntil?.AsUtc())
+            : null;
 
-        var scheduleActiveNow = await ScheduleActiveNowAsync(entity, now, ct);
+        var scheduleActiveNow = await ScheduleActiveNowAsync(settings, now, ct);
 
-        await db.SaveChangesAsync(ct);
+        await _settings.UpdateAsync(settings, manual, ct);
 
-        var manual = await ActiveManualWindowAsync(db, now, ct);
-        return Ok(MapToResponse(entity, manual, scheduleActiveNow));
+        return Ok(MapToResponse(settings, await ActiveManualWindowAsync(ct), scheduleActiveNow));
     }
 
-    /// <summary>The active <c>scope=all</c> windows (resolve-on-read), tracked for mutation.</summary>
-    private static Task<List<DndWindowEntity>> ActiveAllWindowsAsync(
-        NocturneDbContext db, DateTime now, CancellationToken ct) =>
-        db.DndWindows
-            .Where(w => w.Scope == DndScope.All && w.ClearedAt == null
-                        && w.StartedAt <= now && (w.EndsAt == null || now < w.EndsAt))
-            .ToListAsync(ct);
-
     /// <summary>The representative active manual (scope=all) window — earliest started — or null.</summary>
-    private static async Task<DndWindowEntity?> ActiveManualWindowAsync(
-        NocturneDbContext db, DateTime now, CancellationToken ct) =>
-        await db.DndWindows
-            .AsNoTracking()
-            .Where(w => w.Scope == DndScope.All && w.ClearedAt == null
-                        && w.StartedAt <= now && (w.EndsAt == null || now < w.EndsAt))
-            .OrderBy(w => w.StartedAt)
-            .FirstOrDefaultAsync(ct);
+    private async Task<DndWindowRecord?> ActiveManualWindowAsync(CancellationToken ct) =>
+        (await _windows.GetActiveAsync(DndScope.All, ct)).FirstOrDefault();
 
     private async Task<bool> ScheduleActiveNowAsync(
-        TenantAlertSettingsEntity e, DateTime now, CancellationToken ct)
+        TenantAlertSettingsSnapshot schedule, DateTime now, CancellationToken ct)
     {
-        if (!e.DndScheduleEnabled)
+        if (!schedule.DndScheduleEnabled)
             return false;
 
-        var schedule = new TenantAlertSettingsSnapshot(e.DndScheduleEnabled, e.DndScheduleStart, e.DndScheduleEnd);
         return schedule.Resolve(now, await _therapySettings.GetTimezoneAsync(ct: ct)) is not null;
     }
 
     private static TenantAlertSettingsResponse MapToResponse(
-        TenantAlertSettingsEntity e, DndWindowEntity? manual, bool scheduleActiveNow) => new()
+        TenantAlertSettingsSnapshot e, DndWindowRecord? manual, bool scheduleActiveNow) => new()
     {
         DndManualActive = manual is not null,
         DndManualUntil = manual?.EndsAt,

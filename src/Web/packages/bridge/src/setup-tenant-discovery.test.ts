@@ -143,8 +143,14 @@ describe('setupBridge tenant discovery', () => {
     return (http.address() as AddressInfo).port;
   }
 
+  /** The tenant the API admits a caller on `host` to, as the web app signs it into a ticket. */
+  function admittedTenant(host: string): string {
+    const slug = host === 'nocturne.run' ? api.apex : host.split('.')[0];
+    return api.tenants.find((t) => t.slug === slug)?.id ?? 'unlisted';
+  }
+
   /** A browser socket that fetches a fresh ticket for every handshake, as the web app does. */
-  async function browser(port: number, host: string, reconnection = false) {
+  async function browser(port: number, host: string, reconnection = false, tenantId = () => admittedTenant(host)) {
     const handshakes = { count: 0 };
     const client = connectClient(`http://127.0.0.1:${port}`, {
       transports: ['websocket'],
@@ -154,7 +160,7 @@ describe('setupBridge tenant discovery', () => {
       extraHeaders: { 'X-Forwarded-Host': host },
       auth: (cb) => {
         handshakes.count++;
-        cb({ token: signHandshakeTicket(SECRET, host, relay) });
+        cb({ token: signHandshakeTicket(SECRET, host, tenantId(), relay) });
       },
     });
     clients.push(client);
@@ -200,11 +206,11 @@ describe('setupBridge tenant discovery', () => {
     expect(hubsFor('rhys.nocturne.run').map((h) => h.expectedTenantId)).toEqual(['t1']);
   });
 
-  it('does not open a relay for a host the API lists no tenant for', async () => {
+  it('refuses a socket and opens no relay for a host the API lists no tenant for', async () => {
     api.tenants = [{ id: 't1', slug: 'rhys', isActive: true }];
     const port = await start();
 
-    await browser(port, 'nobody.nocturne.run');
+    await expect(browser(port, 'nobody.nocturne.run')).rejects.toThrow('unauthorized');
     await vi.waitFor(() => expect(api.answered).toBe(4));
     await drained();
 
@@ -268,5 +274,18 @@ describe('setupBridge tenant discovery', () => {
     await vi.waitFor(() => expect(member.handshakes.count).toBe(2));
     await vi.waitFor(() => expect(member.client.connected).toBe(true));
     expect(socketsOf('rhys')).toHaveLength(1);
+  });
+
+  it('refuses a ticket minted for the tenant a reused slug named before', async () => {
+    api.tenants = [{ id: 'old', slug: 'rhys', isActive: true }];
+    const port = await start();
+
+    api.tenants = [{ id: 'new', slug: 'rhys', isActive: true }];
+    hubsFor('rhys.nocturne.run')[0].drop();
+    await vi.waitFor(() => expect(hubsFor('rhys.nocturne.run')).toHaveLength(2));
+
+    await expect(browser(port, 'rhys.nocturne.run', false, () => 'old')).rejects.toThrow('unauthorized');
+    expect(socketsOf('rhys')).toEqual([]);
+    expect((await browser(port, 'rhys.nocturne.run')).client.connected).toBe(true);
   });
 });

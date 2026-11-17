@@ -63,7 +63,7 @@ public class RawMmolProfileNotifierTests : IDisposable
 
         _notifier = new RawMmolProfileNotifier(
             _services,
-            new ActiveTenantSnapshot(contexts, TimeProvider.System, NullLogger<ActiveTenantSnapshot>.Instance),
+            new ActiveTenantSnapshot(new TenantRepository(contexts), TimeProvider.System, NullLogger<ActiveTenantSnapshot>.Instance),
             _log);
     }
 

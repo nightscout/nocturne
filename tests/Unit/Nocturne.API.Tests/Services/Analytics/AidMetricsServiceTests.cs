@@ -222,6 +222,47 @@ public class AidMetricsServiceTests
     }
 
     [Fact]
+    public void ApsSnapshotStrategy_LoopCyclesStampedOpenLoop_AreNotActive()
+    {
+        // Loop reports every cycle enacted, in open loop too: an hour open, then an hour closed.
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var cycles = Enumerable.Range(0, 24).Select(i => new ApsLoopCycle
+        {
+            Timestamp = start.AddMinutes(5 * i),
+            Enacted = true,
+            AidAlgorithm = AidAlgorithm.Loop,
+            ClosedLoop = i >= 12,
+        });
+
+        var metrics = ApsMetrics(start, start.AddHours(2), cycles);
+
+        metrics.AidActivePercent.Should().BeApproximately(50.0, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(100.0, 0.001);
+        metrics.EnactedCount.Should().Be(24);
+        metrics.ClosedLoopCount.Should().Be(12);
+    }
+
+    [Theory]
+    [InlineData(AidAlgorithm.Loop)]
+    [InlineData(AidAlgorithm.Trio)]
+    public void ApsSnapshotStrategy_CyclesWithNoClosedLoopStamp_CountWhenEnacted(AidAlgorithm algorithm)
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var cycles = Enumerable.Range(0, 12).Select(i => new ApsLoopCycle
+        {
+            Timestamp = start.AddMinutes(5 * i),
+            Enacted = i % 2 == 0,
+            AidAlgorithm = algorithm,
+        });
+
+        var metrics = ApsMetrics(start, start.AddHours(1), cycles);
+
+        metrics.AidActivePercent.Should().BeApproximately(50.0, 0.001);
+        metrics.EnactedCount.Should().Be(6);
+        metrics.ClosedLoopCount.Should().Be(6);
+    }
+
+    [Fact]
     public void ApsSnapshotStrategy_LastCycleRunsNoFurtherThanTheWindow()
     {
         var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -282,7 +323,7 @@ public class AidMetricsServiceTests
     }
 
     [Fact]
-    public void TbrBasedStrategy_OverlappingTempBasals_CoverTheirSharedTimeOnce()
+    public void TbrBasedStrategy_EachTempBasalEndsWhereTheNextStarts()
     {
         var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var end = start.AddHours(1);
@@ -303,8 +344,57 @@ public class AidMetricsServiceTests
             TempBasals = tempBasals
         });
 
-        metrics.AidActivePercent.Should().BeApproximately(40 / 60.0 * 100, 0.001);
-        metrics.PumpUsePercent.Should().BeApproximately(50 / 60.0 * 100, 0.001);
+        metrics.AidActivePercent.Should().BeApproximately(20 / 60.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(35 / 60.0 * 100, 0.001);
+    }
+
+    private static AidSegmentMetrics TbrMetrics(DateTime start, DateTime end, params TempBasal[] tempBasals) =>
+        new TbrBasedStrategy().CalculateMetrics(new AidDetectionContext
+        {
+            Algorithm = AidAlgorithm.ControlIQ,
+            StartDate = start,
+            EndDate = end,
+            TempBasals = tempBasals
+        });
+
+    [Fact]
+    public void TbrBasedStrategy_LongTempReplacedEarly_CountsOnlyTheTimeItRan()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = TbrMetrics(start, start.AddHours(2),
+            new TempBasal { StartTimestamp = start, EndTimestamp = start.AddHours(2), Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+            new TempBasal { StartTimestamp = start.AddMinutes(30), EndTimestamp = start.AddMinutes(30), Origin = TempBasalOrigin.Algorithm, Rate = 0 });
+
+        metrics.AidActivePercent.Should().BeApproximately(30 / 120.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(30 / 120.0 * 100, 0.001);
+    }
+
+    [Fact]
+    public void TbrBasedStrategy_OpenTempFollowedByLaterRecord_RunsToIt()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = TbrMetrics(start, start.AddHours(1),
+            new TempBasal { StartTimestamp = start, EndTimestamp = null, Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+            new TempBasal { StartTimestamp = start.AddMinutes(20), EndTimestamp = start.AddMinutes(30), Origin = TempBasalOrigin.Manual, Rate = 1.0 });
+
+        metrics.AidActivePercent.Should().BeApproximately(20 / 60.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(30 / 60.0 * 100, 0.001);
+    }
+
+    [Fact]
+    public void TbrBasedStrategy_OnlyAnOpenTempThatEndedBeforeTheWindow_ReturnsNulls()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var windowStart = start.AddHours(3);
+
+        var metrics = TbrMetrics(windowStart, windowStart.AddHours(1),
+            new TempBasal { StartTimestamp = start, EndTimestamp = null, Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+            new TempBasal { StartTimestamp = start.AddHours(1), EndTimestamp = start.AddHours(1), Origin = TempBasalOrigin.Algorithm, Rate = 0 });
+
+        metrics.AidActivePercent.Should().BeNull();
+        metrics.PumpUsePercent.Should().BeNull();
     }
 
     [Fact]
@@ -410,6 +500,31 @@ public class AidMetricsServiceTests
         result.TargetHigh.Should().Be(180);
         result.SiteChangeCount.Should().Be(3);
         result.Segments.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Calculate_RecordBeforeTheSegmentEndsATempRunningIntoIt_CountsOnlyTheTimeItRan()
+    {
+        var service = CreateService();
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var segStart = start.AddHours(1);
+        var segEnd = start.AddHours(2);
+
+        var segments = new List<DeviceSegmentInput>
+        {
+            new() { Algorithm = AidAlgorithm.ControlIQ, StartDate = segStart, EndDate = segEnd }
+        };
+        var tempBasals = new List<TempBasal>
+        {
+            new() { StartTimestamp = start, EndTimestamp = start.AddHours(3), Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+            new() { StartTimestamp = start.AddMinutes(50), EndTimestamp = start.AddMinutes(50), Origin = TempBasalOrigin.Algorithm, Rate = 0 },
+            new() { StartTimestamp = segStart.AddMinutes(30), EndTimestamp = segStart.AddMinutes(45), Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+        };
+
+        var result = service.Calculate(segments, [], tempBasals, 0, null, null, null, 70, 180, segStart, segEnd);
+
+        result.AidActivePercent.Should().Be(25.0);
+        result.PumpUsePercent.Should().Be(25.0);
     }
 
     [Fact]

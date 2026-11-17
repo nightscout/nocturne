@@ -35,8 +35,33 @@ public class SmartSnoozeConfigTests
         config.SmartSnooze.Should().BeTrue();
         config.ExtendMinutes.Should().Be(20);
         config.MaxCount.Should().Be(4);
-        config.Conditions.Should().ContainSingle()
-            .Which.Threshold!.Direction.Should().Be("above");
+        config.Conditions!.Value.GetRawText().Should().Be(
+            """[{"type":"threshold","threshold":{"direction":"above","value":70}}]""");
+        config.Malformed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Conditions_AreKeptAsWritten_ForTheEngineToRead()
+    {
+        var config = SmartSnoozeConfig.Parse("""
+            {"snooze":{"smartSnooze":true,"conditions":[{"Type":"threshold","threshold":{"Direction":"ABOVE"}}]}}
+            """);
+
+        config.Conditions!.Value.GetRawText().Should().Be(
+            """[{"Type":"threshold","threshold":{"Direction":"ABOVE"}}]""");
+        config.ConditionsUnreadable.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void AnEmptyOrNullConditionList_IsNone(string conditions)
+    {
+        var config = SmartSnoozeConfig.Parse(
+            $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""");
+
+        config.Conditions.Should().BeNull();
+        config.ConditionsUnreadable.Should().BeFalse();
         config.Malformed.Should().BeFalse();
     }
 
@@ -88,15 +113,15 @@ public class SmartSnoozeConfigTests
         config.Malformed.Should().BeTrue();
     }
 
-    [Fact]
-    public void UnreadableConditions_NeverFallThroughToTheTrendFallback()
+    [Theory]
+    [InlineData("\"oops\"")]
+    [InlineData("{}")]
+    public void ConditionsThatAreNotAList_NeverFallThroughToTheTrendFallback(string conditions)
     {
-        var config = SmartSnoozeConfig.Parse("""
-            {"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":"oops"}]}}
-            """);
+        var config = SmartSnoozeConfig.Parse(
+            $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""");
 
-        config.Conditions.Should().NotBeNullOrEmpty(
-            "an empty list would route the instance to the trend fallback the user did not configure");
+        config.ConditionsUnreadable.Should().BeTrue();
         config.Malformed.Should().BeTrue();
     }
 }

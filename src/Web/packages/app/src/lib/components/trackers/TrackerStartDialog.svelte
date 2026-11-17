@@ -1,26 +1,23 @@
 <script lang="ts">
   import { timeDay } from "d3-time";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { TextareaAutosize } from "$lib/components/ui/textarea";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { TextareaAutosize } from "#lib/components/ui/textarea/index.js";
   import Play from "@lucide/svelte/icons/play";
-  import { cn } from "$lib/utils";
-  import { formatClock, formatShortDate, time } from "$lib/utils/formatting";
-  import { useToastSubmission } from "$lib/forms";
+  import { cn } from "#lib/utils/index.js";
+  import { formatClock, formatShortDate, time } from "#lib/utils/formatting.js";
+  import { useToastSubmission } from "#lib/forms/index.js";
 
-  import { tick } from "svelte";
   import {
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     TrackerCategory,
     TrackerMode,
     CompletionReason,
-  } from "$api";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { create as createDeviceEventForm } from "$api/generated/deviceEvents.generated.remote";
+  } from "#lib/api/index.js";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
 
   interface TrackerStartDialogProps {
     open: boolean;
@@ -29,8 +26,6 @@
     onClose: () => void;
     onStart?: () => void;
   }
-
-  const realtimeStore = tryGetRealtimeStore();
 
   let {
     open = $bindable(false),
@@ -45,12 +40,6 @@
   let scheduledAtString = $state("");
   const submission = useToastSubmission("Failed to start tracker");
 
-  // Hidden form for device event creation
-  let deviceEventFormRef = $state<HTMLFormElement | null>(null);
-  let deviceEventMills = $state(0);
-  let deviceEventEventType = $state<string>("");
-  let deviceEventNotes = $state<string>("");
-
   // Derived mode check
   const isEventMode = $derived(definition?.mode === TrackerMode.Event);
 
@@ -60,13 +49,13 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
     [CompletionReason.Rescheduled]: "Rescheduled",
-    [CompletionReason.Cancelled]: "Cancelled",
+    [CompletionReason.Cancelled]: "Canceled",
     [CompletionReason.Missed]: "Missed",
   };
 
@@ -190,15 +179,6 @@
         scheduledAt: isEventMode ? (scheduledAt ? scheduledAt.toISOString() : undefined) : undefined,
       });
 
-      // Create device event if configured on the definition
-      if (definition.startEventType && deviceEventFormRef) {
-        deviceEventMills = (startedAt ?? new Date()).getTime();
-        deviceEventEventType = definition.startEventType;
-        deviceEventNotes = startNotes || "";
-        await tick();
-        deviceEventFormRef.requestSubmit();
-      }
-
       open = false;
       onStart?.();
     });
@@ -209,23 +189,6 @@
     onClose();
   }
 </script>
-
-<!-- Hidden device event form -->
-<form
-  bind:this={deviceEventFormRef}
-  class="hidden"
-  {...createDeviceEventForm.for("tracker-start").enhance(async ({ submit }) => {
-    await submit();
-    if (createDeviceEventForm.for("tracker-start").result) realtimeStore?.noteTreatmentWrite();
-  })}
->
-  <input type="hidden" name="n:mills" value={deviceEventMills} />
-  <input type="hidden" name="eventType" value={deviceEventEventType} />
-  {#if deviceEventNotes}
-    <input type="hidden" name="notes" value={deviceEventNotes} />
-  {/if}
-  <input type="hidden" name="app" value="Nocturne Tracker" />
-</form>
 
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-[425px]">
@@ -253,7 +216,7 @@
     <div class="grid gap-4 py-4">
       {#if isEventMode}
         <div class="space-y-2">
-          <Label for="scheduledAt">Scheduled For</Label>
+          <Label for="scheduledAt">Scheduled for</Label>
           <Input
             type="datetime-local"
             id="scheduledAt"
@@ -265,7 +228,7 @@
         </div>
       {:else}
         <div class="space-y-2">
-          <Label for="startedAt">Start Time</Label>
+          <Label for="startedAt">Start time</Label>
           <Input
             type="datetime-local"
             id="startedAt"
@@ -288,7 +251,7 @@
       {#if startPreview.length > 0}
         <div class="rounded-lg border bg-muted/50 p-3 mt-2">
           <Label size="sm" class="mb-2 block">
-            Notification Schedule (Adjusted)
+            Notification schedule (adjusted)
           </Label>
           <div class="space-y-2">
             {#each startPreview as preview, i (i)}

@@ -235,4 +235,20 @@ public class MeterGlucoseControllerTests
             It.IsAny<IReadOnlyList<DeviceCategory>>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
+
+    [Fact]
+    public async Task GetAll_FullPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repoMock.As<IV4Repository<MeterGlucose>>()
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new MeterGlucose()]);
+
+        var result = await CreateController().GetAll(from: null, to: null, limit: 1);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<MeterGlucose>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

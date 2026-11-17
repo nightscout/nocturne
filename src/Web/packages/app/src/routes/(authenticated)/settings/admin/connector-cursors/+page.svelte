@@ -1,21 +1,22 @@
 <script lang="ts">
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import Database from "@lucide/svelte/icons/database";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import * as Alert from "$lib/components/ui/alert";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -23,20 +24,21 @@
   import XCircle from "@lucide/svelte/icons/circle-x";
   import Plug from "@lucide/svelte/icons/plug";
   import Building2 from "@lucide/svelte/icons/building-2";
-  import * as tenantRemote from "$api/generated/tenants.generated.remote";
+  import * as tenantRemote from "#lib/api/generated/tenants.generated.remote.js";
   import {
     getTenantConnectors,
     resetTenantCursors,
     getResetJobStatus,
     cancelResetJob,
-  } from "$api/generated/connectorAdmins.generated.remote";
+  } from "#lib/api/generated/connectorAdmins.generated.remote.js";
   import {
     ConnectorResetConnectorState,
     ConnectorResetJobState,
     type TenantDto,
     type TenantConnectorsDto,
     type ConnectorResetJobStatus,
-  } from "$api";
+  } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // Tenant list (platform admin)
   let tenants = $state<TenantDto[]>([]);
@@ -82,7 +84,7 @@
     tenantsLoading = true;
     tenantsError = null;
     try {
-      tenants = (await tenantRemote.getAll().run()) ?? [];
+      tenants = (await fresh(tenantRemote.getAll())) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
       tenantsError = remoteErrorMessage(err, "Failed to load tenants.");
@@ -91,7 +93,7 @@
     }
   }
 
-  // `.run()` rejects during the render/effect flush, so defer the bootstrap out of it.
+  // Deferred so this effect does not track what the load reads.
   $effect(() => {
     queueMicrotask(loadTenants);
   });
@@ -108,8 +110,8 @@
     connectorsLoading = true;
     connectorsError = null;
     try {
-      // One-shot fetch via .run() — re-selecting a tenant re-executes, so health is never stale.
-      connectors = await getTenantConnectors(value).run();
+      // Fetched afresh on each selection, so health is never stale.
+      connectors = await fresh(getTenantConnectors(value));
     } catch (err) {
       console.error("Failed to load connectors:", err);
       connectorsError = remoteErrorMessage(
@@ -135,15 +137,15 @@
     // can reach.
     stopPolling();
     try {
-      // One-shot fetch each tick — .run() re-executes every call, bypassing query memoisation.
-      const status = await getResetJobStatus(activeJobId).run();
+      // Fetched afresh each tick.
+      const status = await fresh(getResetJobStatus(activeJobId));
       jobStatus = status;
 
       if (isTerminal(status.state)) {
         stopPolling();
         // Re-fetch the connector list so the admin sees updated sync timestamps.
         if (selectedTenantId) {
-          connectors = await getTenantConnectors(selectedTenantId).run();
+          connectors = await fresh(getTenantConnectors(selectedTenantId));
         }
         return;
       }
@@ -215,16 +217,16 @@
 </script>
 
 <svelte:head>
-  <title>Reset Connector Cursors - Administration - Nocturne</title>
+  <title>Reset connector cursors - Administration - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl space-y-6 p-3 @md:p-6">
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-      <RefreshCw class="h-6 w-6 text-primary" />
+    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+      <Database class="size-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Reset Connector Cursors</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Reset connector cursors</h1>
       <p class="text-muted-foreground">
         Re-pull a tenant's connector history after fixing a connector bug
       </p>
@@ -238,7 +240,7 @@
       This forces a full re-pull of history for every configured connector on
       the selected tenant. Re-ingested records dedupe on their idempotency keys,
       so it is safe to re-run. A large re-pull can take several minutes, so it
-      runs as a background job &mdash; progress appears below and you can leave
+      runs as a background job. Progress appears below, and you can leave
       this page while it finishes.
     </Alert.Description>
   </Alert.Root>
@@ -365,7 +367,7 @@
               {#if jobStatus.errorMessage}
                 <span class="text-destructive">
                   {jobStatus.errorMessage === "connector_reset_failed"
-                    ? "One or more connectors failed; review the connector details and retry the failed range."
+                    ? "One or more connectors failed. Review the connector details and retry the failed range."
                     : jobStatus.errorMessage}
                 </span>
               {/if}
@@ -450,7 +452,7 @@
       from {fromDate}
     {:else}
       from the beginning
-    {/if}. This starts a background job &mdash; you can watch per-connector
+    {/if}. This starts a background job. You can watch per-connector
     progress here or leave the page while it runs.
   {/snippet}
 </ConfirmDialog>

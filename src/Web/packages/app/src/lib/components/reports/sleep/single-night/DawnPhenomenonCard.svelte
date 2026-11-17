@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
   import Sunrise from "@lucide/svelte/icons/sunrise";
-  import { bg, bgDelta, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
-  import type { SleepDawnPhenomenon } from "$lib/api";
+  import { bg, bgDelta, bgLabel, formatLocale, toDate } from "#lib/utils/formatting.js";
+  import type { SleepDawnPhenomenon } from "#lib/api/index.js";
 
   interface Props {
     dawnPhenomenon: SleepDawnPhenomenon;
@@ -22,7 +22,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Sunrise class="h-5 w-5 text-muted-foreground" />
-      Pre-wake Change
+      Pre-wake change
     </CardTitle>
   </CardHeader>
   <CardContent class="space-y-3">
@@ -32,7 +32,7 @@
       </p>
     {/if}
     <p class="text-lg font-medium tabular-nums">
-      Trough {bg(dawnPhenomenon.troughBg ?? 0)} &rarr; Peak {bg(dawnPhenomenon.peakBg ?? 0)}
+      Trough {bg(dawnPhenomenon.troughBg ?? 0)} &rarr; peak {bg(dawnPhenomenon.peakBg ?? 0)}
     </p>
     <div class="grid grid-cols-2 gap-4 text-sm">
       <div>

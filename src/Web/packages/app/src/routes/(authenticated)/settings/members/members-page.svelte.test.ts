@@ -3,8 +3,8 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
-import type { TenantMemberDto, TenantRoleDto } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { RoleAccessLevel, type TenantMemberDto, type TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({
   getMembers: vi.fn(),
@@ -22,9 +22,11 @@ const viewer: TenantRoleDto = {
   name: "Viewer",
   slug: "viewer",
   permissions: ["glucose.read"],
+  accessLevel: RoleAccessLevel.ReadOnly,
+  canGrant: true,
 };
 
-vi.mock("$lib/api/generated/memberInvites.generated.remote", () => ({
+vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   getMembers: () => {
     mocks.getMembers();
     return remoteQuery(() => members);
@@ -37,16 +39,16 @@ vi.mock("$lib/api/generated/memberInvites.generated.remote", () => ({
   setMemberPermissions: mocks.setMemberPermissions,
   setMemberLimitTo24Hours: mocks.setMemberLimitTo24Hours,
 }));
-vi.mock("$lib/api/generated/roles.generated.remote", () => ({
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => {
     mocks.getRoles();
     return remoteQuery(() => [viewer]);
   },
 }));
-vi.mock("$api/generated/shareLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
   getShareLink: () => remoteQuery(() => null),
 }));
-vi.mock("$lib/api/generated/membershipRequests.generated.remote", () => ({
+vi.mock("#lib/api/generated/membershipRequests.generated.remote.js", () => ({
   getPendingRequests: () => {
     mocks.getPendingRequests();
     return remoteQuery(() => []);
@@ -55,10 +57,10 @@ vi.mock("$lib/api/generated/membershipRequests.generated.remote", () => ({
   denyRequest: () => Promise.resolve(),
 }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
-vi.mock("$lib/components/members/PublicAccessCard.svelte", () => ({ default: () => {} }));
-vi.mock("$lib/components/members/MembershipRequestsCard.svelte", () => ({ default: () => {} }));
-vi.mock("$lib/components/members/GuestLinksSection.svelte", () => ({ default: () => {} }));
-vi.mock("$lib/components/members/RolesSection.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/components/members/PublicAccessCard.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/components/members/MembershipRequestsCard.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/components/members/GuestLinksSection.svelte", () => ({ default: () => {} }));
+vi.mock("#lib/components/members/RolesSection.svelte", () => ({ default: () => {} }));
 
 import MembersPage from "./+page.svelte";
 
@@ -164,7 +166,7 @@ describe("members page listing members", () => {
     render(MembersPage);
 
     await expect
-      .element(browserPage.getByRole("heading", { name: "Sharing & Privacy" }))
+      .element(browserPage.getByRole("heading", { name: "Sharing & privacy" }))
       .toBeVisible();
     expect(mocks.getMembers).not.toHaveBeenCalled();
     expect(browserPage.getByText(/\d+ members?$/).elements()).toHaveLength(0);
@@ -191,7 +193,7 @@ describe("members page loading roles and pending requests", () => {
     render(MembersPage);
 
     await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
-    await browserPage.getByRole("button", { name: "Create Invite Link" }).click();
+    await browserPage.getByRole("button", { name: "Create invite link" }).click();
 
     await expect.element(browserPage.getByText("Viewer", { exact: true }).last()).toBeVisible();
     expect(mocks.getRoles).toHaveBeenCalled();
@@ -203,7 +205,7 @@ describe("members page loading roles and pending requests", () => {
     render(MembersPage);
 
     await expect
-      .element(browserPage.getByRole("heading", { name: "Sharing & Privacy" }))
+      .element(browserPage.getByRole("heading", { name: "Sharing & privacy" }))
       .toBeVisible();
     expect(mocks.getRoles).not.toHaveBeenCalled();
     expect(mocks.getPendingRequests).not.toHaveBeenCalled();

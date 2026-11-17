@@ -88,18 +88,6 @@ public record SensorContext
     public IReadOnlyDictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; init; } =
         new Dictionary<Guid, ActiveAlertSnapshot>();
 
-    /// <summary>
-    /// Identifier of the rule currently being evaluated. Set by the orchestrator;
-    /// consumed by stateful evaluators (e.g. sustained) to key persistent timers.
-    /// </summary>
-    public Guid CurrentRuleId { get; init; }
-
-    /// <summary>
-    /// Path identifying the current node within the rule's condition tree (e.g. "composite[0].sustained").
-    /// Updated as recursive evaluators descend; consumed by stateful evaluators to key persistent timers.
-    /// </summary>
-    public string CurrentPath { get; init; } = string.Empty;
-
     // ----- Looping facts -----
 
     /// <summary>Timestamp of the latest APS cycle (suggested or enacted), or null when none observed.</summary>
@@ -166,8 +154,8 @@ public record SensorContext
     // very old" — i.e. where a missing/old timestamp would otherwise satisfy a `>=`
     // operator (LoopStale > 15min on a brand-new tenant). Facts whose projection is
     // naturally null when absent (ActiveOverride, ActiveTempBasal) need no flag.
-    // False ⇒ the underlying fact has never been observed for this tenant; the evaluator
-    // should return false rather than treat null as "infinity stale" or similar.
+    // False ⇒ the underlying fact has never been observed for this tenant; the engine
+    // returns false rather than treat null as "infinity stale" or similar.
 
     /// <summary>True when the tenant has at least one ApsSnapshot recorded.</summary>
     public bool HasEverApsCycled { get; init; }
@@ -227,14 +215,22 @@ public record SensorContext
     public bool SleepSessionActive { get; init; }
 
     /// <summary>
-    /// Reference timestamp of the active tracker instance per tracker definition: start
-    /// time for Duration trackers, scheduled time for Event trackers. Populated by the
-    /// enricher for every definition referenced by a <c>tracker_age</c> leaf in the rules
-    /// being evaluated. An absent key means no active instance — the leaf evaluates false.
+    /// The active tracker instance per tracker definition. Populated by the enricher for every
+    /// definition referenced by a <c>tracker_age</c> leaf in the rules being evaluated. An
+    /// absent key means no active instance — the leaf evaluates false.
     /// </summary>
-    public IReadOnlyDictionary<Guid, DateTime> ActiveTrackers { get; init; }
-        = new Dictionary<Guid, DateTime>();
+    public IReadOnlyDictionary<Guid, ActiveTrackerReference> ActiveTrackers { get; init; }
+        = new Dictionary<Guid, ActiveTrackerReference>();
 }
+
+/// <summary>A tracker definition's active instance, as the <c>tracker_age</c> leaf reads it.</summary>
+/// <param name="ReferenceAt">Start time for a Duration tracker, scheduled time for an Event tracker.</param>
+/// <param name="RecordedAt">
+/// When the instance was recorded. A threshold that already held then does not fire for a Duration
+/// instance (docs/alerts/engine-semantics.md §3). Null holds nothing back.
+/// </param>
+/// <param name="IsScheduled">An Event tracker's instance, which is never held back.</param>
+public sealed record ActiveTrackerReference(DateTime ReferenceAt, DateTime? RecordedAt, bool IsScheduled = false);
 
 /// <summary>
 /// A single predicted glucose value at a future offset from "now".
@@ -423,7 +419,7 @@ public record DoNotDisturbCondition(
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>Comparison operator for time-since-last-event leaves. Single-character forms
-/// match the existing <see cref="ComparisonOps"/> wire format used by the JSON payload.</summary>
+/// match the operator wire format the other comparison leaves use.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<AlertComparisonOperator>))]
 public enum AlertComparisonOperator
 {
@@ -449,7 +445,20 @@ public record TimeSinceLastBolusCondition(AlertComparisonOperator Operator, int 
 
 /// <summary>Day-of-week condition. True when the current local day (in the tenant's timezone)
 /// falls into <see cref="Days"/>.</summary>
-public record DayOfWeekCondition(List<DayOfWeek> Days);
+public record DayOfWeekCondition(List<AlertWeekday> Days);
+
+/// <summary>A day a <see cref="DayOfWeekCondition"/> names.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AlertWeekday>))]
+public enum AlertWeekday
+{
+    [JsonStringEnumMemberName("sunday")] Sunday,
+    [JsonStringEnumMemberName("monday")] Monday,
+    [JsonStringEnumMemberName("tuesday")] Tuesday,
+    [JsonStringEnumMemberName("wednesday")] Wednesday,
+    [JsonStringEnumMemberName("thursday")] Thursday,
+    [JsonStringEnumMemberName("friday")] Friday,
+    [JsonStringEnumMemberName("saturday")] Saturday,
+}
 
 /// <summary>Pump-mode state condition. <see cref="PumpStateCondition.IsActive"/> selects which
 /// side of the state is asserted; <see cref="PumpStateCondition.ForMinutes"/> only applies on

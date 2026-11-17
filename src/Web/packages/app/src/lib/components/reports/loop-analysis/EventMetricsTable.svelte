@@ -1,8 +1,8 @@
 <!-- Each figure's spread across each cohort's events, cohorts side by side, the comparison beside each. -->
 <script lang="ts">
-  import { EventResponseKind, type EventCohortDefinition, type EventCohortResult } from "$lib/api";
-  import { plural } from "$lib/utils/plural";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { EventResponseKind, type EventCohortDefinition, type EventCohortResult } from "#lib/api/index.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { bg, bgLabel } from "#lib/utils/formatting.js";
   import CohortDot from "./CohortDot.svelte";
   import { cohortLabel, formatMetric, metricDefinitions } from "./event-labels.svelte";
 
@@ -129,11 +129,11 @@
     <p>
       {cohort ? cohortLabel(cohort) : ""}: grams per unit comes only from a meal with no other meal,
       correction or rise in its window. The pump records must also show all the insulin in that window.
-      {plural(r.gramsPerUnitNotIsolated ?? 0, ["# meal had another event in its window", "# meals had another event in their window"])};
+      {plural(r.gramsPerUnitNotIsolated ?? 0, ["# meal had another event in its window", "# meals had another event in their window"])},
       {plural(r.gramsPerUnitUncovered ?? 0, [
         "# had too little of its basal recorded",
         "# had too little of their basal recorded",
-      ])}; {plural(r.gramsPerUnitNoNetInsulin ?? 0, [
+      ])}, {plural(r.gramsPerUnitNoNetInsulin ?? 0, [
         "# had no insulin above schedule",
         "# had no insulin above schedule",
       ])}.

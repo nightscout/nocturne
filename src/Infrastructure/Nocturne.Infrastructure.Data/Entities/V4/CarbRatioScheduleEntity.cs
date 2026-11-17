@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.CarbRatioSchedule
 /// </summary>
 [Table("carb_ratio_schedules")]
-public class CarbRatioScheduleEntity : V4TimeSeriesEntityBase
+public class CarbRatioScheduleEntity : V4TimeSeriesEntityBase, IProfileScopedEntity
 {
     /// <summary>
     /// Profile name this carb ratio schedule belongs to

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.Settings
 /// </summary>
 [Table("settings")]
-public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
+public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped, IOriginalIdentified
 {
     /// <summary>
     /// Identifier of the tenant this setting belongs to
@@ -16,10 +16,7 @@ public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
-    /// <summary>
-    /// Primary key - UUID Version 7 for time-ordered, globally unique identification
-    /// </summary>
-    [Key]
+    /// <summary>Row id, unique within its tenant: the primary key is <c>(TenantId, Id)</c>.</summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -40,6 +37,7 @@ public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
     /// <summary>
     /// The setting value as JSON string (can be any JSON value)
     /// </summary>
+    [AuditRedacted]
     [Column("value")]
     public string? Value { get; set; }
 
@@ -131,6 +129,7 @@ public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
     /// <summary>
     /// Additional properties from import (stored as JSON)
     /// </summary>
+    [AuditRedacted]
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
 }

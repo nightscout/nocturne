@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -14,6 +15,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -46,7 +48,7 @@ internal sealed class AlarmTestTenant
             .Callback((string eventName, NotificationBase notify) => Sent.Add(new EngineAlarm(eventName, notify)))
             .Returns(Task.CompletedTask);
         Canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync((SensorGlucose?)null);
-        Units("mg/dl");
+        Units(null);
     }
 
     public IDbContextFactory<NocturneDbContext> Contexts { get; }
@@ -54,25 +56,31 @@ internal sealed class AlarmTestTenant
     public Mock<ISignalRBroadcastService> Broadcast { get; } = new();
     public Mock<ICanonicalGlucoseService> Canonical { get; } = new();
     public Mock<ITenantAppearanceReader> Appearance { get; } = new();
+    public Mock<ITenantService> SetupDefaults { get; } = new();
     public List<EngineAlarm> Sent { get; } = [];
 
     public IEnumerable<EngineAlarm> Clears => Sent.Where(a => a.EventName == EngineAlarmEvents.ClearAlarm);
 
-    public ITenantAccessor Accessor => Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant);
+    public ITenantAccessor Accessor => MockTenantAccessor.Create(Tenant).Object;
 
     public EngineAlarmRelay Relay() => new(
         Contexts.AsNocturneFactory(),
         Accessor,
-        Appearance.Object,
+        new TenantGlucoseUnits(Accessor, Appearance.Object, SetupDefaults.Object),
         Canonical.Object,
         Broadcast.Object,
         Time,
         NullLogger<EngineAlarmRelay>.Instance);
 
-    public void Units(string units) =>
+    public void Units(string? units) =>
         Appearance
             .Setup(a => a.GetTenantAppearanceAsync(Tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences { GlucoseUnits = units });
+
+    public void SetupDefaultUnits(string units) =>
+        SetupDefaults
+            .Setup(t => t.GetDefaultGlucoseUnitsAsync(Tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(units);
 
     public void LatestReading(double mgdl, double minutesAgo = 2) =>
         Canonical

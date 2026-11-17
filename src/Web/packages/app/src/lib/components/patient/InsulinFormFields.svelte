@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import * as Select from "$lib/components/ui/select";
-  import { type InsulinFormulation } from "$api";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { type InsulinFormulation } from "#lib/api/index.js";
+  import type { createInsulin, updateInsulin } from "#lib/api/generated/patientRecords.generated.remote.js";
   import {
     insulinCategoryLabels,
     insulinCategoryDescriptions,
@@ -14,9 +15,8 @@
   } from "./labels";
 
   interface Props {
-    /** Prefixed onto every field's `name` attribute — set to "request." when submitting to
-    updateInsulin, whose schema nests fields under `request` (SvelteKit's dot-path form parsing). */
-    namePrefix?: string;
+    /** The fields of the form the controls submit to: updateInsulin nests them under `request`. */
+    fields: typeof createInsulin.fields | typeof updateInsulin.fields.request;
 
     // Core fields (bindable)
     category?: string;
@@ -47,7 +47,7 @@
   }
 
   let {
-    namePrefix = "",
+    fields,
     category = $bindable(""),
     formulationId = $bindable(""),
     name = $bindable(""),
@@ -92,7 +92,7 @@
       <Label for="insulin-category">Category</Label>
       <Select.Root
         type="single"
-        name="{namePrefix}insulinCategory"
+        name={fields.insulinCategory.as("select").name}
         bind:value={category}
         onValueChange={handleCategoryChange}
       >
@@ -159,9 +159,9 @@
   <!-- Name and Role Select -->
   <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
-      <Label for="insulin-name">Brand / Name</Label>
+      <Label for="insulin-name">Brand / name</Label>
       <Input
-        name="{namePrefix}name"
+        name={fields.name.as("text").name}
         id="insulin-name"
         bind:value={name}
         placeholder="e.g. Humalog, Lantus, Fiasp"
@@ -171,7 +171,7 @@
 
     <div class="space-y-2">
       <Label for="insulin-role">Role</Label>
-      <Select.Root type="single" name="{namePrefix}role" bind:value={role}>
+      <Select.Root type="single" name={fields.role.as("select").name} bind:value={role}>
         <Select.Trigger id="insulin-role">
           {labelFor(insulinRoleLabels, role) ?? role}
         </Select.Trigger>
@@ -194,7 +194,7 @@
   <!-- DIA, Peak, Concentration -->
   <div class="grid gap-4 @sm:grid-cols-3">
     <div class="space-y-2">
-      <Label for="insulin-dia">Duration of Insulin Action</Label>
+      <Label for="insulin-dia">Duration of insulin action</Label>
       <div class="flex items-center gap-2">
         <Input
           id="insulin-dia"
@@ -244,18 +244,18 @@
     <!-- Start/End Dates -->
     <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
-        <Label for="insulin-start">Start Date</Label>
+        <Label for="insulin-start">Start date</Label>
         <Input
-          name="{namePrefix}startDate"
+          name={fields.startDate.as("date").name}
           id="insulin-start"
           type="date"
           bind:value={startDate}
         />
       </div>
       <div class="space-y-2">
-        <Label for="insulin-end">End Date</Label>
+        <Label for="insulin-end">End date</Label>
         <Input
-          name="{namePrefix}endDate"
+          name={fields.endDate.as("date").name}
           id="insulin-end"
           type="date"
           bind:value={endDate}
@@ -268,7 +268,7 @@
       <div class="flex items-center gap-2">
         <Checkbox
           id="insulin-current"
-          name="{namePrefix}isCurrent"
+          name={fields.isCurrent.as("checkbox").name}
           bind:checked={isCurrent}
         />
         <Label for="insulin-current">Currently in use</Label>
@@ -277,7 +277,7 @@
       <div class="flex items-center gap-2">
         <Checkbox
           id="insulin-primary"
-          name="{namePrefix}isPrimary"
+          name={fields.isPrimary.as("checkbox").name}
           bind:checked={isPrimary}
         />
         <Label for="insulin-primary">Primary for this role</Label>
@@ -288,7 +288,7 @@
     <div class="space-y-2">
       <Label for="insulin-notes">Notes</Label>
       <Textarea
-        name="{namePrefix}notes"
+        name={fields.notes.as("text").name}
         id="insulin-notes"
         bind:value={notes}
         placeholder="Any additional notes about this insulin"

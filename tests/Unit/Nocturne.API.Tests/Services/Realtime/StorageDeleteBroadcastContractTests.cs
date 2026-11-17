@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Hubs;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using V3DeviceStatusController = Nocturne.API.Controllers.V3.DeviceStatusController;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Health;
@@ -81,6 +82,8 @@ public class StorageDeleteBroadcastContractTests
 
         public JsonElement Create => Wire("create");
 
+        public JsonElement Update => Wire("update");
+
         private IHubContext<THub> StubHub<THub>()
             where THub : Hub
         {
@@ -145,8 +148,6 @@ public class StorageDeleteBroadcastContractTests
         new(
             Mock.Of<ITenantCache>(),
             capture.Broadcast,
-            Mock.Of<IDecompositionPipeline>(),
-            Enumerable.Empty<ICollectionEffectDescriptor>(),
             NullLogger<WriteSideEffectsService>.Instance
         );
 
@@ -332,11 +333,90 @@ public class StorageDeleteBroadcastContractTests
         await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { status });
 
         var v1 = Rest(status).GetProperty("_id").GetString();
-        var v3 = RestIdentifier(V3DeviceStatusController.MapToV3Dto(status));
+        var v3 = RestIdentifier(V3DeviceStatusController.ToDocument(status));
         v1.Should().Be(v3);
         IdKeys(capture.Create.GetProperty("doc"))
             .Should()
             .BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = v3 });
+    }
+
+    /// <summary>
+    /// An AAPS devicestatus upload whose loop has not run yet. AAPS reads the echo with Gson, which
+    /// throws on a <c>null</c> where its model declares an object (<c>openaps.suggested</c>,
+    /// <c>openaps.enacted</c>), so the keys the upload left out must stay out.
+    /// </summary>
+    private static DeviceStatus AapsUploadWithEmptyOpenAps() =>
+        JsonSerializer.Deserialize<DeviceStatus>(
+            """{"device":"openaps://samsung SM-S911B","created_at":"2026-10-23T09:47:00.000Z","openaps":{},"pump":{"reservoir":120}}""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        )!;
+
+    /// <summary>
+    /// Scalars a model writes even when null, as Nightscout does; Gson reads a null scalar without
+    /// complaint.
+    /// </summary>
+    private static readonly string[] DeviceStatusAlwaysWritten = ["$.uploaderBattery"];
+
+    [Fact]
+    public async Task DeviceStatusCreate_LeavesOutTheOpenApsKeysTheUploadLeftOut()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { AapsUploadWithEmptyOpenAps() });
+
+        var doc = capture.Create.GetProperty("doc");
+        doc.GetProperty("openaps").EnumerateObject().Should().BeEmpty();
+        doc.GetProperty("pump").GetProperty("reservoir").GetDouble().Should().Be(120);
+        NullProperties(doc).Should().Equal(DeviceStatusAlwaysWritten);
+    }
+
+    [Fact]
+    public async Task DeviceStatusUpdate_LeavesOutTheOpenApsKeysTheUploadLeftOut()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnUpdatedAsync("devicestatus", AapsUploadWithEmptyOpenAps());
+
+        capture.Update.GetProperty("doc").GetProperty("openaps").EnumerateObject().Should().BeEmpty();
+        NullProperties(capture.Update.GetProperty("doc")).Should().Equal(DeviceStatusAlwaysWritten);
+    }
+
+    [Fact]
+    public async Task TreatmentSinkCreate_LeavesOutUnsetKeys()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateTreatmentSink(capture)
+            .OnCreatedAsync(new Treatment { Id = RecordGuid, EventType = "Meal Bolus", Carbs = 30 }, CancellationToken.None);
+
+        var doc = capture.Create.GetProperty("doc");
+        doc.GetProperty("carbs").GetDouble().Should().Be(30);
+        NullProperties(doc).Should().Equal("$.enteredBy");
+    }
+
+    /// <summary>The paths of every object property that is on the wire as <c>null</c>.</summary>
+    private static List<string> NullProperties(JsonElement element, string path = "$")
+    {
+        var found = new List<string>();
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                var child = $"{path}.{property.Name}";
+                if (property.Value.ValueKind == JsonValueKind.Null)
+                    found.Add(child);
+                else
+                    found.AddRange(NullProperties(property.Value, child));
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var item in element.EnumerateArray())
+                found.AddRange(NullProperties(item, $"{path}[{index++}]"));
+        }
+
+        return found;
     }
 
     /// <summary>The keys a client could take for the record's own id, under the hub's naming.</summary>
@@ -527,7 +607,7 @@ public class StorageDeleteBroadcastContractTests
     /// their delete identifier would emit an id none of those surfaces produces.
     /// </summary>
     [Fact]
-    public async Task SimpleEntityService_Delete_SendsTheUuidVerbatim()
+    public async Task HealthSeries_Delete_SendsTheUuidVerbatim()
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -544,10 +624,9 @@ public class StorageDeleteBroadcastContractTests
 
         var capture = new BroadcastCapture();
         var deleted = await new HeartRateService(
-            context.AsFactory(),
+            new HeartRateRepository(context.AsFactory(), TimeProvider.System),
             Mock.Of<IDocumentProcessingService>(),
-            capture.Broadcast,
-            NullLogger<HeartRateService>.Instance
+            capture.Broadcast
         ).DeleteHeartRateAsync(RecordGuid);
 
         deleted.Should().BeTrue();
@@ -559,6 +638,9 @@ public class StorageDeleteBroadcastContractTests
     public async Task ActivityService_SingleDelete_SendsTheUuidVerbatim()
     {
         var stateSpans = new Mock<IStateSpanService>();
+        stateSpans
+            .Setup(s => s.GetActivityByIdAsync(RecordGuid, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = RecordGuid, Type = "exercise" });
         stateSpans
             .Setup(s => s.DeleteActivityAsync(RecordGuid, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<string>)[RecordGuid]);
@@ -575,6 +657,9 @@ public class StorageDeleteBroadcastContractTests
     public async Task ActivityService_SleepDelete_SendsTheUuidVerbatim()
     {
         var sleep = new Mock<ISleepService>();
+        sleep
+            .Setup(s => s.GetSessionByIdAsync(Guid.Parse(RecordGuid), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SleepSession { Id = RecordGuid, Source = SleepSource.Manual });
         sleep
             .Setup(s => s.DeleteSessionAsync(Guid.Parse(RecordGuid), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);

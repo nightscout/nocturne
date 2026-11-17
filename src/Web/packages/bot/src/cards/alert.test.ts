@@ -36,6 +36,12 @@ const payload = {
 
 const buttons = () => cardButtons(AlertCard({ payload }));
 
+const ago = (minutes: number) =>
+  new Intl.RelativeTimeFormat(new Intl.DateTimeFormat().resolvedOptions().locale, {
+    style: "narrow",
+    numeric: "auto",
+  }).format(-minutes, "minute");
+
 describe("AlertCard button values", () => {
   it("puts every button inside Telegram's callback_data budget", () => {
     expect(buttons()).not.toHaveLength(0);
@@ -93,8 +99,8 @@ describe("ActiveAlertsCard", () => {
 
     expect(cardTitle(card)).toBe("Active alerts");
     expect(cardFields(card)).toEqual([
-      "Urgent low: Firing, started 12 min ago",
-      "High: Acknowledged, started 12 min ago",
+      `Urgent low: Firing, started ${ago(12)}`,
+      `High: Acknowledged, started ${ago(12)}`,
     ]);
   });
 
@@ -105,7 +111,7 @@ describe("ActiveAlertsCard", () => {
     });
 
     expect(cardFields(card)).toEqual([
-      `Low: Snoozed until ${until.toLocaleTimeString()}, started 12 min ago`,
+      `Low: Snoozed until ${until.toLocaleTimeString()}, started ${ago(12)}`,
     ]);
   });
 
@@ -119,7 +125,7 @@ describe("ActiveAlertsCard", () => {
       ],
     });
 
-    expect(cardFields(card)).toEqual(["Low: Acknowledged, started 12 min ago"]);
+    expect(cardFields(card)).toEqual([`Low: Acknowledged, started ${ago(12)}`]);
   });
 
   it("says so rather than printing a bogus age when the start time is missing", () => {

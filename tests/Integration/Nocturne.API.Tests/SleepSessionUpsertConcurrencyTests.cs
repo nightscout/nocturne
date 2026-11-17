@@ -19,6 +19,7 @@ namespace Nocturne.API.Tests.Integration;
 /// second must wait on the first and then replace its row; without the session locks it misses the
 /// uncommitted row, inserts, and fails a unique index once the first commits.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
 {
@@ -132,9 +133,9 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
     {
         await using var seed = Fixture.CreateDbContext(Fixture.TenantId);
         var contexts = new TestNocturneDbContextFactory(seed);
-        var held = await contexts.CreateAsync();
+        var held = contexts.CreateUndisposed();
         held.AttributedTo(firstAudit);
-        var racer = await contexts.CreateAsync();
+        var racer = contexts.CreateUndisposed();
         Task<TSecond>? secondTask = null;
         try
         {
@@ -222,8 +223,8 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
     };
 
     /// <summary>
-    /// Hands the repository one of the race's contexts on every call. Those come from a
-    /// <see cref="TestNocturneDbContextFactory"/>, whose contexts ignore disposal, so the repository's
+    /// Hands the repository one of the race's contexts on every call. Those come from
+    /// <see cref="TestNocturneDbContextFactory.CreateUndisposed"/>, so the repository's
     /// <c>await using</c> leaves the held transaction and the racer's connection open.
     /// </summary>
     private sealed class Pinned(NocturneDbContext context) : SingleReaderDbContextFactory

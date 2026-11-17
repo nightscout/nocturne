@@ -9,7 +9,7 @@
 
 // Imported from the shared (non-server) module, and re-exported below, so the client 401
 // interceptor and these server hooks share one definition of the share-host shape.
-import { isShareHost } from "$lib/share-host";
+import { isShareHost } from "#lib/share-host.js";
 
 /**
  * Get the original client-facing host from the request.

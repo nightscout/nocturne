@@ -175,7 +175,7 @@ public class SessionCookieHandler : IAuthHandler
             _logger.LogDebug("Skipping auth for concurrent request during token rotation grace period");
             return AuthResult.Skip();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CredentialFailure.Is(ex))
         {
             _logger.LogWarning(ex, "Error refreshing session");
         }

@@ -10,12 +10,19 @@
 
 import {
   glucoseUnits,
+  carbRatioFormat,
   timeFormat,
   regionFormat,
   preferredLanguage,
+  type CarbRatioFormat,
   type GlucoseUnits,
-} from "$lib/stores/appearance-store.svelte";
-import type { OverallAverages, Treatment, TreatmentSummary } from "$api-clients";
+} from "#lib/stores/appearance-store.svelte.js";
+import {
+  relativeAge as sharedRelativeAge,
+  relativeTime as sharedRelativeTime,
+  type RelativeTimeOptions,
+} from "@nocturne/ui/relative-time";
+import type { OverallAverages, Treatment, TreatmentSummary } from "#lib/api/generated/nocturne-api-client.js";
 
 // Re-export for backward compatibility
 export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
@@ -26,14 +33,16 @@ export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
 
 // Pure unit conversion/formatting lives in the shared design system (@nocturne/ui/glucose) so the
 // web app and the desktop companion render glucose identically. Re-exported here so existing
-// import sites (`$lib/utils/formatting`) keep working unchanged.
+// import sites (`#lib/utils/formatting.js`) keep working unchanged.
 export {
   convertToDisplayUnits,
   convertFromDisplayUnits,
   formatGlucoseValue,
   formatGlucoseDelta,
   getUnitLabel,
+  isGlucoseUnits,
 } from "@nocturne/ui/glucose";
+export { toDate } from "@nocturne/ui/relative-time";
 import {
   convertToDisplayUnits,
   formatGlucoseValue,
@@ -117,29 +126,6 @@ export function bgValue(mgdl: number): number {
   return convertToDisplayUnits(mgdl, glucoseUnits.current);
 }
 
-/**
- * Get standard glucose range thresholds in user's preferred units
- * @returns Object with common threshold values
- */
-export function bgThresholds(): {
-  urgentLow: number;
-  low: number;
-  targetLow: number;
-  targetHigh: number;
-  high: number;
-  urgentHigh: number;
-} {
-  const units = glucoseUnits.current;
-  return {
-    urgentLow: convertToDisplayUnits(54, units),
-    low: convertToDisplayUnits(70, units),
-    targetLow: convertToDisplayUnits(70, units),
-    targetHigh: convertToDisplayUnits(180, units),
-    high: convertToDisplayUnits(180, units),
-    urgentHigh: convertToDisplayUnits(250, units),
-  };
-}
-
 // =============================================================================
 // Time Formatting (auto-detect format from global preference)
 // =============================================================================
@@ -213,41 +199,33 @@ export function hourLabel(date: Date | number): string {
 }
 
 /**
- * Coarse relative age for a "last seen" or "last synced" field: "Just now",
- * "12m ago", "3h ago", "2d ago", then an absolute date past a week.
+ * How long ago a moment was, in the largest whole unit: "now", "5m ago", "3h ago",
+ * "2d ago", then the absolute date from a week on. The words are the regional
+ * format's own. A moment in the future reads as "now".
  *
- * This is the short form. `formatTimeSince` in the alerts folder is minute-
- * precise ("3h 5m ago") because an alert card is read while it is firing; use
- * this one everywhere else so the same age doesn't render two ways on one row.
+ * Returns `fallback` when `at` is missing or not a date. The caller owns that
+ * wording, so it is extracted for translation with the rest of its component.
  *
- * @param now Reference time. Pass a ticking value (see `Now`) where the result
- *   is rendered, or the text freezes at the age it had on first render.
+ * @param opts.now Reference time. Pass a ticking value (see `Now`) where the
+ *   result is rendered, or the text freezes at the age it had on first render.
  */
-export function lastSeen(
-  date: Date | string | undefined | null,
-  now: number = Date.now()
+export function relativeAge(
+  at: Date | string | number | null | undefined,
+  opts: RelativeTimeOptions = {}
 ): string {
-  if (!date) return "Never";
-  const d = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(d.getTime())) return "Never";
-
-  const minutes = Math.floor((now - d.getTime()) / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return formatNumericDate(d);
+  return sharedRelativeAge(at, formatLocale(), opts);
 }
 
-/** Format elapsed time as minutes ago in the user's regional format. */
-export function minutesAgo(from: number, to: number = Date.now()): string {
-  const minutes = Math.max(0, Math.floor((to - from) / 60000));
-  return new Intl.RelativeTimeFormat(formatLocale(), {
-    numeric: "always",
-    style: "short",
-  }).format(-minutes, "minute");
+/**
+ * How far a moment is from `now`, in either direction: "3h ago" or "in 3h". A
+ * moment behind reads in the largest whole unit, as in `relativeAge`. A moment
+ * ahead reads in the nearest whole unit, so 47 hours is "in 2d", never "tomorrow".
+ */
+export function relativeTime(
+  at: Date | string | number | null | undefined,
+  opts: RelativeTimeOptions = {}
+): string {
+  return sharedRelativeTime(at, formatLocale(), opts);
 }
 
 // =============================================================================
@@ -255,23 +233,24 @@ export function minutesAgo(from: number, to: number = Date.now()): string {
 // =============================================================================
 
 /**
- * NSwag-generated fields typed `Date` arrive over the wire as ISO strings
- * (the client's jsonParseReviver is a no-op) — coerce defensively, and return
- * null rather than an Invalid Date so callers can take their empty branch
- * instead of feeding NaN to Intl.
- */
-export function toDate(value: Date | string | undefined | null): Date | null {
-  if (value == null) return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/**
  * A number with the regional format's own group and decimal separators — "1.234"
  * for a German reader, "1,234" for an American one.
  */
 export function formatNumber(value: number | undefined | null): string {
   return (value ?? 0).toLocaleString(formatLocale());
+}
+
+/** A byte count in the largest unit that keeps it above 1, to one decimal place: "1.5 GB". */
+export function formatFileSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  const digits = unit === 0 ? 0 : 1;
+  return `${value.toLocaleString(formatLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${units[unit]}`;
 }
 
 /**
@@ -492,6 +471,11 @@ export function formatWeekdayLabel(date: Date | string | number): string {
   });
 }
 
+/** A weekday's short name in the viewer's locale. 4 January 2026 is a Sunday, so day d falls on the 4th + d. */
+export function weekdayLabel(day: number): string {
+  return formatWeekdayLabel(new Date(2026, 0, 4 + day));
+}
+
 /**
  * Formats a date string for use in datetime-local input fields
  * @param dateStr - ISO date string or undefined
@@ -555,6 +539,33 @@ export function formatCarbDisplay(carbs: number | undefined): string {
     return "N/A";
   }
   return carbs.toFixed(0);
+}
+
+export function formatInsulinToCarbRatio(
+  gramsPerUnit: number | null | undefined,
+  format: CarbRatioFormat = carbRatioFormat.current
+): string {
+  if (gramsPerUnit == null || !(gramsPerUnit > 0)) return "–";
+  switch (format) {
+    case "g/U":
+      return `${gramsPerUnit.toFixed(1)} g/U`;
+    case "U/10g":
+      return `${unitsPerTenGrams(gramsPerUnit).toFixed(2)} U/10 g`;
+    default:
+      return `1:${gramsPerUnit.toFixed(1)}`;
+  }
+}
+
+export function unitsPerTenGrams(gramsPerUnit: number): number {
+  return 10 / gramsPerUnit;
+}
+
+/**
+ * Kept out of the templates: the catalogue would translate the format's literal there, and the
+ * comparison would then fail in other locales.
+ */
+export function writesUnitsPerTenGrams(format: CarbRatioFormat = carbRatioFormat.current): boolean {
+  return format === "U/10g";
 }
 
 /**

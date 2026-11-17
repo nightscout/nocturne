@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ApsSnapshot } from "$lib/api";
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatClock, formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import type { ApsSnapshot } from "#lib/api/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { formatClock, formatGlucoseValue, getUnitLabel } from "#lib/utils/formatting.js";
   import Brain from "@lucide/svelte/icons/brain";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Apple from "@lucide/svelte/icons/apple";
@@ -39,7 +39,7 @@
       <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
         <Card.Title class="flex items-center gap-2 text-sm">
           <Brain class="h-4 w-4" />
-          APS Decision at {snapshotTime}
+          APS decision at {snapshotTime}
         </Card.Title>
         <Badge
           variant={isEnacted ? "success" : "outline"}
@@ -137,7 +137,7 @@
         <!-- Enacted Action -->
         {#if isEnacted}
           <div>
-            <div class="text-muted-foreground">Temp Basal</div>
+            <div class="text-muted-foreground">Temp basal</div>
             <div class="font-medium tabular-nums">
               {#if snapshot.enactedRate != null}
                 {snapshot.enactedRate.toFixed(2)}U/hr

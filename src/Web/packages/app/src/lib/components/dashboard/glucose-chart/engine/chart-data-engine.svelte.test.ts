@@ -1,19 +1,19 @@
 import { render } from "vitest-browser-svelte";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
-vi.mock("$api/chart-data.remote", () => ({
+vi.mock("#lib/api/chart-data.remote.js", () => ({
   getChartData: vi.fn(() => {
     const result = Promise.resolve(served) as Promise<typeof served> & {
-      run: () => Promise<typeof served>;
+      refresh: () => Promise<void>;
     };
-    result.run = () => Promise.resolve(served);
+    result.refresh = () => result.then(() => undefined);
     return result;
   }),
 }));
 // The store registers its handlers on the client; capturing them lets a test deliver a
 // socket event the way the bridge would.
 const socketHandlers = vi.hoisted(() => ({}) as Record<string, (event: unknown) => void>);
-vi.mock("$lib/websocket/websocket-client.svelte", () => ({
+vi.mock("#lib/websocket/websocket-client.svelte.js", () => ({
   WebSocketClient: class {
     on(event: string, handler: (event: unknown) => void) {
       socketHandlers[event] = handler;
@@ -23,18 +23,18 @@ vi.mock("$lib/websocket/websocket-client.svelte", () => ({
     disconnect() {}
   },
 }));
-vi.mock("$api/predictions.remote", () => ({
+vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictions: vi.fn(async () => null),
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
 import { error } from "@sveltejs/kit";
 import { flushSync } from "svelte";
-import type { RealtimeStore } from "$lib/stores/realtime-store.svelte";
-import { getChartData } from "$api/chart-data.remote";
-import { getPredictionStatus } from "$api/predictions.remote";
-import { transformChartData } from "$lib/utils/chart-data-transform";
-import type { Entry } from "$lib/websocket/types";
+import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+import { getChartData } from "#lib/api/chart-data.remote.js";
+import { getPredictions, getPredictionStatus } from "#lib/api/predictions.remote.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import type { Entry } from "#lib/websocket/types.js";
 import Harness from "./chart-data-engine-harness.test.svelte";
 import type {
   ChartDataEngine,
@@ -250,6 +250,30 @@ describe("chart data engine — realtime glucose source", () => {
   });
 });
 
+describe("chart data engine — predictions", () => {
+  afterEach(() => {
+    vi.mocked(getPredictionStatus).mockImplementation((async () => ({ available: false })) as never);
+  });
+
+  it("asks for predictions while the service status is still unknown", async () => {
+    vi.mocked(getPredictionStatus).mockImplementation((() => new Promise(() => {})) as never);
+    vi.mocked(getPredictions).mockClear();
+
+    render(Harness, {
+      props: {
+        entries: [],
+        options: {
+          focusHours: 3,
+          initialChartData: transformChartData({ glucoseData: [{ time: Date.now() - MINUTE, sgv: 120 }] } as never),
+        },
+        onengine: () => {},
+      },
+    });
+
+    await vi.waitFor(() => expect(getPredictions).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe("chart data engine — refused fetch", () => {
   it("surfaces the API's reason for refusing the range", async () => {
     const detail = "Date range must not exceed 366 days.";
@@ -307,8 +331,8 @@ describe("chart data engine — SSR data refresh", () => {
   type Store = RealtimeStore;
 
   function resolving(value: Served) {
-    const result = Promise.resolve(value) as Promise<Served> & { run: () => Promise<Served> };
-    result.run = () => result;
+    const result = Promise.resolve(value) as Promise<Served> & { refresh: () => Promise<void> };
+    result.refresh = () => result.then(() => undefined);
     return result;
   }
 
@@ -429,9 +453,9 @@ describe("chart data engine — SSR data refresh", () => {
     const { engine, store } = await mount();
     let releaseSlow!: (v: Served) => void;
     const slow = new Promise<Served>((r) => (releaseSlow = r)) as Promise<Served> & {
-      run: () => Promise<Served>;
+      refresh: () => Promise<void>;
     };
-    slow.run = () => slow;
+    slow.refresh = () => slow.then(() => undefined);
     vi.mocked(getChartData).mockImplementationOnce((() => slow) as never);
 
     store.boluses = [{ id: "a" }];
@@ -518,9 +542,9 @@ describe("chart data engine — SSR data refresh", () => {
     const { engine, store } = await mount(undefined, undefined, options);
     let releaseSlow!: (v: Served) => void;
     const slow = new Promise<Served>((r) => (releaseSlow = r)) as Promise<Served> & {
-      run: () => Promise<Served>;
+      refresh: () => Promise<void>;
     };
-    slow.run = () => slow;
+    slow.refresh = () => slow.then(() => undefined);
     vi.mocked(getChartData).mockImplementationOnce((() => slow) as never);
     store.noteTreatmentWrite();
     await vi.advanceTimersByTimeAsync(3 * SECOND);
@@ -608,6 +632,17 @@ describe("chart data engine — SSR data refresh", () => {
 
       setVisibility("visible");
       await vi.advanceTimersByTimeAsync(3 * SECOND);
+      expect(calls()).toBe(1);
+    });
+
+    it("refreshes on becoming visible after a freeze that ran none of its timers", async () => {
+      await mount();
+      setVisibility("hidden");
+      vi.setSystemTime(Date.now() + 60 * MINUTE);
+
+      setVisibility("visible");
+      await vi.advanceTimersByTimeAsync(3 * SECOND);
+
       expect(calls()).toBe(1);
     });
 

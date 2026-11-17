@@ -54,7 +54,8 @@ public class WebhookSettingsControllerTests
         return new WebhookSettingsController(
             new WebhookRequestSender(
                 Mock.Of<IHttpClientFactory>(),
-                NullLogger<WebhookRequestSender>.Instance),
+                NullLogger<WebhookRequestSender>.Instance,
+                TimeProvider.System),
             NullLogger<WebhookSettingsController>.Instance)
         {
             ControllerContext = new ControllerContext

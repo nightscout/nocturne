@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -130,4 +131,14 @@ public class RefreshTokenEntity : IEntityTimestamped
     /// </summary>
     [NotMapped]
     public bool IsValid => !IsRevoked && !IsExpired;
+
+    /// <summary>
+    /// The tokens of the session <paramref name="sessionId"/> names: a chain's OIDC session id, or
+    /// for a legacy token issued before sessions were tagged, the token's own id.
+    /// </summary>
+    public static Expression<Func<RefreshTokenEntity, bool>> InSession(string sessionId)
+    {
+        Guid.TryParse(sessionId, out var legacyTokenId);
+        return t => t.OidcSessionId == sessionId || (t.OidcSessionId == null && t.Id == legacyTokenId);
+    }
 }

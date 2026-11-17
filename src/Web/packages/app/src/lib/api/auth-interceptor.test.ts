@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Force browser mode so redirectToLogin runs its real logic — the node stub
 // sets browser=false to skip DOM side-effects, which would short-circuit it.
-vi.mock("$app/environment", () => ({
+vi.mock("$app/env", () => ({
   browser: true,
   building: false,
   dev: false,

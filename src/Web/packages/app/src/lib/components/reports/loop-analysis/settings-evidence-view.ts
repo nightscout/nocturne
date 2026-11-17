@@ -1,4 +1,4 @@
-import type { SettingsEvidenceEpisode, SettingsEvidenceFigure } from "$lib/api";
+import type { SettingsEvidenceEpisode, SettingsEvidenceFigure } from "#lib/api/index.js";
 import { SLOT_MINUTES } from "./daily-profile-view";
 
 const SLOTS_PER_HOUR = 60 / SLOT_MINUTES;

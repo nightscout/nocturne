@@ -1,9 +1,9 @@
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { SortMode } from './types';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { FOOD_COLUMNS } from './food-columns';
-	import { getEnergyUnit } from '$lib/stores/appearance-store.svelte';
+	import { getEnergyUnit } from '#lib/stores/appearance-store.svelte.js';
 
 	interface Props {
 		sort: SortMode;
@@ -34,11 +34,11 @@
 		</span>
 	</Button>
 
-	<span class="col-label text-xs max-sm:hidden">Portion</span>
+	<span class="col-label text-xs @max-2xl:hidden">Portion</span>
 
-	<span class="col-label text-xs max-sm:hidden">GI</span>
+	<span class="col-label text-xs @max-2xl:hidden">GI</span>
 
-	<span class="col-label text-right text-xs max-sm:hidden">
+	<span class="col-label text-right text-xs @max-2xl:hidden">
 		Energy <span class="normal-case">{getEnergyUnit()}</span>
 	</span>
 
@@ -54,7 +54,8 @@
 		padding: 10px 16px;
 		align-items: center;
 		position: sticky;
-		top: 0;
+		top: var(--app-sticky-top, 0px);
+		transition: top 300ms cubic-bezier(0.4, 0, 0.2, 1);
 		z-index: 5;
 		background: var(--card);
 		border-bottom: 1px solid var(--border);

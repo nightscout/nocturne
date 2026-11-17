@@ -5,7 +5,6 @@ namespace Nocturne.Core.Models.V4;
 /// <see cref="DeviceStatus"/>) into one or more V4 granular models.
 /// Tracks which records were created versus updated for idempotency reporting.
 /// </summary>
-/// <seealso cref="BatchDecompositionResult"/>
 /// <seealso cref="IV4Record"/>
 public class DecompositionResult
 {
@@ -28,6 +27,15 @@ public class DecompositionResult
     /// Most records implement IV4Record, but StateSpan records are also included.
     /// </summary>
     public List<object> UpdatedRecords { get; } = [];
+
+    /// <summary>
+    /// Records whose stored row already held what the decomposition produced, so nothing was
+    /// written for them.
+    /// </summary>
+    public List<object> UnchangedRecords { get; } = [];
+
+    /// <summary>Every record the decomposition leaves stored: created, updated or unchanged.</summary>
+    public IEnumerable<object> StoredRecords => CreatedRecords.Concat(UpdatedRecords).Concat(UnchangedRecords);
 
     /// <summary>
     /// Records not written because the user had deleted them. A re-import never brings those back.

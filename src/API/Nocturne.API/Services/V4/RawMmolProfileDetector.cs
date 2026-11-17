@@ -23,10 +23,6 @@ namespace Nocturne.API.Services.V4;
 /// <c>timestamp</c> in one batch, which <c>MaybeRawIsf</c> already takes as proof.
 /// </para>
 /// <para>
-/// Schedules of profile-switch stores (<see cref="TherapySettings.ProfileSwitchStoreMarker"/>) are left
-/// out, as no editor lists them.
-/// </para>
-/// <para>
 /// <c>MaybeRawIsf</c> departs from the migration in one place: a target row written more than the
 /// migration's one-minute window after the ISF is not proof of one batch. An upload writes both together,
 /// but a hand edit of the targets keeps the store's <c>timestamp</c>, and would otherwise unlist an ISF
@@ -83,9 +79,6 @@ public sealed class RawMmolProfileDetector(INocturneDbContextFactory contexts) :
                                          OR {AnyRaw("x.entries_json", AnyRawTarget)}))))
         """;
 
-    private static string Listed(string alias) =>
-        $"strpos({alias}.profile_name, '{TherapySettings.ProfileSwitchStoreMarker}') = 0";
-
     private static readonly string DetectSql = $"""
         WITH t AS (SELECT @tenant AS id)
         SELECT 'TargetRange' AS "Kind", tr.id AS "Id", tr.profile_name AS "ProfileName", tr.timestamp AS "Timestamp",
@@ -94,7 +87,6 @@ public sealed class RawMmolProfileDetector(INocturneDbContextFactory contexts) :
         FROM target_range_schedules tr CROSS JOIN t
         WHERE tr.tenant_id = t.id
           AND tr.deleted_at IS NULL
-          AND {Listed("tr")}
           AND NOT ({MgdlOwner("tr")} AND NOT {MmolOwner("tr")})
           AND {AnyRaw("tr.entries_json", AnyRawTarget)}
         UNION ALL
@@ -104,7 +96,6 @@ public sealed class RawMmolProfileDetector(INocturneDbContextFactory contexts) :
         FROM sensitivity_schedules si CROSS JOIN t
         WHERE si.tenant_id = t.id
           AND si.deleted_at IS NULL
-          AND {Listed("si")}
           AND ({MaybeRawIsf("si")} OR ({MmolOwner("si")} AND {AnyRaw("si.entries_json", IsfUnder9)}))
           AND NOT {Owner("si", $"ts.additional_properties->>'{IsfIsMgdlKey}' = 'true'")}
         ORDER BY "Kind" DESC, "ProfileName", "Timestamp", "Id"

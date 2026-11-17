@@ -2,34 +2,34 @@
     import { resolve } from "$app/paths";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import SiteLink from "./install/SiteLink.svelte";
 </script>
 
 <div class="mb-8">
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-6">
         <li>
-            Open <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">https://your-domain</code>
-            and complete first-run setup, which creates the owner account with a
-            <a href={resolve("/docs/authentication/passkeys")} class="text-primary hover:underline">passkey</a>
+            Open <SiteLink /> and complete first-run setup, which creates the owner account with a
+            <a href={resolve("docs/authentication/passkeys")} class="text-primary hover:underline">passkey</a>
             or a sign-in provider.
         </li>
         <li>
             Connect a data source (Dexcom, LibreLinkUp, CareLink, Glooko, or your existing Nightscout)
-            under <strong>Settings &rsaquo; Connectors &amp; Apps</strong>.
+            under <strong>Settings &rsaquo; Connectors &amp; apps</strong>.
         </li>
         <li>
             Point your CGM app or loop system at your new Nocturne URL. See
-            <a href={resolve("/docs/connecting-apps")} class="text-primary hover:underline">Connecting apps</a>.
+            <a href={resolve("docs/connecting-apps")} class="text-primary hover:underline">Connecting apps</a>.
         </li>
         <li>
             Invite the people who follow you, or create a
-            <a href={resolve("/docs/sharing")} class="text-primary hover:underline">share link</a>.
+            <a href={resolve("docs/sharing")} class="text-primary hover:underline">share link</a>.
         </li>
-        <li>Watchtower is included and checks for image updates daily. It does not update Caddy or Postgres; see the update steps on this page.</li>
+        <li>Watchtower is included and checks for image updates daily. It does not update Caddy or Postgres. See the update steps on this page.</li>
     </ul>
 
     <div class="flex gap-4 not-prose">
-        <Button href={resolve("/docs/configuration")} variant="outline">
-            Configuration Guide
+        <Button href={resolve("docs/configuration")} variant="outline">
+            Configuration guide
             <ArrowRight class="w-4 h-4" />
         </Button>
     </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
 import { knownTopWidgets } from "./widget-registry";
 
 describe("knownTopWidgets", () => {

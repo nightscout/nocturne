@@ -1,7 +1,7 @@
 <script lang="ts">
   /** Count cards summarising the sensor-integrity analysis. Figures come straight from the API. */
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import type { SensorIntegritySummary } from "$lib/api";
+  import { Card, CardContent } from "#lib/components/ui/card/index.js";
+  import type { SensorIntegritySummary } from "#lib/api/index.js";
 
   interface Props {
     summary: SensorIntegritySummary | undefined;
@@ -10,7 +10,7 @@
   let { summary }: Props = $props();
 
   const cards = $derived([
-    { label: "Days analysed", value: summary?.days ?? 0, hint: "" },
+    { label: "Days analyzed", value: summary?.days ?? 0, hint: "" },
     { label: "Windows flagged", value: summary?.clusters ?? 0, hint: "physiologically implausible patterns" },
     { label: "High confidence", value: summary?.highClusters ?? 0, hint: "of the flagged windows" },
     { label: "Hypos after a window", value: summary?.events ?? 0, hint: "a low within 3 h of a window" },

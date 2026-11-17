@@ -1,10 +1,10 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import ListChecks from "@lucide/svelte/icons/list-checks";
-  import { DashboardVisibility, NotificationUrgency } from "$lib/api";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { DashboardVisibility, NotificationUrgency } from "#lib/api/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
 
   const realtimeStore = getRealtimeStore();
 
@@ -80,11 +80,6 @@
       {/each}
     </div>
   {:else}
-    <div
-      class="flex flex-col items-center justify-center text-muted-foreground py-2"
-    >
-      <ListChecks class="h-6 w-6 mb-1 opacity-50" />
-      <p class="text-xs">No active trackers</p>
-    </div>
+    <EmptyState art="stopwatch" size="compact" title="No active trackers" />
   {/if}
 </WidgetCard>

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -11,6 +12,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
 
@@ -55,7 +57,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext(_testTenantId));
 
         var logger = new Mock<ILogger<DirectGrantTokenHandler>>();
-        _handler = new DirectGrantTokenHandler(_dbContextFactory.Object.AsNocturneFactory(), _clock, logger.Object);
+        _handler = new DirectGrantTokenHandler(new OAuthGrantRepository(_dbContextFactory.Object.AsNocturneFactory()), _clock, new LastUsedClaims(_clock), logger.Object);
     }
 
     public void Dispose()
@@ -370,6 +372,60 @@ public class DirectGrantTokenHandlerTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    [Theory]
+    [InlineData(4, 1)]
+    [InlineData(6, 2)]
+    public async Task AuthenticateAsync_StampsLastUsedAtMostOncePerFiveMinutes(int minutesSinceLastUse, int contextsOpened)
+    {
+        var token = await SeedGrantAsync("noc_stamped", expiresAt: null);
+        await using (var ctx = _db.CreateContext(_testTenantId))
+        {
+            await ctx.OAuthGrants.ExecuteUpdateAsync(s => s.SetProperty(g => g.LastUsedAt, Now.AddMinutes(-minutesSinceLastUse)));
+        }
+
+        var result = await _handler.AuthenticateAsync(BearerContext(token));
+
+        Assert.True(result.Succeeded);
+        _dbContextFactory.Verify(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()), Times.Exactly(contextsOpened));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AuthenticateAsync_LeavesTheSubjectsMembershipOnTheRequest(bool isMember)
+    {
+        var token = await SeedGrantAsync("noc_member", expiresAt: null);
+        if (isMember)
+        {
+            await using var ctx = _db.CreateContext(_testTenantId);
+            ctx.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _testTenantId,
+                SubjectId = _subjectId,
+                DirectPermissions = [Scope.GlucoseRead],
+                LimitTo24Hours = true,
+            });
+            await ctx.SaveChangesAsync();
+        }
+        var context = BearerContext(token);
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        var stored = RequestMembership.Of(context, _subjectId, _testTenantId);
+        Assert.NotNull(stored);
+        if (isMember)
+        {
+            Assert.Equal([Scope.GlucoseRead], stored!.Membership!.Access.EffectivePermissions);
+            Assert.True(stored.Membership.Access.LimitTo24Hours);
+        }
+        else
+        {
+            Assert.Null(stored!.Membership);
+        }
     }
 
     private async Task<string> SeedGrantAsync(string token, DateTime? expiresAt, DateTime? createdAt = null)

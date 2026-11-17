@@ -8,4 +8,5 @@ namespace Nocturne.Core.Models.V4;
 /// <param name="Timestamp">Snapshot timestamp (UTC).</param>
 /// <param name="Iob">Device-reported total IOB, or <c>null</c> when the snapshot carried none.</param>
 /// <param name="Cob">Device-reported COB, or <c>null</c> when the snapshot carried none.</param>
-public readonly record struct ApsIobCobPoint(DateTime Timestamp, double? Iob, double? Cob);
+/// <param name="ClosedLoop">The snapshot's <see cref="ApsSnapshot.ClosedLoop"/>.</param>
+public readonly record struct ApsIobCobPoint(DateTime Timestamp, double? Iob, double? Cob, bool? ClosedLoop);

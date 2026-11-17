@@ -1,9 +1,10 @@
 import { toast } from 'svelte-sonner';
 import { SvelteSet } from 'svelte/reactivity';
-import { distinct } from '$lib/utils/collections';
-import type { Food } from '$api';
+import { distinct } from '#lib/utils/collections.js';
+import type { Food } from '#lib/api/index.js';
 import type { SortMode } from './types.js';
-import { foodCategoryMap, giFromInt, type GiLevel } from '$lib/components/food';
+import { foodCategoryMap } from '#lib/components/food/food-constants.js';
+import { giFromInt, type GiLevel } from '#lib/components/food/gi.js';
 import {
   getFoods,
   createFood as createFoodRemote,
@@ -12,10 +13,11 @@ import {
   addFavorite as addFavoriteRemote,
   removeFavorite as removeFavoriteRemote,
   getFoodAttributionCount,
-} from '$api/generated/foods.generated.remote';
+} from '#lib/api/generated/foods.generated.remote.js';
 import { deleteFood as deleteFoodRemote } from './data.remote';
-import { describeSubmitError } from '$lib/forms/submit-error';
-import { remoteErrorMessage } from '$lib/api/remote-error';
+import { describeSubmitError } from '#lib/forms/submit-error.js';
+import { remoteErrorMessage } from '#lib/api/remote-error.js';
+import { fresh } from "#lib/api/fresh-query.js";
 
 export class FoodState {
   foods = $state<Food[]>([]);
@@ -80,8 +82,8 @@ export class FoodState {
     this.loading = true;
     try {
       const [foods, favs] = await Promise.all([
-        getFoods(undefined).run(),
-        getFavorites(undefined).run(),
+        fresh(getFoods(undefined)),
+        fresh(getFavorites(undefined)),
       ]);
       this.foods = foods ?? [];
       this.favorites = new SvelteSet(
@@ -111,20 +113,22 @@ export class FoodState {
       }
     } catch (err) {
       toast.error(describeSubmitError(err, 'Failed to update favorite'));
-      const favs = await getFavorites(undefined).run();
+      const favs = await fresh(getFavorites(undefined));
       this.favorites = new SvelteSet(
         (favs ?? []).map((f: Food) => f._id).filter((id): id is string => !!id)
       );
     }
   }
 
-  async addFood(food: Food) {
+  /** The composer confirms the add itself, so this posts no success toast. */
+  async addFood(food: Food): Promise<Food | null> {
     try {
       const result = await createFoodRemote(food);
-      if (result?._id) {
-        this.foods = [result, ...this.foods];
-        toast.success('Food created');
+      if (!result?._id) {
+        toast.error('Failed to create food');
+        return null;
       }
+      this.foods = [result, ...this.foods];
       return result;
     } catch (err) {
       toast.error(describeSubmitError(err, 'Failed to create food'));
@@ -148,7 +152,7 @@ export class FoodState {
 
   async getAttributionCount(foodId: string): Promise<number> {
     try {
-      const result = await getFoodAttributionCount(foodId).run();
+      const result = await fresh(getFoodAttributionCount(foodId));
       return result?.count ?? 0;
     } catch {
       // No copy to lose: the caller renders a count, and 0 reads as "none known".

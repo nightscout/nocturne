@@ -1,8 +1,10 @@
 import { beforeNavigate } from "$app/navigation";
-import { Debounced } from "runed";
+import { flushSync } from "svelte";
+import { SvelteSet } from "svelte/reactivity";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
-import { describeSubmitError, GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { followUpError, genericSubmitError } from "./submit-messages.svelte";
+import { useSubmission, type Submission } from "./submission.svelte";
 
 /** The part of SvelteKit's `RemoteForm` the guard drives. */
 export interface GuardedForm {
@@ -29,15 +31,20 @@ export interface FormGuardOptions<T extends Record<string, unknown>> {
 
 export class FormGuard<T extends Record<string, unknown>> {
   #options: FormGuardOptions<T>;
-  #snapshot: T | null = $state(null);
+  #snapshot: T | null = $state.raw(null);
   #issues: ZodIssue[] = $state([]);
   #touched: boolean = $state(false);
   #submitted: boolean = $state(false);
-  #submitError: string | null = $state(null);
-  #debounced: Debounced<boolean>;
+  #blurred = new SvelteSet<string>();
+  #edited = new SvelteSet<string>();
+  #submission: Submission;
 
   constructor(options: FormGuardOptions<T>) {
     this.#options = options;
+    this.#submission = useSubmission({
+      fallback: options.submitErrorMessage ?? genericSubmitError(),
+      followUpFallback: followUpError(),
+    });
 
     // Snapshot from initial when truthy
     const initial = options.initial();
@@ -60,8 +67,9 @@ export class FormGuard<T extends Record<string, unknown>> {
       }
     });
 
-    // Debounced validation
-    this.#debounced = new Debounced(() => this.validate(), 300);
+    $effect(() => {
+      this.validate();
+    });
 
     // Navigation blocking
     if (options.navBlockMessage) {
@@ -88,6 +96,7 @@ export class FormGuard<T extends Record<string, unknown>> {
     return this.#snapshot;
   }
 
+  /** Every issue the schema reports, shown or not. `valid` reads this. */
   get issues(): ZodIssue[] {
     return this.#issues;
   }
@@ -96,8 +105,18 @@ export class FormGuard<T extends Record<string, unknown>> {
     return this.#issues.length === 0;
   }
 
+  /** True once a submit has been attempted and until the form saves or resets. */
   get submitted(): boolean {
     return this.#submitted;
+  }
+
+  /** The issues to show: a field's once it was edited and left, all of them once a submit was attempted. */
+  get visibleIssues(): ZodIssue[] {
+    if (this.#submitted) return this.#issues;
+    return this.#issues.filter(
+      (issue) =>
+        typeof issue.path[0] === "string" && this.#blurred.has(issue.path[0]),
+    );
   }
 
   /**
@@ -105,7 +124,12 @@ export class FormGuard<T extends Record<string, unknown>> {
    * the submit control — the form stays dirty and the entered values stay put.
    */
   get submitError(): string | null {
-    return this.#submitError;
+    return this.#submission.error;
+  }
+
+  /** See `Submission.saved`. */
+  get saved(): number {
+    return this.#submission.saved;
   }
 
   validate(): boolean {
@@ -118,19 +142,44 @@ export class FormGuard<T extends Record<string, unknown>> {
     return false;
   }
 
-  debouncedValidate(): void {
-    // Access .current to trigger the debounced evaluation
-    void this.#debounced.current;
+  /** The issues for one field that are due to show: see {@link visibleIssues}. */
+  issuesFor(field: string): ZodIssue[] {
+    return this.visibleIssues.filter((issue) => issue.path[0] === field);
   }
 
-  issuesFor(field: string): ZodIssue[] {
-    return this.#issues.filter((issue) => issue.path[0] === field);
+  /** The props a guarded `FormField` takes: its key, and the issues due to show. */
+  field(path: string): { name: string; issues: ZodIssue[] } {
+    return { name: path, issues: this.issuesFor(path) };
   }
+
+  #clearVisibility(): void {
+    this.#submitted = false;
+    this.#blurred.clear();
+    this.#edited.clear();
+  }
+
+  #fieldOf(event: Event): string | undefined {
+    if (!(event.target instanceof Element)) return undefined;
+    return event.target.closest<HTMLElement>("[data-field]")?.dataset.field;
+  }
+
+  #editField = (event: Event): void => {
+    const field = this.#fieldOf(event);
+    if (field != null) this.#edited.add(field);
+  };
+
+  #leaveField = (event: FocusEvent): void => {
+    const field = this.#fieldOf(event);
+    if (field == null || this.#snapshot == null) return;
+    const changed = !deepEqual(this.#options.values()[field], this.#snapshot[field]);
+    if (changed || this.#edited.has(field)) this.#blurred.add(field);
+  };
 
   reset(): void {
     this.#touched = false;
+    this.#clearVisibility();
     this.#issues = [];
-    this.#submitError = null;
+    this.#submission.clear();
     if (this.#snapshot != null && this.#options.onreset) {
       this.#options.onreset(structuredClone(this.#snapshot));
     }
@@ -145,58 +194,47 @@ export class FormGuard<T extends Record<string, unknown>> {
 
   /**
    * Wraps the form's `enhance` with client-side validation and dirty-state
-   * bookkeeping. The consumer callback runs only after a successful submission.
+   * bookkeeping. The consumer callback runs only after a successful submission;
+   * it returns false when a follow-up save failed, as `Submission.run`'s
+   * `onSuccess` does.
    */
   enhance(
     callback?: (helpers: {
       submit: () => Promise<boolean>;
-    }) => Promise<void>,
+    }) => Promise<void | boolean>,
   ) {
-    return this.#options.form.enhance(
+    const enhanced = this.#options.form.enhance(
       async (helpers: { submit: () => Promise<boolean> }) => {
-        this.#submitError = null;
-
-        // 1. Validate BEFORE submit
-        if (!this.validate()) {
-          this.focusInvalid();
-          return;
-        }
-
-        // 2. Submit. A handler that throws (e.g. `error(400, …)`) rejects here;
-        //    letting that propagate makes SvelteKit swap in the nearest error
-        //    page, discarding everything the user typed.
-        let succeeded: boolean;
-        try {
-          succeeded = await helpers.submit();
-        } catch (err) {
-          console.error("Form submission failed:", err);
-          this.#submitError = describeSubmitError(
-            err,
-            this.#options.submitErrorMessage ?? GENERIC_SUBMIT_ERROR,
-          );
-          return;
-        }
-
-        // 3. `submit()` resolves false when the server returned validation
-        //    issues. The form stays dirty so the values aren't lost, and the
-        //    guard keeps blocking navigation.
-        if (!succeeded) {
-          this.focusInvalid();
-          return;
-        }
-
-        // 4. Success: re-snapshot as clean and clear stale issues
-        const updated = this.#options.initial();
-        if (updated != null) {
-          this.#snapshot = structuredClone(updated);
-        }
+        this.#submission.clear();
         this.#submitted = true;
-        this.#touched = false;
-        this.#issues = [];
 
-        // 5. Consumer callback
-        await callback?.(helpers);
+        if (!this.validate()) {
+          flushSync();
+          this.focusInvalid();
+          return;
+        }
+
+        const succeeded = await this.#submission.run(helpers.submit, async () => {
+          const updated = this.#options.initial();
+          if (updated != null) {
+            this.#snapshot = structuredClone(updated);
+          }
+          this.#clearVisibility();
+          this.#touched = false;
+          this.#issues = [];
+          return callback?.(helpers);
+        });
+
+        // `submit()` resolves false when the server returned validation issues.
+        // The form stays dirty so the values aren't lost, and the guard keeps
+        // blocking navigation.
+        if (!succeeded && this.#submission.error == null) this.focusInvalid();
       },
     );
+    return {
+      ...enhanced,
+      oninput: this.#editField,
+      onfocusout: this.#leaveField,
+    };
   }
 }

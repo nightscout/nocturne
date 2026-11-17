@@ -33,14 +33,14 @@ public class ScalarAuthProviderTests : IDisposable
         var auth = Auth(context);
         auth.Should().NotBeNull();
         auth!.ClientId.Should().NotBeNullOrWhiteSpace();
-        auth.RedirectUri.Should().Be("https://demo.nocturne.run/scalar");
+        auth.RedirectUri.Should().Be("https://demo.nocturne.run/scalar/");
         auth.BearerToken.Should().Be("demo-access-token");
 
         await using var db = _fixture.Db();
         var client = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId && c.SoftwareId == ScalarAuthProvider.ScalarSoftwareId);
         JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
-            .Should().Equal("https://demo.nocturne.run/scalar");
+            .Should().Equal("https://demo.nocturne.run/scalar/");
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class ScalarAuthProviderTests : IDisposable
 
         var auth = Auth(context);
         auth.Should().NotBeNull();
-        auth!.RedirectUri.Should().Be("https://rhys.nocturne.run/scalar");
+        auth!.RedirectUri.Should().Be("https://rhys.nocturne.run/scalar/");
         auth.BearerToken.Should().BeNull("only a demo tenant's account may be handed out");
         _fixture.SessionService.Verify(
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
@@ -244,7 +244,38 @@ public class ScalarAuthProviderTests : IDisposable
         var client = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId);
         JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
-            .Should().Equal("https://demo.nocturne.run/scalar");
+            .Should().Equal("https://demo.nocturne.run/scalar/");
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_AddsTheTrailingSlashUriToAClientRegisteredWithoutIt()
+    {
+        var tenantId = _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+
+        await _fixture.BuildProvider().TryPrepareAsync(DocsTenantFixture.BuildContext("demo.nocturne.run"));
+
+        string clientId;
+        await using (var seed = _fixture.Db())
+        {
+            var client = await seed.OAuthClients.IgnoreQueryFilters()
+                .SingleAsync(c => c.TenantId == tenantId);
+            client.RedirectUris = JsonSerializer.Serialize(new List<string> { "https://demo.nocturne.run/scalar" });
+            await seed.SaveChangesAsync();
+            clientId = client.ClientId;
+        }
+
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
+        await _fixture.BuildProvider().TryPrepareAsync(context);
+
+        var auth = (ScalarAuthContext)context.Items[ScalarAuthContext.HttpContextItemKey]!;
+        auth.ClientId.Should().Be(clientId);
+        auth.RedirectUri.Should().Be("https://demo.nocturne.run/scalar/");
+
+        await using var db = _fixture.Db();
+        var updated = await db.OAuthClients.IgnoreQueryFilters()
+            .SingleAsync(c => c.TenantId == tenantId);
+        JsonSerializer.Deserialize<List<string>>(updated.RedirectUris)
+            .Should().Equal("https://demo.nocturne.run/scalar", "https://demo.nocturne.run/scalar/");
     }
 
     [Fact]
@@ -339,7 +370,7 @@ public class ScalarAuthProviderTests : IDisposable
 
         var auth = Auth(context);
         auth.Should().NotBeNull("a demo beside it does not end single-tenant mode");
-        auth!.RedirectUri.Should().Be($"https://{BaseDomain}/scalar");
+        auth!.RedirectUri.Should().Be($"https://{BaseDomain}/scalar/");
         auth.BearerToken.Should().BeNull("only the demo's own host may carry its token");
     }
 

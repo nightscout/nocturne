@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OAuthScope, PermissionAtom } from "$api-clients";
+import { OAuthScope, PermissionAtom } from "#lib/api/generated/nocturne-api-client.js";
 import { scopeCategories, scopeLabels } from "./scope-labels.svelte";
 
 describe("scope labels", () => {

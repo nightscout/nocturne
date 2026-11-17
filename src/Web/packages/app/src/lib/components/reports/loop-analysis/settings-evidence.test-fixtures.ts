@@ -13,7 +13,7 @@ import {
   type LoopAnalysisAggregate,
   type SettingsEvidenceRange,
   type SettingsEvidenceReport,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 const HOUR = 3_600_000;
 const C = SettingsEvidenceConfidence;

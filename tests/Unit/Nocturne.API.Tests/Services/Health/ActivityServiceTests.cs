@@ -33,6 +33,12 @@ public class ActivityServiceTests
     private readonly Mock<ILogger<ActivityService>> _mockLogger;
     private readonly ActivityService _activityService;
 
+    private static readonly Nocturne.API.Services.V4.ActivityDecomposer Classifier = new(
+        Mock.Of<Nocturne.Core.Contracts.Repositories.IActivityRecordRepository>(),
+        Mock.Of<Nocturne.Core.Contracts.Repositories.IStateSpanRepository>(),
+        Mock.Of<ISleepService>(),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<Nocturne.API.Services.V4.ActivityDecomposer>.Instance);
+
     public ActivityServiceTests()
     {
         _mockStateSpanService = new Mock<IStateSpanService>();
@@ -65,6 +71,9 @@ public class ActivityServiceTests
         _mockDocumentProcessingService
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> a) => a);
+        _mockActivityDecomposer
+            .Setup(d => d.Classify(It.IsAny<Activity>()))
+            .Returns((Activity a) => Classifier.Classify(a));
 
         _activityService = new ActivityService(
             _mockStateSpanService.Object,
@@ -77,6 +86,35 @@ public class ActivityServiceTests
             _mockStepCountService.Object,
             _mockLogger.Object
         );
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("bpm")]
+    [InlineData("metric")]
+    public async Task UpdateActivityAsync_SensorBodyWithSleepType_NeverUpsertsASleepSession(string sensorKey)
+    {
+        var service = new ActivityService(
+            _mockStateSpanService.Object,
+            _mockSleepService.Object,
+            _mockDocumentProcessingService.Object,
+            _mockSignalRBroadcastService.Object,
+            Mock.Of<IDataEventSink<Activity>>(),
+            Classifier,
+            _mockHeartRateService.Object,
+            _mockStepCountService.Object,
+            _mockLogger.Object);
+        var activity = new Activity
+        {
+            Type = "sleep",
+            AdditionalProperties = new Dictionary<string, object> { [sensorKey] = 60 },
+        };
+
+        await service.UpdateActivityAsync("abc", activity, CancellationToken.None);
+
+        _mockSleepService.Verify(
+            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -158,7 +196,7 @@ public class ActivityServiceTests
             find,
             count,
             skip,
-            CancellationToken.None
+            null, null, CancellationToken.None
         );
 
         // Assert
@@ -192,7 +230,7 @@ public class ActivityServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task GetActivityByIdAsync_WithValidId_ReturnsActivity()
+    public async Task GetStoredActivitiesAsync_WithValidId_ReturnsActivity()
     {
         // Arrange
         var activityId = "60a1b2c3d4e5f6789012345";
@@ -210,20 +248,19 @@ public class ActivityServiceTests
             .ReturnsAsync(expectedActivity);
 
         // Act
-        var result = await _activityService.GetActivityByIdAsync(
+        var result = await _activityService.GetStoredActivitiesAsync(
             activityId,
             CancellationToken.None
         );
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(activityId, result.Id);
+        result.Select(a => a.Id).Should().Equal(activityId);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task GetActivityByIdAsync_WithInvalidId_ReturnsNull()
+    public async Task GetStoredActivitiesAsync_WithInvalidId_ReturnsNothing()
     {
         // Arrange
         var activityId = "invalidid";
@@ -233,19 +270,19 @@ public class ActivityServiceTests
             .ReturnsAsync((Activity?)null);
 
         // Act
-        var result = await _activityService.GetActivityByIdAsync(
+        var result = await _activityService.GetStoredActivitiesAsync(
             activityId,
             CancellationToken.None
         );
 
         // Assert
-        Assert.Null(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task GetActivityByIdAsync_WithException_ThrowsException()
+    public async Task GetStoredActivitiesAsync_WithException_ThrowsException()
     {
         // Arrange
         var activityId = "test-id";
@@ -256,7 +293,7 @@ public class ActivityServiceTests
 
         // Act & Assert
         await Assert.ThrowsAsync<Exception>(() =>
-            _activityService.GetActivityByIdAsync(activityId, CancellationToken.None)
+            _activityService.GetStoredActivitiesAsync(activityId, CancellationToken.None)
         );
     }
 
@@ -378,10 +415,7 @@ public class ActivityServiceTests
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> docs) => docs);
         _mockActivityDecomposer
-            .Setup(d => d.IsSensorData(It.IsAny<Activity>()))
-            .Returns((Activity a) => a.Type == "hr-bpm");
-        _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ThrowsAsync(failure);
 
         var act = () => _activityService.CreateActivitiesAsync(activities, CancellationToken.None);
@@ -416,8 +450,8 @@ public class ActivityServiceTests
         _mockDocumentProcessingService
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> docs) => docs);
-        _mockSleepService
-            .Setup(x => x.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(failure);
 
         var act = () => _activityService.CreateActivitiesAsync(activities, CancellationToken.None);
@@ -452,16 +486,16 @@ public class ActivityServiceTests
             ]
             """)!;
         var decomposed = new List<Activity>();
-        _mockActivityDecomposer.Setup(d => d.IsSensorData(It.IsAny<Activity>())).Returns(true);
+        _mockActivityDecomposer.Setup(d => d.Classify(It.IsAny<Activity>())).Returns(ActivityDestination.HeartRate);
         _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
-            .Callback<Activity, WriteOrigin, CancellationToken>((a, _, _) => decomposed.Add(a))
-            .ReturnsAsync(new Nocturne.Core.Models.V4.DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<Activity>, WriteOrigin, CancellationToken>((a, _, _) => decomposed.AddRange(a))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch));
         var service = new ActivityService(
             _mockStateSpanService.Object,
             _mockSleepService.Object,
             new Nocturne.API.Services.Legacy.DocumentProcessingService(
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<
+                TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<
                     Nocturne.API.Services.Legacy.DocumentProcessingService>.Instance),
             _mockSignalRBroadcastService.Object,
             Mock.Of<IDataEventSink<Activity>>(),
@@ -548,7 +582,7 @@ public class ActivityServiceTests
             _mockStateSpanService.Object,
             _mockSleepService.Object,
             new Nocturne.API.Services.Legacy.DocumentProcessingService(
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<
+                TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<
                     Nocturne.API.Services.Legacy.DocumentProcessingService>.Instance),
             _mockSignalRBroadcastService.Object,
             Mock.Of<IDataEventSink<Activity>>(),
@@ -635,7 +669,7 @@ public class ActivityServiceTests
     {
         // Arrange
         var activityId = "60a1b2c3d4e5f6789012345";
-
+        StoreStateSpan(activityId);
         _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<string>)[activityId]);
@@ -655,25 +689,116 @@ public class ActivityServiceTests
         );
     }
 
-    [Fact]
+    [Theory]
     [Trait("Category", "Unit")]
-    public async Task DeleteActivityAsync_OfAHeartRateOrStepCountOnly_ReturnsTrueAndBroadcasts()
+    [InlineData("60a1b2c3d4e5f67890123456")]
+    [InlineData("0195f3a2-7c4e-7b8a-9d1e-2f3a4b5c6d7e")]
+    public async Task DeleteActivityAsync_OfAHeartRateOnly_DeletesItByMongoIdOrGuid(string activityId)
     {
-        var activityId = "60a1b2c3d4e5f67890123456";
-        _mockActivityDecomposer
-            .Setup(x => x.DeleteByLegacyIdAsync(activityId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
-        _mockStateSpanService
-            .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyList<string>)[]);
+        _mockHeartRateService
+            .Setup(x => x.GetHeartRateByIdAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HeartRate { Id = activityId, Mills = 1, Bpm = 60 });
+        _mockHeartRateService
+            .Setup(x => x.DeleteHeartRateAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var result = await _activityService.DeleteActivityAsync(activityId, CancellationToken.None);
 
         Assert.True(result);
+        _mockHeartRateService.Verify(
+            x => x.DeleteHeartRateAsync(activityId, It.IsAny<CancellationToken>()), Times.Once);
         _mockSignalRBroadcastService.Verify(
-            x => x.BroadcastStorageDeleteAsync("activity", It.IsAny<object>()),
+            x => x.BroadcastStorageDeleteAsync("activity", It.Is<StorageDeleteEvent>(e => e.Identifier == activityId)),
             Times.Once
         );
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeleteActivityAsync_OfAStepCountAddressedByItsGuid_DeletesIt()
+    {
+        var activityId = "0195f3a2-7c4e-7b8a-9d1e-2f3a4b5c6d7e";
+        _mockStepCountService
+            .Setup(x => x.GetStepCountByIdAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StepCount { Id = activityId, Mills = 1, Metric = 400 });
+        _mockStepCountService
+            .Setup(x => x.DeleteStepCountAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        (await _activityService.DeleteActivityAsync(activityId, CancellationToken.None)).Should().BeTrue();
+
+        _mockStepCountService.Verify(
+            x => x.DeleteStepCountAsync(activityId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeleteActivityAsync_OfAManualSleepSessionAddressedByItsClientId_DeletesIt()
+    {
+        const string clientId = "60a1b2c3d4e5f67890123456";
+        var sessionId = Guid.CreateVersion7();
+        _mockSleepService
+            .Setup(s => s.GetSessionBySourceRecordAsync(SleepSource.Manual, clientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(StoredSleepSession(sessionId, clientId));
+        _mockSleepService
+            .Setup(s => s.DeleteSessionAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        (await _activityService.DeleteActivityAsync(clientId, CancellationToken.None)).Should().BeTrue();
+
+        _mockSleepService.Verify(s => s.DeleteSessionAsync(sessionId, It.IsAny<CancellationToken>()), Times.Once);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageDeleteAsync(
+                "activity", It.Is<StorageDeleteEvent>(e => e.Identifier == sessionId.ToString())),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeleteActivityAsync_OfAGuidNamingASleepSessionAndAStateSpan_DeletesBoth()
+    {
+        var sessionId = Guid.CreateVersion7();
+        var id = sessionId.ToString();
+        StoreStateSpan(id);
+        _mockStateSpanService
+            .Setup(x => x.DeleteActivityAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<string>)[id]);
+        _mockSleepService
+            .Setup(s => s.GetSessionByIdAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(StoredSleepSession(sessionId, originalId: null));
+        _mockSleepService
+            .Setup(s => s.DeleteSessionAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        (await _activityService.DeleteActivityAsync(id, CancellationToken.None)).Should().BeTrue();
+
+        _mockSleepService.Verify(s => s.DeleteSessionAsync(sessionId, It.IsAny<CancellationToken>()), Times.Once);
+        _mockStateSpanService.Verify(x => x.DeleteActivityAsync(id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeleteActivityAsync_WhenALaterStorageFails_StillBroadcastsTheCommittedDelete()
+    {
+        const string id = "60a1b2c3d4e5f67890123456";
+        var failure = new InvalidOperationException("heart rate delete failed");
+        StoreStateSpan(id);
+        _mockStateSpanService
+            .Setup(x => x.DeleteActivityAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<string>)[id]);
+        _mockHeartRateService
+            .Setup(x => x.GetHeartRateByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HeartRate { Id = id, Mills = 1, Bpm = 60 });
+        _mockHeartRateService
+            .Setup(x => x.DeleteHeartRateAsync(id, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var delete = () => _activityService.DeleteActivityAsync(id, CancellationToken.None);
+
+        (await delete.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageDeleteAsync("activity", It.Is<StorageDeleteEvent>(e => e.Identifier == id)),
+            Times.Once);
     }
 
     [Fact]
@@ -681,21 +806,12 @@ public class ActivityServiceTests
     [Trait("Category", "Parity")]
     public async Task DeleteActivityAsync_WithInvalidId_ReturnsFalseAndDoesNotBroadcast()
     {
-        // Arrange
-        var activityId = "invalidid";
+        var result = await _activityService.DeleteActivityAsync("invalidid", CancellationToken.None);
 
-        _mockStateSpanService
-            .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyList<string>)[]);
-
-        // Act
-        var result = await _activityService.DeleteActivityAsync(activityId, CancellationToken.None);
-
-        // Assert
         Assert.False(result);
         _mockStateSpanService.Verify(
-            x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()),
-            Times.Once
+            x => x.DeleteActivityAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never
         );
         _mockSignalRBroadcastService.Verify(
             x => x.BroadcastStorageDeleteAsync("activity", It.IsAny<object>()),
@@ -708,6 +824,7 @@ public class ActivityServiceTests
     public async Task DeleteActivityAsync_BroadcastsEveryCopyDeletedWithIt()
     {
         var activityId = "60a1b2c3d4e5f6789012345";
+        StoreStateSpan(activityId);
         _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<string>)[activityId, "copy-from-another-source"]);
@@ -730,7 +847,7 @@ public class ActivityServiceTests
     {
         // Arrange
         var activityId = "test-id";
-
+        StoreStateSpan(activityId);
         _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Database error"));
@@ -740,6 +857,20 @@ public class ActivityServiceTests
             _activityService.DeleteActivityAsync(activityId, CancellationToken.None)
         );
     }
+
+    private void StoreStateSpan(string id) =>
+        _mockStateSpanService
+            .Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = id, Type = "exercise", Mills = 1 });
+
+    private static SleepSession StoredSleepSession(Guid id, string? originalId) => new()
+    {
+        Id = id.ToString(),
+        Source = SleepSource.Manual,
+        OriginalId = originalId,
+        StartTime = new DateTime(2026, 6, 1, 22, 0, 0, DateTimeKind.Utc),
+        EndTime = new DateTime(2026, 6, 2, 6, 0, 0, DateTimeKind.Utc),
+    };
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -1015,42 +1146,27 @@ public class ActivityServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task CreateActivitiesAsync_SleepActivity_UpsertsSessionWithOriginalId()
+    public async Task CreateActivitiesAsync_SleepActivity_IsAnsweredAndAnnouncedAsTheSessionItWasStoredAs()
     {
-        // Arrange
-        var activity = new Activity
-        {
-            Id = "abc123",
-            Type = "sleep",
-            Duration = 480,
-            Mills = 1234567890000,
-        };
-
+        var activity = new Activity { Id = "abc123", Type = "sleep", Duration = 480, Mills = 1234567890000 };
+        var events = new Mock<IDataEventSink<Activity>>();
         _mockDocumentProcessingService
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns(new List<Activity> { activity });
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch));
 
-        SleepSession? upsertedSession = null;
-        _mockSleepService
-            .Setup(s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
-            .Callback<SleepSession, CancellationToken>((s, _) => upsertedSession = s)
-            .ReturnsAsync((SleepSession s, CancellationToken _) => s);
+        var result = (await ServiceWithEvents(events.Object).CreateActivitiesAsync([activity], CancellationToken.None)).ToList();
 
-        // Act
-        var result = await _activityService.CreateActivitiesAsync(
-            new[] { activity },
-            CancellationToken.None
-        );
-
-        // Assert: the session carries the activity id as OriginalId so the repository
-        // dedup (Source + OriginalId) matches a re-POST of the same record
-        Assert.NotNull(upsertedSession);
-        Assert.Equal("abc123", upsertedSession.OriginalId);
-        Assert.Equal("abc123", result.Single().Id);
+        var stored = result.Should().ContainSingle().Which;
+        stored.Should().NotBeSameAs(activity);
+        stored.Id.Should().NotBe(activity.Id);
+        events.Verify(e => e.OnCreatedAsync(It.Is<IReadOnlyList<Activity>>(a => a.Single() == stored), It.IsAny<CancellationToken>()), Times.Once);
+        _mockSleepService.Verify(
+            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()), Times.Never);
         _mockStateSpanService.Verify(
-            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
-            Times.Never
-        );
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -1058,36 +1174,67 @@ public class ActivityServiceTests
     [InlineData("sleep")]
     [InlineData("nap")]
     [InlineData("Sleep")]
-    public async Task CreateActivitiesAsync_ExactSleepType_RoutesToSleepService(string type)
+    public async Task CreateActivitiesAsync_ExactSleepType_RoutesToTheDecomposer(string type)
     {
-        // Arrange
-        var activity = new Activity
-        {
-            Id = "sleep-1",
-            Type = type,
-            Duration = 480,
-            Mills = 1234567890000,
-        };
-
+        var activity = new Activity { Id = "sleep-1", Type = type, Duration = 480, Mills = 1234567890000 };
         _mockDocumentProcessingService
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns(new List<Activity> { activity });
-        _mockSleepService
-            .Setup(s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((SleepSession s, CancellationToken _) => s);
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch));
 
-        // Act
         await _activityService.CreateActivitiesAsync(new[] { activity }, CancellationToken.None);
 
-        // Assert
+        _mockActivityDecomposer.Verify(
+            d => d.DecomposeBatchAsync(It.Is<IReadOnlyList<Activity>>(batch => batch.Contains(activity)), WriteOrigin.Live, It.IsAny<CancellationToken>()),
+            Times.Once);
         _mockSleepService.Verify(
-            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()),
-            Times.Once
-        );
+            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()), Times.Never);
         _mockStateSpanService.Verify(
-            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
-            Times.Never
-        );
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The answer lists the sensor activities as sent, then the stored sleep sessions, then the state
+    /// spans; the announcement lists the same without what the user deleted or an unchanged re-send.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateActivitiesAsync_AMixedBatch_AnswersAndAnnouncesEachKindInOrder()
+    {
+        var sleepFirst = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c01", Type = "sleep", Mills = 1_780_000_000_000, Duration = 420 };
+        var heartRate = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c02", Type = "heartrate", Mills = 1_780_000_000_001, AdditionalProperties = new() { ["bpm"] = 60 } };
+        var resentSteps = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c03", Type = "steps", Mills = 1_780_000_000_002, AdditionalProperties = new() { ["metric"] = 10 } };
+        var regular = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c04", Type = "exercise", Mills = 1_780_000_000_003 };
+        var deletedSleep = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c05", Type = "nap", Mills = 1_780_000_000_004 };
+        var sleepLast = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c06", Type = "sleep", Mills = 1_780_000_000_005, Duration = 60 };
+        var heartRateLast = new Activity { Id = "5f0c0c0c0c0c0c0c0c0c0c07", Type = "heartrate", Mills = 1_780_000_000_006, AdditionalProperties = new() { ["bpm"] = 61 } };
+        var events = new Mock<IDataEventSink<Activity>>();
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
+            .Returns(new List<Activity> { sleepFirst, heartRate, resentSteps, regular, deletedSleep, sleepLast, heartRateLast });
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) =>
+                Decomposed(batch, unchanged: resentSteps, deletedByUser: deletedSleep));
+        _mockStateSpanService
+            .Setup(s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Activity> a, CancellationToken _) => a.ToList());
+        IReadOnlyList<Activity>? announced = null;
+        events
+            .Setup(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyList<Activity> a, CancellationToken _) => announced = a);
+
+        var result = (await ServiceWithEvents(events.Object).CreateActivitiesAsync(
+            [sleepFirst, heartRate, resentSteps, regular, deletedSleep, sleepLast, heartRateLast], CancellationToken.None)).ToList();
+
+        result.Take(3).Should().Equal(heartRate, resentSteps, heartRateLast);
+        var sleep = result.Skip(3).Take(2).ToList();
+        sleep.Select(a => a.Mills).Should().Equal(sleepFirst.Mills, sleepLast.Mills);
+        result.Skip(5).Should().Equal(regular);
+        announced.Should().NotBeNull();
+        announced!.Should().Equal(new[] { heartRate, heartRateLast }.Concat(sleep).Append(regular));
     }
 
     [Theory]
@@ -1251,9 +1398,10 @@ public class ActivityServiceTests
         _mockDocumentProcessingService
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns(new List<Activity> { activity });
-        _mockSleepService
-            .Setup(s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new RecreationBlockedException("sleep session", "original id '60a1b2c3d4e5f67890123456'"));
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) =>
+                Decomposed(batch, deletedByUser: activity));
 
         var result = await _activityService.CreateActivitiesAsync([activity], CancellationToken.None);
 
@@ -1271,17 +1419,79 @@ public class ActivityServiceTests
         _mockDocumentProcessingService
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns(new List<Activity> { skipped, written });
-        _mockActivityDecomposer.Setup(d => d.IsSensorData(It.IsAny<Activity>())).Returns(true);
+        _mockActivityDecomposer.Setup(d => d.Classify(It.IsAny<Activity>())).Returns(ActivityDestination.HeartRate);
         _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(skipped, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
-        _mockActivityDecomposer
-            .Setup(d => d.DecomposeAsync(written, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) =>
+                Decomposed(batch, deletedByUser: skipped));
 
         var result = await _activityService.CreateActivitiesAsync([skipped, written], CancellationToken.None);
 
         result.Select(a => a.Id).Should().Equal(written.Id);
+    }
+
+    /// <summary>
+    /// xDrip re-sends its newest reading every sync cycle: the re-send is answered as stored, so the
+    /// uploader advances, but nothing changed, so nothing is announced.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateActivitiesAsync_AnUnchangedResend_IsReturnedButNotAnnounced()
+    {
+        var resent = new Activity { Type = "hr-bpm", Mills = 1234567890000, AdditionalProperties = new() { ["bpm"] = 70 } };
+        var events = new Mock<IDataEventSink<Activity>>();
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
+            .Returns(new List<Activity> { resent });
+        _mockActivityDecomposer.Setup(d => d.Classify(It.IsAny<Activity>())).Returns(ActivityDestination.HeartRate);
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch, unchanged: resent));
+
+        var result = await ServiceWithEvents(events.Object).CreateActivitiesAsync([resent], CancellationToken.None);
+
+        result.Should().Equal(resent);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()), Times.Never);
+        events.Verify(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private ActivityService ServiceWithEvents(IDataEventSink<Activity> events) => new(
+        _mockStateSpanService.Object,
+        _mockSleepService.Object,
+        _mockDocumentProcessingService.Object,
+        _mockSignalRBroadcastService.Object,
+        events,
+        _mockActivityDecomposer.Object,
+        _mockHeartRateService.Object,
+        _mockStepCountService.Object,
+        _mockLogger.Object);
+
+    /// <summary>
+    /// What the decomposer reports for <paramref name="batch"/>: each activity created, unless it is
+    /// <paramref name="unchanged"/> or <paramref name="deletedByUser"/>. A sleep activity is created as
+    /// the activity of its stored session, as the decomposer reports it.
+    /// </summary>
+    private static ActivityDecomposition Decomposed(
+        IReadOnlyList<Activity> batch, Activity? unchanged = null, Activity? deletedByUser = null)
+    {
+        var decomposition = new ActivityDecomposition();
+        var groups = batch.Select(_ => Guid.CreateVersion7()).ToList();
+        decomposition.Begin(groups);
+        for (var i = 0; i < batch.Count; i++)
+        {
+            if (ReferenceEquals(batch[i], deletedByUser))
+            {
+                decomposition.DeletedByUser(i);
+                continue;
+            }
+            var record = Classifier.Classify(batch[i]) == ActivityDestination.SleepSession
+                ? new Activity { Id = Guid.NewGuid().ToString(), Type = batch[i].Type, Mills = batch[i].Mills }
+                : new object();
+            decomposition.RecordOwners[record] = groups[i];
+            (ReferenceEquals(batch[i], unchanged) ? decomposition.UnchangedRecords : decomposition.CreatedRecords).Add(record);
+        }
+        return decomposition;
     }
 
     [Theory]
@@ -1434,5 +1644,88 @@ public class ActivityServiceTests
 
         observedFetchCount.Should().Be(100_000);
         result.Should().BeEmpty();
+    }
+
+    public static TheoryData<string, string[], ActivityDestination> RoutingBodies => new()
+    {
+        { "hr-bpm", ["bpm"], ActivityDestination.HeartRate },
+        { "exercise", ["metric"], ActivityDestination.StepCount },
+        { "steps-total", ["steps"], ActivityDestination.StepCount },
+        { "sleep", [], ActivityDestination.SleepSession },
+        { "nap", [], ActivityDestination.SleepSession },
+        { "exercise", [], ActivityDestination.StateSpan },
+        { "sleep", ["bpm"], ActivityDestination.HeartRate },
+        { "nap", ["metric"], ActivityDestination.StepCount },
+    };
+
+    private static Activity RoutingBody(string type, string[] keys) => new()
+    {
+        Id = "60a1b2c3d4e5f67890123456",
+        Type = type,
+        Mills = 1_780_000_000_000,
+        Duration = 60,
+        AdditionalProperties = keys.ToDictionary(k => k, object (_) => 60),
+    };
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(RoutingBodies))]
+    public async Task CreateActivitiesAsync_StoresEachBodyWhereClassifySays(
+        string type, string[] keys, ActivityDestination expected)
+    {
+        var body = RoutingBody(type, keys);
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Activity> batch, WriteOrigin _, CancellationToken _) => Decomposed(batch));
+        _mockStateSpanService
+            .Setup(s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Activity> a, CancellationToken _) => a.ToList());
+
+        await _activityService.CreateActivitiesAsync([body], CancellationToken.None);
+
+        Classifier.Classify(body).Should().Be(expected);
+        var decomposed = expected is ActivityDestination.HeartRate or ActivityDestination.StepCount or ActivityDestination.SleepSession;
+        _mockActivityDecomposer.Verify(
+            d => d.DecomposeBatchAsync(It.Is<IReadOnlyList<Activity>>(batch => batch.Contains(body)), WriteOrigin.Live, It.IsAny<CancellationToken>()),
+            decomposed ? Times.Once() : Times.Never());
+        _mockSleepService.Verify(
+            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockStateSpanService.Verify(
+            s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            expected == ActivityDestination.StateSpan ? Times.Once() : Times.Never());
+    }
+
+    /// <summary>
+    /// An update with an id that is not a sleep session's primary key upserts a sleep session for a
+    /// body <see cref="IActivityDecomposer.Classify"/> calls one, and updates the state span the id
+    /// names for every other body, sensor data included.
+    /// </summary>
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(RoutingBodies))]
+    public async Task UpdateActivityAsync_UpsertsASleepSessionOnlyWhereClassifySays(
+        string type, string[] keys, ActivityDestination expected)
+    {
+        var body = RoutingBody(type, keys);
+        _mockSleepService
+            .Setup(s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SleepSession s, CancellationToken _) => s);
+        _mockStateSpanService
+            .Setup(s => s.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, Activity a, CancellationToken _) => a);
+
+        await _activityService.UpdateActivityAsync(body.Id!, body, CancellationToken.None);
+
+        Classifier.Classify(body).Should().Be(expected);
+        var sleep = expected == ActivityDestination.SleepSession;
+        _mockSleepService.Verify(
+            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()),
+            sleep ? Times.Once() : Times.Never());
+        _mockStateSpanService.Verify(
+            s => s.UpdateActivityAsync(body.Id!, It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
+            sleep ? Times.Never() : Times.Once());
+        _mockActivityDecomposer.Verify(
+            d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

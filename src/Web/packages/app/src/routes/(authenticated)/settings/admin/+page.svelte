@@ -1,34 +1,43 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { page } from "$app/state";
   import {
     Card,
     CardContent,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import Shield from "@lucide/svelte/icons/shield";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Bot from "@lucide/svelte/icons/bot";
-  import * as rolesRemote from "$lib/api/generated/roles.generated.remote";
-  import * as oidcRemote from "$lib/api/generated/oidcProviderAdmins.generated.remote";
-  import * as platformSettingsRemote from "$lib/api/generated/platformSettings.generated.remote";
-  import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
-  import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
-  import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { withLockoutOverride } from "$lib/components/admin/lockout-override";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
+  import * as rolesRemote from "#lib/api/generated/roles.generated.remote.js";
+  import * as oidcRemote from "#lib/api/generated/oidcProviderAdmins.generated.remote.js";
+  import * as platformSettingsRemote from "#lib/api/generated/platformSettings.generated.remote.js";
+  import * as jobLedgerRemote from "#lib/api/generated/jobLedgers.generated.remote.js";
+  import IntegrationsTabContent from "#lib/components/admin/IntegrationsTabContent.svelte";
+  import OidcProvidersTabContent from "#lib/components/admin/OidcProvidersTabContent.svelte";
+  import JobsTabContent from "#lib/components/admin/JobsTabContent.svelte";
+  import OidcProviderDialog from "#lib/components/admin/OidcProviderDialog.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { withLockoutOverride } from "#lib/components/admin/lockout-override.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import type {
     TenantRoleDto,
     OidcProviderResponse,
     PlatformSettingsSummary,
     CreateOidcProviderRequest,
-  } from "$api";
+    JobLedgerListing,
+  } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // State
-  let activeTab = $state("identity-providers");
+  const requestedTab = page.url.searchParams.get("tab");
+  let activeTab = $state(
+    requestedTab === "integrations" || requestedTab === "jobs" ? requestedTab : "identity-providers"
+  );
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -62,8 +71,8 @@
     oidcError = null;
     try {
       const [managed, providers] = await Promise.all([
-        oidcRemote.getConfigManaged().run(),
-        oidcRemote.getAll().run(),
+        fresh(oidcRemote.getConfigManaged()),
+        fresh(oidcRemote.getAll()),
       ]);
       oidcConfigManaged = managed?.isConfigManaged ?? false;
       oidcProviders = providers ?? [];
@@ -131,14 +140,31 @@
     }
   }
 
+  let jobs = $state<JobLedgerListing | null>(null);
+  let jobsLoading = $state(false);
+  let jobsError = $state<string | null>(null);
+
+  async function loadJobs() {
+    jobsLoading = true;
+    jobsError = null;
+    try {
+      jobs = await fresh(jobLedgerRemote.list());
+    } catch (err) {
+      console.error("Failed to load jobs:", err);
+      jobsError = remoteErrorMessage(err, "Failed to load the background jobs.");
+    } finally {
+      jobsLoading = false;
+    }
+  }
+
   // Load data
   async function loadData() {
     loading = true;
     error = null;
     try {
       const [rols, platformSettingsList] = await Promise.all([
-        rolesRemote.getRoles().run(),
-        platformSettingsRemote.getAll().run(),
+        fresh(rolesRemote.getRoles()),
+        fresh(platformSettingsRemote.getAll()),
       ]);
       await loadOidcData();
       roles = rols || [];
@@ -151,12 +177,14 @@
     }
   }
 
-  // Initial load. `.run()` rejects when called during the render/effect flush,
-  // so defer the bootstrap to a microtask — onMount's synchronous body still
-  // counts as render.
   onMount(() => {
-    queueMicrotask(() => {
-      loadData();
+    void loadData();
+  });
+
+  // The ledger is read only once its tab is opened.
+  $effect(() => {
+    if (activeTab === "jobs") untrack(() => {
+      if (jobs === null && !jobsLoading) void loadJobs();
     });
   });
 
@@ -166,13 +194,13 @@
 
   async function handlePlatformSettingsSave(category: string, enabled: boolean, fields: Record<string, string>) {
     await platformSettingsRemote.upsert({ category, request: { enabled, fields } });
-    const updated = await platformSettingsRemote.getAll().run();
+    const updated = await fresh(platformSettingsRemote.getAll());
     if (updated) platformSettings = updated;
   }
 
   async function handlePlatformSettingsDelete(category: string) {
     await platformSettingsRemote.remove(category);
-    const updated = await platformSettingsRemote.getAll().run();
+    const updated = await fresh(platformSettingsRemote.getAll());
     if (updated) platformSettings = updated;
   }
 </script>
@@ -184,13 +212,13 @@
 <div class="@container container mx-auto p-3 @md:p-6 max-w-5xl">
   <!-- Header -->
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
       <Shield class="h-6 w-6 text-primary" />
     </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Administration</h1>
       <p class="text-muted-foreground">
-        Manage identity providers and integrations
+        Manage identity providers, integrations, and background jobs
       </p>
     </div>
   </div>
@@ -209,11 +237,11 @@
     </Card>
   {:else}
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class={oidcConfigManaged ? "grid w-full grid-cols-1" : "grid w-full grid-cols-2"}>
+      <Tabs.List variant="wrap">
         {#if !oidcConfigManaged}
           <Tabs.Trigger value="identity-providers">
             <Shield class="h-4 w-4" />
-            Identity Providers
+            Identity providers
             {#if oidcProviders.length > 0}
               <Badge variant="secondary" class="ml-1">{oidcProviders.length}</Badge>
             {/if}
@@ -222,6 +250,10 @@
         <Tabs.Trigger value="integrations">
           <Bot class="h-4 w-4" />
           Integrations
+        </Tabs.Trigger>
+        <Tabs.Trigger value="jobs">
+          <ListChecks class="h-4 w-4" />
+          Jobs
         </Tabs.Trigger>
       </Tabs.List>
 
@@ -240,6 +272,14 @@
         platforms={platformSettings}
         onSave={handlePlatformSettingsSave}
         onDelete={handlePlatformSettingsDelete}
+      />
+
+      <JobsTabContent
+        jobs={jobs?.rows ?? []}
+        capped={jobs?.capped ?? false}
+        loading={jobsLoading}
+        error={jobsError}
+        onRefresh={loadJobs}
       />
     </Tabs.Root>
   {/if}

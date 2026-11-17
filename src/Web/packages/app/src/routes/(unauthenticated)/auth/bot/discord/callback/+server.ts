@@ -2,8 +2,8 @@ import type { RequestHandler } from "./$types";
 import { error, redirect } from "@sveltejs/kit";
 import { z } from "zod";
 import { platformHandle } from "@nocturne/bot";
-import { signDiscordLinkClaim, verifyDiscordLinkState } from "$lib/server/bot/oauth-state";
-import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
+import { signDiscordLinkClaim, verifyDiscordLinkState } from "#lib/server/bot/oauth-state.js";
+import { getDiscordOAuthConfig } from "#lib/server/bot/platform-credentials.js";
 
 const DiscordTokenSchema = z.object({ access_token: z.string().optional() });
 const DiscordUserSchema = z.object({
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	if (!clientId || !clientSecret || !baseDomain) {
 		throw error(
 			500,
-			"Discord OAuth2 not configured. Set Discord credentials in Settings > Admin > Integrations (or DISCORD_APPLICATION_ID / DISCORD_CLIENT_SECRET) and set BASE_DOMAIN.",
+			"Discord OAuth2 not configured. Set Discord credentials in Platform > Administration > Integrations (or DISCORD_APPLICATION_ID / DISCORD_CLIENT_SECRET) and set BASE_DOMAIN.",
 		);
 	}
 
@@ -80,8 +80,6 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		id: discordUser.id,
 		username: platformHandle("discord", discordUser.username),
 	});
-	throw redirect(
-		302,
-		`https://${payload.slug}.${baseDomain}/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`,
-	);
+
+	throw redirect(302, `https://${payload.slug}.${baseDomain}/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`, { external: true });
 };

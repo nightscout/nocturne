@@ -372,7 +372,6 @@ public class TimeRange
 /// This is the root object stored in JSONB.
 /// </summary>
 /// <seealso cref="AlarmProfileConfiguration"/>
-/// <seealso cref="NotificationChannelsConfig"/>
 public class UserAlarmConfiguration
 {
     /// <summary>
@@ -410,9 +409,6 @@ public class UserAlarmConfiguration
     /// </summary>
     [JsonPropertyName("emergencyContacts")]
     public List<EmergencyContactConfig> EmergencyContacts { get; set; } = new();
-
-    [JsonPropertyName("channels")]
-    public NotificationChannelsConfig Channels { get; set; } = new();
 }
 
 public class CustomSoundReference
@@ -469,43 +465,4 @@ public class EmergencyContactConfig
 
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
-}
-
-public class NotificationChannelsConfig
-{
-    /// <summary>Web push notification channel.</summary>
-    [JsonPropertyName("push")]
-    public ChannelConfig Push { get; set; } = new() { Enabled = true };
-
-    [JsonPropertyName("email")]
-    public ChannelConfig Email { get; set; } = new();
-
-    [JsonPropertyName("sms")]
-    public ChannelConfig Sms { get; set; } = new();
-
-    /// <summary>Pushover notification channel configuration (optional third-party service).</summary>
-    [JsonPropertyName("pushover")]
-    public PushoverChannelConfig? Pushover { get; set; }
-}
-
-public class ChannelConfig
-{
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; }
-
-    /// <summary>
-    /// Minimum priority level to send through this channel
-    /// </summary>
-    [JsonPropertyName("minPriority")]
-    public AlarmPriority MinPriority { get; set; } = AlarmPriority.Normal;
-}
-
-public class PushoverChannelConfig : ChannelConfig
-{
-    /// <summary>Pushover user key for delivering notifications.</summary>
-    [JsonPropertyName("userKey")]
-    public string? UserKey { get; set; }
-
-    [JsonPropertyName("apiToken")]
-    public string? ApiToken { get; set; }
 }

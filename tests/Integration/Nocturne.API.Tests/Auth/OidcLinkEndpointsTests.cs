@@ -17,6 +17,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 ///
 /// Does NOT test link initiation or callback (those require a real IdP; unit tests cover them).
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 {

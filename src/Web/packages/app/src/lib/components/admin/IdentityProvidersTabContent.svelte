@@ -1,25 +1,26 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Alert from "$lib/components/ui/alert";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import Shield from "@lucide/svelte/icons/shield";
   import ToggleRight from "@lucide/svelte/icons/toggle-right";
   import ToggleLeft from "@lucide/svelte/icons/toggle-left";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
-  import type { OidcProviderResponse } from "$api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
+  import ProviderIcon from "#lib/components/auth/ProviderIcon.svelte";
+  import type { OidcProviderResponse } from "#lib/api/index.js";
 
   interface Props {
     oidcLoading: boolean;
@@ -46,14 +47,14 @@
   <Card>
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
-        <CardTitle>Identity Providers</CardTitle>
+        <CardTitle>Identity providers</CardTitle>
         <CardDescription>
           Configure OpenID Connect providers for single sign-on.
         </CardDescription>
       </div>
       <Button onclick={openCreateProviderDialog}>
         <Plus class="h-4 w-4" />
-        Add Provider
+        Add provider
       </Button>
     </CardHeader>
     <CardContent>
@@ -67,10 +68,10 @@
           <Alert.Description>{oidcError}</Alert.Description>
         </Alert.Root>
       {:else if oidcProviders.length === 0}
-        <div class="text-center py-8 text-muted-foreground">
-          <Shield class="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p>No identity providers configured.</p>
-        </div>
+        <EmptyState
+          art={fingerprintArtwork}
+          title="No identity providers configured"
+        />
       {:else}
         <div class="space-y-2">
           {#each oidcProviders as provider (provider.id)}

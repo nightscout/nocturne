@@ -1,6 +1,6 @@
 using FluentAssertions;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.TestSuite;
@@ -153,40 +153,29 @@ public class TestCategoryTraitTests
 
     private static List<ScannedFile> Scan()
     {
-        var root = RepositoryRoot();
         var files = new List<ScannedFile>();
 
-        foreach (var tree in Directory.EnumerateDirectories(Path.Combine(root, "tests")))
+        foreach (var source in RepoSources.Tests)
         {
-            foreach (var path in Directory.EnumerateFiles(tree, "*.cs", SearchOption.AllDirectories))
-            {
-                if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                    || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-                {
-                    continue;
-                }
+            var relative = source.Path;
 
-                var text = File.ReadAllText(path);
-                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-
-                var types = CSharpSyntaxTree.ParseText(text).GetRoot()
-                    .DescendantNodes()
-                    .OfType<TypeDeclarationSyntax>()
-                    .Select(type => new TestType(
-                        type.Identifier.ValueText,
-                        relative,
-                        BaseNames(type),
-                        DeclaresFixtureBinding(type),
-                        CategoryTraits(type.AttributeLists),
-                        Methods(type)))
-                    .ToList();
-
-                files.Add(new ScannedFile(
-                    Path.GetFileName(tree),
+            var types = source.Tree.GetRoot()
+                .DescendantNodes()
+                .OfType<TypeDeclarationSyntax>()
+                .Select(type => new TestType(
+                    type.Identifier.ValueText,
                     relative,
-                    types,
-                    text.Contains("Trait(\"Category\"", StringComparison.Ordinal)));
-            }
+                    BaseNames(type),
+                    DeclaresFixtureBinding(type),
+                    CategoryTraits(type.AttributeLists),
+                    Methods(type)))
+                .ToList();
+
+            files.Add(new ScannedFile(
+                relative.Split('/')[1],
+                relative,
+                types,
+                source.Text.Contains("Trait(\"Category\"", StringComparison.Ordinal)));
         }
 
         return files;
@@ -268,23 +257,6 @@ public class TestCategoryTraitTests
 
     private static string SimpleName(TypeSyntax type) =>
         type is NameSyntax name ? SimpleName(name) : type.ToString();
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
-    }
 
     private sealed record TestType(
         string Name,

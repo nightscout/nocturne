@@ -87,7 +87,7 @@ public class SyncUpsertTombstoneTests : IDisposable
 
     private BolusRepository NewBolusRepository(RecordingV4RecordBroadcaster<Bolus> broadcaster) =>
         new(new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);
@@ -170,7 +170,7 @@ public class SyncUpsertTombstoneTests : IDisposable
         var broadcaster = new RecordingV4RecordBroadcaster<SensorGlucose>();
         var repo = new SensorGlucoseRepository(
             new TestNocturneDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance,
             broadcaster);
@@ -184,6 +184,37 @@ public class SyncUpsertTombstoneTests : IDisposable
         broadcaster.Updated.Should().BeEmpty("nothing was upserted in place");
         await AssertInsertedPastTombstoneAsync<SensorGlucoseEntity>(
             tombstoneId, e => e.Mgdl, deletedValue: 120, reuploaded: 180);
+    }
+
+    /// <summary>
+    /// A create its sync key matches to a live row updates that row and says so, on the single and
+    /// the batch path. The row keeps the legacy id it was stored under: a resend under another id
+    /// does not move the key the row was answered and written back under.
+    /// </summary>
+    [Fact]
+    public async Task Upsert_WhenALiveRowHoldsTheKey_ReportsAnUpdateKeepingItsLegacyId()
+    {
+        var liveId = SeedLiveRow(new BolusEntity { Insulin = 5.0, LegacyId = LegacyId });
+        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
+        var repository = NewBolusRepository(broadcaster);
+        var single = ReuploadedBolus(9.0);
+        single.LegacyId = "resent-under-another-id";
+        var batched = ReuploadedBolus(11.0);
+        batched.LegacyId = "batched-under-another-id";
+
+        var written = await repository.UpsertAsync(single, WriteOrigin.Live);
+        var bulk = await repository.BulkCreateAsync([batched], WriteOrigin.Live);
+
+        written.Created.Should().BeFalse();
+        written.Record.Id.Should().Be(liveId);
+        written.Record.LegacyId.Should().Be(LegacyId);
+        bulk.Updated.Should().ContainSingle().Which.LegacyId.Should().Be(LegacyId);
+        broadcaster.Created.Should().BeEmpty();
+        await using var verify = NewContext();
+        var row = (await verify.Boluses.AsNoTracking().ToListAsync()).Should().ContainSingle().Subject;
+        row.Id.Should().Be(liveId);
+        row.Insulin.Should().Be(11.0);
+        row.LegacyId.Should().Be(LegacyId);
     }
 
     [Fact]

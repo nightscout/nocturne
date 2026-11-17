@@ -1,18 +1,20 @@
 <script lang="ts">
-  import { formatDayTime } from "$lib/utils/formatting";
-  import type { AlertHistoryResponse } from "$api-clients";
-  import { AlertConditionType } from "$api-clients";
+  import { formatDayTime } from "#lib/utils/formatting.js";
+  import type { AlertHistoryResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Clock from "@lucide/svelte/icons/clock";
-  import { formatElapsedDuration } from "$lib/utils/duration";
+  import { conditionLabel } from "./conditionLabel.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { formatElapsedDuration } from "#lib/utils/duration.js";
 
   interface Props {
     history: AlertHistoryResponse | null;
@@ -36,21 +38,6 @@
     }
   }
 
-  function getConditionLabel(conditionType: AlertConditionType | undefined): string {
-    switch (conditionType) {
-      case AlertConditionType.Threshold:
-        return "Threshold";
-      case AlertConditionType.RateOfChange:
-        return "Rate of Change";
-      case AlertConditionType.SignalLoss:
-        return "Signal Loss";
-      case AlertConditionType.Composite:
-        return "Composite";
-      default:
-        return conditionType ?? "Unknown";
-    }
-  }
-
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "-";
     const d = typeof date === "string" ? new Date(date) : date;
@@ -62,7 +49,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Clock class="h-5 w-5" />
-      Alert History
+      Alert history
     </CardTitle>
     <CardDescription>
       Past alert excursions and their resolution
@@ -70,13 +57,11 @@
   </CardHeader>
   <CardContent>
     {#if !history || !history.items || history.items.length === 0}
-      <div class="text-center py-8 text-muted-foreground">
-        <Clock class="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p class="font-medium">No alert history</p>
-        <p class="text-sm">
-          Resolved alerts will appear here
-        </p>
-      </div>
+      <EmptyState
+        art="clock"
+        title="No alert history"
+        body="Resolved alerts will appear here"
+      />
     {:else}
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -99,7 +84,7 @@
                   <Badge
                     variant={getConditionBadgeVariant(item.conditionType)}
                   >
-                    {getConditionLabel(item.conditionType)}
+                    {conditionLabel(item.conditionType)}
                   </Badge>
                 </td>
                 <td class="py-2 pr-4 text-muted-foreground">

@@ -1,9 +1,9 @@
 import { redirect } from "@sveltejs/kit";
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import type { LayoutLoad } from "./$types";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
-import { isShareHost } from "$lib/share-host";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { isTenantlessRoute } from "#lib/navigation/tenantless-navigation.js";
+import { isShareHost } from "#lib/share-host.js";
 
 /**
  * Whether the browser still holds the session marker. The API writes it readable by script, with

@@ -16,7 +16,7 @@ const LABELS: Record<ScoreCardStatus, string> = {
 	excellent: "Excellent",
 	good: "Good",
 	fair: "Fair",
-	"needs-attention": "Needs Attention",
+	"needs-attention": "Needs attention",
 	critical: "Critical",
 };
 

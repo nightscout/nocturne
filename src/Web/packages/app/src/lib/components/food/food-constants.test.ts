@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Food } from "$lib/api";
+import type { Food } from "#lib/api/index.js";
 import { newFoodFrom } from "./food-constants";
 
 describe("newFoodFrom", () => {

@@ -82,6 +82,11 @@ class MessageTranslator {
     }
   }
 
+  /** Whether this tenant's storage events are reaching the bridge (see `SocketIOServer.setRelayState`). */
+  handleRelayState(relayed: boolean): void {
+    this.socketIOServer.setRelayState(this.tenantSlug, relayed, this);
+  }
+
   handleStorageCreate(data: unknown): void {
     try {
       const translatedData = this.translateStorageEvent(data);
@@ -138,6 +143,14 @@ class MessageTranslator {
       this.socketIOServer.broadcastTrackerUpdate(data, this.tenantSlug);
     } catch (error) {
       logger.error('Error handling tracker update:', error);
+    }
+  }
+
+  handleTrackerDefinitionUpdate(data: unknown): void {
+    try {
+      this.socketIOServer.broadcastTrackerDefinitionUpdate(data, this.tenantSlug);
+    } catch (error) {
+      logger.error('Error handling tracker definition update:', error);
     }
   }
 

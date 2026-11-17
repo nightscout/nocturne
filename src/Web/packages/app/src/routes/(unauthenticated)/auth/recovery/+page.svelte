@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { FormError, FormField } from "$lib/forms";
-  import { errorStatus } from "$lib/forms/submit-error";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { FormError, FormField } from "#lib/forms/index.js";
+  import { errorStatus } from "#lib/forms/submit-error.js";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { recoveryModeRedeem } from "$lib/api/generated/passkeys.generated.remote";
+  import { recoveryModeRedeem } from "#lib/api/generated/passkeys.generated.remote.js";
   import { goto, replaceState } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -33,15 +33,12 @@
 
     try {
       const { username } = await recoveryModeRedeem({ code: code.trim() });
-      await goto(
-        resolve(`/auth/recovery/passkey?${new URLSearchParams({ username: username ?? "" })}`),
-        { replaceState: true }
-      );
-    } catch (err) {
-      errorMessage =
-        errorStatus(err) === 429
-          ? "Too many attempts. Wait a minute, then try again."
-          : "That recovery code has expired or was already used. Ask an administrator for a new one.";
+
+      await goto(resolve(`auth/recovery/passkey?${new URLSearchParams({ username: username ?? "" })}`), { replace: true });
+    } catch(err) {
+      errorMessage = errorStatus(err) === 429
+        ? "Too many attempts. Wait a minute, then try again."
+        : "That recovery code has expired or was already used. Ask an administrator for a new one.";
     } finally {
       isRedeeming = false;
     }
@@ -61,7 +58,7 @@
 </script>
 
 <svelte:head>
-  <title>Recovery Mode - Nocturne</title>
+  <title>Recovery mode - Nocturne</title>
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
@@ -71,7 +68,7 @@
       <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
         <ShieldAlert class="h-6 w-6 text-warning" />
       </div>
-      <Card.Title class="text-xl">Recovery Mode</Card.Title>
+      <Card.Title class="text-xl">Recovery mode</Card.Title>
       <Card.Description>
         Some accounts here have no way to sign in. If yours is one of them, sign in with one of
         your own recovery codes, or ask an administrator for a one-time recovery code.
@@ -114,9 +111,10 @@
     </Card.Content>
 
     <Card.Footer class="justify-center">
-      <a href={resolve("/auth/login")} class="text-xs text-muted-foreground hover:underline">
-        Sign in with your own recovery code instead
-      </a>
+      <a
+        href={resolve('auth/login')}
+        class="text-xs text-muted-foreground hover:underline"
+      >Sign in with your own recovery code instead</a>
     </Card.Footer>
   </Card.Root>
 

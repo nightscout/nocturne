@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,7 @@ public class ServicesControllerDeleteFailureMappingTests
     private ServicesController CreateController() =>
         new(
             _dataSourceService.Object,
+            Mock.Of<IConnectionService>(),
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),
@@ -109,5 +111,30 @@ public class ServicesControllerDeleteFailureMappingTests
         var failure = response.Result.Should().BeOfType<ObjectResult>().Subject;
         failure.StatusCode.Should().Be(500);
         failure.Value.Should().BeOfType<DataSourceDeleteResult>();
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_SyncRunning_Returns409()
+    {
+        _dataSourceService
+            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DataSourceDeleteResult.Failed(
+                ConnectorId,
+                DataSourceDeleteError.SyncRunning,
+                "A sync is running"));
+
+        var response = await CreateController().DeleteConnectorData(ConnectorId, cancellationToken: CancellationToken.None);
+
+        var conflict = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        conflict.StatusCode.Should().Be(409);
+        conflict.Value.Should().BeOfType<ProblemDetails>();
+    }
+
+    [Fact]
+    public void ListingConnectionsIsRefusedToADelegatedCredential()
+    {
+        typeof(ServicesController).GetMethod(nameof(ServicesController.GetConnections))!
+            .GetCustomAttributes(typeof(RequireInteractiveSessionAttribute), inherit: false)
+            .Should().ContainSingle();
     }
 }

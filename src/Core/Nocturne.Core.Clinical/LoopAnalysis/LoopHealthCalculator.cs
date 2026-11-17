@@ -86,8 +86,8 @@ public static class LoopHealthCalculator
         var inRange = cycles.Where(c => c.Mills >= from && c.Mills < to).ToList();
         var range = new LoopHealthRange
         {
-            From = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            To = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            From = from.ToUtcDateTime(),
+            To = to.ToUtcDateTime(),
             Days = grid.Days(),
             Activity = Activity(inputs, cycles, grid, from, to),
             Cadence = inRange.Count == 0 ? new LoopHealthCadence() : new LoopHealthCadence
@@ -172,7 +172,7 @@ public static class LoopHealthCalculator
     /// req Y") or needing none, it enacts nothing while still in control, so its state is the
     /// outcome of the newest cycle that asked for a change, closed if that was enacted and open if
     /// not. An enacted cycle closes it whether or not its suggestion was stored. Loop records nothing it decided apart from what it enacted, so only an enacted cycle
-    /// shows it closed.
+    /// shows it closed (<see cref="ApsLoopCycle.EnactedClosedLoop"/>).
     /// </summary>
     private static List<long> ClosedLoopCycles(List<ApsLoopCycle> cycles)
     {
@@ -189,7 +189,7 @@ public static class LoopHealthCalculator
                 if (orefClosed)
                     closed.Add(cycle.Mills);
             }
-            else if (cycle.Enacted)
+            else if (cycle.EnactedClosedLoop)
                 closed.Add(cycle.Mills);
         }
         return closed;
@@ -557,7 +557,7 @@ public static class LoopHealthCalculator
                 {
                     Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     DayOfWeek = date.DayOfWeek,
-                    Start = DateTimeOffset.FromUnixTimeMilliseconds(_dayStarts[d]).UtcDateTime,
+                    Start = _dayStarts[d].ToUtcDateTime(),
                 });
             }
             return days;
@@ -681,8 +681,8 @@ public static class LoopHealthCalculator
                 var local = LocalSlotBinning.LocalTime(start, _zone);
                 kept.Add(new LoopHealthGap
                 {
-                    Start = DateTimeOffset.FromUnixTimeMilliseconds(start).UtcDateTime,
-                    End = DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime,
+                    Start = start.ToUtcDateTime(),
+                    End = end.ToUtcDateTime(),
                     Minutes = SlotSummary.Round((double)(end - start) / LocalSlotBinning.MinuteMs),
                     Date = DateOnly.FromDateTime(local).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     StartMinuteOfDay = local.Hour * 60 + local.Minute,

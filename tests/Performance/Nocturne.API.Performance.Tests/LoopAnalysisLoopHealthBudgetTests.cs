@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.LoopAnalysis;
@@ -65,7 +66,7 @@ public class LoopAnalysisLoopHealthBudgetTests(ITestOutputHelper output)
         var delivered = NetInsulinAboveSchedule.DeliveredFromSeries(
             clipped.Select(tb => new BasalPoint { Timestamp = tb.StartMills, Rate = tb.Rate!.Value, Origin = BasalDeliveryOrigin.Algorithm }),
             to, evidence);
-        var scheduled = NetInsulinAboveSchedule.ScheduledBaseline([new BasalSegment(compareFrom, to, 0.8, 0.8, "Default")], []);
+        var scheduled = new ScheduledBasal([new BasalSegment(compareFrom, to, 0.8, 0.8, "Default")], []).Segments(clipped);
         var inputs = new LoopHealthInputs
         {
             Zone = Zone,

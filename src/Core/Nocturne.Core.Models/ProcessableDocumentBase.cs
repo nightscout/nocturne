@@ -17,12 +17,27 @@ public abstract class ProcessableDocumentBase : IProcessableDocument
     /// Ignored here because System.Text.Json serializes this declaration as its own property next
     /// to every override's renamed <c>_id</c>, shipping a second, unconverted copy of the id.
     /// Readers that must keep an uploader's <c>id</c> also drop it: see
-    /// <see cref="Serializers.UploaderIdJsonModifier"/>.
+    /// <see cref="Serializers.IgnoredBasePropertyModifier"/>.
     /// </remarks>
     [JsonIgnore]
     public abstract string? Id { get; set; }
 
+    /// <summary>
+    /// The <c>identifier</c> an upstream Nightscout returned the document with. Nightscout
+    /// write-back sends a record's own key there, because Nightscout 15.0.7 and later replace a
+    /// <c>_id</c> that is not an ObjectId (and, for a treatment carrying an identifier, any
+    /// <c>_id</c>) with one it mints, so the pulled-back copy is only recognisable by it. Set by the
+    /// Nightscout connector's reads alone; never on the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? UpstreamIdentifier { get; set; }
+
     /// <inheritdoc />
+    /// <remarks>
+    /// Ignored for the same reason as <see cref="Id"/>: it would be written as a camelCase
+    /// <c>createdAt</c> beside every override's <c>created_at</c>.
+    /// </remarks>
+    [JsonIgnore]
     public abstract string? CreatedAt { get; set; }
 
     /// <inheritdoc />

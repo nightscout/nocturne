@@ -1,14 +1,17 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { Button } from "$lib/components/ui/button";
-  import { cn } from "$lib/utils";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
   import {
     type InAppNotificationDto,
     NotificationUrgency,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { resolveNotificationIcon } from "$lib/utils/notification-icons";
-  import { resolveNotificationLabel } from "$lib/utils/notification-labels";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { resolveNotificationIcon } from "#lib/utils/notification-icons.js";
+  import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
+  import InstallTiming from "#lib/components/notifications/InstallTiming.svelte";
+  import InstanceKeyChanged from "#lib/components/notifications/InstanceKeyChanged.svelte";
 
   interface Props {
     notification: InAppNotificationDto;
@@ -38,27 +41,6 @@
     }
   }
 
-  // Format relative time
-  function formatRelativeTime(date: string | undefined): string {
-    if (!date) return "";
-    const now = Date.now();
-    const timestamp = new Date(date).getTime();
-    const diffMs = now - timestamp;
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins === 1) return "1m ago";
-    if (diffMins < 60) return `${diffMins}m ago`;
-
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return "1h ago";
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return "1d ago";
-    return `${diffDays}d ago`;
-  }
-
   // Get button variant based on action variant string
   function getButtonVariant(
     variant: string | undefined
@@ -81,6 +63,7 @@
   const Icon = $derived(resolveNotificationIcon(notification.icon, notification.category));
   const urgencyClasses = $derived(getUrgencyClasses(notification.urgency));
   const isRead = $derived(notification.readAt != null);
+  const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
 </script>
 
 <div
@@ -102,13 +85,36 @@
   <div class="flex-1 min-w-0">
     <div class="flex items-center justify-between gap-2">
       <span class={cn("text-sm truncate", isRead ? "font-normal" : "font-semibold")}>
-        {resolveNotificationLabel(notification.title) || "Notification"}
+        {#if notification.type === "system.update_available" && releaseVersion}
+          Nocturne {releaseVersion} is available
+        {:else if notification.type === "system.release_installed" && releaseVersion}
+          Nocturne is now on version {releaseVersion}
+        {:else}
+          {resolveNotificationLabel(notification.title) || "Notification"}
+        {/if}
       </span>
       <span class="text-xs opacity-75 whitespace-nowrap">
-        {formatRelativeTime(notification.createdAt)}
+        {relativeAge(notification.createdAt)}
       </span>
     </div>
-    {#if notification.subtitle}
+    {#if notification.type === "system.update_available"}
+      <p class="text-xs mt-0.5 opacity-75">
+        <InstallTiming
+          mode={notification.metadata?.["AutoUpdateMode"]?.toString()}
+          nextCheckAt={notification.metadata?.["NextCheckAt"]?.toString()}
+          checkIntervalSeconds={Number(notification.metadata?.["CheckIntervalSeconds"]) || null}
+        />
+      </p>
+    {:else if notification.type === "system.release_installed"}
+      <p class="text-xs mt-0.5 opacity-75">See what changed in this version.</p>
+    {:else if notification.type === "system.instance_key_changed" || notification.type === "system.instance_key_changed_platform"}
+      <div class="text-xs mt-0.5 opacity-75 space-y-0.5">
+        <InstanceKeyChanged
+          metadata={notification.metadata}
+          platform={notification.type === "system.instance_key_changed_platform"}
+        />
+      </div>
+    {:else if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
         {resolveNotificationLabel(notification.subtitle)}
       </p>

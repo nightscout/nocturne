@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Models.Alerts;
 
@@ -7,7 +8,13 @@ namespace Nocturne.API.Tests.Services.Platform;
 [Trait("Category", "Unit")]
 public class BotHealthServiceTests
 {
-    private readonly BotHealthService _sut = new();
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
+    private readonly BotHealthService _sut;
+
+    public BotHealthServiceTests()
+    {
+        _sut = new BotHealthService(_time);
+    }
 
     [Fact]
     public void GetChannelStatuses_NoHeartbeatReceived_BotChannelsAreUnavailable()
@@ -85,11 +92,37 @@ public class BotHealthServiceTests
     [Fact]
     public void GetChannelStatuses_StaleHeartbeat_ReportedPlatformsAreDegraded()
     {
-        _sut.Record(["discord"], DateTime.UtcNow.AddMinutes(-3));
+        _sut.Record(["discord"]);
+        _time.Advance(TimeSpan.FromMinutes(3));
         var statuses = _sut.GetChannelStatuses();
         var discord = statuses.First(s => s.ChannelType == ChannelType.DiscordDm);
         discord.Status.Should().Be(ChannelStatus.Degraded);
         discord.Reason.Should().Be(ChannelUnavailableReason.HeartbeatStale);
+    }
+
+    [Theory]
+    [InlineData(119, ChannelStatus.Available)]
+    [InlineData(120, ChannelStatus.Available)]
+    [InlineData(121, ChannelStatus.Degraded)]
+    public void GetChannelStatuses_HeartbeatTurnsStaleOnlyPastTwoMinutes(int seconds, ChannelStatus expected)
+    {
+        _sut.Record(["discord"]);
+        _time.Advance(TimeSpan.FromSeconds(seconds));
+
+        _sut.GetChannelStatuses().First(s => s.ChannelType == ChannelType.DiscordDm)
+            .Status.Should().Be(expected);
+    }
+
+    [Fact]
+    public void GetChannelStatuses_ANewHeartbeatClearsStaleness()
+    {
+        _sut.Record(["discord"]);
+        _time.Advance(TimeSpan.FromMinutes(5));
+        _sut.Record(["discord"]);
+        _time.Advance(TimeSpan.FromSeconds(30));
+
+        _sut.GetChannelStatuses().First(s => s.ChannelType == ChannelType.DiscordDm)
+            .Status.Should().Be(ChannelStatus.Available);
     }
 
     [Fact]

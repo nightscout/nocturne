@@ -3,7 +3,7 @@
  *
  * Only contains server-side logic that needs process.env or crypto.
  * For CRUD operations on chat identity links, use
- * $lib/api/generated/chatIdentities.generated.remote.ts.
+ * #lib/api/generated/chatIdentities.generated.remote.ts.
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { error } from "@sveltejs/kit";
@@ -11,9 +11,9 @@ import {
   DISCORD_LINK_COOKIE,
   DISCORD_LINK_LIFETIME_MS,
   signDiscordLinkState,
-} from "$lib/server/bot/oauth-state";
-import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
-import { extractTenantSlug } from "$lib/server/request-host";
+} from "#lib/server/bot/oauth-state.js";
+import { getDiscordOAuthConfig } from "#lib/server/bot/platform-credentials.js";
+import { extractTenantSlug, getOriginalHost } from "#lib/server/request-host.js";
 
 /**
  * Get Discord integration configuration. Credentials resolve from the
@@ -21,7 +21,7 @@ import { extractTenantSlug } from "$lib/server/request-host";
  * getDiscordOAuthConfig).
  */
 export const getDiscordConfig = query(async () => {
-  const { url, fetch } = getRequestEvent();
+  const { request, fetch } = getRequestEvent();
 
   const { applicationId, clientSecret } = await getDiscordOAuthConfig(fetch);
   const baseDomain = process.env.BASE_DOMAIN ?? null;
@@ -30,7 +30,7 @@ export const getDiscordConfig = query(async () => {
     discordApplicationId: applicationId,
     isOauthConfigured: !!applicationId && !!clientSecret,
     baseDomain,
-    currentHost: url.host,
+    currentHost: getOriginalHost(request),
   };
 });
 

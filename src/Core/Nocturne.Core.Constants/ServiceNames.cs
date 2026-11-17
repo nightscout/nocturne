@@ -124,6 +124,9 @@ public static class ServiceNames
 
     public const string GoogleHealthConnector = "google-health-connector";
 
+    /// <seealso cref="DataSources.OuraConnector"/>
+    public const string OuraConnector = "oura-connector";
+
     /// <summary>
     /// Aspire resource name for the Tandem Source (t:connect) connector service,
     /// which imports t:slim X2 / Mobi pump data.
@@ -275,26 +278,6 @@ public static class ServiceNames
         /// Comma-separated list of feature flags to enable.
         /// </summary>
         public const string FeaturesEnable = "Features:Enable";
-
-        /// <summary>
-        /// Pushover API token from configuration file (appsettings section).
-        /// </summary>
-        public const string PushoverApiToken = "Pushover:ApiToken";
-
-        /// <summary>
-        /// Pushover user/group key from configuration file (appsettings section).
-        /// </summary>
-        public const string PushoverUserKey = "Pushover:UserKey";
-
-        /// <summary>
-        /// Environment variable fallback for the Pushover API token.
-        /// </summary>
-        public const string PushoverApiTokenEnv = "PUSHOVER_API_TOKEN";
-
-        /// <summary>
-        /// Environment variable fallback for the Pushover user/group key.
-        /// </summary>
-        public const string PushoverUserKeyEnv = "PUSHOVER_USER_KEY";
     }
 
     /// <summary>

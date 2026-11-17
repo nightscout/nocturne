@@ -1,5 +1,5 @@
-import { env } from "$env/dynamic/private";
-import { safeReturnUrl } from "$lib/server/return-url";
+import { NOCTURNE_DEV_AUTO_LOGIN } from "$app/env/private";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
 // after it bounces back. It survives the round-trip because the auth guard
@@ -30,7 +30,7 @@ export function autoLoginEndpoint(
   isDemo: boolean | undefined,
   isShareHost: boolean | undefined,
 ): string | null {
-  if (env.NOCTURNE_DEV_AUTO_LOGIN === "true") return DEV_LOGIN_ENDPOINT;
+  if (NOCTURNE_DEV_AUTO_LOGIN === "true") return DEV_LOGIN_ENDPOINT;
   if (isShareHost) return null;
   return isDemo ? DEMO_LOGIN_ENDPOINT : null;
 }
@@ -40,7 +40,8 @@ export function autoLoginEndpoint(
  * been spent.
  *
  * The session is host-scoped (cookie domain = the exact host that set it) and only
- * authenticates on a tenant subdomain. Opened on the apex host, the issued session
+ * authenticates on a host that resolves a tenant: a tenant subdomain, or the apex of an
+ * instance with a sole tenant. Opened on an apex that resolves none, the issued session
  * never authenticates, so the auth guard bounces straight back — and a blind
  * re-redirect would loop forever, flooding the API with 401s from the dashboard load
  * on every pass. If the marker is already present the attempt has been had, and the

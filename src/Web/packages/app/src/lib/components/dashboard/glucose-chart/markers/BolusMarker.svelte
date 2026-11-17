@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { BolusType2 } from "#lib/api/index.js";
   import {
     bolusMarkerPoints,
     BOLUS_LABEL_Y,
     PRINT_BOLUS_LABEL_Y,
     MARKER_HEIGHT,
     MARKER_HEIGHT_OVERRIDE,
-  } from "$lib/components/icons/marker-shapes";
+  } from "#lib/components/icons/marker-shapes.js";
 
   interface Props {
     xPos: number;
@@ -45,7 +46,7 @@
   // override draws outlined *and* tall, where the two used to be exclusive
   // branches and the override silhouette won.
   const isAutomatic = $derived(
-    bolusType === "AutomaticBolus" || bolusType === "Smb",
+    bolusType === BolusType2.AutomaticBolus || bolusType === BolusType2.Smb,
   );
 
   const height = $derived(isOverride ? MARKER_HEIGHT_OVERRIDE : MARKER_HEIGHT);

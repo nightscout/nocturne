@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ browser: false, dev: false }));
+vi.mock("$app/env", () => ({ browser: false, dev: false }));
 vi.mock("$app/navigation", () => ({}));
 vi.mock("$app/state", () => ({}));
 vi.mock("mode-watcher", () => ({

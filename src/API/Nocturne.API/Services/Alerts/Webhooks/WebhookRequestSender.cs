@@ -15,7 +15,8 @@ namespace Nocturne.API.Services.Alerts.Webhooks;
 /// </remarks>
 public class WebhookRequestSender(
     IHttpClientFactory httpClientFactory,
-    ILogger<WebhookRequestSender> logger)
+    ILogger<WebhookRequestSender> logger,
+    TimeProvider timeProvider)
 {
     /// <summary>
     /// Name of the HTTP client used for webhook delivery. Configured not to follow
@@ -70,7 +71,7 @@ public class WebhookRequestSender(
 
                 if (!string.IsNullOrWhiteSpace(secret))
                 {
-                    var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
                     var signature = WebhookSignature.Create(secret, payload, timestamp);
                     content.Headers.Add("X-Nocturne-Timestamp", timestamp.ToString());
                     content.Headers.Add("X-Nocturne-Signature", signature);

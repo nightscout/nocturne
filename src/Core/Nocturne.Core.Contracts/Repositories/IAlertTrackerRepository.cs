@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Repositories;
@@ -13,6 +14,12 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="Nocturne.Core.Contracts.Alerts.IExcursionTracker"/>
 public interface IAlertTrackerRepository
 {
+    /// <summary>
+    /// The rules' sustained timers in the same store. On the repository
+    /// <see cref="ExecuteInTransactionAsync{T}"/> hands its work, they write in that transaction.
+    /// </summary>
+    IConditionTimerStore Timers { get; }
+
     /// <param name="alertRuleId">The unique identifier of the <see cref="AlertRule"/>.</param>
     /// <returns>The <see cref="AlertTrackerState"/> for the rule, or <c>null</c> if no state has been recorded yet.</returns>
     Task<AlertTrackerState?> GetTrackerStateAsync(

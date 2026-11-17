@@ -1,15 +1,17 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import type { IconArtworkSource } from "water-ui";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import User from "@lucide/svelte/icons/user";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Info from "@lucide/svelte/icons/info";
@@ -29,27 +31,28 @@
     removeCredential,
     getRecoveryStatus,
     regenerateRecoveryCodes,
-  } from "$lib/api/generated/passkeys.generated.remote";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
   import {
     setup as totpSetup,
     verifySetup as totpVerifySetup,
     listCredentials as totpListCredentials,
     removeCredential as totpRemoveCredential,
-  } from "$lib/api/generated/totps.generated.remote";
-  import LinkedOidcIdentities from "$lib/components/settings/LinkedOidcIdentities.svelte";
-  import UserProfileCard from "$lib/components/account/UserProfileCard.svelte";
-  import SecurityCredentialCard from "$lib/components/account/SecurityCredentialCard.svelte";
-  import TotpSetupDialog from "$lib/components/account/TotpSetupDialog.svelte";
-  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
+  } from "#lib/api/generated/totps.generated.remote.js";
+  import LinkedOidcIdentities from "#lib/components/settings/LinkedOidcIdentities.svelte";
+  import ActiveSessions from "#lib/components/settings/ActiveSessions.svelte";
+  import UserProfileCard from "#lib/components/account/UserProfileCard.svelte";
+  import SecurityCredentialCard from "#lib/components/account/SecurityCredentialCard.svelte";
+  import TotpSetupDialog from "#lib/components/account/TotpSetupDialog.svelte";
+  import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/components/auth/passkey-errors.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     describeTotpSetupError,
     describeTotpSetupStartError,
-  } from "$lib/components/account/totp-errors";
+  } from "#lib/components/account/totp-errors.js";
   import { page } from "$app/state";
   import { invalidateAll } from "$app/navigation";
 
@@ -65,7 +68,7 @@
   const recoveryQuery = getRecoveryStatus();
 
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean; icon?: IconArtworkSource } | null>(null);
 
   // Passkey add flow
   let isRegistering = $state(false);
@@ -119,10 +122,10 @@
   $effect(() => {
     const linked = page.url.searchParams.get("linked");
     if (linked === "success") {
-      successMessage = "Account linked successfully.";
+      successMessage = { text: "Account linked successfully.", wash: true };
       clearMessages();
     } else if (linked === "already") {
-      successMessage = "This account was already linked.";
+      successMessage = { text: "This account was already linked.", wash: false };
       clearMessages();
     }
     if (linked && typeof window !== "undefined") {
@@ -181,14 +184,13 @@
         attestationResponseJson: pendingPasskey.attestationResponseJson,
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
-      });
-      await credentialsQuery.refresh();
-      await invalidateAll();
+      }).updates(credentialsQuery);
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
-      successMessage = "Passkey added successfully.";
+      successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
     } finally {
@@ -218,9 +220,9 @@
 
     try {
       await removeCredential(removeTarget.id);
-      await invalidateAll();
-      successMessage = "Passkey removed.";
+      successMessage = { text: "Passkey removed.", wash: false };
       clearMessages();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove passkey.");
     } finally {
@@ -242,7 +244,7 @@
       const result = await regenerateRecoveryCodes();
       newRecoveryCodes = result.codes ?? [];
       showNewCodesDialog = true;
-      await invalidateAll();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
@@ -306,7 +308,7 @@
       totpQrDataUrl = null;
       totpVerifyCode = "";
       totpLabel = "";
-      successMessage = "Authenticator app added successfully.";
+      successMessage = { text: "Authenticator app added successfully.", wash: true };
       clearMessages();
     } catch (err) {
       totpSetupError = describeTotpSetupError(err);
@@ -328,7 +330,7 @@
 
     try {
       await totpRemoveCredential(totpRemoveTarget.id);
-      successMessage = "Authenticator removed.";
+      successMessage = { text: "Authenticator removed.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove authenticator.");
@@ -338,8 +340,12 @@
     }
   }
 
+  let clearTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Restarted per message, so an earlier message's timer cannot cut a newer one short.
   function clearMessages() {
-    setTimeout(() => {
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => {
       successMessage = null;
       errorMessage = null;
     }, 3000);
@@ -353,7 +359,7 @@
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   {#if user}
     <div class="flex items-center gap-3">
-      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
         <User class="h-6 w-6 text-primary" />
       </div>
       <div>
@@ -377,16 +383,7 @@
     {/if}
 
     {#if successMessage}
-      <div
-        class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-      >
-        <Check
-          class="mt-0.5 h-4 w-4 shrink-0 text-success"
-        />
-        <p class="text-sm text-success">
-          {successMessage}
-        </p>
-      </div>
+      <SuccessBanner wash={successMessage.wash} icon={successMessage.icon}>{successMessage.text}</SuccessBanner>
     {/if}
 
     {#if isSecurityLoading}
@@ -422,7 +419,7 @@
 
       <!-- Section 2: Authenticator Apps -->
       <SecurityCredentialCard
-        title="Authenticator Apps"
+        title="Authenticator apps"
         description="Use an authenticator app like Google Authenticator or Authy to generate time-based one-time passwords for sign-in."
         icon={Smartphone}
         addLabel="Add authenticator"
@@ -446,7 +443,7 @@
         <Card.Header>
           <Card.Title class="flex items-center gap-2">
             <ShieldAlert class="h-5 w-5" />
-            Recovery Codes
+            Recovery codes
           </Card.Title>
           <Card.Description>
             Recovery codes allow you to access your account if you lose all your
@@ -465,7 +462,7 @@
                     Your old recovery codes stopped working after a Nocturne
                     update. Generate new codes to keep a backup way to sign in.
                   {:else if recoveryStatus.hasCodes}
-                    Every recovery code has been used
+                    Every recovery code was used
                   {:else}
                     No recovery codes yet
                   {/if}
@@ -507,12 +504,17 @@
         </Card.Content>
       </Card.Root>
 
+      <!-- A tenantless host admits the account page but not the sessions endpoint. -->
+      {#if page.data.tenantless !== true}
+        <ActiveSessions />
+      {/if}
+
       <!-- Section 4: Recovery Mode Info -->
       <Card.Root>
         <Card.Header>
           <Card.Title variant="muted" class="flex items-center gap-2">
             <Server class="h-5 w-5" />
-            Server-Side Account Recovery
+            Server-side account recovery
           </Card.Title>
         </Card.Header>
         <Card.Content>
@@ -532,9 +534,7 @@
                 environment variable on your server.
               </p>
               <p class="text-sm text-muted-foreground">
-                This enables a temporary recovery flow that allows you to register
-                a new passkey. It requires physical access to the server
-                environment.
+                This enables a temporary recovery flow. You can register a new passkey with it. It requires physical access to the server environment.
               </p>
             </div>
           </div>
@@ -553,7 +553,7 @@
           >
             <User class="h-8 w-8 text-primary" />
           </div>
-          <Card.Title class="text-2xl font-bold">Not Signed In</Card.Title>
+          <Card.Title class="text-2xl font-bold">Not signed in</Card.Title>
           <Card.Description class="mt-2">
             Sign in to access your account dashboard and manage your settings.
           </Card.Description>
@@ -565,7 +565,7 @@
             class="w-full @sm:w-auto min-w-[200px]"
           >
             <User class="mr-2 h-5 w-5" />
-            Sign In with Nocturne
+            Sign in with Nocturne
           </Button>
         </Card.Content>
       </Card.Root>
@@ -579,8 +579,8 @@
     <Dialog.Header>
       <Dialog.Title>Name your passkey</Dialog.Title>
       <Dialog.Description>
-        Give this passkey a name to help you identify it later (e.g. "MacBook
-        Touch ID", "YubiKey 5").
+        Give this passkey a name to help you identify it later, for example "MacBook
+        Touch ID" or "YubiKey 5".
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">

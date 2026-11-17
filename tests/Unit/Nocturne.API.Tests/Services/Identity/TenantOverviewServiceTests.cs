@@ -9,11 +9,13 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
@@ -458,6 +460,7 @@ public class TenantOverviewServiceTests
             contextClampSeen));
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
         services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
+        services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
         services.AddScoped(sp =>
         {
             var category = sp.GetRequiredService<ICategoryReadContext>();
@@ -474,10 +477,11 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         var service = new TenantOverviewService(
-            (new InMemoryContextFactory(options)).AsNocturneFactory(),
+            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory()),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
+            TimeProvider.System,
             NullLogger<TenantOverviewService>.Instance);
         return (service, clampSeen, contextClampSeen);
     }
@@ -517,6 +521,9 @@ public class TenantOverviewServiceTests
             LastReadingAt = lastReadingAt,
         };
         db.Tenants.Add(tenant);
+
+        if (!db.Subjects.Any(s => s.Id == subjectId))
+            db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
 
         var member = new TenantMemberEntity
         {
@@ -599,13 +606,15 @@ public class TenantOverviewServiceTests
         services.AddScoped(_ => accessor.Object);
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
         services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
+        services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
-            (new InMemoryContextFactory(options)).AsNocturneFactory(),
+            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory()),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
+            TimeProvider.System,
             NullLogger<TenantOverviewService>.Instance);
     }
 

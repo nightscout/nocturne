@@ -55,6 +55,7 @@ describe("public share link", () => {
     expect(link.scopes).toEqual(["glucose.read"]);
     expect((await viewer.get("/api/v1/treatments.json?count=5")).status).toBe(403);
     expect((await viewer.get("/api/v4/insulin/boluses?limit=5")).status).toBe(403);
+    expect((await viewer.get("/api/v4/alerts/active")).status).toBe(403);
   });
 
   it("refuses writes", async () => {
@@ -89,6 +90,19 @@ describe("public share link", () => {
       timeoutMs: 75_000,
       intervalMs: 1_000,
     });
+  });
+
+  it("shows a firing alarm when the owner grants alerts, and nothing of its configuration", async () => {
+    await tenant.api.ok("PUT", "/api/v4/share/scopes", {
+      scopes: ["glucose.read", "treatments.read", "alerts.read"],
+    });
+    await eventually(async () => (await viewer.get("/api/v4/alerts/active")).status === 200, {
+      what: "active alerts on the share host",
+      timeoutMs: 75_000,
+      intervalMs: 1_000,
+    });
+    expect([401, 403]).toContain((await viewer.get("/api/v4/alerts/history")).status);
+    expect([401, 403]).toContain((await viewer.get("/api/v4/alert-rules")).status);
   });
 
   it("stops working when disabled, and a rotated link replaces the old one", async () => {

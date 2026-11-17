@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { AlertRuleResponse } from "$api-clients";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Switch } from "$lib/components/ui/switch";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -16,10 +16,13 @@
   import {
     summarizeCondition,
     type SummarizeContext,
-  } from "./summarizeCondition";
+  } from "./summarizeCondition.svelte";
   import { severity } from "./severity";
+  import { severityLabel } from "./severityLabel.svelte";
   import { nodeFromApi } from "./types";
+  import { conditionLabel } from "./conditionLabel.svelte";
   import { findChannelMeta } from "./channelMeta";
+  import { channelLabel } from "./channelText.svelte";
 
   interface Props {
     rule: AlertRuleResponse;
@@ -52,12 +55,14 @@
   // Reconstruct the editor-side ConditionNode from the API's flat
   // (conditionType, conditionParams) pair so we can render a human chip via
   // summarizeCondition. Defensive against malformed rows: if reconstruction
-  // fails we fall back to the raw discriminator.
+  // fails we fall back to the condition-type label.
   let chip = $derived(
     (() => {
       const node = nodeFromApi(rule.conditionType, rule.conditionParams);
       const ctx: SummarizeContext = { resolveAlertName };
-      return node ? summarizeCondition(node, ctx) : (rule.conditionType ?? "");
+      return node
+        ? summarizeCondition(node, ctx)
+        : conditionLabel(rule.conditionType);
     })()
   );
 
@@ -78,7 +83,7 @@
   <!-- Severity dot -->
   <span
     class="h-2.5 w-2.5 shrink-0 rounded-full {severityClass}"
-    aria-label="Severity: {rule.severity ?? 'warning'}"
+    aria-label="Severity: {severityLabel(rule.severity ?? 'warning')}"
   ></span>
 
   <!-- Identity + condition summary chip -->
@@ -120,7 +125,7 @@
         {@const meta = findChannelMeta(ch.channelType)}
         <span
           class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
-          title={ch.destinationLabel ?? ch.channelType ?? ""}
+          title={ch.destinationLabel ?? (meta ? channelLabel(meta.type) : ch.channelType) ?? ""}
         >
           {#if meta?.logo}
             <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />

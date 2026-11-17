@@ -1,11 +1,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ClockIcon from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { getById as getClockFaceById } from "$api/generated/clockFaces.generated.remote";
-  import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { getById as getClockFaceById } from "#lib/api/generated/clockFaces.generated.remote.js";
+  import ClockFaceRenderer from "#lib/components/clock/ClockFaceRenderer.svelte";
 
   interface Props {
     /** Absent on a face the list returned without one, which has nothing to fetch. */

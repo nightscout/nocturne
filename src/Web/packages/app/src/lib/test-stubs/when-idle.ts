@@ -1,7 +1,7 @@
 /**
- * Stand-in for `$lib/utils/when-idle` that holds every callback until the test calls
+ * Stand-in for `#lib/utils/when-idle.js` that holds every callback until the test calls
  * `flushIdle`, so a test can assert what happens before the page goes idle and after.
- * Install with `vi.mock("$lib/utils/when-idle", () => import("$lib/test-stubs/when-idle"))`.
+ * Install with `vi.mock("#lib/utils/when-idle.js", () => import("#lib/test-stubs/when-idle.js"))`.
  */
 const pending = new Set<() => void>();
 

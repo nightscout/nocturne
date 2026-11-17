@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle for various status formats against
 /// the full distributed application stack.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class StatusIntegrationTests : ApiIntegrationTestBase
 {
@@ -61,7 +62,10 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
         name.GetString().Should().Be("nightscout", "Nightscout clients read the name Nightscout reports");
 
         status.TryGetProperty("version", out var version).Should().BeTrue();
-        version.GetString().Should().NotBeNullOrEmpty();
+        version.GetString().Should().Be("15.0.3");
+
+        status.TryGetProperty("nocturneVersion", out var nocturneVersion).Should().BeTrue();
+        nocturneVersion.GetString().Should().NotBeNullOrEmpty().And.NotBe("15.0.3");
 
         status.TryGetProperty("serverTime", out var serverTime).Should().BeTrue();
         serverTime.ValueKind.Should().Be(JsonValueKind.String);

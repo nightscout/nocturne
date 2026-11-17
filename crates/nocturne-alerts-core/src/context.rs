@@ -93,13 +93,37 @@ pub struct SensorContext {
     /// Keyed by `(category, state)`; a `None` state means "any state of this
     /// category".
     pub active_state_spans: HashMap<(StateSpanCategory, Option<String>), StateSpanSnapshot>,
-    /// Reference timestamp of the active tracker instance per tracker
-    /// definition: start time for duration trackers, scheduled time for event
-    /// trackers (resolved by the enricher). Absent key = no active instance.
-    pub active_trackers: HashMap<Uuid, DateTime<Utc>>,
+    /// The active tracker instance per tracker definition. Absent key = no
+    /// active instance.
+    pub active_trackers: HashMap<Uuid, TrackerReference>,
     /// Pre-computed by the enricher: a sleep session (from the sleep_sessions
     /// tables) has `StartTime <= now <= EndTime` for the tenant.
     pub sleep_session_active: bool,
+}
+
+/// A tracker definition's active instance, as `tracker_age` reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrackerReference {
+    /// The instance's start for a duration tracker, its scheduled time for an
+    /// event tracker (resolved by the enricher).
+    pub reference_at: DateTime<Utc>,
+    /// When the instance was recorded. A threshold that already held then does
+    /// not fire for a duration instance; `None` holds nothing back.
+    pub recorded_at: Option<DateTime<Utc>>,
+    /// An event tracker's instance, counting to its scheduled time.
+    pub scheduled: bool,
+}
+
+impl TrackerReference {
+    /// A duration instance with no recorded time.
+    #[must_use]
+    pub fn at(reference_at: DateTime<Utc>) -> Self {
+        Self {
+            reference_at,
+            recorded_at: None,
+            scheduled: false,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +248,10 @@ struct WireStateSpan {
 struct WireTrackerReference {
     tracker_definition_id: Uuid,
     reference_at: DateTime<Utc>,
+    #[serde(default)]
+    recorded_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    scheduled: bool,
 }
 
 fn dec(n: &Number, what: &str) -> Result<Decimal, String> {
@@ -313,7 +341,11 @@ impl SensorContext {
         for t in w.active_trackers.unwrap_or_default() {
             active_trackers.insert(
                 t.tracker_definition_id,
-                check_timestamp(t.reference_at, "active_trackers.reference_at")?,
+                TrackerReference {
+                    reference_at: check_timestamp(t.reference_at, "active_trackers.reference_at")?,
+                    recorded_at: opt_ts(t.recorded_at, "active_trackers.recorded_at")?,
+                    scheduled: t.scheduled,
+                },
             );
         }
 

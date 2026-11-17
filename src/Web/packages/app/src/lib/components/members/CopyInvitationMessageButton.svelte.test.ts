@@ -55,7 +55,7 @@ describe("CopyInvitationMessageButton", () => {
 
     await vi.waitFor(() => expect(clipboard).toHaveLength(1));
     expect(clipboard[0]).toContain(INVITE_URL);
-    expect(clipboard[0]).toMatch(/^You've been invited to Nocturne/);
+    expect(clipboard[0]).toMatch(/^You are invited to Nocturne/);
   });
 
   it("does not toast on a successful copy", async () => {

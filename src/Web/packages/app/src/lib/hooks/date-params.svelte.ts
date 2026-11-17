@@ -22,7 +22,8 @@ import {
   resolveDayRange,
   startOfDay,
   type DayRangeStrings,
-} from "$lib/utils/date-range";
+} from "#lib/utils/date-range.js";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 /**
  * Zod schema for reports URL parameters.
@@ -48,9 +49,9 @@ export type ReportsParams = z.infer<typeof ReportsParamsSchema>;
 export type RangeWrite = DateRangeInput & { isDefault: boolean };
 
 /** `search` with `write` in it, as the setters would write it, for a navigation that carries more. */
-export function withRange(search: URLSearchParams, write: RangeWrite): URLSearchParams {
+export function withRange(search: ReadonlyURLSearchParams, write: RangeWrite): URLSearchParams {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a value built and returned, never state
-  const next = new URLSearchParams(search);
+  const next = new URLSearchParams(search.toString());
   for (const [name, value] of Object.entries(write)) {
     if (value == null) next.delete(name);
     else next.set(name, String(value));
@@ -224,15 +225,6 @@ export function useDateParams(defaultDays = 7) {
     return resolveDayRange(memoizedInput, defaultDays);
   }
 
-  /**
-   * The current range as instants: local midnight opening the first day through
-   * the last millisecond of the last day, so the range is inclusive.
-   */
-  function getDateRange(): { start: Date; end: Date } {
-    const { from, to } = resolvedRange();
-    return { start: startOfDay(from), end: endOfDay(to) };
-  }
-
   return {
     // Reactive properties from runed
     get days() {
@@ -274,12 +266,6 @@ export function useDateParams(defaultDays = 7) {
       return endOfDay(resolvedRange().to);
     },
 
-    /** The inclusive range as Unix milliseconds. */
-    get dateRangeMillis(): { from: number; to: number } {
-      const { from, to } = resolvedRange();
-      return { from: startOfDay(from).getTime(), to: endOfDay(to).getTime() };
-    },
-
     /** Calendar days the range covers, counting both end days. */
     get dayCount(): number {
       const { from, to } = resolvedRange();
@@ -290,7 +276,6 @@ export function useDateParams(defaultDays = 7) {
     setDayRange,
     setCustomRange,
     reset,
-    getDateRange,
     /** What the setter of the same name writes, for {@link withRange}. */
     dayRangeWrite,
     customRangeWrite,
@@ -440,7 +425,10 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
 
   untrack(() => {
     if (reportDefaultDays === undefined) return;
-    if (params.isDefault && params.days !== reportDefaultDays) {
+    // A from/to with no day count is a range someone chose, a shared link among them, even
+    // where the URL leaves `isDefault` to the schema's default.
+    const chosenRange = params.days == null && params.from != null && params.to != null;
+    if (params.isDefault && !chosenRange && params.days !== reportDefaultDays) {
       // The user hasn't made a custom selection (isDefault=true), so we can adjust
       // to this report's preferred default range.
       params._setDefaultDayRange(reportDefaultDays);

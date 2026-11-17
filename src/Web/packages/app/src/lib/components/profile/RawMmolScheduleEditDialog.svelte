@@ -1,16 +1,16 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
   import Target from "@lucide/svelte/icons/target";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
-  import GlucoseScheduleEditor from "$lib/components/schedule/GlucoseScheduleEditor.svelte";
+  import GlucoseScheduleEditor from "#lib/components/schedule/GlucoseScheduleEditor.svelte";
   import {
     getSensitivityScheduleById,
     getTargetRangeScheduleById,
     updateSensitivitySchedule,
     updateTargetRangeSchedule,
-  } from "$api/generated/profiles.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { RawMmolScheduleKind, type RawMmolSchedule } from "$api-clients";
+  } from "#lib/api/generated/profiles.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { RawMmolScheduleKind, type RawMmolSchedule } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     /** The listed schedule to edit; the dialog shows nothing without one */
@@ -51,7 +51,7 @@
       {@const schedule = targetQuery.current}
       {@const id = item.id}
       <GlucoseScheduleEditor
-        title="Target Range"
+        title="Target range"
         description="Desired blood glucose range"
         unit="mg/dL"
         icon={Target}
@@ -70,7 +70,7 @@
       {@const schedule = isfQuery.current}
       {@const id = item.id}
       <GlucoseScheduleEditor
-        title="Insulin Sensitivity (ISF)"
+        title="Insulin sensitivity (ISF)"
         description="BG drop per unit of insulin"
         unit="mg/dL/U"
         icon={TrendingUp}

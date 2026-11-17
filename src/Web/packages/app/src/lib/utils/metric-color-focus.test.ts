@@ -3,7 +3,9 @@ import { getGlucoseHeatmapFill } from "./chart-colors";
 import {
   addColorBoundary,
   insertSliderSteps,
+  intensityScale,
   metricRamp,
+  paintRamp,
   rampColor,
   rampPosition,
   rampValue,
@@ -11,6 +13,7 @@ import {
   resolveColorFocusRange,
   scaleFill,
   scaleGradient,
+  glucoseScale as buildGlucoseScale,
   GLUCOSE_COLOR_MAX,
   GLUCOSE_COLOR_MIN,
   GLUCOSE_RAMP,
@@ -20,6 +23,7 @@ import {
 
 const glucoseScale = (overrides: Partial<MetricScale> = {}): MetricScale => ({
   ramp: GLUCOSE_RAMP,
+  ends: {},
   domain: [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX],
   axis: [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX],
   window: [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX],
@@ -30,6 +34,7 @@ const glucoseScale = (overrides: Partial<MetricScale> = {}): MetricScale => ({
 
 const doseScale = (overrides: Partial<MetricScale> = {}): MetricScale => ({
   ramp: metricRamp("--insulin"),
+  ends: {},
   domain: [10, 70],
   axis: [0, 500],
   window: [10, 70],
@@ -173,5 +178,63 @@ describe("insertSliderSteps", () => {
     const base = [0, 1, 2, 3];
     expect(insertSliderSteps(base, [1.5, 2, 3.25])).toEqual([0, 1, 1.5, 2, 3, 3.25]);
     expect(base).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("chosen colors", () => {
+  it("accepts a hex color on a boundary and refuses any other", () => {
+    expect(resolveColorBoundaries([{ value: 100, position: 0.5, color: "#ff0000" }], [40, 350])).toEqual([
+      { value: 100, position: 0.5, color: "#ff0000" },
+    ]);
+    expect(resolveColorBoundaries([{ value: 100, position: 0.5, color: null }], [40, 350])).toEqual([
+      { value: 100, position: 0.5 },
+    ]);
+    expect(resolveColorBoundaries([{ value: 100, position: 0.5, color: "red" }], [40, 350])).toBeNull();
+  });
+
+  it("paints the ends and each colored boundary the domain reaches", () => {
+    const ramp = paintRamp(
+      metricRamp("--insulin"),
+      { low: "#ffffff", high: "#000000" },
+      [
+        { value: 20, position: 0.25, color: "#ff0000" },
+        { value: 90, position: 0.9, color: "#00ff00" },
+      ],
+      [10, 70]
+    );
+    expect(ramp).toEqual([
+      { position: 0, color: "#ffffff" },
+      { position: 0.25, color: "#ff0000" },
+      { position: 1, color: "#000000" },
+    ]);
+  });
+
+  it("leaves the theme ramp untouched without chosen colors", () => {
+    expect(paintRamp(GLUCOSE_RAMP, {}, [{ value: 100, position: 0.3 }], [40, 350])).toBe(GLUCOSE_RAMP);
+  });
+
+  it("mirrors a dose scale when its end colors are swapped", () => {
+    const scale = intensityScale("--insulin", [0, Infinity], 50, null, null, 90, {
+      low: "#000000",
+      high: "#ffffff",
+    });
+    expect(scaleFill(0, scale)).toBe("#000000");
+    expect(scaleFill(50, scale)).toBe("#ffffff");
+  });
+
+  it("drops an end color that is not hex but keeps the other", () => {
+    expect(buildGlucoseScale(null, null, 90, { low: "blue", high: "#123456" }).ends).toEqual({
+      high: "#123456",
+    });
+  });
+
+  it("adds a boundary that holds the chosen color already drawn", () => {
+    const scale = intensityScale("--insulin", [0, Infinity], 40, null, null, 90, {
+      low: "#000000",
+      high: "#ffffff",
+    });
+    const [added] = addColorBoundary(scale)!;
+    expect(added.color).toBeUndefined();
+    expect(rampColor(scale.ramp, added.position)).toBe(scaleFill(added.value, scale));
   });
 });

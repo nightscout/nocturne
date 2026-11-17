@@ -6,13 +6,13 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 
 public class GlycemicTargetStateTests
 {
-    private readonly StatisticsService _service = new();
+    private readonly StatisticsService _service = new(TimeProvider.System);
 
     [Theory]
     [InlineData(6.9, true, true)]
-    [InlineData(6.94, true, true)]
-    [InlineData(6.95, false, true)]
-    [InlineData(6.9538, false, false)]
+    [InlineData(6.994, true, true)]
+    [InlineData(6.99491, true, false)]
+    [InlineData(6.996, false, false)]
     [InlineData(7.0, false, false)]
     [InlineData(7.1, false, false)]
     public void EstimatedA1cMeetsTarget_IsJudgedPerUnitAtItsDisplayedPrecision(
@@ -24,6 +24,18 @@ public class GlycemicTargetStateTests
 
         state.Percent.Should().Be(percentMet);
         state.MmolMol.Should().Be(mmolMolMet);
+    }
+
+    [Fact]
+    public void A1cTargetState_RoundsAsTheWebAppShowsTheValue()
+    {
+        // toFixed rounds the binary value just below each tie, so the web app shows 3.00 and 10.3.
+        var state = A1cTargetState.Below(
+            new A1cDisplayValue { Percent = 3.005, MmolMol = 10.35 },
+            new A1cDisplayValue { Percent = 3.01, MmolMol = 10.4 });
+
+        state.Percent.Should().BeTrue();
+        state.MmolMol.Should().BeTrue();
     }
 
     [Theory]
@@ -42,6 +54,33 @@ public class GlycemicTargetStateTests
         };
 
         _service.AssessAgainstTargets(analytics).CVAssessment.Status.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(0, GlycemicVariabilityStatus.Stable)]
+    [InlineData(36, GlycemicVariabilityStatus.Stable)]
+    [InlineData(36.4, GlycemicVariabilityStatus.Stable)]
+    [InlineData(36.5, GlycemicVariabilityStatus.Moderate)]
+    [InlineData(50, GlycemicVariabilityStatus.Moderate)]
+    [InlineData(50.4, GlycemicVariabilityStatus.Moderate)]
+    [InlineData(50.5, GlycemicVariabilityStatus.Variable)]
+    [InlineData(80, GlycemicVariabilityStatus.Variable)]
+    public void CoefficientOfVariationStatus_IsJudgedAtTheWholePercentItIsDisplayedAt(
+        double cv,
+        GlycemicVariabilityStatus expected)
+    {
+        new GlycemicVariability { CoefficientOfVariation = cv }
+            .CoefficientOfVariationStatus.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CalculateGlycemicVariability_ServesTheStatusOfItsOwnCv()
+    {
+        var steady = _service.CalculateGlycemicVariability([100d, 102d, 98d, 101d], [], TimeZoneInfo.Utc)!;
+        var swinging = _service.CalculateGlycemicVariability([60d, 300d, 80d, 320d], [], TimeZoneInfo.Utc)!;
+
+        steady.CoefficientOfVariationStatus.Should().Be(GlycemicVariabilityStatus.Stable);
+        swinging.CoefficientOfVariationStatus.Should().Be(GlycemicVariabilityStatus.Variable);
     }
 
     [Fact]

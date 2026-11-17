@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""
+r"""
 Post-generation patch for the Swift SDK.
 
 Extracts large mapValuesToQueryItems dict literals into explicitly-typed
 local variables to work around Swift's "compiler is unable to type-check
 this expression in reasonable time" error on dicts with many entries.
+
+Rewrites the escapes in validation patterns (StringRule(pattern: "...")) that
+Swift string literals reject: the generator escapes a regex's slashes as \/,
+JavaScript-style, and copies a regex escape such as \d through unchanged.
 """
 import re
 import glob
@@ -18,6 +22,24 @@ PATTERN = re.compile(
     r"(\))",
     re.MULTILINE,
 )
+
+
+RULE_PATTERN = re.compile(r'(pattern: ")((?:[^"\\]|\\.)*)(")')
+# What may follow a backslash in a Swift string literal (\u is followed by {...}).
+SWIFT_ESCAPES = set("0\\tnr\"'u")
+
+
+def swift_escape(m: re.Match) -> str:
+    char = m.group(1)
+    if char == "/":
+        return "/"
+    if char in SWIFT_ESCAPES:
+        return m.group(0)
+    return "\\\\" + char
+
+
+def swift_pattern(m: re.Match) -> str:
+    return m.group(1) + re.sub(r"\\(.)", swift_escape, m.group(2)) + m.group(3)
 
 
 def fix_file(path: str) -> None:
@@ -36,7 +58,7 @@ def fix_file(path: str) -> None:
         assign = f"localVariableUrlComponents?.queryItems = APIHelper.mapValuesToQueryItems({varname})"
         return f"{typed}\n        {assign}"
 
-    patched = PATTERN.sub(replacer, src)
+    patched = RULE_PATTERN.sub(swift_pattern, PATTERN.sub(replacer, src))
     if patched != src:
         with open(path, "w") as f:
             f.write(patched)

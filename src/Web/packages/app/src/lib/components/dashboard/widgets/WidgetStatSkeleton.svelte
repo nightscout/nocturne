@@ -10,7 +10,7 @@
      for a line of text at that text size's line height (text-xs h-4, text-xl h-7, text-2xl h-8)
      and the widget's own spacing. -->
 {#if shape === "tir"}
-  <div class="bg-muted mb-2 h-32 animate-pulse rounded sm:h-6"></div>
+  <div class="bg-muted mb-2 h-32 animate-pulse rounded @2xl:h-6"></div>
   <div class="flex items-baseline justify-between gap-2">
     <div class="bg-muted h-7 w-28 animate-pulse rounded"></div>
     <div class="bg-muted h-4 w-20 animate-pulse rounded"></div>

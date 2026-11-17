@@ -13,6 +13,12 @@ public interface ISensitivityResolver
     Task<double> GetSensitivityAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 
     /// <summary>
+    /// As <see cref="GetSensitivityAsync"/>, but null when no schedule gives a value at that time
+    /// in place of the default.
+    /// </summary>
+    Task<double?> FindSensitivityAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the current effective ISF as a percentage of the schedule baseline.
     /// 100 means "at baseline"; values below 100 indicate the active CCP makes the
     /// pump more aggressive (lower ISF, more insulin per mg/dL); values above 100

@@ -1,9 +1,7 @@
 //! Node dispatch and container evaluation (engine-semantics.md §2.4, §3).
 //!
-//! Evaluation cannot fail: the shapes whose evaluation fails (§1.4) are
-//! rejected when a tree is parsed. Anything else malformed, such as an unknown
-//! kind, operator or direction, a `not` or `sustained` with no child, or a
-//! composite with an empty list, is `false`, which `not` inverts.
+//! Evaluation cannot fail: a tree reads into the model only when it can be
+//! evaluated as written (§1.4).
 
 pub(crate) mod clock;
 mod device;
@@ -58,7 +56,7 @@ impl<'a> Env<'a> {
         &self,
         anchor: DateTime<Utc>,
         unit: Unit,
-        op: Option<CmpOp>,
+        op: CmpOp,
         threshold: impl Into<Decimal>,
     ) -> bool {
         let actual = elapsed(self.now, anchor, unit).and_then(decimal_from_f64_cs);
@@ -81,11 +79,9 @@ impl<'a> Env<'a> {
     }
 }
 
-/// Evaluates a condition node at `path`. `None` (a JSON-null child slot)
-/// evaluates false.
-pub fn eval_node(node: Option<&Node>, path: &str, env: &mut Env) -> bool {
-    node.and_then(Node::dispatch)
-        .is_some_and(|payload| eval_payload(&payload, path, env))
+/// Evaluates a condition node at `path`.
+pub fn eval_node(node: &Node, path: &str, env: &mut Env) -> bool {
+    eval_payload(node.payload(), path, env)
 }
 
 /// Evaluates a payload as the node at `path`.
@@ -129,38 +125,21 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
 
 /// `and` / `or` evaluate every child in document order, whatever an earlier
 /// one returned, so each sustained timer tracks its own condition wherever it
-/// sits. An absent or empty list, or an unknown operator, is false with no
-/// child evaluated.
+/// sits.
 fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> bool {
-    let Some(conditions) = p.conditions.as_deref().filter(|c| !c.is_empty()) else {
-        return false;
-    };
-    let Some(op) = p.operator.value else {
-        return false;
-    };
-    let results: Vec<bool> = conditions
+    let results: Vec<bool> = p
+        .conditions
         .iter()
         .enumerate()
-        .map(|(i, child)| eval_composite_child(child.as_ref(), i, path, env))
+        .map(|(i, child)| eval_node(child, &node_child_path(path, i, child), env))
         .collect();
-    match op {
+    match p.operator {
         CompositeOp::And => results.iter().all(|&r| r),
         CompositeOp::Or => results.iter().any(|&r| r),
     }
 }
 
-fn eval_composite_child(child: Option<&Node>, index: usize, path: &str, env: &mut Env) -> bool {
-    let Some(node) = child else {
-        return false;
-    };
-    eval_node(Some(node), &node_child_path(path, index, Some(node)), env)
-}
-
-/// A missing child is false, not true; otherwise the child inverted, so
-/// `not` over an unknown kind is true.
+/// The child inverted.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> bool {
-    let Some(child) = &p.child else {
-        return false;
-    };
-    !eval_node(Some(child), &node_child_path(path, 0, Some(child)), env)
+    !eval_node(&p.child, &node_child_path(path, 0, &p.child), env)
 }

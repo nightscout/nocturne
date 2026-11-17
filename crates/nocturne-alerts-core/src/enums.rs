@@ -1,65 +1,29 @@
-//! The enumerations a condition payload or sensor context names by string or
-//! ordinal, parsed once when the payload is read.
+//! The enumerations a condition payload or sensor context names by string,
+//! parsed once when the payload is read. A value is exactly one member's wire
+//! name (engine-semantics.md §1.1).
 //!
-//! A mirrored enum's declaration order is its ordinal, and an integer payload
-//! value is that ordinal, so an enum that drifts from the host's silently
-//! rebinds integer payloads to the wrong member. The corpus generator writes
-//! every mirrored enum to `tests/Parity/AlertEngineEnums.json`, and
+//! Every mirrored enum is listed in `tests/Parity/AlertEngineEnums.json`,
+//! which the backend's `EnumManifestTests` keeps equal to the C# enums, and
 //! `enums_match_manifest` pins each one to it.
 
-use serde::{Serialize, Serializer};
-
-/// How a string payload field is matched against an enum's names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Fold {
-    /// ASCII case-insensitive, as enum names are read.
-    AsciiCase,
-    /// Unicode-lowercased, then matched exactly (engine-semantics.md §3).
-    Lowercase,
-}
-
-/// An enum with a fixed, ordered set of wire names.
+/// An enum with a fixed set of wire names.
 pub trait WireEnum: Copy + Eq + 'static {
-    /// Every member, in ordinal order.
+    /// Every member, in declaration order.
     const ALL: &'static [Self];
-    /// The member a missing field reads as: ordinal 0.
-    const FIRST: Self;
-    /// How [`WireEnum::from_word`] folds the text it reads.
-    const FOLD: Fold = Fold::AsciiCase;
 
     fn name(self) -> &'static str;
 
-    /// The member named `s`, ignoring ASCII case.
+    /// The member whose wire name is exactly `s`.
     #[must_use]
     fn from_name(s: &str) -> Option<Self> {
-        Self::ALL
-            .iter()
-            .copied()
-            .find(|e| e.name().eq_ignore_ascii_case(s))
-    }
-
-    #[must_use]
-    fn from_ordinal(ordinal: i64) -> Option<Self> {
-        usize::try_from(ordinal)
-            .ok()
-            .and_then(|i| Self::ALL.get(i))
-            .copied()
-    }
-
-    /// The member a string payload field names, folded per [`WireEnum::FOLD`].
-    #[must_use]
-    fn from_word(s: &str) -> Option<Self> {
-        match Self::FOLD {
-            Fold::AsciiCase => Self::from_name(s),
-            Fold::Lowercase => Self::from_name(&s.to_lowercase()),
-        }
+        Self::ALL.iter().copied().find(|e| e.name() == s)
     }
 }
 
 macro_rules! wire_enum {
     (
         $(#[$meta:meta])*
-        $vis:vis enum $name:ident $(($fold:ident))? {
+        $vis:vis enum $name:ident {
             $first:ident = $first_wire:literal
             $(, $variant:ident = $wire:literal)* $(,)?
         }
@@ -73,8 +37,6 @@ macro_rules! wire_enum {
 
         impl $crate::enums::WireEnum for $name {
             const ALL: &'static [Self] = &[Self::$first, $(Self::$variant),*];
-            const FIRST: Self = Self::$first;
-            $(const FOLD: $crate::enums::Fold = $crate::enums::Fold::$fold;)?
 
             fn name(self) -> &'static str {
                 match self {
@@ -83,83 +45,21 @@ macro_rules! wire_enum {
                 }
             }
         }
+
+        /// Serialises as its wire name.
+        impl serde::Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                s.serialize_str($crate::enums::WireEnum::name(*self))
+            }
+        }
     };
 }
 
 pub(crate) use wire_enum;
 
-/// An enum-typed payload field: a member, or an integer naming none. Integers
-/// are accepted raw, so an undefined one is kept and compares unequal to
-/// every member.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnumValue<E> {
-    Known(E),
-    Undefined(i32),
-}
-
-impl<E: WireEnum> Default for EnumValue<E> {
-    fn default() -> Self {
-        Self::Known(E::FIRST)
-    }
-}
-
-impl<E: WireEnum> EnumValue<E> {
-    pub(crate) fn from_ordinal(ordinal: i32) -> Self {
-        E::from_ordinal(i64::from(ordinal)).map_or(Self::Undefined(ordinal), Self::Known)
-    }
-
-    #[must_use]
-    pub fn known(self) -> Option<E> {
-        match self {
-            Self::Known(e) => Some(e),
-            Self::Undefined(_) => None,
-        }
-    }
-}
-
-/// A member serialises as its name, an undefined value as its integer.
-impl<E: WireEnum> Serialize for EnumValue<E> {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Known(e) => s.serialize_str(e.name()),
-            Self::Undefined(i) => s.serialize_i32(*i),
-        }
-    }
-}
-
-/// A string payload field as written, with the member it names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Spelled<T> {
-    pub text: Option<String>,
-    pub value: Option<T>,
-}
-
-impl<T> Default for Spelled<T> {
-    fn default() -> Self {
-        Self {
-            text: None,
-            value: None,
-        }
-    }
-}
-
-impl<T: WireEnum> Spelled<T> {
-    pub(crate) fn new(text: Option<String>) -> Self {
-        let value = text.as_deref().and_then(T::from_word);
-        Self { text, value }
-    }
-}
-
-/// Serialises as written.
-impl<T> Serialize for Spelled<T> {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        self.text.serialize(s)
-    }
-}
-
 wire_enum! {
     /// `AlertComparisonOperator`, and the operators a decimal comparison
-    /// recognises, matched exactly (engine-semantics.md §3).
+    /// recognises (engine-semantics.md §3).
     pub enum CmpOp {
         Gt = ">",
         Ge = ">=",
@@ -182,11 +82,10 @@ impl CmpOp {
     }
 }
 
-/// `op` applied to `actual`; false when either is absent.
+/// `op` applied to `actual`; false when it is absent.
 #[must_use]
-pub fn holds<T: PartialOrd>(op: Option<CmpOp>, actual: Option<T>, threshold: T) -> bool {
-    op.zip(actual)
-        .is_some_and(|(op, actual)| op.apply(actual, threshold))
+pub fn holds<T: PartialOrd>(op: CmpOp, actual: Option<T>, threshold: T) -> bool {
+    actual.is_some_and(|actual| op.apply(actual, threshold))
 }
 
 wire_enum! {
@@ -197,15 +96,15 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// Sunday first, as the host's `DayOfWeek` numbers days.
+    /// `AlertWeekday`.
     pub enum DayOfWeek {
-        Sunday = "Sunday",
-        Monday = "Monday",
-        Tuesday = "Tuesday",
-        Wednesday = "Wednesday",
-        Thursday = "Thursday",
-        Friday = "Friday",
-        Saturday = "Saturday",
+        Sunday = "sunday",
+        Monday = "monday",
+        Tuesday = "tuesday",
+        Wednesday = "wednesday",
+        Thursday = "thursday",
+        Friday = "friday",
+        Saturday = "saturday",
     }
 }
 
@@ -264,7 +163,7 @@ wire_enum! {
 
 wire_enum! {
     /// `threshold.direction`.
-    pub enum ThresholdDirection (Lowercase) {
+    pub enum ThresholdDirection {
         Above = "above",
         Below = "below",
     }
@@ -272,7 +171,7 @@ wire_enum! {
 
 wire_enum! {
     /// `rate_of_change.direction`.
-    pub enum RateDirection (Lowercase) {
+    pub enum RateDirection {
         Rising = "rising",
         Falling = "falling",
     }
@@ -280,7 +179,7 @@ wire_enum! {
 
 wire_enum! {
     /// `composite.operator`.
-    pub enum CompositeOp (Lowercase) {
+    pub enum CompositeOp {
         And = "and",
         Or = "or",
     }
@@ -288,7 +187,7 @@ wire_enum! {
 
 wire_enum! {
     /// `alert_state.state`.
-    pub enum AlertStateKind (Lowercase) {
+    pub enum AlertStateKind {
         Firing = "firing",
         Unacknowledged = "unacknowledged",
         Acknowledged = "acknowledged",
@@ -326,25 +225,21 @@ mod tests {
         };
         let tables = [
             ("AlertComparisonOperator", names::<CmpOp>()),
-            ("DayOfWeek", names::<DayOfWeek>()),
+            ("AlertWeekday", names::<DayOfWeek>()),
             ("GlucoseBucket", names::<GlucoseBucket>()),
             ("PumpModeState", names::<PumpMode>()),
             ("StateSpanCategory", names::<StateSpanCategory>()),
             ("TempBasalMetric", names::<TempBasalMetric>()),
             ("TrendBucket", names::<TrendBucket>()),
             ("AlertConditionType", names::<ConditionKind>()),
-            (
-                "AlertConditionTypeMembers",
-                ConditionKind::ALL.iter().map(|k| k.member()).collect(),
-            ),
         ];
         for (enum_name, ours) in tables {
             assert_eq!(listed(enum_name), ours, "{enum_name} drifted from C#");
         }
     }
 
-    /// A property the Rust payload does not declare is stripped from a saved
-    /// tree, so each payload must declare exactly what the C# model reads.
+    /// A property the Rust payload does not declare keeps a tree from being
+    /// evaluated, so each payload must declare exactly what the C# model reads.
     #[test]
     fn payload_fields_match_the_csharp_models() {
         let path = concat!(
@@ -364,25 +259,25 @@ mod tests {
                 .iter()
                 .map(|v| v.as_str().expect("field name is a string"))
                 .collect();
-            let mut ours = crate::model::Payload::default_for(kind).fields().to_vec();
+            let mut ours = crate::model::Payload::fields(kind).to_vec();
             ours.sort_unstable();
             assert_eq!(ours, theirs, "{} fields drifted from C#", kind.name());
         }
     }
 
     #[test]
-    fn words_fold_per_enum() {
+    fn a_name_matches_only_exactly() {
         assert_eq!(
-            ThresholdDirection::from_word("BELOW"),
+            ThresholdDirection::from_name("below"),
             Some(ThresholdDirection::Below)
         );
-        assert_eq!(
-            AlertStateKind::from_word("ac\u{212A}nowledged"),
-            Some(AlertStateKind::Acknowledged)
-        );
-        assert_eq!(TrendBucket::from_word("un\u{212A}nown"), None);
-        assert_eq!(TrendBucket::from_word("FLAT"), Some(TrendBucket::Flat));
-        assert_eq!(CmpOp::from_word(">="), Some(CmpOp::Ge));
-        assert_eq!(CmpOp::from_word(" >="), None);
+        assert_eq!(ThresholdDirection::from_name("BELOW"), None);
+        assert_eq!(AlertStateKind::from_name("ac\u{212A}nowledged"), None);
+        assert_eq!(TrendBucket::from_name("Flat"), None);
+        assert_eq!(PumpMode::from_name("suspended"), None);
+        assert_eq!(DayOfWeek::from_name("Monday"), None);
+        assert_eq!(DayOfWeek::from_name("1"), None);
+        assert_eq!(CmpOp::from_name(">="), Some(CmpOp::Ge));
+        assert_eq!(CmpOp::from_name(" >="), None);
     }
 }

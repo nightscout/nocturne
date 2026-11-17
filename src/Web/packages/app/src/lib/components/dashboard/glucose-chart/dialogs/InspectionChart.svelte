@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { PredictionData } from "$api/predictions.remote";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
   import GlucoseResponseChart from "./GlucoseResponseChart.svelte";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   interface Props {
     glucoseUnits?: GlucoseUnits;
@@ -45,7 +45,7 @@
 
 {#if windowedGlucoseData.length > 0}
   <div class="py-2">
-    <p class="text-xs text-muted-foreground mb-1">Glucose Response</p>
+    <p class="text-xs text-muted-foreground mb-1">Glucose response</p>
     <GlucoseResponseChart
       glucoseData={windowedGlucoseData}
       {centerTime}

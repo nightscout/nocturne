@@ -5,24 +5,24 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import { LoopAnalysisComparison } from "$lib/api";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { useReportFilters } from "$lib/hooks/report-slots.svelte";
-  import { formatMediumDateRange } from "$lib/utils/formatting";
-  import { startOfDay } from "$lib/utils/date-range";
+  import { LoopAnalysisComparison } from "#lib/api/index.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { useReportFilters } from "#lib/hooks/report-slots.svelte.js";
+  import { formatMediumDateRange } from "#lib/utils/formatting.js";
+  import { startOfDay } from "#lib/utils/date-range.js";
   import Info from "@lucide/svelte/icons/info";
-  import LoopAnalysisFilterFields from "$lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte";
-  import AppliedFiltersSummary from "$lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte";
-  import { LoopAnalysisState, setLoopAnalysis } from "$lib/components/reports/loop-analysis/loop-analysis-context.svelte";
+  import LoopAnalysisFilterFields from "#lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte";
+  import AppliedFiltersSummary from "#lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte";
+  import { LoopAnalysisState, setLoopAnalysis } from "#lib/components/reports/loop-analysis/loop-analysis-context.svelte.js";
   import {
     readLoopAnalysisFilter,
     withoutUnavailable,
     writeLoopAnalysisFilter,
     type LoopAnalysisFilterState,
-  } from "$lib/components/reports/loop-analysis/loop-analysis-filter";
-  import { loopAnalysisPageIntros, loopAnalysisPath } from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
-  import TourReplayButton from "$lib/coach-marks/TourReplayButton.svelte";
-  import { loopAnalysisReplay } from "$lib/coach-marks/sequences";
+  } from "#lib/components/reports/loop-analysis/loop-analysis-filter.js";
+  import { loopAnalysisPageIntros, loopAnalysisPath } from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
+  import TourReplayButton from "#lib/coach-marks/TourReplayButton.svelte";
+  import { loopAnalysisReplay } from "#lib/coach-marks/sequences.js";
 
   let { children } = $props();
 
@@ -33,9 +33,8 @@
     if (!analysis.current) return;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- loopAnalysisPath resolves the path
     await goto(loopAnalysisPath(analysis.current, writeLoopAnalysisFilter(next, page.url.searchParams)), {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true,
+      replace: true,
+      reset: false,
     });
   }
 

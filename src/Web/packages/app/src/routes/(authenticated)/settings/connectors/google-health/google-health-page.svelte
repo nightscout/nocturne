@@ -1,27 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { docsUrl } from "#lib/docs-url.js";
   import { resolve } from "$app/paths";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Unplug from "@lucide/svelte/icons/unplug";
-  import { GoogleHealthConnectionState, type GoogleHealthStatus } from "$lib/api";
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import ConfirmDialog from "$lib/components/ui/confirm-dialog/confirm-dialog.svelte";
-  import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-  } from "$lib/components/ui/card";
+  import { GoogleHealthConnectionState, type GoogleHealthStatus } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import ConfirmDialog from "#lib/components/ui/confirm-dialog/confirm-dialog.svelte";
+  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
+
   import {
     describeGoogleHealthError,
     isGoogleHealthAlreadyRunningError,
     type GoogleHealthOperation,
-  } from "$lib/connectors/google-health-error.svelte";
+  } from "#lib/connectors/google-health-error.svelte.js";
   import {
     getGoogleHealth,
     saveGoogleHealth,
@@ -30,16 +26,18 @@
     syncGoogleHealth,
     previewGoogleHealth,
     purgeGoogleHealth,
-  } from "$lib/api/generated/googleHealths.generated.remote";
+  } from "#lib/api/generated/googleHealths.generated.remote.js";
   import {
     connectionOutcome,
     errorMessage,
     knownErrorMessage,
+    lookbackSentence,
     noticeText,
     type NoticeKey,
   } from "./google-health-copy.svelte";
   import GoogleHealthCategoryTable from "./GoogleHealthCategoryTable.svelte";
   import GoogleHealthSyncProgress from "./GoogleHealthSyncProgress.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let status = $state<GoogleHealthStatus | null>(null);
   let importFrom = $state(""),
@@ -88,8 +86,8 @@
   }
 
   async function refresh() {
-    status = await getGoogleHealth().run();
-    selected = status.configured ? (status.selectedTypes ?? []) : selected;
+    status = await fresh(getGoogleHealth());
+    selected = status.configured ? status.selectedTypes ?? [] : selected;
     historyDays = status.historyDays ?? 7;
     importFrom = day(status.importFrom);
   }
@@ -115,8 +113,8 @@
   }
 
   async function connect() {
-    if (!status?.configured && !(await run("save", () => saveGoogleHealth(options(true)))))
-      return;
+    if (!status?.configured && !await run("save", () => saveGoogleHealth(options(true)))) return;
+
     await run("signin", async () => {
       const auth = await startGoogleHealth();
       if (auth.url) location.assign(auth.url);
@@ -144,12 +142,21 @@
   }
 
   async function saveSettings(sync: boolean) {
-    if (!(await run("save", () => saveGoogleHealth(options(false))))) return;
+    notice = null;
+    if (!await run("save", () => saveGoogleHealth(options(false)))) return;
     if (!sync || selected.length === 0) {
-      await run("status", refresh);
+      if (await run("status", refresh))
+        notice =
+          selected.length === 0
+            ? "selectionPaused"
+            : paused
+              ? "settingsSavedPaused"
+              : status?.isSyncing
+                ? "settingsSavedOnly"
+                : "settingsSaved";
       return;
     }
-    if (!(await run("sync", syncNow))) await refresh().catch(() => {});
+    if (!await run("sync", syncNow)) await refresh().catch(() => {});
   }
 
   async function disconnect() {
@@ -173,7 +180,7 @@
         if (!busy || localDisconnecting) {
           const wasSyncing = status?.isSyncing;
           const previousImportFrom = status?.importFrom;
-          const next = await getGoogleHealth().run();
+          const next = await fresh(getGoogleHealth());
           if (disposed) return;
           status = next;
           if (wasSyncing && !next.isSyncing && importFrom === day(previousImportFrom))
@@ -205,14 +212,13 @@
   });
 </script>
 
-<svelte:head><title>Google Health · Connectors & Apps</title></svelte:head>
+<svelte:head><title>Google Health · Connectors & apps</title></svelte:head>
 <section class="mx-auto max-w-5xl space-y-6 p-6">
   <a
     class="inline-flex items-center gap-2 text-sm text-muted-foreground"
-    href={resolve("/settings/connectors")}
-  >
-    <ArrowLeft class="h-4 w-4" />Connectors & Apps
-  </a>
+    href={resolve('settings/connectors')}
+  ><ArrowLeft class="h-4 w-4" />Connectors & apps</a>
+
   <header class="flex items-start justify-between gap-4">
     <div class="flex items-center gap-3">
       <div class="rounded-lg bg-primary/10 p-3">
@@ -236,7 +242,7 @@
   {/if}
   {#if disconnecting}
     <p role="status" class="rounded-lg border border-primary/40 p-4">
-      Disconnecting Google Health. The current scan or import is being stopped.
+      Disconnecting Google Health. Nocturne is stopping the current scan or import.
     </p>
   {/if}
   {#if notice}
@@ -254,7 +260,7 @@
     </div>
   {/if}
   {#if status?.isSyncing}
-    <GoogleHealthSyncProgress {status} />
+    <GoogleHealthSyncProgress status={status} />
   {/if}
 
   {#if status?.connected && status.backfillSyncedThrough}
@@ -267,6 +273,7 @@
         {:else}
           Each sync refreshes today and imports one older calendar month.
         {/if}
+        Imported history is kept.
       </p>
     </div>
   {/if}
@@ -280,15 +287,17 @@
       {#if !status}
         <p>Loading connection status…</p>
       {:else if unavailable && !status.connected}
-        <p>Your Nocturne operator hasn't enabled Google Health on this server.</p>
+        <p>Your Nocturne operator did not enable Google Health on this server.</p>
+        <!-- eslint-disable svelte/no-navigation-without-resolve -- an absolute URL to the docs site, not an app route -->
         <a
           class="inline-block text-sm underline"
-          href="https://getnocturne.dev/docs/data-sources/google-health"
+          href={docsUrl("/docs/data-sources/google-health", "google-health-unavailable")}
           target="_blank"
           rel="noreferrer"
         >
           How Google Health is enabled
         </a>
+        <!-- eslint-enable svelte/no-navigation-without-resolve -->
       {:else if !status.connected}
         <p>
           Link Google Health in the Google Health app first, then connect. Google
@@ -305,7 +314,7 @@
               ? "Google Health is connected. Review the available data below, then save your selection to start importing."
               : connection === GoogleHealthConnectionState.NothingSelected
                 ? "Google Health is connected. Imports are paused because no data types are selected."
-                : "Google Health is connected. Automatic sync runs approximately every 15 minutes."}
+                : "Google Health is connected. Automatic sync runs on a schedule."}
         </p>
         <p class="text-sm text-muted-foreground">
           Change the import start date and selection below without reconnecting.
@@ -338,15 +347,13 @@
           <p class="text-sm text-muted-foreground">
             If a historical import stops or needs to be repeated, reset the Google
             Health connector from a chosen date. The reset runs in the background,
-            re-reads the range and keeps the normal duplicate protection; platform
+            reads the range again and keeps the normal duplicate protection. Platform
             administrators can monitor or cancel it.
           </p>
           <a
             class="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium underline-offset-4 hover:underline"
-            href={resolve("/settings/admin/connector-cursors")}
-          >
-            Open connector reset
-          </a>
+            href={resolve('settings/admin/connector-cursors')}
+          >Open connector reset</a>
         </div>
       {/if}
     </CardContent>
@@ -369,6 +376,16 @@
             );
           }}
         >
+          {#if status.previewRequired}
+            <div role="status" class="rounded-lg border border-primary p-4">
+              <p class="font-medium">Next step: confirm what to import</p>
+              <p class="mt-1 text-sm">
+                Google access is authorized, but nothing is imported until you
+                confirm a selection. Review the data types below, select the ones
+                you want, then save.
+              </p>
+            </div>
+          {/if}
           <label class="block text-sm font-medium">
             Import data from
             <Input
@@ -381,9 +398,14 @@
             />
           </label>
           <p class="text-sm text-muted-foreground">
-            Choose an earlier date to import older data shared with Google
-            Health. Empty results are not errors. Clear all selections and save
-            to pause imports; previously imported data is kept.
+            A date requests a one-time import of older data shared with Google
+            Health, back to that day. Choose an earlier date and save to request
+            more history. The field clears once the requested history is
+            complete. {lookbackSentence(status.historyDays)} Automatic sync does
+            not re-import that period each time, and an empty field does not
+            remove older records. Empty results are not errors. To pause imports,
+            clear all selections and save. Data that was already imported is
+            kept.
           </p>
           {#if inventoryBusy}
             <p class="text-sm text-muted-foreground">
@@ -395,7 +417,7 @@
             <div class="space-y-3">
               {#each status.categories as category (category.kind)}
                 <GoogleHealthCategoryTable
-                  {category}
+                  category={category}
                   bind:selected
                   disabled={busy || disconnecting || !!status.isSyncing}
                 />
@@ -403,7 +425,11 @@
             </div>
           {/if}
           <div class="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy || disconnecting || status.isSyncing}>
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={busy || disconnecting || status.isSyncing}
+            >
               Save import settings
             </Button>
             <Button
@@ -428,6 +454,18 @@
                 : "Refresh inventory"}
             </Button>
           </div>
+
+          <ul
+            class="list-disc space-y-1 pl-5 text-sm text-muted-foreground"
+          >
+            <li>Save selection and import: confirms the selection and requests an import now.</li>
+
+            <li>
+              Save import settings: confirms the selection without requesting an import. {paused
+                ? "Imports resume when your Nocturne operator turns Google Health back on."
+                : "Automatic sync imports it on its next scheduled run."}
+            </li>
+          </ul>
         </form>
       </CardContent>
     </Card>
@@ -439,13 +477,12 @@
       title="Delete imported Google Health data?"
       confirmLabel="Delete imported data"
       destructive
-      {busy}
-      onConfirm={() =>
-        void run("purge", async () => {
-          await purgeGoogleHealth();
-          purgeDialogOpen = false;
-          await refresh();
-        })}
+      busy={busy}
+      onConfirm={() => void run("purge", async () => {
+        await purgeGoogleHealth();
+        purgeDialogOpen = false;
+        await refresh();
+      })}
     >
       {#snippet description()}
         Measurements imported through Google Health will be deleted from

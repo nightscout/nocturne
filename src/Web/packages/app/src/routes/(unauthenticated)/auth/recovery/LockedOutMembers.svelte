@@ -1,17 +1,17 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import UserRoundKey from "@lucide/svelte/icons/user-round-key";
   import {
     getLockedOutMembers,
     issueRecoveryCode,
-  } from "$lib/api/generated/memberRecoveries.generated.remote";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  } from "#lib/api/generated/memberRecoveries.generated.remote.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { page } from "$app/state";
 
   /**
@@ -36,7 +36,7 @@
       issuedFor = subjectId;
       issuedLink = link.toString();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't create a recovery link.");
+      errorMessage = describeSubmitError(err, "Could not create a recovery link.");
     } finally {
       issuingFor = null;
     }
@@ -46,7 +46,7 @@
 {#if members.current && members.current.length > 0}
   <Card.Root class="w-full max-w-md">
     <Card.Header>
-      <Card.Title class="text-base">Members who can't sign in</Card.Title>
+      <Card.Title class="text-base">Members who cannot sign in</Card.Title>
       <Card.Description>
         Send a member a one-time recovery link so they can register a new passkey. It works once
         and expires after 24 hours.
@@ -81,7 +81,7 @@
           </div>
           {#if member.hasRecoveryCodes && !member.operatorOnly}
             <p class="text-xs text-muted-foreground">
-              They still have recovery codes of their own. If they've lost them, a link cancels
+              They still have recovery codes of their own. If they lost them, a link cancels
               those codes once it is used.
             </p>
           {/if}

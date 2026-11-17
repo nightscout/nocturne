@@ -1,16 +1,16 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import {
   RawMmolReason,
   RawMmolScheduleKind,
   type RawMmolSchedule,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 const saved = vi.hoisted(() => ({ sensitivity: [] as unknown[], target: [] as unknown[] }));
 
-vi.mock("$api/generated/profiles.generated.remote", () => ({
+vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
   getTargetRangeScheduleById: () => ({
     current: { id: "t1", entries: [{ time: "00:00", timeAsSeconds: 0, low: 5, high: 5.5 }] },
   }),

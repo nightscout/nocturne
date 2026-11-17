@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Models.OAuth;
 
@@ -45,7 +46,8 @@ public class ConsentApprovalRequest
     public bool Approved { get; set; }
 
     /// <summary>
-    /// When true, limits data access to 24 hours from the grant creation time.
+    /// When true, the grant reads only the last 24 hours of every time-series category, a rolling
+    /// window from now.
     /// </summary>
     [FromForm(Name = "limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; }
@@ -80,6 +82,12 @@ public class OAuthClientInfoResponse
     /// URL of the client application's logo image.
     /// </summary>
     public string? LogoUri { get; set; }
+
+    /// <summary>
+    /// What the requested scopes allow the client to delete. Null when the request names no
+    /// scope, so a caller that forgets to send it gets no answer rather than a reassuring one.
+    /// </summary>
+    public ScopeDeletionAccess? DeletionAccess { get; set; }
 }
 
 /// <summary>

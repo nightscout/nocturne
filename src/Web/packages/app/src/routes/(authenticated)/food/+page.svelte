@@ -2,8 +2,7 @@
   import { FoodState } from './food-state.svelte.js';
   import { setFoodState } from './food-context.js';
   import { onMount } from 'svelte';
-  import type { Food } from '$api';
-  import { GiIcon, GiLabel, isGiLevel, type GiLevel } from '$lib/components/food';
+  import { GiIcon, GiLabel, isGiLevel, type GiLevel } from '#lib/components/food/index.js';
 
   import FoodList from './FoodList.svelte';
   import Composer from './Composer.svelte';
@@ -14,40 +13,35 @@
   import Search from '@lucide/svelte/icons/search';
   import Star from '@lucide/svelte/icons/star';
   import X from '@lucide/svelte/icons/x';
-  import Apple from '@lucide/svelte/icons/apple';
-  import * as Select from '$lib/components/ui/select';
-  import { Button } from '$lib/components/ui/button';
-  import { Separator } from '$lib/components/ui/separator';
-  import * as InputGroup from '$lib/components/ui/input-group';
-  import { Toggle } from '$lib/components/ui/toggle';
-  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import { EmptyState } from '#lib/components/shared/index.js';
+  import * as Select from '#lib/components/ui/select/index.js';
+  import { Button } from '#lib/components/ui/button/index.js';
+  import { Separator } from '#lib/components/ui/separator/index.js';
+  import * as InputGroup from '#lib/components/ui/input-group/index.js';
+  import { Toggle } from '#lib/components/ui/toggle/index.js';
+  import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 
   const state = new FoodState();
   setFoodState(state);
 
-  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
-  onMount(() => queueMicrotask(() => state.load()));
+  onMount(() => void state.load());
 
   const giLevels: GiLevel[] = ['low', 'medium', 'high'];
   const ALL_CATEGORIES = '__all';
-
-  async function handleAdd(food: Food) {
-    await state.addFood(food);
-  }
 </script>
 
 <svelte:head>
-  <title>Food Editor - Nocturne</title>
+  <title>Food editor - Nocturne</title>
 </svelte:head>
 
-<div class="@container flex-1 overflow-auto p-5">
+<div class="@container flex-1 p-5">
   <!-- Header -->
   <div class="mb-5 flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Food Editor</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Food editor</h1>
       <div class="mt-0.5 text-xs text-muted-foreground">
         {#if state.foods.length === 0 && !state.loading}
-          No foods yet — add one to get started
+          No foods yet. Add one to get started.
         {:else}
           {state.foods.length} foods
         {/if}
@@ -61,7 +55,7 @@
   </div>
 
   <!-- Main card -->
-  <div class="overflow-hidden rounded-xl border border-border bg-card">
+  <div class="overflow-clip rounded-xl border border-border bg-card">
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-3.5">
       <InputGroup.Root data-testid="food-search" class="min-w-[180px] flex-1">
@@ -146,38 +140,33 @@
 
     <!-- Composer -->
     {#if state.composerOpen}
-      <Composer onadd={handleAdd} onclose={() => (state.composerOpen = false)} />
+      <Composer onadd={(food) => state.addFood(food)} onclose={() => (state.composerOpen = false)} />
     {/if}
 
     <!-- Content -->
     {#if state.loading}
       <div class="py-16 text-center text-muted-foreground">Loading food database...</div>
     {:else if state.foods.length === 0}
-      <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted-foreground">
-        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-carbs/12 text-entry-carbs">
-          <Apple class="h-7 w-7" />
-        </div>
-        <div class="text-lg font-semibold text-foreground">Build your food database</div>
-        <div class="max-w-[380px] text-sm leading-relaxed">
-          Add the foods you eat regularly with their carb counts. Once they're here,
-          logging a meal takes a couple of taps anywhere in Nocturne.
-        </div>
-        <div class="mt-1.5 flex gap-2">
+      <EmptyState
+        art="apple"
+        variant="dashed"
+        title="Build your food database"
+        body="Add the foods you eat regularly with their carb counts. When they are in this list, you can log a meal from anywhere in Nocturne in a few steps."
+      >
+        {#snippet action()}
           <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add your first food</Button>
           <Button variant="outline" size="sm"><Upload class="h-3.5 w-3.5" /> Import CSV</Button>
-        </div>
-        <div class="mt-4 text-xs text-muted-foreground/60">
-          Or browse the Nocturne food bank →
-        </div>
-      </div>
+        {/snippet}
+        {#snippet footnote()}
+          <p class="mt-3 text-muted-foreground/60">Or browse the Nocturne food bank →</p>
+        {/snippet}
+      </EmptyState>
     {:else if state.filteredFoods.length === 0}
-      <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.05] text-muted-foreground">
-          <Search class="h-6 w-6" />
-        </div>
-        <div class="text-base font-semibold text-foreground">No matches for "{state.query}"</div>
-        <Button variant="outline" size="sm" onclick={() => state.clearFilters()}>Clear filters</Button>
-      </div>
+      <EmptyState art="magnifying-glass" title={`No matches for "${state.query}"`}>
+        {#snippet action()}
+          <Button variant="outline" size="sm" onclick={() => state.clearFilters()}>Clear filters</Button>
+        {/snippet}
+      </EmptyState>
     {:else}
       <FoodList />
     {/if}

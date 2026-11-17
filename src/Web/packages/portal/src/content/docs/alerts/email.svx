@@ -4,7 +4,7 @@ title: Email Alerts (Resend)
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Email Alerts
@@ -52,7 +52,7 @@ per day, which is more than enough for most alert configurations.
 ### Option A: Admin UI
 
 1. Sign in to your Nocturne instance as an admin
-2. Go to **Settings > Admin > Integrations**
+2. Go to **Platform > Administration > Integrations**
 3. Find the **Resend (Email)** card and fill in:
 
 | Field | Value |

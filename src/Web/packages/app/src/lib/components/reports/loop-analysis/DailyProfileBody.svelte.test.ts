@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 import DailyProfileBody from "./DailyProfileBody.svelte";
 import { profileResponse } from "./daily-profile.test-fixtures";
 
@@ -13,6 +13,19 @@ async function hoverSlot(panel: string, steps: number) {
   for (let i = 0; i < steps; i++) await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
   return page.getByRole("tooltip");
 }
+
+
+async function iobTickValues(): Promise<number[]> {
+  const panel = () => document.querySelector('[data-testid="loop-analysis-panel-iob"]');
+  await expect.poll(() => panel()?.querySelectorAll("svg text").length ?? 0).toBeGreaterThan(0);
+  return Array.from(panel()!.querySelectorAll("svg text"), (t) => t.textContent?.trim() ?? "")
+    .filter((label) => label !== "")
+    .map(Number)
+    .filter(Number.isFinite);
+}
+
+// Net basal IOB goes below zero while basal is withheld, so the bands can too.
+const negativeIob = { p10: -1.5, p25: -1, p50: -0.5, p75: 0, p90: 0.5, mean: -0.5, n: 14, sparse: false };
 
 describe("DailyProfileBody", () => {
   it("lays every series out on the shared time-of-day axis with the summary strip", async () => {
@@ -234,19 +247,6 @@ describe("DailyProfileBody", () => {
     expect(page.getByRole("slider").elements()).toHaveLength(0);
   });
 
-  it("says why a shared link has no time-of-day view", async () => {
-    render(DailyProfileBody, {
-      props: {
-        response: {
-          primary: { slots: [], days: [] },
-          timeZoneUnavailableReason: TimeZoneUnavailableReason.Share,
-        },
-      },
-    });
-
-    await expect.element(page.getByText(/A shared link does not show the time zone/)).toBeVisible();
-  });
-
   it("says the ranges were clamped to the last 24 hours", async () => {
     render(DailyProfileBody, { props: { response: profileResponse({ historyClamped: true }) } });
 
@@ -268,5 +268,19 @@ describe("DailyProfileBody", () => {
     await expect
       .element(page.getByRole("slider", { name: "Glucose" }))
       .toHaveAccessibleDescription(/Press Enter to list the days for the time\. Press Escape to close the list\./);
+  });
+
+  it("extends the IOB axis below zero to the lowest band", async () => {
+    const response = profileResponse();
+    for (const slot of response.primary!.slots!) slot.iob = { ...negativeIob };
+    render(DailyProfileBody, { props: { response } });
+
+    expect(Math.min(...(await iobTickValues()))).toBeLessThanOrEqual(-1.5);
+  });
+
+  it("starts the IOB axis at zero when no band goes below it", async () => {
+    render(DailyProfileBody, { props: { response: profileResponse() } });
+
+    expect(Math.min(...(await iobTickValues()))).toBe(0);
   });
 });

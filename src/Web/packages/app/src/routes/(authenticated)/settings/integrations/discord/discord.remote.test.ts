@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { errorStatus } from "$lib/forms/submit-error";
-import { DISCORD_LINK_COOKIE, verifyDiscordLinkState } from "$lib/server/bot/oauth-state";
+import { errorStatus } from "#lib/forms/submit-error.js";
+import { DISCORD_LINK_COOKIE, verifyDiscordLinkState } from "#lib/server/bot/oauth-state.js";
 
 let event: Record<string, unknown>;
 
@@ -10,7 +10,7 @@ vi.mock("$app/server", () => ({
 	command: (...args: unknown[]) => args.at(-1),
 }));
 
-vi.mock("$lib/server/bot/platform-credentials", () => ({
+vi.mock("#lib/server/bot/platform-credentials.js", () => ({
 	getDiscordOAuthConfig: async () => ({ applicationId: "000000000000000000", clientSecret: "secret" }),
 }));
 

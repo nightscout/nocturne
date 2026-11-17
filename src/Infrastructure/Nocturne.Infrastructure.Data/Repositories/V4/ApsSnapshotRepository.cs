@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
@@ -53,7 +54,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
         return await ctx.ApsSnapshots.AsNoTracking()
             .Where(e => e.Timestamp >= from && e.Timestamp <= to)
             .OrderBy(e => e.Timestamp)
-            .Select(e => new ApsIobCobPoint(e.Timestamp, e.Iob, e.Cob))
+            .Select(e => new ApsIobCobPoint(e.Timestamp, e.Iob, e.Cob, e.ClosedLoop))
             .ToListAsync(ct);
     }
 
@@ -146,6 +147,47 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
         return [.. rows.OrderBy(r => r.Timestamp).Select(ToLoopCycle)];
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ApsSnapshotMark>> GetMarksAsync(
+        IReadOnlyCollection<string?> devices, DateTime after, DateTime through, int following,
+        IReadOnlyCollection<Guid> excluded, CancellationToken ct = default)
+    {
+        if (devices.Count == 0)
+            return [];
+
+        var skipped = excluded.ToList();
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        IQueryable<ApsSnapshotEntity> Of(string? device)
+        {
+            var snapshots = ctx.ApsSnapshots.AsNoTracking().Where(e => !skipped.Contains(e.Id));
+            return device is null ? snapshots : snapshots.Where(e => e.Device == device);
+        }
+
+        IQueryable<MarkColumns>? query = null;
+        foreach (var device in devices.Distinct())
+        {
+            var marks = Of(device).Where(e => e.Timestamp > after && e.Timestamp <= through).Select(Mark)
+                .Concat(Of(device).Where(e => e.Timestamp > through)
+                    .OrderBy(e => e.Timestamp).ThenBy(e => e.Id).Take(following).Select(Mark));
+            query = query is null ? marks : query.Concat(marks);
+        }
+
+        var rows = await query!.ToListAsync(ct);
+        return [.. rows.DistinctBy(r => r.Id).Select(r => new ApsSnapshotMark(r.Id, r.LegacyId, r.Device, r.Timestamp))];
+    }
+
+    private static readonly System.Linq.Expressions.Expression<Func<ApsSnapshotEntity, MarkColumns>> Mark =
+        e => new MarkColumns { Id = e.Id, LegacyId = e.LegacyId, Device = e.Device, Timestamp = e.Timestamp };
+
+    /// <summary>Set by member initialisation, which EF can translate on both sides of a union.</summary>
+    private sealed class MarkColumns
+    {
+        public Guid Id { get; init; }
+        public string? LegacyId { get; init; }
+        public string? Device { get; init; }
+        public DateTime Timestamp { get; init; }
+    }
+
     internal static ApsLoopCycle ToLoopCycle(LoopCycleColumns r)
     {
         var reason = string.IsNullOrEmpty(r.Reason) ? null : r.Reason;
@@ -155,6 +197,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             Timestamp = r.Timestamp,
             AidAlgorithm = Enum.TryParse<AidAlgorithm>(r.AidAlgorithm, out var algorithm) ? algorithm : AidAlgorithm.Unknown,
             Enacted = r.Enacted,
+            ClosedLoop = r.ClosedLoop,
             EnactedRate = r.EnactedRate,
             Iob = r.Iob,
             SensitivityRatio = r.SensitivityRatio,
@@ -171,6 +214,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
         public DateTime Timestamp { get; init; }
         public string AidAlgorithm { get; init; } = "";
         public bool Enacted { get; init; }
+        public bool? ClosedLoop { get; init; }
         public double? EnactedRate { get; init; }
         public double? Iob { get; init; }
         public double? SensitivityRatio { get; init; }
@@ -189,6 +233,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             Timestamp = e.Timestamp,
             AidAlgorithm = e.AidAlgorithm,
             Enacted = e.Enacted,
+            ClosedLoop = e.ClosedLoop,
             EnactedRate = e.EnactedRate,
             Iob = e.Iob,
             SensitivityRatio = e.SensitivityRatio,
@@ -196,26 +241,75 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             SuggestedChange = e.SuggestedJson == null ? null : EF.Functions.JsonExistAny(e.SuggestedJson, "duration", "units"),
         };
 
-    /// <summary>
-    /// Gets APS snapshots by correlation IDs.
-    /// </summary>
-    /// <param name="correlationIds">The correlation IDs to match.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching APS snapshots.</returns>
-    public async Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Raw SQL, naming the tenant and <c>deleted_at IS NULL</c> as <see cref="GetPredictionsAsync"/>
+    /// does so the partial tenant timestamp index serves it, and written a week of snapshots at a time
+    /// so a version that governs months of history is not one long update. The newest row written wins
+    /// between versions starting at one instant. A tenant that never stored Loop settings, deleted ones
+    /// included, has nothing stamped to clear and returns before reading any snapshot.
+    /// </remarks>
+    public async Task<int> StampLoopClosedLoopAsync(DateTime from, DateTime? to, CancellationToken ct = default)
     {
-        var ids = correlationIds.ToList();
-        if (ids.Count == 0) return [];
-
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.ApsSnapshots
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
+        var tenantId = ctx.TenantId;
+        var loop = nameof(AidAlgorithm.Loop);
+        var everHadLoopSettings = await ctx.Database.SqlQuery<bool>($"""
+            SELECT EXISTS (
+                SELECT 1 FROM therapy_settings t
+                WHERE t.tenant_id = {tenantId}
+                  AND jsonb_typeof(t.loop_settings_json -> 'dosingEnabled') = 'boolean') AS "Value"
+            """).SingleAsync(ct);
+        if (!everHadLoopSettings)
+            return 0;
 
-        return entities.Select(ApsSnapshotMapper.ToDomainModel);
+        var end = to ?? await ctx.Database.SqlQuery<DateTime?>($"""
+            SELECT least(
+                (SELECT min(t.timestamp) FROM therapy_settings t
+                 WHERE t.tenant_id = {tenantId} AND t.deleted_at IS NULL AND t.timestamp > {from}
+                   AND jsonb_typeof(t.loop_settings_json -> 'dosingEnabled') = 'boolean'),
+                (SELECT max(s.timestamp) FROM aps_snapshots s
+                 WHERE s.tenant_id = {tenantId} AND s.deleted_at IS NULL AND s.aps_system = {loop})) AS "Value"
+            """).SingleAsync(ct);
+        if (end is not { } last)
+            return 0;
+
+        var changed = 0;
+        var start = from;
+        do
+        {
+            var stop = last - start > StampBatch ? start + StampBatch : last;
+            changed += await ctx.Database.ExecuteSqlInterpolatedAsync($"""
+                WITH versions AS (
+                    SELECT v.timestamp AS start, lead(v.timestamp) OVER (ORDER BY v.timestamp) AS next, v.closed
+                    FROM (
+                        SELECT DISTINCT ON (t.timestamp) t.timestamp,
+                               (t.loop_settings_json ->> 'dosingEnabled')::boolean AS closed
+                        FROM therapy_settings t
+                        WHERE t.tenant_id = {tenantId} AND t.deleted_at IS NULL
+                          AND jsonb_typeof(t.loop_settings_json -> 'dosingEnabled') = 'boolean'
+                        ORDER BY t.timestamp, t.id DESC) v)
+                UPDATE aps_snapshots s
+                SET closed_loop = stamped.closed
+                FROM (
+                    SELECT x.id, versions.closed
+                    FROM aps_snapshots x
+                    LEFT JOIN versions ON x.timestamp >= versions.start
+                                      AND (versions.next IS NULL OR x.timestamp < versions.next)
+                    WHERE x.tenant_id = {tenantId}
+                      AND x.deleted_at IS NULL
+                      AND x.aps_system = {loop}
+                      AND x.timestamp >= {start} AND x.timestamp <= {stop}) stamped
+                WHERE s.id = stamped.id
+                  AND s.closed_loop IS DISTINCT FROM stamped.closed
+                """, ct);
+            start = stop;
+        } while (start < last);
+
+        return changed;
     }
+
+    private static readonly TimeSpan StampBatch = TimeSpan.FromDays(7);
 
     /// <inheritdoc />
     public async Task<DateTime?> GetLatestTimestampAsOfAsync(DateTime? asOf, CancellationToken ct = default)
@@ -254,6 +348,6 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             .OrderByDescending(e => e.Timestamp)
             .Select(e => e.SensitivityRatio)
             .FirstOrDefaultAsync(ct);
-        return value is double v && double.IsFinite(v) ? (decimal)v : null;
+        return value is double v && double.IsFinite(v) ? v.ToDecimal() : null;
     }
 }

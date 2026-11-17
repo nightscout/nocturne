@@ -6,12 +6,12 @@ import {
   RawMmolReason,
   RawMmolScheduleKind,
   type RawMmolSchedule,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 let schedules: RawMmolSchedule[] = [];
 const dismissed: string[] = [];
 
-vi.mock("$api/generated/profiles.generated.remote", () => ({
+vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
   getRawMmolSchedules: () => ({ current: schedules, loading: false }),
   dismissRawMmolIsf: (id: string) => {
     dismissed.push(id);

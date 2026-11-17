@@ -65,16 +65,26 @@ public class MyTenantsController : ControllerBase
         return null;
     }
 
-    /// <inheritdoc cref="ITenantService.GetTenantsForSubjectAsync"/>
+    /// <summary>
+    /// Returns every tenant the caller belongs to, or with <paramref name="reachableOnly"/> only
+    /// those they can go to.
+    /// </summary>
+    /// <param name="reachableOnly">Leaves out inactive tenants.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    /// <seealso cref="ITenantService.GetTenantsForSubjectAsync"/>
+    /// <seealso cref="ITenantService.GetReachableTenantsForSubjectAsync"/>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TenantDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetMyTenants(CancellationToken ct)
+    public async Task<IActionResult> GetMyTenants(
+        [FromQuery] bool reachableOnly = false, CancellationToken ct = default)
     {
         if (ResolveOwnSubject(new List<TenantDto>(), out _, out var subjectId) is { } answer)
             return answer;
 
-        var tenants = await _tenantService.GetTenantsForSubjectAsync(subjectId, ct);
+        var tenants = reachableOnly
+            ? await _tenantService.GetReachableTenantsForSubjectAsync(subjectId, ct)
+            : await _tenantService.GetTenantsForSubjectAsync(subjectId, ct);
         return Ok(tenants);
     }
 
@@ -129,7 +139,7 @@ public class MyTenantsController : ControllerBase
         return Created($"/api/v4/me/tenants", tenant);
     }
 
-    /// <inheritdoc cref="ITenantService.ValidateSlugAsync"/>
+    /// <inheritdoc cref="ITenantService.ValidateSlugAsync(string, CancellationToken)"/>
     [HttpGet("validate-slug")]
     [AllowAnonymous]
     [AnonymousUntilSetupComplete]

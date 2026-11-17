@@ -24,9 +24,10 @@ namespace Nocturne.API.Helpers;
 /// <c>history/</c> routes.
 /// </para>
 /// <para>
-/// Only the upper bound lives here. Zero and negative counts stay with each route, because
-/// Nightscout's behaviour differs per route: entries, treatments, devicestatus and activity answer
-/// an empty array, while <c>times/</c> and <c>slice/</c> answer 400.
+/// Nightscout 16 reads the count as <c>Number(count) || default</c>, so a count of zero is a count
+/// that was not sent: <see cref="ZeroAsAbsent"/> maps it, and the route serves its default page.
+/// A negative count keeps each route's own answer: entries, treatments, devicestatus and activity
+/// answer an empty array, profiles answer one record, and <c>times/</c> and <c>slice/</c> answer 400.
 /// </para>
 /// <para>
 /// <c>MaxCount</c> shares a value with <c>EntryReadService.MaxFilterFetch</c> and
@@ -60,7 +61,7 @@ public static class LegacyReadLimits
     /// fetches of <c>count</c> records each (state spans, heart rate, step count, sleep) and merges
     /// them in memory, so the objects materialized are a multiple of what is returned; at 1 Hz,
     /// heart-rate data alone reaches 10,000 rows in under three hours.
-    /// <c>DeviceStatusProjectionService</c> runs a windowed anchor query plus four per-table batch
+    /// A device status read runs a windowed anchor query plus four per-table batch
     /// loads and an overlapping-override scan, then emits a composite document carrying the APS,
     /// pump, uploader and extras payloads. Ten thousand still clears the 10,000-record page every
     /// first-party bulk caller uses.
@@ -94,6 +95,11 @@ public static class LegacyReadLimits
     /// </returns>
     public static int ClampMergedPage(int count, int skip) =>
         Math.Min(count, MaxMergedCount - Math.Min(skip, MaxMergedCount));
+
+    /// <summary>
+    /// Treat a v1 <c>count</c> of zero as one that was not sent.
+    /// </summary>
+    public static int? ZeroAsAbsent(int? count) => count == 0 ? null : count;
 
     /// <summary>
     /// Clamp a caller-supplied v1 <c>count</c> to <see cref="MaxCount"/>.

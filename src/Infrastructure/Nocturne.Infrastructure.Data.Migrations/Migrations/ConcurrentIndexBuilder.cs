@@ -21,6 +21,11 @@ namespace Nocturne.Infrastructure.Data.Migrations;
 /// index the planner will never use. Every build therefore drops its own invalid remains first,
 /// conditional on invalidity so a retry does not rebuild what already succeeded.
 /// </para>
+/// <para>
+/// The <c>lock_timeout</c> covers only that drop. The <c>CREATE INDEX CONCURRENTLY</c> waits for
+/// conflicting transactions without a timeout, on purpose: a timeout there would fail the migration
+/// and crash-loop the API, where waiting only delays startup.
+/// </para>
 /// </summary>
 internal static class ConcurrentIndexBuilder
 {

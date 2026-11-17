@@ -24,21 +24,21 @@ public class MyFitnessPalAuthTokenProvider(
     IConnectorServerResolver<MyFitnessPalConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<MyFitnessPalAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<MyFitnessPalConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider? timeProvider = null)
+    : AuthTokenProviderBase<MyFitnessPalConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     public const string RefreshTokenMetadataKey = "RefreshToken";
     public const string UserIdMetadataKey = "UserId";
 
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         MyFitnessPalConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var token = await ExecuteWithRetryAsync(
             async attempt => await RequestTokenAsync(config, attempt, cancellationToken),
-            _retryDelayStrategy,
             config.MaxRetryAttempts,
             "MyFitnessPal authentication",
             cancellationToken
@@ -52,7 +52,7 @@ public class MyFitnessPalAuthTokenProvider(
         var lifetime = token.ExpiresIn > 0
             ? TimeSpan.FromSeconds(token.ExpiresIn)
             : MyFitnessPalConstants.DefaultTokenLifetime;
-        var expiresAt = DateTime.UtcNow.Add(lifetime);
+        var expiresAt = _timeProvider.GetUtcNow().UtcDateTime.Add(lifetime);
 
         var metadata = new Dictionary<string, string>();
         if (!string.IsNullOrEmpty(token.RefreshToken))

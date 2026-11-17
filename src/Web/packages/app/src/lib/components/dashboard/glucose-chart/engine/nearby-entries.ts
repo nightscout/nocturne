@@ -1,5 +1,5 @@
-import type { EntryRecord } from "$lib/constants/entry-categories";
-import { uniqueBy } from "$lib/utils/collections";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
+import { uniqueBy } from "#lib/utils/collections.js";
 import { TREATMENT_PROXIMITY_MS } from "./chart-data-view.svelte";
 
 /** The entries behind the markers within the treatment proximity of `time`, one per entry id. */

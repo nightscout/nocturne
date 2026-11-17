@@ -1,7 +1,7 @@
-import { DayOfWeek, LoopAnalysisComparison } from "$lib/api";
-import type { getDailyProfile } from "$api/generated/loopAnalysis.generated.remote";
-import { isDayString } from "$lib/utils/date-range";
-import { formatLocale } from "$lib/utils/formatting";
+import { DayOfWeek, LoopAnalysisComparison } from "#lib/api/index.js";
+import type { getDailyProfile } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+import { isDayString } from "#lib/utils/date-range.js";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 type DailyProfileQuery = Parameters<typeof getDailyProfile>[0];
 
@@ -71,7 +71,7 @@ export function toWeekdays(values: readonly (string | number)[]): DayOfWeek[] {
   return WEEKDAYS.filter((day) => picked.has(day));
 }
 
-export function readLoopAnalysisFilter(search: URLSearchParams): LoopAnalysisFilterState {
+export function readLoopAnalysisFilter(search: ReadonlyURLSearchParams): LoopAnalysisFilterState {
   const compareFrom = search.get("compareFrom");
   const compareTo = search.get("compareTo");
 
@@ -97,9 +97,9 @@ export function readLoopAnalysisFilter(search: URLSearchParams): LoopAnalysisFil
  */
 export function writeLoopAnalysisFilter(
   filter: LoopAnalysisFilterState,
-  search: URLSearchParams
+  search: ReadonlyURLSearchParams
 ): URLSearchParams {
-  const next = new URLSearchParams(search);
+  const next = new URLSearchParams(search.toString());
   for (const name of FILTER_PARAM_NAMES) next.delete(name);
 
   if (filter.compare !== LoopAnalysisComparison.None) next.set("compare", filter.compare.toLowerCase());
@@ -173,9 +173,4 @@ export function withoutUnavailable(
   const dropProfile = names.has("profileName") && filter.profileName != null;
   if (!changed && !dropProfile) return null;
   return { ...filter, masks, profileName: dropProfile ? null : filter.profileName };
-}
-
-/** A weekday's short name in the viewer's locale. 4 January 2026 is a Sunday, so day d falls on the 4th + d. */
-export function weekdayLabel(day: DayOfWeek): string {
-  return new Date(2026, 0, 4 + day).toLocaleDateString(formatLocale(), { weekday: "short" });
 }

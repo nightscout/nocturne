@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Dexcom.Configurations;
     ServiceNames.DexcomConnector,
     "DEXCOM",
     "ConnectSource.Dexcom",
-    "dexcom-connector",
+    DataSources.DexcomConnector,
     "dexcom",
     ConnectorCategory.Cgm,
     "Connect to Dexcom Share or Clarity",
@@ -21,7 +21,8 @@ namespace Nocturne.Connectors.Dexcom.Configurations;
     MaxHistoricalDays = 90,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
-    SensorReadingIntervalSeconds = 300
+    SensorReadingIntervalSeconds = 300,
+    DocumentationUrl = UrlConstants.External.DocsDexcom
 )]
 public class DexcomConnectorConfiguration : BaseConnectorConfiguration
 {

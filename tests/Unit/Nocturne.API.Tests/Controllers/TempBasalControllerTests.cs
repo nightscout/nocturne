@@ -236,6 +236,21 @@ public class TempBasalControllerTests
         VerifyFetched(V4ReadLimits.MaxPageSize, 0);
     }
 
+    [Fact]
+    public async Task GetAll_FullPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repo.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TempBasal()]);
+
+        var result = await _controller.GetAll(null, null, 1, 0);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TempBasal>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private void VerifyFetched(int limit, int offset) =>
         _repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
 }

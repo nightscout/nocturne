@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import FileText from "@lucide/svelte/icons/file-text";
 
   interface Props {
@@ -30,7 +30,7 @@
 </div>
 
 <div class="space-y-2">
-  <Label for="eventType">Event Type</Label>
+  <Label for="eventType">Event type</Label>
   <Input
     id="eventType"
     bind:value={form.eventType}

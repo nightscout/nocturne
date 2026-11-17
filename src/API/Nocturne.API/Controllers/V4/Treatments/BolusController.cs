@@ -33,7 +33,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/insulin/boluses")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class BolusController(
     IBolusRepository repo,
     IPatientInsulinRepository insulinRepo,
@@ -59,8 +59,9 @@ public class BolusController(
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null, [FromQuery] string? source = null,
+        [FromQuery] bool includeTotal = false,
         CancellationToken ct = default)
-        => base.GetAll(from, to, limit, offset, sort, device, source, ct);
+        => base.GetAll(from, to, limit, offset, sort, device, source, includeTotal, ct);
 
     /// <inheritdoc/>
     /// <remarks>

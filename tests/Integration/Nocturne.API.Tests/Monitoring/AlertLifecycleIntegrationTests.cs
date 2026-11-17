@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/alerts</c> covering active alerts, acknowledgement,
 /// snooze, history, and delivery workflows.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
 {
@@ -361,7 +362,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
             await db.SaveChangesAsync();
         }
 
-        using var bot = await CreateHistoryClampedClientAsync();
+        using var bot = await CreateHistoryClampedClientAsync("Clamped Bot", _tenantId);
         (await bot.PostAsJsonAsync($"/api/v4/alerts/deliveries/{delivered}/delivered", new { platformMessageId = "msg-1" }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await bot.PostAsJsonAsync($"/api/v4/alerts/deliveries/{failed}/failed", new { error = "rate limited" }))
@@ -379,26 +380,5 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
         rows[failed].RetryCount.Should().Be(1);
         rows[ofAnAlertResolvedTwoDaysAgo].Status.Should().Be("pending",
             "a delivery of an alert resolved before the window is outside what a clamped caller reads");
-    }
-
-    private async Task<HttpClient> CreateHistoryClampedClientAsync()
-    {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
-            conn, _tenantId, "Clamped Bot");
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantId.ToString());
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
     }
 }

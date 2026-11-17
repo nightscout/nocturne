@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>
@@ -238,7 +240,18 @@ public static class Scope
         {
             GlucoseRead, TreatmentsRead, DevicesRead,
             HeartRateRead, StepCountRead, FoodRead, ReportsRead,
+            AlertsRead,
         };
+
+    /// <summary>
+    /// Whether a share link carries <paramref name="scope"/> given the Public membership's direct
+    /// permissions. <see cref="AlertsRead"/> counts only when granted directly, by the sharing toggle:
+    /// a Public membership that reaches it through a role or a broad grant (<c>*</c>, a legacy
+    /// read-everything permission) was set up before alerts could be shared, and must not start
+    /// showing them without its owner choosing to.
+    /// </summary>
+    public static bool SharesWithPublic(string scope, IEnumerable<string>? directPermissions) =>
+        scope != AlertsRead || directPermissions?.Contains(AlertsRead, StringComparer.Ordinal) == true;
 
     /// <summary>
     /// Scopes granted to the Public subject when a share link is first enabled. Defaults to glucose
@@ -453,6 +466,25 @@ public static class Scope
         permissions.Any(IsReadScope)
         && permissions.All(p => IsReadScope(p) || MemberPersonalScopes.Contains(p));
 
+    /// <summary>
+    /// What a consent screen must disclose about deleting data if <paramref name="scopes"/> are
+    /// granted. A readwrite scope deletes as well as writes (see the class remarks), so read-only
+    /// is the only tier that cannot delete. <see cref="SharingReadWrite"/> counts although no
+    /// endpoint reads it yet: a consent screen that understates what a grant may do is the failure
+    /// to avoid.
+    /// </summary>
+    /// <param name="scopes">The requested scopes, aliases included.</param>
+    public static ScopeDeletionAccess DeletionAccess(IEnumerable<string> scopes)
+    {
+        var normalized = Normalize(scopes);
+
+        if (normalized.Contains(FullAccess)) return ScopeDeletionAccess.Full;
+
+        return normalized.Any(s => ReadWriteImpliesRead.ContainsKey(s) || s == SharingReadWrite)
+            ? ScopeDeletionAccess.ReadWrite
+            : ScopeDeletionAccess.None;
+    }
+
     /// <summary>Whether a scope string is one an OAuth client may request.</summary>
     public static bool IsValid(string scope)
     {
@@ -518,6 +550,19 @@ public static class Scope
         return normalized.Contains(FullAccess)
             ? [FullAccess]
             : [.. normalized.Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// The scopes a listing shows for a grant: what the grant authorizes, not what is stored on it.
+    /// A stored row may still hold an alias or an atom it cannot exercise.
+    /// </summary>
+    /// <param name="scopes">The grant's stored scopes.</param>
+    /// <param name="grantType">The grant's type, from <see cref="OAuthGrantTypes"/>.</param>
+    public static List<string> ForDisplay(IEnumerable<string> scopes, string grantType)
+    {
+        return grantType == OAuthGrantTypes.Guest
+            ? [.. NormalizeGuest(scopes).Order(StringComparer.Ordinal)]
+            : NormalizeForStorage(scopes);
     }
 
     private static IReadOnlySet<string> Normalize(
@@ -680,6 +725,18 @@ public static class Scope
     /// <param name="approverScopes">The approving caller's resolved scopes.</param>
     public static HashSet<string> CapAt(IEnumerable<string> requested, IReadOnlySet<string> approverScopes) =>
         requested.Where(scope => Satisfies(approverScopes, scope)).ToHashSet(StringComparer.Ordinal);
+}
+
+/// <summary>The deletion a scope set allows, from <see cref="Scope.DeletionAccess"/>.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ScopeDeletionAccess>))]
+public enum ScopeDeletionAccess
+{
+    /// <summary>Read-only or device capability scopes: nothing can be deleted.</summary>
+    None,
+    /// <summary>Readwrite scopes: records in the categories they cover can be changed and deleted.</summary>
+    ReadWrite,
+    /// <summary>Full access (<c>*</c>): every category, including bulk deletes.</summary>
+    Full,
 }
 
 /// <summary>

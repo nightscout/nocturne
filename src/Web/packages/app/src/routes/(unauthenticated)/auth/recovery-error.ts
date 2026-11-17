@@ -1,4 +1,4 @@
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 /**
  * Why a recovery-code sign-in didn't succeed.

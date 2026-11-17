@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
 
@@ -40,7 +40,7 @@
   </div>
 
   {#if entries.length === 0}
-    <p class="text-sm text-muted-foreground">No entries yet. Click Add to create one.</p>
+    <p class="text-sm text-muted-foreground">No entries yet. Select Add to create one.</p>
   {:else}
     <div class="space-y-2">
       {#each entries as entry, i (entry)}
@@ -48,14 +48,14 @@
           <Input
             type="time"
             bind:value={entry.time}
-            class="w-32"
+            class="w-32 min-w-0 shrink"
           />
           <Input
             type="number"
             bind:value={entry.value}
             {step}
             {min}
-            class="w-28"
+            class="w-28 min-w-0 shrink"
           />
           <span class="text-sm text-muted-foreground whitespace-nowrap">{unit}</span>
           {#if entries.length > 1}

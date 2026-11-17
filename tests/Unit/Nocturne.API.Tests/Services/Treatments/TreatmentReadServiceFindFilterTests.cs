@@ -26,7 +26,6 @@ public class TreatmentReadServiceFindFilterTests
         _service = new TreatmentReadService(
             _projection.Object,
             new Mock<ITreatmentDecomposer>().Object,
-            new Mock<IDecompositionPipeline>().Object,
             new Mock<ITempBasalRepository>().Object,
             new Mock<IBolusRepository>().Object,
             new Mock<ICarbIntakeRepository>().Object,
@@ -43,7 +42,7 @@ public class TreatmentReadServiceFindFilterTests
     {
         _projection
             .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(treatments);
     }
 
@@ -79,8 +78,8 @@ public class TreatmentReadServiceFindFilterTests
         };
         _projection
             .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long? _, long? _, int limit, bool _, bool _, CancellationToken _) =>
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long? _, long? _, int limit, bool _, CancellationToken _) =>
                 all.OrderBy(t => t.Mills).Take(limit).ToList());
 
         var result = await _service.QueryAsync(new TreatmentQuery
@@ -142,7 +141,7 @@ public class TreatmentReadServiceFindFilterTests
 
         result.Should().ContainSingle();
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(from, to, 10, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(from, to, 10, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -162,7 +161,7 @@ public class TreatmentReadServiceFindFilterTests
 
         result.Should().ContainSingle().Which.Id.Should().Be("1");
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(from, null, It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(from, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -181,10 +180,10 @@ public class TreatmentReadServiceFindFilterTests
             .ToList();
 
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 100, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 100, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(firstPage);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 400, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 400, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(secondPage);
 
         var result = await _service.QueryAsync(new TreatmentQuery
@@ -195,7 +194,7 @@ public class TreatmentReadServiceFindFilterTests
 
         result.Select(t => t.Id).Should().Equal("match-1", "match-2");
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(null, null, 400, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(null, null, 400, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

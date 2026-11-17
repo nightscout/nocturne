@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -18,6 +19,7 @@ namespace Nocturne.API.Tests.Integration;
 /// their schedule-derived rates following later schedule and activation writes. Every test names its
 /// own profile store, so no profile version a test before it cached answers for it.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
 {
@@ -162,8 +164,9 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
     {
         var store = StoreName();
         await PostAsync("/api/v1/profile", FlatProfile(store, 1.0, DaysAgo(20)));
-        var careportalAt = At(DaysAgo(15));
-        var aapsAt = At(DaysAgo(15).AddMinutes(1));
+        var start = DaysAgo(15);
+        var careportalAt = At(start);
+        var aapsAt = At(start.AddMinutes(1));
         await PostAsync("/api/v1/treatments", CareportalTemp(careportalAt, -50));
         await PostAsync("/api/v1/treatments", AapsTemp(aapsAt, -30, 0.7));
         (await StoredAtAsync(careportalAt)).Rate.Should().BeApproximately(0.5, 1e-9);
@@ -187,8 +190,8 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
         var switchAt = DaysAgo(9);
         var createdAt = At(switchAt.AddMinutes(1));
 
-        Task Import(Treatment treatment) => WithTenantScopeAsync(sp => sp.GetRequiredService<ITreatmentDecomposer>()
-            .DecomposeBatchAsync([treatment], WriteOrigin.Backfill, CancellationToken.None));
+        Task Import(Treatment treatment) => WithTenantScopeAsync(sp => sp.GetRequiredService<ITreatmentService>()
+            .ImportTreatmentsAsync([treatment], CancellationToken.None));
 
         await Import(new Treatment
         {
@@ -219,8 +222,8 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
         var temporaryAt = permanentAt.AddHours(1);
         var createdAt = At(temporaryAt.AddMinutes(90));
 
-        Task Import(Treatment treatment) => WithTenantScopeAsync(sp => sp.GetRequiredService<ITreatmentDecomposer>()
-            .DecomposeBatchAsync([treatment], WriteOrigin.Backfill, CancellationToken.None));
+        Task Import(Treatment treatment) => WithTenantScopeAsync(sp => sp.GetRequiredService<ITreatmentService>()
+            .ImportTreatmentsAsync([treatment], CancellationToken.None));
 
         await Import(new Treatment
         {
@@ -251,8 +254,9 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
     public async Task ARateWriteRacingAnEdit_LeavesTheEditStanding()
     {
         await PostAsync("/api/v1/profile", FlatProfile(StoreName(), 1.0, DaysAgo(3)));
-        var resolvedAt = At(DaysAgo(1));
-        var uploadedAt = At(DaysAgo(1).AddMinutes(1));
+        var start = DaysAgo(1);
+        var resolvedAt = At(start);
+        var uploadedAt = At(start.AddMinutes(1));
         await PostAsync("/api/v1/treatments", CareportalTemp(resolvedAt, -50));
         await PostAsync("/api/v1/treatments", AapsTemp(uploadedAt, -30, 0.7));
         var resolved = await StoredAtAsync(resolvedAt);

@@ -1,16 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 
-// chart-colors reaches $lib/api only for the ChartColor type; stub it so this
+// chart-colors reaches #lib/api only for the ChartColor type; stub it so this
 // suite doesn't need the generated API client.
-vi.mock("$lib/api", () => ({}));
+vi.mock("#lib/api/index.js", () => ({}));
 
 import {
   FALLBACK_GLUCOSE_THRESHOLDS,
   FALLBACK_GLUCOSE_Y_MAX,
   resolveChartThresholds,
 } from "./glucose-thresholds";
-import { getGlucoseColor } from "$lib/utils/chart-colors";
-import { transformChartData } from "$lib/utils/chart-data-transform";
+import { getGlucoseColor } from "#lib/utils/chart-colors.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
 
 describe("FALLBACK_GLUCOSE_THRESHOLDS", () => {
   it("matches the boundaries the time-in-range reports use", () => {

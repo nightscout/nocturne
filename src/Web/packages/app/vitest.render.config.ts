@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { wuchale } from "wuchale/vite";
 
 /**
@@ -13,24 +13,32 @@ import { wuchale } from "wuchale/vite";
  * render, so they see it.
  */
 export default defineConfig({
-  plugins: [svelte(), wuchale()],
+  plugins: [
+    svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } }),
+    wuchale(),
+  ],
   test: {
     // Its own suffix: `*.ssr.test.ts` already belongs to tests that run under
     // the node config without the production translation transform.
     include: ["src/**/*.render.test.ts"],
     environment: "node",
+    // As in the app's SSR build (vite.config.ts `ssr.noExternal`): layerchart's and @layerstack's
+    // dist import `svelte` without declaring it, which Node cannot resolve from pnpm's store, so
+    // they go through Vite. Matched against the resolved path.
+    server: { deps: { inline: [/\/layerchart\//, /\/@layerstack\//] } },
     alias: [
       {
-        // Before the $lib prefix, so it wins for this one module: the real
-        // barrel re-exports formatting, which reaches the generated client.
-        find: /^\$lib\/utils$/,
+        // The real barrel re-exports formatting, which reaches the generated client.
+        find: /^#lib\/utils\/index\.js$/,
         replacement: fileURLToPath(new URL("./src/lib/test-stubs/utils-cn.ts", import.meta.url)),
       },
-      { find: /^\$api\//, replacement: fileURLToPath(new URL("./src/lib/api/", import.meta.url)) },
-      { find: /^\$lib\//, replacement: fileURLToPath(new URL("./src/lib/", import.meta.url)) },
-      { find: "$lib", replacement: fileURLToPath(new URL("./src/lib", import.meta.url)) },
+      // Before `$app/env`, which would otherwise match them as a prefix.
       {
-        find: "$app/environment",
+        find: /^\$app\/env\/(private|public)$/,
+        replacement: fileURLToPath(new URL("./src/lib/test-stubs/app-env-vars.ts", import.meta.url)),
+      },
+      {
+        find: "$app/env",
         replacement: fileURLToPath(
           new URL("./src/lib/test-stubs/app-environment-node.ts", import.meta.url)
         ),
@@ -40,6 +48,14 @@ export default defineConfig({
         replacement: fileURLToPath(
           new URL("./src/lib/test-stubs/app-navigation.ts", import.meta.url)
         ),
+      },
+      {
+        find: "$app/paths",
+        replacement: fileURLToPath(new URL("./src/lib/test-stubs/app-paths.ts", import.meta.url)),
+      },
+      {
+        find: "$app/server",
+        replacement: fileURLToPath(new URL("./src/lib/test-stubs/app-server.ts", import.meta.url)),
       },
       {
         find: "$app/state",

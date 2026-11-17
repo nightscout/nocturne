@@ -17,6 +17,12 @@ public interface ISecretEncryptionService
     string Decrypt(string ciphertext);
 
     /// <summary>
+    /// Whether <paramref name="ciphertext"/> decrypts under the current instance key. Empty
+    /// ciphertext decrypts. False when encryption is not configured.
+    /// </summary>
+    bool CanDecrypt(string? ciphertext);
+
+    /// <summary>
     /// Encrypts a dictionary of secrets (property name → value).
     /// </summary>
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>

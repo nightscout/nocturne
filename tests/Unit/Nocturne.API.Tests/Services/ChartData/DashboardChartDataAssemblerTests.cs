@@ -21,6 +21,7 @@ public class DashboardChartDataAssemblerTests
             BasalSeries = new List<BasalPoint> { new() { Timestamp = 1700000000000L, Rate = 0.8, ScheduledRate = 0.9, Origin = BasalDeliveryOrigin.Algorithm, FillColor = ChartColor.GlucoseInRange, StrokeColor = ChartColor.GlucoseHigh } },
             DefaultBasalRate = 0.75,
             MaxBasalRate = 2.5,
+            MinIob = -0.4,
             MaxIob = 5.0,
             MaxCob = 60.0,
 
@@ -29,7 +30,7 @@ public class DashboardChartDataAssemblerTests
             Thresholds = new ChartThresholdsDto { Low = 70, High = 180, VeryLow = 54, VeryHigh = 250, GlucoseYMax = 0 },
 
             BolusMarkers = new List<BolusMarkerDto> { new() { Time = 1700000000000L, Insulin = 2.0, TreatmentId = "t1", BolusType = BolusType.MealBolus, IsOverride = false, DataSource = "loop" } },
-            CarbMarkers = new List<CarbMarkerDto> { new() { Time = 1700000000000L, Carbs = 45.0, Label = "Lunch", TreatmentId = "t2", IsOffset = false, DataSource = "loop" } },
+            CarbMarkers = new List<CarbMarkerDto> { new() { Time = 1700000000000L, Carbs = 45.0, MealPeriod = MealPeriod.Lunch, TreatmentId = "t2", IsOffset = false, DataSource = "loop" } },
             DeviceEventMarkers = new List<DeviceEventMarkerDto> { new() { Time = 1700000000000L, EventType = DeviceEventType.SiteChange, Notes = "left arm", TreatmentId = "t3", Color = ChartColor.GlucoseVeryLow } },
             BgCheckMarkers = new List<BgCheckMarkerDto> { new() { Time = 1700000000000L, Glucose = 115.0, GlucoseType = "Finger", TreatmentId = "t4" } },
 
@@ -70,6 +71,7 @@ public class DashboardChartDataAssemblerTests
         // Assert — scalar fields
         result.DefaultBasalRate.Should().Be(context.DefaultBasalRate);
         result.MaxBasalRate.Should().Be(context.MaxBasalRate);
+        result.MinIob.Should().Be(context.MinIob);
         result.MaxIob.Should().Be(context.MaxIob);
         result.MaxCob.Should().Be(context.MaxCob);
 

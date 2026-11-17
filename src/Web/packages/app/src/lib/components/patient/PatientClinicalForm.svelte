@@ -1,18 +1,21 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { Input } from "$lib/components/ui/input";
-  import * as Select from "$lib/components/ui/select";
-  import { FormField } from "$lib/forms";
-  import { DiabetesType } from "$api";
+  import Scale from "@lucide/svelte/icons/scale";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { FormField } from "#lib/forms/index.js";
+  import { DiabetesType } from "#lib/api/index.js";
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
   import TimezoneCombobox from "./TimezoneCombobox.svelte";
-
+    
   interface Props {
     onstate?: (state: ClinicalState) => void;
+    /** Runs once the record, and the weight if it changed, have saved. */
+    onsaved?: () => void | Promise<void>;
   }
 
-  let { onstate }: Props = $props();
+  let { onstate, onsaved }: Props = $props();
 
   let formEl = $state<HTMLFormElement | null>(null);
   const clinical = new ClinicalState(() => formEl);
@@ -27,40 +30,35 @@
   class="@container"
   bind:this={formEl}
   {...clinical.guard.enhance(async () => {
-    await clinical.weight.save();
+    const saved = await clinical.weight.save();
+    if (saved) await onsaved?.();
+    return saved;
   })}
 >
   <!-- Hidden fields for read-only record data -->
   {#if clinical.record?.id}
-    <input type="hidden" name="id" value={clinical.record.id} />
+    <input {...clinical.form.fields.id.as("hidden", clinical.record.id)} />
   {/if}
   {#if clinical.record?.avatarUrl}
-    <input type="hidden" name="avatarUrl" value={clinical.record.avatarUrl} />
+    <input {...clinical.form.fields.avatarUrl.as("hidden", clinical.record.avatarUrl)} />
   {/if}
   {#if clinical.record?.createdAt}
-    <input type="hidden" name="createdAt" value={clinical.record.createdAt} />
+    <input {...clinical.form.fields.createdAt.as("hidden", clinical.record.createdAt)} />
   {/if}
   {#if clinical.record?.modifiedAt}
-    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt} />
+    <input {...clinical.form.fields.modifiedAt.as("hidden", clinical.record.modifiedAt)} />
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
-    <!-- aria-required, not required: bits-ui puts `required` on a 1px hidden
-         input that still takes part in constraint validation, so an empty
-         select blocks the submit event with a bubble anchored off-screen — the
-         Save button would appear to do nothing. The requirement is enforced by
-         the guard's schema, which reports it on the field. -->
     <FormField
-      label="Diabetes Type"
+      label="Diabetes type"
       id="diabetes-type"
-      required
-      issues={clinical.guard.issuesFor("diabetesType")}
+      {...clinical.guard.field("diabetesType")}
     >
       {#snippet control(field)}
-        <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
+        <Select.Root type="single" name={clinical.form.fields.diabetesType.as("select").name} bind:value={clinical.diabetesType}>
           <Select.Trigger
             id={field.id}
-            aria-required="true"
             aria-invalid={field["aria-invalid"]}
             aria-describedby={field["aria-describedby"]}
           >
@@ -69,6 +67,7 @@
               : "Select type"}
           </Select.Trigger>
           <Select.Content>
+            <Select.Item value="" label="Not set" />
             {#each Object.entries(diabetesTypeLabels) as [value, label] (value)}
               <Select.Item {value} {label} />
             {/each}
@@ -78,11 +77,11 @@
     </FormField>
 
     {#if clinical.diabetesType === DiabetesType.Other}
-      <FormField label="Specify Type" id="diabetes-type-other">
+      <FormField label="Specify type" id="diabetes-type-other">
         {#snippet control(field)}
           <Input
             {...field}
-            name="diabetesTypeOther"
+            name={clinical.form.fields.diabetesTypeOther.as("text").name}
             bind:value={clinical.diabetesTypeOther}
             placeholder="e.g. Type 3c"
           />
@@ -90,11 +89,11 @@
       </FormField>
     {/if}
 
-    <FormField label="Diagnosis Date" id="diagnosis-date">
+    <FormField label="Diagnosis date" id="diagnosis-date">
       {#snippet control(field)}
         <Input
           {...field}
-          name="diagnosisDate"
+          name={clinical.form.fields.diagnosisDate.as("date").name}
           type="date"
           autocomplete="off"
           bind:value={clinical.diagnosisDate}
@@ -102,11 +101,11 @@
       {/snippet}
     </FormField>
 
-    <FormField label="Date of Birth" id="date-of-birth">
+    <FormField label="Date of birth" id="date-of-birth">
       {#snippet control(field)}
         <Input
           {...field}
-          name="dateOfBirth"
+          name={clinical.form.fields.dateOfBirth.as("date").name}
           type="date"
           autocomplete="bday"
           bind:value={clinical.dateOfBirth}
@@ -120,7 +119,7 @@
       description="Biological sex, used with your age to show sex-specific typical ranges in sleep reports. Separate from pronouns."
     >
       {#snippet control(field)}
-        <Select.Root type="single" name="sex" bind:value={clinical.sex}>
+        <Select.Root type="single" name={clinical.form.fields.sex.as("select").name} bind:value={clinical.sex}>
           <Select.Trigger {...field}>
             {clinical.sex
               ? (labelFor(biologicalSexLabels, clinical.sex) ?? clinical.sex)
@@ -136,14 +135,14 @@
       {/snippet}
     </FormField>
 
-    <FormField label="Preferred Name" id="preferred-name">
+    <FormField label="Preferred name" id="preferred-name">
       {#snippet control(field)}
         <Input
           {...field}
-          name="preferredName"
+          name={clinical.form.fields.preferredName.as("text").name}
           autocomplete="nickname"
           bind:value={clinical.preferredName}
-          placeholder="How you'd like to be addressed"
+          placeholder="How you want to be addressed"
         />
       {/snippet}
     </FormField>
@@ -152,7 +151,7 @@
       {#snippet control(field)}
         <Input
           {...field}
-          name="pronouns"
+          name={clinical.form.fields.pronouns.as("text").name}
           bind:value={clinical.pronouns}
           placeholder="e.g. she/her, he/him, they/them"
         />
@@ -163,10 +162,10 @@
       label="Timezone"
       id="timezone"
       class="@sm:col-span-2"
-      issues={clinical.guard.issuesFor("timezone")}
+      {...clinical.guard.field("timezone")}
     >
       {#snippet control(field)}
-        <input type="hidden" name="timezone" value={clinical.timezone} />
+        <input {...clinical.form.fields.timezone.as("hidden", clinical.timezone)} />
         <TimezoneCombobox
           id={field.id}
           aria-invalid={field["aria-invalid"]}
@@ -178,11 +177,11 @@
       {#snippet hint()}
         {#if clinical.timezoneAutoDetected}
           <p class="text-xs text-muted-foreground">
-            Auto-detected from your browser. Save to confirm — alerts with time-of-day rules use this to interpret window hours in your local time, starting from when you save.
+            Detected automatically from your browser. Save to confirm. Alerts with time-of-day rules use this time zone to read window hours in your local time, starting from when you save.
           </p>
         {:else}
           <p class="text-xs text-muted-foreground">
-            Used by alerts, schedules, and analytics. Changing it takes effect from when you save — past data isn't reinterpreted.
+            Used by alerts, schedules, and analytics. A change takes effect when you save. Past data is not reinterpreted.
           </p>
         {/if}
       {/snippet}
@@ -191,18 +190,21 @@
     <FormField
       label="Weight (kg)"
       id="weight"
-      description="Recorded to your weight history when you save — only if it's changed."
+      description="Recorded to your weight history when you save, but only if it changed."
       issues={clinical.weight.saveError}
     >
       {#snippet control(field)}
-        <Input
-          {...field}
-          type="number"
-          step="0.1"
-          min="0"
-          bind:value={clinical.weight.weightKg}
-          placeholder="e.g. 70"
-        />
+        <div class="flex items-center gap-2">
+          <Scale class="size-6 shrink-0 text-muted-foreground" />
+          <Input
+            {...field}
+            type="number"
+            step="0.1"
+            min="0"
+            bind:value={clinical.weight.weightKg}
+            placeholder="e.g. 70"
+          />
+        </div>
       {/snippet}
     </FormField>
   </div>

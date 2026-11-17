@@ -2,12 +2,12 @@
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
   import BasalRateTrack from "./BasalRateTrack.svelte";
-  import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import PredictionVisualizations from "$lib/components/dashboard/PredictionVisualizations.svelte";
-  import { partialEngine, setGlucoseChartContext } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
-  import { computeTrackLayout } from "$lib/components/dashboard/glucose-chart/engine/track-layout";
-  import type { GlucoseChartContext } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
-  import type { PredictionData } from "$api/predictions.remote";
+  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
+  import PredictionVisualizations from "#lib/components/dashboard/PredictionVisualizations.svelte";
+  import { partialEngine, setGlucoseChartContext } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
+  import { computeTrackLayout } from "#lib/components/dashboard/glucose-chart/engine/track-layout.js";
+  import type { GlucoseChartContext } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
 
   interface Props {
     track: "basalRate" | "iobCob" | "predictions";

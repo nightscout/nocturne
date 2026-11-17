@@ -8,6 +8,11 @@
 /** Display unit preference. */
 export type GlucoseUnits = "mg/dl" | "mmol";
 
+/** Whether a value the API sends as a plain string is one of the display units. */
+export function isGlucoseUnits(value: unknown): value is GlucoseUnits {
+  return value === "mg/dl" || value === "mmol";
+}
+
 /**
  * Milligrams per decilitre in one millimole per litre of glucose. Must equal
  * `GlucoseConstants.MgdlPerMmol`; `GlucoseMirrorTests` fails if it does not.
@@ -238,4 +243,24 @@ export const glucoseStatusTileVariant: Record<GlucoseStatusName, GlucoseTileVari
 export function glucoseTileVariant(status: string | null | undefined): GlucoseTileVariant {
   const known: Partial<Record<string, GlucoseTileVariant>> = glucoseStatusTileVariant;
   return (status && Object.hasOwn(known, status) && known[status]) || "neutral";
+}
+
+/** What a current-reading tile shows: its flat fill, and whether a host's artwork covers it. */
+export interface GlucoseTileFill {
+  fill: GlucoseTileVariant;
+  painted: boolean;
+}
+
+/**
+ * A stale reading shows the neutral fill and a disconnected one keeps its range fill; artwork
+ * is painted only over the range fill of a current, connected reading.
+ */
+export function glucoseTileFill(
+  variant: GlucoseTileVariant,
+  { stale, disconnected }: { stale: boolean; disconnected: boolean },
+): GlucoseTileFill {
+  return {
+    fill: stale ? "neutral" : variant,
+    painted: !stale && !disconnected && variant !== "neutral",
+  };
 }

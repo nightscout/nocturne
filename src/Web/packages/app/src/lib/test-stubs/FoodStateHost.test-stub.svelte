@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { setFoodState } from "$routes/(authenticated)/food/food-context.js";
-  import type { FoodState } from "$routes/(authenticated)/food/food-state.svelte.js";
+  import { setFoodState } from "#routes/(authenticated)/food/food-context.js";
+  import type { FoodState } from "#routes/(authenticated)/food/food-state.svelte.js";
 
   interface Props {
     Form: Component<never>;

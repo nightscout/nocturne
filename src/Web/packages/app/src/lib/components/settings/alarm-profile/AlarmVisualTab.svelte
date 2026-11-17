@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Eye from "@lucide/svelte/icons/eye";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,
-  } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
   import {
     getBrowserCapabilities,
     type BrowserAlarmCapabilities,
-  } from "$lib/audio/alarm-sounds";
+  } from "#lib/audio/alarm-sounds.js";
   import AlarmPreview from "../AlarmPreview.svelte";
   import CapabilityBadge from "./CapabilityBadge.svelte";
 
@@ -37,7 +37,7 @@
   <!-- Preview Section -->
   <div class="p-4 rounded-lg border bg-muted/30">
     <div class="flex items-center justify-between mb-3">
-      <Label>Test Alarm</Label>
+      <Label>Test alarm</Label>
       <span class="text-xs text-muted-foreground">
         Preview sound and visual effects
       </span>
@@ -52,7 +52,7 @@
     <div class="flex items-center gap-3">
       <Eye class="h-5 w-5 text-muted-foreground" />
       <div>
-        <Label>Screen Flash</Label>
+        <Label>Screen flash</Label>
         <p class="text-sm text-muted-foreground">
           Flash the screen to get attention
         </p>
@@ -64,7 +64,7 @@
   {#if profile.visual.screenFlash}
     <div class="grid gap-4 @sm:grid-cols-2 p-4 bg-muted/50 rounded-lg">
       <div class="space-y-2">
-        <Label>Flash Color</Label>
+        <Label>Flash color</Label>
         <div class="flex items-center gap-2">
           <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
           <input
@@ -80,7 +80,7 @@
         </div>
       </div>
       <div class="space-y-2">
-        <Label>Flash Interval</Label>
+        <Label>Flash interval</Label>
         <div class="flex items-center gap-2">
           <Input
             type="number"
@@ -100,7 +100,7 @@
   <div class="flex items-center justify-between">
     <div>
       <div class="flex items-center gap-2">
-        <Label>Persistent Banner</Label>
+        <Label>Persistent banner</Label>
         <CapabilityBadge {capabilities} feature="notifications" />
       </div>
       <p class="text-sm text-muted-foreground">
@@ -113,11 +113,11 @@
   <div class="flex items-center justify-between">
     <div>
       <div class="flex items-center gap-2">
-        <Label>Wake Screen</Label>
+        <Label>Wake screen</Label>
         <CapabilityBadge {capabilities} feature="wakeLock" />
       </div>
       <p class="text-sm text-muted-foreground">
-        Turn on the screen when alarm triggers
+        Wake the screen when alarm triggers
       </p>
     </div>
     <Switch bind:checked={profile.visual.wakeScreen} />
@@ -127,7 +127,7 @@
 
   <div class="flex items-center justify-between">
     <div>
-      <Label>Show Emergency Contacts</Label>
+      <Label>Show emergency contacts</Label>
       <p class="text-sm text-muted-foreground">
         Display "In Case of Emergency, Contact:" info during alarm
       </p>
@@ -137,7 +137,7 @@
 
   {#if profile.visual.showEmergencyContacts}
     <div class="space-y-2 animate-in slide-in-from-top-2 duration-200">
-      <Label>Specific Instructions</Label>
+      <Label>Specific instructions</Label>
       <Textarea
         bind:value={profile.visual.emergencyInstructions}
         placeholder="e.g. Spare key is under the mat..."

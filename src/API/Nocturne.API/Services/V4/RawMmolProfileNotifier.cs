@@ -17,8 +17,8 @@ namespace Nocturne.API.Services.V4;
 /// <remarks>
 /// The detector runs on every start, so a notification of <see cref="NotificationType"/> the owner was
 /// ever sent for the tenant, read or archived, stops another. That holds only while archived rows
-/// stay: <see cref="NotificationCleanupService"/> purges them after 30 days and has no type filter, so
-/// once it reaches a tenant an owner who archived this notification is told again on the next start.
+/// stay: <see cref="NotificationCleanupJob"/> purges them after 30 days and has no type filter, so
+/// an owner who archived this notification is told again on the first start after that.
 /// </remarks>
 public sealed class RawMmolProfileNotifier(
     IServiceProvider services,

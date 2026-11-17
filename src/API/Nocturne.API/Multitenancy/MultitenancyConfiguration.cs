@@ -19,11 +19,18 @@ public class BaseDomainOptions
     /// Public origin of the deployment apex: "https://{BaseDomain}", or null when
     /// no base domain is configured. The platform serves HTTPS at the edge
     /// (WebAuthn already requires it), so the scheme is not configurable.
-    /// Used for OIDC redirect URIs, invite links, Pushover callbacks, and other
+    /// Used for OIDC redirect URIs, invite links, and other
     /// externally visible URLs.
     /// </summary>
     public string? PublicOrigin =>
         string.IsNullOrEmpty(BaseDomain) ? null : $"https://{BaseDomain}";
+
+    /// <summary>
+    /// Public origin of tenant <paramref name="slug"/>: "https://{slug}.{BaseDomain}", or null when
+    /// no base domain is configured.
+    /// </summary>
+    public string? TenantOrigin(string slug) =>
+        string.IsNullOrEmpty(BaseDomain) ? null : $"https://{slug}.{BaseDomain}";
 
     /// <summary>
     /// Splits <see cref="BaseDomain"/> into host and optional port. Returns a null host when the

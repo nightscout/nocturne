@@ -101,7 +101,9 @@ public class ShareDataCategoriesTests
         // reviewer will see it: a governed table must decide its clamp column (or opt out
         // with an explicit null) — it cannot be forgotten.
         var governed = ShareDataCategories.GovernedTables.Values.SelectMany(t => t);
-        governed.Should().OnlyContain(t => ShareDataCategories.RecencyColumns.ContainsKey(t));
+        governed.Should().OnlyContain(t =>
+            ShareDataCategories.RecencyColumns.ContainsKey(t)
+            ^ ShareDataCategories.GovernedSpanEndColumns.ContainsKey(t));
     }
 
     [Fact]
@@ -149,8 +151,6 @@ public class ShareDataCategoriesTests
 
     [Theory]
     [InlineData("sleep_sessions", "end_time")]
-    [InlineData("alert_excursions", "ended_at")]
-    [InlineData("alert_instances", "resolved_at")]
     [InlineData("tracker_instances", "completed_at")]
     [InlineData("in_app_notifications", "archived_at")]
     public void HiddenSpans_AreClampedForMembersByOverlap(string table, string end)
@@ -158,6 +158,28 @@ public class ShareDataCategoriesTests
         ShareDataCategories.GoverningScopeFor(table).Should().BeNull();
         ShareDataCategories.RecencyColumnFor(table).Should().BeNull();
         ShareDataCategories.SpanEndColumnFor(table).Should().Be(end);
+    }
+
+    /// <summary>
+    /// A share holding alerts.read sees an alert that is open however long ago it started, and a
+    /// clamped member still does: both are clamped by overlap.
+    /// </summary>
+    [Theory]
+    [InlineData("alert_excursions", "ended_at")]
+    [InlineData("alert_instances", "resolved_at")]
+    public void AlertSpans_AreSharedUnderAlertsReadAndClampedByOverlap(string table, string end)
+    {
+        ShareDataCategories.GoverningScopeFor(table).Should().Be(Scope.AlertsRead);
+        ShareDataCategories.RecencyColumnFor(table).Should().BeNull();
+        ShareDataCategories.SpanEndColumnFor(table).Should().Be(end);
+    }
+
+    [Fact]
+    public void AlertRules_AreSharedUnderAlertsReadUnclamped()
+    {
+        ShareDataCategories.GoverningScopeFor("alert_rules").Should().Be(Scope.AlertsRead);
+        ShareDataCategories.RecencyColumnFor("alert_rules").Should().BeNull();
+        ShareDataCategories.SpanEndColumnFor("alert_rules").Should().BeNull();
     }
 
     [Fact]

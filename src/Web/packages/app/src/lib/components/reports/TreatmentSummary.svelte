@@ -2,9 +2,9 @@
   import Syringe from "@lucide/svelte/icons/syringe";
   import Apple from "@lucide/svelte/icons/apple";
   import Utensils from "@lucide/svelte/icons/utensils";
-  import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "$lib/utils/formatting";
+  import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "#lib/utils/formatting.js";
   import type { DayToDayDailyData } from "./types";
-  import type { TreatmentSummary } from "$lib/api";
+  import type { TreatmentSummary } from "#lib/api/index.js";
 
   interface Props {
     dailyDataPoints: DayToDayDailyData[];
@@ -32,7 +32,7 @@
 
 <div class="@container bg-white shadow-lg rounded-lg p-4 @lg:p-6 mb-6">
   <h2 class="text-xl font-semibold text-foreground mb-4">
-    Overall Treatment Summary
+    Overall treatment summary
   </h2>
   <div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
     {#each dailyDataPoints as day (day.date)}

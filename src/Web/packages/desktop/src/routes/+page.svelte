@@ -9,9 +9,9 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Monitor from "@lucide/svelte/icons/monitor";
   import Settings from "@lucide/svelte/icons/settings";
-  import GlucoseReadout from "$lib/GlucoseReadout.svelte";
-  import type { Reading } from "$lib/glucose-types";
-  import { preferences } from "$lib/preferences.svelte";
+  import GlucoseReadout from "#lib/GlucoseReadout.svelte";
+  import type { Reading } from "#lib/glucose-types.js";
+  import { preferences } from "#lib/preferences.svelte.js";
 
   let reading = $state<Reading | null>(null);
   let linked = $state(false);

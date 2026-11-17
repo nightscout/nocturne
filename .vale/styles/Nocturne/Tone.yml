@@ -1,0 +1,20 @@
+# UI copy states what happened and what to do next. It does not perform a mood.
+# An apology or an exclamation adds no fact, and at 3 a.m. during a low it reads
+# as noise. Error copy: what happened, the cause if known, then the fix.
+extends: existence
+message: "'%s' adds tone, not a fact. State what happened and what to do."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+tokens:
+  - oops
+  - whoops
+  - uh-oh
+  - yay
+  - hooray
+  - awesome
+  - 'all set'
+  - 'you''re all set'
+  - sorry
+  - unfortunately
+  - 'something went wrong'

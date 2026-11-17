@@ -1,6 +1,6 @@
 # Java SDK template overrides
 
-Both files are the stock templates from openapi-generator **v7.21.0**
+These files are the stock templates from openapi-generator **v7.21.0**
 (`modules/openapi-generator/src/main/resources/Java/libraries/okhttp-gson/`)
 with minimal, documented changes. Together with `../.openapi-generator-ignore`
 they replace all post-generation shell edits — the generated project under
@@ -79,6 +79,22 @@ missing dependencies break the gradle build, and a restored Oltu dependency
 fails `compileOkhttp3Floor`. A missed removal of `jakarta.ws.rs-api` or
 `commons-lang3` fails nothing; the publish overlay guard only affects
 publishing config.
+
+## `libraries/okhttp-gson/pojo.mustache` and `additional_properties.mustache`
+
+`disallowAdditionalPropertiesIfNotPresent: false` makes every model keep unknown response fields
+in a holder instead of throwing. Stock names the holder `additionalProperties`, but some models
+declare a real property of that name, so the templates name the holder `unknownProperties`
+(`getUnknownProperties()`, `putUnknownProperty(...)`) and leave the real property's accessors alone.
+
+1. `additional_properties.mustache` renames the holder and declares it `transient`, so Gson does not
+   bind it as a field.
+2. `pojo.mustache` uses the renamed holder in `equals`, `hashCode`, `toString` and both type adapter
+   halves. It drops `obj.remove("additionalProperties")` from the write adapter: the holder is
+   already excluded, and the line would delete the real property from the request body.
+
+`../../verify-tolerant-java-models.sh` fails the build when a model throws on an unknown field, an
+enum throws on an unknown value, or a template change drops the holder or the enum fallback.
 
 ## Refreshing after a generator upgrade
 

@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -18,6 +20,10 @@ public class ActogramReportServiceTests
     // +14 days
     private const long EndMills = StartMills + 14L * 24 * 60 * 60 * 1000;
 
+    // 22:30:00Z on 14 Nov, one hour long
+    private const long SummaryStart = StartMills + 1_000_000L;
+    private const long SummaryEnd = SummaryStart + 3_600_000L;
+
     private readonly Mock<ISensorGlucoseRepository> _glucose = new();
     private readonly Mock<ISleepService> _sleep = new();
     private readonly Mock<IStepCountService> _steps = new();
@@ -35,7 +41,7 @@ public class ActogramReportServiceTests
             _heartRates.Object,
             _therapy.Object,
             _targetRange.Object,
-            new TenantClockResolver(_therapy.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
+            new TenantClockResolver(_therapy.Object, _readContext, new ShareClockDouble(_therapy.Object), NullLogger<TenantClockResolver>.Instance),
             NullLogger<ActogramReportService>.Instance
         );
 
@@ -121,7 +127,7 @@ public class ActogramReportServiceTests
 
         _glucose
             .Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { glucoseRow });
         _sleep
             .Setup(s => s.GetSessionsAsync(
@@ -225,7 +231,7 @@ public class ActogramReportServiceTests
     [InlineData(null, TimeZoneUnavailableReason.NotConfigured)]
     [InlineData("", TimeZoneUnavailableReason.NotConfigured)]
     [InlineData("Not/AZone", TimeZoneUnavailableReason.Unrecognised)]
-    public async Task GetAsync_WithoutAUsableTimezone_BinsNoDayAndSaysWhy(
+    public async Task GetAsync_WithoutAUsableTimezone_ServesUtcDaysAndSaysWhy(
         string? stored,
         TimeZoneUnavailableReason expected)
     {
@@ -236,7 +242,10 @@ public class ActogramReportServiceTests
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
-        result.StepDayTotals.Should().BeEmpty();
+        result.Days.Select(d => d.Date).Should().StartWith("2023-11-14").And.HaveCount(15);
+        result.Days[0].EndMills.Should().Be(result.Days[1].StartMills);
+        result.Days[1].StartMills.Should().Be(1700006400000L);
+        result.StepDayTotals["2023-11-14"].Should().Be(800);
         result.TimeZoneUnavailableReason.Should().Be(expected);
         result.StepCounts.Should().HaveCount(2);
     }
@@ -255,18 +264,107 @@ public class ActogramReportServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_ForAShare_BinsNoDayAndSaysShare_EvenWhenAZoneIsCached()
+    public async Task GetAsync_ForAShare_ServesTheTenantsLocalDays()
     {
         SetupEmpty();
         SetupSteps((StartMills + 30 * 60_000, 300));
         _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        SetupZone("Australia/Brisbane");
+        SetupZone("Europe/Stockholm");
         _readContext.MarkShare();
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
-        result.StepDayTotals.Should().BeEmpty();
-        result.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.Share);
+        result.Days[0].Date.Should().Be("2023-11-14");
+        result.Days[0].StartMills.Should().Be(1699916400000L);
+        result.TimeZoneUnavailableReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ServesEachTenantLocalDayWithItsStartAndEndInstants()
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("Europe/Stockholm");
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.Days.Should().HaveCount(15);
+        result.Days[0].Date.Should().Be("2023-11-14");
+        result.Days[0].StartMills.Should().Be(1699916400000L);
+        result.Days[0].EndMills.Should().Be(1700002800000L);
+        result.Days[1].StartMills.Should().Be(result.Days[0].EndMills);
+        result.Days.Select(d => d.Date).Should().Equal(result.StepDayTotals.Keys);
+    }
+
+    [Theory]
+    [InlineData("2023-03-12", 23)]
+    [InlineData("2023-03-13", 24)]
+    [InlineData("2023-11-05", 25)]
+    public async Task GetAsync_ServesADayAcrossADstChangeAtItsRealLength(string date, int hours)
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("America/New_York");
+        var from = new DateTimeOffset(2023, 3, 10, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var to = new DateTimeOffset(2023, 11, 7, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var march = await CreateService().GetAsync(from, from + 5L * 24 * 3_600_000);
+        var november = await CreateService().GetAsync(to - 5L * 24 * 3_600_000, to);
+
+        var day = march.Days.Concat(november.Days).First(d => d.Date == date);
+        (day.EndMills - day.StartMills).Should().Be(hours * 3_600_000L);
+    }
+
+    [Theory]
+    [InlineData("2023-03-11")]
+    [InlineData("2023-03-12")]
+    [InlineData("2023-03-13")]
+    [InlineData("2023-11-04")]
+    [InlineData("2023-11-05")]
+    public async Task GetAsync_ServesHourMarksAtTheRealLocalHoursOfTheDayAndTheNext(string date)
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("America/New_York");
+        var from = new DateTimeOffset(2023, 3, 10, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var to = new DateTimeOffset(2023, 11, 7, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var march = await CreateService().GetAsync(from, from + 5L * 24 * 3_600_000);
+        var november = await CreateService().GetAsync(to - 5L * 24 * 3_600_000, to);
+
+        var day = march.Days.Concat(november.Days).First(d => d.Date == date);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        var local = day.HourMarks
+            .Select(m => TimeZoneInfo.ConvertTimeFromUtc(DateTimeOffset.FromUnixTimeMilliseconds(m).UtcDateTime, zone))
+            .ToList();
+        var first = DateTime.Parse(date, CultureInfo.InvariantCulture);
+        local.Should().Equal(
+            first.AddHours(6), first.AddHours(12), first.AddHours(18),
+            first.AddDays(1).AddHours(6), first.AddDays(1).AddHours(12), first.AddDays(1).AddHours(18));
+        day.HourMarks.Should().BeInAscendingOrder();
+        day.HourMarks[0].Should().BeGreaterThan(day.StartMills);
+        day.HourMarks[2].Should().BeLessThan(day.EndMills);
+        day.HourMarks[3].Should().BeGreaterThan(day.EndMills);
+    }
+
+    [Fact]
+    public async Task GetAsync_StepDayTotalsEqualTheStepsInsideEachServedDay()
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("Pacific/Chatham");
+        var from = new DateTimeOffset(2023, 11, 14, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var samples = Enumerable.Range(0, 96).Select(i => (from + i * 3_600_000L, 10 + i)).ToArray();
+        SetupSteps(samples);
+
+        var result = await CreateService().GetAsync(from, from + 96 * 3_600_000L);
+
+        foreach (var day in result.Days)
+        {
+            var inside = samples.Where(s => s.Item1 >= day.StartMills && s.Item1 < day.EndMills).Sum(s => s.Item2);
+            result.StepDayTotals[day.Date].Should().Be(inside);
+        }
+        result.StepDayTotals.Values.Sum().Should().Be(samples.Sum(s => s.Item2));
     }
 
     [Fact]
@@ -307,6 +405,197 @@ public class ActogramReportServiceTests
         await act.Should().NotThrowAsync();
     }
 
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_CoversOnlyTheSummaryRange_HalfOpen()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates(
+            (SummaryStart - 1, 30),
+            (SummaryStart, 80),
+            (SummaryStart + 60_000, 60),
+            (SummaryStart + 120_000, 100),
+            (SummaryStart + 180_000, 70),
+            (SummaryStart + 240_000, 90),
+            (SummaryStart + 300_000, 65),
+            (SummaryStart + 360_000, 75),
+            (SummaryStart + 420_000, 85),
+            (SummaryStart + 480_000, 95),
+            (SummaryStart + 540_000, 55),
+            (SummaryEnd, 200),
+            (SummaryEnd + 60_000, 200));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.HeartRateSummary.Should().NotBeNull();
+        var summary = result.HeartRateSummary!;
+        summary.ReadingCount.Should().Be(10);
+        summary.MinBpm.Should().Be(55);
+        summary.MaxBpm.Should().Be(100);
+        summary.AverageBpm.Should().Be(78, "the mean is 77.5, which rounds away from zero");
+        summary.RestingBpm.Should().Be(60, "index 10 / 10 = 1 of the ascending readings");
+        result.HeartRates.Should().HaveCount(13, "the series itself is not clipped to the summary range");
+    }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_RestingBpmIsTheAscendingReadingAtCountOverTen()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates(Enumerable.Range(0, 25)
+            .Select(i => (SummaryStart + i * 60_000L, 125 - i * 2))
+            .ToArray());
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        // Ascending readings are 77, 79, 81, ...; floor(25 / 10) = 2.
+        result.HeartRateSummary!.RestingBpm.Should().Be(81);
+        result.HeartRateSummary.MinBpm.Should().Be(77);
+    }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_IsNullWhenNoReadingFallsInTheSummaryRange()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates((SummaryStart - 1, 64), (SummaryEnd, 70));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.HeartRateSummary.Should().BeNull();
+        result.HeartRates.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_IsNullWithNoReadings()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.HeartRateSummary.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_CoversOnlyTheSummaryRange()
+    {
+        SetupEmpty();
+        SetupZone("Europe/Stockholm");
+        SetupSteps(
+            (SummaryStart - 1, 777),
+            (SummaryStart, 300),
+            (SummaryStart + 1_800_000, 500),
+            (SummaryEnd, 999));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.StepSummary!.TotalSteps.Should().Be(800);
+        result.StepSummary.DayCount.Should().Be(1);
+        result.StepSummary.DailyAverage.Should().Be(800);
+    }
+
+    [Theory]
+    [InlineData("Pacific/Auckland")]
+    [InlineData("Europe/Stockholm")]
+    [InlineData(null)]
+    public async Task GetAsync_StepSummary_CountsTheRangesWholeDaysWhateverItsMidnights(string? zone)
+    {
+        // A 14-day pick aligned to Auckland midnights touches 15 UTC or Stockholm days.
+        var aucklandMidnight = DateTimeOffset.Parse("2023-11-15T00:00:00+13:00").ToUnixTimeMilliseconds();
+        SetupEmpty();
+        SetupZone(zone);
+        SetupSteps((aucklandMidnight, 1400));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(
+            aucklandMidnight - 86_400_000, aucklandMidnight + 15 * 86_400_000L,
+            aucklandMidnight, aucklandMidnight + 14 * 86_400_000L);
+
+        result.StepSummary!.DayCount.Should().Be(14);
+        result.StepSummary.DailyAverage.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_DailyAverageRoundsAwayFromZero()
+    {
+        SetupEmpty();
+        SetupZone("Europe/Stockholm");
+        SetupSteps((SummaryStart, 500), (SummaryStart + 1_800_000, 501));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(
+            StartMills, EndMills, SummaryStart, SummaryStart + 2 * 86_400_000L);
+
+        result.StepSummary!.TotalSteps.Should().Be(1001);
+        result.StepSummary.DayCount.Should().Be(2);
+        result.StepSummary.DailyAverage.Should().Be(501, "500.5 rounds up");
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_CountsAtLeastOneDay()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupSteps((SummaryStart, 120));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryStart + 1);
+
+        result.StepSummary!.DayCount.Should().Be(1);
+        result.StepSummary.DailyAverage.Should().Be(120);
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_ExcludesPossibleRunningTotals()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupSteps(
+            (SummaryStart, 300, 0),
+            (SummaryStart + 60_000, 9_000, StepCount.PossibleRunningTotalFlag));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.StepSummary!.TotalSteps.Should().Be(300);
+    }
+
+    [Fact]
+    public async Task GetAsync_SummaryRangeOmitted_SummarisesTheWholeWindow()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates((StartMills, 60), (StartMills + 3_600_000, 80), (EndMills - 1, 100));
+        SetupSteps((StartMills, 100), (EndMills - 1, 200));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.HeartRateSummary!.ReadingCount.Should().Be(3);
+        result.HeartRateSummary.AverageBpm.Should().Be(80);
+        result.StepSummary!.TotalSteps.Should().Be(300);
+        result.StepSummary.DayCount.Should().Be(14);
+        result.StepSummary.DailyAverage.Should().Be(21);
+    }
+
+    private void SetupHeartRates(params (long Mills, int Bpm)[] samples) =>
+        _heartRates
+            .Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(samples
+                .Select(s => new HeartRate
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime,
+                    Bpm = s.Bpm,
+                })
+                .ToArray());
+
     private void SetupZone(string? id) =>
         _therapy
             .Setup(t => t.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
@@ -332,7 +621,7 @@ public class ActogramReportServiceTests
     {
         _glucose
             .Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
         _sleep
             .Setup(s => s.GetSessionsAsync(

@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { error } from "@sveltejs/kit";
-import type { TenantRoleDto } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({ approve: vi.fn() }));
 
@@ -12,6 +12,16 @@ const viewer: TenantRoleDto = {
   name: "Viewer",
   slug: "viewer",
   permissions: ["glucose.read"],
+  canGrant: true,
+};
+
+/** `GET /roles` as an Administrator reads it: Owner is listed but not grantable. */
+const owner: TenantRoleDto = {
+  id: "11111111-1111-1111-1111-111111111111",
+  name: "Owner",
+  slug: "owner",
+  permissions: ["*"],
+  canGrant: false,
 };
 
 const requests = [
@@ -19,13 +29,13 @@ const requests = [
   { subjectId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", name: "Jo" },
 ];
 
-vi.mock("$lib/api/generated/accessRequests.generated.remote", () => ({
+vi.mock("#lib/api/generated/accessRequests.generated.remote.js", () => ({
   getPendingRequests: () => remoteQuery(() => requests),
   approve: mocks.approve,
   deny: () => Promise.resolve(),
 }));
-vi.mock("$lib/api/generated/roles.generated.remote", () => ({
-  getRoles: () => remoteQuery(() => [viewer]),
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
+  getRoles: () => remoteQuery(() => [owner, viewer]),
 }));
 
 import AccessRequestsPage from "./+page.svelte";
@@ -40,6 +50,13 @@ describe("access requests approval", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.approve.mockResolvedValue(undefined);
+  });
+
+  it("offers only the roles the approver can grant", async () => {
+    render(AccessRequestsPage);
+
+    await expect.element(page.getByRole("checkbox", { name: "Viewer" }).first()).toBeVisible();
+    expect(page.getByRole("checkbox", { name: "Owner" }).elements()).toHaveLength(0);
   });
 
   it("approves with the chosen role and reports success", async () => {

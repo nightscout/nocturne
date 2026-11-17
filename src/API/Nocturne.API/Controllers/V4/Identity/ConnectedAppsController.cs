@@ -76,7 +76,7 @@ public class ConnectedAppsController : ControllerBase
                 ClientUri = g.ClientUri,
                 LogoUri = g.LogoUri,
                 Identity = g.ClientIdentity,
-                Scopes = g.Scopes,
+                Scopes = Scope.ForDisplay(g.Scopes, g.GrantType),
                 Label = g.Label,
                 CreatedAt = g.CreatedAt,
                 LastUsedAt = g.LastUsedAt,
@@ -95,7 +95,7 @@ public class ConnectedAppsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="IOAuthGrantService.RevokeGrantAsync"/>
     [HttpDelete("{grantId}")]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Revoke(Guid grantId, CancellationToken ct)

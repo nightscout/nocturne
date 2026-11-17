@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { command, form, getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import { remoteQuery } from "./remote-resource";
@@ -12,10 +12,36 @@ import { remoteQuery } from "./remote-resource";
  * What is pinned here is shape: that a query call is a resource and not the
  * implementation, that the `(schema, fn)` overloads reach `fn`, that a command
  * call is a promise carrying `updates()`, and that a form's fields answer
- * `undefined` rather than `[]` when they have no issues. Reactivity,
- * per-argument caching, schema validation and form submission are deliberately
- * absent from the stub, so nothing below asserts them.
+ * `undefined` rather than `[]` when they have no issues. Of a form's
+ * submission, what is pinned is what kit does with the input: how it reads the
+ * controls, the `id` a keyed instance adds, and the schema's issues. Reactivity
+ * beyond that and per-argument caching are deliberately absent from the stub, so
+ * nothing below asserts them.
  */
+/** Submits a form built from `controls`, named as `as()` would name them, and answers what `submit()` resolved. */
+function submitted(
+  instance: { enhance: (callback: (helpers: { submit: () => Promise<boolean> }) => Promise<void>) => object },
+  controls: Record<string, string>
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const element = document.createElement("form");
+    Object.assign(
+      element,
+      instance.enhance(async ({ submit }) => {
+        submit().then(resolve, reject);
+      })
+    );
+    for (const [name, value] of Object.entries(controls)) {
+      const input = document.createElement("input");
+      Object.assign(input, { type: "hidden", name, value });
+      element.append(input);
+    }
+    document.body.append(element);
+    element.requestSubmit();
+    element.remove();
+  });
+}
+
 describe("$app/server stub", () => {
   it("hands back a resource rather than the implementation", async () => {
     const getValue = query(async () => 42);
@@ -160,6 +186,45 @@ describe("$app/server stub", () => {
     expect(submit.fields.username.issues()).toBeUndefined();
   });
 
+  it("submits an enhanced form with the input kit builds from its controls", async () => {
+    const handler = vi.fn(async (data: unknown) => ({ saved: data }));
+    const submit = form(
+      z.object({ name: z.string(), count: z.number(), tags: z.array(z.string()) }),
+      handler
+    );
+
+    const outcome = await submitted(submit, { name: "G7", "n:count": "2", "tags[0]": "a" });
+
+    expect(outcome).toBe(true);
+    expect(handler).toHaveBeenCalledWith({ name: "G7", count: 2, tags: ["a"] });
+    expect(submit.result).toEqual({ saved: { name: "G7", count: 2, tags: ["a"] } });
+  });
+
+  it("posts a keyed instance's key as id, which a strict schema refuses", async () => {
+    const handler = vi.fn();
+    const submit = form(z.strictObject({ name: z.string() }), handler).for("create");
+
+    const outcome = await submitted(submit, { name: "G7" });
+
+    expect(outcome).toBe(false);
+    expect(handler).not.toHaveBeenCalled();
+    expect(submit.result).toBeUndefined();
+    expect(submit.fields.allIssues()?.map((issue) => issue.message)).toEqual([
+      expect.stringContaining('"id"'),
+    ]);
+  });
+
+  it("rejects submit() when the handler throws", async () => {
+    const submit = form(z.object({ name: z.string() }), async () => {
+      throw { status: 400, body: { message: "Refused" } };
+    });
+
+    await expect(submitted(submit, { name: "G7" })).rejects.toEqual({
+      status: 400,
+      body: { message: "Refused" },
+    });
+  });
+
   it("refuses getRequestEvent rather than answering with a half-built event", () => {
     expect(() => getRequestEvent()).toThrow();
   });
@@ -176,6 +241,20 @@ describe("remoteQuery", () => {
 
     value = 2;
     expect(resource.current).toBe(2);
+  });
+
+  it("keeps re-reading its source through any number of refreshes", async () => {
+    let value = 1;
+    const resource = remoteQuery(() => value);
+
+    await resource.refresh();
+    value = 2;
+    expect(resource.current).toBe(2);
+    expect(await resource).toBe(2);
+
+    await resource.refresh();
+    value = 3;
+    expect(resource.current).toBe(3);
   });
 
   it("is awaitable, as a query is in a template", async () => {

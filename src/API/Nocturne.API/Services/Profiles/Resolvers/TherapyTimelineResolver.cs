@@ -120,24 +120,30 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         string profileName, long fromMills, long toMills, CancellationToken ct)
     {
         // Sequential: see INocturneDbContextFactory.
-        List<DateTime> starts =
+        List<long> starts =
         [
-            .. (await _versions.GetVersionsAsync(_therapySettingsRepo, profileName, ct)).Select(v => v.Timestamp),
-            .. (await _versions.GetVersionsAsync(_sensitivityRepo, profileName, ct)).Select(v => v.Timestamp),
-            .. (await _versions.GetVersionsAsync(_carbRatioRepo, profileName, ct)).Select(v => v.Timestamp),
-            .. (await _versions.GetVersionsAsync(_basalRepo, profileName, ct)).Select(v => v.Timestamp),
+            .. CutsOf(await _versions.GetVersionsAsync(_therapySettingsRepo, profileName, ct)),
+            .. CutsOf(await _versions.GetVersionsAsync(_sensitivityRepo, profileName, ct)),
+            .. CutsOf(await _versions.GetVersionsAsync(_carbRatioRepo, profileName, ct)),
+            .. CutsOf(await _versions.GetVersionsAsync(_basalRepo, profileName, ct)),
         ];
 
+        IEnumerable<long> CutsOf<TRecord>(TRecord[] versions) where TRecord : class, IV4Record =>
+            ProfileVersionCache.Slice(versions, fromMills, toMills)
+                .Skip(1)
+                .Select(s => s.StartMills);
+
         return starts
-            .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)).ToUnixTimeMilliseconds())
-            .Where(t => t > fromMills && t < toMills)
             .Distinct()
             .Order()
             .ToList();
     }
 
+    /// <param name="anchorMills">The instant, in Unix milliseconds, the settings are read at.</param>
+    /// <param name="profileName">The stored profile the settings are read from.</param>
     /// <param name="ccp">The percentage and timeshift to apply to the schedules.</param>
     /// <param name="schedules">The activation's own schedules, read in place of the stored profile's.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<TherapySnapshot> ResolveSegmentSnapshotAsync(
         long anchorMills,
         string profileName,
@@ -151,8 +157,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         if (!hasData)
         {
             return new TherapySnapshot(
-                dia: TherapySnapshot.DefaultDia,
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+                dia: await _therapySettings.GetDIAAsync(anchorMills, profileName, ct),
                 carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
                 timezone: null,
                 ccpPercentage: null,
@@ -163,7 +168,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             );
         }
 
-        var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
+        var anchorDt = anchorMills.ToUtcDateTime();
 
         // Sequential: see INocturneDbContextFactory.
         // An activation's own DIA, carb rate and timezone win over the stored profile's, as
@@ -181,7 +186,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         {
             return new TherapySnapshot(
                 dia: dia,
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: carbsHr,
                 timezone: ResolveTimezone(timezoneId),
                 ccpPercentage: ccp?.Percentage,
@@ -198,7 +202,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
 
         return new TherapySnapshot(
             dia: dia,
-            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
             carbsPerHour: carbsHr,
             timezone: ResolveTimezone(timezoneId),
             ccpPercentage: ccp?.Percentage,

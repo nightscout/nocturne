@@ -1,14 +1,17 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { SETUP_TENANT_COOKIE } from "$lib/server/request-host";
-import { isFreshInstallError } from "$lib/server/onboarding-check";
+import { SETUP_TENANT_COOKIE } from "#lib/server/request-host.js";
+import { isFreshInstallError } from "#lib/server/onboarding-check.js";
+import { setupStageFor } from "#lib/server/setup-hub.js";
 
 export const load: PageServerLoad = async ({ locals, cookies, parent }) => {
   const setupTenantSlug = cookies.get(SETUP_TENANT_COOKIE) ?? null;
   const { tenantless } = await parent();
 
   if (locals.isAuthenticated) {
-    return { setupRequired: false, tenantExists: true, setupTenantSlug };
+    const stage = await setupStageFor(locals);
+    if (stage === "not-owner") redirect(302, "/");
+    return { setupRequired: false, tenantExists: true, setupTenantSlug, hub: stage === "hub" };
   }
 
   // Determine if setup is needed:

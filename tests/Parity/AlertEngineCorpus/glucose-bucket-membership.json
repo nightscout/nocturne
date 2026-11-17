@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "glucose-bucket-membership",
-  "description": "set membership over the enricher-computed bucket; null bucket and empty bucket list are false",
+  "description": "set membership over the enricher-computed bucket; a null bucket is false; an empty bucket list cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

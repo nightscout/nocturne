@@ -1,6 +1,8 @@
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -9,21 +11,18 @@ namespace Nocturne.Connectors.Glooko.Services;
 ///     <see cref="GlookoAuthTokenProvider"/>'s cache-bypassing verification path. Nothing is
 ///     persisted and the tenant's live session is untouched.
 /// </summary>
-public class GlookoCredentialVerifier : ConnectorCredentialVerifier<GlookoConnectorConfiguration>
+public class GlookoCredentialVerifier(
+    CredentialVerificationTokenProvider<GlookoAuthTokenProvider> tokenProvider,
+    IConnectorRegistration<GlookoConnectorConfiguration> registration,
+    IConnectorConfigurationService configService)
+    : ConnectorCredentialVerifier<GlookoConnectorConfiguration>(registration, configService)
 {
-    private readonly GlookoAuthTokenProvider _tokenProvider;
-
-    public GlookoCredentialVerifier(GlookoAuthTokenProvider tokenProvider)
-    {
-        _tokenProvider = tokenProvider;
-    }
-
     public override string ConnectorId => "glooko";
 
     protected override async Task<ConnectorCredentialVerificationResult> VerifyConfiguredAsync(
         GlookoConnectorConfiguration config, CancellationToken ct)
     {
-        var authenticated = await _tokenProvider.VerifyCredentialsAsync(config, ct);
+        var authenticated = await tokenProvider.Provider.VerifyCredentialsAsync(config, ct);
 
         return authenticated
             ? ConnectorCredentialVerificationResult.Verified()

@@ -17,16 +17,19 @@ public class GlookoPumpEventMapper
     private readonly string _connectorSource;
     private readonly GlookoTimeMapper _timeMapper;
     private readonly ILogger _logger;
+    private readonly TimeProvider _clock;
 
-    public GlookoPumpEventMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
+    public GlookoPumpEventMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger, TimeProvider clock)
     {
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public List<DeviceEvent> TransformPumpEventsToDeviceEvents(IEnumerable<GlookoPumpEvent>? events)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<DeviceEvent>();
         if (events == null) return results;
 
@@ -50,7 +53,6 @@ public class GlookoPumpEventMapper
                 ? $"glooko_event_{evt.Guid}"
                 : $"glooko_event_raw_{evt.Type}_{evt.PumpTimestamp}";
 
-            var now = DateTime.UtcNow;
             results.Add(new DeviceEvent
             {
                 Id = Guid.CreateVersion7(),

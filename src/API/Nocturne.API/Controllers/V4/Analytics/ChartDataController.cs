@@ -98,7 +98,11 @@ public class ChartDataController : ControllerBase
             cancellationToken
         );
 
-        return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
+        var redacted = ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes());
+        if (!TrackerReadAccess.Allows(HttpContext))
+            redacted.TrackerMarkers = [];
+
+        return Ok(redacted);
     }
 
     /// <summary>
@@ -134,5 +138,36 @@ public class ChartDataController : ControllerBase
         var basalSeries = await _chartDataService.GetBasalSeriesAsync(startTime, endTime, cancellationToken);
 
         return Ok(basalSeries);
+    }
+
+    /// <summary>
+    /// Gets the basal delivery spans overlapping a time window, as the dashboard chart draws them.
+    /// </summary>
+    /// <param name="startTime">Start of the requested window as a Unix timestamp in milliseconds.</param>
+    /// <param name="endTime">End of the requested window as a Unix timestamp in milliseconds.
+    /// Must be greater than <paramref name="startTime"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Spans that overlap the window, unclipped: one that began before it is returned whole.</returns>
+    [HttpGet("basal-delivery-spans")]
+    [RemoteQuery]
+    [RequireScope(Scope.TreatmentsRead)]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
+    [ProducesResponseType(typeof(List<BasalDeliverySpanDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
+    public async Task<ActionResult<List<BasalDeliverySpanDto>>> GetBasalDeliverySpans(
+        [FromQuery] long startTime,
+        [FromQuery] long endTime,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (endTime <= startTime)
+            return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+
+        if (this.RejectDateSpan(startTime, endTime) is { } overlong)
+            return overlong;
+
+        return Ok(await _chartDataService.GetBasalDeliverySpansAsync(startTime, endTime, cancellationToken));
     }
 }

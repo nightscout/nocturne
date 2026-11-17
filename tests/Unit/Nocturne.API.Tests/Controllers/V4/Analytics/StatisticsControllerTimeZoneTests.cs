@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
@@ -27,8 +28,8 @@ public partial class StatisticsControllerTests
         { null, false, TimeZoneUnavailableReason.NotConfigured },
         { "  ", false, TimeZoneUnavailableReason.NotConfigured },
         { "Not/AZone", false, TimeZoneUnavailableReason.Unrecognised },
-        { null, true, TimeZoneUnavailableReason.Share },
-        { "Not/AZone", true, TimeZoneUnavailableReason.Share },
+        { null, true, TimeZoneUnavailableReason.NotConfigured },
+        { "Not/AZone", true, TimeZoneUnavailableReason.Unrecognised },
     };
 
     private StatisticsController ControllerOnClock(string? timezoneId, bool share)
@@ -39,7 +40,7 @@ public partial class StatisticsControllerTests
         var category = new CategoryReadContext();
         if (share)
             category.MarkShare();
-        return CreateController(statisticsService: new StatisticsService(), categoryReadContext: category);
+        return CreateController(statisticsService: new StatisticsService(TimeProvider.System), categoryReadContext: category);
     }
 
     private void SetupInsulinAtSydneyMorning()
@@ -50,9 +51,9 @@ public partial class StatisticsControllerTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<BolusKind?>(),
+                It.IsAny<BolusKind?>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? _, int _, int _, bool _, bool _, BolusKind? kind,
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? _, int _, int _, bool _, BolusKind? kind,
                 DateTime? _, Guid? _, CancellationToken _) =>
                 kind == BolusKind.Manual
                     ? new List<Bolus> { new() { Timestamp = SydneyMondayMorning, Insulin = 4 } }
@@ -74,6 +75,265 @@ public partial class StatisticsControllerTests
                     Origin = TempBasalOrigin.Algorithm,
                 },
             });
+    }
+
+    [Theory]
+    [InlineData("Australia/Sydney", 1)]
+    [InlineData(null, 2)]
+    public async Task AssessDataSufficiency_CountsDaysOnTheTenantZone(string? timezoneId, int expectedDays)
+    {
+        var request = new DataSufficiencyRequest
+        {
+            Days = 1,
+            Entries = new[]
+            {
+                new DateTime(2026, 1, 14, 14, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+            }.Select(t => new SensorGlucose { Timestamp = t, Mgdl = 100 }).ToList(),
+        };
+
+        var result = await ControllerOnClock(timezoneId, share: false).AssessDataSufficiency(request);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<DataSufficiencyAssessment>().Subject
+            .DaysWithData.Should().Be(expectedDays);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnavailableZones))]
+    public async Task AssessDataSufficiency_WithoutAZone_CountsUtcDaysAndSaysWhy(
+        string? timezoneId, bool share, TimeZoneUnavailableReason expected)
+    {
+        var request = new DataSufficiencyRequest
+        {
+            Days = 1,
+            Entries = [new SensorGlucose { Timestamp = SydneyMondayMorning, Mgdl = 100 }],
+        };
+
+        var result = await ControllerOnClock(timezoneId, share).AssessDataSufficiency(request);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<DataSufficiencyAssessment>().Subject;
+        payload.DaysWithData.Should().Be(1);
+        payload.TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task AssessDataSufficiency_OnATenantZone_CarriesNoReason()
+    {
+        var request = new DataSufficiencyRequest
+        {
+            Days = 1,
+            Entries = [new SensorGlucose { Timestamp = SydneyMondayMorning, Mgdl = 100 }],
+        };
+
+        var result = await ControllerOnClock("Australia/Sydney", share: false).AssessDataSufficiency(request);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<DataSufficiencyAssessment>().Subject
+            .TimeZoneUnavailableReason.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(UnavailableZones))]
+    public async Task CalculateGlycemicVariability_WithoutAZone_WithholdsTheAverageDailyRiskRangeAndSaysWhy(
+        string? timezoneId, bool share, TimeZoneUnavailableReason expected)
+    {
+        var request = new GlycemicVariabilityRequest
+        {
+            Values = [100, 140, 90, 180],
+            Entries = new[] { 100, 140, 90, 180 }
+                .Select((mgdl, i) => new SensorGlucose { Timestamp = SydneyMondayMorning.AddMinutes(5 * i), Mgdl = mgdl })
+                .ToList(),
+        };
+
+        var result = await ControllerOnClock(timezoneId, share).CalculateGlycemicVariability(request);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<GlycemicVariability>().Subject;
+        payload.AverageDailyRiskRange.Should().BeNull();
+        payload.TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task CalculateGlycemicVariability_OnATenantZone_ServesTheAverageDailyRiskRange()
+    {
+        var request = new GlycemicVariabilityRequest
+        {
+            Values = [100, 140, 90, 180],
+            Entries = new[] { 100, 140, 90, 180 }
+                .Select((mgdl, i) => new SensorGlucose { Timestamp = SydneyMondayMorning.AddMinutes(5 * i), Mgdl = mgdl })
+                .ToList(),
+        };
+
+        var result = await ControllerOnClock("Australia/Sydney", share: false).CalculateGlycemicVariability(request);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<GlycemicVariability>().Subject;
+        payload.AverageDailyRiskRange.Should().BeGreaterThan(0);
+        payload.TimeZoneUnavailableReason.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(UnavailableZones))]
+    public async Task AnalyzeGlucoseDataExtended_WithoutAZone_SaysWhyOnTheAnalyticsItself(
+        string? timezoneId, bool share, TimeZoneUnavailableReason expected)
+    {
+        var readings = Enumerable.Range(0, 6)
+            .Select(i => new SensorGlucose { Timestamp = SydneyMondayMorning.AddMinutes(5 * i), Mgdl = 100 + i * 10 })
+            .ToList();
+
+        var result = await ControllerOnClock(timezoneId, share)
+            .AnalyzeGlucoseDataExtended(new ExtendedGlucoseAnalyticsRequest { Entries = readings });
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ExtendedGlucoseAnalytics>().Subject;
+        payload.GlycemicVariability!.AverageDailyRiskRange.Should().BeNull();
+        payload.TimeZoneUnavailableReason.Should().Be(expected);
+        payload.GlycemicVariability.TimeZoneUnavailableReason.Should().Be(expected);
+        payload.DataSufficiency.TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnavailableZones))]
+    public async Task AnalyzeGlucoseData_WithoutAZone_SaysWhyOnTheAnalytics(
+        string? timezoneId, bool share, TimeZoneUnavailableReason expected)
+    {
+        var readings = Enumerable.Range(0, 6)
+            .Select(i => new SensorGlucose { Timestamp = SydneyMondayMorning.AddMinutes(5 * i), Mgdl = 100 + i * 10 })
+            .ToList();
+
+        var result = await ControllerOnClock(timezoneId, share)
+            .AnalyzeGlucoseData(new GlucoseAnalyticsRequest { Entries = readings });
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<GlucoseAnalytics>().Subject;
+        payload.GlycemicVariability!.AverageDailyRiskRange.Should().BeNull();
+        payload.TimeZoneUnavailableReason.Should().Be(expected);
+        payload.GlycemicVariability.TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnavailableZones))]
+    public async Task GetMultiPeriodStatistics_WithoutAZone_SaysWhyOnEachPeriodsAnalytics(
+        string? timezoneId, bool share, TimeZoneUnavailableReason expected)
+    {
+        var now = DefaultNow.UtcDateTime;
+        SetupGlucose(Enumerable.Range(1, 12)
+            .Select(i => new SensorGlucose { Timestamp = now.AddMinutes(-5 * i), Mgdl = 100 + i * 5 })
+            .ToList());
+        SetupEmptyTreatments();
+
+        var result = await ControllerOnClock(timezoneId, share).GetMultiPeriodStatistics();
+
+        var data = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<MultiPeriodStatistics>().Subject;
+        PeriodAnalytics(data).Should().OnlyContain(a =>
+            a.TimeZoneUnavailableReason == expected
+            && a.GlycemicVariability!.AverageDailyRiskRange == null
+            && a.GlycemicVariability.TimeZoneUnavailableReason == expected);
+    }
+
+    private static IEnumerable<GlucoseAnalytics> PeriodAnalytics(MultiPeriodStatistics data) =>
+        new[] { data.LastDay, data.Last3Days, data.LastWeek, data.LastMonth, data.Last90Days }
+            .Select(period => period.Analytics!);
+
+    [Theory]
+    [MemberData(nameof(UnavailableZones))]
+    public async Task GetRangeAnalytics_WithoutAZone_WithholdsTheAverageDailyRiskRangeAndSaysWhy(
+        string? timezoneId, bool share, TimeZoneUnavailableReason expected)
+    {
+        SetupGlucose(Enumerable.Range(0, 6)
+            .Select(i => new SensorGlucose { Timestamp = SydneyMondayMorning.AddMinutes(5 * i), Mgdl = 100 + i * 10 })
+            .ToList());
+        SetupEmptyTreatments();
+
+        var result = await ControllerOnClock(timezoneId, share).GetRangeAnalytics(WindowStart, WindowEnd);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ReportAnalysisResult>().Subject;
+        payload.TimeZoneUnavailableReason.Should().Be(expected);
+        payload.Analysis.GlycemicVariability!.AverageDailyRiskRange.Should().BeNull();
+        payload.Analysis.TimeZoneUnavailableReason.Should().Be(expected);
+        payload.Analysis.GlycemicVariability.TimeZoneUnavailableReason.Should().Be(expected);
+        payload.Analysis.DataSufficiency.TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_CountsTotalDaysAndDaysWithDataOnTheSamePatientDays()
+    {
+        SetupGlucose(new[]
+            {
+                new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 4, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 3, 4, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 3, 20, 0, 0, DateTimeKind.Utc),
+            }
+            .Select(at => new SensorGlucose { Timestamp = at, Mgdl = 110 })
+            .ToList());
+        SetupEmptyTreatments();
+
+        var result = await ControllerOnClock("Australia/Sydney", share: false).GetRangeAnalytics(WindowStart, WindowEnd);
+
+        var sufficiency = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ReportAnalysisResult>().Subject.Analysis.DataSufficiency;
+        sufficiency.TotalDays.Should().Be(4);
+        sufficiency.DaysWithData.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_FromTheLongDaylightSavingDay_CountsEachPatientDayTheWindowTouches()
+    {
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var firstDay = new DateOnly(2026, 4, 5);
+        var start = DateTimeOffset.FromUnixTimeMilliseconds(LocalSlotBinning.DayStartMills(firstDay, sydney)).UtcDateTime;
+        var end = DateTimeOffset.FromUnixTimeMilliseconds(
+            LocalSlotBinning.DayStartMills(firstDay.AddDays(3), sydney) + 6 * LocalSlotBinning.HourMs).UtcDateTime;
+        SetupGlucose(Enumerable.Range(0, 4)
+            .Select(i => new SensorGlucose
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(
+                    LocalSlotBinning.DayStartMills(firstDay.AddDays(i), sydney) + 30 * LocalSlotBinning.MinuteMs).UtcDateTime,
+                Mgdl = 110,
+            })
+            .ToList());
+        SetupEmptyTreatments();
+
+        var result = await ControllerOnClock("Australia/Sydney", share: false).GetRangeAnalytics(start, end);
+
+        var sufficiency = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ReportAnalysisResult>().Subject.Analysis.DataSufficiency;
+        sufficiency.TotalDays.Should().Be(4);
+        sufficiency.DaysWithData.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_ARolling24HourWindow_KeepsPerDayFiguresOnItsDuration()
+    {
+        var start = new DateTime(2026, 3, 2, 4, 0, 0, DateTimeKind.Utc);
+        var end = start.AddHours(24);
+        SetupGlucose(Enumerable.Range(0, 144)
+            .Select(i => new SensorGlucose { Timestamp = start.AddMinutes(10 * i), Mgdl = 110 })
+            .ToList());
+        SetupEmptyTreatments();
+        _carbIntakeRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CarbIntake> { new() { Timestamp = start.AddHours(1), Carbs = 60 } });
+
+        var result = await ControllerOnClock("Australia/Sydney", share: false).GetRangeAnalytics(start, end);
+
+        var analysis = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ReportAnalysisResult>().Subject.Analysis;
+        analysis.DataSufficiency.TotalDays.Should().Be(2);
+        analysis.DataSufficiency.DaysWithData.Should().Be(2);
+        analysis.DataSufficiency.ExpectedReadings.Should().Be(288);
+        analysis.DataSufficiency.CompletenessPercentage.Should().Be(50);
+        analysis.TreatmentSummary!.DailyCarbs.Should().Be(60);
     }
 
     [Fact]
@@ -116,7 +376,7 @@ public partial class StatisticsControllerTests
             .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("db down"));
 
-        var result = await CreateController(statisticsService: new StatisticsService())
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
             .GetWeekdayAverages(WindowStart, WindowEnd);
 
         var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject

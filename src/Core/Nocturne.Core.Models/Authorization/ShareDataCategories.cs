@@ -49,6 +49,17 @@ public static class ShareDataCategories
                 "uploader_snapshots",
                 "aps_snapshots",
             },
+            [Scope.AlertsRead] = new[]
+            {
+                // What /alerts/active reads: the open excursion, its instances, and the rule for its
+                // name and severity. Rule channels stay behind DenyNoAccountViewer in the API, and
+                // mutes, deliveries, DND windows and sounds stay hidden.
+                "alert_excursions",
+                "alert_instances",
+                "alert_rules",
+                // A share records and reads back its own "seen"; the API filters it to the caller.
+                "alert_excursion_receipts",
+            },
             [Scope.HeartRateRead] = new[] { "heart_rates" },
             [Scope.StepCountRead] = new[] { "step_counts" },
             [Scope.FoodRead] = new[]
@@ -89,7 +100,22 @@ public static class ShareDataCategories
             ["heart_rates"] = "timestamp",
             ["step_counts"] = "timestamp",
             ["foods"] = null,
+            ["alert_rules"] = null,
+            ["alert_excursion_receipts"] = "seen_at",
             ["connector_food_entries"] = "consumed_at",
+        };
+
+    /// <summary>
+    /// End column per governed table of spans, clamped by overlap like
+    /// <see cref="HiddenSpanEndColumns"/> rather than by a recency column: an alert still open stays in
+    /// front of a share without full history, and of a clamped member, however long ago it started.
+    /// A governed table is in exactly one of this and <see cref="RecencyColumns"/>.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> GovernedSpanEndColumns =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["alert_excursions"] = "ended_at",
+            ["alert_instances"] = "resolved_at",
         };
 
     /// <summary>
@@ -129,8 +155,8 @@ public static class ShareDataCategories
     /// legacy treatment reads serve.
     /// </summary>
     /// <remarks>
-    /// The same rule keeps an open alert (<c>alert_instances</c> unresolved, <c>alert_excursions</c>
-    /// not ended), an active tracker (<c>tracker_instances</c> not completed) and a notification still
+    /// The same rule, with <see cref="GovernedSpanEndColumns"/> for the alert tables, keeps an open
+    /// alert, an active tracker (<c>tracker_instances</c> not completed) and a notification still
     /// in its recipient's inbox (<c>in_app_notifications</c> not archived, within
     /// <see cref="HiddenOpenSpanBounds"/>) in front of a clamped member, and keeps a sleep session that
     /// ended inside the window whole however early it began. A row that never ends and has no bound
@@ -144,8 +170,6 @@ public static class ShareDataCategories
             ["state_spans"] = "end_timestamp",
             ["profile_activations"] = "end_timestamp",
             ["sleep_sessions"] = "end_time",
-            ["alert_excursions"] = "ended_at",
-            ["alert_instances"] = "resolved_at",
             ["tracker_instances"] = "completed_at",
             ["in_app_notifications"] = "archived_at",
         };
@@ -216,7 +240,9 @@ public static class ShareDataCategories
     /// Returns the end column a span table is clamped by overlap on, or <c>null</c> when the table is
     /// not a clamped span table. See <see cref="HiddenSpanEndColumns"/>.
     /// </summary>
-    public static string? SpanEndColumnFor(string table) => HiddenSpanEndColumns.GetValueOrDefault(table);
+    public static string? SpanEndColumnFor(string table) =>
+        GovernedSpanEndColumns.TryGetValue(table, out var column) ? column
+        : HiddenSpanEndColumns.GetValueOrDefault(table);
 
     /// <summary>
     /// Returns the parent a table is clamped through, or <c>null</c> when it is not. See
@@ -267,14 +293,24 @@ public static class ShareDataCategories
                     || HiddenParentRecency.ContainsKey(table))
                 {
                     throw new InvalidOperationException(
-                        $"Governed table '{table}' is also in {nameof(HiddenRecencyColumns)}, {nameof(HiddenSpanEndColumns)} or {nameof(HiddenParentRecency)}; declare it in {nameof(RecencyColumns)} only.");
+                        $"Governed table '{table}' is also in {nameof(HiddenRecencyColumns)}, {nameof(HiddenSpanEndColumns)} or {nameof(HiddenParentRecency)}; declare it in {nameof(RecencyColumns)} or {nameof(GovernedSpanEndColumns)} only.");
                 }
-                if (!RecencyColumns.ContainsKey(table))
+                if (RecencyColumns.ContainsKey(table) == GovernedSpanEndColumns.ContainsKey(table))
                 {
                     throw new InvalidOperationException(
-                        $"Governed table '{table}' has no entry in {nameof(RecencyColumns)}. " +
-                        "Declare its recency column, or an explicit null to exempt it from the share 24-hour clamp.");
+                        $"Governed table '{table}' needs exactly one entry in {nameof(RecencyColumns)} or " +
+                        $"{nameof(GovernedSpanEndColumns)}. Declare its recency column, its span end column, " +
+                        "or an explicit null recency to exempt it from the share 24-hour clamp.");
                 }
+            }
+        }
+
+        foreach (var table in GovernedSpanEndColumns.Keys)
+        {
+            if (!map.ContainsKey(table))
+            {
+                throw new InvalidOperationException(
+                    $"'{table}' is in {nameof(GovernedSpanEndColumns)} but no scope governs it; use {nameof(HiddenSpanEndColumns)}.");
             }
         }
 
@@ -286,7 +322,7 @@ public static class ShareDataCategories
                     $"Table '{child}' is clamped through its parent, so it cannot also have a clamp column of its own.");
             }
             var parentHasTimestamp = RecencyColumns.GetValueOrDefault(parent.Table) is not null
-                || HiddenSpanEndColumns.ContainsKey(parent.Table);
+                || SpanEndColumnFor(parent.Table) is not null;
             if (!parentHasTimestamp || UnixMillisRecencyTables.Contains(parent.Table))
             {
                 throw new InvalidOperationException(

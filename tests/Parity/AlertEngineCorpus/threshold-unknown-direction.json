@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "threshold-unknown-direction",
-  "description": "an unrecognised direction string evaluates false regardless of glucose",
+  "description": "an unrecognised direction string cannot be evaluated, so its rule is skipped, whatever the glucose",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

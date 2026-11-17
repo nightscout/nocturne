@@ -1,4 +1,5 @@
-//! Evaluability (parse-time) and save-time validation of condition trees.
+//! Reading condition trees: every shape that cannot be evaluated as written is
+//! rejected (engine-semantics.md §1.4), and validation reports all of them.
 
 #![allow(
     clippy::unwrap_used,
@@ -16,9 +17,7 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Rule, evaluate_rule};
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseError, Reason, parse_payload};
-use nocturne_alerts_core::validate::{
-    UnknownKey, unknown_keys_in_node, unknown_keys_in_rule, validate_node, validate_rule,
-};
+use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
 fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 5, 12, 0, 0).unwrap()
@@ -32,124 +31,198 @@ fn composite(operator: &str, conditions: Value) -> Value {
     json!({ "type": "composite", "composite": { "operator": operator, "conditions": conditions } })
 }
 
-fn parse_error(v: &Value) -> ParseError {
-    Node::parse(v).expect_err("tree cannot be evaluated")
+/// Every problem reading `v` as a node.
+fn parse_issues(v: &Value) -> Vec<ParseError> {
+    Node::parse(v).expect_err("tree cannot be evaluated").0
 }
 
 fn issue(path: &str, reason: Reason) -> ParseError {
     ParseError::new(path, reason)
 }
 
+fn leaf(kind: &str, payload: Value) -> Value {
+    json!({ "type": kind, kind: payload })
+}
+
+fn issues_of(kind: &str, payload: Value) -> Vec<ParseError> {
+    validate_rule(
+        "composite",
+        &json!({ "operator": "and", "conditions": [leaf(kind, payload)] }),
+    )
+}
+
+fn at_leaf(kind: &str, reasons: &[Reason]) -> Vec<ParseError> {
+    reasons
+        .iter()
+        .map(|&r| issue(&format!("composite[0].{kind}"), r))
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
-// Shapes whose evaluation fails
+// Shapes that cannot be evaluated
 // ---------------------------------------------------------------------------
 
 #[test]
-fn composite_without_a_conditions_list_cannot_be_evaluated() {
-    let nested = composite(
-        "and",
-        json!([{ "type": "composite", "composite": { "operator": "or" } }]),
+fn a_composite_needs_conditions() {
+    for (conditions, path) in [
+        (json!({ "operator": "or" }), "composite[0].composite"),
+        (
+            json!({ "operator": "or", "conditions": [] }),
+            "composite[0].composite",
+        ),
+        (
+            json!({ "operator": "or", "conditions": null }),
+            "composite[0].composite",
+        ),
+    ] {
+        let tree = composite(
+            "and",
+            json!([{ "type": "composite", "composite": conditions }]),
+        );
+        assert_eq!(
+            parse_issues(&tree),
+            vec![issue(path, Reason::ListEmpty("conditions"))],
+            "{tree}"
+        );
+    }
+}
+
+#[test]
+fn a_composite_needs_a_known_operator() {
+    let missing = json!({ "type": "composite", "composite": { "conditions": [low()] } });
+    assert_eq!(
+        parse_issues(&missing),
+        vec![issue("composite", Reason::FieldMissing("operator"))]
     );
     assert_eq!(
-        parse_error(&nested),
-        issue("composite[0].composite", Reason::ConditionsMissing)
-    );
-    let bare = composite("and", json!([{ "type": "composite" }]));
-    assert_eq!(
-        parse_error(&bare),
-        issue("composite[0].composite", Reason::ConditionsMissing)
+        parse_issues(&composite("AND", json!([low()]))),
+        vec![issue("composite", Reason::UnknownValue("operator"))]
     );
 }
 
 #[test]
-fn composite_with_conditions_but_no_operator_cannot_be_evaluated() {
-    let tree = json!({ "type": "composite", "composite": { "conditions": [low()] } });
+fn a_null_composite_slot_cannot_be_evaluated() {
     assert_eq!(
-        parse_error(&tree),
-        issue("composite", Reason::OperatorMissing)
+        parse_issues(&composite("and", json!([low(), null]))),
+        vec![issue("composite[1].", Reason::ConditionMissing)]
     );
 }
 
 #[test]
-fn composite_without_operator_or_conditions_evaluates_false() {
-    let tree = json!({ "type": "composite", "composite": { "conditions": [] } });
-    assert!(Node::parse(&tree).is_ok());
-}
-
-#[test]
-fn null_composite_slot_cannot_be_evaluated() {
-    let tree = composite("and", json!([low(), null]));
+fn not_and_sustained_need_a_child() {
     assert_eq!(
-        parse_error(&tree),
-        issue("composite[1].", Reason::ConditionMissing)
+        parse_issues(&json!({ "type": "not", "not": {} })),
+        vec![issue("not", Reason::FieldMissing("child"))]
+    );
+    assert_eq!(
+        parse_issues(&json!({ "type": "sustained", "sustained": { "minutes": 5 } })),
+        vec![issue("sustained", Reason::FieldMissing("child"))]
     );
 }
 
 #[test]
-fn child_without_a_type_cannot_be_evaluated() {
+fn a_node_needs_its_payload() {
+    for kind in [
+        "composite",
+        "not",
+        "sustained",
+        "threshold",
+        "pump_suspended",
+    ] {
+        assert_eq!(
+            parse_issues(&composite("and", json!([{ "type": kind }]))),
+            vec![issue(
+                &format!("composite[0].{kind}"),
+                Reason::PayloadMissing
+            )],
+            "{kind}"
+        );
+    }
+    assert_eq!(
+        parse_payload(ConditionKind::Threshold, &Value::Null)
+            .unwrap_err()
+            .0,
+        vec![issue("threshold", Reason::PayloadMissing)]
+    );
+}
+
+#[test]
+fn a_child_without_a_type_cannot_be_evaluated() {
     let not =
         json!({ "type": "not", "not": { "child": { "threshold": { "direction": "below" } } } });
-    assert_eq!(parse_error(&not), issue("not[0].", Reason::TypeMissing));
+    assert_eq!(
+        parse_issues(&not),
+        vec![issue("not[0].", Reason::TypeMissing)]
+    );
     let slot = composite("or", json!([{ "type": null }]));
     assert_eq!(
-        parse_error(&slot),
-        issue("composite[0].", Reason::TypeMissing)
+        parse_issues(&slot),
+        vec![issue("composite[0].", Reason::TypeMissing)]
     );
     let root = json!({ "threshold": { "direction": "below", "value": 70 } });
     assert_eq!(
-        Node::parse_rooted(&root, "auto_resolve").unwrap_err(),
-        issue("auto_resolve", Reason::TypeMissing)
+        Node::parse_rooted(&root, "auto_resolve").unwrap_err().0,
+        vec![issue("auto_resolve", Reason::TypeMissing)]
     );
 }
 
 #[test]
-fn threshold_and_rate_of_change_without_a_direction_cannot_be_evaluated() {
+fn a_type_that_is_not_exactly_a_wire_name_cannot_be_evaluated() {
     for (tree, path) in [
+        (json!({ "type": "warp_drive" }), "warp_drive"),
+        (
+            json!({ "type": "RateOfChange", "rate_of_change": { "direction": "falling", "rate": 3 } }),
+            "RateOfChange",
+        ),
+        (
+            json!({ "type": "THRESHOLD", "threshold": { "direction": "below", "value": 70 } }),
+            "THRESHOLD",
+        ),
+        (
+            json!({ "type": "0", "threshold": { "direction": "below", "value": 70 } }),
+            "0",
+        ),
+        (
+            json!({ "type": "not", "not": { "child": { "type": "warp_drive" } } }),
+            "not[0].warp_drive",
+        ),
         (
             composite(
                 "and",
-                json!([{ "type": "threshold", "threshold": { "value": 70 } }]),
+                json!([{ "type": "PumpState", "pump_state": { "mode": "Suspended", "is_active": true } }]),
             ),
-            "composite[0].threshold",
-        ),
-        (
-            composite("and", json!([{ "type": "threshold" }])),
-            "composite[0].threshold",
-        ),
-        (
-            json!({ "type": "not", "not": { "child": { "type": "rate_of_change", "rate_of_change": { "rate": 3 } } } }),
-            "not[0].rate_of_change",
+            "composite[0].PumpState",
         ),
     ] {
-        assert_eq!(parse_error(&tree), issue(path, Reason::DirectionMissing));
+        assert_eq!(
+            parse_issues(&tree),
+            vec![issue(path, Reason::UnknownKind)],
+            "{tree}"
+        );
     }
-    assert_eq!(
-        parse_payload(ConditionKind::Threshold, &json!({ "value": 70 })).unwrap_err(),
-        issue("threshold", Reason::DirectionMissing)
-    );
 }
 
 #[test]
-fn a_multi_word_kind_spelled_by_its_member_name_drops_its_payload() {
-    // "RateOfChange" resolves the kind but not the payload key, so the
-    // evaluator sees the default payload, whose direction is missing.
+fn a_node_carries_only_its_own_kinds_payload() {
     let tree = composite(
         "and",
-        json!([{ "type": "RateOfChange", "rate_of_change": { "direction": "falling", "rate": 3 } }]),
+        json!([{ "type": "threshold", "threshold": { "direction": "below", "value": 70 },
+                 "iob": { "operator": ">", "value": 1 } }]),
     );
     assert_eq!(
-        parse_error(&tree),
-        issue("composite[0].RateOfChange", Reason::DirectionMissing)
+        parse_issues(&tree),
+        vec![issue("composite[0].threshold", Reason::UnknownField)]
     );
 }
 
 #[test]
-fn alert_state_without_a_state_cannot_be_evaluated() {
-    let payload = json!({ "alert_id": "00000000-0000-0000-0000-0000000000aa" });
-    assert_eq!(
-        parse_payload(ConditionKind::AlertState, &payload).unwrap_err(),
-        issue("alert_state", Reason::StateMissing)
+fn a_null_property_reads_as_absent() {
+    let tree = composite(
+        "and",
+        json!([{ "type": "threshold", "iob": null,
+                 "threshold": { "direction": "below", "value": 70, "note": null } }]),
     );
+    assert!(Node::parse(&tree).is_ok());
 }
 
 #[test]
@@ -158,28 +231,38 @@ fn a_fault_the_evaluation_order_would_never_reach_still_rejects_the_tree() {
     assert!(Node::parse(&short_circuited).is_err());
     let behind_zero_minutes = json!({
         "type": "sustained",
-        "sustained": { "minutes": 0, "child": { "type": "threshold" } }
+        "sustained": { "minutes": 0, "child": { "type": "threshold", "threshold": {} } }
     });
     assert_eq!(
-        parse_error(&behind_zero_minutes),
-        issue("sustained[0].threshold", Reason::DirectionMissing)
+        parse_issues(&behind_zero_minutes),
+        vec![
+            issue("sustained", Reason::MinutesNotPositive("minutes")),
+            issue("sustained[0].threshold", Reason::FieldMissing("direction")),
+            issue("sustained[0].threshold", Reason::FieldMissing("value")),
+        ]
     );
 }
 
 #[test]
-fn problems_that_only_evaluate_false_or_true_still_parse() {
+fn every_problem_a_save_rejects_fails_evaluation() {
     for tree in [
-        json!({ "type": "warp_drive" }),
-        json!({ "type": "not", "not": { "child": { "type": "warp_drive" } } }),
         json!({ "type": "not", "not": {} }),
         json!({ "type": "sustained", "sustained": { "minutes": 0, "child": low() } }),
         composite("xor", json!([low()])),
         composite("and", json!([])),
         json!({ "type": "threshold", "threshold": { "direction": "sideways", "value": 70 } }),
         json!({ "type": "iob", "iob": { "operator": "=>", "value": 1 } }),
-        json!({ "type": "PumpState", "pump_state": { "mode": "Suspended", "is_active": true } }),
+        leaf("signal_loss", json!({ "timeoutMinutes": 20 })),
+        leaf("time_of_day", json!({ "from": "09:00", "to": "09:00" })),
+        leaf("day_of_week", json!({ "days": [] })),
+        leaf(
+            "state_span_active",
+            json!({ "category": "PumpMode", "is_active": true }),
+        ),
+        leaf("trend", json!({ "bucket": "sideways" })),
+        leaf("staleness", json!({ "operator": ">", "value": -1 })),
     ] {
-        assert!(Node::parse(&tree).is_ok(), "{tree}");
+        assert!(Node::parse(&tree).is_err(), "{tree}");
     }
 }
 
@@ -240,7 +323,7 @@ fn an_auto_resolve_tree_that_cannot_be_evaluated_never_resolves() {
 }
 
 // ---------------------------------------------------------------------------
-// Save-time validation
+// Validation reports every problem
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -251,59 +334,59 @@ fn a_valid_rule_has_no_issues() {
             { "type": "rate_of_change", "rate_of_change": { "direction": "falling", "rate": 2 } } } },
         { "type": "not", "not": { "child": { "type": "do_not_disturb", "do_not_disturb": { "is_active": true } } } },
         { "type": "time_since_last_carb", "time_since_last_carb": { "operator": ">=", "minutes": 30 } },
-        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "Firing" } }
+        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "firing" } }
     ]});
     assert_eq!(validate_rule("composite", &params), vec![]);
 }
 
 #[test]
-fn saving_reports_every_problem_in_the_tree() {
-    let params = json!({ "operator": "AND", "conditions": [
+fn validation_reports_every_problem_in_the_tree() {
+    let params = json!({ "operator": "and", "conditions": [
         { "type": "warp_drive" },
         { "type": "Threshold", "threshold": { "direction": "below", "value": 70 } },
         { "type": "threshold", "threshold": { "direction": "sideways", "value": 70 } },
         { "type": "iob", "iob": { "operator": "=>", "value": 1 } },
-        { "type": "time_since_last_bolus", "time_since_last_bolus": { "operator": 9, "minutes": 5 } },
-        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "snoozed" } },
+        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "Firing" } },
         { "type": "composite", "composite": { "operator": "xor", "conditions": [low()] } },
         { "type": "composite", "composite": { "operator": "or", "conditions": [] } },
         { "type": "not", "not": {} },
         { "type": "sustained", "sustained": { "minutes": 0 } },
         null,
-        { "type": "rate_of_change" }
+        { "type": "rate_of_change", "rate_of_change": {} },
+        { "type": "RateOfChange", "rate_of_change": { "direction": "falling" } }
     ]});
     assert_eq!(
         validate_rule("composite", &params),
         vec![
             issue("composite[0].warp_drive", Reason::UnknownKind),
-            issue("composite[1].Threshold", Reason::NonCanonicalType),
-            issue("composite[2].threshold", Reason::UnknownDirection),
-            issue("composite[3].iob", Reason::UnknownOperator),
+            issue("composite[1].Threshold", Reason::UnknownKind),
+            issue("composite[2].threshold", Reason::UnknownValue("direction")),
+            issue("composite[3].iob", Reason::UnknownValue("operator")),
+            issue("composite[4].alert_state", Reason::UnknownValue("state")),
+            issue("composite[5].composite", Reason::UnknownValue("operator")),
+            issue("composite[6].composite", Reason::ListEmpty("conditions")),
+            issue("composite[7].not", Reason::FieldMissing("child")),
             issue(
-                "composite[4].time_since_last_bolus",
-                Reason::UnknownOperator
-            ),
-            issue("composite[5].alert_state", Reason::UnknownState),
-            issue("composite[6].composite", Reason::UnknownOperator),
-            issue("composite[7].composite", Reason::ConditionsEmpty),
-            issue("composite[8].not", Reason::ChildMissing),
-            issue(
-                "composite[9].sustained",
+                "composite[8].sustained",
                 Reason::MinutesNotPositive("minutes")
             ),
-            issue("composite[9].sustained", Reason::ChildMissing),
-            issue("composite[10].", Reason::ConditionMissing),
-            issue("composite[11].rate_of_change", Reason::FieldMissing("rate")),
-            issue("composite[11].rate_of_change", Reason::DirectionMissing),
+            issue("composite[8].sustained", Reason::FieldMissing("child")),
+            issue("composite[9].", Reason::ConditionMissing),
+            issue(
+                "composite[10].rate_of_change",
+                Reason::FieldMissing("direction")
+            ),
+            issue("composite[10].rate_of_change", Reason::FieldMissing("rate")),
+            issue("composite[11].RateOfChange", Reason::UnknownKind),
         ]
     );
 }
 
 #[test]
-fn saving_rejects_a_root_that_is_not_the_wire_name_or_has_no_payload() {
+fn validation_rejects_a_root_that_is_not_the_wire_name_or_has_no_payload() {
     assert_eq!(
         validate_rule("Threshold", &json!({ "direction": "below", "value": 70 })),
-        vec![issue("Threshold", Reason::NonCanonicalType)]
+        vec![issue("Threshold", Reason::UnknownKind)]
     );
     assert_eq!(
         validate_rule("warp_drive", &json!({})),
@@ -316,14 +399,14 @@ fn saving_rejects_a_root_that_is_not_the_wire_name_or_has_no_payload() {
     assert_eq!(
         validate_rule("threshold", &json!({})),
         vec![
-            issue("threshold", Reason::FieldMissing("value")),
-            issue("threshold", Reason::DirectionMissing)
+            issue("threshold", Reason::FieldMissing("direction")),
+            issue("threshold", Reason::FieldMissing("value"))
         ]
     );
 }
 
 #[test]
-fn saving_reports_the_first_structural_error_with_its_path_and_field() {
+fn a_value_of_the_wrong_json_kind_is_reported_with_its_path_and_field() {
     let params = json!({ "operator": "and", "conditions": [
         low(),
         { "type": "not", "not": { "child": { "type": "iob", "iob": { "operator": "<", "value": "lots" } } } }
@@ -343,13 +426,13 @@ fn saving_reports_the_first_structural_error_with_its_path_and_field() {
 fn validating_a_node_roots_paths_at_the_scope() {
     let tree = composite(
         "and",
-        json!([{ "type": "trend", "trend": { "bucket": "falling" } }, { "type": "cob" }]),
+        json!([{ "type": "trend", "trend": { "bucket": "falling" } }, { "type": "cob", "cob": {} }]),
     );
     assert_eq!(
         validate_node(&tree, "auto_resolve"),
         vec![
-            issue("auto_resolve[1].cob", Reason::FieldMissing("value")),
-            issue("auto_resolve[1].cob", Reason::UnknownOperator)
+            issue("auto_resolve[1].cob", Reason::FieldMissing("operator")),
+            issue("auto_resolve[1].cob", Reason::FieldMissing("value"))
         ]
     );
     assert_eq!(
@@ -369,30 +452,12 @@ fn reasons_never_carry_payload_values() {
         .collect();
     assert_eq!(
         rendered,
-        vec!["unknown_direction at 'composite[0].threshold' (field 'direction')"]
+        vec!["unknown_value at 'composite[0].threshold' (field 'direction')"]
     );
 }
 
-fn leaf(kind: &str, payload: Value) -> Value {
-    json!({ "type": kind, kind: payload })
-}
-
-fn issues_of(kind: &str, payload: Value) -> Vec<ParseError> {
-    validate_rule(
-        "composite",
-        &json!({ "operator": "and", "conditions": [leaf(kind, payload)] }),
-    )
-}
-
-fn at_leaf(kind: &str, reasons: &[Reason]) -> Vec<ParseError> {
-    reasons
-        .iter()
-        .map(|&r| issue(&format!("composite[0].{kind}"), r))
-        .collect()
-}
-
 #[test]
-fn saving_rejects_properties_no_node_or_payload_has() {
+fn validation_rejects_properties_no_node_or_payload_has() {
     assert_eq!(
         validate_rule("signal_loss", &json!({ "timeoutMinutes": 20 })),
         vec![
@@ -426,86 +491,29 @@ fn saving_rejects_properties_no_node_or_payload_has() {
     );
 }
 
-fn unknown(path: &str, pointer: &str, key: &str) -> UnknownKey {
-    UnknownKey {
-        path: path.to_owned(),
-        pointer: pointer.to_owned(),
-        key: key.to_owned(),
-    }
-}
-
 #[test]
-fn unknown_keys_name_each_property_and_the_object_holding_it() {
-    let params = json!({ "operator": "and", "conditions": [
-        { "type": "threshold", "note": "x",
-          "Threshold": { "direction": "below", "value": 70, "for_minutes": 5 } },
-        { "type": "not", "not": { "child":
-            { "type": "signal_loss", "signal_loss": { "timeoutMinutes": 20, "timeout_minutes": 20 } } } }
-    ]});
+fn a_property_name_in_another_case_is_not_read() {
     assert_eq!(
-        unknown_keys_in_rule("composite", &params),
-        vec![
-            unknown("composite[0].threshold", "/conditions/0", "note"),
-            unknown(
-                "composite[0].threshold",
-                "/conditions/0/Threshold",
-                "for_minutes"
-            ),
-            unknown(
-                "composite[1].not[0].signal_loss",
-                "/conditions/1/not/child/signal_loss",
-                "timeoutMinutes"
-            ),
-        ]
-    );
-    assert_eq!(
-        validate_rule("composite", &params)
-            .iter()
-            .filter(|e| e.reason == Reason::UnknownField)
-            .count(),
-        3
-    );
-    assert_eq!(
-        unknown_keys_in_rule("signal_loss", &json!({ "timeoutMinutes": 20 })),
-        vec![unknown("signal_loss", "", "timeoutMinutes")]
-    );
-    assert_eq!(
-        unknown_keys_in_node(
-            &composite(
-                "and",
-                json!([
-                    low(),
-                    leaf("iob", json!({ "operator": ">", "value": 1, "units": "U" }))
-                ])
-            ),
-            "snooze"
+        parse_issues(
+            &json!({ "Type": "threshold", "threshold": { "direction": "below", "value": 70 } })
         ),
-        vec![unknown(
-            "snooze[1].iob",
-            "/composite/conditions/1/iob",
-            "units"
-        )]
+        vec![issue("", Reason::TypeMissing)]
     );
     assert_eq!(
-        unknown_keys_in_rule(
-            "composite",
-            &json!({ "operator": "and", "conditions": [low()] })
-        ),
-        vec![]
+        issues_of("threshold", json!({ "Direction": "below", "VALUE": 70 })),
+        at_leaf(
+            "threshold",
+            &[
+                Reason::UnknownField,
+                Reason::FieldMissing("direction"),
+                Reason::FieldMissing("value")
+            ]
+        )
     );
 }
 
 #[test]
-fn saving_accepts_property_names_in_any_case_and_other_kinds_payloads() {
-    let params = json!({ "operator": "and", "conditions": [
-        { "Type": "threshold", "THRESHOLD": { "Direction": "below", "VALUE": 70 },
-          "iob": { "operator": ">", "value": 1 } }
-    ]});
-    assert_eq!(validate_rule("composite", &params), vec![]);
-}
-
-#[test]
-fn saving_rejects_missing_operands_that_would_read_as_defaults() {
+fn validation_rejects_missing_operands() {
     let cases: Vec<(&str, Value, Reason)> = vec![
         (
             "rate_of_change",
@@ -516,6 +524,11 @@ fn saving_rejects_missing_operands_that_would_read_as_defaults() {
             "staleness",
             json!({ "operator": ">=" }),
             Reason::FieldMissing("value"),
+        ),
+        (
+            "staleness",
+            json!({ "value": 15 }),
+            Reason::FieldMissing("operator"),
         ),
         (
             "predicted",
@@ -533,6 +546,11 @@ fn saving_rejects_missing_operands_that_would_read_as_defaults() {
             Reason::FieldMissing("alert_id"),
         ),
         (
+            "alert_state",
+            json!({ "alert_id": "00000000-0000-0000-0000-0000000000aa" }),
+            Reason::FieldMissing("state"),
+        ),
+        (
             "loop_stale",
             json!({ "operator": ">" }),
             Reason::FieldMissing("minutes"),
@@ -544,7 +562,7 @@ fn saving_rejects_missing_operands_that_would_read_as_defaults() {
         ),
         (
             "sleep_session_active",
-            json!({}),
+            json!({ "is_active": null }),
             Reason::FieldMissing("is_active"),
         ),
         (
@@ -580,7 +598,7 @@ fn saving_rejects_missing_operands_that_would_read_as_defaults() {
 }
 
 #[test]
-fn saving_rejects_enum_values_no_member_has() {
+fn validation_rejects_enum_values_no_member_has() {
     let cases: Vec<(&str, Value, Reason)> = vec![
         (
             "trend",
@@ -588,29 +606,59 @@ fn saving_rejects_enum_values_no_member_has() {
             Reason::UnknownValue("bucket"),
         ),
         (
+            "trend",
+            json!({ "bucket": "FLAT" }),
+            Reason::UnknownValue("bucket"),
+        ),
+        (
             "temp_basal",
-            json!({ "metric": 7, "operator": ">", "value": 1 }),
-            Reason::UnknownValue("metric"),
+            json!({ "metric": 0, "operator": ">", "value": 1 }),
+            Reason::InvalidField("metric"),
+        ),
+        (
+            "time_since_last_bolus",
+            json!({ "operator": 1, "minutes": 5 }),
+            Reason::InvalidField("operator"),
         ),
         (
             "glucose_bucket",
-            json!({ "buckets": ["low", 42] }),
+            json!({ "buckets": ["low", "LOW"] }),
             Reason::UnknownValue("buckets"),
         ),
         (
             "day_of_week",
-            json!({ "days": [9] }),
+            json!({ "days": [1] }),
+            Reason::InvalidField("days"),
+        ),
+        (
+            "day_of_week",
+            json!({ "days": ["Monday"] }),
             Reason::UnknownValue("days"),
         ),
         (
             "pump_state",
-            json!({ "mode": 42, "is_active": false }),
+            json!({ "mode": "suspended", "is_active": false }),
             Reason::UnknownValue("mode"),
         ),
         (
             "state_span_active",
-            json!({ "category": 99, "is_active": true }),
-            Reason::UnknownValue("category"),
+            json!({ "category": 4, "is_active": true }),
+            Reason::InvalidField("category"),
+        ),
+        (
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "ETC/GMT-2" }),
+            Reason::InvalidField("timezone"),
+        ),
+        (
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "AUS Eastern Standard Time" }),
+            Reason::InvalidField("timezone"),
+        ),
+        (
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "" }),
+            Reason::InvalidField("timezone"),
         ),
     ];
     for (kind, payload, reason) in cases {
@@ -619,7 +667,7 @@ fn saving_rejects_enum_values_no_member_has() {
 }
 
 #[test]
-fn saving_rejects_empty_lists() {
+fn validation_rejects_empty_lists() {
     for (kind, field, payload) in [
         ("glucose_bucket", "buckets", json!({ "buckets": [] })),
         ("glucose_bucket", "buckets", json!({})),
@@ -635,7 +683,7 @@ fn saving_rejects_empty_lists() {
 }
 
 #[test]
-fn saving_rejects_time_windows_that_never_open() {
+fn validation_rejects_time_windows_that_never_open() {
     assert_eq!(
         issues_of("time_of_day", json!({ "from": "9:00", "to": "17:00" })),
         at_leaf("time_of_day", &[Reason::InvalidTime("from")])
@@ -662,14 +710,14 @@ fn saving_rejects_time_windows_that_never_open() {
 }
 
 #[test]
-fn saving_rejects_a_generic_state_span_on_the_pump_mode_category() {
+fn validation_rejects_a_generic_state_span_on_the_pump_mode_category() {
     let pump_mode = json!({ "category": "PumpMode", "is_active": true });
     assert_eq!(
         validate_rule("state_span_active", &pump_mode),
         vec![issue("state_span_active", Reason::PumpModeCategory)]
     );
     let nested = json!({ "minutes": 10, "child": { "type": "not", "not": { "child":
-        leaf("state_span_active", json!({ "category": 0, "is_active": false })) } } });
+        leaf("state_span_active", json!({ "category": "PumpMode", "is_active": false })) } } });
     assert_eq!(
         validate_rule("sustained", &nested),
         vec![issue(
@@ -681,7 +729,7 @@ fn saving_rejects_a_generic_state_span_on_the_pump_mode_category() {
 }
 
 #[test]
-fn saving_rejects_durations_that_leave_a_leaf_never_or_always_true() {
+fn validation_rejects_durations_that_leave_a_leaf_never_or_always_true() {
     for minutes in [0, -5] {
         assert_eq!(
             issues_of("signal_loss", json!({ "timeout_minutes": minutes })),
@@ -756,33 +804,6 @@ fn saving_rejects_durations_that_leave_a_leaf_never_or_always_true() {
         Reason::MinutesNotPositive("timeout_minutes").field(),
         Some("timeout_minutes")
     );
-    assert!(!Reason::MinutesNegative("minutes").fails_evaluation());
-}
-
-#[test]
-fn save_only_reasons_do_not_fail_evaluation() {
-    let tree = composite(
-        "or",
-        json!([
-            leaf("signal_loss", json!({ "timeoutMinutes": 20 })),
-            leaf("time_of_day", json!({ "from": "9:00", "to": "9:00" })),
-            leaf("day_of_week", json!({ "days": [] })),
-            leaf("state_span_active", json!({ "category": "PumpMode" })),
-            leaf("trend", json!({ "bucket": "sideways" })),
-        ]),
-    );
-    assert!(Node::parse(&tree).is_ok());
-    for reason in [
-        Reason::UnknownField,
-        Reason::FieldMissing("value"),
-        Reason::UnknownValue("mode"),
-        Reason::InvalidTime("from"),
-        Reason::EmptyWindow,
-        Reason::ListEmpty("days"),
-        Reason::PumpModeCategory,
-    ] {
-        assert!(!reason.fails_evaluation(), "{reason:?}");
-    }
 }
 
 /// The shapes the producers of stored trees write: the rule editor's

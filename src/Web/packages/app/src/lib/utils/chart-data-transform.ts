@@ -1,6 +1,6 @@
-import type { DashboardChartData } from "$lib/api/generated/nocturne-api-client";
-import { resolveChartColor, getGlucoseColor } from "$lib/utils/chart-colors";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
+import { resolveChartColor, getGlucoseColor } from "#lib/utils/chart-colors.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
 /**
  * Transform raw NSwag DashboardChartData into the shape consumed by chart
@@ -48,6 +48,7 @@ export function transformChartData(data: DashboardChartData) {
     defaultBasalRate: data.defaultBasalRate ?? 1.0,
     maxBasalRate: data.maxBasalRate ?? 3.0,
     maxIob: data.maxIob ?? 5.0,
+    minIob: data.minIob ?? 0,
     maxCob: data.maxCob ?? 100.0,
 
     glucoseData: (data.glucoseData ?? []).map((p) => ({

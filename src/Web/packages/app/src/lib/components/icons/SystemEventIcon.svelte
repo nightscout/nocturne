@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SystemEventType } from "$lib/api";
+  import { SystemEventType } from "#lib/api/index.js";
   import AlarmIcon from "./AlarmIcon.svelte";
   import HazardIcon from "./HazardIcon.svelte";
   import WarningIcon from "./WarningIcon.svelte";

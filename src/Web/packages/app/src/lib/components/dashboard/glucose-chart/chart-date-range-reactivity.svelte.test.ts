@@ -13,13 +13,13 @@ const { getChartData } = vi.hoisted(() => ({
   getChartData: vi.fn((_window: ChartWindow) => Promise.resolve(transformed())),
 }));
 
-vi.mock("$api/chart-data.remote", () => ({ getChartData }));
-vi.mock("$api/predictions.remote", () => ({
+vi.mock("#lib/api/chart-data.remote.js", () => ({ getChartData }));
+vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictions: vi.fn(async () => null),
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
-import { transformChartData } from "$lib/utils/chart-data-transform";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
 import Harness from "./GlucoseChartRangeHarness.test.svelte";
 
 // The payload is irrelevant: the assertion is on the request, not the response.

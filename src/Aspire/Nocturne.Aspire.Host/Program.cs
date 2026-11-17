@@ -113,6 +113,7 @@ class Program
                 defaultValue: ServiceNames.Defaults.PostgresUsername);
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
+                new GenerateParameterDefault { MinLength = 32, Special = false },
                 secret: true
             ).WithPublishMetadata(
                 "PostgreSQL bootstrap password",
@@ -246,7 +247,13 @@ class Program
         // Secret parameters. AddParameter handles dashboard prompting and
         // env var override (Parameters__name) for free.
         // ------------------------------------------------------------------
-        var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true)
+        // Generated and kept in user secrets on first run; a value already set there wins. Publish
+        // leaves it blank in the .env template.
+        var instanceKey = builder
+            .AddParameter(
+                ServiceNames.Parameters.InstanceKey,
+                new GenerateParameterDefault { MinLength = 64, Special = false },
+                secret: true)
             .WithPublishMetadata(
                 "Instance key",
                 "Minimum 32 characters: used for JWT signing and service authentication");
@@ -315,13 +322,6 @@ class Program
         var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
         var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
 
-        // The instance's Google OAuth client for the Google Health connector. Optional: empty
-        // leaves the connector unavailable to every tenant. The redirect URI defaults to the apex
-        // callback derived from BASE_DOMAIN.
-        var googleHealthClientId = builder.AddParameter("google-health-client-id", "", secret: false);
-        var googleHealthClientSecret = builder.AddParameter("google-health-client-secret", "", secret: true);
-        var googleHealthRedirectUri = builder.AddParameter("google-health-redirect-uri", "", secret: false);
-
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
         // an empty default means telemetry is collected in-process and dropped
@@ -374,6 +374,9 @@ class Program
                 .WithAspNetCoreUrls("http")
                 .WithHttpHealthCheck("/alive")
                 .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
+            AlertsNativeBuild.AddTo(builder, watchedApi, solutionRoot,
+                AlertsNativeBuild.CommandRuns("cargo", "--version"));
             // Without a dashboard there is no collector, and the exporter would retry every second.
             if (includeDashboard)
             {
@@ -387,6 +390,12 @@ class Program
                 .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
                 .WithHttpEndpoint(name: "http", targetPort: 8080)
                 .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
+                // Self-hosted stacks share a small box with Postgres and the web app. Under a 2 GB
+                // limit on 2 vCPUs, workstation GC with a conserving heap held ~100 MiB less than
+                // the per-core server GC at rest and ~250 MiB less at an overload peak, while
+                // serving more of that overload, for ~10 ms more at the median under steady load.
+                .WithEnvironment("DOTNET_gcServer", "0")
+                .WithEnvironment("DOTNET_GCConserveMemory", "5")
                 .PublishAsDockerComposeService((_, _) => { })
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
                 .WithRemoteImageTag("latest")
@@ -396,10 +405,7 @@ class Program
         }
 
         var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
-        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey)
-            .WithEnvironment("GOOGLE_HEALTH_CLIENT_ID", googleHealthClientId)
-            .WithEnvironment("GOOGLE_HEALTH_CLIENT_SECRET", googleHealthClientSecret)
-            .WithEnvironment("GOOGLE_HEALTH_REDIRECT_URI", googleHealthRedirectUri);
+        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
@@ -516,9 +522,13 @@ class Program
         }
 
         IResourceBuilder<IResourceWithEndpoints> web;
+        var devOptions = DevOptions.From(builder.Configuration);
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            if (devOptions.LiveSampleData)
+                apiEnvironment.WithEnvironment("SampleData__Live", "true");
+
             var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
             var bridge = builder.AddPnpmApp(
                 "nocturne-bridge-build",
@@ -538,13 +548,17 @@ class Program
 
             ConfigureWebEnvironment(viteWeb);
 
-            // Dev auto-login, on unless NOCTURNE_DEV_AUTO_LOGIN is false (apphost
-            // appsettings or the host environment, e.g.
-            // `NOCTURNE_DEV_AUTO_LOGIN=false aspire start`): the web login page
-            // redirects through /api/v4/dev-only/auth/login instead of the
-            // passkey UI, since a seeded tenant's passkey is held by no one. Run
-            // mode only — the backing controller exists only in Development.
-            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", true))
+            // Waited for so the first page anyone opens is the seeded dashboard, never /setup.
+            if (devOptions.AutoSeed.Enabled)
+            {
+                var devSeed = builder.AddDevTenantSeed(
+                    "nocturne-dev-seed", api, devOptions.AutoSeed.SampleDataDays);
+                viteWeb.WaitForCompletion(devSeed);
+                devSeed.WithParentRelationship(viteWeb);
+            }
+
+            // Run mode only: the backing controller exists only in Development.
+            if (devOptions.AutoLogin)
             {
                 viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", "true");
             }
@@ -861,12 +875,12 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            // Explicit domain runs on 443, so URLs omit the port; the default
-            // local domain keeps the gateway port and must carry it in
-            // BASE_DOMAIN — consumers build URLs (and strip the port for the
-            // WebAuthn rp.id) from it.
+            // An explicit domain outside a worktree runs on 443, so URLs omit the
+            // port; otherwise the gateway port (1612, or dynamic in a worktree)
+            // must be carried in BASE_DOMAIN — consumers build URLs (and strip
+            // the port for the WebAuthn rp.id) from it.
             var gatewayEndpoint = gateway.GetEndpoint("https");
-            var baseDomainExpr = hasExplicitDomain
+            var baseDomainExpr = hasExplicitDomain && !isWorktree
                 ? ReferenceExpression.Create($"{customDomain}")
                 : ReferenceExpression.Create(
                     $"{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
@@ -890,7 +904,7 @@ class Program
 
             // Show the gateway URL on the web resource in the Aspire dashboard
             // so users can click through to the app via the HTTPS gateway.
-            if (hasExplicitDomain)
+            if (hasExplicitDomain && !isWorktree)
             {
                 web.WithUrl($"https://{customDomain}", customDomain);
             }
@@ -902,6 +916,19 @@ class Program
                     ),
                     "Gateway"
                 );
+            }
+
+            if (devOptions.AutoSeed.Enabled)
+            {
+                // Read from the allocated port: an explicit domain is on 443 only outside a worktree.
+                var devTenantHost = $"{DevTenantSeeder.Slug}.{customDomain}";
+                gateway.WithUrls(context => context.Urls.Add(new ResourceUrlAnnotation
+                {
+                    Url = gatewayEndpoint.Port == 443
+                        ? $"https://{devTenantHost}"
+                        : $"https://{devTenantHost}:{gatewayEndpoint.Port}",
+                    DisplayText = "Dev tenant (if seeded)",
+                }));
             }
 
             // Warn if custom domain doesn't resolve (no-op for *.localhost,
@@ -918,14 +945,40 @@ class Program
         // ------------------------------------------------------------------
         if (enableWatchtower)
         {
+            // The API's release check reads Watchtower's read-only HTTP API (history, config) over
+            // the stack network to tell owners when an update installs. Watchtower reports neither
+            // its interval nor its next run, so both containers take the interval from one value.
+            // Leaving the update endpoint off keeps the periodic polls running. The published
+            // compose turns the endpoints on only when the token is set
+            // (PortainerComposePublisherExtensions.GateWatchtowerApiOnToken).
+            var watchtowerApiToken = builder
+                .AddParameter(
+                    "watchtower-api-token",
+                    new GenerateParameterDefault { MinLength = 32, Special = false },
+                    secret: true)
+                .WithPublishMetadata(
+                    "Watchtower API token",
+                    "Optional. Any random string, e.g. from openssl rand -hex 24. Lets the API read when Watchtower last checked for updates, so update notices show the install time.");
+            var watchtowerPollInterval = builder.AddParameter("watchtower-poll-interval", "86400")
+                .WithPublishMetadata(
+                    "Watchtower poll interval",
+                    "Seconds between Watchtower's checks for new images. The API uses it to tell owners when an update installs.",
+                    defaultValue: "86400");
+
             builder
                 .AddContainer("watchtower", "ghcr.io/nicholas-fedor/watchtower", "latest")
                 .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
                 .WithEnvironment("WATCHTOWER_CLEANUP", "true")
-                .WithEnvironment("WATCHTOWER_POLL_INTERVAL", "86400")
+                .WithEnvironment("WATCHTOWER_POLL_INTERVAL", watchtowerPollInterval)
                 .WithEnvironment("WATCHTOWER_INCLUDE_STOPPED", "false")
                 .WithEnvironment("WATCHTOWER_REVIVE_STOPPED", "false")
+                .WithEnvironment("WATCHTOWER_HTTP_API_ENDPOINTS", "history,config")
+                .WithEnvironment("WATCHTOWER_HTTP_API_TOKEN", watchtowerApiToken)
                 .PublishAsDockerComposeService((_, _) => { });
+
+            apiEnvironment
+                .WithEnvironment("ReleaseCheck__Watchtower__Token", watchtowerApiToken)
+                .WithEnvironment("ReleaseCheck__Watchtower__PollIntervalSeconds", watchtowerPollInterval);
         }
 
         // These steps depend on the "publish-compose" pipeline step, which only
@@ -938,6 +991,7 @@ class Program
             builder.AddPortainerComposePublisher();
             builder.AddByoProxyComposePublisher();
             builder.AddPostgresDataComposePublisher();
+            builder.AddInstallScriptPublisher();
         }
 
         var app = builder.Build();

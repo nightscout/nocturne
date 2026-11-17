@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Integration tests for OAuth 2.0 refresh token rotation, replay detection,
 /// client binding, and revocation.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
 {

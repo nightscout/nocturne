@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
 
   const { children } = $props();
@@ -20,7 +20,7 @@
   {/if}
 
   <!-- Main Content - No secondary sidebar, use the app's main sidebar -->
-  <div class="flex-1 overflow-auto">
+  <div class="flex-1">
     {@render children()}
   </div>
 </div>

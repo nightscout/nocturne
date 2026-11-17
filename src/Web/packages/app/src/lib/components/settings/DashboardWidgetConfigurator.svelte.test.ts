@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   WidgetId,
   WidgetPlacement,
-} from "$lib/api/generated/nocturne-api-client";
-import type { TopWidgetId } from "$lib/components/dashboard/widget-registry";
+} from "#lib/api/generated/nocturne-api-client.js";
+import type { TopWidgetId } from "#lib/components/dashboard/widget-registry.js";
 
 const top = (id: string, name: string, renderable = true) => ({
   id,
@@ -22,7 +22,7 @@ const main = (id: string, name: string, renderable = true) => ({
 });
 
 const CATALOGUE = [
-  top(WidgetId.BgDelta, "BG Delta"),
+  top(WidgetId.BgDelta, "Current Glucose"),
   top(WidgetId.LastUpdated, "Last Updated"),
   top(WidgetId.ConnectionStatus, "Connection Status"),
   top(WidgetId.Meals, "Recent Meals"),
@@ -43,7 +43,7 @@ const CATALOGUE = [
 let current: { definitions: unknown[] } | undefined;
 let error: unknown;
 
-vi.mock("$api/generated/metadatas.generated.remote", () => ({
+vi.mock("#lib/api/generated/metadatas.generated.remote.js", () => ({
   getWidgetDefinitions: () => ({
     get current() {
       return current;
@@ -57,7 +57,7 @@ vi.mock("$api/generated/metadatas.generated.remote", () => ({
 import DashboardWidgetConfigurator from "./DashboardWidgetConfigurator.svelte";
 
 const OFFERED = [
-  "BG Delta",
+  "Current Glucose",
   "Last Updated",
   "Connection Status",
   "Recent Meals",
@@ -95,7 +95,7 @@ describe("DashboardWidgetConfigurator", () => {
   it("does not offer a top widget the server marks unrenderable", async () => {
     current = {
       definitions: [
-        top(WidgetId.BgDelta, "BG Delta"),
+        top(WidgetId.BgDelta, "Current Glucose"),
         top(WidgetId.Clock, "Clock", false),
       ],
     };
@@ -103,7 +103,7 @@ describe("DashboardWidgetConfigurator", () => {
     render(DashboardWidgetConfigurator, { props: { value: [] } });
 
     await expect
-      .element(page.getByRole("button", { name: "BG Delta" }))
+      .element(page.getByRole("button", { name: "Current Glucose" }))
       .toBeVisible();
     expect(page.getByRole("button").elements()).toHaveLength(1);
   });

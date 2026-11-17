@@ -1,4 +1,4 @@
-import type { WebSocketConnectionStatus } from "$lib/websocket/types";
+import type { WebSocketConnectionStatus } from "#lib/websocket/types.js";
 
 /** `idle` has not been attempted yet, `connecting`/`reconnecting` are in flight,
  *  and `unauthorized` is a policy outcome the user cannot act on — none of them

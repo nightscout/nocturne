@@ -33,6 +33,9 @@ public class DashboardChartData
     /// <summary>Maximum basal rate in the time window, used for Y-axis scaling.</summary>
     public double MaxBasalRate { get; set; }
 
+    /// <summary>Lowest IOB value in the time window, and never above 0, used for Y-axis scaling.</summary>
+    public double MinIob { get; set; }
+
     /// <summary>Maximum IOB value in the time window, used for Y-axis scaling.</summary>
     public double MaxIob { get; set; }
 
@@ -203,6 +206,9 @@ public class CarbMarkerDto
     public long Time { get; set; }
     public double Carbs { get; set; }
     public string? Label { get; set; }
+
+    /// <summary>Null when the patient's time zone is unknown.</summary>
+    public MealPeriod? MealPeriod { get; set; }
     public string? TreatmentId { get; set; }
     public bool IsOffset { get; set; }
     public string? DataSource { get; set; }

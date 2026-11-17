@@ -319,7 +319,6 @@ public class NightscoutBackfillReconcileTests
                 Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 registration.Object,
                 publisher.Object);
         }

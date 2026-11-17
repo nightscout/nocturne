@@ -18,7 +18,7 @@ public class GlookoV4TreatmentMapperDecompositionBatchTests
         var logger = Mock.Of<ILogger>();
         var config = new GlookoConnectorConfiguration();
         var timeMapper = new GlookoTimeMapper(config, logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
     }
 
     #region V2 MapBatchData

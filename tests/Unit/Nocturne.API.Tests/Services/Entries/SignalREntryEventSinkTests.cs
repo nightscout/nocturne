@@ -18,8 +18,6 @@ public class SignalREntryEventSinkTests
         var sideEffects = new WriteSideEffectsService(
             _cache.Object,
             Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<IDecompositionPipeline>(),
-            [],
             NullLogger<WriteSideEffectsService>.Instance);
         _sut = new SignalREntryEventSink(sideEffects, NullLogger<SignalREntryEventSink>.Instance);
     }
@@ -33,7 +31,7 @@ public class SignalREntryEventSinkTests
     private List<string> ClearedFamilies() =>
         _cache.Invocations
             .Where(i => i.Method.Name == nameof(ITenantCache.RemoveFamilyAsync))
-            .Select(i => (string)i.Arguments[0])
+            .Select(i => (string)i.Arguments[0]!)
             .ToList();
 
     [Fact]

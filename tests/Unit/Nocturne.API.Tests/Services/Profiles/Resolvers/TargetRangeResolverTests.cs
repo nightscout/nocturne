@@ -119,6 +119,34 @@ public class TargetRangeResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task FindReturnsNullWhenNoScheduleExists()
+    {
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(Array.Empty<TargetRangeSchedule>());
+
+        (await _sut.FindBGTargetRangeAsync(NoonMills)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FindReturnsNullWhenTheScheduleHasNoEntries()
+    {
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { MakeSchedule() });
+
+        (await _sut.FindBGTargetRangeAsync(NoonMills)).Should().BeNull();
+        (await _sut.GetBGTargetRangeAsync(NoonMills)).Should().Be((70.0, 180.0));
+    }
+
+    [Fact]
+    public async Task FindReturnsTheScheduledRange()
+    {
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { MakeSchedule((0, 80.0, 120.0), (6 * 3600, 90.0, 130.0)) });
+
+        (await _sut.FindBGTargetRangeAsync(NoonMills)).Should().Be((90.0, 130.0));
+    }
+
+    [Fact]
     public async Task UsesActiveProfileNameWhenSpecProfileIsNull()
     {
         _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(NoonMills, default))

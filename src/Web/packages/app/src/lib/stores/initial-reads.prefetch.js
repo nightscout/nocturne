@@ -6,9 +6,7 @@
     var now = Date.now();
     var oneDayAgo = new Date(now - 86400000).toISOString();
     var to = new Date(now).toISOString();
-    var day = new Date(now);
-    var midnight = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-    var glucoseFrom = new Date(Math.min(midnight, now - 86400000)).toISOString();
+    var glucoseFrom = new Date(now - 3 * 3600000).toISOString();
     var enc = encodeURIComponent;
     var range = function (path, limit) {
       return path + "?from=" + enc(oneDayAgo) + "&to=" + enc(to) + "&limit=" + limit;
@@ -18,6 +16,7 @@
       "/api/v4/profile/summary",
       "/api/v4/trackers/definitions",
       "/api/v4/trackers/instances",
+      "/api/v4/trackers/legacy-fallbacks",
       "/api/v4/notifications",
       range("/api/v4/insulin/boluses", 500),
       range("/api/v4/nutrition/carbs", 500),

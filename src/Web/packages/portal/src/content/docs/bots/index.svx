@@ -65,7 +65,7 @@ Every platform's credentials can be supplied two ways. Pick whichever fits your 
 ### Option A: Admin UI
 
 1. Sign in to your Nocturne instance as an admin.
-2. Go to **Settings > Admin > Integrations**.
+2. Go to **Platform > Administration > Integrations**.
 3. Find the platform's card, fill in its fields, turn the **Enabled** switch on, and click **Save**.
 
 Credentials entered here are **encrypted at rest** and stored per-instance. The fields are
@@ -118,7 +118,7 @@ URLs in the platform's developer console (the per-platform pages say exactly whe
 
 To push alerts to a connected platform:
 
-1. Go to **Settings > Alerts**.
+1. Go to **Alerts**.
 2. Create or edit an alert rule.
 3. Under **Delivery channels**, add the platform.
 4. Save the rule.

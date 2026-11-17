@@ -41,6 +41,7 @@ public class DeviceClockService : IDeviceClockService
     private readonly ITimezoneTimelineService _timeline;
     private readonly ITenantOwnerResolver _ownerResolver;
     private readonly IInAppNotificationService _notifications;
+    private readonly TimeProvider _time;
     private readonly ILogger<DeviceClockService> _logger;
 
     public DeviceClockService(
@@ -49,6 +50,7 @@ public class DeviceClockService : IDeviceClockService
         ITimezoneTimelineService timeline,
         ITenantOwnerResolver ownerResolver,
         IInAppNotificationService notifications,
+        TimeProvider timeProvider,
         ILogger<DeviceClockService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -56,6 +58,7 @@ public class DeviceClockService : IDeviceClockService
         _timeline = timeline ?? throw new ArgumentNullException(nameof(timeline));
         _ownerResolver = ownerResolver ?? throw new ArgumentNullException(nameof(ownerResolver));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+        _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -112,7 +115,7 @@ public class DeviceClockService : IDeviceClockService
             changed = true;
         }
 
-        var cutoff = DateTime.UtcNow.AddDays(-RetentionDays);
+        var cutoff = _time.GetUtcNow().UtcDateTime.AddDays(-RetentionDays);
         var stale = existing.Where(e => e.ObservedAt < cutoff).ToList();
         if (stale.Count > 0)
         {
@@ -267,7 +270,7 @@ public class DeviceClockService : IDeviceClockService
                 cancellationToken);
         }
 
-        anchor.AppliedAt = DateTime.UtcNow;
+        anchor.AppliedAt = _time.GetUtcNow().UtcDateTime;
         return true;
     }
 
@@ -314,7 +317,7 @@ public class DeviceClockService : IDeviceClockService
                 continue; // transient failure: leave the anchor unstamped so the next sync retries
 
             foreach (var anchor in anchors)
-                anchor.AppliedAt = DateTime.UtcNow;
+                anchor.AppliedAt = _time.GetUtcNow().UtcDateTime;
             stamped = true;
         }
 

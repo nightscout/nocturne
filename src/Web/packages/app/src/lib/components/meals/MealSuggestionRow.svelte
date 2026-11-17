@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Sparkles from "@lucide/svelte/icons/sparkles";
-  import type { SuggestedMealMatch } from "$lib/api";
+  import type { SuggestedMealMatch } from "#lib/api/index.js";
 
   let {
     suggestion,

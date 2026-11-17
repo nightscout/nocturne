@@ -55,6 +55,16 @@ public abstract class AuditedSoftDeleteTestBase<TEntity> : IDisposable
         return (Guid)_context.Entry(row).Property("Id").CurrentValue!;
     }
 
+    /// <summary>
+    /// Persists <paramref name="rows"/> in one save: a save per row rescans every row the context
+    /// already tracks, which is quadratic in a seed of hundreds.
+    /// </summary>
+    protected void AddRange(IEnumerable<TEntity> rows)
+    {
+        _context.Set<TEntity>().AddRange(rows);
+        _context.SaveChanges();
+    }
+
     private NocturneDbContext Verify() => _db.CreateContext();
 
     protected async Task<(DateTime? DeletedAt, bool DeletedByUser)> ReadDeleteStateAsync(Guid id)

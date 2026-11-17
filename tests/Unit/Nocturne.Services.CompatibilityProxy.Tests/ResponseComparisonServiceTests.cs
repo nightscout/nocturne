@@ -30,7 +30,7 @@ public class ResponseComparisonServiceTests
                 },
             }
         );
-        _service = new ResponseComparisonService(config, _logger);
+        _service = new ResponseComparisonService(config, TimeProvider.System, _logger);
     }
 
     [Fact]

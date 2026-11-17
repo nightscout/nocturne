@@ -35,6 +35,7 @@ export { default as SiteChangeIcon } from './SiteChangeIcon.svelte';
 export { default as ReservoirIcon } from './ReservoirIcon.svelte';
 export { default as BatteryIcon } from './BatteryIcon.svelte';
 export { default as CannulaIcon } from './CannulaIcon.svelte';
+export { default as PodIcon } from './PodIcon.svelte';
 export { default as SiteRotationIcon } from './SiteRotationIcon.svelte';
 
 // Therapy Event Icons (AAPS SVG icons)
@@ -54,7 +55,6 @@ export { default as SystemEventIcon } from './SystemEventIcon.svelte';
 export { default as PumpModeIcon } from './PumpModeIcon.svelte';
 export { default as DeviceEventIcon } from './DeviceEventIcon.svelte';
 export { default as TrackerCategoryIcon } from './TrackerCategoryIcon.svelte';
-export { default as TreatmentTypeIcon } from './TreatmentTypeIcon.svelte';
 export { default as ActivityCategoryIcon } from './ActivityCategoryIcon.svelte';
 
 // Treatment Marker Icons (for charts and legends)

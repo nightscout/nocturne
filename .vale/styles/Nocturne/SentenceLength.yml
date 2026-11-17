@@ -1,0 +1,15 @@
+# Rules 5.1 and 6.3: 20 words for a procedure, 25 for description.
+#
+# Vale cannot tell the two apart, so this enforces the looser descriptive
+# limit. Classifying a passage, and applying the 20-word procedural limit,
+# stays a human or model job.
+#
+# Rule 8.6 says a backticked command or identifier counts as one word. Here it
+# counts as zero, because .vale.ini strips code spans before the rule runs.
+extends: occurrence
+message: "Rule 6.3: sentence runs over 25 words. Split it."
+link: .claude/skills/simple-english/SKILL.md
+level: warning
+scope: sentence
+max: 25
+token: '\b\w+\b'

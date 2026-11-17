@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Nocturne.API.Services.Alerts.Evaluators;
-using Nocturne.Core.Models;
+using Nocturne.API.Services.Alerts.Conditions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -24,16 +23,23 @@ namespace Nocturne.API.Services.Alerts;
 /// <param name="ExtendMinutes">Length of one automatic extension.</param>
 /// <param name="MaxCount">Cap on the instance's shared snooze count.</param>
 /// <param name="Conditions">
-/// Optional predicate, evaluated as <c>composite{and, conditions}</c>. When absent or empty the
-/// sweep falls back to <see cref="SmartSnoozeTrendGate"/>.
+/// Optional predicate: the stored <c>conditions</c> list, as written, evaluated as
+/// <c>composite{and, conditions}</c> (<see cref="AndBody"/>). Null when absent, <c>null</c> or
+/// empty, and the sweep then falls back to <see cref="SmartSnoozeTrendGate"/>.
 /// </param>
 /// <param name="Malformed">True when some part of the section could not be read.</param>
+/// <param name="ConditionsUnreadable">
+/// <c>conditions</c> is neither a list nor <c>null</c>. The sweep clears the snooze rather than
+/// falling back to <see cref="SmartSnoozeTrendGate"/>, which would extend on a basis the user never
+/// configured.
+/// </param>
 internal sealed record SmartSnoozeConfig(
     bool SmartSnooze,
     int ExtendMinutes,
     int MaxCount,
-    IReadOnlyList<ConditionNode>? Conditions,
-    bool Malformed = false)
+    JsonElement? Conditions,
+    bool Malformed = false,
+    bool ConditionsUnreadable = false)
 {
     /// <summary>Mirrored by <c>defaultClientConfig()</c> in the web app's <c>alerts/types.ts</c>.</summary>
     public const int DefaultMaxCount = 3;
@@ -41,36 +47,20 @@ internal sealed record SmartSnoozeConfig(
     /// <inheritdoc cref="DefaultMaxCount"/>
     public const int DefaultExtendMinutes = 10;
 
+    /// <summary><paramref name="conditions"/> as the one node the sweep evaluates: <c>composite{and}</c>.</summary>
+    public static JsonElement ConditionTree(JsonElement conditions) =>
+        JsonSerializer.SerializeToElement(new JsonObject
+        {
+            ["type"] = "composite",
+            ["composite"] = JsonNode.Parse(AndBody(conditions)),
+        });
+
     public static SmartSnoozeConfig Default { get; } =
         new(false, DefaultExtendMinutes, DefaultMaxCount, null);
 
     private const string SectionProperty = "snooze";
     private const string SmartSnoozeProperty = "smartSnooze";
     private const string ConditionsProperty = "conditions";
-
-    /// <summary>
-    /// The raw <see cref="Conditions"/> the sweep evaluates: present only when
-    /// <see cref="SmartSnooze"/> is on and <c>conditions</c> is a list. Null for unreadable JSON.
-    /// </summary>
-    public static JsonElement? EvaluatedConditions(string? clientConfiguration)
-    {
-        if (string.IsNullOrWhiteSpace(clientConfiguration))
-            return null;
-        try
-        {
-            using var doc = JsonDocument.Parse(clientConfiguration);
-            return Section(doc.RootElement) is { } snooze
-                   && snooze.TryGetProperty(SmartSnoozeProperty, out var smart)
-                   && smart.ValueKind == JsonValueKind.True
-                   && ConditionList(snooze) is { } conditions
-                ? conditions.Clone()
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
 
     /// <summary>
     /// The raw <see cref="Conditions"/> list, whether or not smart snooze is on. Null when there is
@@ -93,12 +83,22 @@ internal sealed record SmartSnoozeConfig(
         }
     }
 
-    /// <summary>The <c>conditions</c> list in a mutable <c>client_configuration</c>, whether or not smart snooze is on.</summary>
-    public static JsonArray? ConditionsNode(JsonNode? clientConfiguration) =>
-        clientConfiguration is JsonObject root
-        && root[SectionProperty] is JsonObject snooze
-            ? snooze[ConditionsProperty] as JsonArray
-            : null;
+    /// <summary>
+    /// Whether two <see cref="StoredConditions"/> lists are the same tree
+    /// (<see cref="ConditionTreeEquality"/>). A rule edit that changes them prunes the rule's
+    /// timers (<see cref="AlertRuleRearm.SaveAndPruneAsync"/>), and a snooze evaluation of the old
+    /// list is then dropped.
+    /// </summary>
+    public static bool SameConditions(JsonElement? stored, JsonElement? other) =>
+        ConditionTreeEquality.Same(stored?.GetRawText(), other?.GetRawText());
+
+    /// <summary>The payload-only body of the <c>composite{and}</c> <paramref name="conditions"/> evaluate as.</summary>
+    public static string AndBody(JsonElement conditions) =>
+        new JsonObject
+        {
+            ["operator"] = "and",
+            ["conditions"] = JsonNode.Parse(conditions.GetRawText()),
+        }.ToJsonString();
 
     private static JsonElement? Section(JsonElement root) =>
         root.ValueKind == JsonValueKind.Object
@@ -150,25 +150,24 @@ internal sealed record SmartSnoozeConfig(
             var extendMinutes = ReadPositiveInt(snooze, "smartSnoozeExtendMinutes", DefaultExtendMinutes, ref malformed);
             var maxCount = ReadNonNegativeInt(snooze, "maxCount", DefaultMaxCount, ref malformed);
 
-            IReadOnlyList<ConditionNode>? conditions = null;
-            if (ConditionList(snooze) is { } conditionsEl)
+            JsonElement? conditions = null;
+            var conditionsUnreadable = false;
+            if (snooze.TryGetProperty(ConditionsProperty, out var conditionsEl)
+                && conditionsEl.ValueKind != JsonValueKind.Null)
             {
-                try
+                if (conditionsEl.ValueKind != JsonValueKind.Array)
                 {
-                    conditions = JsonSerializer.Deserialize<List<ConditionNode>>(
-                        conditionsEl.GetRawText(), EvaluatorJson.Options);
-                }
-                catch (JsonException)
-                {
-                    // An unreadable predicate must not fall through to the trend fallback, which
-                    // would extend on a basis the user never configured. A lone unknown-kind node
-                    // evaluates false, so the snooze clears.
-                    conditions = [new ConditionNode("unparseable")];
+                    conditionsUnreadable = true;
                     malformed = true;
+                }
+                else if (conditionsEl.GetArrayLength() > 0)
+                {
+                    conditions = conditionsEl.Clone();
                 }
             }
 
-            return new SmartSnoozeConfig(smartSnooze, extendMinutes, maxCount, conditions, malformed);
+            return new SmartSnoozeConfig(
+                smartSnooze, extendMinutes, maxCount, conditions, malformed, conditionsUnreadable);
         }
     }
 

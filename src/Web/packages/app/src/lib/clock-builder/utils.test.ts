@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { ClockElement } from "$lib/api";
-import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
+import type { ClockElement } from "#lib/api/index.js";
+import { FALLBACK_GLUCOSE_THRESHOLDS } from "#lib/constants/glucose-thresholds.js";
 import {
   buildStyleString,
   clockBackgroundStyle,

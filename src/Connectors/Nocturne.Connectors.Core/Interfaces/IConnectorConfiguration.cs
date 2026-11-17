@@ -40,11 +40,6 @@ public interface IConnectorConfiguration
     int SyncIntervalMinutes { get; set; }
 
     /// <summary>
-    ///     Validates the configuration and throws ArgumentException if invalid
-    /// </summary>
-    void Validate();
-
-    /// <summary>
     ///     Checks whether a specific data type is enabled for syncing
     /// </summary>
     bool IsDataTypeEnabled(SyncDataType type);

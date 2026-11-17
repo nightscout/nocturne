@@ -80,8 +80,8 @@ public class PredictionController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            // No recent device-status prediction data — the normal state for care-portal-only
-            // tenants now that DeviceStatus is the default source, so not a client fault.
+            // The source has no forecast to give, which is the normal state for a care-portal-only
+            // tenant on the default DeviceStatus source. Not a client fault.
             _logger.LogWarning(ex, "No prediction data available");
             return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
         }
@@ -111,7 +111,10 @@ public class PredictionController : ControllerBase
 
     /// <summary>
     /// Get the pre-resolved therapy profile for the next 24 hours, flattened into contiguous
-    /// absolute-time segments, for an offline on-device <c>oref</c> prediction run.
+    /// absolute-time segments, for an offline on-device <c>oref</c> prediction run. Available
+    /// even when server-side prediction is off. The payload omits the oref constants
+    /// <c>max_iob=10</c>, <c>max_basal=4</c> and <c>max_daily_basal=2</c>; a client matching a
+    /// server-side run applies them itself.
     /// </summary>
     /// <remarks>
     /// Unlike <see cref="GetPredictions"/>, this action is intentionally available regardless of

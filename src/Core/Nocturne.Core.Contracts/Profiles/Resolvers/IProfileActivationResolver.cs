@@ -12,6 +12,13 @@ public interface IProfileActivationResolver
     Task<ResolvedProfileActivation?> GetAtAsync(long timeMills, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="GetAtAsync(long, CancellationToken)"/> at each of <paramref name="timesMills"/>, in order,
+    /// from one read of the activations spanning them, split where one read would reach its cap.
+    /// </summary>
+    Task<IReadOnlyList<ResolvedProfileActivation?>> GetAtAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default);
+
+    /// <summary>
     /// The stretches of [<paramref name="fromMills"/>, <paramref name="toMills"/>) an activation applies
     /// over, oldest first, without overlap. A stretch no activation covers is left out.
     /// </summary>

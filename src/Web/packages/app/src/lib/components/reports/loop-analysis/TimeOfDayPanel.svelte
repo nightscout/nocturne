@@ -9,8 +9,8 @@
 <script lang="ts">
   import { untrack, type Snippet } from "svelte";
   import { Axis, Chart, Rule, Svg } from "layerchart";
-  import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
-  import { hourLabel, time } from "$lib/utils/formatting";
+  import ChartKey, { type ChartKeyItem } from "#lib/components/charts/print/ChartKey.svelte";
+  import { hourLabel, time } from "#lib/utils/formatting.js";
   import { atMinute, SLOT_MINUTES, slotKeyAction } from "./daily-profile-view";
   import type { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
 
@@ -81,6 +81,16 @@
   });
   const formatTick = $derived(yFormat ?? ((v: number) => v.toFixed(tickDigits)));
 
+  let width = $state(0);
+  // Every other (or every third) time label on a narrow plot, so the labels do not run together.
+  const MIN_TICK_SPACING = 40;
+  const shownTicks = $derived.by(() => {
+    const plot = width - padding.left - padding.right;
+    if (plot <= 0) return ticks;
+    const step = Math.max(1, Math.ceil(((ticks.length - 1) * MIN_TICK_SPACING) / plot));
+    return ticks.filter((_, i) => i % step === 0);
+  });
+
   function slotAt(event: PointerEvent | MouseEvent, element: HTMLElement): number | null {
     const box = element.getBoundingClientRect();
     const width = box.width - padding.left - padding.right;
@@ -130,7 +140,7 @@
 </script>
 
 <div class="space-y-1" data-testid="loop-analysis-panel-{id}">
-  <div class="flex items-baseline justify-between gap-2 px-1">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-2 px-1">
     <h3 class="text-sm font-medium">{title}</h3>
     <span id={unitId} class="text-xs text-muted-foreground">{unit}</span>
   </div>
@@ -145,6 +155,7 @@
     <div
       class="relative {heightClass} w-full cursor-crosshair touch-pan-y rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       bind:this={element}
+      bind:clientWidth={width}
       role="slider"
       tabindex={cursor.tabStop === id ? 0 : -1}
       aria-label={title}
@@ -184,7 +195,7 @@
           <Axis
             placement="bottom"
             rule={{ class: "stroke-border" }}
-            {ticks}
+            ticks={shownTicks}
             format={showTimeAxis ? tickLabel : () => ""}
             tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
           />

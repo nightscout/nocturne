@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import supportedLocales from "../../../../../../supportedLocales.json";
-import { REGION_FORMATS } from "$lib/stores/appearance-store.svelte";
+import { REGION_FORMATS } from "#lib/stores/appearance-store.svelte.js";
 import { firstDayOfWeek } from "./calendar-date";
 
 const fixture: Record<string, number> = JSON.parse(

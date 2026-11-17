@@ -4,7 +4,7 @@ title: Trackers
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Trackers
@@ -57,7 +57,7 @@ showing the time since. That design has limits that trackers remove.
 
 | | CAGE / SAGE / IAGE / BAGE | Trackers |
 |--|--|--|
-| **What you can track** | Four fixed things: cannula, sensor, insulin, battery. | Anything. Each tracker has a category (sensor, cannula, reservoir, battery, consumable, appointment, reminder or custom), and you can have as many as you like. |
+| **What you can track** | Four fixed things: cannula, sensor, insulin, battery. | Anything. Each tracker has a category (sensor, cannula, pod, reservoir, battery, consumable, appointment, reminder or custom), and you can have as many as you like. |
 | **How long things last** | Info, warning and urgent ages are set once for each pill, usually in server settings. | Each tracker has its own expected lifespan and up to four notification steps. |
 | **Reminders before the end** | Counted forwards from the start only. | A step can count forwards from the start or backwards from the expected end, such as "24 hours before this sensor ends". If you change the lifespan, those steps move with it. |
 | **Getting the reminder** | A coloured pill, plus the separate Nightscout alarms. | Every step becomes an alert rule, so it can use the same channels as your other alerts, and you can acknowledge it. |

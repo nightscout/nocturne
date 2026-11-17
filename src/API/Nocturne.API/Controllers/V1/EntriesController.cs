@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +9,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -63,7 +61,8 @@ public class EntriesController : ControllerBase
 
     /// <summary>
     /// Get the most recent glucose entry
-    /// This endpoint assumes SGV (sensor glucose value) type and returns the single most recent entry
+    /// This endpoint assumes SGV (sensor glucose value) type and returns the single most recent entry.
+    /// The response is never cached; a conditional request with <c>If-Modified-Since</c> can return 304.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The most recent glucose entry, or empty array if no entries exist</returns>
@@ -104,10 +103,10 @@ public class EntriesController : ControllerBase
         }
 
         _logger.LogDebug(
-            "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
+            "Returning current entry with ID: {EntryId}, Mills: {Mills}, Glucose: {Glucose}",
             currentEntry.Id,
             currentEntry.Mills,
-            currentEntry.Sgv ?? currentEntry.Mgdl
+            currentEntry.GlucoseMgdl()
         );
 
         // Return as array to match legacy API format with V1 response structure
@@ -115,7 +114,8 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Get a specific entry by ID or get entries by type
+    /// Get a specific entry by ID or get entries by type.
+    /// A type spec behaves like the entries list: it honors <c>count</c> and <c>find[...]</c>, and the path type overrides any <c>find[type]</c>.
     /// </summary>
     /// <param name="spec">Either an entry ID (24-character hex string) or entry type (e.g., "sgv", "mbg", "cal")</param>
     /// <param name="count">Maximum number of entries to return for a type spec (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
@@ -198,7 +198,8 @@ public class EntriesController : ControllerBase
 
     /// <summary>
     /// Get entries with optional query parameters
-    /// Supports advanced query features including find filters, date ranges, and pagination
+    /// Supports advanced query features including find filters, date ranges, and pagination.
+    /// The response is never cached; a conditional request with <c>If-Modified-Since</c> can return 304.
     /// </summary>
     /// <param name="count">Maximum number of entries to return (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
     /// <param name="type">Entry type filter (default: "sgv")</param>
@@ -272,8 +273,8 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        // Nightscout returns an empty array for count=0 or a negative count.
-        if (count is <= 0)
+        count = LegacyReadLimits.ZeroAsAbsent(count);
+        if (count is < 0)
         {
             return [];
         }
@@ -417,7 +418,7 @@ public class EntriesController : ControllerBase
             // Entries carrying no usable data are refused rather than written, but a refused entry
             // still occupies its position in the response: v1 uploaders require one response object
             // per submitted entry and treat a shorter array as a failed upload, which wedges the
-            // client on that batch forever (see PartitionStoredEntriesAsync).
+            // client on that batch forever (see IEntryService.UpsertUploadAsync).
             var acceptedIndices = new List<int>(entriesToCreate.Count);
             for (var i = 0; i < entriesToCreate.Count; i++)
             {
@@ -440,30 +441,15 @@ public class EntriesController : ControllerBase
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
             var processedArray = processedEntries.ToArray();
 
-            // Filter out duplicates using database-backed detection. Duplicates are
-            // excluded from the write but must still be echoed in the response: v1
-            // uploaders (Loop's NightscoutKit) require one response object per
-            // submitted entry, and treat a shorter array as a failed upload — the
-            // batch is then retried forever and the client never uploads anything
-            // newer. Legacy cgm-remote-monitor echoed dedup hits back with their _id.
-            var (uniqueEntries, responseEntries) = await PartitionStoredEntriesAsync(
+            var upload = await _entryService.UpsertUploadAsync(
                 processedArray,
+                Request?.Headers.UserAgent.ToString(),
                 cancellationToken
             );
 
-            // Create entries in database
-            var createdEntries = await _entryService.CreateEntriesAsync(
-                uniqueEntries,
-                cancellationToken: cancellationToken
-            );
-            var createdArray = createdEntries.ToArray();
+            await _alertEvaluator.EvaluateForEntriesAsync(upload.GlucoseMoved, cancellationToken);
 
-            _logger.LogDebug("Created {Count} entries", createdArray.Length);
-
-            // Evaluate alert rules against the latest created entry
-            await _alertEvaluator.EvaluateForEntriesAsync(createdArray, cancellationToken);
-
-            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, responseEntries);
+            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, upload.Response);
 
             return Ok(echo.ToV1Responses());
         }
@@ -486,12 +472,12 @@ public class EntriesController : ControllerBase
     /// Rebuilds the response in submitted order: the processed entry for every entry that was
     /// accepted, and the submitted entry unchanged for every one that was refused. The result has
     /// exactly one element per submitted entry, which is the contract v1 uploaders depend on —
-    /// see <see cref="PartitionStoredEntriesAsync"/>.
+    /// see <see cref="IEntryService.UpsertUploadAsync"/>.
     /// </summary>
     private static Entry[] BuildSubmittedOrderEcho(
         List<Entry> submitted,
         List<int> acceptedIndices,
-        List<Entry> acceptedResponses
+        IReadOnlyList<Entry> acceptedResponses
     )
     {
         if (acceptedResponses.Count != acceptedIndices.Count)
@@ -500,8 +486,8 @@ public class EntriesController : ControllerBase
                 $"Echo has {acceptedResponses.Count} entries for {acceptedIndices.Count} accepted entries");
         }
 
-        // Refused entries are already in place; accepted ones are replaced by what the write path
-        // resolved them to (the submitted entry, or the stored row it duplicated).
+        // Refused entries are already in place; accepted ones are replaced by what the upload
+        // echoes for them.
         var echo = submitted.ToArray();
         for (var i = 0; i < acceptedIndices.Count; i++)
         {
@@ -526,135 +512,9 @@ public class EntriesController : ControllerBase
                 + "timestamp or non-sgv type; they are echoed but not stored. Client {UserAgent}",
             refused,
             submitted,
-            SanitizeForLog(Request?.Headers.UserAgent.ToString())
+            LogText.Sanitize(Request?.Headers.UserAgent.ToString())
         );
     }
-
-    /// <summary>
-    /// Splits a processed upload batch into the entries to write and the entries to echo, using
-    /// one duplicate query per entry type for the whole batch instead of one per entry.
-    /// </summary>
-    /// <remarks>
-    /// The echo list carries the stored entry for every duplicate and the submitted entry
-    /// otherwise, so it always has one element per submitted entry — the response shape v1
-    /// uploaders require.
-    /// </remarks>
-    private async Task<(List<Entry> Unique, List<Entry> Response)> PartitionStoredEntriesAsync(
-        Entry[] processedArray,
-        CancellationToken cancellationToken
-    )
-    {
-        var probes = Array.ConvertAll(
-            processedArray,
-            entry => new EntryDuplicateProbe(entry.Device, entry.Type ?? "sgv", entry.Mills)
-        );
-
-        var duplicates = await _entryService.CheckForDuplicateEntriesAsync(probes, cancellationToken);
-
-        if (duplicates.Count != processedArray.Length)
-        {
-            throw new InvalidOperationException(
-                $"Duplicate check returned {duplicates.Count} results for {processedArray.Length} entries");
-        }
-
-        var uniqueEntries = new List<Entry>();
-        var responseEntries = new List<Entry>(processedArray.Length);
-
-        for (var i = 0; i < processedArray.Length; i++)
-        {
-            var entry = processedArray[i];
-            var duplicate = duplicates[i];
-
-            if (duplicate != null)
-            {
-                _logger.LogDebug(
-                    "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
-                    entry.Device,
-                    entry.Type,
-                    entry.Sgv,
-                    entry.Mills
-                );
-                responseEntries.Add(duplicate);
-                continue;
-            }
-
-            uniqueEntries.Add(entry);
-            responseEntries.Add(entry);
-        }
-
-        _logger.LogDebug(
-            "Filtered {Original} entries to {Unique} unique entries",
-            processedArray.Length,
-            uniqueEntries.Count
-        );
-
-        LogReuploadLoop(processedArray.Length, processedArray.Length - uniqueEntries.Count);
-
-        return (uniqueEntries, responseEntries);
-    }
-
-    /// <summary>
-    /// Records one line when a large upload is almost entirely already stored, which is what a
-    /// client re-sending its backlog every cycle looks like from the server. Names the uploader
-    /// (User-Agent) and the counts only — no entry values.
-    /// </summary>
-    private void LogReuploadLoop(int submitted, int duplicates)
-    {
-        if (submitted < ReuploadLoopMinimumBatch)
-            return;
-        if (duplicates < submitted * ReuploadLoopDuplicateRatio)
-            return;
-
-        var userAgent = SanitizeForLog(Request?.Headers.UserAgent.ToString());
-
-        _logger.LogInformation(
-            "Entries upload of {Submitted} entries was already stored ({Duplicates} duplicates); "
-                + "client {UserAgent} is re-sending stored readings",
-            submitted,
-            duplicates,
-            userAgent
-        );
-    }
-
-    /// <summary>Smallest upload that can be reported as a re-upload loop.</summary>
-    private const int ReuploadLoopMinimumBatch = 100;
-
-    /// <summary>Share of an upload that must already be stored to report a re-upload loop.</summary>
-    private const double ReuploadLoopDuplicateRatio = 0.95;
-
-    /// <summary>Cap on the logged User-Agent, which is attacker-controlled free text.</summary>
-    private const int MaxLoggedUserAgentLength = 200;
-
-    /// <summary>
-    /// Renders a caller-supplied header safe to log. Logs reach a line-oriented console exporter
-    /// and are shipped verbatim over OTLP, so a control, format or line-separator character in a
-    /// header value forges log lines or spoofs how they read.
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "(none)";
-
-        var capped = value.Length > MaxLoggedUserAgentLength
-            ? value[..MaxLoggedUserAgentLength]
-            : value;
-
-        return string.Create(capped.Length, capped, static (span, source) =>
-        {
-            for (var i = 0; i < source.Length; i++)
-                span[i] = IsUnsafeForLog(source[i]) ? ' ' : source[i];
-        });
-    }
-
-    /// <summary>
-    /// Control characters (which include ESC, so ANSI sequences are covered), Unicode format
-    /// characters such as the right-to-left override, and the line and paragraph separators.
-    /// </summary>
-    private static bool IsUnsafeForLog(char value) =>
-        char.IsControl(value)
-        || char.GetUnicodeCategory(value) is UnicodeCategory.Format
-            or UnicodeCategory.LineSeparator
-            or UnicodeCategory.ParagraphSeparator;
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
@@ -837,7 +697,9 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select
+    /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select.
+    /// A type spec deletes in bulk, needs full access (403 without it), and the path type overrides
+    /// any <c>find[type]</c>.
     /// </summary>
     /// <param name="id">The entry ID to delete, an entry type, or <c>*</c> for every type</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>

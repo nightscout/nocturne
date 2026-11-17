@@ -1,4 +1,4 @@
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 
 /**
  * Route classification shared by the request hooks.

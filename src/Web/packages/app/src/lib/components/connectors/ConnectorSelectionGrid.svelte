@@ -2,17 +2,17 @@
   import type {
     AvailableConnector,
     ServicesOverview,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { Card, CardContent } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import Plug from "@lucide/svelte/icons/plug";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
 
   interface Props {
     servicesOverview: ServicesOverview | null;
@@ -84,15 +84,12 @@
     </div>
   </div>
 {:else}
-  <Card>
-    <CardContent class="py-8 text-center">
-      <Plug class="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-      <p class="font-medium">No connectors available</p>
-      <p class="text-sm text-muted-foreground mt-2">
-        No server-side connectors are registered in this installation.
-      </p>
-    </CardContent>
-  </Card>
+  <EmptyState
+    art="plug"
+    variant="card"
+    title="No connectors available"
+    body="No server-side connectors are registered in this installation."
+  />
 {/if}
 
 {#if onCancel}

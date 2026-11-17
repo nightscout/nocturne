@@ -24,7 +24,7 @@ public class GlookoSsv2EgvMapperTests
         var timeMapper = new GlookoTimeMapper(config, NullLogger.Instance);
         if (timeline is not null)
             timeMapper.UseTimeline(timeline);
-        return new GlookoSensorGlucoseMapper(config, ConnectorSource, timeMapper, NullLogger.Instance);
+        return new GlookoSensorGlucoseMapper(config, ConnectorSource, timeMapper, NullLogger.Instance, TimeProvider.System);
     }
 
     private static GlookoEgv Egv(double glucoseValueX100, string displayTime, string? guid = "g1",

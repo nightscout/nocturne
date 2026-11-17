@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { severity, severityLabel, severityVar } from "./severity";
+import { severity, severityVar } from "./severity";
+import { severityLabel } from "./severityLabel.svelte";
 
 describe("severity", () => {
 	it("returns slot classes for each known severity", () => {

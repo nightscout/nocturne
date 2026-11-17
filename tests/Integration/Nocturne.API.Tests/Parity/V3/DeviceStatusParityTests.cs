@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// - UPDATE: PUT /devicestatus/{id}
 /// - DELETE: DELETE /devicestatus/{id}
 /// </summary>
+[Collection(ParityShards.One)]
 public class DeviceStatusParityTests : ParityTestBase
 {
     public DeviceStatusParityTests(ParityTestFixture fixture, ITestOutputHelper output)

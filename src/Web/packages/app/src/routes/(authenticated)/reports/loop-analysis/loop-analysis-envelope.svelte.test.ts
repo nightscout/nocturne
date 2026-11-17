@@ -1,23 +1,26 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Component } from "svelte";
 import { page as pageState } from "$app/state";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { ALL_SCOPES, profileResponse } from "$lib/components/reports/loop-analysis/daily-profile.test-fixtures";
-import { loopHealthResponse } from "$lib/components/reports/loop-analysis/loop-health.test-fixtures";
+import { resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { ALL_SCOPES, profileResponse } from "#lib/components/reports/loop-analysis/daily-profile.test-fixtures.js";
+import { loopHealthResponse } from "#lib/components/reports/loop-analysis/loop-health.test-fixtures.js";
 import Harness from "./LoopAnalysisHarness.test.svelte";
 
 /** Every call of each remote function: with the real contextResource below, each is one request. */
 const requests = vi.hoisted(() => ({ envelope: [] as unknown[], page: [] as unknown[] }));
 
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
+
 vi.mock("$app/state", async () => {
   const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
-  const { reactiveFields } = await import("$lib/test-stubs/reactive-fields.svelte");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
   return { ...stub, page: reactiveFields({ ...stub.page }) };
 });
 
-vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
+vi.mock("#lib/api/generated/loopAnalysis.generated.remote.js", () => ({
   getEnvelope: (input: unknown) => {
     requests.envelope.push(input);
     return remoteQuery(() => profileResponse());
@@ -32,11 +35,14 @@ vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
   },
 }));
 
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/hooks/date-params.svelte.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/hooks/date-params.svelte.js")>()),
   requireDateParamsContext: () => ({ fromDay: "2026-10-09", toDay: "2026-10-22" }),
 }));
 
 describe("the Loop Analysis envelope", () => {
+  afterEach(() => resetWatercolour());
+
   beforeEach(() => {
     requests.envelope.length = 0;
     requests.page.length = 0;

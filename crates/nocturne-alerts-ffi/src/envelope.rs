@@ -13,21 +13,21 @@ use uuid::Uuid;
 use nocturne_alerts_core::classify::classify;
 use nocturne_alerts_core::context::{SensorContext, check_timestamp};
 use nocturne_alerts_core::engine::{
-    EngineState, Rule, WireRule, evaluate_parsed_rule, format_instant,
+    EngineState, Rule, WireRule, evaluate_parsed_rule, format_instant, parse_auto_resolve,
 };
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
 use nocturne_alerts_core::facts::{self, ContextFact, RuleConditions};
-use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload_structure};
-use nocturne_alerts_core::paths::node_child_path;
+use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload};
+use nocturne_alerts_core::paths::{AUTO_RESOLVE_ROOT, node_child_path};
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
 use nocturne_alerts_core::wall_clock::references_wall_clock;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
 
 fn known_kind(condition_type: &str) -> Result<ConditionKind, String> {
-    ConditionKind::from_name(condition_type).ok_or_else(|| {
+    ConditionKind::from_wire(condition_type).ok_or_else(|| {
         format!(
             "unknown condition_type '{}'",
             condition_type.escape_default()
@@ -248,12 +248,10 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
         None => Node::parse(&req.node),
     }
     .map_err(|e| format!("malformed condition node: {e}"))?;
-    let root = req
-        .root
-        .unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
+    let root = req.root.unwrap_or_else(|| node.kind().name().to_owned());
 
     let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
-    let value = eval_node(Some(&node), &root, &mut env);
+    let value = eval_node(&node, &root, &mut env);
     let ops = timers.drain_ops();
     Ok(ok(json!({
         "value": value,
@@ -360,9 +358,9 @@ pub(crate) fn references_any(request_json: &str) -> Result<Value, String> {
     Ok(ok(json!({ "references_any": matched })))
 }
 
-/// Every node slot's condition path and the leaves' paths by leaf id. Input
-/// is a condition node, or `{"node": …, "root": …}` naming the root segment,
-/// which defaults to the node's `type` as written.
+/// Every node's condition path and the leaves' paths by leaf id. Input is a
+/// condition node, or `{"node": …, "root": …}` naming the root segment, which
+/// defaults to the node's `type`. A node that cannot be evaluated is an error.
 pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
     let v: Value = serde_json::from_str(input_json).map_err(|e| format!("invalid JSON: {e}"))?;
     let (node_value, root_override) = match &v {
@@ -377,12 +375,15 @@ pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
         _ => return Err("condition node must be a JSON object".into()),
     };
 
-    let node =
-        Node::parse_structure(node_value).map_err(|e| format!("malformed condition node: {e}"))?;
-    let root = root_override.unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
+    let node = match &root_override {
+        Some(root) => Node::parse_rooted(node_value, root),
+        None => Node::parse(node_value),
+    }
+    .map_err(|e| format!("malformed condition node: {e}"))?;
+    let root = root_override.unwrap_or_else(|| node.kind().name().to_owned());
     let mut paths = Vec::new();
     let mut leaves = Vec::new();
-    walk_paths(Some(&node), root.clone(), &mut paths, &mut leaves);
+    walk_paths(&node, root.clone(), &mut paths, &mut leaves);
     let leaves = leaves.iter().enumerate();
     Ok(ok(json!({
         "root": root,
@@ -394,14 +395,9 @@ pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
 }
 
 /// Pre-order; leaves are pushed in leaf-id order.
-fn walk_paths(
-    node: Option<&Node>,
-    path: String,
-    paths: &mut Vec<String>,
-    leaves: &mut Vec<String>,
-) {
+fn walk_paths(node: &Node, path: String, paths: &mut Vec<String>, leaves: &mut Vec<String>) {
     paths.push(path.clone());
-    match node.and_then(Node::container) {
+    match node.container() {
         Some(container) => {
             for (i, child) in container.children().enumerate() {
                 walk_paths(child, node_child_path(&path, i, child), paths, leaves);
@@ -411,40 +407,55 @@ fn walk_paths(
     }
 }
 
-/// A rule's condition tree as leaf-id-tagged authored operands, for condition
-/// readouts (ADR 0007). Leaf ids and paths match `evaluate`'s leaf log and
-/// timer keys. A body that does not parse describes as one leaf with default
-/// operands.
-pub(crate) fn describe(request_json: &str) -> Result<Value, String> {
-    let req = read_rule_body(request_json)?;
-    let kind = known_kind(&req.condition_type)?;
-    let payload = match &req.condition_params {
-        Value::Null => None,
-        v => parse_payload_structure(kind, v).ok(),
-    };
-    let node = Node::from_rule(kind, payload);
-    let tree = describe_node(Some(&node), kind.name().to_owned(), &mut 0);
-    Ok(ok(json!({ "tree": tree })))
+/// [`RuleBodyRequest`] plus, optionally, an auto-resolve tree to describe.
+#[derive(Deserialize)]
+struct DescribeRequest {
+    #[serde(flatten)]
+    body: RuleBodyRequest,
+    #[serde(default)]
+    auto_resolve_params: Option<Value>,
 }
 
-/// Pre-order, numbering leaves as the leaf log does. A leaf shows the payload
-/// evaluation reads, so a kind reached through its member name or ordinal
-/// shows its defaults, not the operands it ignores.
-fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) -> Value {
-    if let Some(container) = node.and_then(Node::container) {
+/// A rule's condition tree as leaf-id-tagged authored operands, for condition
+/// readouts (ADR 0007). Leaf ids and paths match `evaluate`'s leaf log and
+/// timer keys. `tree` is `null` for a body that cannot be evaluated. A request
+/// carrying `auto_resolve_params` also gets
+/// `auto_resolve_tree`, under the `auto_resolve` path root, or `null` when that
+/// tree is `null` or cannot be evaluated.
+pub(crate) fn describe(request_json: &str) -> Result<Value, String> {
+    let req: DescribeRequest =
+        read_request(request_json, |r: &DescribeRequest| r.body.schema_version)?;
+    let kind = known_kind(&req.body.condition_type)?;
+    let tree = parse_payload(kind, &req.body.condition_params).map_or(Value::Null, |payload| {
+        describe_node(&Node::from(payload), kind.name().to_owned(), &mut 0)
+    });
+    let mut response = Map::new();
+    response.insert("tree".to_owned(), tree);
+    if let Some(params) = &req.auto_resolve_params {
+        let auto_resolve = parse_auto_resolve(Some(params)).map_or(Value::Null, |tree| {
+            describe_node(&tree, AUTO_RESOLVE_ROOT.to_owned(), &mut 0)
+        });
+        response.insert("auto_resolve_tree".to_owned(), auto_resolve);
+    }
+    Ok(ok(Value::Object(response)))
+}
+
+/// Pre-order, numbering leaves as the leaf log does.
+fn describe_node(node: &Node, path: String, next_leaf_id: &mut usize) -> Value {
+    if let Some(container) = node.container() {
         let mut children = container
             .children()
             .enumerate()
             .map(|(i, child)| describe_node(child, node_child_path(&path, i, child), next_leaf_id));
         return match container {
-            Container::Composite(p, _) => json!({
+            Container::Composite(p) => json!({
                 "type": "composite",
                 "path": path,
                 "operator": p.operator,
                 "conditions": children.collect::<Vec<_>>(),
             }),
             Container::Not(_) => json!({ "type": "not", "path": path, "child": children.next() }),
-            Container::Sustained(p, _) => json!({
+            Container::Sustained(p) => json!({
                 "type": "sustained",
                 "path": path,
                 "minutes": p.minutes,
@@ -455,12 +466,11 @@ fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) ->
 
     let leaf_id = *next_leaf_id;
     *next_leaf_id = leaf_id.saturating_add(1);
-    let payload = node.and_then(Node::dispatch);
     json!({
         "leaf_id": leaf_id,
         "path": path,
-        "type": node.and_then(|n| n.type_str.as_deref()),
-        "kind": payload.as_ref().map(|p| p.kind().name()),
-        "params": payload,
+        "type": node.kind().name(),
+        "kind": node.kind().name(),
+        "params": node.payload(),
     })
 }

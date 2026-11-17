@@ -1,18 +1,18 @@
 import { render } from "vitest-browser-svelte";
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
+import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
 import {
 	FALLBACK_GLUCOSE_THRESHOLDS,
 	FALLBACK_GLUCOSE_Y_MAX,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 import Harness from "./GlucoseSparklineHarness.test.svelte";
 
 const realtime = vi.hoisted(() => ({
 	chartThresholds: null as ChartThresholdsDto | null,
 }));
 
-vi.mock("$lib/stores/realtime-store.svelte", async () => {
-	const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
+	const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
 	return {
 		tenantChartThresholds: () => ({
 			get current() {
@@ -31,7 +31,7 @@ const entries = [90, 140, 200].map((mgdl, i) => ({
 async function veryLowBoundaryOffset(
 	thresholds?: ChartThresholdsDto,
 ): Promise<number> {
-	const { container } = render(Harness, { entries, dayStartMills, thresholds });
+	const { container } = render(Harness, { entries, thresholds });
 	await expect.poll(() => container.querySelectorAll("linearGradient").length).toBeGreaterThan(0);
 	const stops = container.querySelector("linearGradient")!.querySelectorAll("stop");
 	const veryLowStop = [...stops].find(
@@ -42,6 +42,52 @@ async function veryLowBoundaryOffset(
 
 const fallbackOffset = (veryLow: number, glucoseYMax: number) =>
 	1 - veryLow / glucoseYMax;
+
+describe("GlucoseSparkline day domain", () => {
+	const hour = 3_600_000;
+	const berlinDays = [
+		{ name: "25 hour day", start: 1792879200000, end: 1792969200000 },
+		{ name: "23 hour day", start: 1774738800000, end: 1774821600000 },
+	];
+
+	async function dataLineExtent(
+		readings: Array<{ mills: number; mgdl: number }>,
+		day: { startMills: number; endMills: number },
+	) {
+		const { container } = render(Harness, { entries: readings, day });
+		await expect.poll(() => container.querySelector("svg path.lc-area-line")).not.toBeNull();
+		const box = (container.querySelector("svg path.lc-area-line") as SVGGraphicsElement).getBBox();
+		const plotWidth = container.querySelector("svg")!.getBoundingClientRect().width - 2;
+		return { left: box.x, right: box.x + box.width, plotWidth };
+	}
+
+	for (const { name, start, end } of berlinDays) {
+		it(`draws readings at the first and last millisecond of the ${name} edge to edge`, async () => {
+			const { left, right, plotWidth } = await dataLineExtent(
+				[
+					{ mills: start, mgdl: 120 },
+					{ mills: end - 1, mgdl: 140 },
+				],
+				{ startMills: start, endMills: end },
+			);
+
+			expect(left).toBeCloseTo(0, 0);
+			expect(right).toBeCloseTo(plotWidth, 0);
+		});
+
+		it(`places a reading two hours before the end of the ${name} by the day's real length`, async () => {
+			const { right, plotWidth } = await dataLineExtent(
+				[
+					{ mills: start, mgdl: 120 },
+					{ mills: end - 2 * hour, mgdl: 140 },
+				],
+				{ startMills: start, endMills: end },
+			);
+
+			expect(right).toBeCloseTo(plotWidth * (1 - (2 * hour) / (end - start)), 0);
+		});
+	}
+});
 
 describe("GlucoseSparkline thresholds", () => {
 	beforeEach(() => {

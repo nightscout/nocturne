@@ -8,11 +8,11 @@ const grant = vi.hoisted(() => ({
   refusedAsDemoSubject: false,
 }));
 
-vi.mock("$lib/api/generated/myPermissions.generated.remote", () => ({
+vi.mock("#lib/api/generated/myPermissions.generated.remote.js", () => ({
   getMyPermissions: () => ({ current: { ...grant }, loading: false }),
 }));
 
-vi.mock("$lib/api/generated/configurations.generated.remote", () => ({
+vi.mock("#lib/api/generated/configurations.generated.remote.js", () => ({
   getAllConnectorStatus: () => ({ current: [], loading: false }),
   getSchema: () => ({
     loading: false,
@@ -37,19 +37,27 @@ vi.mock("$lib/api/generated/configurations.generated.remote", () => ({
   deleteConfiguration: () => Promise.resolve({}),
 }));
 
-vi.mock("$lib/api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getServicesOverview: () => ({
     loading: false,
     current: {
       availableConnectors: [{ id: "nightscout", name: "Nightscout" }],
     },
   }),
-  getConnectorCapabilities: () => ({ current: {}, loading: false }),
+  getConnectorCapabilities: () => ({
+    current: {
+      supportedDataTypes: ["Glucose", "Treatments"],
+      supportsHistoricalSync: true,
+      maxHistoricalDays: 90,
+      supportsManualSync: false,
+    },
+    loading: false,
+  }),
   getConnectorDataSummary: () => ({ current: { total: 0 }, loading: false }),
   deleteConnectorData: () => Promise.resolve({}),
 }));
 
-vi.mock("$lib/api/generated/careLinkConnects.generated.remote", () => ({
+vi.mock("#lib/api/generated/careLinkConnects.generated.remote.js", () => ({
   start: () => Promise.resolve({}),
   complete: () => Promise.resolve({}),
   desktopToken: () => Promise.resolve({}),
@@ -137,5 +145,18 @@ describe("ConnectorSetup", () => {
 
       await expectReadOnly();
     });
+  });
+
+  it("lists what the connector can sync when capabilities are shown", async () => {
+    render(ConnectorSetup, {
+      props: { connectorId: "nightscout", showCapabilities: true },
+    });
+
+    await expect.element(page.getByText("Sync capabilities")).toBeVisible();
+    await expect.element(page.getByText("Glucose", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Treatments", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Supported", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Disabled", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("90", { exact: true })).toBeVisible();
   });
 });

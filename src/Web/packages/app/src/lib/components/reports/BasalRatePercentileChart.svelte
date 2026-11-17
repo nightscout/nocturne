@@ -1,10 +1,10 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import { BASAL_BANDS } from "./percentile-band-colors";
-  import Layers from "@lucide/svelte/icons/layers";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
   // Local type definition for hourly basal percentile data
   interface HourlyBasalPercentileData {
@@ -120,9 +120,10 @@
           xAxis: {
             tickMultiline: true,
             format: formatHour,
+            tickOcclusion: true,
           },
           yAxis: {
-            label: "Basal Rate (U/hr)",
+            label: "Basal rate (U/hr)",
           },
         }}
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
@@ -138,16 +139,13 @@
       ]}
     />
   {:else}
-    <div
-      class="flex h-[400px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <Layers class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">No basal data available</p>
-        <p class="text-sm">
-          No temp basal or basal treatments found in this period
-        </p>
-      </div>
+    <div class="flex h-[400px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No basal data available"
+        body="No temp basal or basal treatments found in this period"
+      />
     </div>
   {/if}
 </div>

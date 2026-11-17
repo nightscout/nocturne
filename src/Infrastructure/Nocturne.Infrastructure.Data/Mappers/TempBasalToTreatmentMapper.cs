@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -31,10 +32,12 @@ public static class TempBasalToTreatmentMapper
             Id = MongoObjectId.IsObjectId(tempBasal.LegacyId)
                 ? tempBasal.LegacyId
                 : tempBasal.Id.ToString(),
+            LegacyId = tempBasal.LegacyId,
+            RecordId = tempBasal.Id,
             Mills = tempBasal.StartMills,
-            SrvCreated = new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvModified = new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            EventType = "Temp Basal",
+            SrvCreated = tempBasal.CreatedAt.ToMills(),
+            SrvModified = tempBasal.ModifiedAt.ToMills(),
+            EventType = TreatmentTypes.TempBasal,
             Duration = durationMinutes,
             Absolute = relative ? null : rate,
             Rate = relative && tempBasal.RateFromSchedule ? null : rate,

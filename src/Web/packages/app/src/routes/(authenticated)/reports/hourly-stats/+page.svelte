@@ -1,31 +1,31 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import Info from "@lucide/svelte/icons/info";
-  import { getHourlyPatterns } from "$api/reports.remote";
+  import { getHourlyPatterns } from "#lib/api/reports.remote.js";
   import {
     HourlyClockBasis,
     HourlyComparison,
     TimeZoneUnavailableReason,
     type HourlyPattern,
-  } from "$lib/api";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "$lib/utils/formatting";
-  import HourlyRangeBars from "$lib/components/reports/hourly-patterns/HourlyRangeBars.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import HourlyGlance from "$lib/components/reports/hourly-patterns/HourlyGlance.svelte";
-  import { hourSpan } from "$lib/components/reports/hourly-patterns/hour-labels";
+  } from "#lib/api/index.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "#lib/utils/formatting.js";
+  import HourlyRangeBars from "#lib/components/reports/hourly-patterns/HourlyRangeBars.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import HourlyGlance from "#lib/components/reports/hourly-patterns/HourlyGlance.svelte";
+  import { hourSpan } from "#lib/components/reports/hourly-patterns/hour-labels.js";
 
   const reportsParams = requireDateParamsContext(14);
 
   const patternsResource = contextResource(
     () => getHourlyPatterns(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Hourly Patterns", dateParams: reportsParams }
+    { errorTitle: "Error loading hourly patterns", dateParams: reportsParams }
   );
 
   const report = $derived(patternsResource.current);
@@ -57,14 +57,6 @@
   const hourList = (list: HourlyPattern[]) => list.map((h) => hourSpan(h.hour ?? 0)).join(", ");
 </script>
 
-<svelte:head>
-  <title>Hourly Patterns - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Which hours of the day spend the most and least time in the glucose target range"
-  />
-</svelte:head>
-
 {#if report}
   <div class="@container space-y-6">
     <header class="max-w-3xl space-y-2">
@@ -72,8 +64,7 @@
         {dateRangeDisplay} • {patternsResource.date.dayCount} days
       </p>
       <p class="text-pretty">
-        This report lays every day in the range over one 24-hour clock, so you can see
-        which hours of the day tend to go well and which tend to be harder.
+        This report lays every day in the range over one 24-hour clock. You can see which hours of the day tend to go well and which tend to be harder.
         {#if edges}In range means a reading between {bgRange(edges.low, edges.targetTop)}.{/if}
       </p>
     </header>
@@ -204,7 +195,7 @@
               <p class="text-muted-foreground">
                 An hour is only compared with the others once it has readings on at least
                 {minimumDays} different days, and at least {minimumReadings} readings in all.
-                With less data, a single unusual day could make an hour look much better or
+                With less data, a single unusual day can make an hour look much better or
                 worse than it usually is. Those hours still appear in the chart and table.
                 Best and worst hours are only named when they differ by at least {spread}
                 percentage points of time in range.
@@ -228,7 +219,7 @@
 
       <div class="flex justify-end print:hidden">
         <Button href="/reports/agp" variant="outline" size="sm">
-          See the full daily curve in the Glucose Profile
+          See the full daily curve in the glucose profile
           <ArrowRight class="h-4 w-4" />
         </Button>
       </div>

@@ -10,15 +10,9 @@ class HttpError {
   status: number;
   body: App.Error;
 
-  constructor(status: number, body?: App.Error | string) {
+  constructor(status: number, body: Omit<App.Error, "status">) {
     this.status = status;
-    if (typeof body === "string") {
-      this.body = { message: body };
-    } else if (body) {
-      this.body = body;
-    } else {
-      this.body = { message: `Error: ${status}` };
-    }
+    this.body = { ...body, status };
   }
 
   toString() {
@@ -50,8 +44,16 @@ class ActionFailure {
   ) {}
 }
 
-export function error(status: number, body?: App.Error | string): never {
-  throw new HttpError(status, body);
+export function error(
+  status: number,
+  message?: string | Omit<App.Error, "status">,
+  properties?: Omit<App.Error, "status" | "message">
+): never {
+  // An object second argument is the form SvelteKit 3 deprecates but still accepts.
+  if (message !== undefined && typeof message !== "string") {
+    throw new HttpError(status, { ...message });
+  }
+  throw new HttpError(status, { ...properties, message: message ?? `Error: ${status}` });
 }
 
 export function isHttpError(e: unknown, status?: number): boolean {
@@ -59,7 +61,11 @@ export function isHttpError(e: unknown, status?: number): boolean {
   return !status || e.status === status;
 }
 
-export function redirect(status: number, location: string | URL): never {
+export function redirect(
+  status: number,
+  location: string | URL,
+  _options?: { external?: boolean | string[] }
+): never {
   throw new Redirect(status, location.toString());
 }
 

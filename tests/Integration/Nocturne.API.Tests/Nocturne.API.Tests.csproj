@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="Moq" />
@@ -35,6 +36,10 @@
     <ProjectReference Include="../../../src/API/Nocturne.API/Nocturne.API.csproj" />
     <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data/Nocturne.Infrastructure.Data.csproj" />
     <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/FakeNightscoutTreatments.cs" Link="TestSupport/FakeNightscoutTreatments.cs" />
+    <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/PreBolusSplittingNightscout.cs" Link="TestSupport/PreBolusSplittingNightscout.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Migration\Fixtures\*.json">

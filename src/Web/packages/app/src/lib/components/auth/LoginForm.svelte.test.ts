@@ -21,7 +21,7 @@ interface StubProvider {
 let providers: StubProvider[] = [];
 let providersLoading = false;
 
-vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
+vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", async () => ({
   getOidcProviders: () => ({
     get loading() {
       return providersLoading;
@@ -34,19 +34,16 @@ vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
   signInWithAuthenticator: {
     pending: 0,
     enhance: () => ({}),
-    fields: { code: { issues: () => [] } },
+    fields: (await import("#lib/test-stubs/remote-resource.js")).remoteFormFields(),
   },
   signInWithRecoveryCode: {
     pending: 0,
     enhance: () => ({}),
-    fields: {
-      username: { issues: () => [] },
-      code: { issues: () => [] },
-    },
+    fields: (await import("#lib/test-stubs/remote-resource.js")).remoteFormFields(),
   },
 }));
 
-vi.mock("$lib/api/generated/passkeys.generated.remote", () => ({
+vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   discoverableLoginOptions: vi.fn(),
   loginOptions: vi.fn(),
   loginComplete: vi.fn(),

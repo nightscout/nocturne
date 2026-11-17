@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Card } from "$lib/components/ui/card";
+  import { Card } from "#lib/components/ui/card/index.js";
 
   export interface Figure {
     label: string;
@@ -36,8 +36,8 @@
     {#each figures as figure (figure.label)}
       <div class="bg-card px-4 py-3">
         <dt class="text-xs text-muted-foreground">{figure.label}</dt>
-        <dd class="m-0 mt-1 flex items-baseline gap-1">
-          <span class="text-xl font-semibold tabular-nums">{figure.value}</span>
+        <dd class="m-0 mt-1 flex flex-wrap items-baseline gap-x-1">
+          <span class="text-xl font-semibold tabular-nums whitespace-nowrap">{figure.value}</span>
           {#if figure.unit}
             <span class="text-xs text-muted-foreground">{figure.unit}</span>
           {/if}

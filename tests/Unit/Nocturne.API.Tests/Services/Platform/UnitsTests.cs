@@ -1,6 +1,7 @@
 using System.Globalization;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -12,19 +13,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 [Parity("units.test.js")]
 public class UnitsTests
 {
-    private readonly StatisticsService _statisticsService = new();
-
-    [Fact]
-    public void MgdlToMMOL_ShouldConvert99ToFivePointFive()
-    {
-        Assert.Equal("5.5", _statisticsService.MgdlToMMOLString(99));
-    }
-
-    [Fact]
-    public void MgdlToMMOL_ShouldConvert180ToTenPointZero()
-    {
-        Assert.Equal("10.0", _statisticsService.MgdlToMMOLString(180));
-    }
+    private readonly StatisticsService _statisticsService = new(TimeProvider.System);
 
     [Fact]
     public void MmolToMgdl_ShouldConvertFivePointFiveTo99()
@@ -41,7 +30,7 @@ public class UnitsTests
     [Fact]
     public void MgdlToMMOL_ToMmolToMgdl_ShouldRoundTrip()
     {
-        var mmol = _statisticsService.MgdlToMMOLString(99);
+        var mmol = GlucoseUnits.FromMgdl(99, GlucoseUnit.Mmol).ToString("F1", CultureInfo.InvariantCulture);
         var result = _statisticsService.MmolToMGDL(
             double.Parse(mmol, CultureInfo.InvariantCulture)
         );
@@ -53,7 +42,7 @@ public class UnitsTests
     public void MmolToMgdl_ToMgdlToMMOL_ShouldRoundTrip()
     {
         var mgdl = _statisticsService.MmolToMGDL(5.5);
-        var result = _statisticsService.MgdlToMMOLString(mgdl);
+        var result = GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol).ToString("F1", CultureInfo.InvariantCulture);
 
         Assert.Equal("5.5", result);
     }

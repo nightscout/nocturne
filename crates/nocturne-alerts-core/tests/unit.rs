@@ -1,6 +1,5 @@
-//! Representative port of the C# evaluator/tracker edge tests
-//! (`ConditionEvaluatorTests.cs`, `ExcursionTrackerTests.cs`), covering null
-//! permutations and state-machine edges the corpus may not pin individually.
+//! Evaluator and tracker edge cases, covering null permutations and
+//! state-machine edges the corpus may not pin individually.
 
 #![allow(
     clippy::unwrap_used,
@@ -16,7 +15,7 @@ use rust_decimal::Decimal;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use nocturne_alerts_core::context::SensorContext;
+use nocturne_alerts_core::context::{SensorContext, TrackerReference};
 use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, evaluate_rule};
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
@@ -24,7 +23,7 @@ use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind,
     TransitionType,
 };
-use nocturne_alerts_core::model::{ConditionKind, Node, parse_payload, parse_payload_structure};
+use nocturne_alerts_core::model::{ConditionKind, Node, ParseResult, Reason, parse_payload};
 use nocturne_alerts_core::sustained::TimerStore;
 
 fn base() -> DateTime<Utc> {
@@ -65,8 +64,8 @@ fn eval_tree(node_json: &Value, ctx: &SensorContext) -> bool {
     let node = Node::parse(node_json).expect("node parses");
     let mut timers = TimerStore::new();
     let mut env = Env::new(base(), Uuid::nil(), ctx, &mut timers);
-    let root = node.type_str.clone().unwrap_or_default();
-    eval_node(Some(&node), &root, &mut env)
+    let root = node.kind().name();
+    eval_node(&node, root, &mut env)
 }
 
 // ---------------------------------------------------------------------------
@@ -112,13 +111,6 @@ fn threshold_above_exact_boundary_returns_false() {
 fn threshold_null_latest_value_returns_false() {
     let payload = json!({"direction": "below", "value": 70});
     let ctx = glucose_ctx(None, Some("0"));
-    assert!(!eval_payload(ConditionKind::Threshold, &payload, &ctx));
-}
-
-#[test]
-fn threshold_unknown_direction_returns_false() {
-    let payload = json!({"direction": "sideways", "value": 70});
-    let ctx = glucose_ctx(Some("50"), Some("0"));
     assert!(!eval_payload(ConditionKind::Threshold, &payload, &ctx));
 }
 
@@ -169,13 +161,6 @@ fn rate_of_change_null_trend_rate_returns_false() {
     assert!(!eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
 }
 
-#[test]
-fn rate_of_change_unknown_direction_returns_false() {
-    let payload = json!({"direction": "spinning", "rate": 3.0});
-    let ctx = glucose_ctx(Some("100"), Some("10"));
-    assert!(!eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
-}
-
 // ---------------------------------------------------------------------------
 // CompositeEvaluator
 // ---------------------------------------------------------------------------
@@ -218,28 +203,6 @@ fn composite_or_all_false_returns_false() {
 }
 
 #[test]
-fn composite_empty_conditions_list_returns_false() {
-    let tree = json!({"type": "composite", "composite": {"operator": "and", "conditions": []}});
-    let ctx = glucose_ctx(Some("60"), Some("-4.0"));
-    assert!(!eval_tree(&tree, &ctx));
-}
-
-#[test]
-fn composite_unknown_operator_returns_false() {
-    let tree = json!({
-        "type": "composite",
-        "composite": {
-            "operator": "xor",
-            "conditions": [
-                {"type": "threshold", "threshold": {"direction": "below", "value": 70}}
-            ]
-        }
-    });
-    let ctx = glucose_ctx(Some("60"), Some("0"));
-    assert!(!eval_tree(&tree, &ctx));
-}
-
-#[test]
 fn composite_nested_works() {
     // Outer OR: (inner AND fails) OR (threshold above 250 succeeds).
     let tree = json!({
@@ -267,41 +230,6 @@ fn composite_nested_works() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn not_missing_child_returns_false() {
-    let tree = json!({"type": "not", "not": {}});
-    let ctx = glucose_ctx(Some("100"), Some("0"));
-    assert!(!eval_tree(&tree, &ctx));
-}
-
-#[test]
-fn not_over_unknown_child_kind_returns_true() {
-    // Child of unknown kind evaluates false; not inverts to true. [normative]
-    let tree = json!({"type": "not", "not": {"child": {"type": "warp_drive"}}});
-    let ctx = glucose_ctx(Some("100"), Some("0"));
-    assert!(eval_tree(&tree, &ctx));
-}
-
-#[test]
-fn sustained_zero_minutes_never_fires() {
-    let tree = json!({
-        "type": "sustained",
-        "sustained": {
-            "minutes": 0,
-            "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}
-        }
-    });
-    let ctx = glucose_ctx(Some("60"), Some("0"));
-    assert!(!eval_tree(&tree, &ctx));
-}
-
-#[test]
-fn sustained_missing_child_returns_false() {
-    let tree = json!({"type": "sustained", "sustained": {"minutes": 5}});
-    let ctx = glucose_ctx(Some("60"), Some("0"));
-    assert!(!eval_tree(&tree, &ctx));
-}
-
-#[test]
 fn sustained_timer_runs_behind_a_false_and_sibling() {
     let tree = json!({
         "type": "composite",
@@ -316,7 +244,7 @@ fn sustained_timer_runs_behind_a_false_and_sibling() {
     let at = |now: DateTime<Utc>, glucose: &str, timers: &mut TimerStore| {
         let ctx = glucose_ctx(Some(glucose), Some("0"));
         let mut env = Env::new(now, Uuid::nil(), &ctx, timers);
-        eval_node(Some(&node), "composite", &mut env)
+        eval_node(&node, "composite", &mut env)
     };
 
     // The first row is false, yet the sustained row starts its clock.
@@ -416,16 +344,6 @@ fn temp_basal_percent_with_zero_scheduled_rate_returns_false() {
     assert!(!eval_payload(
         ConditionKind::TempBasal,
         &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 50}),
-        &ctx
-    ));
-}
-
-#[test]
-fn state_span_active_pump_mode_category_is_always_false() {
-    let ctx = SensorContext::default();
-    assert!(!eval_payload(
-        ConditionKind::StateSpanActive,
-        &json!({"category": "PumpMode", "state": null, "is_active": false}),
         &ctx
     ));
 }
@@ -1026,10 +944,39 @@ fn tracker_definition() -> Uuid {
 }
 
 fn tracker_ctx(reference_at: DateTime<Utc>) -> SensorContext {
+    recorded_tracker_ctx(reference_at, None)
+}
+
+fn recorded_tracker_ctx(
+    reference_at: DateTime<Utc>,
+    recorded_at: Option<DateTime<Utc>>,
+) -> SensorContext {
+    recorded_ctx(reference_at, recorded_at, false)
+}
+
+fn recorded_ctx(
+    reference_at: DateTime<Utc>,
+    recorded_at: Option<DateTime<Utc>>,
+    scheduled: bool,
+) -> SensorContext {
     let mut ctx = SensorContext::default();
-    ctx.active_trackers
-        .insert(tracker_definition(), reference_at);
+    ctx.active_trackers.insert(
+        tracker_definition(),
+        TrackerReference {
+            reference_at,
+            recorded_at,
+            scheduled,
+        },
+    );
     ctx
+}
+
+fn tracker_age_holds(ctx: &SensorContext, operator: &str, minutes: i32) -> bool {
+    eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(operator, minutes),
+        ctx,
+    )
 }
 
 fn tracker_age_payload(operator: &str, minutes: i32) -> Value {
@@ -1075,8 +1022,10 @@ fn tracker_age_no_active_instance_is_false() {
 #[test]
 fn tracker_age_other_definition_is_false() {
     let mut ctx = SensorContext::default();
-    ctx.active_trackers
-        .insert(Uuid::from_u128(0xFFFF), base() - TimeDelta::hours(48));
+    ctx.active_trackers.insert(
+        Uuid::from_u128(0xFFFF),
+        TrackerReference::at(base() - TimeDelta::hours(48)),
+    );
     assert!(!eval_payload(
         ConditionKind::TrackerAge,
         &tracker_age_payload(">=", 60),
@@ -1103,22 +1052,93 @@ fn tracker_age_negative_minutes_pre_event_window() {
 }
 
 #[test]
-fn tracker_age_unknown_operator_is_false() {
-    let ctx = tracker_ctx(base() - TimeDelta::hours(48));
-    assert!(!eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload("~", 60),
-        &ctx
-    ));
+fn tracker_age_threshold_due_before_recording_does_not_fire() {
+    // Backdated 72h and recorded an hour ago: the 48h threshold was due 23h before.
+    let ctx = recorded_tracker_ctx(
+        base() - TimeDelta::hours(72),
+        Some(base() - TimeDelta::hours(1)),
+    );
+    assert!(!tracker_age_holds(&ctx, ">=", 48 * 60));
+    assert!(!tracker_age_holds(&ctx, ">", 48 * 60));
 }
 
 #[test]
-fn tracker_age_missing_definition_id_is_nil_uuid_lookup() {
-    // Absent tracker_definition_id parses as Uuid::nil (C# default); only a
-    // context entry under the nil key would match.
-    let ctx = tracker_ctx(base() - TimeDelta::hours(48));
-    let payload = json!({ "operator": ">=", "minutes": 0 });
-    assert!(!eval_payload(ConditionKind::TrackerAge, &payload, &ctx));
+fn tracker_age_threshold_due_after_recording_fires() {
+    // Recorded 42h into the run: the 48h threshold fell due after.
+    let ctx = recorded_tracker_ctx(
+        base() - TimeDelta::hours(72),
+        Some(base() - TimeDelta::hours(30)),
+    );
+    assert!(tracker_age_holds(&ctx, ">=", 48 * 60));
+}
+
+#[test]
+fn tracker_age_threshold_due_exactly_at_recording_does_not_fire() {
+    let start = base() - TimeDelta::hours(72);
+    let at_due = recorded_tracker_ctx(start, Some(start + TimeDelta::hours(48)));
+    assert!(!tracker_age_holds(&at_due, ">=", 48 * 60));
+
+    let just_before = recorded_tracker_ctx(
+        start,
+        Some(start + TimeDelta::hours(48) - TimeDelta::seconds(1)),
+    );
+    assert!(tracker_age_holds(&just_before, ">=", 48 * 60));
+}
+
+#[test]
+fn tracker_age_strictly_greater_is_held_back_only_after_its_due_time() {
+    // `> 48h` does not hold at 48h, so a run recorded exactly then still alerts.
+    let start = base() - TimeDelta::hours(72);
+    let at_due = recorded_tracker_ctx(start, Some(start + TimeDelta::hours(48)));
+    assert!(tracker_age_holds(&at_due, ">", 48 * 60));
+
+    let after = recorded_tracker_ctx(
+        start,
+        Some(start + TimeDelta::hours(48) + TimeDelta::seconds(1)),
+    );
+    assert!(!tracker_age_holds(&after, ">", 48 * 60));
+}
+
+#[test]
+fn tracker_age_event_run_is_never_held_back() {
+    // Booked two hours ago for 22h from now: the "24h before" step was due
+    // before the booking, and still fires.
+    let ctx = recorded_ctx(
+        base() + TimeDelta::hours(22),
+        Some(base() - TimeDelta::hours(2)),
+        true,
+    );
+    assert!(tracker_age_holds(&ctx, ">=", -24 * 60));
+}
+
+#[test]
+fn tracker_age_later_threshold_of_the_same_run_still_fires() {
+    // Recorded 50h into the run: 48h is held back, 70h fires once reached.
+    let start = base() - TimeDelta::hours(72);
+    let ctx = recorded_tracker_ctx(start, Some(start + TimeDelta::hours(50)));
+    assert!(!tracker_age_holds(&ctx, ">=", 48 * 60));
+    assert!(tracker_age_holds(&ctx, ">=", 70 * 60));
+}
+
+#[test]
+fn tracker_age_upper_bound_is_not_held_back_by_recording() {
+    let ctx = recorded_tracker_ctx(base() - TimeDelta::hours(2), Some(base()));
+    assert!(tracker_age_holds(&ctx, "<", 3 * 60));
+}
+
+#[test]
+fn tracker_age_wire_recorded_at_holds_back_a_due_threshold() {
+    let wire = json!({
+        "active_trackers": [
+            {
+                "tracker_definition_id": tracker_definition().to_string(),
+                "reference_at": "2026-01-02T12:00:00Z",
+                "recorded_at": "2026-01-05T11:00:00Z",
+            }
+        ]
+    });
+    let ctx: SensorContext = serde_json::from_value(wire).expect("context parses");
+    assert!(!tracker_age_holds(&ctx, ">=", 48 * 60));
 }
 
 #[test]
@@ -1388,6 +1408,15 @@ fn raw(json: &str) -> Value {
 }
 
 #[test]
+fn a_repeated_property_binds_its_last_occurrence() {
+    let ctx = glucose_ctx(Some("60"), Some("0"));
+    let last_is_70 = raw(r#"{"direction": "below", "value": 50, "value": 70}"#);
+    let last_is_50 = raw(r#"{"direction": "below", "value": 70, "value": 50}"#);
+    assert!(eval_payload(ConditionKind::Threshold, &last_is_70, &ctx));
+    assert!(!eval_payload(ConditionKind::Threshold, &last_is_50, &ctx));
+}
+
+#[test]
 fn uuid_payload_fields_accept_only_the_hyphenated_form() {
     let parses = |id: &str| {
         parse_payload(
@@ -1404,7 +1433,7 @@ fn uuid_payload_fields_accept_only_the_hyphenated_form() {
 }
 
 #[test]
-fn enum_integers_must_fit_an_int() {
+fn an_enum_value_is_exactly_a_wire_name() {
     let parses = |category: Value| {
         parse_payload(
             ConditionKind::StateSpanActive,
@@ -1412,32 +1441,16 @@ fn enum_integers_must_fit_an_int() {
         )
         .is_ok()
     };
-    assert!(parses(json!(2_147_483_647)));
-    assert!(parses(json!(-1)));
-    assert!(!parses(json!(2_147_483_648_i64)));
-    assert!(!parses(json!(-2_147_483_649_i64)));
-    assert!(!parses(json!("2147483648")));
-    assert!(!parses(json!("4.0")));
-    assert!(!parses(json!("0x4")));
-}
-
-#[test]
-fn enum_integer_strings_allow_surrounding_whitespace_and_a_sign() {
-    let ctx: SensorContext = serde_json::from_value(json!({
-        "active_state_spans": [
-            { "category": "Exercise", "state": null, "started_at": "2026-01-05T11:00:00Z" }
-        ]
-    }))
-    .unwrap();
-    for category in [" 4", "4 ", "+4"] {
-        assert!(
-            eval_payload(
-                ConditionKind::StateSpanActive,
-                &json!({ "category": category, "is_active": true }),
-                &ctx
-            ),
-            "{category:?}"
-        );
+    assert!(parses(json!("Exercise")));
+    for other in [
+        json!(4),
+        json!("4"),
+        json!(" 4"),
+        json!("exercise"),
+        json!("Exercise "),
+        json!(null),
+    ] {
+        assert!(!parses(other.clone()), "{other}");
     }
 }
 
@@ -1505,19 +1518,27 @@ fn threshold_node() -> Value {
     json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } })
 }
 
+fn too_deep<T>(read: ParseResult<T>) -> bool {
+    read.err()
+        .is_some_and(|e| e.0.iter().any(|issue| issue.reason == Reason::TooDeep))
+}
+
 #[test]
 fn node_depth_limit_counts_typed_values_like_system_text_json() {
     // 30 not levels (60 objects) + threshold node and payload = 62.
-    assert!(Node::parse_structure(&not_chain(30, threshold_node())).is_ok());
+    assert!(Node::parse(&not_chain(30, threshold_node())).is_ok());
     // 63 typed objects is the most STJ builds.
-    assert!(Node::parse_structure(&not_chain(31, json!({ "type": "threshold" }))).is_ok());
-    assert!(Node::parse_structure(&not_chain(31, threshold_node())).is_err());
+    assert!(!too_deep(Node::parse(&not_chain(
+        31,
+        json!({ "type": "threshold" })
+    ))));
+    assert!(too_deep(Node::parse(&not_chain(31, threshold_node()))));
     // A condition list is a typed frame too: 60 + node + payload + list + node = 64.
     let composite = json!({
         "type": "composite",
         "composite": { "operator": "and", "conditions": [{ "type": "threshold" }] }
     });
-    assert!(Node::parse_structure(&not_chain(30, composite)).is_err());
+    assert!(too_deep(Node::parse(&not_chain(30, composite))));
 }
 
 #[test]
@@ -1530,16 +1551,16 @@ fn node_depth_limit_counts_ignored_properties_as_plain_json() {
         json!({ "type": "threshold", "threshold": { "direction": "below", "value": 1, "x": x } })
     };
     // 62 typed objects + 2 untyped arrays = 64 nested containers.
-    assert!(Node::parse_structure(&not_chain(30, with_arrays(2))).is_ok());
-    assert!(Node::parse_structure(&not_chain(30, with_arrays(3))).is_err());
+    assert!(!too_deep(Node::parse(&not_chain(30, with_arrays(2)))));
+    assert!(too_deep(Node::parse(&not_chain(30, with_arrays(3)))));
 }
 
 #[test]
 fn payload_depth_counts_from_the_payload_document() {
     let payload = |levels| json!({ "child": not_chain(levels, json!({ "type": "threshold", "threshold": {} })) });
     // payload + 60 + node + payload = 63.
-    assert!(parse_payload_structure(ConditionKind::Not, &payload(30)).is_ok());
-    assert!(parse_payload_structure(ConditionKind::Not, &payload(31)).is_err());
+    assert!(!too_deep(parse_payload(ConditionKind::Not, &payload(30))));
+    assert!(too_deep(parse_payload(ConditionKind::Not, &payload(31))));
 }
 
 #[test]

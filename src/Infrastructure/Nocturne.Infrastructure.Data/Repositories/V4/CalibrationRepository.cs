@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
@@ -16,7 +15,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing calibration records. A LegacyId-only type (no SyncId-upsert, no
-/// DeduplicationService participation), so it uses the shared <see cref="V4RepositoryBase{TModel,TEntity}"/>
+/// deduplication), so it uses the shared <see cref="V4RepositoryBase{TModel,TEntity}"/>
 /// behaviour unchanged plus the calibration-specific queries below.
 /// </summary>
 public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEntity>, ICalibrationRepository
@@ -25,8 +24,8 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Initializes a new instance of the <see cref="CalibrationRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CalibrationRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
+    public CalibrationRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
     {
     }
 
@@ -42,22 +41,6 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// <inheritdoc />
     protected override void ApplyUpdate(CalibrationEntity target, Calibration source) =>
         CalibrationMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Gets calibration records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of calibrations.</returns>
-    public async Task<IEnumerable<Calibration>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.Calibrations
-            .AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(CalibrationMapper.ToDomainModel);
-    }
 
     /// <summary>
     /// Deletes all calibration records for the given data source.

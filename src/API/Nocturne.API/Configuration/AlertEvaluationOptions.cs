@@ -32,11 +32,8 @@ public sealed class AlertEvaluationOptions
 
     /// <summary>
     /// Rows per page of the historical glucose fetch that feeds replay. The fetch is keyset-paged
-    /// and streamed through the tick loop, so the resident reading set is bounded by this plus
-    /// the rows of one held-back 5-minute bucket rather than by the window's total row count.
-    /// A single bucket holding more rows than one page (bulk backfill, duplicate import) is
-    /// flushed per page instead of held whole, trading exact bucket-winner resolution for the
-    /// memory bound on a shape the live engine never produces. Values below 1 are treated as 1.
+    /// and streamed through the tick loop, so the resident reading set is bounded by this rather
+    /// than by the window's total row count. Values below 1 are treated as 1.
     /// </summary>
     public int ReplayGlucosePageSize { get; set; } = 2000;
 }

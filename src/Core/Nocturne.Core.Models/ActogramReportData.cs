@@ -24,19 +24,73 @@ public class ActogramReportData
     public List<StepBubbleDto> StepCounts { get; set; } = new();
 
     /// <summary>
-    /// Total steps per calendar day of the requested window, keyed by the tenant-local date
-    /// (<c>yyyy-MM-dd</c>). Every day the window touches is present, days without samples as 0.
+    /// Every day the half-open window touches, oldest first, as the rows the report draws. The days
+    /// are the tenant's, or UTC days when <see cref="TimeZoneUnavailableReason"/> is set.
+    /// </summary>
+    public List<ActogramDay> Days { get; set; } = new();
+
+    /// <summary>
+    /// Total steps per entry of <see cref="Days"/>, keyed by <see cref="ActogramDay.Date"/>. Days
+    /// without samples are 0.
     /// </summary>
     public Dictionary<string, int> StepDayTotals { get; set; } = new();
 
     /// <summary>
-    /// Why <see cref="StepDayTotals"/> is empty: the tenant time zone did not resolve.
-    /// Null when the totals use that zone.
+    /// Why <see cref="Days"/> are UTC days: the tenant time zone did not resolve.
+    /// Null when the days use that zone.
     /// </summary>
     public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 
     /// <summary>Sleep spans within the requested window.</summary>
     public List<ActogramSleepSpan> SleepSpans { get; set; } = new();
+
+    /// <summary>
+    /// <see cref="HeartRates"/> summarised over the summary range; null when the range holds none.
+    /// </summary>
+    public ActogramHeartRateSummary? HeartRateSummary { get; set; }
+
+    /// <summary>
+    /// <see cref="StepCounts"/> summarised over the summary range; null when the caller may not read
+    /// step counts.
+    /// </summary>
+    public ActogramStepSummary? StepSummary { get; set; }
+}
+
+/// <summary>
+/// The heart rates of an actogram's summary range, the selected range without the padding the
+/// rows scroll back through. Each reading is a minute average.
+/// </summary>
+public class ActogramHeartRateSummary
+{
+    /// <summary>Mean of the readings, rounded to whole beats per minute.</summary>
+    public int AverageBpm { get; set; }
+
+    /// <summary>
+    /// Resting rate estimate: the 10th percentile of the readings, by nearest rank (the reading at
+    /// index floor(count / 10) in ascending order).
+    /// </summary>
+    public int RestingBpm { get; set; }
+
+    public int MinBpm { get; set; }
+
+    public int MaxBpm { get; set; }
+
+    public int ReadingCount { get; set; }
+}
+
+/// <summary>The step counts of an actogram's summary range.</summary>
+public class ActogramStepSummary
+{
+    public int TotalSteps { get; set; }
+
+    /// <summary>
+    /// Whole days in the summary range, rounded to nearest, at least one. Not the local days it
+    /// touches: a caller may align the range to midnights in a zone other than the patient's.
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary><see cref="TotalSteps"/> over <see cref="DayCount"/>, rounded to whole steps.</summary>
+    public int DailyAverage { get; set; }
 }
 
 /// <summary>
@@ -49,4 +103,21 @@ public class ActogramSleepSpan
     public long StartMills { get; set; }
     public long EndMills { get; set; }
     public string State { get; set; } = string.Empty;
+}
+
+/// <summary>One local day of the actogram, from its first instant to the first instant of the next day.</summary>
+public class ActogramDay
+{
+    /// <summary>The <c>yyyy-MM-dd</c> date of the day in the report's zone.</summary>
+    public string Date { get; set; } = string.Empty;
+    public long StartMills { get; set; }
+    /// <summary>Exclusive. A day that crosses a DST change is 23 or 25 hours long.</summary>
+    public long EndMills { get; set; }
+
+    /// <summary>
+    /// The instants of local 6h, 12h and 18h of this day, then of the next day, for the row's double
+    /// plot. The row's own 0h marks are <see cref="StartMills"/> and <see cref="EndMills"/>. A DST
+    /// change moves these off a fixed spacing from <see cref="StartMills"/>.
+    /// </summary>
+    public List<long> HourMarks { get; set; } = new();
 }

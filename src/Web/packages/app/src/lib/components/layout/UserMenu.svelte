@@ -1,17 +1,18 @@
 <script lang="ts">
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import * as Avatar from "$lib/components/ui/avatar";
-  import * as Sidebar from "$lib/components/ui/sidebar";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import User from "@lucide/svelte/icons/user";
   import LogOut from "@lucide/svelte/icons/log-out";
   import Settings from "@lucide/svelte/icons/settings";
   import Shield from "@lucide/svelte/icons/shield";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import UserPlus from "@lucide/svelte/icons/user-plus";
+  import { helpLinks } from "#lib/navigation/settings-navigation.svelte.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import type { AuthUser } from "$lib/stores/auth-store.svelte";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
+  import type { AuthUser } from "#lib/stores/auth-store.svelte.js";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
 
   interface Props {
     user: AuthUser | null;
@@ -34,18 +35,8 @@
 
   let isOpen = $state(false);
   const requestMembershipDialog = lazyComponent(
-    () => import("$lib/components/members/RequestMembershipDialog.svelte"),
+    () => import("#lib/components/members/RequestMembershipDialog.svelte"),
   );
-
-  /** Get initials from user name */
-  function getInitials(name: string): string {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }
 
 </script>
 
@@ -54,12 +45,7 @@
     <DropdownMenu.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Sidebar.MenuButton size="lg" class={className} {...props}>
-          <Avatar.Root class="h-8 w-8 shrink-0">
-            <Avatar.Image src={user.avatarUrl} alt={user.name} />
-            <Avatar.Fallback variant="primary" class="text-xs">
-              {getInitials(user.name)}
-            </Avatar.Fallback>
-          </Avatar.Root>
+          <UserAvatar name={user.name} src={user.avatarUrl} />
           {#if !collapsed}
             <div class="flex flex-col items-start text-left flex-1 min-w-0">
               <span class="text-sm font-medium truncate w-full">
@@ -115,27 +101,34 @@
 
         {#if !tenantless}
           <DropdownMenu.Group>
-            <DropdownMenu.Item onSelect={() => goto(resolve("/settings/account"))}>
-              <User class="mr-2 h-4 w-4" />
-              <span>Account</span>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => goto(resolve("/settings"))}>
+            <DropdownMenu.Item onSelect={() => goto(resolve('settings/account'))}><User class="mr-2 h-4 w-4" /><span>Account</span></DropdownMenu.Item>
+
+            <DropdownMenu.Item onSelect={() => goto(resolve('settings'))}>
               <Settings class="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenu.Item>
             {#if isPlatformAdmin}
-              <DropdownMenu.Item onSelect={() => goto(resolve("/settings/admin"))}>
-                <Shield class="mr-2 h-4 w-4" />
-                <span>Admin</span>
-              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => goto(resolve('settings/admin'))}><Shield class="mr-2 h-4 w-4" /><span>Admin</span></DropdownMenu.Item>
             {/if}
+          </DropdownMenu.Group>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Group>
+            {#each helpLinks() as link (link.href)}
+              <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a literal in-app path from settings-navigation -->
+              <DropdownMenu.Item onSelect={() => goto(link.href)}>
+                <link.icon class="mr-2 h-4 w-4" />
+                <span>{link.title}</span>
+              </DropdownMenu.Item>
+            {/each}
           </DropdownMenu.Group>
         {/if}
       {:else}
         <DropdownMenu.Group>
-          <DropdownMenu.Item onSelect={() => (requestMembershipDialog.open = true)}>
+          <DropdownMenu.Item
+            onSelect={() => requestMembershipDialog.open = true}
+          >
             <UserPlus class="mr-2 h-4 w-4" />
-            <span>Request Membership</span>
+            <span>Request membership</span>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
       {/if}
@@ -149,7 +142,7 @@
             <!-- eslint-disable-next-line no-restricted-syntax -- DropdownMenu.Item styles its child as the menu item -->
             <button {...props} type="submit">
               <LogOut class="mr-2 h-4 w-4" />
-              <span>Log out</span>
+              <span>Sign out</span>
             </button>
           {/snippet}
         </DropdownMenu.Item>
@@ -165,7 +158,11 @@
   <!-- Not logged in - show login button -->
   <Sidebar.MenuButton size="lg" class={className}>
     {#snippet child({ props }: { props: Record<string, unknown> })}
-      <a {...props} data-testid="sign-in-link" href={resolve("/auth/login")}>
+      <a
+        {...props}
+        data-testid="sign-in-link"
+        href={resolve('auth/login')}
+      >
         <div
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted"
         >

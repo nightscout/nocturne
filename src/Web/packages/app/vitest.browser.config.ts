@@ -1,11 +1,14 @@
 import { fileURLToPath } from "node:url";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [svelte(), tailwindcss()],
+  plugins: [
+    svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } }),
+    tailwindcss(),
+  ],
   resolve: { dedupe: ["svelte", "@internationalized/date", "bits-ui"] },
   // pnpm 11's global links store lives outside the workspace root, so vite's strict fs
   // allow-list blocks serving vitest-browser-svelte to the browser runner.
@@ -16,7 +19,7 @@ export default defineConfig({
   // as files load, it re-bundles mid-run and reloads the browser, and a test file whose import was
   // in flight then fails with "Failed to fetch dynamically imported module". Each
   // @lucide/svelte/icons/* path is its own dep, so it is excluded rather than pre-bundled.
-  optimizeDeps: { exclude: ["runed/kit", "@lucide/svelte"], entries: ["src/**/*.svelte.test.ts"] },
+  optimizeDeps: { exclude: ["runed/kit", "sveltekit-search-params", "@lucide/svelte"], entries: ["src/**/*.svelte.test.ts"] },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],
@@ -27,9 +30,11 @@ export default defineConfig({
     // source file (untested ones at zero) and instrumenting the rest here doubles time and memory.
     coverage: {
       provider: "v8",
+      // @nocturne/ui sits outside this package; its sources count toward the app components that mount them.
+      allowExternal: true,
       reporter: ["text-summary", "json-summary", "cobertura"],
       reportsDirectory: "coverage/browser",
-      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/node_modules/**", "**/.svelte-kit/**"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/node_modules/**", "**/.svelte-kit/**", "**/vendor/**"],
     },
     browser: {
       enabled: true,
@@ -39,7 +44,16 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
     },
     alias: {
-      "$app/environment": fileURLToPath(new URL(
+      // Before `$app/env`, which would otherwise match them as a prefix.
+      "$app/env/private": fileURLToPath(new URL(
+        "./src/lib/test-stubs/app-env-vars.ts",
+        import.meta.url
+      )),
+      "$app/env/public": fileURLToPath(new URL(
+        "./src/lib/test-stubs/app-env-vars.ts",
+        import.meta.url
+      )),
+      "$app/env": fileURLToPath(new URL(
         "./src/lib/test-stubs/app-environment.ts",
         import.meta.url
       )),
@@ -63,13 +77,6 @@ export default defineConfig({
         "./src/lib/test-stubs/sveltekit.ts",
         import.meta.url
       )),
-      $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
-      $api: fileURLToPath(new URL("./src/lib/api/", import.meta.url)),
-      "$api-clients": fileURLToPath(new URL(
-        "./src/lib/api/generated/nocturne-api-client",
-        import.meta.url
-      )),
-      $routes: fileURLToPath(new URL("./src/routes", import.meta.url)),
     },
   },
 });

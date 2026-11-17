@@ -19,6 +19,8 @@ RUN pnpm fetch
 COPY src/Web/supportedLocales.json src/Web/wuchale.shared.js ./
 COPY src/Web/locales ./locales
 COPY src/Web/packages ./packages
+# The water-ui submodule, with its wasm built in CI before the image build.
+COPY src/Web/vendor/water-ui/packages/water-ui ./vendor/water-ui/packages/water-ui
 
 RUN pnpm install --frozen-lockfile --offline
 
@@ -90,4 +92,9 @@ ENV PORT=5173
 ENV BODY_SIZE_LIMIT=44M
 EXPOSE 5173
 
+# Compose NOCTURNE_POSTGRES_URI from the nocturne_web role pieces the chart sets;
+# entrypoint.sh honors a directly-provided URI (Aspire/compose) otherwise.
+COPY --from=builder /app/packages/app/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "server.js"]

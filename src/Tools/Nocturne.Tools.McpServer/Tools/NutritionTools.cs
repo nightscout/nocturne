@@ -12,13 +12,14 @@ public static class NutritionTools
     [McpServerTool]
     [Description("Get recent carbohydrate intake records.")]
     public static async Task<string> GetRecentCarbs(
+        TimeProvider timeProvider,
         [Description("Number of hours to look back (default: 24)")] int hours = 24,
         [Description("Maximum number of records (default: 50)")] int limit = 50
     )
     {
         try
         {
-            var from = ToolBase.ToIso(DateTime.UtcNow.AddHours(-hours));
+            var from = ToolBase.ToIso(timeProvider.GetUtcNow().UtcDateTime.AddHours(-hours));
             var endpoint = ToolBase.BuildQuery("api/v4/nutrition/carbs", new()
             {
                 ["from"] = from,
@@ -38,12 +39,13 @@ public static class NutritionTools
     [McpServerTool]
     [Description("Get recent meals with food attribution status (which foods were logged with each meal).")]
     public static async Task<string> GetRecentMeals(
+        TimeProvider timeProvider,
         [Description("Number of hours to look back (default: 24)")] int hours = 24
     )
     {
         try
         {
-            var from = ToolBase.ToIso(DateTime.UtcNow.AddHours(-hours));
+            var from = ToolBase.ToIso(timeProvider.GetUtcNow().UtcDateTime.AddHours(-hours));
             var endpoint = ToolBase.BuildQuery("api/v4/nutrition/meals", new()
             {
                 ["from"] = from,

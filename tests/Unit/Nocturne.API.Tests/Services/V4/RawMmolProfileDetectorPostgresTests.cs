@@ -14,7 +14,7 @@ namespace Nocturne.API.Tests.Services.V4;
 
 /// <summary>
 /// <see cref="RawMmolProfileDetector"/> on PostgreSQL under the runtime role, over stores written
-/// directly. The migration's own cases run in the API integration project.
+/// directly. The stores the raw mmol repair leaves run in the API integration project.
 /// </summary>
 [Trait("Category", "Integration")]
 public class RawMmolProfileDetectorPostgresTests(RawMmolProfileDetectorPostgresTests.Database database)

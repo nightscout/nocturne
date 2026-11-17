@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -56,12 +57,13 @@ public class ActivityController : ControllerBase
 
     /// <summary>
     /// Get all activities with optional filtering and pagination.
-    /// Returns regular activities, heart rate, and step count data merged by timestamp.
+    /// Returns regular activities, heart rate, step count and sleep data merged by timestamp.
+    /// Requires read access to at least one of those categories; records in categories the caller cannot read are omitted, so fewer than <c>count</c> records can come back.
     /// </summary>
     /// <remarks>
     /// Like Nightscout, <c>find[...]</c> filters narrow the result, a find that bounds neither
     /// <c>created_at</c> nor <c>dateString</c> reads only the last four days, and the result is
-    /// unlimited unless <paramref name="count"/> is given, up to the merged read cap.
+    /// unlimited unless a nonzero <paramref name="count"/> is given, up to the merged read cap.
     /// The scope requirement is an OR because the response merges four storages, each with its own
     /// read scope. Admission means the caller holds at least one of those categories;
     /// <see cref="ActivityReadScopeGuard"/> then removes the records whose category the caller does
@@ -90,10 +92,10 @@ public class ActivityController : ControllerBase
                 skip = 0; // Normalize to 0 for Nightscout compatibility
             }
 
-            // An empty array covers both a 0-or-negative count (Nightscout behavior) and a page
+            // An empty array covers both a negative count (Nightscout behavior) and a page
             // starting past the merged paging window.
             var pageCount = LegacyReadLimits.ClampMergedPage(
-                count ?? LegacyReadLimits.MaxMergedCount, skip);
+                LegacyReadLimits.ZeroAsAbsent(count) ?? LegacyReadLimits.MaxMergedCount, skip);
             if (pageCount <= 0)
             {
                 return Ok(Array.Empty<Activity>());
@@ -138,7 +140,8 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Get a specific activity by ID (checks StateSpans, sleep_sessions, heart_rates, and step_counts)
+    /// Get a specific activity by ID (checks StateSpans, sleep_sessions, heart_rates, and step_counts).
+    /// A record in a category the caller cannot read returns 404, not 403.
     /// </summary>
     /// <remarks>
     /// The scope requirement is an OR over the four storages this route resolves against, and
@@ -162,12 +165,11 @@ public class ActivityController : ControllerBase
     {
         try
         {
-            var activity = await _activityService.GetActivityByIdAsync(id, cancellationToken);
+            var activity = ActivityReadScopeGuard.FirstReadable(
+                await _activityService.GetStoredActivitiesAsync(id, cancellationToken),
+                _activityDecomposer,
+                HttpContext.GetGrantedScopes());
             if (activity == null)
-                return NotFound(new { error = $"Activity with ID {id} not found" });
-
-            if (!ActivityReadScopeGuard.CanRead(
-                activity, _activityDecomposer, HttpContext.GetGrantedScopes()))
                 return NotFound(new { error = $"Activity with ID {id} not found" });
 
             return Ok(activity);
@@ -185,10 +187,22 @@ public class ActivityController : ControllerBase
     /// <summary>
     /// Create one or more new activities.
     /// Heart rate and step count data is automatically routed to dedicated tables.
+    /// Requires write access to the category of every record in the request.
     /// </summary>
+    /// <remarks>
+    /// The scope requirement is an OR, like the reads' (<see cref="GetActivities"/>): each record
+    /// is written to the storage its content routes to, and that storage has its own write scope.
+    /// Admission means the caller holds at least one of those categories;
+    /// <see cref="ActivityWriteScopeGuard"/> then requires the write scope of every record's
+    /// storage, so a batch needs every scope its records need. The PUT actions follow the same rule.
+    /// </remarks>
     [HttpPost]
     [Authorize]
-    [RequireScope(Scope.TreatmentsReadWrite)]
+    [RequireScope(
+        Scope.TreatmentsReadWrite,
+        Scope.HeartRateReadWrite,
+        Scope.StepCountReadWrite,
+        Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -242,12 +256,16 @@ public class ActivityController : ControllerBase
 
     /// <summary>
     /// Save the activity identified by the <c>_id</c> in the body, inserting it when that id is not
-    /// already stored
+    /// already stored. Like Nightscout, it takes one document; an array is refused with 400.
     /// </summary>
     /// <remarks>Nightscout's save takes one document, so an array is refused.</remarks>
     [HttpPut]
     [Authorize]
-    [RequireScope(Scope.TreatmentsReadWrite)]
+    [RequireScope(
+        Scope.TreatmentsReadWrite,
+        Scope.HeartRateReadWrite,
+        Scope.StepCountReadWrite,
+        Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -278,7 +296,11 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(Scope.TreatmentsReadWrite)]
+    [RequireScope(
+        Scope.TreatmentsReadWrite,
+        Scope.HeartRateReadWrite,
+        Scope.StepCountReadWrite,
+        Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -343,8 +365,8 @@ public class ActivityController : ControllerBase
     /// and any other goes through the create path, which keeps the client's id.
     /// </summary>
     /// <remarks>
-    /// The scope gate covers the stored record as well as the payload, so a caller cannot edit
-    /// sleep, heart-rate or step data without that category's scope by sending another type.
+    /// The scope gate covers every record the id names as well as the payload, so a caller cannot
+    /// edit sleep, heart-rate or step data without that category's scope by sending another type.
     /// An id that names an activity the user deleted is refused with the 409 every other refused
     /// recreation gets (<see cref="Filters.RecreationBlockedFilter"/>), as a PUT of a deleted sleep
     /// session already was.
@@ -357,10 +379,8 @@ public class ActivityController : ControllerBase
     {
         var hasId = !string.IsNullOrWhiteSpace(activity.Id);
         var toCheck = new List<Activity> { activity };
-        if (hasId
-            && await _activityService.GetActivityByIdAsync(activity.Id!, cancellationToken)
-                is { } existing)
-            toCheck.Add(existing);
+        if (hasId)
+            toCheck.AddRange(await _activityService.GetStoredActivitiesAsync(activity.Id!, cancellationToken));
         var missingScope = ActivityWriteScopeGuard.FindMissingScope(
             toCheck, _activityDecomposer, HttpContext.GetGrantedScopes());
         if (missingScope is not null)

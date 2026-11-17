@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/devicestatus endpoints.
 /// Covers: GET, POST, DELETE/{id}, DELETE (bulk), GET/devicestatus.json
 /// </summary>
+[Collection(ParityShards.Two)]
 public class DeviceStatusParityTests : ParityTestBase
 {
     public DeviceStatusParityTests(ParityTestFixture fixture, ITestOutputHelper output)

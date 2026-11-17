@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventAnchorKind } from "$lib/api";
+import { EventAnchorKind } from "#lib/api/index.js";
 import {
   clockToMinute,
   eventResponseQuery,

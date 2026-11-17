@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.Core.Models.Basal;
 
 /// <summary>
@@ -67,7 +69,7 @@ public static class BasalCalculator
         // two boundaries at the same instant and silently mask the second value. Keep the last
         // upload for each second-of-day, then sort.
         var entries = assignment.Entries
-            .Select(e => (Seconds: e.TimeAsSeconds ?? ParseTimeAsSeconds(e.Time), e.Value))
+            .Select(e => (Seconds: ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), e.Value))
             .GroupBy(e => e.Seconds)
             .Select(g => g.Last())
             .OrderBy(e => e.Seconds)
@@ -107,8 +109,8 @@ public static class BasalCalculator
     {
         // Span one local day before fromMills and one after toMills to capture boundaries that
         // straddle midnight after timeshift.
-        var fromUtc = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime;
-        var toUtc = DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime;
+        var fromUtc = fromMills.ToUtcDateTime();
+        var toUtc = toMills.ToUtcDateTime();
         var firstLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(fromUtc, tz)).AddDays(-1);
         var lastLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(toUtc, tz)).AddDays(1);
 
@@ -119,8 +121,8 @@ public static class BasalCalculator
             {
                 var localBoundary = day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified)
                     .AddSeconds(entry.Seconds);
-                var boundaryUtc = LocalToUtcAcrossDst(localBoundary, tz);
-                var boundary = new DateTimeOffset(boundaryUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                var boundaryUtc = TimeZoneHelper.LocalToUtc(localBoundary, tz);
+                var boundary = boundaryUtc.ToMills()
                     - timeshiftMs;
                 if (boundary <= fromMills) continue;
                 if (boundary >= toMills) continue;
@@ -137,74 +139,15 @@ public static class BasalCalculator
         long timeshiftMs,
         double percentage)
     {
-        var localTod = LocalSecondsFromMidnight(atMills + timeshiftMs, tz);
-        var scheduled = FindEntryAt(sortedEntries, localTod);
+        var localTod = ScheduleEntryTime.SecondsOfDay(atMills + timeshiftMs, tz);
+        ScheduleEntryTime.TryEntryAt(sortedEntries, localTod, e => e.Seconds, out var entry);
+        var scheduled = entry.Value;
         return (scheduled * (percentage / 100.0), scheduled);
-    }
-
-    private static double FindEntryAt(List<(int Seconds, double Value)> sortedEntries, int secondsFromMidnight)
-    {
-        var result = sortedEntries[0].Value;
-        foreach (var entry in sortedEntries)
-        {
-            if (secondsFromMidnight >= entry.Seconds) result = entry.Value;
-            else break;
-        }
-        return result;
-    }
-
-    private static int LocalSecondsFromMidnight(long timeMills, TimeZoneInfo tz)
-    {
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds(timeMills);
-        var local = TimeZoneInfo.ConvertTime(dto, tz);
-        return (int)local.TimeOfDay.TotalSeconds;
     }
 
     private static TimeZoneInfo ResolveTimeZone(string? timezoneId)
     {
         if (string.IsNullOrEmpty(timezoneId)) return TimeZoneInfo.Utc;
         return TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
-    }
-
-    private static int ParseTimeAsSeconds(string hhmm)
-    {
-        if (TimeOnly.TryParse(hhmm, out var t))
-            return (int)t.ToTimeSpan().TotalSeconds;
-        return 0;
-    }
-
-    /// <summary>
-    /// Convert a local DateTime to UTC, handling DST gaps and overlaps explicitly.
-    /// Spring-forward (skipped time, e.g. local 02:30 on a US spring-forward day): the schedule
-    /// entry is treated as if it activates at the end of the gap (when wall-clocks jump to the
-    /// next valid local time), so the new rate kicks in as soon as that local time exists.
-    /// Fall-back (ambiguous time, e.g. local 02:30 on a US fall-back day): use the FIRST
-    /// occurrence (DST-active interpretation) so the rate transition happens earlier of the two.
-    /// </summary>
-    private static DateTime LocalToUtcAcrossDst(DateTime localDateTime, TimeZoneInfo tz)
-    {
-        var unspecified = DateTime.SpecifyKind(localDateTime, DateTimeKind.Unspecified);
-        if (tz.IsInvalidTime(unspecified))
-        {
-            // Skipped local time. Walk forward minute-by-minute until we land in a valid slot —
-            // bounded by the maximum DST gap (typically 1h, never more than 2h in practice).
-            for (int i = 1; i <= 180; i++)
-            {
-                var candidate = unspecified.AddMinutes(i);
-                if (!tz.IsInvalidTime(candidate))
-                    return TimeZoneInfo.ConvertTimeToUtc(candidate, tz);
-            }
-            // Pathological tz with a >3h gap — fall back to treating the local time as UTC.
-            return DateTime.SpecifyKind(localDateTime, DateTimeKind.Utc);
-        }
-        if (tz.IsAmbiguousTime(unspecified))
-        {
-            // Ambiguous: pick the first UTC occurrence. UTC = local - offset, so the EARLIER UTC
-            // instant comes from the LARGER signed offset (DST-active interpretation).
-            var offsets = tz.GetAmbiguousTimeOffsets(unspecified);
-            var firstOccurrenceOffset = offsets.Max();
-            return new DateTimeOffset(unspecified, firstOccurrenceOffset).UtcDateTime;
-        }
-        return TimeZoneInfo.ConvertTimeToUtc(unspecified, tz);
     }
 }

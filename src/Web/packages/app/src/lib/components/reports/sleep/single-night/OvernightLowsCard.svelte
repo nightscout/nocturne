@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
   import ArrowDownToLine from "@lucide/svelte/icons/arrow-down-to-line";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import { bg, bgLabel, time, toDate } from "$lib/utils/formatting";
-  import { laneForStage } from "$lib/utils/sleep-stages";
-  import { SleepHypoSeverity, type SleepHypoEvent } from "$lib/api";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { bg, bgLabel, time, toDate } from "#lib/utils/formatting.js";
+  import { laneForStage } from "#lib/utils/sleep-stages.js";
+  import { SleepHypoSeverity, type SleepHypoEvent } from "#lib/api/index.js";
 
   interface Props {
     lows: SleepHypoEvent[];
@@ -38,7 +38,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <ArrowDownToLine class="h-5 w-5 text-muted-foreground" />
-      Overnight Lows
+      Overnight lows
     </CardTitle>
   </CardHeader>
   <CardContent class="space-y-3">

@@ -1,8 +1,8 @@
 <!-- Daily profile inside the Loop Analysis layout, with the reports Filters panel and range as the reports layout provides them. -->
 <script lang="ts">
-  import { createReportSlots } from "$lib/hooks/report-slots.svelte";
-  import { setDateParamsContext, useDateParams } from "$lib/hooks/date-params.svelte";
-  import ReportsFilterSidebar from "$lib/components/layout/ReportsFilterSidebar.svelte";
+  import { createReportSlots } from "#lib/hooks/report-slots.svelte.js";
+  import { setDateParamsContext, useDateParams } from "#lib/hooks/date-params.svelte.js";
+  import ReportsFilterSidebar from "#lib/components/layout/ReportsFilterSidebar.svelte";
   import Layout from "./+layout.svelte";
   import DailyProfile from "./daily-profile/+page.svelte";
 

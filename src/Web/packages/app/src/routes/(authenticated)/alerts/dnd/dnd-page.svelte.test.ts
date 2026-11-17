@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import type { TenantAlertSettingsResponse } from "$api-clients";
+import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 // The page seeds its form from the generated remote query; the mock resolves
 // synchronously so `current` is populated on first render.
@@ -13,7 +13,7 @@ let settings: TenantAlertSettingsResponse = {
 
 let updateImpl: () => Promise<TenantAlertSettingsResponse>;
 
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
   get: () => ({ current: settings }),
   update: () => updateImpl(),
 }));
@@ -21,7 +21,7 @@ vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
 import DndPage from "./+page.svelte";
 
 const saveButton = () => page.getByRole("button", { name: "Save" });
-const accessDenied = () => page.getByText("Access Denied");
+const accessDenied = () => page.getByText("Access denied");
 
 describe("alerts/dnd page", () => {
   beforeEach(() => {
@@ -46,7 +46,7 @@ describe("alerts/dnd page", () => {
 
     await expect.element(saveButton()).toBeVisible();
     await expect
-      .element(page.getByText("Do Not Disturb is currently"))
+      .element(page.getByText("Do not disturb is currently"))
       .toBeVisible();
     await expect.element(accessDenied()).not.toBeInTheDocument();
   });

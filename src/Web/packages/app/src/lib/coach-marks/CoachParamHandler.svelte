@@ -3,6 +3,7 @@
   import { replaceState } from "$app/navigation";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { beforeNavigate } from "$app/navigation";
+  import { withoutQueryParam } from "#lib/navigation/query-param.js";
 
   const ctx = getCoachMarkContext();
 
@@ -14,10 +15,8 @@
   // React to coach param in URL
   $effect(() => {
     const coachParam = page.url.searchParams.get("coach");
-    if (coachParam) {
-      // Strip the param immediately
-      const url = new URL(page.url);
-      url.searchParams.delete("coach");
+    const url = withoutQueryParam(page.url, "coach");
+    if (coachParam && url) {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, {});
 

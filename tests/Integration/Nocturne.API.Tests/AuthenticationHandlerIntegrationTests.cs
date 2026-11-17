@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for authentication handler chain
 /// Tests legacy API compatibility with api-secret, access tokens, and JWT tokens
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Parity]
 public class AuthenticationHandlerIntegrationTests : ApiIntegrationTestBase
 {

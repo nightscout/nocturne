@@ -3,7 +3,6 @@ using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
@@ -15,21 +14,14 @@ namespace Nocturne.API.Services.Entries;
 /// <summary>
 /// Read-only <see cref="IEntryStore"/> that queries V4 repositories exclusively and projects
 /// results into legacy <see cref="Entry"/> shape via <see cref="EntryProjection"/>.
-/// Sgv reads serve the canonical glucose stream: legacy clients get one coherent series even
-/// when multiple CGMs report concurrently.
+/// Sgv reads serve the canonical glucose stream (<see cref="GlucoseStreams"/>): legacy clients get
+/// one coherent series even when multiple CGMs report concurrently.
 /// </summary>
-public class EntryReadService : IEntryStore
+internal class EntryReadService : IEntryStore
 {
-    /// <summary>
-    /// Canonical selection drops losing-stream rows after the DB query, so limit-based sgv
-    /// fetches over-fetch by this factor before selection to keep pages filled.
-    /// </summary>
-    private const int CanonicalOverFetchFactor = 3;
-
     private readonly ISensorGlucoseRepository _sgRepo;
     private readonly IMeterGlucoseRepository _mgRepo;
     private readonly ICalibrationRepository _calRepo;
-    private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IDemoModeService _demoMode;
     private readonly ILogger<EntryReadService> _logger;
 
@@ -40,14 +32,12 @@ public class EntryReadService : IEntryStore
         ISensorGlucoseRepository sgRepo,
         IMeterGlucoseRepository mgRepo,
         ICalibrationRepository calRepo,
-        ICanonicalGlucoseService canonicalGlucose,
         IDemoModeService demoMode,
         ILogger<EntryReadService> logger)
     {
         _sgRepo = sgRepo;
         _mgRepo = mgRepo;
         _calRepo = calRepo;
-        _canonicalGlucose = canonicalGlucose;
         _demoMode = demoMode;
         _logger = logger;
     }
@@ -177,18 +167,11 @@ public class EntryReadService : IEntryStore
     public async Task<Entry?> GetCurrentAsync(CancellationToken ct = default)
     {
         var (source, excludeDemo) = ResolveDemoFilter();
-
-        // Over-fetch to survive demo filtering and canonical selection dropping the newest rows
-        // when a losing stream reported last — a 1-minute losing cadence can outnumber the
-        // winner five to one on a descending page.
-        const int fetchLimit = 60;
         var results = await _sgRepo.GetForEntriesAsync(
             from: null, to: null, device: null, source: source,
-            limit: fetchLimit, offset: 0, descending: true, nativeOnly: false, ct: ct);
+            limit: 1, offset: 0, descending: true, ct: ct, streams: Canonical(excludeDemo));
 
-        var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
-        var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
-        var sg = canonical.FirstOrDefault();
+        var sg = results.FirstOrDefault();
         return sg is null ? null : EntryProjection.FromSensorGlucose(sg);
     }
 
@@ -205,9 +188,12 @@ public class EntryReadService : IEntryStore
     /// <inheritdoc />
     public async Task<IV4Record?> GetStoredByIdAsync(string id, CancellationToken ct = default)
     {
-        // A uuid-shaped id may also be a legacy id: older v1 uploads without an _id were given one.
+        // A uuid-shaped id may also be a client-supplied legacy id, or the dashless uuid an older v1
+        // POST assigned and served, since stored as the ObjectId it coerces to.
         if (Guid.TryParse(id, out var guid))
-            return await GetByGuidAsync(guid, ct) ?? await GetByLegacyIdAsync(id, ct);
+            return await GetByGuidAsync(guid, ct)
+                ?? await GetByLegacyIdAsync(id, ct)
+                ?? await GetByLegacyIdAsync(MongoObjectId.Coerce(id)!, ct);
 
         // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
         // ObjectId we derived from the record's UUID; resolve the latter via its uuid prefix range.
@@ -224,6 +210,10 @@ public class EntryReadService : IEntryStore
     /// <inheritdoc />
     public async Task<Entry?> CheckDuplicateAsync(string? device, string type, long mills,
         CancellationToken ct = default)
+        => (await FindDuplicateAsync(device, type, mills, ct))?.Entry;
+
+    private async Task<StoredEntryMatch?> FindDuplicateAsync(string? device, string type, long mills,
+        CancellationToken ct)
     {
         var (from, to) = MillisecondOf(mills);
 
@@ -237,10 +227,10 @@ public class EntryReadService : IEntryStore
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
+    public async Task<IReadOnlyList<StoredEntryMatch?>> CheckDuplicatesAsync(
         IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken ct = default)
     {
-        var results = new Entry?[probes.Count];
+        var results = new StoredEntryMatch?[probes.Count];
         var sgvProbes = new List<(EntryDuplicateProbe probe, int index)>();
 
         for (var i = 0; i < probes.Count; i++)
@@ -254,7 +244,7 @@ public class EntryReadService : IEntryStore
 
             // Only sgv arrives in the thousands-per-cycle uploads this batching exists for, so mbg
             // and cal keep the per-entry probe. Unknown types return null without a query.
-            results[i] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
+            results[i] = await FindDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
         }
 
         foreach (var chunk in ChunkByTimeSpan(sgvProbes))
@@ -352,8 +342,8 @@ public class EntryReadService : IEntryStore
     }
 
     /// <summary>
-    /// Width, in canonical buckets, of the widest gap between two page readings that still share one
-    /// window read in <see cref="CanonicalIdsAsync"/>.
+    /// Width, in canonical buckets, of the widest gap between two deleted readings whose buckets still
+    /// share one window read in <see cref="CanonicalSuccessorsAsync"/>.
     /// </summary>
     private const int MaxWindowBucketGap = 12;
 
@@ -361,7 +351,7 @@ public class EntryReadService : IEntryStore
     /// <remarks>
     /// Each glucose type pages through its own <see cref="HistoryPage"/>, and the merge cuts on raw
     /// stamps before anything is withheld, for the reason given at
-    /// <see cref="V4.V4ToLegacyProjectionService.GetProjectedTreatmentsModifiedSinceAsync"/>. The cut
+    /// <see cref="Treatments.V4ToLegacyProjectionService.GetProjectedTreatmentsModifiedSinceAsync"/>. The cut
     /// then decides the cursor, not the delivered rows. A full page that withholds every row is
     /// followed by the next rather than returned: AAPS keeps its cursor on an empty page, so it
     /// would request the same withheld rows forever.
@@ -378,7 +368,7 @@ public class EntryReadService : IEntryStore
         {
             // Sequential to avoid DbContext thread-safety issues with scoped lifetime
             var fetched = new List<HistoryRecord<IV4Record>>();
-            fetched.AddRange(Widen(await _sgRepo.GetModifiedSinceAsync(cursor, limit, ct)));
+            fetched.AddRange(Widen(await _sgRepo.GetCanonicalModifiedSinceAsync(cursor, limit, ct)));
             fetched.AddRange(Widen(await _mgRepo.GetModifiedSinceAsync(cursor, limit, ct)));
             fetched.AddRange(Widen(await _calRepo.GetModifiedSinceAsync(cursor, limit, ct)));
 
@@ -386,7 +376,7 @@ public class EntryReadService : IEntryStore
             if (page.Count == 0)
                 return new ModifiedSincePage<Entry>([], pageCursor);
 
-            pageCursor = HistoryPage.ToMilliseconds(page[^1].Record.ModifiedAt);
+            pageCursor = page[^1].Record.ModifiedAt.ToMills();
 
             var delivered = await VisibleHistoryEntriesAsync(page, source, excludeDemo, ct);
             if (delivered.Count > 0 || page.Count < limit)
@@ -413,9 +403,9 @@ public class EntryReadService : IEntryStore
         if (ordered.Count <= limit)
             return ordered;
 
-        var lastMills = HistoryPage.ToMilliseconds(ordered[limit - 1].Record.ModifiedAt);
+        var lastMills = ordered[limit - 1].Record.ModifiedAt.ToMills();
         return ordered
-            .TakeWhile((r, i) => i < limit || HistoryPage.ToMilliseconds(r.Record.ModifiedAt) == lastMills)
+            .TakeWhile((r, i) => i < limit || r.Record.ModifiedAt.ToMills() == lastMills)
             .ToList();
     }
 
@@ -432,11 +422,11 @@ public class EntryReadService : IEntryStore
 
     /// <summary>
     /// Projects the page rows a regular entries read would return, in page order: demo filtering as
-    /// <see cref="ResolveDemoFilter"/> sets it, and only the canonical stream's sgv readings. A deleted
-    /// row is delivered whatever the canonical selection, with <c>isValid: false</c>: the reading it
-    /// was may have been delivered while it won, and a client that never saw it ignores the delete.
-    /// Each bucket a deleted reading leaves also sends its canonical reading again
-    /// (<see cref="CanonicalSuccessorsAsync"/>).
+    /// <see cref="ResolveDemoFilter"/> sets it. The sgv page holds only the canonical stream's live
+    /// readings (<see cref="ISensorGlucoseRepository.GetCanonicalModifiedSinceAsync"/>), and every
+    /// deleted one, delivered with <c>isValid: false</c>: the reading it was may have been delivered
+    /// while it won, and a client that never saw it ignores the delete. Each bucket a deleted reading
+    /// leaves also sends its canonical reading again (<see cref="CanonicalSuccessorsAsync"/>).
     /// </summary>
     private async Task<List<Entry>> VisibleHistoryEntriesAsync(
         IReadOnlyList<HistoryRecord<IV4Record>> page, string? source, bool excludeDemo, CancellationToken ct)
@@ -447,14 +437,7 @@ public class EntryReadService : IEntryStore
                 : !excludeDemo || !DataSources.IsEphemeral(r.Record.DataSource))
             .ToList();
 
-        var canonical = await CanonicalIdsAsync(
-            visible.Where(r => !r.Deleted).Select(r => r.Record).OfType<SensorGlucose>().ToList(),
-            source,
-            excludeDemo,
-            ct);
-
         var entries = visible
-            .Where(r => r.Deleted || r.Record is not SensorGlucose sg || canonical.Contains(sg.Id))
             .Select(r =>
             {
                 var entry = r.Record switch
@@ -499,50 +482,19 @@ public class EntryReadService : IEntryStore
         var size = CanonicalGlucoseStream.BucketSize.Ticks;
         var stamps = deleted
             .GroupBy(r => r.Timestamp.Ticks / size)
-            .ToDictionary(g => g.Key, g => g.Max(r => HistoryPage.ToMilliseconds(r.ModifiedAt)));
+            .ToDictionary(g => g.Key, g => g.Max(r => r.ModifiedAt.ToMills()));
 
-        var window = new Dictionary<Guid, SensorGlucose>();
+        var successors = new List<(SensorGlucose, long)>();
         foreach (var (from, to) in CanonicalBucketRuns(deleted))
         {
-            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
-            foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
-                window.TryAdd(reading.Id, reading);
+            var stored = await _sgRepo.GetForEntriesAsync(
+                from, to, device: null, source, MaxFilterFetch, 0, false, null, null, ct, streams: Canonical(excludeDemo));
+            successors.AddRange(stored
+                .Where(r => stamps.ContainsKey(r.Timestamp.Ticks / size))
+                .Select(r => (r, stamps[r.Timestamp.Ticks / size])));
         }
 
-        if (window.Count == 0)
-            return [];
-
-        return (await _canonicalGlucose.SelectAsync(window.Values.ToList(), ct))
-            .Where(r => stamps.ContainsKey(r.Timestamp.Ticks / size))
-            .Select(r => (r, stamps[r.Timestamp.Ticks / size]))
-            .ToList();
-    }
-
-    /// <summary>
-    /// Ids of the <paramref name="readings"/> that win canonical selection. A bucket's winner depends
-    /// on every stream that reported into it, and a modified-since page holds only the rows written
-    /// after the cursor — a late backfill from a second CGM arrives without the winner's readings
-    /// beside it — so selection runs over every stored reading in the buckets the page touches.
-    /// </summary>
-    private async Task<HashSet<Guid>> CanonicalIdsAsync(
-        IReadOnlyList<SensorGlucose> readings, string? source, bool excludeDemo, CancellationToken ct)
-    {
-        if (readings.Count == 0)
-            return [];
-
-        var window = new Dictionary<Guid, SensorGlucose>();
-        foreach (var (from, to) in CanonicalBucketRuns(readings))
-        {
-            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
-            foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
-                window.TryAdd(reading.Id, reading);
-        }
-
-        foreach (var reading in readings)
-            window[reading.Id] = reading;
-
-        var canonical = await _canonicalGlucose.SelectAsync(window.Values.ToList(), ct);
-        return canonical.Select(r => r.Id).ToHashSet();
+        return successors;
     }
 
     /// <summary>
@@ -580,42 +532,17 @@ public class EntryReadService : IEntryStore
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
         int count, int skip, bool descending, ReadSortField sort, CancellationToken ct)
     {
-        // Canonical selection happens after the DB query, so paging cannot be pushed down:
-        // over-fetch from offset 0, select, then page.
-        var canonical = await FetchCanonicalSgvAsync(from, to, source, excludeDemo, (long)count + skip, descending, sort, ct);
-        return canonical.Skip(skip).Take(count).Select(EntryProjection.FromSensorGlucose).ToList();
+        var readings = await ReadCanonicalSgvAsync(from, to, source, excludeDemo, count, skip, descending, sort, ct);
+        return readings.Select(EntryProjection.FromSensorGlucose).ToList();
     }
 
-    /// <summary>
-    /// Fetches sgv readings with demo filtering and canonical stream selection applied,
-    /// over-fetching so at least <paramref name="needed"/> canonical rows survive when a
-    /// losing stream contributed to the raw page. A losing stream can outnumber the winner by
-    /// cadence (1-minute vs 5-minute), so the fetch grows geometrically until the page fills
-    /// or the raw window is exhausted.
-    /// </summary>
-    private async Task<IReadOnlyList<Core.Models.V4.SensorGlucose>> FetchCanonicalSgvAsync(
+    private async Task<IEnumerable<SensorGlucose>> ReadCanonicalSgvAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        long needed, bool descending, ReadSortField sort, CancellationToken ct)
-    {
-        const int maxFetch = 100_000;
-        var target = Math.Max(1, needed);
-        var fetchCount = (int)Math.Min(target * CanonicalOverFetchFactor, maxFetch);
-
-        while (true)
-        {
-            var results = (sort == ReadSortField.Sgv
-                ? await _sgRepo.GetForEntriesByValueAsync(from, to, source, fetchCount, 0, descending, ct)
-                : await _sgRepo.GetForEntriesAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct)).ToList();
-            var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
-            var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
-
-            var exhausted = results.Count < fetchCount || fetchCount >= maxFetch;
-            if (canonical.Count >= target || exhausted)
-                return canonical;
-
-            fetchCount = (int)Math.Min((long)fetchCount * CanonicalOverFetchFactor, maxFetch);
-        }
-    }
+        int count, int skip, bool descending, ReadSortField sort, CancellationToken ct) =>
+        sort == ReadSortField.Sgv
+            ? await _sgRepo.GetForEntriesByValueAsync(from, to, source, count, skip, descending, ct, Canonical(excludeDemo))
+            : await _sgRepo.GetForEntriesAsync(
+                from, to, device: null, source, count, skip, descending, null, null, ct, streams: Canonical(excludeDemo));
 
     private async Task<IReadOnlyList<Entry>> QueryMbgAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
@@ -643,7 +570,7 @@ public class EntryReadService : IEntryStore
         var fetchCount = (int)Math.Min((long)count + skip, 100_000);
 
         // Sequential to avoid DbContext thread-safety issues with scoped lifetime
-        var sgResults = await FetchCanonicalSgvAsync(from, to, source, excludeDemo, (long)fetchCount, descending, sort, ct);
+        var sgResults = await ReadCanonicalSgvAsync(from, to, source, excludeDemo, fetchCount, 0, descending, sort, ct);
         var mgResults = await _mgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
         var calResults = await _calRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
 
@@ -686,28 +613,28 @@ public class EntryReadService : IEntryStore
 
     #region Private — Duplicate check helpers
 
-    private async Task<Entry?> CheckSgvDuplicateAsync(
+    private async Task<StoredEntryMatch?> CheckSgvDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         // Probe raw storage rather than the visibility-filtered GetAsync: copies linked as
         // non-primary cross-connector duplicates are hidden from reads, but they still mean the
         // reading is already stored — a filtered check re-inserts them on every upload.
         var match = await _sgRepo.FindStoredDuplicateAsync(device, from, to, ct);
-        return match is null ? null : EntryProjection.FromSensorGlucose(match);
+        return match is null ? null : MatchOf(match);
     }
 
-    private async Task<Entry?> CheckMbgDuplicateAsync(
+    private async Task<StoredEntryMatch?> CheckMbgDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         var match = await _mgRepo.FindStoredDuplicateAsync(device, from, to, ct);
-        return match is null ? null : EntryProjection.FromMeterGlucose(match);
+        return match is null ? null : new StoredEntryMatch(EntryProjection.FromMeterGlucose(match), match.LegacyId);
     }
 
-    private async Task<Entry?> CheckCalDuplicateAsync(
+    private async Task<StoredEntryMatch?> CheckCalDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         var match = await _calRepo.FindStoredDuplicateAsync(device, from, to, ct);
-        return match is null ? null : EntryProjection.FromCalibration(match);
+        return match is null ? null : new StoredEntryMatch(EntryProjection.FromCalibration(match), match.LegacyId);
     }
 
     /// <summary>
@@ -716,7 +643,7 @@ public class EntryReadService : IEntryStore
     /// </summary>
     private async Task ClassifySgvChunkAsync(
         List<(EntryDuplicateProbe probe, int index)> chunk,
-        Entry?[] results,
+        StoredEntryMatch?[] results,
         CancellationToken ct)
     {
         var (from, _) = MillisecondOf(chunk[0].probe.Mills);
@@ -735,7 +662,7 @@ public class EntryReadService : IEntryStore
             foreach (var (probe, index) in chunk)
             {
                 ct.ThrowIfCancellationRequested();
-                results[index] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
+                results[index] = await FindDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
             }
 
             return;
@@ -745,9 +672,12 @@ public class EntryReadService : IEntryStore
         {
             ct.ThrowIfCancellationRequested();
             var match = MatchAtMillisecond(candidates, probe);
-            results[index] = match is null ? null : EntryProjection.FromSensorGlucose(match);
+            results[index] = match is null ? null : MatchOf(match);
         }
     }
+
+    private static StoredEntryMatch MatchOf(SensorGlucose stored) =>
+        new(EntryProjection.FromSensorGlucose(stored), stored.LegacyId);
 
     /// <summary>
     /// The single-entry probe's match rule, applied in memory: the newest candidate at the probe's
@@ -822,10 +752,7 @@ public class EntryReadService : IEntryStore
     /// precision that its <c>Mills</c> truncates away, so equality on the instant would miss it.
     /// </summary>
     private static (DateTime From, DateTime To) MillisecondOf(long mills) =>
-        (MillsToUtc(mills), MillsToUtc(mills + 1));
-
-    private static DateTime MillsToUtc(long mills) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        (mills.ToUtcDateTime(), (mills + 1).ToUtcDateTime());
 
     #endregion
 
@@ -850,6 +777,14 @@ public class EntryReadService : IEntryStore
     }
 
     /// <summary>
+    /// The canonical stream, without ephemeral sources when <paramref name="excludeDemo"/> is
+    /// <c>true</c>: the sgv twin of <see cref="ExcludeDemoIfNeeded{T}"/>, applied in the query so
+    /// paging pushes down.
+    /// </summary>
+    private static GlucoseStreams Canonical(bool excludeDemo) =>
+        excludeDemo ? GlucoseStreams.CanonicalExcludingEphemeral : GlucoseStreams.Canonical;
+
+    /// <summary>
     /// Filters out ephemeral (demo/test) records when <paramref name="exclude"/> is <c>true</c>.
     /// Returns the sequence unchanged when filtering is not needed.
     /// </summary>
@@ -869,9 +804,9 @@ public class EntryReadService : IEntryStore
         // Time range from the parsed find query
         var (fromMills, toMills) = (find.FromMills, find.ToMills);
         if (fromMills.HasValue)
-            from = DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime;
+            from = fromMills.Value.ToUtcDateTime();
         if (toMills.HasValue)
-            to = DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime;
+            to = toMills.Value.ToUtcDateTime();
 
         // DateString takes priority over Find-based time range. Both cannot be combined because
         // the V4 repos accept a single from/to window; DateString wins when both are present.
@@ -884,9 +819,9 @@ public class EntryReadService : IEntryStore
         // Explicit FromMills/ToMills win outright — typed callers (alert replay) use these
         // instead of round-tripping through Find or DateString.
         if (query.FromMills.HasValue)
-            from = DateTimeOffset.FromUnixTimeMilliseconds(query.FromMills.Value).UtcDateTime;
+            from = query.FromMills.Value.ToUtcDateTime();
         if (query.ToMills.HasValue)
-            to = DateTimeOffset.FromUnixTimeMilliseconds(query.ToMills.Value).UtcDateTime;
+            to = query.ToMills.Value.ToUtcDateTime();
 
         return (from, to);
     }

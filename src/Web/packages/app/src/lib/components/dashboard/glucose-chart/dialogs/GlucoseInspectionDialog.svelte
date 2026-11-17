@@ -1,12 +1,12 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import { bg, bgDelta, bgLabel, formatLocale, time } from "$lib/utils/formatting";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
+  import { bg, bgDelta, bgLabel, formatLocale, time } from "#lib/utils/formatting.js";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import InspectionChart from "./InspectionChart.svelte";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
@@ -72,11 +72,11 @@
     () => timestamp,
   );
 
-  // Determine range status (at-threshold is "In Range", matching getGlucoseColor)
+  // Determine range status (at-threshold is "In range", matching getGlucoseColor)
   const rangeStatus = $derived.by(() => {
     if (glucoseValue > highThreshold) return "High";
     if (glucoseValue < lowThreshold) return "Low";
-    return "In Range";
+    return "In range";
   });
 
   // eslint-disable-next-line shadcn/require-static-classes -- the only badge tinted by glucose range; a Badge variant per range would serve this one call site.
@@ -150,7 +150,7 @@
       {/if}
 
       {#if pumpMode}
-        <span class="text-muted-foreground">Pump Mode</span>
+        <span class="text-muted-foreground">Pump mode</span>
         <span class="font-medium">{pumpMode}</span>
       {/if}
 

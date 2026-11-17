@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -23,9 +24,12 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// a delegate or a reflection call that names none of these.
 /// </remarks>
 [Trait("Category", "Unit")]
-public class ChildScopeGuardTests
+public partial class ChildScopeGuardTests
 {
     private const string JobScope = nameof(TenantJobScope);
+
+    /// <summary>What a helper's declared type names; see <see cref="ReturnsScope"/>.</summary>
+    private const string ScopeType = "ServiceScope";
 
     private const string Seam = "src/Infrastructure/Nocturne.Infrastructure.Data/Services/TenantJobScope.cs";
 
@@ -43,34 +47,22 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Program.cs: GlobalStatement",
         "src/API/Nocturne.API/Hubs/HubConnectionRevalidator.cs: HubConnectionRevalidator.RevalidateAsync",
         "src/API/Nocturne.API/Services/Alerts/AlertRuleConditionAuditService.cs: AlertRuleConditionAuditService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.BeginTenantScope",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.CheckSnoozedInstancesAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.CloseHysteresisWindowsAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.EvaluateAutoResolveAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.EvaluateWallClockRulesAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.ProcessTenantSnoozesAsync",
-        "src/API/Nocturne.API/Services/Alerts/RuleScopeClassBackfillService.cs: RuleScopeClassBackfillService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Auth/AuthorizationSeedService.cs: AuthorizationSeedService.StartAsync",
         "src/API/Nocturne.API/Services/Auth/OidcProviderService.cs: OidcProviderService.SyncConfigProvidersAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/ApsSnapshotCurvesBackfillService.cs: ApsSnapshotCurvesBackfillService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/CompressionLowDetectionService.cs: CompressionLowDetectionService.ComputeNextRunDelayAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/CompressionLowDetectionService.cs: CompressionLowDetectionService.RunForAllTenantsAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/ConnectorBackgroundService.cs: ConnectorBackgroundService.SyncForTenantAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/DeduplicationReconciliationBackgroundService.cs: DeduplicationReconciliationBackgroundService.ReconcileAllTenantsAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/DemoServiceHealthMonitor.cs: DemoServiceHealthMonitor.CleanupDemoDataAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/NightscoutConnectorBackgroundService.cs: NightscoutConnectorBackgroundService.StartListenerForTenantAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/NocturneRemoteConnectorBackgroundService.cs: NocturneRemoteConnectorBackgroundService.StartRealtimeListenersAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/NotificationCleanupService.cs: NotificationCleanupService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/TempBasalOriginCorroborationService.cs: TempBasalOriginCorroborationService.RunAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/TempBasalRateSweepService.cs: TempBasalRateSweepService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Chat/ChatIdentityPendingLinkCleanupService.cs: ChatIdentityPendingLinkCleanupService.SweepAsync",
         "src/API/Nocturne.API/Services/Compatibility/DiscrepancyMaintenanceService.cs: DiscrepancyMaintenanceService.PerformMaintenanceAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthWorker.cs: GoogleHealthWorker.ProcessRequestsAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthWorker.cs: GoogleHealthWorker.SyncTenantAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthGrantHolders.cs: PostgresGoogleHealthGrantHolders.AdoptAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationStartupService.cs: MigrationStartupService.StartAsync",
-        "src/API/Nocturne.API/Services/Monitoring/TrackerAlertRuleBackfillService.cs: TrackerAlertRuleBackfillService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/Notifications/NotificationResolutionService.cs: NotificationResolutionService.EvaluateAllTenantsAsync",
+        "src/API/Nocturne.API/Services/Jobs/JobScheduler.cs: JobScheduler.RunAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationStartupService.cs: MigrationStartupService.NotifyIfPendingAsync",
+        "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcilePlatformAsync",
+        "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcileTenantAsync",
+        "src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeJob.cs: ReleaseNoticeJob.NotifyOwnersAsync",
+        "src/API/Nocturne.API/Services/Seeding/SampleDataLiveFeedService.cs: SampleDataLiveFeedService.AdvanceAllAsync",
         "src/API/Nocturne.API/Services/V4/RawMmolProfileNotifier.cs: RawMmolProfileNotifier.NotifyAsync",
 
         // Credential and identity lookups: subjects, grants, memberships and guest links, which no
@@ -87,21 +79,19 @@ public class ChildScopeGuardTests
 
         // Job and connector bookkeeping: job runs, migration sources, sync cursors and locks, none of
         // them time-series.
-        "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorCursorResetJobService.FindRecordAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorCursorResetJobService.StartResetAsync",
-        "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorResetJob.PersistSnapshotAsync",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.LockAsync",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.NotifyAsync",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.OpenRequestListenerAsync",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.ReadRequestsAsync",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.ReadCursorsAsync",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.TenantScope",
-        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.WriteCursorAsync",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.PendingTenantsAsync",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.ReadAsync",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.WriteAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.PersistSnapshotAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.TestApiConnectionAsync",
+
+        // A share's zone and timezone timeline, which no category governs and every local-day report
+        // needs. Each returns only the zone id or the timeline's entries.
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimelineAsync",
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimezoneAsync",
 
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an
@@ -122,7 +112,9 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.TransformDeviceStatusAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.TransformProfileAsync",
         "src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs: SampleDataSeeder.SeedInTenantScopeAsync",
+        "src/API/Nocturne.API/Services/V4/LoopClosedLoopStamper.cs: LoopClosedLoopStamper.RunAsync",
         "src/API/Nocturne.API/Services/V4/TempBasalRateReresolver.cs: TempBasalRateReresolver.RunAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DemoDataPurgeRepository.cs: DemoDataPurgeRepository.ReportInTenantAsync",
     ];
 
     private static readonly IReadOnlyList<string> Openers = Scan();
@@ -161,18 +153,25 @@ public class ChildScopeGuardTests
     [InlineData("class C { static readonly Func<IServiceScope> Make = () => p.CreateScope(); void M() { using var s = Make(); } }", "C.Make,C.M")]
     [InlineData("class C { IServiceScope Helper() => p.CreateScope(); } class D { void M() { var s = Helper(); } }", "C.Helper")]
     [InlineData("class C { IServiceScope Helper() => p.CreateScope(); } class D { void M(C c) { using var s = c.Helper(); } }", "C.Helper,D.M")]
+    [InlineData("class C { void M(IServiceProvider p) { using var s = p.Create\\u0053cope(); } }", "C.M")]
     [InlineData("class C { void M() { var s = TenantJobScope.OpenFor(p, r, \"a\"); } }", null)]
     [InlineData("class C { void M() { var s = File.Open(path); } }", null)]
     [InlineData("class C { void M() { var s = Open(path); } }", null)]
     public void FindsTheOpeningMember(string source, string? expected)
     {
         var tree = CSharpSyntaxTree.ParseText(source);
-        var members = OpeningMembers(tree, ScopeHelpers([tree]));
+        var helpers = ScopeHelpers([tree]);
+        var members = OpeningMembers(tree, helpers);
 
         if (expected is null)
             members.Should().BeEmpty();
         else
             members.Should().Equal(expected.Split(','));
+
+        if (helpers.Count > 0)
+            MayDeclareHelper(source).Should().BeTrue("the scan does not parse a file this filter turns away");
+        if (members.Count > 0)
+            MayOpen(source, helpers.Keys).Should().BeTrue("the scan does not parse a file this filter turns away");
     }
 
     /// <summary>
@@ -231,7 +230,7 @@ public class ChildScopeGuardTests
     }
 
     private static bool ReturnsScope(TypeSyntax type) =>
-        type.ToString().Contains("ServiceScope", StringComparison.Ordinal);
+        type.ToString().Contains(ScopeType, StringComparison.Ordinal);
 
     private static List<string> OpeningMembers(SyntaxTree tree, Dictionary<string, HashSet<string>> helpers) =>
         OpeningNodes(tree.GetRoot(), FileNames.Of(tree.GetRoot()), helpers)
@@ -296,43 +295,50 @@ public class ChildScopeGuardTests
         };
     }
 
-    private static List<string> Scan()
+    /// <summary>
+    /// Whether <paramref name="text"/> can declare a helper: <see cref="ReturnsScope"/> reads the
+    /// declared type as written, so it names <see cref="ScopeType"/>. The scan parses only the files
+    /// these filters admit, since the migrations are most of <c>src</c>.
+    /// </summary>
+    private static bool MayDeclareHelper(string text) => text.Contains(ScopeType, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether <paramref name="text"/> can hold an opening node: an identifier naming a raw scope
+    /// method, <c>Open</c> or one of <paramref name="helpers"/>. Identifiers are matched by value, so
+    /// the text is read with its <c>\u</c> escapes decoded.
+    /// </summary>
+    private static bool MayOpen(string text, IEnumerable<string> helpers)
     {
-        var root = RepositoryRoot();
-        var sources = new List<(string File, SyntaxTree Tree)>();
+        if (text.Contains(@"\u", StringComparison.OrdinalIgnoreCase))
+            text = UnicodeEscape().Replace(text, Decode);
 
-        foreach (var tree in ScannedTrees)
-        {
-            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories))
+        static string Decode(System.Text.RegularExpressions.Match escape) =>
+            Convert.ToInt32(escape.Groups[1].Success ? escape.Groups[1].Value : escape.Groups[2].Value, 16) switch
             {
-                if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                    || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-                    continue;
+                <= 0xFFFF and var unit => ((char)unit).ToString(),
+                <= 0x10FFFF and var point => char.ConvertFromUtf32(point),
+                _ => escape.Value,
+            };
 
-                var file = Path.GetRelativePath(root, path).Replace('\\', '/');
-                sources.Add((file, CSharpSyntaxTree.ParseText(File.ReadAllText(path))));
-            }
-        }
-
-        var helpers = ScopeHelpers(sources.Where(s => s.File != Seam).Select(s => s.Tree).ToList());
-
-        return sources
-            .SelectMany(s => OpeningMembers(s.Tree, helpers).Select(member => $"{s.File}: {member}"))
-            .ToList();
+        var names = RawScopeMethods.Append(nameof(TenantJobScope.Open)).Concat(helpers).Select(Regex.Escape);
+        return Regex.IsMatch(text, $@"\b(?:{string.Join('|', names)})\b", RegexOptions.CultureInvariant);
     }
 
-    private static string RepositoryRoot()
+    [GeneratedRegex(@"\\(?:u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8}))")]
+    private static partial Regex UnicodeEscape();
+
+    private static List<string> Scan()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        var sources = ScannedTrees.SelectMany(RepoSources.Under).ToList();
 
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
+        var helpers = ScopeHelpers(sources
+            .Where(s => s.Path != Seam && MayDeclareHelper(s.Text))
+            .Select(s => s.Tree)
+            .ToList());
 
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
+        return sources
+            .Where(s => MayOpen(s.Text, helpers.Keys))
+            .SelectMany(s => OpeningMembers(s.Tree, helpers).Select(member => $"{s.Path}: {member}"))
+            .ToList();
     }
 }

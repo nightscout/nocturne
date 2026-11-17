@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -42,7 +43,7 @@ public static class HistoryPage
         string table,
         CancellationToken ct)
     {
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var from = (cursorMills + 1).ToUtcDateTime();
         var horizon = await HistoryHorizon.GetAsync(context, logger, ct);
         var page = await source
             .Where(InRange(stamp, from, horizon))
@@ -56,7 +57,7 @@ public static class HistoryPage
 
         var idOf = id.Compile();
         var seen = page.Select(idOf).ToHashSet();
-        var lastMills = ToMilliseconds(stamp.Compile()(page[^1]));
+        var lastMills = stamp.Compile()(page[^1]).ToMills();
 
         foreach (var row in await GetMillisecondAsync(source, stamp, id, lastMills, ct))
         {
@@ -88,7 +89,7 @@ public static class HistoryPage
         long millisecond,
         CancellationToken ct)
     {
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(millisecond).UtcDateTime;
+        var from = millisecond.ToUtcDateTime();
         return source
             .Where(InRange(stamp, from, from.AddMilliseconds(1)))
             .OrderBy(stamp)
@@ -103,9 +104,6 @@ public static class HistoryPage
     /// </summary>
     public static IQueryable<T> IncludingDeleted<T>(this IQueryable<T> source) where T : class =>
         source.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]);
-
-    public static long ToMilliseconds(DateTime stamp) =>
-        new DateTimeOffset(stamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private static Expression<Func<T, bool>> InRange<T>(
         Expression<Func<T, DateTime>> stamp,

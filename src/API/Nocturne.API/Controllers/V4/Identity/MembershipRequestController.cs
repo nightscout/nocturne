@@ -92,7 +92,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize]
-    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
+    [RemoteCommand(Invalidates = ["GetPendingRequests", "MemberInvite_GetMembers"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

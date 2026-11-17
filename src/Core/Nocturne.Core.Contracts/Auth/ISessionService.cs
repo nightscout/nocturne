@@ -15,13 +15,28 @@ public interface ISessionService
 
     /// <summary>
     /// Rotate an existing refresh token, issuing a new token pair with
-    /// freshly resolved roles and permissions.
+    /// freshly resolved roles and permissions. Everything the pair needs is read before the
+    /// rotation commits, so a failed read leaves the presented token valid.
     /// </summary>
     /// <param name="context">Contextual metadata for the session.</param>
     /// <returns>New token pair, or null if the refresh token is invalid.</returns>
     Task<SessionTokenPair?> RotateSessionAsync(
         string refreshToken, SessionContext context, CancellationToken ct = default);
+
+    /// <summary>
+    /// Read the claims a refresh of <paramref name="refreshToken"/> mints for its subject. A missing
+    /// or inactive subject is refused and the token revoked, so a rotating and a non-rotating
+    /// refresh agree on who may refresh.
+    /// </summary>
+    /// <returns>The subject's claims, or null when the subject may not refresh.</returns>
+    Task<SessionClaims?> ReadRefreshClaimsAsync(
+        string refreshToken, Guid subjectId, CancellationToken ct = default);
 }
+
+/// <summary>
+/// The subject, roles and permissions an access token is minted from.
+/// </summary>
+public record SessionClaims(SubjectInfo Subject, List<string> Roles, List<string> Permissions);
 
 /// <summary>
 /// Contextual metadata attached to a session for audit and device tracking.
@@ -33,7 +48,7 @@ public record SessionContext(
     string? UserAgent = null);
 
 /// <summary>
-/// An access/refresh token pair with the access token's lifetime.
+/// An access/refresh token pair with the access token's lifetime and the subject it was issued to.
 /// </summary>
 public record SessionTokenPair(
-    string AccessToken, string RefreshToken, int ExpiresInSeconds);
+    string AccessToken, string RefreshToken, int ExpiresInSeconds, Guid SubjectId);

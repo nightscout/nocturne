@@ -3,6 +3,9 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.API.Services.ChartData;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
@@ -11,6 +14,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Analytics;
@@ -23,10 +27,16 @@ public class LoopAnalysisServiceReadTests
     private static readonly DateTime To = From.AddDays(1);
 
     private readonly Mock<ITempBasalRepository> _tempBasals = new();
+    private readonly Mock<IBolusRepository> _boluses = new();
+    private readonly Mock<ICarbIntakeRepository> _carbs = new();
+    private readonly Mock<IStateSpanRepository> _spans = new();
     private readonly Mock<IApsSnapshotRepository> _snapshots = new();
     private readonly Mock<IPatientDeviceRepository> _devices = new();
     private readonly Mock<IBasalSeriesBuilder> _series = new();
     private readonly List<TempBasal> _seriesTemps = [];
+    private readonly List<ScaleFactorInterval> _seriesOverrides = [];
+    private readonly List<StateSpan> _overrideSpans = [];
+    private readonly List<long> _timelineStarts = [];
 
     public LoopAnalysisServiceReadTests()
     {
@@ -45,8 +55,12 @@ public class LoopAnalysisServiceReadTests
             .ReturnsAsync([]);
         _series
             .Setup(b => b.BuildAsync(
-                It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
-            .Callback((List<TempBasal> temps, long _, long _, double _, CancellationToken _) => _seriesTemps.AddRange(temps))
+                It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<IReadOnlyList<ScaleFactorInterval>>(), It.IsAny<CancellationToken>()))
+            .Callback((List<TempBasal> temps, long _, long _, double _, IReadOnlyList<ScaleFactorInterval> overrides, CancellationToken _) =>
+            {
+                _seriesTemps.AddRange(temps);
+                _seriesOverrides.AddRange(overrides);
+            })
             .ReturnsAsync([]);
     }
 
@@ -56,34 +70,37 @@ public class LoopAnalysisServiceReadTests
         profiles
             .Setup(r => r.GetProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var spans = new Mock<IStateSpanRepository>();
-        spans
+        _spans
             .Setup(r => r.GetByCategories(
                 It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+            .ReturnsAsync(() => new Dictionary<StateSpanCategory, List<StateSpan>>
+            {
+                [StateSpanCategory.Override] = [.. _overrideSpans],
+            });
         var glucose = new Mock<ISensorGlucoseRepository>();
         glucose
             .Setup(r => r.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
             .ReturnsAsync([]);
         var timeline = new Mock<ITherapyTimelineResolver>();
         timeline
             .Setup(t => t.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback((long from, long _, string? _, CancellationToken _) => _timelineStarts.Add(from))
             .ReturnsAsync(new TherapyTimeline([
                 new TherapySegment(0, long.MaxValue,
-                    new TherapySnapshot(5.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    new TherapySnapshot(5.0, TherapySnapshot.DefaultCarbsPerHour,
                         null, null, 0, null, null, null)),
             ]));
 
         return new LoopAnalysisService(
             glucoseRepository: glucose.Object,
-            canonicalGlucose: CanonicalGlucosePassThrough.Create(),
-            bolusRepository: Mock.Of<IBolusRepository>(),
-            carbIntakeRepository: Mock.Of<ICarbIntakeRepository>(),
+            bolusRepository: _boluses.Object,
+            carbIntakeRepository: _carbs.Object,
             tempBasalRepository: _tempBasals.Object,
             apsSnapshotRepository: _snapshots.Object,
-            stateSpanRepository: spans.Object,
+            pumpSnapshotRepository: Mock.Of<IPumpSnapshotRepository>(),
+            stateSpanRepository: _spans.Object,
             patientDeviceRepository: _devices.Object,
             targetRangeScheduleRepository: Mock.Of<ITargetRangeScheduleRepository>(),
             therapyTimelineResolver: timeline.Object,
@@ -91,7 +108,9 @@ public class LoopAnalysisServiceReadTests
             activeProfileResolver: profiles.Object,
             basalSeriesBuilder: _series.Object,
             basalSegmentService: Mock.Of<IBasalSegmentService>(),
-            iobCalculator: Mock.Of<IIobCalculator>(),
+            iobCalculator: new IobCalculator(
+                Mock.Of<ITherapySettingsResolver>(), Mock.Of<ISensitivityResolver>(), Mock.Of<IBasalSegmentService>(),
+                Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(), MockStateSpans.Empty().Object),
             cobCalculator: Mock.Of<ICobCalculator>(),
             therapySettingsRepository: Mock.Of<ITherapySettingsRepository>(),
             aidSystemMetrics: null!,
@@ -120,6 +139,59 @@ public class LoopAnalysisServiceReadTests
             "the load reads past the range for climbs, but nothing after now has been delivered");
     }
 
+    [Fact]
+    public async Task SettingsEvidence_HandsTheBasalSeriesTheOverridesItRead()
+    {
+        _overrideSpans.Add(new StateSpan
+        {
+            Category = StateSpanCategory.Override,
+            StartTimestamp = From.AddHours(2),
+            EndTimestamp = From.AddHours(4),
+            Metadata = new Dictionary<string, object> { ["insulinNeedsScaleFactor"] = 0.5 },
+        });
+
+        await Service().GetSettingsEvidenceAsync(new LoopAnalysisFilter { From = From, To = To, Now = To }, Utc);
+
+        _seriesOverrides.Should().Equal(new ScaleFactorInterval(
+            new DateTimeOffset(From.AddHours(2)).ToUnixTimeMilliseconds(),
+            new DateTimeOffset(From.AddHours(4)).ToUnixTimeMilliseconds(),
+            0.5));
+    }
+
+    [Fact]
+    public async Task DailyProfile_BuildsTheTimelineFromTheLookback()
+    {
+        // Temp basals are read from the look-back before the range, and the net basal IOB at the
+        // first tick reads the schedule under each of their chunks, so the timeline starts there too.
+        await Service().GetDailyProfileAsync(new LoopAnalysisFilter { From = From, To = To, Now = To }, Utc);
+
+        _timelineStarts.Should().NotBeEmpty().And.OnlyContain(start =>
+            start == new DateTimeOffset(From).ToUnixTimeMilliseconds() - DailyProfileCalculator.ActingMs);
+    }
+
+    [Fact]
+    public async Task DailyProfile_ReadsTheSeriesWindowsLookBacks_FromTheFirstTick()
+    {
+        var from = From.AddMinutes(2);
+
+        await Service().GetDailyProfileAsync(new LoopAnalysisFilter { From = from, To = To, Now = To }, Utc);
+
+        var insulinFrom = From.AddHours(-8);
+        var tempBasalFrom = From.AddHours(-32);
+        _boluses.Verify(r => r.GetAsync(
+            insulinFrom, It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _carbs.Verify(r => r.GetAsync(
+            insulinFrom, It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _tempBasals.Verify(r => r.GetAsync(
+            tempBasalFrom, It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+        _spans.Verify(r => r.GetByCategories(
+            It.Is<IEnumerable<StateSpanCategory>>(c => c.SequenceEqual(new[] { StateSpanCategory.Override })),
+            tempBasalFrom, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Theory]
     [InlineData(-10, 1)]
     [InlineData(40, 0)]
@@ -141,12 +213,56 @@ public class LoopAnalysisServiceReadTests
             .ReturnsAsync([new ApsPredictionPoint(start, "loop://iPhone", true, AidAlgorithm.Loop, "[120,120,120,120,120,120,120]", null, null, null, null)]);
         _snapshots
             .Setup(r => r.GetIobCobPointsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ApsIobCobPoint(start.AddMinutes(storedMinutesAfter), null, null)]);
+            .ReturnsAsync([new ApsIobCobPoint(start.AddMinutes(storedMinutesAfter), null, null, null)]);
 
         var report = await Service().GetPredictionAccuracyAsync(new LoopAnalysisFilter { From = From, To = To, Now = To.AddDays(1) }, Utc);
 
         report.Primary.Predictions.Should().Be(counted,
             "a registered pump with no AID algorithm is open loop wherever no APS snapshot was stored in the half hour before, as on every page");
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    [InlineData(null, 1)]
+    public async Task Predictions_OnALoopPump_AreOpenLoop_WhereASnapshotHadDosingOff(bool? closedLoop, int counted)
+    {
+        var start = From.AddHours(10);
+        _devices
+            .Setup(r => r.GetByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PatientDevice
+            {
+                Id = Guid.NewGuid(),
+                DeviceCategory = DeviceCategory.InsulinPump,
+                AidAlgorithm = AidAlgorithm.Loop,
+                StartDate = DateOnly.FromDateTime(From),
+                EndDate = DateOnly.FromDateTime(From),
+            }]);
+        _snapshots
+            .Setup(r => r.GetPredictionsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ApsPredictionPoint(start, "loop://iPhone", true, AidAlgorithm.Loop, "[120,120,120,120,120,120,120]", null, null, null, null)]);
+        _snapshots
+            .Setup(r => r.GetIobCobPointsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ApsIobCobPoint(start.AddMinutes(-5), null, null, closedLoop)]);
+
+        var report = await Service().GetPredictionAccuracyAsync(new LoopAnalysisFilter { From = From, To = To, Now = To.AddDays(1) }, Utc);
+
+        report.Primary.Predictions.Should().Be(counted,
+            "a Loop snapshot with dosing off is open loop, and one with dosing on or unknown is closed, whatever the pump is registered as");
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(null, true)]
+    public void LoopStates_ReadTheClosedLoopState_OfACycleAndOfAnIobCobPoint(bool? closedLoop, bool closed)
+    {
+        var at = From.AddHours(3);
+
+        LoopAnalysisService.LoopStates([new ApsLoopCycle { Timestamp = at, ClosedLoop = closedLoop }])
+            .Should().Equal(new ApsLoopState(at.ToMills(), closed));
+        LoopAnalysisService.LoopStates([new ApsIobCobPoint(at, null, null, closedLoop)])
+            .Should().Equal(new ApsLoopState(at.ToMills(), closed));
     }
 
     [Fact]

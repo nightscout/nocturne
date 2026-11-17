@@ -8,8 +8,11 @@
     variant = "default",
     ...restProps
   }: AvatarPrimitive.FallbackProps & {
-    /** primary: a person's initials, tinted with the primary colour. */
-    variant?: "default" | "primary";
+    /**
+     * primary: a person's initials, tinted with the primary colour.
+     * wash: initials over a painted wash the caller places inside; the fallback is its positioning context.
+     */
+    variant?: "default" | "primary" | "wash";
   } = $props();
 </script>
 
@@ -19,6 +22,7 @@
   class={cn(
     "bg-muted flex size-full items-center justify-center rounded-full",
     variant === "primary" && "bg-primary/10 text-primary",
+    variant === "wash" && "relative font-medium text-foreground",
     className
   )}
   {...restProps}

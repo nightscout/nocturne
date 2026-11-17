@@ -1,4 +1,4 @@
-import type { ClientSettings } from '$lib/stores/serverSettings.js';
+import type { ClientSettings } from '#lib/stores/serverSettings.js';
 
 export function getDefaultSettings(): ClientSettings {
 	return {

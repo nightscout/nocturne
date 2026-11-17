@@ -24,7 +24,8 @@ internal sealed class MyLifeStateSpanMapper
     internal static IEnumerable<TempBasal> MapTempBasals(
         IEnumerable<MyLifeEvent> events,
         bool enableTempBasalConsolidation,
-        int tempBasalConsolidationWindowMinutes
+        int tempBasalConsolidationWindowMinutes,
+        DateTime now
     )
     {
         var eventList = events.ToList();
@@ -32,7 +33,8 @@ internal sealed class MyLifeStateSpanMapper
             eventList,
             false,
             enableTempBasalConsolidation,
-            tempBasalConsolidationWindowMinutes
+            tempBasalConsolidationWindowMinutes,
+            now
         );
 
         return MapTempBasals(eventList, context);

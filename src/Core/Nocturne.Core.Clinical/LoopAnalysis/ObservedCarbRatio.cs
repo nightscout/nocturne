@@ -53,15 +53,16 @@ public static class ObservedCarbRatio
         var tallies = blocks.Select(_ => new RejectionTally(Rules)).ToArray();
         var episodes = blocks.Select(_ => new List<CarbRatioEvidenceEpisode>()).ToArray();
 
-        var meals = EventAnchors.Meals(context.Inputs.Series.Carbs);
-        foreach (var meal in meals)
+        var meals = context.MealPairing.Meals;
+        for (var index = 0; index < meals.Count; index++)
         {
+            var meal = meals[index];
             if (meal.Mills < context.From || meal.Mills >= context.To)
                 continue;
             var block = (int)SettingsEvidenceCalculator.BlockOf(LocalSlotBinning.LocalTime(meal.Mills, context.Zone).Hour);
             tallies[block].Candidate();
             var (episode, rule) = EventAnchors.IsIsolated(meal, context.Isolating, WindowBeforeMs, WindowAfterMs)
-                ? Measure(context, meal, conversion, baseline)
+                ? Measure(context, meal, index, conversion, baseline)
                 : (null, SettingsEvidenceRule.NotIsolated);
             if (rule is { } rejected)
                 tallies[block].Reject(rejected);
@@ -99,24 +100,24 @@ public static class ObservedCarbRatio
         SettingsEvidenceCalculator.Share((e.EndGlucose - e.StartGlucose) / e.Isf, e.InsulinNeeded);
 
     /// <summary>
-    /// IOB before the meal's own bolus: the first manual dose up to <see cref="EventAnchors.CarbFreeMs"/>
-    /// before the meal, which a pre-bolus may put ahead of the window's start.
+    /// IOB before the meal's own bolus: the first manual dose up to the meal that
+    /// <see cref="MealPairing"/> pairs with it, which a pre-bolus may put ahead of the window's start.
     /// </summary>
-    private static double? StandingIob(SettingsEvidenceContext context, long meal)
+    private static double? StandingIob(SettingsEvidenceContext context, long meal, int index)
     {
         var doses = context.Insulin.Doses;
-        for (var i = SortedSearch.FirstEndingAfter(doses, meal - EventAnchors.CarbFreeMs - 1, static d => d.Mills);
+        for (var i = SortedSearch.FirstEndingAfter(doses, meal - EventAnchors.BolusBeforeMealMs - 1, static d => d.Mills);
              i < doses.Count && doses[i].Mills <= meal;
              i++)
         {
-            if (!doses[i].Automatic)
+            if (!doses[i].Automatic && context.MealPairing.MealOf(doses[i]) == index)
                 return context.Series.IobAt(doses[i].Mills - 1);
         }
         return null;
     }
 
     private static (CarbRatioEvidenceEpisode? Episode, SettingsEvidenceRule? Rejected) Measure(
-        SettingsEvidenceContext context, EventAnchor meal, IsfConversion conversion, BasalBaseline? baseline)
+        SettingsEvidenceContext context, EventAnchor meal, int index, IsfConversion conversion, BasalBaseline? baseline)
     {
         var start = meal.Mills - WindowBeforeMs;
         var end = meal.Mills + WindowAfterMs;
@@ -144,7 +145,7 @@ public static class ObservedCarbRatio
         var grams = meal.Grams!.Value;
         var episode = context.Episode<CarbRatioEvidenceEpisode>(
             meal.Mills, end, grams / needed, context.TherapyAt(meal.Mills).CarbRatioAt(meal.Mills));
-        context.Fill(episode, end, startGlucose, endGlucose, insulin, StandingIob(context, meal.Mills) ?? insulin.IobAtStart);
+        context.Fill(episode, end, startGlucose, endGlucose, insulin, StandingIob(context, meal.Mills, index) ?? insulin.IobAtStart);
         episode.Grams = SlotSummary.Round(grams);
         episode.InsulinNeeded = SlotSummary.Round(needed);
         episode.Isf = SlotSummary.Round(isf);

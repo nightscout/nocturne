@@ -132,6 +132,13 @@ public class DeviceStatus : ProcessableDocumentBase
     [Sanitizable]
     public string Device { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The connector the status was stored for, set when its creation is announced so a write-back can
+    /// tell it from an upload. Never serialized, so a client cannot set it and no response carries it.
+    /// </summary>
+    [JsonIgnore]
+    public string? DataSource { get; set; }
+
     [JsonPropertyName("isCharging")]
     public bool? IsCharging { get; set; }
 
@@ -239,9 +246,6 @@ public class PumpStatus
     /// </summary>
     [JsonPropertyName("reservoir_display_override")]
     public string? ReservoirDisplayOverride { get; set; }
-
-    [JsonPropertyName("reservoir_level_override")]
-    public PumpAlertLevel? ReservoirLevelOverride { get; set; }
 
     /// <summary>
     /// Pump manufacturer (e.g., "Insulet", "Medtronic", "Tandem")

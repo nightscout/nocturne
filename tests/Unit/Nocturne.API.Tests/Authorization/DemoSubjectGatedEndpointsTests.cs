@@ -108,6 +108,9 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(TotpController), nameof(TotpController.ListCredentials) },
         { typeof(TotpController), nameof(TotpController.RemoveCredential) },
 
+        // Stepping down strips the shared subject's own roles, for every later visitor.
+        { typeof(MemberInviteController), nameof(MemberInviteController.StepDown) },
+
         // The avatar every later visitor is shown. The read stays open — it is the demo account's
         // own picture, and the tiles render it.
         { typeof(AvatarController), nameof(AvatarController.Upload) },

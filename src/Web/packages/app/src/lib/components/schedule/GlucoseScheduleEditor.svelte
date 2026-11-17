@@ -1,15 +1,15 @@
 <script lang="ts">
   import type { Icon } from "@lucide/svelte";
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import { Card, CardContent } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ScheduleView from "./ScheduleView.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     convertToDisplayUnits,
     convertFromDisplayUnits,
     timeStringToSeconds,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   interface GlucoseEntry {
     time?: string;
@@ -31,8 +31,6 @@
     entries: GlucoseEntry[];
     /** Show and save the stored numbers as they are, with no display-unit conversion */
     raw?: boolean;
-    /** The draft when there are no stored entries, in display units */
-    fallback?: () => GlucoseEntry[];
     /** Called with the edited entries, in mg/dL */
     save: (entries: GlucoseEntry[]) => Promise<void>;
     cancel: () => void;
@@ -48,7 +46,6 @@
     range,
     entries,
     raw = false,
-    fallback,
     save,
     cancel,
     saveErrorMessage,
@@ -61,7 +58,7 @@
   const fromDisplay = (value: number) => (raw ? value : convertFromDisplayUnits(value, displayUnits));
 
   function initialDraft(): GlucoseEntry[] {
-    if (entries.length === 0) return fallback?.() ?? [{ time: "00:00" }];
+    if (entries.length === 0) return [{ time: "00:00" }];
     return entries.map((e) =>
       range
         ? {
@@ -134,6 +131,7 @@
       {iconClass}
       entries={draft}
       onchange={(next) => (draft = next)}
+      {range}
       step={fineSteps ? 0.1 : 1}
       min={fineSteps ? 0.1 : 1}
     />

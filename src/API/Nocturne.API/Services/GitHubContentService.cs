@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Content;
 using Nocturne.Core.Models.Content;
 
@@ -77,7 +78,7 @@ public partial class GitHubContentService(
 
         logger.LogInformation(
             "Opened content PR #{PrNumber} for {Path} ({Mode})",
-            prNumber, ContributionValidation.ForLog(request.Path), existing is null ? "create" : "update");
+            prNumber, LogText.Sanitize(request.Path), existing is null ? "create" : "update");
 
         return new ContentContributionResponse
         {
@@ -97,7 +98,7 @@ public partial class GitHubContentService(
         {
             var error = await response.Content.ReadAsStringAsync(ct);
             logger.LogError("Content relay error: {StatusCode} {Error}",
-                response.StatusCode, ContributionValidation.ForLog(error));
+                response.StatusCode, LogText.Sanitize(error));
             if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity)
                 // Forward the relay's own reason so the contributor can tell
                 // "identical to published" from "path not allowed".

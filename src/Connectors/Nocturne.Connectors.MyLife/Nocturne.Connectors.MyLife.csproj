@@ -1,12 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <Description>MyLife connector service</Description>
         <Company>Nocturne</Company>
         <Product>Nocturne Connectors</Product>
+        <!-- This project reads the clock only through an injected TimeProvider; BannedSymbols.txt
+             holds it there. Scoped to this project until the rest of the tree follows. -->
+        <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
     </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <AdditionalFiles Include="BannedSymbols.txt"/>
+    </ItemGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Connectors.MyLife.Tests" />
     </ItemGroup>

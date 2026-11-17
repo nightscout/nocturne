@@ -17,7 +17,7 @@ public static class FoodMapper
     {
         return new FoodEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(food.Id),
+            Id = RecordIdKey.ParseIdToGuid(food.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(food.Id) ? food.Id : null,
             Type = food.Type,
             Category = food.Category,
@@ -62,8 +62,8 @@ public static class FoodMapper
             Position = entity.Position,
             // Map SysCreatedAt to created_at for Nightscout parity
             CreatedAt = entity.SysCreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            SrvModified = new DateTimeOffset(entity.SysUpdatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvCreated = new DateTimeOffset(entity.SysCreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvModified = entity.SysUpdatedAt.ToMills(),
+            SrvCreated = entity.SysCreatedAt.ToMills(),
         };
     }
 

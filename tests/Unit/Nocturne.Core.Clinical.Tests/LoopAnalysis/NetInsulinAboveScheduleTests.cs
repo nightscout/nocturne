@@ -1,4 +1,5 @@
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 
@@ -156,9 +157,10 @@ public class NetInsulinAboveScheduleTests
     [Fact]
     public void OverrideScaleFactor_ScalesTheBaseline()
     {
-        var baseline = NetInsulinAboveSchedule.ScheduledBaseline(
-            [new BasalSegment(T0Mills, T0Mills + Hour, 1.0, 1.0, "Default")],
-            [new ScaleFactorInterval(T0Mills + 20 * Minute, T0Mills + 40 * Minute, 0.5)]);
+        var baseline = new ScheduledBasal(
+                [new BasalSegment(T0Mills, T0Mills + Hour, 1.0, 1.0, "Default")],
+                [new ScaleFactorInterval(T0Mills + 20 * Minute, T0Mills + 40 * Minute, 0.5)])
+            .Segments([]);
 
         baseline.Should().Equal(
             new RateSegment(T0Mills, T0Mills + 20 * Minute, 1.0),
@@ -239,12 +241,13 @@ public class NetInsulinAboveScheduleTests
     [Fact]
     public void OverlappingOverrides_TheLatestStartedIsInForce()
     {
-        var baseline = NetInsulinAboveSchedule.ScheduledBaseline(
-            [new BasalSegment(T0Mills, T0Mills + Hour, 1.0, 1.0, "Default")],
-            [
-                new ScaleFactorInterval(T0Mills, T0Mills + 40 * Minute, 0.5),
-                new ScaleFactorInterval(T0Mills + 10 * Minute, T0Mills + 20 * Minute, 2.0),
-            ]);
+        var baseline = new ScheduledBasal(
+                [new BasalSegment(T0Mills, T0Mills + Hour, 1.0, 1.0, "Default")],
+                [
+                    new ScaleFactorInterval(T0Mills, T0Mills + 40 * Minute, 0.5),
+                    new ScaleFactorInterval(T0Mills + 10 * Minute, T0Mills + 20 * Minute, 2.0),
+                ])
+            .Segments([]);
 
         baseline.Should().Equal(
             new RateSegment(T0Mills, T0Mills + 10 * Minute, 0.5),

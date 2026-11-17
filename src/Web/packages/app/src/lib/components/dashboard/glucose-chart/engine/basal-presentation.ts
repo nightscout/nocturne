@@ -1,4 +1,4 @@
-import { BasalDeliveryOrigin } from "$api-clients";
+import { BasalDeliveryOrigin } from "#lib/api/generated/nocturne-api-client.js";
 
 /**
  * Whether a basal point departs from the schedule, which the chart paints in the

@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { DayOfWeek } from "$lib/api";
+import { DayOfWeek } from "#lib/api/index.js";
 import AppliedFiltersSummary from "./AppliedFiltersSummary.svelte";
 
 describe("AppliedFiltersSummary", () => {

@@ -3,6 +3,7 @@ using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -40,14 +41,32 @@ internal sealed class BasalRateResolver : IBasalRateResolver
     public async Task<double> GetBasalRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
         => await FindAsync(timeMills, specProfile, ct) ?? DefaultBasalRate;
 
-    public Task<double?> FindBasalRateAsync(long timeMills, CancellationToken ct = default)
-        => FindAsync(timeMills, specProfile: null, ct);
-
-    private async Task<double?> FindAsync(long timeMills, string? specProfile, CancellationToken ct)
+    public async Task<IReadOnlyList<double?>> FindBasalRatesAsync(
+        IReadOnlyList<long> timesMills, CancellationToken ct = default)
     {
-        var schedule = await ActiveSchedule.ResolveAsync(
+        if (timesMills.Count == 0)
+            return [];
+
+        var active = await _activeProfileResolver.GetActiveAtAsync(timesMills, ct);
+        var patientTimezone = (await _patientRecordRepo.GetAsync(ct))?.Timezone;
+        var rates = new List<double?>(timesMills.Count);
+        foreach (var (timeMills, (profileName, activation)) in timesMills.Zip(active))
+        {
+            rates.Add(RateOf(await ActiveSchedule.ResolveAsync(
+                timeMills, profileName, activation?.Schedules, activation?.Scaling, _repo, _versions,
+                s => s.Entries, s => s.Basal, _therapyRepo, patientTimezone, ct)));
+        }
+
+        return rates;
+    }
+
+    private async Task<double?> FindAsync(long timeMills, string? specProfile, CancellationToken ct) =>
+        RateOf(await ActiveSchedule.ResolveAsync(
             timeMills, specProfile, _activeProfileResolver, _repo, _versions,
-            s => s.Entries, s => s.Basal, _therapyRepo, _patientRecordRepo, ct);
+            s => s.Entries, s => s.Basal, _therapyRepo, _patientRecordRepo, ct));
+
+    private static double? RateOf(ActiveSchedule.At<ScheduleEntry>? schedule)
+    {
         if (schedule is null
             || ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight) is not { } value)
             return null;
@@ -95,7 +114,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             if (SpanAt(spans, timeMills) is not { } span)
                 return DefaultBasalRate;
 
-            var at = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+            var at = timeMills.ToUtcDateTime();
             var store = stores[span.ProfileName];
             var adjustment = span.Adjustment;
             var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
@@ -111,11 +130,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             if (entries is null)
                 return DefaultBasalRate;
 
-            var dto = DateTimeOffset.FromUnixTimeMilliseconds(shiftedMills);
-            if (tz is not null)
-                dto = TimeZoneInfo.ConvertTime(dto, tz);
-
-            var secondsFromMidnight = (int)dto.TimeOfDay.TotalSeconds;
+            var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(shiftedMills, tz);
             var value = ScheduleResolution.FindValueAtTime(entries, secondsFromMidnight)
                 ?? DefaultBasalRate;
 

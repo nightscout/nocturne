@@ -6,11 +6,19 @@ import SocketIOServer from './socketio-server.js';
 import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
 
 const SECRET = 'test-instance-key-0123456789';
+const TENANT_ID = '0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b';
+
+/** The server, with `TENANT_ID` as the tenant every slug names. */
+function servingTenant(server: SocketIOServer): SocketIOServer {
+  server.isCurrentTenant = async (_slug, id) => id === TENANT_ID;
+  server.holdsTenantNow = (_slug, id) => id === TENANT_ID;
+  return server;
+}
 
 const relay: RealtimeGrant = { tenantRelay: true, categories: [], historyClamped: false };
 
 function makeServer() {
-  return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, 'http://api.internal');
+  return servingTenant(new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, 'http://api.internal'));
 }
 
 function fakeSocket(host: string, auth: { token?: string } = {}) {
@@ -33,7 +41,7 @@ describe('SocketIOServer tenant discovery', () => {
   it('asks for discovery when the apex serves no tenant yet, and admits once it does', async () => {
     const server = makeServer();
     server.onApexUnresolved = vi.fn(async () => server.setApexTenantSlug('only'));
-    const socket = fakeSocket('nocturne.run', { token: signHandshakeTicket(SECRET, 'nocturne.run', relay) });
+    const socket = fakeSocket('nocturne.run', { token: signHandshakeTicket(SECRET, 'nocturne.run', TENANT_ID, relay) });
     const next = vi.fn();
 
     await server.authorizeHandshake(socket as never, next);
@@ -75,7 +83,7 @@ describe('SocketIOServer tenant discovery', () => {
     const host = 'fresh.nocturne.run';
 
     await server.authorizeHandshake(
-      fakeSocket(host, { token: signHandshakeTicket(SECRET, host, relay) }) as never,
+      fakeSocket(host, { token: signHandshakeTicket(SECRET, host, TENANT_ID, relay) }) as never,
       vi.fn(),
     );
 
@@ -133,7 +141,7 @@ describe('SocketIOServer.disconnectTenant', () => {
 
   async function listening() {
     const http = createServer();
-    const server = new SocketIOServer(http, {}, 'nocturne.run', null, SECRET);
+    const server = servingTenant(new SocketIOServer(http, {}, 'nocturne.run', null, SECRET));
     await server.start();
     await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
     return { server, port: (http.address() as AddressInfo).port };
@@ -144,7 +152,7 @@ describe('SocketIOServer.disconnectTenant', () => {
       transports: ['websocket'],
       reconnection: false,
       extraHeaders: { 'X-Forwarded-Host': host },
-      auth: ticket ? { token: signHandshakeTicket(SECRET, host, relay) } : {},
+      auth: ticket ? { token: signHandshakeTicket(SECRET, host, TENANT_ID, relay) } : {},
     });
     clients.push(client);
     await new Promise<void>((resolve, reject) => {

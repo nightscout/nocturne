@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -44,7 +45,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
     private readonly ISensitivityScheduleRepository _sensitivityRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeRepo;
     private readonly IProfileProjectionService _projectionService;
+    private readonly IProfileDeletionService _deletionService;
     private readonly ITempBasalRateReresolver _tempBasalRates;
+    private readonly ILoopClosedLoopStamper _closedLoop;
     private readonly IRawMmolProfileDetector _rawMmol;
 
     /// <summary>
@@ -56,7 +59,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <param name="sensitivityRepo">Repository for insulin sensitivity schedule records.</param>
     /// <param name="targetRangeRepo">Repository for target glucose range schedule records.</param>
     /// <param name="projectionService">Service for reading legacy profile projections from V4 data.</param>
+    /// <param name="deletionService">Service for deleting a whole named therapy profile.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
+    /// <param name="closedLoop">Restamps the Loop snapshots written therapy settings govern.</param>
     /// <param name="rawMmol">Finds the schedules that still hold mmol/L values.</param>
     public ProfileController(
         ITherapySettingsRepository therapyRepo,
@@ -65,7 +70,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
         ISensitivityScheduleRepository sensitivityRepo,
         ITargetRangeScheduleRepository targetRangeRepo,
         IProfileProjectionService projectionService,
+        IProfileDeletionService deletionService,
         ITempBasalRateReresolver tempBasalRates,
+        ILoopClosedLoopStamper closedLoop,
         IRawMmolProfileDetector rawMmol
     )
     {
@@ -75,7 +82,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
         _sensitivityRepo = sensitivityRepo;
         _targetRangeRepo = targetRangeRepo;
         _projectionService = projectionService;
+        _deletionService = deletionService;
         _tempBasalRates = tempBasalRates;
+        _closedLoop = closedLoop;
         _rawMmol = rawMmol;
     }
 
@@ -86,6 +95,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Optionally provide a date range to include schedule change detection info.
     /// </summary>
     [HttpGet("summary")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     // Never cached: UseResponseCaching keys only on host + query + Cookie, so a mutation that
     // correctly invalidates its client-side query can still have the refetch answered from a body
@@ -172,27 +182,141 @@ public class ProfileController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
-    /// Make the newest settings row of <paramref name="profileName"/> (exact name) the tenant's only default profile.
+    /// The profiles in force over [<paramref name="from"/>, <paramref name="to"/>), the longest first,
+    /// each with the schedules it read then.
+    /// </summary>
+    [HttpGet("active-schedules")]
+    [RequireScope(Scope.TherapyRead)]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(List<ActiveProfileSchedules>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<ActiveProfileSchedules>>> GetActiveSchedules(
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromServices] IActiveProfileSchedulesService activeSchedules,
+        CancellationToken ct = default
+    )
+    {
+        if (to <= from)
+            return Problem(detail: "The range must end after it starts.", statusCode: 400, title: "Bad Request");
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
+
+        var profiles = await activeSchedules.GetForRangeAsync(from.ToMills(), to.ToMills(), ct);
+        return Ok(profiles.ToList());
+    }
+
+    /// <summary>
+    /// Make the newest settings row of the profile <see cref="ResolveProfile"/> finds for
+    /// <paramref name="profileName"/> the tenant's only default profile.
     /// </summary>
     [HttpPost("set-default/{profileName}")]
     [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> SetDefaultProfile(string profileName, CancellationToken ct = default)
     {
-        var all = await _therapyRepo.GetAsync(null, null, null, null, 1000, 0, true, ct);
+        var all = (await _therapyRepo.GetAsync(null, null, null, null, 1000, 0, true, ct)).ToList();
 
-        var target = all.FirstOrDefault(ts =>
-            string.Equals(ts.ProfileName, profileName, StringComparison.Ordinal));
+        var (target, ambiguous) = ResolveProfile(all, profileName);
+
+        if (ambiguous is not null)
+            return Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Ambiguous profile name",
+                detail: $"'{profileName}' matches more than one profile when case is ignored: "
+                    + $"{string.Join(", ", ambiguous)}. Use the exact name.");
 
         if (target is null)
             return NotFound();
 
         await _therapyRepo.SetDefaultAsync(target.Id, ct);
-        await _tempBasalRates.AfterProfilesChangedAsync([profileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Resolves a caller-supplied profile name against the stored records, preferring an exact
+    /// match and accepting a differently-cased one only when it is unambiguous.
+    /// </summary>
+    /// <remarks>
+    /// Profile names are stored case-sensitively, so <c>Default</c> and <c>default</c> are two
+    /// profiles. A tenant ends up with both when an uploader relays one and a pump writes the
+    /// other. Matching case-insensitively would silently act on whichever was written last.
+    /// Requiring an exact match would turn the lenient calls this endpoint has always served into
+    /// 404s. Neither is safe alone, so a case-only difference resolves when one candidate name
+    /// exists and is reported when several do.
+    /// </remarks>
+    /// <param name="all">Therapy settings, newest first.</param>
+    /// <param name="profileName">The name the caller asked for.</param>
+    /// <returns>
+    /// The newest record for the resolved name, or the candidate names when the request was
+    /// ambiguous. Both are null when nothing matched.
+    /// </returns>
+    private static (TherapySettings? Target, IReadOnlyList<string>? Ambiguous) ResolveProfile(
+        IReadOnlyList<TherapySettings> all,
+        string profileName
+    )
+    {
+        var exact = all.FirstOrDefault(ts =>
+            string.Equals(ts.ProfileName, profileName, StringComparison.Ordinal));
+
+        if (exact is not null)
+            return (exact, null);
+
+        var candidates = all
+            .Select(ts => ts.ProfileName)
+            .Where(n => string.Equals(n, profileName, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (candidates.Count > 1)
+            return (null, candidates);
+
+        if (candidates.Count == 0)
+            return (null, null);
+
+        return (all.First(ts => string.Equals(ts.ProfileName, candidates[0], StringComparison.Ordinal)), null);
+    }
+
+    /// <summary>
+    /// Delete a whole named therapy profile and every schedule record belonging to it.
+    /// The name is matched case-sensitively, with no lenient fallback.
+    /// </summary>
+    /// <remarks>
+    /// The name is matched case-sensitively, with no lenient fallback: this destroys data, so
+    /// <c>Default</c> must never resolve to <c>default</c>. Contrast
+    /// <see cref="ResolveProfile"/>, which the non-destructive <see cref="SetDefaultProfile"/> uses.
+    /// </remarks>
+    [HttpDelete("by-name/{profileName}")]
+    [RequireDeclaredWriteScope]
+    [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult> DeleteProfileByName(string profileName, CancellationToken ct = default)
+    {
+        var result = await _deletionService.DeleteByProfileNameAsync(profileName, ct);
+
+        return result.Refusal switch
+        {
+            ProfileDeletionRefusal.NotFound => NotFound(),
+            ProfileDeletionRefusal.OnlyProfile => Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Cannot delete the only profile",
+                detail: $"'{profileName}' is the only therapy profile. "
+                    + "Add or sync another profile before deleting this one."),
+            ProfileDeletionRefusal.ActiveProfile => Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Cannot delete the active profile",
+                detail: $"'{profileName}' is the active profile. "
+                    + "Set another profile active first, then delete this one."),
+            _ => NoContent(),
+        };
     }
 
     #endregion
@@ -204,6 +328,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// as mg/dL, which every reader takes as mg/dL until the owner corrects or dismisses them.
     /// </summary>
     [HttpGet("raw-mmol")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     // Never cached, as GetProfileSummary: an edit or a dismiss must clear the list at once.
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -233,6 +358,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <see cref="Profile"/> shape (store with basal/carbratio/sens/target arrays).
     /// </summary>
     [HttpGet("records")]
+    [RequireScope(Scope.TherapyRead)]
     [ProducesResponseType(typeof(PaginatedResponse<Profile>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PaginatedResponse<Profile>>> GetProfileRecords(
         [FromQuery] int limit = 100,
@@ -262,7 +388,17 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get all therapy settings with optional filtering
     /// </summary>
+    /// <param name="from">Start of the time range to return. Unbounded when omitted.</param>
+    /// <param name="to">End of the time range to return. Unbounded when omitted.</param>
+    /// <param name="limit">Maximum number of records in the page. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip before the page. Defaults to `0`.</param>
+    /// <param name="sort">Order by timestamp: `timestamp_desc` or `timestamp_asc`. Any other value is a 400. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Return only records from this device.</param>
+    /// <param name="source">Return only records from this data source.</param>
+    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("settings")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<TherapySettings>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -274,19 +410,14 @@ public class ProfileController : ControllerBase, IWriteScopedController
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null,
         [FromQuery] string? source = null,
+        [FromQuery] bool includeTotal = false,
         CancellationToken ct = default
     )
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return BadRequest(
-                new { error = $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'." }
-            );
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
-        var data = await _therapyRepo.GetAsync(
+        var data = (await _therapyRepo.GetAsync(
             from,
             to,
             device,
@@ -295,21 +426,22 @@ public class ProfileController : ControllerBase, IWriteScopedController
             offset,
             descending,
             ct
+        )).ToList();
+        var pagination = await PaginationInfo.ForPageAsync(
+            limit,
+            offset,
+            data.Count,
+            includeTotal,
+            () => _therapyRepo.CountAsync(from, to, ct)
         );
-        var total = await _therapyRepo.CountAsync(from, to, ct);
-        return Ok(
-            new PaginatedResponse<TherapySettings>
-            {
-                Data = data,
-                Pagination = new(limit, offset, total),
-            }
-        );
+        return Ok(new PaginatedResponse<TherapySettings> { Data = data, Pagination = pagination });
     }
 
     /// <summary>
     /// Get therapy settings by profile name
     /// </summary>
     [HttpGet("settings/by-name/{profileName}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<TherapySettings>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<TherapySettings>>> GetTherapySettingsByName(
@@ -325,6 +457,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get a therapy settings record by ID
     /// </summary>
     [HttpGet("settings/{id:guid}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(TherapySettings), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -339,6 +472,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// Create a new therapy settings record
+    /// <c>isDefault: true</c> makes the new record the tenant's only default; <c>false</c> leaves the current default alone.
     /// </summary>
     /// <remarks>
     /// <see cref="TherapySettings.IsDefault"/> <c>true</c> makes the new row the tenant's only default,
@@ -364,12 +498,14 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(created.Id, ct);
             created.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([created.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
+        await _closedLoop.AfterLoopSettingsWrittenAsync([created.Timestamp], ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
 
     /// <summary>
     /// Update an existing therapy settings record
+    /// <c>isDefault: true</c> makes the record the tenant's only default. <c>false</c> keeps the stored flag, so an update never demotes the default; promote another record to move it.
     /// </summary>
     /// <remarks>
     /// <see cref="TherapySettings.IsDefault"/> <c>true</c> makes the row the tenant's only default, as
@@ -392,7 +528,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        model.DocumentDefaultProfile = (await _therapyRepo.GetByIdAsync(id, ct))?.DocumentDefaultProfile;
+        var stored = await _therapyRepo.GetByIdAsync(id, ct);
+        model.DocumentDefaultProfile = stored?.DocumentDefaultProfile;
         TherapySettings updated;
         try
         {
@@ -407,7 +544,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(id, ct);
             updated.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([updated.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
+        await _closedLoop.AfterLoopSettingsWrittenAsync(
+            stored is null ? [updated.Timestamp] : [stored.Timestamp, updated.Timestamp], ct);
         return Ok(updated);
     }
 
@@ -431,7 +570,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
         }
 
-        await _tempBasalRates.AfterProfilesChangedAsync(stored is null ? [] : [stored.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
+        await _closedLoop.AfterLoopSettingsWrittenAsync(stored is null ? [] : [stored.Timestamp], ct);
         return NoContent();
     }
 
@@ -443,6 +583,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get basal schedules by profile name
     /// </summary>
     [HttpGet("basal/{profileName}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<BasalSchedule>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<BasalSchedule>>> GetBasalSchedulesByName(
@@ -458,6 +599,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get a basal schedule by ID
     /// </summary>
     [HttpGet("basal/by-id/{id:guid}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(BasalSchedule), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -561,6 +703,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get carb ratio schedules by profile name
     /// </summary>
     [HttpGet("carb-ratio/{profileName}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<CarbRatioSchedule>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<CarbRatioSchedule>>> GetCarbRatioSchedulesByName(
@@ -576,6 +719,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get a carb ratio schedule by ID
     /// </summary>
     [HttpGet("carb-ratio/by-id/{id:guid}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(CarbRatioSchedule), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -670,6 +814,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get sensitivity schedules by profile name
     /// </summary>
     [HttpGet("sensitivity/{profileName}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<SensitivitySchedule>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<SensitivitySchedule>>> GetSensitivitySchedulesByName(
@@ -685,6 +830,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get a sensitivity schedule by ID
     /// </summary>
     [HttpGet("sensitivity/by-id/{id:guid}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(SensitivitySchedule), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -787,6 +933,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get target range schedules by profile name
     /// </summary>
     [HttpGet("target-range/{profileName}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<TargetRangeSchedule>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<TargetRangeSchedule>>> GetTargetRangeSchedulesByName(
@@ -802,6 +949,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// Get a target range schedule by ID
     /// </summary>
     [HttpGet("target-range/by-id/{id:guid}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(TargetRangeSchedule), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

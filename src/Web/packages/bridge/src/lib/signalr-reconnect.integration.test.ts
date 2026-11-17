@@ -8,6 +8,8 @@ import MessageTranslator from "./message-translator.js";
 import SocketIOServer from "./socketio-server.js";
 import { signHandshakeTicket } from "./handshake-ticket.js";
 
+const TENANT_ID = "0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b";
+
 it("recovers all real hubs after partial handshake failure and a prolonged outage", async () => {
   let available = true;
   let refuseAlarmHandshake = true;
@@ -72,6 +74,8 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
     "test-key",
     url,
   );
+  relay.isCurrentTenant = async (_slug, id) => id === TENANT_ID;
+  relay.holdsTenantNow = (_slug, id) => id === TENANT_ID;
   await relay.start();
   await new Promise<void>((resolve) =>
     downstream.listen(0, "127.0.0.1", resolve),
@@ -83,7 +87,7 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
       transports: ["websocket"],
       extraHeaders: { "X-Forwarded-Host": "test.nocturne.test" },
       auth: {
-        token: signHandshakeTicket("test-key", "test.nocturne.test", {
+        token: signHandshakeTicket("test-key", "test.nocturne.test", TENANT_ID, {
           tenantRelay: true,
           categories: ["entries"],
           historyClamped: false,

@@ -55,7 +55,7 @@ public class MyPermissionsController : ControllerBase
 
     /// <summary>
     /// The caller's grant, or null when the default-deny fallback would refuse this endpoint
-    /// (no non-empty permission trie). <see cref="OidcController.GetSession"/> carries it so a
+    /// (no non-empty permission trie). <see cref="Nocturne.API.Controllers.Authentication.OidcController.GetSession"/> carries it so a
     /// session check needs no second round-trip to learn it.
     /// </summary>
     internal static async Task<MyPermissionsResponse?> TryBuildAsync(HttpContext httpContext)

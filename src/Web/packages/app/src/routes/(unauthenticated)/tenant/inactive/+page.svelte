@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { DeadEndCard } from "$lib/components/shared";
-  import { Button } from "$lib/components/ui/button";
+  import { DeadEndCard } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import PauseCircle from "@lucide/svelte/icons/circle-pause";
 
   let { data } = $props();
@@ -16,7 +16,7 @@
 <DeadEndCard icon={PauseCircle} title="This account is inactive">
   <!-- The browser cannot tell why an account is inactive, so the copy does not guess. -->
   <p>
-    This Nocturne account isn't active at the moment, so there's nothing here to
+    This Nocturne account is not active at the moment, so there is nothing here to
     sign in to.
   </p>
   {#if billingLink}

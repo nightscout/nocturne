@@ -71,6 +71,59 @@ public class V4ReadOnlyControllerBaseTests
     }
 
     [Fact]
+    public async Task GetAll_ShortFirstPage_FillsTotalWithoutCounting()
+    {
+        _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ReadOnlyTestRecord(), new ReadOnlyTestRecord()]);
+
+        var result = await _controller.GetAll(null, null, 100, 0, "timestamp_desc", null, null);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
+        response.Pagination.Total.Should().Be(2);
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_FullPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repo.Setup(r => r.GetAsync(null, null, null, null, 2, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ReadOnlyTestRecord(), new ReadOnlyTestRecord()]);
+
+        var result = await _controller.GetAll(null, null, 2, 0, "timestamp_desc", null, null);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_ShortLaterPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 100, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ReadOnlyTestRecord()]);
+
+        var result = await _controller.GetAll(null, null, 100, 100, "timestamp_desc", null, null);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_IncludeTotal_CountsTheRange()
+    {
+        _repo.Setup(r => r.GetAsync(null, null, null, null, 2, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ReadOnlyTestRecord(), new ReadOnlyTestRecord()]);
+        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(57);
+
+        var result = await _controller.GetAll(null, null, 2, 0, "timestamp_desc", null, null, includeTotal: true);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
+        response.Pagination.Total.Should().Be(57);
+        _repo.Verify(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetAll_InvalidSort_ReturnsBadRequest()
     {
         var result = await _controller.GetAll(null, null, 100, 0, "invalid", null, null);
@@ -140,10 +193,10 @@ public class V4ReadOnlyControllerBaseTests
     }
 
     [Fact]
-    public async Task GetAll_DateSpanOneMillisecondOverMaximum_ReturnsBadRequest()
+    public async Task GetAll_DateSpanOneMillisecondOverMaximumPlusDaylightSavingMargin_ReturnsBadRequest()
     {
         var to = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays).AddMilliseconds(-1);
+        var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays).Subtract(V4ReadLimits.DaylightSavingMargin).AddMilliseconds(-1);
 
         var result = await _controller.GetAll(from, to, 100, 0, "timestamp_desc", null, null);
 

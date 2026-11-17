@@ -20,6 +20,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -68,6 +69,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         services.AddSingleton<IMemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<InAppProvider>();
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<DeviceActionProvider>();
         services.AddSingleton<ChatBotProvider>();
         services.AddSingleton<HomeAssistantProvider>();
@@ -78,11 +80,13 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
 
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
+            new TenantMembershipRepository(_factory.AsNocturneFactory()),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
             _alarmRelay.Object,
             provider,
-            NullLogger<AlertDeliveryService>.Instance);
+            NullLogger<AlertDeliveryService>.Instance,
+            TimeProvider.System);
     }
 
     private async Task<Guid> SeedInstanceAsync(DateTime? snoozedUntil)

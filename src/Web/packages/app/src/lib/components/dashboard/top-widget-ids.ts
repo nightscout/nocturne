@@ -35,10 +35,26 @@ export function isTopWidgetId(id: string): id is TopWidgetId {
  * tenant settings.
  */
 export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [
-  WidgetId.BgDelta,
   WidgetId.TirChart,
   WidgetId.Tdd,
+  WidgetId.BgDelta,
 ];
+
+/** The grid shows at most this many; a longer stored list renders its head. */
+export const MAX_TOP_WIDGETS = 3;
+
+/**
+ * Whether the grid is showing the Current glucose widget (`BgDelta`, kept as the
+ * id so stored selections carry over), which then carries the dashboard's
+ * reading in place of the header tile.
+ */
+export function showsCurrentGlucoseWidget(
+  ids: readonly string[] | undefined
+): boolean {
+  return knownTopWidgets(ids)
+    .slice(0, MAX_TOP_WIDGETS)
+    .includes(WidgetId.BgDelta);
+}
 
 /**
  * Selections persist per user, outlive any one release, and arrive from a

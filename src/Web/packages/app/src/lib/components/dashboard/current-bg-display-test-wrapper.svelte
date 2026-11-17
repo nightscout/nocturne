@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import CurrentBGDisplay from "./CurrentBGDisplay.svelte";
 
   interface Props {
@@ -9,6 +9,9 @@
   let { showPills = true }: Props = $props();
 </script>
 
+<!-- The dashboard page is the container the mobile rail's breakpoint reads. -->
 <Tooltip.Provider>
-  <CurrentBGDisplay {showPills} />
+  <div class="@container">
+    <CurrentBGDisplay {showPills} />
+  </div>
 </Tooltip.Provider>

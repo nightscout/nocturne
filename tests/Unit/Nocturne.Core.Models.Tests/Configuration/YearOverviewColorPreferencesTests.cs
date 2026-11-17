@@ -101,4 +101,33 @@ public class YearOverviewColorPreferencesTests
             AvgGlucoseBoundaries = [Pin(41, 0.01), Pin(349, 0.99)],
         }.Validate().Should().BeNull();
     }
+
+    [Fact]
+    public void Chosen_colors_round_trip()
+    {
+        var colors = new YearOverviewColorPreferences
+        {
+            TddLowColor = "#1A2B3C",
+            TddHighColor = "#ffffff",
+            TddBoundaries = [new() { Value = 30, Position = 0.5, Color = "#ff0000" }, Pin(40, 0.7)],
+        };
+        var restored = UserDisplayPreferences.Deserialize(new UserDisplayPreferences { YearOverviewColors = colors }.Serialize());
+        restored.YearOverviewColors.Should().BeEquivalentTo(colors);
+        restored.Validate().Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("red")]
+    [InlineData("#fff")]
+    [InlineData("#gggggg")]
+    [InlineData("#1234567")]
+    [InlineData("var(--insulin)")]
+    [InlineData("")]
+    public void A_color_is_six_digit_hex(string color)
+    {
+        new YearOverviewColorPreferences { TddLowColor = color }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { AvgGlucoseHighColor = color }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { CarbsBoundaries = [new() { Value = 5, Position = 0.5, Color = color }] }
+            .Validate().Should().NotBeNull();
+    }
 }

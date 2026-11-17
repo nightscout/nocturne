@@ -75,6 +75,13 @@ public interface ICompressionLowRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Check if a suggestion of any status exists for a night, dismissed ones included.
+    /// </summary>
+    Task<bool> AnySuggestionExistsForNightAsync(
+        DateOnly nightOf,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete a <see cref="CompressionLowSuggestion"/> by ID.
     /// </summary>
     /// <param name="id">Suggestion ID to delete.</param>

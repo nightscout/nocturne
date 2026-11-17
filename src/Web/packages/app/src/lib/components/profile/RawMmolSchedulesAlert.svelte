@@ -1,16 +1,16 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Pencil from "@lucide/svelte/icons/pencil";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     dismissRawMmolIsf,
     getRawMmolSchedules,
-  } from "$api/generated/profiles.generated.remote";
-  import { RawMmolScheduleKind, type RawMmolSchedule } from "$api-clients";
+  } from "#lib/api/generated/profiles.generated.remote.js";
+  import { RawMmolScheduleKind, type RawMmolSchedule } from "#lib/api/generated/nocturne-api-client.js";
   import RawMmolScheduleEditDialog from "./RawMmolScheduleEditDialog.svelte";
 
   const canWrite = $derived(

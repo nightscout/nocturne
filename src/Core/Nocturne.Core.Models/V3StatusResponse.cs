@@ -19,7 +19,15 @@ public class V3StatusResponse
     /// </summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The Nightscout release Nocturne matches, <see cref="Nocturne.Core.Constants.ApplicationConstants.NightscoutApi.CompatibleVersion"/>
+    /// </summary>
     public string Version { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Nocturne's own release version
+    /// </summary>
+    public string NocturneVersion { get; set; } = string.Empty;
 
     /// <summary>
     /// Current server time in ISO 8601 format

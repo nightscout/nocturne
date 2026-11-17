@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Devices;
@@ -92,6 +93,7 @@ public class PatientRecordController : ControllerBase
     /// Get or create the patient record
     /// </summary>
     [HttpGet]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> GetPatientRecord(CancellationToken cancellationToken = default)
@@ -105,7 +107,7 @@ public class PatientRecordController : ControllerBase
     /// </summary>
     [HttpPut]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteForm(Invalidates = ["GetPatientRecord"])]
+    [RemoteForm(Invalidates = ["GetPatientRecord", "TenantSettings_GetPatientRelationship"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
         [FromBody] PatientRecord model,
@@ -116,7 +118,7 @@ public class PatientRecordController : ControllerBase
         if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
         {
             await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
-            await _tempBasalRates.AfterProfilesChangedAsync([], cancellationToken);
+            await _tempBasalRates.AfterProfilesChangedAsync(cancellationToken);
         }
         return Ok(updated);
     }
@@ -129,6 +131,7 @@ public class PatientRecordController : ControllerBase
     /// Get all patient devices
     /// </summary>
     [HttpGet("devices")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<PatientDevice>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientDevice>>> GetDevices(CancellationToken cancellationToken = default)
@@ -142,6 +145,7 @@ public class PatientRecordController : ControllerBase
     /// candidate streams the user can register as devices from the settings UI.
     /// </summary>
     [HttpGet("devices/discovered-sources")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<DiscoveredSource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<DiscoveredSource>>> GetDiscoveredSources(CancellationToken cancellationToken = default)
@@ -287,6 +291,7 @@ public class PatientRecordController : ControllerBase
     /// Get all patient insulins
     /// </summary>
     [HttpGet("insulins")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<PatientInsulin>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientInsulin>>> GetInsulins(CancellationToken cancellationToken = default)

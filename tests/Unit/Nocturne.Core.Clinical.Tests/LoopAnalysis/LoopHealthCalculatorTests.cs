@@ -56,7 +56,8 @@ public class LoopHealthCalculatorTests
         double? iob = null,
         double? sensitivity = null,
         bool? suggestedChange = true,
-        Guid? id = null) => new()
+        Guid? id = null,
+        bool? closedLoop = null) => new()
         {
             Id = id ?? Guid.NewGuid(),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
@@ -68,6 +69,7 @@ public class LoopHealthCalculatorTests
             HasReason = algorithm != AidAlgorithm.Loop && hasReason,
             SuggestedChange = algorithm != AidAlgorithm.Loop ? suggestedChange : null,
             LimitReason = limitReason,
+            ClosedLoop = closedLoop,
         };
 
     /// <summary>A temp's start, origin evidence and setter, as <see cref="LoopHealthInputs.Temps"/> reads them.</summary>
@@ -657,6 +659,21 @@ public class LoopHealthCalculatorTests
         var result = Calculate(from, to, cycles: EveryFiveMinutes(from, to, t => Cycle(t, rate: 1.0, suggestedChange: null)));
 
         result.Activity.ClosedLoop!.Percent.Should().Be(100);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 100)]
+    [InlineData(null, 100)]
+    public void Activity_CountsAnEnactedLoopCycleAsClosedUnlessItsSettingsHadDosingOff(bool? closedLoop, int closed)
+    {
+        // Loop reports every cycle enacted, in open loop too.
+        var from = Day0;
+        var to = Day0 + Hour;
+        var result = Calculate(from, to, cycles: EveryFiveMinutes(from, to,
+            t => Cycle(t, AidAlgorithm.Loop, rate: 1.0, closedLoop: closedLoop)));
+
+        result.Activity.ClosedLoop!.Percent.Should().Be(closed);
     }
 
     [Fact]
