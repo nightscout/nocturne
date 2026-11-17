@@ -611,7 +611,7 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     public ActionResult<double> MgdlToMMOL(double mgdl)
     {
-        var result = _statisticsService.MgdlToMMOL(mgdl);
+        var result = GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol);
         return Ok(result);
     }
 

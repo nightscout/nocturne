@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
@@ -754,7 +755,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
 /// </summary>
 internal static class LegacyTreatmentTables
 {
-    // DeviceEventType → legacy Nightscout eventType string (reverse of TreatmentTypes.DeviceEventTypeMap)
+    // DeviceEventType → legacy Nightscout eventType string (reverse of TreatmentTypeMaps.DeviceEventTypeMap)
     private static readonly Dictionary<DeviceEventType, string> DeviceEventTypeToString =
         new()
         {
@@ -889,7 +890,7 @@ internal static class LegacyTreatmentTables
         if (eventType == TreatmentTypes.ProfileSwitch)
             return await ProfileActivationTable.LatestSwitchAsync(context, from, to, ct);
 
-        if (!TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out var type))
+        if (!TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(eventType, out var type))
             return [];
 
         var latest = await repositories.DeviceEvents.GetLatestByEventTypeAsync(type, to, ct);
@@ -1448,7 +1449,7 @@ internal static class LegacyTreatmentTables
             RecordId = bc.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bc.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bc.AdditionalProperties),
-            EventType = "Bolus Wizard",
+            EventType = TreatmentTypes.BolusWizard,
             Mills = bc.Mills,
             BloodGlucoseInput = bc.BloodGlucoseInput,
             BloodGlucoseInputSource = bc.BloodGlucoseInputSource,

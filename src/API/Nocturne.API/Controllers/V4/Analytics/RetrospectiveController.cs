@@ -5,6 +5,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Clinical.Statistics;
@@ -130,7 +131,7 @@ public class RetrospectiveController : ControllerBase
             {
                 Id = b.Id.ToString(),
                 Mills = b.Mills,
-                EventType = "Bolus",
+                EventType = TreatmentTypes.Bolus,
                 Insulin = b.Insulin,
             });
         }
@@ -140,7 +141,7 @@ public class RetrospectiveController : ControllerBase
             {
                 Id = c.Id.ToString(),
                 Mills = c.Mills,
-                EventType = "Carb Correction",
+                EventType = TreatmentTypes.CarbCorrection,
                 Carbs = c.Carbs,
             });
         }

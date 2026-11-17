@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
 
@@ -61,9 +62,9 @@ public static class PreBolusSplit
     public static long OffsetMillis(double preBolus) => (long)Math.Round(preBolus * 60_000);
 
     public static bool IsMealEventType(string? eventType) =>
-        string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
+        string.Equals(eventType, TreatmentTypes.MealBolus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, TreatmentTypes.SnackBolus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether <see cref="Split"/> changes <paramref name="treatment"/> once it has an id.</summary>
     public static bool Applies(Treatment treatment) => CarbsAt(treatment) is not null;
