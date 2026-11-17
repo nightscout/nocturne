@@ -1,5 +1,8 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { expoOut } from "svelte/easing";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { fly } from "svelte/transition";
   import { beforeNavigate, goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -67,12 +70,20 @@
   // The furthest step reached. A step past it cannot be opened from the browser's history.
   let reached = $state(TYPE);
   let step = $state(TYPE);
+  // Which way the last move went: a step ahead comes in from the right, a step back from the left.
+  let direction = $state(1);
+
+  function show(index: number): void {
+    if (index === step) return;
+    direction = index > step ? 1 : -1;
+    step = index;
+  }
 
   // Each step is an entry in the browser's history, so Back on a phone goes to the step before.
   $effect(() => {
     const wanted = page.state.alertWizardStep;
     untrack(() => {
-      step = typeof wanted === "number" ? Math.max(TYPE, Math.min(wanted, reached)) : TYPE;
+      show(typeof wanted === "number" ? Math.max(TYPE, Math.min(wanted, reached)) : TYPE);
     });
   });
 
@@ -86,7 +97,7 @@
 
   function open(index: number): void {
     reached = Math.max(reached, index);
-    step = index;
+    show(index);
     void goto(resolve("/(authenticated)/alerts/new"), {
       state: { alertWizardStep: index },
       shallow: true,
@@ -97,7 +108,7 @@
   function back(): void {
     // The step before is the history entry before, unless this step was not reached through one.
     if (page.state.alertWizardStep === step) history.back();
-    else step = Math.max(TYPE, step - 1);
+    else show(Math.max(TYPE, step - 1));
   }
 
   function pickType(id: TemplateId): void {
@@ -238,7 +249,15 @@
 
   <WizardProgress {steps} current={step} {reached} onJump={open} />
 
-  <div class="mt-8 space-y-6">
+  {#key step}
+  <div
+    class="mt-8 space-y-6"
+    in:fly={{
+      x: direction * 20,
+      duration: prefersReducedMotion.current ? 0 : 260,
+      easing: expoOut,
+    }}
+  >
     <h2 class="text-lg font-semibold leading-tight" data-testid="alert-wizard-heading">
       {heading(step)}
     </h2>
@@ -271,6 +290,7 @@
       </p>
     {/if}
   </div>
+  {/key}
 
   <!-- md+: at the end of the step. Below md: pinned to the bottom, under the thumb. -->
   {#if draft}
