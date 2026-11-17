@@ -139,6 +139,13 @@ public class HostPersistenceGuardTests
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
                     "reports the seeder's SleepSessions count, which shares the DbSet's name"),
             ]),
+        new("DND windows and tenant alert settings (#3304)",
+            ["DndWindowEntity", "TenantAlertSettingsEntity"],
+            ["DndWindows", "TenantAlertSettings"],
+            [
+                new("src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs",
+                    "seeds the sample tenant's one cleared window straight into the table alongside every other seeded record"),
+            ]),
         new("Google Health grant holders (#3348)",
             ["GoogleHealthGrantHolderEntity"],
             ["GoogleHealthGrantHolders"],
