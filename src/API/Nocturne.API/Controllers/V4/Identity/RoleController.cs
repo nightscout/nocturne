@@ -138,7 +138,8 @@ public class RoleController : ControllerBase
     }
 
     private ObjectResult NameProblem(SaveRoleResult result) =>
-        Problem(detail: result.ErrorDescription, statusCode: StatusCodes.Status409Conflict, title: result.ErrorCode);
+        this.ProblemWithCode(
+            result.ErrorCode!, result.ErrorDescription, StatusCodes.Status409Conflict, title: result.ErrorCode);
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal.

@@ -413,3 +413,56 @@ describe("a mutation whose fallback names the permission its page is gated on", 
     );
   });
 });
+
+describe("a problem code the caller has a sentence for", () => {
+  const KNOWN = { role_name_taken: "A role with this name already exists." };
+  const FALLBACK = "Failed to create role.";
+
+  it.each([400, 404, 409])("answers a %i with the sentence for its code", (status) => {
+    const err = { status, body: { message: "Server text", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(KNOWN.role_name_taken);
+  });
+
+  it("answers a query's own error the same way", () => {
+    const err = { status: 409, message: "Server text", code: "role_name_taken" };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(KNOWN.role_name_taken);
+  });
+
+  it("leaves the server's text for a code the caller does not know", () => {
+    const err = { status: 409, body: { message: "Server text", code: "other_code" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("leaves the server's text when the rejection has no code", () => {
+    const err = { status: 409, body: { message: "Server text" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("ignores a code when the caller passes no map", () => {
+    const err = { status: 409, body: { message: "Server text", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK)).toBe("Server text");
+  });
+
+  it("ignores a malformed code", () => {
+    const err = { status: 409, body: { message: "Server text", code: "Role Name Taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, { "Role Name Taken": "No." })).toBe("Server text");
+  });
+
+  it("does not mistake an inherited property for a known code", () => {
+    const err = { status: 409, body: { message: "Server text", code: "constructor" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("still answers a 429 as throttled", () => {
+    const err = { status: 429, body: { message: "Too many requests", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(rateLimitedError());
+  });
+});
