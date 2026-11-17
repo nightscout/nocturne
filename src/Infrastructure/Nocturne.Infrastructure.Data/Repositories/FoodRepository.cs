@@ -70,6 +70,18 @@ public class FoodRepository : IFoodRepository
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
     }
 
+    /// <inheritdoc />
+    public async Task<Guid?> ResolveFoodKeyAsync(
+        string id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindEntityAsync(db.Foods.AsNoTracking(), id, cancellationToken);
+
+        return entity?.Id;
+    }
+
     /// <summary>
     /// The food <paramref name="id"/> names: its legacy ObjectId, its own UUID, or the id v3 serves
     /// for it (<see cref="MongoObjectId.Coerce"/>), which is the UUID's 24-hex prefix, or a hash of a
