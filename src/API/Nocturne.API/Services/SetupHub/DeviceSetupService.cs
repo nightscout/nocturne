@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
-using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;

@@ -111,7 +111,7 @@ public sealed class DemoApiClient
         {
             var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
 
-            if (treatment.EventType == "Temp Basal" && treatment.Rate is { } rate)
+            if (treatment.EventType == TreatmentTypes.TempBasal && treatment.Rate is { } rate)
             {
                 // The temp-basal endpoint is array-only (uploaders batch).
                 var payload = new[]
@@ -135,8 +135,8 @@ public sealed class DemoApiClient
                 {
                     timestamp,
                     insulin = treatment.Insulin.Value,
-                    kind = (int)(treatment.EventType == "SMB" ? BolusKind.Algorithm : BolusKind.Manual),
-                    automatic = treatment.EventType == "SMB",
+                    kind = (int)(treatment.EventType == TreatmentTypes.Smb ? BolusKind.Algorithm : BolusKind.Manual),
+                    automatic = treatment.EventType == TreatmentTypes.Smb,
                     device = DemoDeviceStatusGenerator.DeviceName,
                     dataSource = treatment.DataSource,
                 }, SerializerOptions, ct);

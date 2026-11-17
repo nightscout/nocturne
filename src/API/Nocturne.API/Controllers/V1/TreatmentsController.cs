@@ -6,6 +6,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -599,9 +600,9 @@ public class TreatmentsController : ControllerBase
         {
             treatment.EventType = (treatment.Insulin.HasValue, treatment.Carbs.HasValue) switch
             {
-                (true, true) => "Meal Bolus",
-                (true, false) => "Correction Bolus",
-                (false, true) => "Carb Correction",
+                (true, true) => TreatmentTypes.MealBolus,
+                (true, false) => TreatmentTypes.CorrectionBolus,
+                (false, true) => TreatmentTypes.CarbCorrection,
                 _ => "Note",
             };
         }
