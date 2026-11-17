@@ -20,6 +20,7 @@ export type ReportPreview =
   | "treatments"
   | "basal"
   | "insulin"
+  | "loop"
   | "site"
   | "idp"
   | "battery";
@@ -48,6 +49,7 @@ export const REPORTS: readonly Report[] = [
   { name: "Treatment Log", short: "Treatments", group: "Treatment Insights", preview: "treatments" },
   { name: "Basal Rate Analysis", short: "Basal Analysis", group: "Treatment Insights", preview: "basal" },
   { name: "Insulin Delivery", short: "Insulin Delivery", group: "Treatment Insights", preview: "insulin" },
+  { name: "Loop Analysis", short: "Loop Analysis", group: "Treatment Insights", preview: "loop" },
   { name: "Site Change Impact", short: "Site Changes", group: "Treatment Insights", preview: "site" },
   { name: "Insulin Dosing Profile", short: "IDP", group: "Treatment Insights", preview: "idp" },
   { name: "Battery", short: "Battery", group: "Treatment Insights", preview: "battery" },

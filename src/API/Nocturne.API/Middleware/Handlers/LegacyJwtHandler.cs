@@ -6,11 +6,10 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Middleware.Handlers;
 
 /// <summary>
-/// Authentication handler for legacy Nightscout JWT tokens.
-/// These are self-issued JWTs exchanged from access tokens via
-/// /api/v2/authorization/request/:accessToken. Runs after
-/// <see cref="OAuthAccessTokenHandler"/>, so it only sees JWTs without OAuth
-/// claims (scope/client_id).
+/// Authentication handler for a session JWT presented as a bearer token. Runs after
+/// <see cref="OAuthAccessTokenHandler"/>, so it only sees JWTs without OAuth claims
+/// (scope/client_id), and refuses any other grant-derived shape
+/// (<see cref="SessionCookieHandler.IsGrantShaped"/>).
 /// </summary>
 /// <remarks>
 /// Validation and claim extraction are delegated to <see cref="IJwtService"/>.
@@ -73,17 +72,14 @@ public class LegacyJwtHandler : IAuthHandler
 
         var claims = validationResult.Claims;
 
-        // Enforce tenant pin: reject tokens issued for a different tenant
-        if (claims.TenantId.HasValue)
+        // A grant-derived JWT left over after OAuthAccessTokenHandler (one minted from a grant whose
+        // scope list is empty) would otherwise resolve as an unscoped session to the member's whole
+        // role, outside its grant's revocation.
+        if (SessionCookieHandler.IsGrantShaped(claims))
         {
-            var tenantCtx = context.GetTenantContext();
-            if (tenantCtx is null || tenantCtx.TenantId != claims.TenantId.Value)
-            {
-                _logger.LogWarning(
-                    "Legacy JWT tenant mismatch: token tenant {TokenTenant}, request tenant {RequestTenant}",
-                    claims.TenantId, tenantCtx?.TenantId);
-                return Task.FromResult(AuthResult.Failure("Token is not valid for this tenant"));
-            }
+            _logger.LogWarning(
+                "Rejected a grant-shaped bearer JWT for subject {SubjectId}", claims.SubjectId);
+            return Task.FromResult(AuthResult.Failure("Invalid token"));
         }
 
         var authContext = new AuthContext
@@ -94,10 +90,9 @@ public class LegacyJwtHandler : IAuthHandler
             SubjectName = claims.Name ?? claims.SubjectId.ToString(),
             Permissions = claims.Permissions,
             Roles = claims.Roles,
-            Scopes = claims.Scopes,
             RawToken = token,
+            TokenId = claims.GrantId,
             ExpiresAt = claims.ExpiresAt,
-            LimitTo24Hours = claims.LimitTo24Hours,
         };
 
         _logger.LogDebug(

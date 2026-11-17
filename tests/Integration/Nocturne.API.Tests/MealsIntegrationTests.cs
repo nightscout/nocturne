@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for the atomic meal submission endpoint at
 /// <c>POST /api/v4/nutrition/meals</c>.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 [Parity]
 public class MealsIntegrationTests : ApiIntegrationTestBase

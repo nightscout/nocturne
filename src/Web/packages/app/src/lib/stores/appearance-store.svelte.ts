@@ -4,8 +4,8 @@
  * Per-user display preferences (units, time format, theme, prediction, chart
  * style, widgets) are backed by a `SyncedPref`: it keeps the reactive `.current`
  * API of runed's PersistedState, but additionally
- *  - hydrates from the `nocturne-prefs` cookie / legacy per-key localStorage,
- *  - mirrors every change into one `nocturne-prefs` cookie so a returning device
+ *  - hydrates from the `nocturne-prefs` and units cookies / legacy per-key localStorage,
+ *  - mirrors every change into those cookies so a returning device
  *    hydrates synchronously at module load (before first paint), avoiding a wait
  *    on the session/API round-trip, and
  *  - writes through to the backend user-preferences endpoint (injected callback)
@@ -22,16 +22,23 @@
  * field of the preferences blob.
  */
 
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId, type UserDisplayPreferences } from "../api/generated/nocturne-api-client";
+import {
+  LegacyConsumableKind,
+  WidgetId,
+  type DashboardRailPreference,
+  type UserDisplayPreferences,
+} from "../api/generated/nocturne-api-client";
 import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
+import { parseRailPreference } from "../components/status-pills/rail";
 import { weekStartName } from "../components/calendar/calendar-date";
 import { resolveCookieDomain } from "../utils/tenant-host";
 import { isRecord } from "../utils/type-guards";
+import { ENERGY_UNITS, type EnergyUnit } from "@nocturne/ui/energy";
 
 // ==========================================
 // Type Definitions
@@ -42,8 +49,15 @@ const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic"] as const;
 /** Color theme - visual styling */
 export type ColorTheme = (typeof COLOR_THEMES)[number];
 
+const GLUCOSE_RANGE_PALETTES = ["theme", "clarity"] as const;
+
+/** Glucose range palette: the theme's own range colours, or distinct colours for every band */
+export type GlucoseRangePalette = (typeof GLUCOSE_RANGE_PALETTES)[number];
+
+const COLOR_SCHEMES = ["system", "light", "dark"] as const;
+
 /** Color scheme - light/dark mode preference */
-export type ColorScheme = "system" | "light" | "dark";
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
 const GLUCOSE_UNITS = ["mg/dl", "mmol"] as const;
 
@@ -55,6 +69,10 @@ const TIME_FORMATS = ["12", "24"] as const;
 const A1C_NAMES = ["HbA1c", "A1c"] as const;
 // @wc-ignore
 const A1C_UNITS = ["percent", "mmol/mol"] as const;
+// @wc-ignore
+export const CARB_RATIO_FORMATS = ["1:x", "g/U", "U/10g"] as const;
+
+export type CarbRatioFormat = (typeof CARB_RATIO_FORMATS)[number];
 
 /** Time format preference */
 export type TimeFormat = (typeof TIME_FORMATS)[number];
@@ -88,9 +106,19 @@ export type SupportedLocale = (typeof supportedLocales)[number];
 export const PREFS_COOKIE_NAME = "nocturne-prefs";
 const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
 
+/**
+ * Cookie holding this device's glucose units, apart from the rest of its preferences because a
+ * tenant has default units of its own. It is host-only, so a choice made on one tenant's host is
+ * never read on another's, where it would hide that tenant's default. A host with no tenant keeps
+ * one of its own too, which no tenant host is sent.
+ */
+export const UNITS_COOKIE_NAME = "nocturne-glucose-units";
+
 /** The type-independent face of a `SyncedPref`, so prefs of every type share one registry. */
 interface SyncedEntry {
   hydrateFrom(prefs: UserDisplayPreferences): void;
+  presentFrom(prefs: UserDisplayPreferences): void;
+  fallBackTo(prefs: UserDisplayPreferences): void;
   hydrateJson(json: string): void;
 }
 
@@ -98,7 +126,7 @@ interface SyncedEntry {
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level registry; nothing renders from it
 const syncedRegistry = new Map<string, SyncedEntry>();
 
-const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
+const PREFERENCES_CONTEXT_KEY = "nocturne:app:display-preferences";
 
 /**
  * One request's preference sources: the display-preference payloads, highest
@@ -139,9 +167,9 @@ function requestPreferences(): RequestPreferences | null {
  */
 let writeThrough: ((prefs: UserDisplayPreferences) => unknown) | null = null;
 
-/** Register the backend write-through used to persist synced preferences per-user. */
+/** Register the backend write-through used to persist synced preferences per-user; null withdraws it. */
 export function registerPreferencesWriteThrough(
-  fn: (prefs: UserDisplayPreferences) => unknown
+  fn: ((prefs: UserDisplayPreferences) => unknown) | null
 ): void {
   writeThrough = fn;
 }
@@ -151,7 +179,8 @@ let preferenceCookieDomain: string | null = null;
 
 /**
  * Scope preference cookies to the base domain, and rewrite the ones this document already wrote
- * host-scoped: cookies are written at module load, before the layout can supply the domain.
+ * host-scoped: cookies are written at module load, before the layout can supply the domain. The
+ * units cookie stays host-only (see {@link UNITS_COOKIE_NAME}).
  */
 export function registerPreferenceCookieDomain(
   baseDomain: string | null | undefined
@@ -162,7 +191,7 @@ export function registerPreferenceCookieDomain(
   if (domain === preferenceCookieDomain) return;
   preferenceCookieDomain = domain;
 
-  const prefs = readPrefsCookie();
+  const prefs = readDevicePreferences();
   if (prefs) writePrefsCookie(prefs);
   syncLanguageCookie(preferredLanguage.current);
 }
@@ -173,9 +202,13 @@ export function registerPreferenceCookieDomain(
  */
 function writeThroughReporting(prefs: UserDisplayPreferences): void {
   try {
-    void Promise.resolve(writeThrough?.(prefs)).catch((error: unknown) => {
-      console.error("Failed to save display preferences:", error);
-    });
+    void Promise.resolve(writeThrough?.(prefs))
+      .then((saved) => {
+        if (isRecord(saved) && isRecord(saved.preferences)) hydrateResolvedEnergyUnit(saved.preferences);
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to save display preferences:", error);
+      });
   } catch (error) {
     console.error("Failed to save display preferences:", error);
   }
@@ -222,6 +255,7 @@ const widgetListPref: PrefParser<WidgetId[]> = (raw) =>
     ? raw.flatMap((id) => WIDGET_IDS.find((known) => known === id) ?? [])
     : undefined;
 
+
 function parseJson(json: string): unknown {
   try {
     return JSON.parse(json);
@@ -230,11 +264,11 @@ function parseJson(json: string): unknown {
   }
 }
 
-function readInitial<T>(key: string, fallback: T, parse: PrefParser<T>): T {
-  if (!browser) return fallback;
+function readInitial<T>(key: string, parse: PrefParser<T>): T | undefined {
+  if (!browser) return undefined;
   const raw = localStorage.getItem(key);
-  if (raw === null) return fallback;
-  return parse(parseJson(raw)) ?? fallback;
+  if (raw === null) return undefined;
+  return parse(parseJson(raw));
 }
 
 function persistLocal<T>(key: string, value: T): void {
@@ -249,14 +283,19 @@ function persistLocal<T>(key: string, value: T): void {
 /**
  * A per-user preference with the same reactive `.current` surface as runed's
  * PersistedState, so no consumer changes. Writes propagate to localStorage (cache),
- * the shared cookie, and the backend. `hydrate` sets the value without a
+ * the device cookies (see {@link writePrefsCookie}), and the backend. `hydrate` sets the value without a
  * backend/cookie echo (used when applying server- or cross-tab-sourced values).
  * `read` locates this preference inside a `UserDisplayPreferences` payload, and is
  * the single mapping used for both hydration and server-side resolution.
  */
 class SyncedPref<T> implements SyncedEntry {
   private _value: T;
+  /** Whether this device holds a value of its own, as opposed to showing the default. */
+  private _held: boolean;
+  /** The tenant's presentation, shown in place of the default while this device stores no value. */
+  private _fallback: T | undefined = $state(undefined);
   private _key: string;
+  private _initial: T;
   private _select: (prefs: UserDisplayPreferences) => unknown;
   private _parse: PrefParser<T>;
 
@@ -267,9 +306,12 @@ class SyncedPref<T> implements SyncedEntry {
     parse: PrefParser<T>
   ) {
     this._key = key;
+    this._initial = initial;
     this._select = select;
     this._parse = parse;
-    this._value = $state(readInitial(key, initial, parse));
+    const stored = readInitial(key, parse);
+    this._held = stored !== undefined;
+    this._value = $state(stored ?? initial);
     syncedRegistry.set(key, this);
   }
 
@@ -284,11 +326,27 @@ class SyncedPref<T> implements SyncedEntry {
         if (value !== undefined && value !== null) return value;
       }
     }
-    return this._value;
+    return this._fallback ?? this._value;
+  }
+
+  /** The value one request's preference layers give it, highest precedence first, else the default. */
+  resolve(layers: readonly UserDisplayPreferences[]): T {
+    for (const prefs of layers) {
+      const value = this._read(prefs);
+      if (value !== undefined && value !== null) return value;
+    }
+    return this._initial;
+  }
+
+  /** What this device holds for the preference: never the default, never a fallback. */
+  get stored(): T | undefined {
+    return this._held ? this._value : undefined;
   }
 
   set current(value: T) {
     this._value = value;
+    this._held = true;
+    this._fallback = undefined;
     persistLocal(this._key, value);
     schedulePersist();
   }
@@ -301,13 +359,51 @@ class SyncedPref<T> implements SyncedEntry {
    */
   hydrate(value: T): void {
     this._value = value;
+    this._held = true;
+    this._fallback = undefined;
     persistLocal(this._key, value);
+  }
+
+  /**
+   * Show a value this device has no stored choice for, without storing it: a default the viewer
+   * inherits, which their own later choice replaces. Browser-only, like {@link hydrate}.
+   */
+  showDefault(value: T): void {
+    if (localStorage.getItem(this._key) === null) this._value = value;
   }
 
   /** Hydrate from a preference payload, leaving the current value alone when unset. */
   hydrateFrom(prefs: UserDisplayPreferences): void {
     const value = this._read(prefs);
     if (value !== undefined && value !== null) this.hydrate(value);
+  }
+
+  /**
+   * Show a payload's value in place of the hard-coded default while this device holds no value of
+   * its own. It is kept apart from the stored value, so nothing persists it. Browser-only, as
+   * {@link hydrate}.
+   */
+  fallBackTo(prefs: UserDisplayPreferences): void {
+    if (this._held) return;
+    this._fallback = this._read(prefs) ?? undefined;
+  }
+
+  /**
+   * Show a payload's value, or the default where it has none, over whatever this device holds,
+   * without storing it. Browser-only, as {@link hydrate}.
+   */
+  presentFrom(prefs: UserDisplayPreferences): void {
+    this._value = this._read(prefs) ?? this._initial;
+    this._held = false;
+    this._fallback = undefined;
+  }
+
+  /** Drop what this device holds and show the default. Browser-only, as {@link hydrate}. */
+  forget(): void {
+    this._value = this._initial;
+    this._held = false;
+    this._fallback = undefined;
+    localStorage.removeItem(this._key);
   }
 
   /** Hydrate from another tab's localStorage write, ignoring a malformed one. */
@@ -332,14 +428,33 @@ export const colorTheme = new SyncedPref<ColorTheme>(
   oneOfPref(COLOR_THEMES)
 );
 
+export const glucoseRangePalette = new SyncedPref<GlucoseRangePalette>(
+  "nocturne-glucose-range-palette",
+  "theme",
+  (p) => p.glucoseRangePalette,
+  oneOfPref(GLUCOSE_RANGE_PALETTES)
+);
+
 /**
- * Blood glucose units preference. Per-user: syncs across devices/tenants.
+ * Blood glucose units preference. The saved value follows the user across devices and tenants;
+ * this device's value stays on one tenant's host (see {@link UNITS_COOKIE_NAME}).
  */
 export const glucoseUnits = new SyncedPref<GlucoseUnits>(
   "nocturne-glucose-units",
   "mg/dl",
   (p) => p.glucoseUnits,
   oneOfPref(GLUCOSE_UNITS)
+);
+
+/**
+ * The food energy unit the user chose, or `null` to follow the backend's resolution from their
+ * region format (see {@link getEnergyUnit}).
+ */
+export const energyUnit = new SyncedPref<EnergyUnit | null>(
+  "nocturne-energy-unit",
+  null,
+  (p) => p.energyUnit,
+  oneOfPref(ENERGY_UNITS)
 );
 
 // @wc-ignore
@@ -359,6 +474,11 @@ export const timeFormat = new SyncedPref<TimeFormat>(
   "12",
   (p) => p.timeFormat,
   oneOfPref(TIME_FORMATS)
+);
+
+// @wc-ignore
+export const carbRatioFormat = new SyncedPref<CarbRatioFormat>(
+  "nocturne-carb-ratio-format", "1:x", (p) => p.carbRatioFormat, oneOfPref(CARB_RATIO_FORMATS)
 );
 
 /**
@@ -385,6 +505,14 @@ export const nightModeSchedule = new SyncedPref<boolean>(
   booleanPref
 );
 
+/** Print each calendar day's in-range percentage over its time-in-range bar. */
+export const calendarShowTirPercent = new SyncedPref<boolean>(
+  "nocturne-calendar-show-tir-percent",
+  false,
+  (p) => p.calendarShowTirPercent,
+  booleanPref
+);
+
 export const yearOverviewColors = new SyncedPref<NonNullable<UserDisplayPreferences["yearOverviewColors"]>>(
   "nocturne-year-overview-colors",
   {},
@@ -401,6 +529,32 @@ export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   DEFAULT_TOP_WIDGETS,
   (p) => p.dashboardTopWidgets,
   widgetListPref
+);
+
+/**
+ * How the user arranged the dashboard status rail; an empty object is the default rail (see
+ * `effectiveRail`).
+ */
+export const dashboardRail = new SyncedPref<DashboardRailPreference>(
+  "nocturne-dashboard-rail",
+  {},
+  (p) => p.dashboardRail,
+  parseRailPreference
+);
+
+const LEGACY_CONSUMABLE_KINDS: readonly LegacyConsumableKind[] = Object.values(LegacyConsumableKind);
+
+const legacyKindListPref: PrefParser<LegacyConsumableKind[]> = (raw) =>
+  Array.isArray(raw)
+    ? LEGACY_CONSUMABLE_KINDS.filter((kind) => raw.includes(kind))
+    : undefined;
+
+/** The legacy ages the user hid from the rail's tracker pills. */
+export const hiddenLegacyFallbacks = new SyncedPref<LegacyConsumableKind[]>(
+  "nocturne-hidden-legacy-fallbacks",
+  [],
+  (p) => p.hiddenLegacyFallbacks,
+  legacyKindListPref
 );
 
 // ==========================================
@@ -431,6 +585,22 @@ function applyColorTheme(theme: ColorTheme): void {
   }
 }
 
+const RANGE_PALETTE_CLASS = "range-palette-clarity";
+
+function applyGlucoseRangePalette(palette: GlucoseRangePalette): void {
+  if (!browser) return;
+  document.documentElement.classList.toggle(RANGE_PALETTE_CLASS, palette === "clarity");
+}
+
+/**
+ * Set glucose range palette and apply immediately
+ */
+export function setGlucoseRangePalette(palette: GlucoseRangePalette): void {
+  if (glucoseRangePalette.current === palette) return;
+  glucoseRangePalette.current = palette;
+  applyGlucoseRangePalette(palette);
+}
+
 /**
  * Set color theme and apply immediately
  */
@@ -453,6 +623,7 @@ export function getColorTheme(): ColorTheme {
 export function initColorTheme(): void {
   if (!browser) return;
   applyColorTheme(colorTheme.current);
+  applyGlucoseRangePalette(glucoseRangePalette.current);
 }
 
 // Apply theme on module load in browser
@@ -460,6 +631,7 @@ if (browser) {
   // Use setTimeout to ensure DOM is ready
   setTimeout(() => {
     applyColorTheme(colorTheme.current);
+    applyGlucoseRangePalette(glucoseRangePalette.current);
   }, 0);
 }
 
@@ -473,6 +645,7 @@ if (browser) {
  */
 export function setColorScheme(value: ColorScheme): void {
   setMode(value);
+  mirrorColorScheme();
 }
 
 /**
@@ -506,6 +679,37 @@ export function getGlucoseUnits(): GlucoseUnits {
  */
 export function setGlucoseUnits(units: GlucoseUnits): void {
   glucoseUnits.current = units;
+}
+
+// ==========================================
+// Energy Unit Helpers
+// ==========================================
+
+const energyUnitPref = oneOfPref(ENERGY_UNITS);
+
+/**
+ * The backend's `effectiveEnergyUnit`. It is an answer rather than a preference, so it is never
+ * written back, and it is refreshed from each save so a region change takes effect.
+ */
+let resolvedEnergyUnit = $state<EnergyUnit>("kcal");
+
+function hydrateResolvedEnergyUnit(prefs: { effectiveEnergyUnit?: unknown }): void {
+  if (!browser) return;
+  const unit = energyUnitPref(prefs.effectiveEnergyUnit);
+  if (unit) resolvedEnergyUnit = unit;
+}
+
+/** The unit food energy is shown and entered in. */
+export function getEnergyUnit(): EnergyUnit {
+  const chosen = energyUnit.current;
+  if (chosen) return chosen;
+  if (!browser) {
+    for (const prefs of requestPreferences()?.layers ?? []) {
+      const unit = energyUnitPref(prefs.effectiveEnergyUnit);
+      if (unit) return unit;
+    }
+  }
+  return resolvedEnergyUnit;
 }
 
 // ==========================================
@@ -572,7 +776,7 @@ export type PredictionDisplayMode = (typeof PREDICTION_DISPLAY_MODES)[number];
 const LINE_COLOR_MODES = ["single", "threshold", "continuous"] as const;
 export type LineColorMode = (typeof LINE_COLOR_MODES)[number];
 
-const AREA_MODES = ["off", "baseline", "deviation"] as const;
+const AREA_MODES = ["off", "full", "baseline", "deviation"] as const;
 export type AreaMode = (typeof AREA_MODES)[number];
 
 /**
@@ -615,7 +819,7 @@ export const GLUCOSE_CHART_FETCH_HOURS = 48;
 
 export const chartLineColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-line-color-mode",
-  "threshold",
+  "continuous",
   (p) => p.chart?.lineColorMode,
   oneOfPref(LINE_COLOR_MODES)
 );
@@ -629,7 +833,7 @@ export const chartLineColor = new SyncedPref<string>(
 
 export const chartPointColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-point-color-mode",
-  "threshold",
+  "continuous",
   (p) => p.chart?.pointColorMode,
   oneOfPref(LINE_COLOR_MODES)
 );
@@ -679,35 +883,42 @@ export const chartAlwaysShowPatterns = new SyncedPref<boolean>(
 // ==========================================
 
 /**
- * Assemble the full per-user preference payload from the current store values.
- * Shape mirrors the backend `UserDisplayPreferences` (nested prediction/chart).
+ * Assemble the per-user preference payload from what this device holds, leaving out any field
+ * still on its default or showing the tenant's presentation. Shape mirrors the backend `UserDisplayPreferences` (nested
+ * prediction/chart).
  */
 export function collectPreferences(): UserDisplayPreferences {
   return {
-    yearOverviewColors: yearOverviewColors.current,
-    glucoseUnits: glucoseUnits.current,
-    a1cName: a1cName.current,
-    a1cUnits: a1cUnits.current,
-    timeFormat: timeFormat.current,
-    regionFormat: regionFormat.current,
-    colorTheme: colorTheme.current,
-    nightModeSchedule: nightModeSchedule.current,
-    dashboardTopWidgets: dashboardTopWidgets.current,
+    yearOverviewColors: yearOverviewColors.stored,
+    glucoseUnits: glucoseUnits.stored,
+    a1cName: a1cName.stored,
+    a1cUnits: a1cUnits.stored,
+    carbRatioFormat: carbRatioFormat.stored,
+    timeFormat: timeFormat.stored,
+    regionFormat: regionFormat.stored,
+    energyUnit: energyUnit.stored ?? undefined,
+    colorTheme: colorTheme.stored,
+    glucoseRangePalette: glucoseRangePalette.stored,
+    nightModeSchedule: nightModeSchedule.stored,
+    calendarShowTirPercent: calendarShowTirPercent.stored,
+    dashboardTopWidgets: dashboardTopWidgets.stored,
+    dashboardRail: dashboardRail.stored,
+    hiddenLegacyFallbacks: hiddenLegacyFallbacks.stored,
     prediction: {
-      enabled: predictionEnabled.current,
-      minutes: predictionMinutes.current,
-      displayMode: predictionDisplayMode.current,
+      enabled: predictionEnabled.stored,
+      minutes: predictionMinutes.stored,
+      displayMode: predictionDisplayMode.stored,
     },
     chart: {
-      lineColorMode: chartLineColorMode.current,
-      lineColor: chartLineColor.current,
-      pointColorMode: chartPointColorMode.current,
-      pointColor: chartPointColor.current,
-      showPoints: chartShowPoints.current,
-      areaMode: chartAreaMode.current,
-      areaOpacity: chartAreaOpacity.current,
-      alwaysShowPatterns: chartAlwaysShowPatterns.current,
-      lookback: glucoseChartLookback.current,
+      lineColorMode: chartLineColorMode.stored,
+      lineColor: chartLineColor.stored,
+      pointColorMode: chartPointColorMode.stored,
+      pointColor: chartPointColor.stored,
+      showPoints: chartShowPoints.stored,
+      areaMode: chartAreaMode.stored,
+      areaOpacity: chartAreaOpacity.stored,
+      alwaysShowPatterns: chartAlwaysShowPatterns.stored,
+      lookback: glucoseChartLookback.stored,
     },
   };
 }
@@ -724,15 +935,39 @@ export function applyPreferences(
   if (!prefs) return;
 
   for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
+  hydrateResolvedEnergyUnit(prefs);
 
-  if (browser) applyColorTheme(colorTheme.current);
+  if (browser) {
+    applyColorTheme(colorTheme.current);
+    applyGlucoseRangePalette(glucoseRangePalette.current);
+  }
   if (options.refreshCookie) writePrefsCookie(collectPreferences());
 }
 
-/** True when a server preference payload carries at least one saved value. */
+/**
+ * Draw a guest with the tenant's presentation wherever the guest has set nothing themselves. The
+ * values are shown, not stored, so the tenant's never become the guest's own and a later change
+ * of the owner's reaches them.
+ */
+export function applyTenantPresentation(prefs: UserDisplayPreferences | null | undefined): void {
+  if (!browser) return;
+
+  // An empty presentation clears the fallbacks, so a guest who signs in on this tab stops seeing
+  // the tenant's values.
+  if (prefs) hydrateResolvedEnergyUnit(prefs);
+  for (const pref of syncedRegistry.values()) pref.fallBackTo(prefs ?? {});
+  applyColorTheme(colorTheme.current);
+}
+
+/**
+ * True when a server preference payload carries at least one saved value. `effectiveEnergyUnit`
+ * is resolved on every response, saved or not.
+ */
 export function hasStoredPreferences(prefs: UserDisplayPreferences | null | undefined): boolean {
   if (!prefs) return false;
-  return Object.values(prefs).some((v) => v !== undefined && v !== null);
+  return Object.entries(prefs).some(
+    ([key, v]) => key !== "effectiveEnergyUnit" && v !== undefined && v !== null
+  );
 }
 
 /** Ensures reconciliation happens once per document load, not on every client navigation. */
@@ -752,6 +987,7 @@ let preferencesReconciled = false;
 export function reconcilePreferences(serverPrefs: UserDisplayPreferences | null | undefined): void {
   if (!browser || preferencesReconciled) return;
   preferencesReconciled = true;
+  if (serverPrefs) hydrateResolvedEnergyUnit(serverPrefs);
 
   if (hasStoredPreferences(serverPrefs)) {
     applyPreferences(serverPrefs, { refreshCookie: true });
@@ -763,6 +999,33 @@ export function reconcilePreferences(serverPrefs: UserDisplayPreferences | null 
     writePrefsCookie(prefs);
     writeThroughReporting(prefs);
   }
+}
+
+/**
+ * Shows the tenant's default glucose units to a member with no units stored anywhere: not on the
+ * server (reconciled first) and not on this device. Nothing is written, so the default is never
+ * mistaken for the member's own choice and seeded back as one.
+ */
+export function showTenantDefaultUnits(units: string | null | undefined): void {
+  if (!browser) return;
+  const parsed = oneOfPref(GLUCOSE_UNITS)(units);
+  if (parsed) glucoseUnits.showDefault(parsed);
+}
+
+/**
+ * Draw a share as its owner draws it: the owner's presentation, and the default for every field
+ * the owner left unset, never the viewer's own preferences, which the base-domain cookie still
+ * carries onto the share host. Nothing is stored, so the owner's values never become the viewer's.
+ * Once per document load, as {@link reconcilePreferences}, so a change the viewer makes in-session
+ * is not reverted on navigation.
+ */
+export function presentOwnerPreferences(prefs: UserDisplayPreferences | null | undefined): void {
+  if (!browser || preferencesReconciled) return;
+  preferencesReconciled = true;
+
+  if (prefs) hydrateResolvedEnergyUnit(prefs);
+  for (const pref of syncedRegistry.values()) pref.presentFrom(prefs ?? {});
+  applyColorTheme(colorTheme.current);
 }
 
 /** True if any synced preference has a stored value on this device (legacy localStorage / prior sync). */
@@ -798,23 +1061,42 @@ export function preferenceCookieWrites(
   return [`${name}=;path=/;max-age=0;SameSite=Lax`, `${write};domain=${domain}`];
 }
 
-/** The one writer for every preference cookie, so a scope can never drift between them. */
-function writePreferenceCookie(name: string, value: string, maxAge: number): void {
+/** The one writer for every preference cookie; each caller names the cookie's scope. */
+function writePreferenceCookie(
+  name: string,
+  value: string,
+  maxAge: number,
+  domain: string | null
+): void {
   if (!browser) return;
-  for (const assignment of preferenceCookieWrites(name, value, maxAge, preferenceCookieDomain)) {
+  for (const assignment of preferenceCookieWrites(name, value, maxAge, domain)) {
     document.cookie = assignment;
   }
 }
 
+/**
+ * The scheme rides in the prefs cookie beside the synced preferences but is not one of them:
+ * mode-watcher owns it, and it is never sent to the backend, so the server can read it from the
+ * first request and render the right theme.
+ */
+const COLOR_SCHEME_COOKIE_KEY = "colorScheme";
+
+/**
+ * Mirror a preference set into this device's cookies: units into the host-only
+ * {@link UNITS_COOKIE_NAME}, everything else into `nocturne-prefs` on the base domain.
+ */
 function writePrefsCookie(prefs: UserDisplayPreferences): void {
+  const { glucoseUnits: units, ...shared } = prefs;
   writePreferenceCookie(
     PREFS_COOKIE_NAME,
-    encodeURIComponent(JSON.stringify(prefs)),
-    PREFS_COOKIE_MAX_AGE
+    encodeURIComponent(JSON.stringify({ ...shared, [COLOR_SCHEME_COOKIE_KEY]: getColorScheme() })),
+    PREFS_COOKIE_MAX_AGE,
+    preferenceCookieDomain
   );
+  writePreferenceCookie(UNITS_COOKIE_NAME, units ?? "", units ? PREFS_COOKIE_MAX_AGE : 0, null);
 }
 
-/** Decode a raw `nocturne-prefs` cookie value; also used server-side by the root layout load. */
+/** Decode a raw `nocturne-prefs` cookie value. */
 export function parsePrefsCookie(
   value: string | null | undefined
 ): UserDisplayPreferences | null {
@@ -826,6 +1108,21 @@ export function parsePrefsCookie(
   } catch {
     return null;
   }
+}
+
+/**
+ * This device's display preferences from its raw `nocturne-prefs` and units cookie values; also
+ * used server-side, so SSR reads the device as the browser does. Units come only from the units
+ * cookie: one that `nocturne-prefs` still carries names no tenant, so it is ignored.
+ */
+export function parseDevicePreferences(
+  prefsCookie: string | null | undefined,
+  unitsCookie: string | null | undefined
+): UserDisplayPreferences | null {
+  const prefs = parsePrefsCookie(prefsCookie);
+  const glucoseUnits = oneOfPref(GLUCOSE_UNITS)(unitsCookie);
+  if (!prefs && !glucoseUnits) return null;
+  return { ...prefs, glucoseUnits };
 }
 
 /**
@@ -843,19 +1140,34 @@ export function readCookieFrom(header: string, name: string): string | null {
   return match ? match.slice(name.length + 1) : null;
 }
 
+/** The scheme stored in a raw `nocturne-prefs` cookie value, or `null` when absent or unreadable. */
+export function parseColorSchemeCookie(value: string | null | undefined): ColorScheme | null {
+  const prefs = parsePrefsCookie(value);
+  const raw = isRecord(prefs) ? prefs[COLOR_SCHEME_COOKIE_KEY] : undefined;
+  return COLOR_SCHEMES.find((scheme) => scheme === raw) ?? null;
+}
+
+function mirrorColorScheme(): void {
+  writePrefsCookie(readDevicePreferences() ?? {});
+}
+
 function readCookie(name: string): string | null {
   return browser ? readCookieFrom(document.cookie, name) : null;
 }
 
-function readPrefsCookie(): UserDisplayPreferences | null {
-  return parsePrefsCookie(readCookie(PREFS_COOKIE_NAME));
+function readDevicePreferences(): UserDisplayPreferences | null {
+  return parseDevicePreferences(readCookie(PREFS_COOKIE_NAME), readCookie(UNITS_COOKIE_NAME));
 }
 
 // Hydrate synchronously from the cookie on load (before first paint) so a known
 // device renders the user's units/theme immediately; server reconciliation
 // (via reconcilePreferences in +layout) then confirms/corrects.
 if (browser) {
-  applyPreferences(readPrefsCookie());
+  const devicePreferences = readDevicePreferences();
+  // localStorage can hold units another tenant's cookie put there, which SSR never sees.
+  if (!devicePreferences?.glucoseUnits) glucoseUnits.forget();
+  applyPreferences(devicePreferences);
+  mirrorColorScheme();
 
   // Cross-tab sync: mirror another tab's change into this tab's store.
   window.addEventListener("storage", (event) => {
@@ -864,6 +1176,9 @@ if (browser) {
     if (!pref) return;
     pref.hydrateJson(event.newValue);
     if (event.key === "nocturne-color-theme") applyColorTheme(colorTheme.current);
+    if (event.key === "nocturne-glucose-range-palette") {
+      applyGlucoseRangePalette(glucoseRangePalette.current);
+    }
   });
 }
 
@@ -932,7 +1247,7 @@ export function hasLanguagePreference(): boolean {
  * Sync language preference to cookie for server-side access
  */
 function syncLanguageCookie(locale: SupportedLocale): void {
-  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE);
+  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE, preferenceCookieDomain);
 }
 
 /**
@@ -994,7 +1309,7 @@ export function regionFormatLabel(tag: RegionFormat): string {
 
   const sample = REGION_SAMPLE_DATE.toLocaleDateString(tag);
   const weekStart = weekStartName(tag, preferredLanguage.current);
-  return `${name} — ${sample}, weeks start ${weekStart}`;
+  return `${name}: ${sample}, weeks start ${weekStart}`;
 }
 
 /**

@@ -17,6 +17,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for the unified in-app notification system
 /// Tests the complete request/response cycle for notification CRUD operations
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class NotificationsIntegrationTests : ApiIntegrationTestBase
 {
@@ -42,7 +43,6 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
         return await action(scope.ServiceProvider.GetRequiredService<IInAppNotificationService>());
     }
 

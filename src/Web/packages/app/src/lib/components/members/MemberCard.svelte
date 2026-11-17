@@ -1,22 +1,31 @@
+<script lang="ts" module>
+  export interface MemberChanges {
+    access?: { roleIds: string[]; permissions: string[] };
+    limitTo24Hours?: boolean;
+  }
+</script>
+
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Clock from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import type { TenantMemberDto, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import FormError from "#lib/forms/FormError.svelte";
+  import type { TenantMemberDto, TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     member: TenantMemberDto;
@@ -25,10 +34,10 @@
     canManage: boolean;
     isExpanded: boolean;
     isSaving: boolean;
+    saveError?: string | null;
     currentSubjectId?: string;
     onToggleExpand: () => void;
-    onSaveRoles: (roleIds: string[], permissions: string[]) => void;
-    onSaveLimitTo24Hours?: (limitTo24Hours: boolean) => void;
+    onSave: (changes: MemberChanges) => void;
     onRemove: () => void;
   }
 
@@ -39,10 +48,10 @@
     canManage = false,
     isExpanded = false,
     isSaving = false,
+    saveError = null,
     currentSubjectId,
     onToggleExpand,
-    onSaveRoles,
-    onSaveLimitTo24Hours,
+    onSave,
     onRemove,
   }: Props = $props();
 
@@ -60,19 +69,28 @@
   let originalLimitTo24Hours = $state(false);
   let showDirectPermissions = $state(false);
 
+  const grantableRoles = $derived(roles.filter((r) => r.canGrant));
+
+  /** The server keeps a held role the editor cannot grant as is, so it shows read-only. */
+  const ungrantableHeldRoles = $derived(
+    (member.roles ?? []).filter((held) => !grantableRoles.some((r) => r.id === held.roleId))
+  );
+
   /** Union of all permissions from the currently selected roles */
   const rolePermissions = $derived(
     editingRoleIds.flatMap((rid) => {
-      const role = roles.find((r) => r.id === rid);
+      const role =
+        grantableRoles.find((r) => r.id === rid) ?? ungrantableHeldRoles.find((r) => r.roleId === rid);
       return role?.permissions ?? [];
     })
   );
 
-  const isDirty = $derived(
+  const isAccessDirty = $derived(
     JSON.stringify([...editingRoleIds].sort()) !== JSON.stringify([...originalRoleIds].sort()) ||
-    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort()) ||
-    editingLimitTo24Hours !== originalLimitTo24Hours
+    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort())
   );
+  const isLimitDirty = $derived(editingLimitTo24Hours !== originalLimitTo24Hours);
+  const isDirty = $derived(isAccessDirty || isLimitDirty);
 
   function toggleExpand() {
     if (!isExpanded) {
@@ -96,10 +114,12 @@
   }
 
   function handleSave() {
-    onSaveRoles(editingRoleIds, editingPermissions);
-    if (editingLimitTo24Hours !== originalLimitTo24Hours && onSaveLimitTo24Hours) {
-      onSaveLimitTo24Hours(editingLimitTo24Hours);
-    }
+    onSave({
+      access: isAccessDirty
+        ? { roleIds: editingRoleIds, permissions: editingPermissions }
+        : undefined,
+      limitTo24Hours: isLimitDirty ? editingLimitTo24Hours : undefined,
+    });
   }
 
   function handleCancel() {
@@ -113,6 +133,7 @@
 <Card.Root class="@container">
   <Card.Header>
     <div class="flex items-start justify-between gap-4">
+      <UserAvatar name={member.name} size="md" />
       <div class="space-y-1 flex-1 min-w-0">
         <Card.Title class="flex items-center gap-2 flex-wrap">
           <span class="truncate">
@@ -190,7 +211,22 @@
       <div class="space-y-2">
         <Label>Roles</Label>
         <div class="grid gap-2 @sm:grid-cols-2">
-          {#each roles as role (role.id)}
+          {#each ungrantableHeldRoles as role (role.roleId)}
+            <div class="flex items-center gap-2">
+              <Checkbox
+                id="member-role-{member.subjectId}-{role.roleId}"
+                checked
+                disabled
+              />
+              <label
+                for="member-role-{member.subjectId}-{role.roleId}"
+                class="text-sm text-muted-foreground select-none"
+              >
+                {role.name}
+              </label>
+            </div>
+          {/each}
+          {#each grantableRoles as role (role.id)}
             <div class="flex items-center gap-2">
               <Checkbox
                 id="member-role-{member.subjectId}-{role.id}"
@@ -206,6 +242,11 @@
             </div>
           {/each}
         </div>
+        {#if ungrantableHeldRoles.length > 0}
+          <p class="text-xs text-muted-foreground">
+            You cannot change a role that gives more access than you have.
+          </p>
+        {/if}
       </div>
 
       <Separator />
@@ -270,6 +311,7 @@
 
       <!-- Cancel / Save - only when dirty -->
       {#if isDirty}
+        <FormError issues={saveError} focusOnShow />
         <div class="flex gap-3">
           <Button
             variant="outline"
@@ -286,7 +328,7 @@
             {#if isSaving}
               <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
             {/if}
-            Save Changes
+            Save changes
           </Button>
         </div>
       {/if}

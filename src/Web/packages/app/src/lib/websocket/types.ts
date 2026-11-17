@@ -3,8 +3,10 @@ import type {
   Entry,
   Treatment,
   TrackerInstanceDto,
+  TrackerRealtimeAction,
   InAppNotificationDto,
-} from '$lib/api/generated/nocturne-api-client';
+  SyncPhase,
+} from '#lib/api/generated/nocturne-api-client.js';
 
 // Re-export API client types for convenience
 export type { Entry, Treatment };
@@ -28,6 +30,8 @@ export type WebSocketConnectionStatus =
 // WebSocket client configuration
 export interface WebSocketConfig {
   url: string;
+  /** The host has no realtime feed, so the client never asks for a ticket or opens a socket. */
+  disabled?: boolean;
   reconnectAttempts: number;
   reconnectDelay: number;
   maxReconnectDelay: number;
@@ -51,6 +55,10 @@ export interface StorageEvent {
   colName: string;
   /** Unvalidated: the collection decides the shape, so consumers narrow it. */
   doc: unknown;
+  /** The v4 model a native record broadcast carries; absent on a legacy collection event. */
+  recordType?: string;
+  /** The removed record's id on a native record delete, which carries no `doc`. */
+  id?: string;
 }
 
 export interface AnnouncementEvent {
@@ -76,8 +84,12 @@ export interface StatusEvent {
 }
 
 export interface TrackerUpdateEvent {
-  action: 'create' | 'reopen' | 'delete' | 'complete' | 'ack';
+  action: TrackerRealtimeAction;
   instance: TrackerInstanceDto;
+}
+
+export interface TrackerDefinitionUpdateEvent {
+  definitionId: string;
 }
 
 export interface NotificationUpdateEvent {
@@ -96,7 +108,7 @@ export type SyncMessageType =
 export interface SyncProgressEvent {
   connectorId: string;
   connectorName: string;
-  phase: "Syncing" | "Completed" | "Failed";
+  phase: SyncPhase;
   errorMessage: string | null;
   timestamp: string;
   messageType: SyncMessageType | null;
@@ -136,6 +148,7 @@ export interface WebSocketEventHandlers {
 
   // Tracker events
   trackerUpdate: (event: TrackerUpdateEvent) => void;
+  trackerDefinitionUpdate: (event: TrackerDefinitionUpdateEvent) => void;
 
   // In-app notification events
   notificationCreated: (notification: InAppNotificationDto) => void;

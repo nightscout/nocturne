@@ -1,6 +1,6 @@
-import type { DashboardChartData } from "$lib/api/generated/nocturne-api-client";
-import { resolveChartColor, getGlucoseColor } from "$lib/utils/chart-colors";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
+import { resolveChartColor, getGlucoseColor } from "#lib/utils/chart-colors.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
 /**
  * Transform raw NSwag DashboardChartData into the shape consumed by chart
@@ -23,6 +23,7 @@ export function transformChartData(data: DashboardChartData) {
       endTime: s.endMills != null ? new Date(s.endMills) : null,
       color: resolveChartColor(s.color ?? "muted-foreground"),
       metadata: s.metadata,
+      profileActivation: s.profileActivation,
     }));
 
   const thresholds = resolveChartThresholds(data.thresholds);
@@ -47,6 +48,7 @@ export function transformChartData(data: DashboardChartData) {
     defaultBasalRate: data.defaultBasalRate ?? 1.0,
     maxBasalRate: data.maxBasalRate ?? 3.0,
     maxIob: data.maxIob ?? 5.0,
+    minIob: data.minIob ?? 0,
     maxCob: data.maxCob ?? 100.0,
 
     glucoseData: (data.glucoseData ?? []).map((p) => ({
@@ -98,6 +100,7 @@ export function transformChartData(data: DashboardChartData) {
       fillColor: resolveChartColor(s.fillColor ?? "insulin-basal"),
       strokeColor: resolveChartColor(s.strokeColor ?? "insulin-basal"),
     })),
+    lastPumpSyncMills: data.lastPumpSyncMills ?? null,
 
     systemEventMarkers: (data.systemEventMarkers ?? []).map((e) => ({
       ...e,

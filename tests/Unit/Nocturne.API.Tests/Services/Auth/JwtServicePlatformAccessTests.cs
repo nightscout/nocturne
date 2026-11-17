@@ -21,7 +21,8 @@ public class JwtServicePlatformAccessTests
             Issuer = "nocturne",
             Audience = "nocturne-api",
         }),
-        NullLogger<JwtService>.Instance);
+        NullLogger<JwtService>.Instance,
+        TimeProvider.System);
 
     private readonly SubjectInfo _subject = new()
     {

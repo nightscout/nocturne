@@ -6,6 +6,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.NocturneRemote.Configurations;
+using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
@@ -29,8 +30,9 @@ public class NocturneRemoteRealtimeListenerTests
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
+            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance, TimeProvider.System);
 
         // Act & Assert — should not throw
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -50,8 +52,9 @@ public class NocturneRemoteRealtimeListenerTests
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
+            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance, TimeProvider.System);
 
         // Act & Assert — should not throw
         await InvokeStopRealtimeListenersAsync(sut);
@@ -70,8 +73,9 @@ public class NocturneRemoteRealtimeListenerTests
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
+            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance, TimeProvider.System);
 
         // Act & Assert — should not throw on repeated calls
         await InvokeStopRealtimeListenersAsync(sut);
@@ -99,8 +103,9 @@ public class NocturneRemoteRealtimeListenerTests
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
+            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance, TimeProvider.System);
 
         // Act & Assert — should skip the tenant without throwing
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -127,8 +132,9 @@ public class NocturneRemoteRealtimeListenerTests
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            Mock.Of<IJobLedger>(),
             serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
-            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
+            NullLogger<NocturneRemoteConnectorBackgroundService>.Instance, TimeProvider.System);
 
         // Act & Assert — should skip the tenant without throwing
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -154,7 +160,7 @@ public class NocturneRemoteRealtimeListenerTests
         var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NocturneRemoteConnectorBackgroundService(
-            serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger);
+            serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System);
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
@@ -182,7 +188,7 @@ public class NocturneRemoteRealtimeListenerTests
         var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NocturneRemoteConnectorBackgroundService(
-            serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger);
+            serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, TimeProvider.System);
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
@@ -196,30 +202,12 @@ public class NocturneRemoteRealtimeListenerTests
 
     #region Helpers
 
-    /// <summary>
-    /// Invokes the protected StartRealtimeListenersAsync via reflection.
-    /// </summary>
-    private static async Task InvokeStartRealtimeListenersAsync(
+    private static Task InvokeStartRealtimeListenersAsync(
         NocturneRemoteConnectorBackgroundService sut,
-        CancellationToken cancellationToken)
-    {
-        var method = typeof(ConnectorBackgroundService<NocturneRemoteConnectorConfiguration>)
-            .GetMethod("StartRealtimeListenersAsync",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        await (Task)method.Invoke(sut, [cancellationToken])!;
-    }
+        CancellationToken cancellationToken) => sut.StartRealtimeListenersAsync(cancellationToken);
 
-    /// <summary>
-    /// Invokes the protected StopRealtimeListenersAsync via reflection.
-    /// </summary>
-    private static async Task InvokeStopRealtimeListenersAsync(
-        NocturneRemoteConnectorBackgroundService sut)
-    {
-        var method = typeof(ConnectorBackgroundService<NocturneRemoteConnectorConfiguration>)
-            .GetMethod("StopRealtimeListenersAsync",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        await (Task)method.Invoke(sut, [])!;
-    }
+    private static Task InvokeStopRealtimeListenersAsync(NocturneRemoteConnectorBackgroundService sut) =>
+        sut.StopRealtimeListenersAsync();
 
     /// <summary>
     /// Builds a service provider wired up for the NocturneRemoteConnectorBackgroundService.
@@ -235,12 +223,7 @@ public class NocturneRemoteRealtimeListenerTests
         db.AddToServices(services);
         services.AddActiveTenantSnapshot();
 
-        services.AddScoped<ITenantAccessor>(_ =>
-        {
-            var mock = MockTenantAccessor.Create(Guid.NewGuid());
-            mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
-            return mock.Object;
-        });
+        services.AddScoped<ITenantAccessor, Nocturne.API.Multitenancy.HttpContextTenantAccessor>();
 
         if (config != null)
         {

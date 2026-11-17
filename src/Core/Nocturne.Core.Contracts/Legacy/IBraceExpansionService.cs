@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.Core.Contracts.Legacy;
 
@@ -17,20 +17,10 @@ public interface IBraceExpansionService
     /// </remarks>
     /// <param name="pattern">Brace pattern to expand (e.g., <c>"20{14..16}-{01..12}"</c>).</param>
     /// <returns>All expanded string permutations.</returns>
+    /// <exception cref="TimePatternRejectedException">
+    /// The pattern exceeds a <see cref="TimePatternLimits"/> bound.
+    /// </exception>
     IEnumerable<string> ExpandBraces(string pattern);
-
-    /// <summary>
-    /// Convert expanded string patterns into compiled <see cref="Regex"/> objects.
-    /// </summary>
-    /// <param name="patterns">Expanded string patterns.</param>
-    /// <param name="prefix">Optional prefix to prepend to each pattern.</param>
-    /// <param name="suffix">Optional suffix to append to each pattern.</param>
-    /// <returns>Compiled <see cref="Regex"/> objects for matching.</returns>
-    IEnumerable<Regex> PatternsToRegex(
-        IEnumerable<string> patterns,
-        string? prefix = null,
-        string? suffix = null
-    );
 
     /// <summary>
     /// Prepare a <see cref="TimePatternQuery"/> from prefix and regex parameters for database querying.
@@ -39,6 +29,7 @@ public interface IBraceExpansionService
     /// <param name="regex">Time regex pattern (e.g., <c>"T{13..18}:{00..15}"</c>).</param>
     /// <param name="fieldName">Database field name to match against (default <c>"dateString"</c>).</param>
     /// <returns>A <see cref="TimePatternQuery"/> ready for database execution.</returns>
+    /// <exception cref="TimePatternRejectedException">Either expansion exceeds a <see cref="TimePatternLimits"/> bound.</exception>
     TimePatternQuery PrepareTimePatterns(
         string? prefix,
         string? regex,
@@ -57,3 +48,21 @@ public class TimePatternQuery
     public string? SingleRegexPattern { get; set; }
     public bool CanOptimizeWithIndex { get; set; }
 }
+
+/// <summary>
+/// Bounds on brace expansion. Upstream's <c>braces</c> refuses a range past 1000 values; the other
+/// caps keep nested groups from multiplying past it. Expansion visits at most
+/// <see cref="MaxExpansions"/> times <see cref="MaxGroups"/> patterns, and the expansions are joined
+/// into one <c>$regex</c>, so together they must fit <see cref="BoundedRegex.MaxLength"/>.
+/// </summary>
+public static class TimePatternLimits
+{
+    public const int MaxPatternLength = 512;
+    public const int MaxGroups = 16;
+    public const int MaxRangeSize = 1000;
+    public const int MaxExpansions = 1000;
+    public const int MaxExpandedLength = BoundedRegex.MaxLength;
+}
+
+/// <summary>A time pattern the API will not evaluate. Its message is safe to return to the caller.</summary>
+public sealed class TimePatternRejectedException(string message) : Exception(message);

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 
 namespace Nocturne.Core.Models.V4;
@@ -23,13 +24,6 @@ namespace Nocturne.Core.Models.V4;
 public class TherapySettings : V4RecordBase, IProfileScoped
 {
     /// <summary>
-    /// Separates the profile name from the switch time in the store name of a profile a Profile
-    /// Switch treatment carried inline (<c>"{name}@@@@@{mills}"</c>). Such a row is a snapshot of
-    /// the switch, not a profile document, so it never takes part in the default (see <see cref="IsDefault"/>).
-    /// </summary>
-    public const string ProfileSwitchStoreMarker = "@@@@@";
-
-    /// <summary>
     /// The <c>_id</c> a row answers to as a legacy profile document: the part of its legacy id before
     /// the first colon, since a document fans out to one <c>"{_id}:{storeName}"</c> row per store; the
     /// whole legacy id when it has no colon; or the row's own id when it has no legacy id.
@@ -44,9 +38,6 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public string ProfileName { get; set; } = "Default";
 
-    /// <summary>
-    /// Timezone for this profile
-    /// </summary>
     public string? Timezone { get; set; }
 
     /// <summary>
@@ -109,6 +100,9 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public LoopProfileSettings? LoopSettings { get; set; }
 
+    /// <inheritdoc cref="Profile.IsAPNSProduction"/>
+    public bool? IsAPNSProduction { get; set; }
+
     /// <summary>
     /// Whether this is the tenant's default profile: at most one row per tenant carries it.
     /// </summary>
@@ -117,11 +111,19 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// its <c>defaultProfile</c>, matched to the store key exactly, until a user picks another. It
     /// is a tenant-wide singleton, not per-document provenance, so ingest settles it across the
     /// tenant rather than deriving it per document. The profile in effect at a given time is not
-    /// this flag: that comes from Profile state spans (profile switches).
+    /// this flag: that comes from profile activations (profile switches).
     /// An update never writes it: only <c>ITherapySettingsRepository.SetDefaultAsync</c> moves it, so a
     /// write carrying a stale read of the flag cannot leave a second default.
     /// </remarks>
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// The <c>defaultProfile</c> of the legacy profile document this row was decomposed from, shared
+    /// by every row of that document; null for a row written on its own, or decomposed before it was
+    /// recorded. Only decomposing the document writes it, so it is not part of the V4 API.
+    /// </summary>
+    [JsonIgnore]
+    public string? DocumentDefaultProfile { get; set; }
 
     /// <summary>
     /// Who entered this profile (e.g., "Loop", "Trio")

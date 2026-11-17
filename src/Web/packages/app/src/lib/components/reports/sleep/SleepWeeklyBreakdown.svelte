@@ -4,8 +4,10 @@
    * tracked night is a weekday-keyed link to its single-night report.
    */
   import { resolve } from "$app/paths";
-  import type { SleepNightSummary, SleepWeekSummary } from "$lib/api";
-  import { formatMinutesDuration } from "$lib/utils/duration";
+  import type { SleepNightSummary, SleepWeekSummary } from "#lib/api/index.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { parseCalendarDate, weekdayIndex, weekdayLabels } from "#lib/components/calendar/calendar-date.js";
+  import { formatLocale } from "#lib/utils/formatting.js";
 
   interface Props {
     weeks: SleepWeekSummary[];
@@ -15,7 +17,6 @@
 
   let { weeks, nights }: Props = $props();
 
-  const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
 
   const nightsBySessionId = $derived(
     new Map(nights.filter((n) => n.sessionId).map((n) => [n.sessionId!, n]))
@@ -33,22 +34,19 @@
     cells: WeekdayCell[];
   }
 
-  /** Weekday index (Mon = 0) for a local YYYY-MM-DD display date. */
-  function weekdayIndex(dateStr: string): number {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    return (new Date(y, m - 1, d).getDay() + 6) % 7;
-  }
-
-  // Most recent week first; weekday cells Mon–Sun linking where a night exists.
+  // Most recent week first; weekday cells linking where a night exists.
   const rows = $derived.by<WeekRow[]>(() =>
     weeks
       .map((week) => {
-        const cells: WeekdayCell[] = WEEKDAY_INITIALS.map((initial) => ({ initial }));
+        const firstDay = parseCalendarDate((week.weekStart ?? "").slice(0, 10)).getDay();
+        const cells: WeekdayCell[] = weekdayLabels(formatLocale(), "narrow", undefined, firstDay).map(
+          (initial) => ({ initial })
+        );
         for (const id of week.sessionIds ?? []) {
           const night = nightsBySessionId.get(id);
           if (!night?.displayDate) continue;
           const dateStr = night.displayDate;
-          const idx = weekdayIndex(dateStr);
+          const idx = weekdayIndex(parseCalendarDate(dateStr), firstDay);
           // First night wins on a shared display day — same tie-break as the
           // composition chart's day mapping.
           if (cells[idx].date) continue;
@@ -74,7 +72,7 @@
 <div class="divide-y divide-border/60">
   {#each rows as { week, cells } (week.weekStart)}
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-2.5 first:pt-0 last:pb-0">
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 flex-1 basis-48">
         <div class="text-sm font-medium">{week.label}</div>
         {#if (week.nightCount ?? 0) > 0}
           <div class="text-xs text-muted-foreground">

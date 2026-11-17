@@ -1,12 +1,11 @@
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Glucose;
@@ -18,20 +17,37 @@ public class GlucoseStatusClassifierTests
 
     // ---- threshold resolution ----
 
-    [Fact]
-    public async Task ResolveThresholdsAsync_noVisibleRules_returnsTheConfiguredDefaults()
-    {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        await using var db = new NocturneDbContext(options) { TenantId = Guid.NewGuid() };
-        var classifier = new GlucoseStatusClassifier(
-            new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance);
+    private static GlucoseStatusClassifier NewClassifier() =>
+        new(new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance);
 
-        var resolved = await classifier.ResolveThresholdsAsync(db, CancellationToken.None);
+    private static AlertRuleSnapshot Rule(
+        AlertConditionType type, string conditionParams, AlertRuleSeverity severity) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), "rule", type, conditionParams, severity, "{}", 0, false, null);
+
+    [Fact]
+    public void ResolveThresholds_noRules_returnsTheConfiguredDefaults()
+    {
+        var classifier = NewClassifier();
+
+        var resolved = classifier.ResolveThresholds([]);
 
         resolved.Should().Be(classifier.Defaults);
         resolved.Should().Be(Defaults, "the fixture's defaults mirror the configured constants");
+    }
+
+    [Fact]
+    public void ResolveThresholds_readsOnlyThresholdRulesAndSkipsOnesItCannotParse()
+    {
+        var resolved = NewClassifier().ResolveThresholds(
+        [
+            Rule(AlertConditionType.Threshold, """{"direction":"below","value":65}""", AlertRuleSeverity.Warning),
+            Rule(AlertConditionType.Threshold, """{"direction":"above","value":220}""", AlertRuleSeverity.Warning),
+            Rule(AlertConditionType.Threshold, "not json", AlertRuleSeverity.Critical),
+            Rule(AlertConditionType.Threshold, """{"value":300}""", AlertRuleSeverity.Critical),
+            Rule(AlertConditionType.RateOfChange, """{"direction":"below","rate":2}""", AlertRuleSeverity.Critical),
+        ]);
+
+        resolved.Should().Be(new TenantOverviewThresholds(55, 65, 220, 260));
     }
 
     [Fact]
@@ -115,12 +131,12 @@ public class GlucoseStatusClassifierTests
     }
 
     [Fact]
-    public void ResolveThresholds_directionCasingIsIgnored()
+    public void ResolveThresholds_readsOnlyTheExactDirection()
     {
         var resolved = GlucoseStatusClassifier.ResolveThresholds(Defaults,
             [("Below", 70, AlertRuleSeverity.Critical)]);
 
-        resolved.UrgentLow.Should().Be(70);
+        resolved.Should().Be(Defaults);
     }
 
     // ---- classification ----

@@ -7,14 +7,60 @@ namespace Nocturne.API.Services.Audit;
 /// Populated by AuditContextMiddleware for HTTP requests
 /// or manually by background services.
 /// </summary>
-public class AuditContext : IAuditContext
+public class AuditContext : IAuditContext, ISystemAttributable
 {
+    /// <summary>
+    /// The <see cref="Microsoft.AspNetCore.Http.HttpContext.Items"/> key the request's populated
+    /// context is kept under, for the SignalR invocation scopes that serve its connection.
+    /// </summary>
+    public const string HttpItemKey = "AuditContext";
+
     public Guid? SubjectId { get; set; }
     public string? SubjectName { get; set; }
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
     public Guid? TokenId { get; set; }
+    public string? CredentialFingerprint { get; set; }
+    public string? UserAgent { get; set; }
     public string? TraceId { get; set; }
     public string? Endpoint { get; set; }
     public bool IsSystem { get; set; }
+
+    /// <summary>The writer a system-attributed stretch keeps (<see cref="SystemAuditScope"/>).</summary>
+    internal Guid? KeptWriterGrantId { get; set; }
+
+    /// <inheritdoc />
+    public Guid? WriterGrantId => KeptWriterGrantId ?? this.GrantId();
+
+    /// <summary>Takes every actor field of <paramref name="source"/>.</summary>
+    public void CopyFrom(IAuditContext source)
+    {
+        SubjectId = source.SubjectId;
+        SubjectName = source.SubjectName;
+        AuthType = source.AuthType;
+        IpAddress = source.IpAddress;
+        TokenId = source.TokenId;
+        CredentialFingerprint = source.CredentialFingerprint;
+        UserAgent = source.UserAgent;
+        TraceId = source.TraceId;
+        Endpoint = source.Endpoint;
+        IsSystem = source.IsSystem;
+    }
+
+    /// <inheritdoc />
+    public void AttributeToSystem(string endpoint)
+    {
+        var system = SystemAuditContext.ForService(endpoint);
+        SubjectId = null;
+        SubjectName = null;
+        TokenId = null;
+        CredentialFingerprint = null;
+        KeptWriterGrantId = null;
+        IpAddress = null;
+        UserAgent = null;
+        AuthType = system.AuthType;
+        Endpoint = system.Endpoint;
+        TraceId = system.TraceId;
+        IsSystem = true;
+    }
 }

@@ -13,47 +13,31 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class TreatmentReadServiceCountTests
 {
     private readonly Mock<IV4ToLegacyProjectionService> _projection = new();
-    private readonly Mock<ITreatmentDecomposer> _decomposer = new();
-    private readonly Mock<IDecompositionPipeline> _pipeline = new();
-    private readonly Mock<ITempBasalRepository> _tempBasalRepo = new();
-    private readonly Mock<IBolusRepository> _bolusRepo = new();
-    private readonly Mock<ICarbIntakeRepository> _carbIntakeRepo = new();
-    private readonly Mock<IBGCheckRepository> _bgCheckRepo = new();
-    private readonly Mock<INoteRepository> _noteRepo = new();
-    private readonly Mock<IDeviceEventRepository> _deviceEventRepo = new();
-    private readonly Mock<IBolusCalculationRepository> _bolusCalcRepo = new();
     private readonly TreatmentReadService _service;
 
     public TreatmentReadServiceCountTests()
     {
         _service = new TreatmentReadService(
             _projection.Object,
-            _decomposer.Object,
-            _pipeline.Object,
-            _tempBasalRepo.Object,
-            _bolusRepo.Object,
-            _carbIntakeRepo.Object,
-            _bgCheckRepo.Object,
-            _noteRepo.Object,
-            _deviceEventRepo.Object,
-            _bolusCalcRepo.Object,
+            Mock.Of<ITreatmentDecomposer>(),
+            Mock.Of<ITempBasalRepository>(),
+            Mock.Of<IBolusRepository>(),
+            Mock.Of<ICarbIntakeRepository>(),
+            Mock.Of<IBGCheckRepository>(),
+            Mock.Of<INoteRepository>(),
+            Mock.Of<IDeviceEventRepository>(),
+            Mock.Of<IBolusCalculationRepository>(),
+            Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
     }
 
     [Fact]
-    public async Task CountAsync_NoFilter_SumsAllRepos()
+    public async Task CountAsync_NoFilter_CountsEveryServedTable()
     {
-        _bolusRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(10);
-        _carbIntakeRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(5);
-        _bgCheckRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(3);
-        _noteRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(2);
-        _deviceEventRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(4);
-        _tempBasalRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
-        _bolusCalcRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _projection
-            .Setup(p => p.CountProjectedStateSpanTreatmentsAsync(null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(6);
+            .Setup(p => p.CountProjectedTreatmentsAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(39);
 
         var result = await _service.CountAsync();
 
@@ -61,24 +45,15 @@ public class TreatmentReadServiceCountTests
     }
 
     [Fact]
-    public async Task CountAsync_WithTimeRange_PassesParsedTimesToRepos()
+    public async Task CountAsync_WithTimeRange_PassesTheParsedBounds()
     {
         var find = "{\"created_at\":{\"$gte\":1000,\"$lte\":2000}}";
-
-        _bolusRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
-        _carbIntakeRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _bgCheckRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _noteRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _deviceEventRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _tempBasalRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _bolusCalcRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _projection
+            .Setup(p => p.CountProjectedTreatmentsAsync(1000, 2000, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(5);
 
         var result = await _service.CountAsync(find);
 
         result.Should().Be(5);
-        _bolusRepo.Verify(r => r.CountAsync(
-            It.Is<DateTime?>(d => d.HasValue),
-            It.Is<DateTime?>(d => d.HasValue),
-            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

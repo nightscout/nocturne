@@ -8,38 +8,39 @@
     ChartClipPath,
     getChartContext,
   } from "layerchart";
-  import { curveMonotoneX } from "d3";
+  import { bisector, curveMonotoneX } from "d3";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import type { GlucosePoint } from "../engine/chart-data-view.svelte";
-  import { bg } from "$lib/utils/formatting";
+  import { bg } from "#lib/utils/formatting.js";
   import {
+    distinctRangeStops,
     getGlucoseColor,
     getGlucoseColorContinuous,
-  } from "$lib/utils/chart-colors";
+  } from "#lib/utils/chart-colors.js";
   import {
-    thresholdLineStops,
-    continuousLineStops,
-    fillStopsFromLineStops,
-    singleColorFillStops,
+    glucoseRangePalette,
+    type GlucoseRangePalette,
+  } from "#lib/stores/appearance-store.svelte.js";
+  import {
+    lineStopsFor,
+    fillStopsFor,
     areaY0Accessor,
+    type AreaMode,
+    type LineColorMode,
   } from "../utils/glucose-gradient-stops";
-
-  type LineColorMode = "single" | "threshold" | "continuous";
-  type AreaMode = "off" | "baseline" | "deviation";
 
   /**
    * GlucoseTrack renders the glucose line/area/points layer of a chart.
    *
    * Customisation is composable across four feature axes:
-   *   - `lineColorMode` (default `"threshold"`): line strokes by glucose
-   *     bucket (very-low/low/in-range/high/very-high) unless overridden to
-   *     `"single"` (flat `lineColor`) or `"continuous"` (oklch spectrum).
-   *     The threshold default applies to every consumer that doesn't pass
-   *     the prop explicitly; callers wanting the previous in-range green
-   *     line must opt in via `lineColorMode="single"`.
+   *   - `lineColorMode` (default `"continuous"`): line strokes along the
+   *     oklch glucose spectrum unless overridden to `"threshold"` (one colour
+   *     per bucket: very-low/low/in-range/high/very-high) or `"single"`
+   *     (flat `lineColor`).
    *   - `areaMode` (default `"off"`): adds a filled area below the line
-   *     extending to the chart bottom (`"baseline"`) or only where the
-   *     line deviates outside `[low, high]` (`"deviation"`).
+   *     extending to the chart bottom, at flat opacity (`"full"`) or fading
+   *     out toward the bottom (`"baseline"`), or only where the line
+   *     deviates outside `[low, high]` (`"deviation"`).
    *   - Points (`showPoints` / `pointColorMode` / `pointColor`): mirror
    *     the line by default, but can diverge. Passing `pointColor` alone
    *     (without `pointColorMode`) implicitly switches points to
@@ -56,23 +57,40 @@
     pointColorMode?: LineColorMode;
     pointColor?: string;
     areaOpacity?: number;
+    /** The range palette the continuous colours follow; the viewer's own when omitted. A server render has no viewer store, so it passes the request's. */
+    rangePalette?: GlucoseRangePalette;
+    /**
+     * Draw only the readings in the chart's x domain. Two more on each side keep the curve and
+     * the points at its edges as the whole series draws them: a monotone curve's segment reads
+     * the readings either side of it.
+     */
+    visibleOnly?: boolean;
   }
 
   let {
     showAxis = true,
     showPoints,
     areaMode = "off",
-    lineColorMode = "threshold",
+    lineColorMode = "continuous",
     lineColor = "var(--glucose-in-range)",
     pointColorMode,
     pointColor,
     areaOpacity = 0.5,
+    rangePalette,
+    visibleOnly = false,
   }: Props = $props();
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
 
   const glucoseData = $derived(ctx.engine.glucoseData);
+  const bisectTime = bisector((d: GlucosePoint) => d.time);
+  const drawnData = $derived.by(() => {
+    if (!visibleOnly) return glucoseData;
+    const [from, to] = chartCtx.xScale.domain();
+    const start = Math.max(0, bisectTime.left(glucoseData, from) - 2);
+    return glucoseData.slice(start, bisectTime.right(glucoseData, to) + 2);
+  });
   const glucoseScale = $derived(ctx.layout.glucose.scale);
   const glucoseAxisScale = $derived(ctx.layout.glucose.axisScale);
   const thresholds = $derived(ctx.engine.thresholds);
@@ -90,24 +108,31 @@
     areaMode === "off" ? undefined : areaY0Accessor(areaMode, thresholds),
   );
 
-  const lineStops = $derived.by(() => {
-    if (lineColorMode === "single") return undefined;
-    if (lineColorMode === "threshold")
-      return thresholdLineStops(thresholds, glucoseAxisScale, chartCtx.height);
-    return continuousLineStops(glucoseAxisScale, chartCtx.height);
-  });
+  const rangeStops = $derived(
+    distinctRangeStops(
+      rangePalette ?? glucoseRangePalette.current,
+      thresholds,
+    ),
+  );
 
-  const fillStops = $derived.by(() => {
-    if (areaMode === "off") return undefined;
-    if (lineColorMode === "single")
-      return singleColorFillStops(lineColor, areaOpacity);
-    return lineStops ? fillStopsFromLineStops(lineStops, areaOpacity) : undefined;
-  });
+  const lineStops = $derived(
+    lineStopsFor(
+      lineColorMode,
+      thresholds,
+      glucoseAxisScale,
+      chartCtx.height,
+      rangeStops,
+    ),
+  );
+
+  const fillStops = $derived(
+    fillStopsFor(areaMode, lineStops, lineColor, areaOpacity),
+  );
 
   function pointFill(sgv: number): string {
     if (effectivePointMode === "single") return effectivePointColor;
     if (effectivePointMode === "continuous")
-      return getGlucoseColorContinuous(sgv);
+      return getGlucoseColorContinuous(sgv, rangeStops);
     return getGlucoseColor(sgv, thresholds);
   }
 
@@ -123,7 +148,7 @@
     placement="left"
     scale={glucoseAxisScale}
     ticks={ctx.printing ? printTicks : 5}
-    format={(v) => String(bg(v))}
+    format={(v) => String(bg(v, ctx.glucoseUnits))}
     tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
   />
 {/if}
@@ -131,7 +156,7 @@
 {#snippet splineOrArea(stroke: string)}
   {#if areaMode === "off"}
     <Spline
-      data={glucoseData}
+      data={drawnData}
       x={(d) => d.time}
       y={(d) => glucoseScale(d.sgv)}
       {stroke}
@@ -140,10 +165,16 @@
       curve={curveMonotoneX}
     />
   {:else}
-    <LinearGradient stops={fillStops} units="userSpaceOnUse" vertical>
+    <LinearGradient
+      stops={fillStops}
+      units="userSpaceOnUse"
+      vertical
+      y1="0"
+      y2={String(chartCtx.height)}
+    >
       {#snippet children({ gradient: fillGrad })}
         <Area
-          data={glucoseData}
+          data={drawnData}
           x={(d: GlucosePoint) => d.time}
           y1={(d: GlucosePoint) => glucoseScale(d.sgv)}
           {y0}
@@ -160,7 +191,15 @@
   {#if lineColorMode === "single"}
     {@render splineOrArea(lineColor)}
   {:else}
-    <LinearGradient stops={lineStops} units="userSpaceOnUse" vertical>
+    <!-- A percentage extent resolves against the whole SVG, padding included,
+         so pin it to the plot area the stops were computed against. -->
+    <LinearGradient
+      stops={lineStops}
+      units="userSpaceOnUse"
+      vertical
+      y1="0"
+      y2={String(chartCtx.height)}
+    >
       {#snippet children({ gradient: strokeGrad })}
         {@render splineOrArea(strokeGrad)}
       {/snippet}
@@ -174,7 +213,7 @@
          cost O(N^2) synchronous work. Data mode renders the whole series from
          one mark with a per-point fill accessor. -->
     <Circle
-      data={glucoseData}
+      data={drawnData}
       key={(d) => d.time.getTime()}
       cx={(d) => d.time}
       cy={(d) => glucoseScale(d.sgv)}

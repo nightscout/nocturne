@@ -6,7 +6,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -44,6 +44,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
     /// <summary>
     /// Get entries with V3 API features including pagination, field selection, and advanced filtering.
+    /// Honors <c>If-None-Match</c> and <c>If-Modified-Since</c>, returning 304 when nothing changed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
@@ -87,21 +88,17 @@ public class EntriesController : BaseV3Controller<Entry>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
-            // Get entries using service layer with V3 parameters
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: type,
-                count: parameters.Limit,
-                skip: parameters.Offset,
-                findQuery: findQuery,
-                dateString: null, // V3 uses filter instead
-                reverseResults: reverseResults,
-                cancellationToken: cancellationToken
+            var entries = await _entryService.QueryEntriesAsync(
+                new EntryQuery
+                {
+                    Type = type,
+                    Find = findQuery,
+                    Count = parameters.Limit,
+                    Skip = parameters.Offset,
+                    ReverseResults = !parameters.Sort.Descending,
+                    SortField = ReadSortFieldOf(parameters.Sort),
+                },
+                cancellationToken
             );
 
             var entriesList = entries.ToList();
@@ -172,10 +169,11 @@ public class EntriesController : BaseV3Controller<Entry>
 
     /// <summary>
     /// Create a new entry via V3 API.
+    /// An entry with the same device, type and timestamp as a stored one is not duplicated: the response is 200 with <c>isDeduplication: true</c>.
     /// </summary>
     /// <param name="entry">The <see cref="Entry"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created <see cref="Entry"/> in V3 format.</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored entry.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
     /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
@@ -190,11 +188,12 @@ public class EntriesController : BaseV3Controller<Entry>
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries")]
-    [ProducesResponseType(typeof(Entry), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Entry>> CreateEntry(
+    public async Task<ActionResult> CreateEntry(
         [FromBody] Entry entry,
         CancellationToken cancellationToken = default
     )
@@ -223,16 +222,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
                 if (existingEntry != null)
                 {
-                    var existingIdentifier = MongoObjectId.Coerce(existingEntry.Id);
-                    return Ok(
-                        new
-                        {
-                            status = 200,
-                            identifier = existingIdentifier,
-                            isDeduplication = true,
-                            deduplicatedIdentifier = existingIdentifier,
-                        }
-                    );
+                    return V3Deduplicated(existingEntry.Id, existingEntry.SrvModified);
                 }
             }
 
@@ -257,12 +247,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             await _alertEvaluator.EvaluateForEntriesAsync([createdEntry], cancellationToken);
 
-            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
-            return CreatedAtAction(
-                nameof(GetEntry),
-                new { id = MongoObjectId.Coerce(createdEntry.Id) },
-                createdEntry.ToV3Response()
-            );
+            return V3Created(nameof(GetEntry), createdEntry.Id);
         }
         catch (ArgumentException ex)
         {
@@ -412,7 +397,7 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     /// <summary>
-    /// Partially update an entry via V3 API (JSON merge-patch).
+    /// Partially update an entry via V3 API (JSON merge-patch). Accepts <c>PATCH</c> as AAPS NSClientV3 sends it.
     /// </summary>
     /// <remarks>
     /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries (e.g. marking
@@ -506,34 +491,20 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetEntryHistory(
+    public Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 entry history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var page = await _entryService.GetEntriesModifiedSinceAsync(
+        =>
+        CreateV3HistoryResponseAsync(
+            "entry",
             lastModified,
             limit,
-            cancellationToken
+            (since, take) =>
+                _entryService.GetEntriesModifiedSinceAsync(since, take, cancellationToken),
+            records => records.ToV3Responses().ToList()
         );
-
-        if (page.CursorMills is { } cursor)
-        {
-            SetHistoryCursorHeaders(cursor);
-        }
-
-        var v3Entries = page.Records.ToV3Responses().ToList();
-        return CreateV3SuccessResponse(v3Entries);
-    }
 
     #region Helper Methods
 

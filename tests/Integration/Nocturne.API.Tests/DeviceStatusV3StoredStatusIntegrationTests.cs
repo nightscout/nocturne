@@ -4,9 +4,9 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Xunit;
@@ -20,6 +20,7 @@ namespace Nocturne.API.Tests.Integration;
 /// carries in place under the status's identifier and removes each one it omits, and a DELETE
 /// removes them all.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class DeviceStatusV3StoredStatusIntegrationTests : ApiIntegrationTestBase
 {
@@ -210,12 +211,14 @@ public class DeviceStatusV3StoredStatusIntegrationTests : ApiIntegrationTestBase
             OpenAps = new OpenApsStatus { Iob = new OpenApsIobData { Iob = 1.5 } },
             Override = new OverrideStatus { Active = true, Name = "Exercise", Duration = 60, Timestamp = createdAt },
         };
-        await WithScopeAsync(sp =>
+        await WithScopeAsync(async sp =>
         {
-            var decomposer = sp.GetRequiredService<IDeviceStatusDecomposer>();
-            return batch
-                ? decomposer.DecomposeBatchAsync([status], source: "integration-connector", WriteOrigin.Live)
-                : decomposer.DecomposeAsync(status, source: "integration-connector", WriteOrigin.Live);
+            var deviceStatuses = sp.GetRequiredService<IDeviceStatusService>();
+            if (batch)
+                await deviceStatuses.ImportDeviceStatusesAsync([status], source: "integration-connector");
+            else
+                await deviceStatuses.CreateDeviceStatusesAsync([status], source: "integration-connector");
+            return status;
         });
 
         var aps = await ListV4Async(client, "aps", device);
@@ -245,7 +248,6 @@ public class DeviceStatusV3StoredStatusIntegrationTests : ApiIntegrationTestBase
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
         return await action(scope.ServiceProvider);
     }
 

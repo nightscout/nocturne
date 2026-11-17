@@ -7,6 +7,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Profiles;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using dotAPNS;
 
 namespace Nocturne.API.Tests.Services.Notifications;
@@ -36,12 +37,14 @@ public class NotificationV2ServiceTests
             _mockLogger.Object,
             _mockSignalRBroadcastService.Object,
             _mockProfileProjection.Object,
-            _mockLoopService.Object
+            _mockLoopService.Object,
+            TimeProvider.System
         );
     }
 
     private (NotificationV2Service Service, MockApnsClientFactory Apns) CreateWithLoopPush(
-        Profile? currentProfile
+        Profile? currentProfile,
+        string? pushServerEnvironment = null
     )
     {
         var apns = new MockApnsClientFactory();
@@ -53,9 +56,11 @@ public class NotificationV2ServiceTests
                     ApnsKey = "mock-key",
                     ApnsKeyId = "ABC123DEFG",
                     DeveloperTeamId = "TEAM123456",
+                    PushServerEnvironment = pushServerEnvironment ?? new LoopConfiguration().PushServerEnvironment,
                 }
             ),
-            apns
+            apns,
+            TimeProvider.System
         );
         _mockProfileProjection
             .Setup(p => p.GetCurrentProfileAsync(It.IsAny<CancellationToken>()))
@@ -65,14 +70,20 @@ public class NotificationV2ServiceTests
             _mockLogger.Object,
             _mockSignalRBroadcastService.Object,
             _mockProfileProjection.Object,
-            loopService
+            loopService,
+            TimeProvider.System
         );
         return (service, apns);
     }
 
-    private static Profile ProfileWithLoopSettings(string? deviceToken, string? bundleIdentifier) =>
+    private static Profile ProfileWithLoopSettings(
+        string? deviceToken,
+        string? bundleIdentifier,
+        bool? isApnsProduction = null
+    ) =>
         new()
         {
+            IsAPNSProduction = isApnsProduction,
             LoopSettings = new LoopProfileSettings
             {
                 DeviceToken = deviceToken,
@@ -112,6 +123,32 @@ public class NotificationV2ServiceTests
         push.GetProperty("otp").Should().Be("123456");
         push.GetProperty("start-time").Should().Be("2026-09-30T01:02:03.000Z");
         push.GetProperty("remote-address").Should().Be("10.0.0.5");
+    }
+
+    [Theory]
+    [InlineData(false, "production", true)]
+    [InlineData(true, "development", false)]
+    [InlineData(null, "production", false)]
+    [InlineData(null, "development", true)]
+    public async Task SendLoopNotificationAsync_TheProfilesEnvironmentOutranksTheConfiguredOne(
+        bool? profileIsProduction,
+        string configuredEnvironment,
+        bool expectDevelopmentServer
+    )
+    {
+        var (service, apns) = CreateWithLoopPush(
+            ProfileWithLoopSettings("profile-device-token", "com.loopkit.Loop", profileIsProduction),
+            configuredEnvironment
+        );
+
+        var result = await service.SendLoopNotificationAsync(
+            new LoopNotificationData { EventType = "Temporary Override Cancel" },
+            "10.0.0.5"
+        );
+
+        result.Success.Should().BeTrue(result.Message);
+        apns.CapturedPushes.Should().ContainSingle().Which
+            .SentToDevelopmentServer.Should().Be(expectDevelopmentServer);
     }
 
     [Fact]
@@ -165,6 +202,30 @@ public class NotificationV2ServiceTests
 
 
     #region ProcessNotificationAsync Tests
+
+    [Fact]
+    public async Task ProcessNotificationAsync_StampsTheResponseFromTheClock()
+    {
+        var now = new DateTimeOffset(2026, 10, 29, 3, 4, 5, TimeSpan.Zero);
+        var service = new NotificationV2Service(
+            _mockLogger.Object,
+            _mockSignalRBroadcastService.Object,
+            _mockProfileProjection.Object,
+            _mockLoopService.Object,
+            new FakeTimeProvider(now)
+        );
+
+        var result = await service.ProcessNotificationAsync(new NotificationBase { Title = "Test", Level = 0 });
+
+        result.Timestamp.Should().Be(now.ToUnixTimeMilliseconds());
+        result.Data.Should().BeEquivalentTo(new
+        {
+            title = "Test",
+            group = "default",
+            level = 0,
+            processed_at = "2026-10-29T03:04:05.0000000+00:00",
+        });
+    }
 
     [Fact]
     public async Task ProcessNotificationAsync_WithValidNotification_ReturnsSuccess()
@@ -498,7 +559,8 @@ public class NotificationV2ServiceTests
             _mockLogger.Object,
             mockSignalRThatThrows.Object,
             _mockProfileProjection.Object,
-            _mockLoopService.Object
+            _mockLoopService.Object,
+            TimeProvider.System
         );
 
         // Act

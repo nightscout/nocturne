@@ -1,9 +1,9 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { time } from "$lib/utils/formatting";
-  import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { time } from "#lib/utils/formatting.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
   const realtimeStore = getRealtimeStore();
 
@@ -25,7 +25,7 @@
   const lastMealTime = $derived(recentMeals[0]?.mills);
 </script>
 
-<WidgetCard title="Recent Meals">
+<WidgetCard title="Recent meals">
   {#if recentMeals.length > 0}
     <div class="space-y-2">
       <div class="flex items-center justify-between">
@@ -48,9 +48,6 @@
       </div>
     </div>
   {:else}
-    <div class="flex flex-col items-center justify-center text-muted-foreground py-2">
-      <UtensilsCrossed class="h-6 w-6 mb-1 opacity-50" />
-      <p class="text-xs">No recent meals</p>
-    </div>
+    <EmptyState art="apple" size="compact" title="No recent meals" />
   {/if}
 </WidgetCard>

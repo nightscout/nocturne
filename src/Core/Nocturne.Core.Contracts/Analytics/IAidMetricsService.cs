@@ -11,14 +11,14 @@ namespace Nocturne.Core.Contracts.Analytics;
 /// <seealso cref="IAidDetectionStrategy"/>
 /// <seealso cref="AidSystemMetrics"/>
 /// <seealso cref="TempBasal"/>
-/// <seealso cref="ApsSnapshot"/>
+/// <seealso cref="ApsLoopCycle"/>
 public interface IAidMetricsService
 {
     /// <summary>
     /// Calculate comprehensive AID system metrics over a date range.
     /// </summary>
     /// <param name="deviceSegments">Device usage segments with algorithm identification.</param>
-    /// <param name="apsSnapshots">APS decision snapshots from the loop system.</param>
+    /// <param name="loopCycles">The loop system's APS loop cycles.</param>
     /// <param name="tempBasals"><see cref="TempBasal"/> records issued by the AID system.</param>
     /// <param name="siteChangeCount">Number of infusion site changes in the period.</param>
     /// <param name="cgmDeviceNames">Comma-separated CGM device names, or <c>null</c> if unknown.</param>
@@ -27,11 +27,11 @@ public interface IAidMetricsService
     /// <param name="targetLow">Low glucose target in mg/dL, or <c>null</c> if unknown.</param>
     /// <param name="targetHigh">High glucose target in mg/dL, or <c>null</c> if unknown.</param>
     /// <param name="startDate">Start of the analysis period.</param>
-    /// <param name="endDate">End of the analysis period.</param>
+    /// <param name="endDate">End of the analysis period, no later than now: a temp with no end runs to it.</param>
     /// <returns>Computed <see cref="AidSystemMetrics"/>.</returns>
     AidSystemMetrics Calculate(
         IReadOnlyList<DeviceSegmentInput> deviceSegments,
-        IReadOnlyList<ApsSnapshot> apsSnapshots,
+        IReadOnlyList<ApsLoopCycle> loopCycles,
         IReadOnlyList<TempBasal> tempBasals,
         int siteChangeCount,
         string? cgmDeviceNames,

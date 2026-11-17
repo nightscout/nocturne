@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -16,7 +17,7 @@ public static class StateSpanMapper
     {
         return new StateSpanEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(stateSpan.Id),
+            Id = RecordIdKey.ParseIdToGuid(stateSpan.Id),
             Category = stateSpan.Category.ToString(),
             State = stateSpan.State ?? string.Empty,
             StartTimestamp = stateSpan.StartTimestamp,
@@ -25,12 +26,51 @@ public static class StateSpanMapper
             MetadataJson = stateSpan.Metadata != null
                 ? JsonSerializer.Serialize(stateSpan.Metadata)
                 : null,
-            OriginalId = stateSpan.OriginalId,
+            LegacyId = stateSpan.OriginalId,
             SupersededById = !string.IsNullOrEmpty(stateSpan.SupersededById)
-                ? MapperHelpers.ParseIdToGuid(stateSpan.SupersededById)
+                ? RecordIdKey.ParseIdToGuid(stateSpan.SupersededById)
                 : null,
         };
     }
+
+    /// <summary>
+    /// Every stored value <see cref="ParseCategory"/> reads. Rows with any other value are retired and
+    /// only ever soft-deleted, so a read that includes deleted rows filters on this
+    /// (<see cref="WhereCategoryIsCurrent"/>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> CategoryNames = Enum.GetNames<StateSpanCategory>();
+
+    /// <summary>
+    /// A name lookup rather than <see cref="Enum.TryParse{TEnum}(string, out TEnum)"/>, which also
+    /// accepts the numeric form and would read a column holding "3" as a real category.
+    /// </summary>
+    private static readonly Dictionary<string, StateSpanCategory> CategoriesByName =
+        Enum.GetValues<StateSpanCategory>().ToDictionary(c => c.ToString(), StringComparer.Ordinal);
+
+    /// <summary>
+    /// Whether a stored value is one of <see cref="CategoryNames"/>, and the category it names.
+    /// </summary>
+    public static bool TryParseCategory(string category, out StateSpanCategory parsed) =>
+        CategoriesByName.TryGetValue(category, out parsed);
+
+    /// <summary>
+    /// The category a stored value names.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value is not one of <see cref="CategoryNames"/>.</exception>
+    public static StateSpanCategory ParseCategory(string category) =>
+        TryParseCategory(category, out var parsed)
+            ? parsed
+            : throw new InvalidOperationException($"Stored state span category '{category}' is not a {nameof(StateSpanCategory)}.");
+
+    /// <summary>
+    /// Narrows <paramref name="spans"/> to the rows whose category is one of <see cref="CategoryNames"/>.
+    /// </summary>
+    public static IQueryable<StateSpanEntity> WhereCategoryIsCurrent(this IQueryable<StateSpanEntity> spans) =>
+        spans.Where(IsCurrentCategory);
+
+    /// <summary>The predicate <see cref="WhereCategoryIsCurrent"/> applies.</summary>
+    public static readonly Expression<Func<StateSpanEntity, bool>> IsCurrentCategory =
+        s => CategoryNames.Contains(s.Category);
 
     /// <summary>
     /// Convert database entity to domain model
@@ -39,16 +79,14 @@ public static class StateSpanMapper
     {
         return new StateSpan
         {
-            Id = entity.OriginalId ?? entity.Id.ToString(),
-            Category = Enum.TryParse<StateSpanCategory>(entity.Category, out var category)
-                ? category
-                : StateSpanCategory.PumpMode,
+            Id = entity.LegacyId ?? entity.Id.ToString(),
+            Category = ParseCategory(entity.Category),
             State = entity.State,
             StartTimestamp = entity.StartTimestamp,
             EndTimestamp = entity.EndTimestamp,
             Source = entity.Source,
             Metadata = MapperHelpers.DeserializeJson<Dictionary<string, object>>(entity.MetadataJson),
-            OriginalId = entity.OriginalId,
+            OriginalId = entity.LegacyId,
             SupersededById = entity.SupersededById?.ToString(),
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
@@ -73,6 +111,6 @@ public static class StateSpanMapper
         entity.MetadataJson = stateSpan.Metadata != null
             ? JsonSerializer.Serialize(stateSpan.Metadata)
             : null;
-        entity.OriginalId = stateSpan.OriginalId;
+        entity.LegacyId = stateSpan.OriginalId;
     }
 }

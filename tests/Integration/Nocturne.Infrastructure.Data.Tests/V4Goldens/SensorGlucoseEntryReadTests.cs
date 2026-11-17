@@ -34,7 +34,7 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
             Direction = i % 2 == 0 ? GlucoseDirection.SingleUp : null,
             TrendRate = i % 2 == 0 ? 1.5 : null, Noise = i % 2 == 0 ? 2 : null,
             Filtered = i % 2 == 0 ? 12345 : null, Unfiltered = i % 2 == 0 ? 23456 : null,
-            Delta = i % 2 == 0 ? -1.5 : null,
+            Delta = i % 2 == 0 ? -1.5 : null, Rssi = i % 2 == 0 ? 100 : null,
             AdditionalProperties = new() { ["ignored"] = "legacy projection does not read this" },
             SmoothedMgdl = 101, UnsmoothedMgdl = 99,
         }), WriteOrigin.Backfill);
@@ -47,12 +47,19 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
             .Be(LegacyJson(CanonicalGlucoseStream.Select(full, [primary])));
         slim.Should().OnlyContain(r => r.AdditionalProperties == null && r.SmoothedMgdl == null);
 
+        // The stored stream decision reads back as the rule over the whole window.
+        var canonical = await repo.GetForEntriesAsync(start, start.AddMinutes(25), null, null, 100,
+            descending: descending, streams: GlucoseStreams.Canonical);
+        LegacyJson(canonical).Should().Be(LegacyJson(CanonicalGlucoseStream.Select(full, [primary])));
+        canonical.Should().HaveCount(6);
+
         var expected = await repo.GetAsync(start.AddMinutes(5), start.AddMinutes(20), "a", "entry-projection-test",
-            2, 1, descending, nativeOnly: true, patientDeviceId: primary.Id);
+            2, 1, descending, patientDeviceId: primary.Id);
         var actual = await repo.GetForEntriesAsync(start.AddMinutes(5), start.AddMinutes(20), "a", "entry-projection-test",
-            2, 1, descending, nativeOnly: true, patientDeviceId: primary.Id);
+            2, 1, descending, patientDeviceId: primary.Id);
         LegacyJson(actual).Should().Be(LegacyJson(expected));
         actual.Should().NotBeEmpty();
+        actual.Should().Contain(r => r.LegacyId == "legacy-6");
 
         var cursor = full[3];
         expected = await repo.GetAsync(start, null, null, null, 3, 99, descending,
@@ -60,6 +67,30 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
         actual = await repo.GetForEntriesAsync(start, null, null, null, 3, 99, descending,
             afterTimestamp: cursor.Timestamp, afterId: cursor.Id);
         LegacyJson(actual).Should().Be(LegacyJson(expected));
+    }
+
+    [Theory]
+    [InlineData(false, new[] { 60d, 60d, 90d })]
+    [InlineData(true, new[] { 200d, 150d, 90d })]
+    public async Task ReadByValue_PagesTheLowestOrHighestReadings_NotTheOldestOrNewest(
+        bool descending, double[] expected)
+    {
+        using var scope = await fixture.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var start = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        double[] values = [200, 90, 60, 150, 60];
+        await repo.BulkCreateAsync(values.Select((mgdl, i) => new SensorGlucose
+        {
+            Timestamp = start.AddMinutes(i), Mgdl = mgdl, Device = "a", DataSource = "value-order-test",
+        }), WriteOrigin.Backfill);
+
+        var page = (await repo.GetForEntriesByValueAsync(null, null, null, 3, 0, descending)).ToList();
+
+        page.Select(r => r.Mgdl).Should().Equal(expected);
+        if (!descending)
+            page[0].Timestamp.Should().BeBefore(page[1].Timestamp);
+        var next = (await repo.GetForEntriesByValueAsync(null, null, null, 3, 3, descending)).ToList();
+        page.Concat(next).Select(r => r.Id).Should().OnlyHaveUniqueItems().And.HaveCount(5);
     }
 
     [Fact]
@@ -86,6 +117,28 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
         var slim = (await repo.GetForEntriesAsync(null, null, null, null, 100)).ToList();
         slim.Should().ContainSingle();
         LegacyJson(slim).Should().Be(LegacyJson(full));
+    }
+
+    /// <summary>
+    /// The v3 history page is the canonical stream: a live reading another stream outranks is held
+    /// back, and once deleted it is delivered as a delete.
+    /// </summary>
+    [Fact]
+    public async Task CanonicalHistoryWithholdsALosingStream_AndDeliversItsDelete()
+    {
+        using var scope = await fixture.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var at = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var winner = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = at, Mgdl = 110, DataSource = "a-cgm", Device = "sensor" };
+        var loser = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = at.AddMinutes(1), Mgdl = 180, DataSource = "b-cgm", Device = "sensor" };
+        await repo.BulkCreateAsync([winner, loser], WriteOrigin.Live);
+
+        (await repo.GetCanonicalModifiedSinceAsync(0, 100))
+            .Select(h => (h.Record.Id, h.Deleted)).Should().Equal((winner.Id, false));
+
+        await repo.DeleteAsync(loser.Id, WriteOrigin.Live);
+        (await repo.GetCanonicalModifiedSinceAsync(0, 100))
+            .Select(h => (h.Record.Id, h.Deleted)).Should().BeEquivalentTo(new[] { (winner.Id, false), (loser.Id, true) });
     }
 
     private static string LegacyJson(IEnumerable<SensorGlucose> readings) =>

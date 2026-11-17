@@ -1,10 +1,22 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -21,11 +33,25 @@ public class TenantSettingsController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IPatientRecordRepository _patientRecords;
+    private readonly IUnitsAndTimezoneService _unitsAndTimezone;
+    private readonly IPlatformPolicyRepository _platformPolicy;
+    private readonly BaseDomainOptions _baseDomain;
 
-    public TenantSettingsController(ITenantService tenantService, ITenantAccessor tenantAccessor)
+    public TenantSettingsController(
+        ITenantService tenantService,
+        ITenantAccessor tenantAccessor,
+        IPatientRecordRepository patientRecords,
+        IUnitsAndTimezoneService unitsAndTimezone,
+        IPlatformPolicyRepository platformPolicy,
+        IOptions<BaseDomainOptions> baseDomain)
     {
         _tenantService = tenantService;
         _tenantAccessor = tenantAccessor;
+        _patientRecords = patientRecords;
+        _unitsAndTimezone = unitsAndTimezone;
+        _platformPolicy = platformPolicy;
+        _baseDomain = baseDomain.Value;
     }
 
     [HttpGet]
@@ -58,6 +84,223 @@ public class TenantSettingsController : ControllerBase
             _tenantAccessor.TenantId, request.Enabled, ct));
     }
 
+    [DenyDemoSubject]
+    [HttpPut("display-name")]
+    [RemoteCommand(Invalidates = ["GetTenantSettings"])]
+    [ProducesResponseType(typeof(TenantSettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSettingsDto>> SetDisplayName(
+        [FromBody] SetDisplayNameRequest request, CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.TenantSettings))
+            return Forbid();
+
+        var name = request.DisplayName.Trim();
+        if (name.Length == 0)
+            return Problem(detail: "The display name must not be blank.", statusCode: 400, title: "Bad Request");
+
+        return Ok(await _tenantService.SetDisplayNameAsync(_tenantAccessor.TenantId, name, ct));
+    }
+
+    /// <summary>
+    /// The tenant's subdomain and address, and whether the caller may change it: an owner may when
+    /// the platform policy allows owners to, and an owner who is a platform admin always may.
+    /// </summary>
+    [HttpGet("subdomain")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSubdomainDto>> GetSubdomain(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.TenantSettings))
+            return Forbid();
+
+        var settings = await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct);
+        return Ok(new TenantSubdomainDto(
+            settings.Slug, _baseDomain.TenantOrigin(settings.Slug), _baseDomain.BaseDomain, await CanChangeSubdomainAsync(ct)));
+    }
+
+    /// <inheritdoc cref="ITenantService.ChangeSlugAsync"/>
+    [DenyDemoSubject]
+    [HttpPut("subdomain")]
+    [RemoteCommand(Invalidates = ["GetSubdomain", "GetTenantSettings"])]
+    [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSubdomainDto>> ChangeSubdomain(
+        [FromBody] ChangeSubdomainRequest request, CancellationToken ct)
+    {
+        if (!await CanChangeSubdomainAsync(ct))
+            return Forbid();
+
+        var result = await _tenantService.ChangeSlugAsync(_tenantAccessor.TenantId, request.Slug, ct);
+        if (!result.IsValid)
+            return Problem(detail: result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+
+        var slug = request.Slug.Trim().ToLowerInvariant();
+        return Ok(new TenantSubdomainDto(slug, _baseDomain.TenantOrigin(slug), _baseDomain.BaseDomain, true));
+    }
+
+    private async Task<bool> CanChangeSubdomainAsync(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess) || string.IsNullOrEmpty(_baseDomain.BaseDomain))
+            return false;
+
+        return HttpContext.GetAuthContext()?.IsPlatformAdmin == true
+            || (await _platformPolicy.GetAsync(ct)).AllowOwnerSlugChange;
+    }
+
+    /// <summary>
+    /// Who the tenant is for, as its onboarder answered, with the patient's preferred name.
+    /// Owner-only: the answer describes the owner's own relationship to the patient.
+    /// </summary>
+    [HttpGet("patient-relationship")]
+    [RequireScope(Scope.FullAccess)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(PatientRelationshipDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PatientRelationshipDto>> GetPatientRelationship(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess))
+            return Forbid();
+
+        return Ok(await ReadPatientRelationshipAsync(ct));
+    }
+
+    /// <summary>
+    /// Records who the tenant is for, overwriting any earlier answer. A non-blank
+    /// <see cref="SetPatientRelationshipRequest.PatientName"/> becomes the patient record's
+    /// preferred name; <see cref="PatientRelationship.Self"/> never touches it.
+    /// </summary>
+    [DenyDemoSubject]
+    [HttpPut("patient-relationship")]
+    [RemoteCommand(Invalidates = ["GetPatientRelationship", "PatientRecord_GetPatientRecord", "SetupHub_GetSetupHub"])]
+    [ProducesResponseType(typeof(PatientRelationshipDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PatientRelationshipDto>> SetPatientRelationship(
+        [FromBody] SetPatientRelationshipRequest request, CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess))
+            return Forbid();
+
+        await _tenantService.SetPatientRelationshipAsync(
+            _tenantAccessor.TenantId, request.Relationship, HttpContext.GetSubjectId(), ct);
+
+        var name = request.PatientName?.Trim();
+        if (request.Relationship != PatientRelationship.Self && !string.IsNullOrEmpty(name))
+        {
+            var record = await _patientRecords.GetOrCreateAsync(ct);
+            record.PreferredName = name;
+            await _patientRecords.UpdateAsync(record, WriteOrigin.Live, ct);
+        }
+
+        return Ok(await ReadPatientRelationshipAsync(ct));
+    }
+
+    /// <summary>
+    /// The glucose units and timezone onboarding asks the owner to confirm, pre-filled as
+    /// <see cref="IUnitsAndTimezoneService.GetAsync"/> describes. Owner-only: the units are the
+    /// owner's own display units.
+    /// </summary>
+    /// <param name="locale">The browser's language tag (e.g. "en-AU"), for the units default.</param>
+    /// <param name="fromNightscout">Also read the saved Nightscout instance's settings.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    [HttpGet("units-and-timezone")]
+    [RequireScope(Scope.FullAccess)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(UnitsAndTimezoneDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<UnitsAndTimezoneDto>> GetUnitsAndTimezone(
+        [FromQuery] string? locale = null, [FromQuery] bool fromNightscout = false, CancellationToken ct = default)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess) || HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
+            return Forbid();
+
+        return Ok(await _unitsAndTimezone.GetAsync(subjectId, locale, fromNightscout, ct));
+    }
+
+    /// <summary>
+    /// Saves the owner's display units, the tenant default units for members who have not chosen
+    /// their own, and the patient's timezone. Nothing already stored in other units is converted.
+    /// </summary>
+    [DenyDemoSubject]
+    [HttpPut("units-and-timezone")]
+    [RemoteCommand(Invalidates = [
+        "GetUnitsAndTimezone",
+        "PatientRecord_GetPatientRecord",
+        "UserPreferences_GetPreferences",
+    ])]
+    [ProducesResponseType(typeof(UnitsAndTimezoneDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<UnitsAndTimezoneDto>> SetUnitsAndTimezone(
+        [FromBody] SetUnitsAndTimezoneRequest request, CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess) || HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
+            return Forbid();
+
+        if (TimeZoneHelper.ToIanaIdOrNull(request.Timezone) is not { } timezone)
+            return Problem(detail: $"'{request.Timezone}' is not a known timezone.", statusCode: 400, title: "Bad Request");
+
+        return Ok(await _unitsAndTimezone.SetAsync(
+            _tenantAccessor.TenantId, subjectId, request.GlucoseUnits, timezone, ct));
+    }
+
+    private async Task<PatientRelationshipDto> ReadPatientRelationshipAsync(CancellationToken ct)
+    {
+        var relationship = await _tenantService.GetPatientRelationshipAsync(_tenantAccessor.TenantId, ct);
+        var record = await _patientRecords.GetAsync(ct);
+        return new PatientRelationshipDto(relationship, record?.PreferredName);
+    }
 }
 
 public record SetPublicDocsRequest(bool Enabled);
+
+/// <remarks>
+/// Nominal rather than positional: MVC refuses validation attributes on a positional record's
+/// properties, and NSwag reads them only from properties.
+/// </remarks>
+public record SetPatientRelationshipRequest
+{
+    [JsonRequired]
+    [EnumDataType(typeof(PatientRelationship))]
+    public PatientRelationship Relationship { get; init; }
+
+    [MaxLength(256)]
+    public string? PatientName { get; init; }
+}
+
+/// <remarks>Nominal for the same reason as <see cref="SetPatientRelationshipRequest"/>.</remarks>
+public record SetDisplayNameRequest
+{
+    /// <summary>Trimmed before it is stored; the 256 limit is the <c>tenants.display_name</c> column's.</summary>
+    [Required(AllowEmptyStrings = false)]
+    [MaxLength(256)]
+    public string DisplayName { get; init; } = "";
+}
+
+public record PatientRelationshipDto(PatientRelationship? Relationship, string? PatientName);
+
+/// <remarks>Nominal for the same reason as <see cref="SetPatientRelationshipRequest"/>.</remarks>
+public record SetUnitsAndTimezoneRequest
+{
+    /// <summary>"mg/dl" or "mmol".</summary>
+    [JsonRequired]
+    [AllowedValues(GlucoseUnitDefaults.MgDl, GlucoseUnitDefaults.Mmol)]
+    public string GlucoseUnits { get; init; } = "";
+
+    /// <summary>IANA timezone, e.g. "Australia/Sydney".</summary>
+    [JsonRequired]
+    [MaxLength(64)]
+    public string Timezone { get; init; } = "";
+}
+
+/// <param name="Slug">The tenant's subdomain.</param>
+/// <param name="Address">The tenant's origin, or null when no base domain is configured.</param>
+/// <param name="BaseDomain">The domain every subdomain sits under.</param>
+/// <param name="CanChange">Whether the caller may change the subdomain.</param>
+public record TenantSubdomainDto(string Slug, string? Address, string BaseDomain, bool CanChange);
+
+public record ChangeSubdomainRequest(string Slug);

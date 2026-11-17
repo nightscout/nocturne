@@ -3,7 +3,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
-using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Alerts.Native;
 
@@ -19,8 +18,7 @@ namespace Nocturne.API.Services.Alerts;
 /// (root condition truth, excursion transition, auto-resolve) and applies the side effects:
 /// instance creation, engine-level DND suppression, delivery dispatch to the rule's flat
 /// channel list, info auto-ack, and close handling. The engine owns evaluation-state
-/// persistence (sustained timers, tracker state, excursion rows); which engine runs
-/// (managed C# evaluators, Rust over FFI, or shadow) is selected by <c>Alerts:Engine</c>.
+/// persistence (sustained timers, tracker state, excursion rows).
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
 /// the evaluation pass. A rule whose stored condition tree cannot be evaluated fails the same way
 /// on every pass, so that is logged once per version of the condition. Delayed escalation is a
@@ -32,22 +30,23 @@ namespace Nocturne.API.Services.Alerts;
 internal sealed class AlertOrchestrator(
     IAlertEvaluationEngine evaluationEngine,
     IAlertRepository repository,
+    IAlertRuleRepository ruleRepository,
     ITenantAccessor tenantAccessor,
     IAlertDeliveryService deliveryService,
     ISensorContextEnricher contextEnricher,
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,
     ConditionVersionLog conditionLog,
+    IAlertRuleConditionValidator conditionValidator,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
 {
     public async Task EvaluateAsync(SensorContext context, CancellationToken ct)
     {
-        var tenantId = tenantAccessor.TenantId;
-        if (tenantId == Guid.Empty) return;
+        if (tenantAccessor.TenantId == Guid.Empty) return;
 
-        var rules = await repository.GetEnabledRulesAsync(tenantId, ct);
+        var rules = await repository.GetEnabledRulesAsync(ct);
         await EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), context, ct);
     }
 
@@ -60,13 +59,18 @@ internal sealed class AlertOrchestrator(
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty || rules.Count == 0) return;
 
+        // Before the filter below, which drops a rule whose alert_state names no enabled rule:
+        // a malformed alert_state names none, and its rule is reported here or nowhere.
+        foreach (var rule in rules)
+            ReportConditionIssues(rule, tenantId);
+
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
         var evaluable = RuleReferenceResolver.FilterEvaluable(rules, logger, enabledRuleIds);
         if (evaluable.Count == 0) return;
 
         // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule
         // in the surviving set will consult (IOB/COB/predictions/active-alerts/etc.).
-        var enriched = await contextEnricher.EnrichAsync(context, evaluable, tenantId, ct);
+        var enriched = await contextEnricher.EnrichAsync(context, evaluable, ct);
 
         foreach (var rule in evaluable)
         {
@@ -74,15 +78,9 @@ internal sealed class AlertOrchestrator(
             {
                 await EvaluateRuleAsync(rule, enriched, tenantId, ct);
             }
-            catch (Exception ex) when (ex is ConditionTreeFaultException
-                                       or RustAlertEngineException { IsConditionRejection: true })
+            catch (RustAlertEngineException ex) when (ex.IsConditionRejection)
             {
-                if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
-                {
-                    logger.LogWarning(ex,
-                        "Condition tree of alert rule {AlertRuleId} cannot be evaluated; the rule is skipped until it is edited",
-                        rule.Id);
-                }
+                // The rule is skipped; ReportConditionIssues has logged why.
             }
             catch (Exception ex)
             {
@@ -90,6 +88,40 @@ internal sealed class AlertOrchestrator(
                     rule.Id, tenantId);
             }
         }
+    }
+
+    /// <summary>
+    /// Logs, once per version of a rule's condition, every problem that keeps one of its trees
+    /// from being evaluated (docs/alerts/engine-semantics.md §1.4): a body skips the rule, an
+    /// auto-resolve tree never resolves, and smart-snooze conditions clear the snooze. A failure
+    /// of the check itself is logged and never keeps the rule from evaluating.
+    /// </summary>
+    private void ReportConditionIssues(AlertRuleSnapshot rule, Guid tenantId)
+    {
+        IReadOnlyList<RustValidationIssue> issues;
+        try
+        {
+            if (!conditionLog.FirstIssueCheckFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+                return;
+
+            issues = conditionValidator.Validate(
+                rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
+                rule.AutoResolveParams, rule.ClientConfiguration);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Checking the conditions of alert rule {AlertRuleId} for tenant {TenantId} failed",
+                rule.Id, tenantId);
+            return;
+        }
+        if (issues.Count == 0)
+            return;
+
+        logger.LogWarning(
+            "Alert rule {AlertRuleId} for tenant {TenantId} has conditions that cannot be evaluated until it is edited: {Issues}",
+            rule.Id,
+            tenantId,
+            string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}{(i.Field is null ? "" : $" ({i.Field})")}")));
     }
 
     private async Task EvaluateRuleAsync(
@@ -143,7 +175,6 @@ internal sealed class AlertOrchestrator(
 
         // Create alert instance with the simplified, schedule-free shape.
         var request = new CreateAlertInstanceRequest(
-            TenantId: tenantId,
             ExcursionId: excursionId,
             Status: "triggered",
             TriggeredAt: now);
@@ -152,10 +183,10 @@ internal sealed class AlertOrchestrator(
 
         // Look up the rule's flat channel list; an empty list is allowed (the user explicitly
         // chose "no delivery channels" — alert still tracked, just not pushed anywhere).
-        var channels = await repository.GetChannelsForRuleAsync(tenantId, rule.Id, ct);
+        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
 
         // Active excursion count + tenant subject for payload.
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
+        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
         var payload = AlertPayloads.Build(
@@ -171,7 +202,7 @@ internal sealed class AlertOrchestrator(
         if (suppressingScope is { } scope)
         {
             await repository.MarkInstanceSuppressedAsync(
-                tenantId, instance.Id, DndSuppressionGate.SuppressionReason(scope), ct);
+                instance.Id, DndSuppressionGate.SuppressionReason(scope), ct);
             logger.LogInformation(
                 "Alert instance {InstanceId} for rule {RuleName} suppressed by DND (scope {Scope})",
                 instance.Id, rule.Name, scope);

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Devices;
@@ -103,8 +104,8 @@ public class BatteryController : ControllerBase
 
         var readings = await _batteryService.GetBatteryReadingsAsync(
             device,
-            from.HasValue ? new DateTimeOffset(from.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null,
-            to.HasValue ? new DateTimeOffset(to.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null,
+            from.HasValue ? from.Value.ToMills() : null,
+            to.HasValue ? to.Value.ToMills() : null,
             cancellationToken
         );
 
@@ -140,8 +141,8 @@ public class BatteryController : ControllerBase
 
         var statistics = await _batteryService.GetBatteryStatisticsAsync(
             device,
-            from.HasValue ? new DateTimeOffset(from.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null,
-            to.HasValue ? new DateTimeOffset(to.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null,
+            from.HasValue ? from.Value.ToMills() : null,
+            to.HasValue ? to.Value.ToMills() : null,
             cancellationToken
         );
 
@@ -182,8 +183,8 @@ public class BatteryController : ControllerBase
 
         var cycles = await _batteryService.GetChargeCyclesAsync(
             device,
-            from.HasValue ? new DateTimeOffset(from.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null,
-            to.HasValue ? new DateTimeOffset(to.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null,
+            from.HasValue ? from.Value.ToMills() : null,
+            to.HasValue ? to.Value.ToMills() : null,
             limit,
             cancellationToken
         );

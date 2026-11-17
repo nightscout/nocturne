@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Migration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Migration;
@@ -78,8 +79,8 @@ public class MigrationFoodImportTests
         await using var provider = MigrationJobHarness.BuildProvider(new FoodSource(source));
         using (var scope = provider.CreateScope())
         {
-            var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-            context.TenantId = _tenantId;
+            await using var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+                .CreateForTenantAsync(_tenantId);
             var food = new FoodEntity
             {
                 Id = Guid.CreateVersion7(), OriginalId = OriginalId, Type = "food", Name = "Oats", Carbs = 30,
@@ -94,8 +95,8 @@ public class MigrationFoodImportTests
 
         status.CollectionProgress["food"].DocumentsFailed.Should().Be(0);
         using var readScope = provider.CreateScope();
-        var readContext = readScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        readContext.TenantId = _tenantId;
+        await using var readContext = await readScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(_tenantId);
         (await readContext.Foods.CountAsync()).Should().Be(liveAfter);
     }
 }

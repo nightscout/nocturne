@@ -17,6 +17,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.Core.Contracts.Auth;
+
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
 /// <summary>
@@ -146,7 +150,8 @@ public class MyPermissionsControllerTests
             .ReturnsAsync(() => db.CreateContext());
         var httpContext = controller.ControllerContext.HttpContext;
         httpContext.RequestServices = new ServiceCollection()
-            .AddSingleton(factory.Object)
+            .AddSingleton(factory.Object.AsNocturneFactory())
+            .AddSingleton<ISubjectRepository>(new SubjectRepository(factory.Object.AsNocturneFactory()))
             .BuildServiceProvider();
         httpContext.Items["AuthContext"] = new AuthContext
         {

@@ -4,6 +4,7 @@ import {
   formatCalendarDate,
   getCalendarDayNumber,
   leadingBlankDays,
+  weekdayIndex,
   weekdayLabels,
   weekStartName,
 } from "./calendar-date";
@@ -39,6 +40,17 @@ describe("calendar date helpers", () => {
     expect(firstDayOfWeek("en-GB")).toBe(1);
     expect(firstDayOfWeek("de-DE")).toBe(1);
     expect(firstDayOfWeek("sv-SE")).toBe(1);
+  });
+
+  it("indexes a weekday from the first day of the week", () => {
+    const sunday = new Date(2026, 0, 4);
+    expect(weekdayIndex(sunday, 0)).toBe(0);
+    expect(weekdayIndex(sunday, 1)).toBe(6);
+    expect(weekdayIndex(new Date(2026, 0, 7), 1)).toBe(2);
+  });
+
+  it("orders weekday labels from an explicit first day", () => {
+    expect(weekdayLabels("en-US", "short", undefined, 1)[0]).toBe("Mon");
   });
 
   it("orders weekday labels from the locale's first day of the week", () => {

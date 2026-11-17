@@ -30,7 +30,7 @@ internal sealed class CarbIntakeHandler : IMyLifeHandler
                 return [];
         }
 
-        var carbIntake = MyLifeFactory.CreateCarbIntake(ev, carbs);
+        var carbIntake = MyLifeFactory.CreateCarbIntake(ev, context.Now, carbs);
         return [carbIntake];
     }
 }

@@ -1,0 +1,11 @@
+# Rule 3.2: approved modals are can, will, and must.
+# "should" is the dangerous one. A model reads it as optional.
+extends: substitution
+message: "Rule 3.2: use '%s' in place of '%s', or state it as fact."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+swap:
+  should: must
+  "should not": "must not"
+  shouldn't: "must not"

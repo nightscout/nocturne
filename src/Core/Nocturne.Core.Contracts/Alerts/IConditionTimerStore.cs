@@ -10,16 +10,8 @@ namespace Nocturne.Core.Contracts.Alerts;
 public interface IConditionTimerStore
 {
     /// <summary>
-    /// Returns the recorded first-true instant for <paramref name="path"/> on
-    /// <paramref name="ruleId"/>, or <c>null</c> when no timer is currently active.
-    /// </summary>
-    Task<DateTime?> GetFirstTrueAsync(Guid ruleId, string path, CancellationToken ct);
-
-    /// <summary>
     /// Returns every active timer for <paramref name="ruleId"/> as a
-    /// <c>path → first-true instant</c> map (empty when none). Used by engines that
-    /// carry timer state across an evaluation as data (the Rust FFI envelope) rather
-    /// than reading per-path during evaluation.
+    /// <c>path → first-true instant</c> map (empty when none).
     /// </summary>
     Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct);
 
@@ -34,12 +26,6 @@ public interface IConditionTimerStore
     /// transitions back to false and the sustained window must restart on the next true.
     /// </summary>
     Task ClearAsync(Guid ruleId, string path, CancellationToken ct);
-
-    /// <summary>
-    /// Removes every timer belonging to <paramref name="ruleId"/>. Used when a rule is
-    /// disabled or deleted and any in-flight sustained windows must be discarded.
-    /// </summary>
-    Task ClearAllForRuleAsync(Guid ruleId, CancellationToken ct);
 
     /// <summary>
     /// Removes timers for <paramref name="ruleId"/> whose path is not in

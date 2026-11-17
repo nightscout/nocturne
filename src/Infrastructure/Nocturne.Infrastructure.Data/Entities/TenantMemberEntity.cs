@@ -61,7 +61,8 @@ public class TenantMemberEntity : ISystemTimestamped
     public string? Username { get; set; }
 
     /// <summary>
-    /// Whether this membership was limited to 24 hours (e.g. temporary guest access)
+    /// Whether this member reads only the last 24 hours of every time-series category. An owner or a
+    /// holder of <c>tenant.settings</c> is never clamped, whatever this says.
     /// </summary>
     [Column("limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; } = false;
@@ -117,10 +118,11 @@ public class TenantMemberEntity : ISystemTimestamped
     /// </summary>
     /// <param name="excludingRoleId">A role to leave out, to ask what would remain without it.</param>
     public IEnumerable<string> EffectivePermissions(Guid? excludingRoleId = null) =>
-        MemberRoles
-            .Where(mr => mr.TenantRoleId != excludingRoleId)
-            .SelectMany(mr => mr.TenantRole.Permissions)
-            .Union(DirectPermissions ?? []);
+        MemberPermissions.Effective(
+            MemberRoles
+                .Where(mr => mr.TenantRoleId != excludingRoleId)
+                .Select(mr => mr.TenantRole.Permissions),
+            DirectPermissions);
 
     /// <summary>
     /// Whether the effective permissions, normalised as member permissions, satisfy

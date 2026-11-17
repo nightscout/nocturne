@@ -4,9 +4,9 @@
   at one end tie one another or sit too close to the rest to call.
 -->
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { HourlyComparison, HourlyExcursion, type HourlyPattern, type HourlyPatterns } from "$lib/api";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { HourlyComparison, HourlyExcursion, type HourlyPattern, type HourlyPatterns } from "#lib/api/index.js";
+  import { bg, bgLabel } from "#lib/utils/formatting.js";
   import HourBandStrip from "./HourBandStrip.svelte";
   import { hourSpan } from "./hour-labels";
 
@@ -68,7 +68,7 @@
   <p class="px-4 py-3 text-sm text-muted-foreground">
     {#if comparison === HourlyComparison.CloseTogether}
       The compared hours were all within {spread} percentage points of each other in time
-      in range, too close to call any of them better or worse.
+      in range. This is too close to call any of them better or worse.
     {:else if direction === "above"}
       No hour stood out on its own above the rest. The hours at that end tied with one another.
     {:else}

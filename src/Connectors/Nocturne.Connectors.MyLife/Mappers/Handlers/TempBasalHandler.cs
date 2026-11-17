@@ -37,7 +37,7 @@ internal sealed class TempBasalHandler : IMyLifeStateSpanHandler
         // suspension - mylife reports suspension as its own PumpSuspend/PumpResume event pair.
         var origin = TempBasalOrigin.Manual;
 
-        var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, rate, origin);
+        var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, context.Now, rate, origin);
 
         // For user-initiated temp basals, we can calculate the end time
         // since the duration is explicit in the event

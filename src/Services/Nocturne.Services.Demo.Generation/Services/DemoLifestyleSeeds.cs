@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -13,7 +14,10 @@ public static class DemoLifestyleSeeds
     /// <summary>A food library item; carbs/fat/protein per portion in grams.</summary>
     public sealed record FoodSeed(
         string Name, string Category, string Subcategory,
-        double Portion, string Unit, double Carbs, double Protein, double Fat, double Energy);
+        double Portion, string Unit, double Carbs, double Protein, double Fat, double EnergyKcal)
+    {
+        public double EnergyKilojoules => Math.Round(EnergyKcal * NutritionConstants.KilojoulesPerKilocalorie);
+    }
 
     /// <summary>Foods referenced by generated meals, plus a few browsables.</summary>
     public static readonly IReadOnlyList<FoodSeed> FoodLibrary =
@@ -56,13 +60,13 @@ public static class DemoLifestyleSeeds
         var dayNumber = (int)(localDay.Date.Ticks / TimeSpan.TicksPerDay);
         var drift = 1.2 * Math.Sin(dayNumber / 120.0 * 2 * Math.PI);
         var wobble = (DayScenarios.Roll(localDay, "weight", 13) - 6) * 0.1;
-        return Math.Round(77.5 + drift + wobble, 1);
+        return ScaledRounding.Round(77.5 + drift + wobble, 1);
     }
 
     /// <summary>
     /// One state span to seed; local times, null end = still active. Metadata
-    /// follows the decomposer's conventions (e.g. Profile spans carry the name
-    /// in <c>profileName</c>, temporary targets carry <c>targetTop/Bottom</c>)
+    /// follows the decomposer's conventions (e.g. temporary targets carry
+    /// <c>targetTop/Bottom</c>)
     /// so the resolvers that read spans see the same shape as real uploads.
     /// </summary>
     public sealed record SpanSeed(
@@ -73,7 +77,6 @@ public static class DemoLifestyleSeeds
         IReadOnlyDictionary<string, object>? Metadata = null);
 
     /// <summary>The timezone-timeline trip: NYC for five days, three weeks back.</summary>
-    public const string HomeTimezoneFallback = "Australia/Sydney";
     public const string TripTimezone = "America/New_York";
     public const int TripStartDaysAgo = 21;
     public const int TripLengthDays = 5;
@@ -84,18 +87,12 @@ public static class DemoLifestyleSeeds
     /// workout overrides + temporary targets, illness spans on sick days, and
     /// the travel span matching the timezone-timeline trip.
     /// </summary>
-    public static List<SpanSeed> BuildSpans(DateTime localToday, int days)
+    /// <param name="seedEnd">The local end of the seeded range.</param>
+    public static List<SpanSeed> BuildSpans(DateTime localToday, int days, DateTime seedEnd)
     {
         var spans = new List<SpanSeed>();
         var windowStart = localToday.AddDays(-days);
-        var now = DateTime.Now;
-
-        // Profile: the seeded therapy profile is active for the whole window.
-        // Resolvers read the name from metadata, not from State (which is the
-        // ProfileState enum name).
-        spans.Add(new SpanSeed(
-            StateSpanCategory.Profile, nameof(ProfileState.Active), windowStart, null,
-            new Dictionary<string, object> { ["profileName"] = DemoTherapyProfile.ProfileName }));
+        var now = seedEnd;
 
         // Pump mode: Automatic, interrupted by occasional Manual windows and
         // by Exercise mode during workouts on exercise days.
@@ -117,11 +114,9 @@ public static class DemoLifestyleSeeds
                     workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10),
                     new Dictionary<string, object> { ["targetTop"] = 150.0, ["targetBottom"] = 140.0 }));
             }
-            else if (DayScenarios.Roll(day, "manual-mode", 100) < 9)
+            else if (DemoLoopInterruptions.ManualModeWindow(day, now) is { } manual)
             {
-                // An occasional afternoon in manual mode (pump maintenance, pool day).
-                var start = day.AddHours(13 + DayScenarios.Roll(day, "manual-start", 4));
-                interruptions.Add((start, start.AddHours(2.5), nameof(PumpModeState.Manual)));
+                interruptions.Add((manual.Start, manual.End, nameof(PumpModeState.Manual)));
             }
         }
 

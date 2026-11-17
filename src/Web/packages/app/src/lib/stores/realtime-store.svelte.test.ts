@@ -67,3 +67,35 @@ describe("RealtimeStore recentEntries", () => {
     store.destroy();
   });
 });
+
+describe("RealtimeStore restart", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("runs again when initialised after destroy(), as when a withdrawn grant is restored", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const store = new RealtimeStore({
+      url: "",
+      reconnectAttempts: 0,
+      reconnectDelay: 0,
+      maxReconnectDelay: 0,
+      pingTimeout: 0,
+      pingInterval: 0,
+    });
+
+    await store.initialize();
+    store.destroy();
+    vi.setSystemTime(new Date("2026-01-01T12:05:00Z"));
+    store.now = 0;
+    vi.advanceTimersByTime(3000);
+    expect(store.now).toBe(0);
+
+    await store.initialize();
+    vi.advanceTimersByTime(1000);
+
+    expect(store.now).toBe(Date.now());
+    store.destroy();
+  });
+});

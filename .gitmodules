@@ -1,0 +1,3 @@
+[submodule "src/Web/vendor/water-ui"]
+	path = src/Web/vendor/water-ui
+	url = https://github.com/ryceg/water-ui.git

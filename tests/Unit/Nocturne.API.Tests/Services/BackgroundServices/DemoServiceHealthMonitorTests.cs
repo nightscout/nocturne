@@ -9,6 +9,8 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
@@ -17,12 +19,11 @@ public class DemoServiceHealthMonitorTests
 {
     /// <summary>
     /// The cleanup soft-deletes demo glucose through the audited repositories, so its DI scope has to
-    /// carry system attribution on both context paths: a user-attributed delete stamps
-    /// <c>deleted_by_user</c> and permanently blocks the demo rows from being re-seeded once the
-    /// service recovers.
+    /// carry system attribution: a user-attributed delete stamps <c>deleted_by_user</c> and
+    /// permanently blocks the demo rows from being re-seeded once the service recovers.
     /// </summary>
     [Fact]
-    public async Task CleanupDemoData_RunsUnderSystemAttribution_OnBothContextPaths()
+    public async Task CleanupDemoData_RunsUnderSystemAttribution()
     {
         var cleanupCalled = new TaskCompletionSource();
         bool? ambientIsSystem = null;
@@ -31,21 +32,18 @@ public class DemoServiceHealthMonitorTests
 
         var services = new ServiceCollection();
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(_ => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("Filename=:memory:")
-                .Options));
+        services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IDataSourceService>(sp =>
         {
             var ambient = sp.GetRequiredService<IAuditContext>();
-            var dbContext = sp.GetRequiredService<NocturneDbContext>();
+            var readContext = sp.GetRequiredService<TenantReadContext>();
             var stub = new Mock<IDataSourceService>();
             stub.Setup(x => x.DeleteDemoDataAsync(It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
                     ambientIsSystem = ambient.IsSystem;
-                    contextIsSystem = dbContext.AuditContext?.IsSystem;
-                    contextEndpoint = dbContext.AuditContext?.Endpoint;
+                    contextIsSystem = readContext.AuditContext?.IsSystem;
+                    contextEndpoint = readContext.AuditContext?.Endpoint;
                     cleanupCalled.TrySetResult();
                     return Task.FromResult(new DataSourceDeleteResult { Success = true });
                 });
@@ -69,10 +67,8 @@ public class DemoServiceHealthMonitorTests
         await cleanupCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await monitor.StopAsync(CancellationToken.None);
 
-        ambientIsSystem.Should().BeTrue(
-            "repositories stamp factory-created contexts from the ambient audit context");
-        contextIsSystem.Should().BeTrue(
-            "the interceptor prefers the scoped context's own audit context");
+        ambientIsSystem.Should().BeTrue();
+        contextIsSystem.Should().BeTrue("every context of the scope reads the scope's audit context");
         contextEndpoint.Should().Be(DemoServiceHealthMonitor.AuditEndpoint);
     }
 

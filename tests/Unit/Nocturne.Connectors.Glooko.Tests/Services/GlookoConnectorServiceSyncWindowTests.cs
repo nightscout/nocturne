@@ -1,5 +1,6 @@
 using System.Globalization;
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Glooko.Configurations;
 using Xunit;
@@ -43,6 +44,28 @@ public class GlookoConnectorServiceSyncWindowTests
         handler.WindowCount.Should().Be(3);
         Parse(handler.Windows[^1].End).Should().BeBefore(AskedTo.AddDays(2),
             "the caller bounded the range at both ends");
+    }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task SyncDataAsync_WithNoRange_ReachesBackTheFullWalkFromTheClockInGlookoTime(int deviceOffsetHours)
+    {
+        var now = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+        var handler = new GlookoEndpointHandler();
+        var service = GlookoSyncHarness.Service(handler, clock: new FakeTimeProvider(now));
+        var config = GlookoSyncHarness.Config(useV3Api: false);
+        config.TimezoneOffset = deviceOffsetHours;
+
+        var result = await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.TempBasals] }, config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var expectedFrom = now.UtcDateTime.AddMonths(-GlookoConstants.FullWalkMonths).AddHours(deviceOffsetHours).AddDays(-1);
+        var expectedTo = now.UtcDateTime.AddHours(deviceOffsetHours).AddDays(1);
+        Parse(handler.Windows[0].Start).Should().Be(expectedFrom);
+        Parse(handler.Windows[^1].End).Should().Be(expectedTo);
     }
 
     private static DateTime Parse(string timestamp) =>

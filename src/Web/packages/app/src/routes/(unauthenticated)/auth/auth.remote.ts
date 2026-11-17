@@ -14,16 +14,17 @@ import { z } from "zod";
 import { query, command, form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 
-import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
-import { clearAuthCookies } from "$lib/config/auth-cookies";
-import { errorStatus, RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
-import { safeReturnUrl } from "$lib/server/return-url";
+import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
+import { clearAuthCookies } from "#lib/config/auth-cookies.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
+import { rateLimitedError } from "#lib/forms/submit-messages.svelte.js";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { classifyRecoveryError, type RecoveryFailure } from "./recovery-error";
 
-const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, string> = {
+const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, () => string> = {
   // The API deliberately doesn't say which of the two was wrong.
-  rejected: "That username and recovery code don't match.",
-  "rate-limited": RATE_LIMITED_ERROR,
+  rejected: () => "That username and recovery code don't match.",
+  "rate-limited": rateLimitedError,
 };
 
 // ============================================================================
@@ -294,7 +295,7 @@ export const signInWithRecoveryCode = form(
       );
     }
 
-    if (failure) invalid(issue.code(RECOVERY_FAILURE_MESSAGES[failure]));
+    if (failure) invalid(issue.code(RECOVERY_FAILURE_MESSAGES[failure]()));
 
     const destination = new URLSearchParams({
       username: data.username,
@@ -315,6 +316,7 @@ export const signInWithAuthenticator = form(
     const api = getApiClient();
 
     let verified = false;
+    let notAMember = false;
     try {
       const result = await api.totp.login({
         stepUpToken: data.stepUpToken,
@@ -322,9 +324,19 @@ export const signInWithAuthenticator = form(
       });
       verified = result?.success === true;
     } catch (err) {
+      // 403: both factors passed, but this address does not admit the account.
+      notAMember = errorStatus(err) === 403;
       console.error(
         "Authenticator sign-in failed with status:",
         errorStatus(err) ?? "none"
+      );
+    }
+
+    if (notAMember) {
+      invalid(
+        issue.code(
+          "Your account isn't a member here. Go back to sign in, or request membership."
+        )
       );
     }
 

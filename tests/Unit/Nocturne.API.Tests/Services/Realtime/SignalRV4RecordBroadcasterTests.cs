@@ -6,7 +6,7 @@ namespace Nocturne.API.Tests.Unit.Services.Realtime;
 
 /// <summary>
 /// Unit tests for <see cref="SignalRV4RecordBroadcaster{TModel}"/> — the SignalR adapter that turns a
-/// native V4 record write into a <c>BroadcastStorage*Async(category, {recordType, doc})</c> call. Mapped
+/// native V4 record write into a <c>BroadcastStorage*Async(category, {colName, recordType, doc})</c> call. Mapped
 /// types fan out to their category; unmapped (dormant <c>therapy</c>) types and empty lists broadcast
 /// nothing. The anonymous payload is inspected by reflection so a payload-shape regression fails here.
 /// </summary>
@@ -29,7 +29,8 @@ public class SignalRV4RecordBroadcasterTests
 
         _broadcast.Verify(b => b.BroadcastStorageCreateAsync(
             RealtimeCategories.Care,
-            It.Is<object>(p => (string)GetProp(p, "recordType")! == "bolus"
+            It.Is<object>(p => (string)GetProp(p, "colName")! == RealtimeCategories.Care
+                               && (string)GetProp(p, "recordType")! == "bolus"
                                && ReferenceEquals(GetProp(p, "doc"), bolus))),
             Times.Once);
         _broadcast.VerifyNoOtherCalls();
@@ -44,7 +45,8 @@ public class SignalRV4RecordBroadcasterTests
 
         _broadcast.Verify(b => b.BroadcastStorageUpdateAsync(
             RealtimeCategories.Care,
-            It.Is<object>(p => (string)GetProp(p, "recordType")! == "bolus"
+            It.Is<object>(p => (string)GetProp(p, "colName")! == RealtimeCategories.Care
+                               && (string)GetProp(p, "recordType")! == "bolus"
                                && ReferenceEquals(GetProp(p, "doc"), bolus))),
             Times.Once);
         _broadcast.VerifyNoOtherCalls();
@@ -59,7 +61,8 @@ public class SignalRV4RecordBroadcasterTests
 
         _broadcast.Verify(b => b.BroadcastStorageDeleteAsync(
             RealtimeCategories.Care,
-            It.Is<object>(p => (string)GetProp(p, "recordType")! == "bolus"
+            It.Is<object>(p => (string)GetProp(p, "colName")! == RealtimeCategories.Care
+                               && (string)GetProp(p, "recordType")! == "bolus"
                                && (Guid)GetProp(p, "id")! == id)),
             Times.Once);
         _broadcast.VerifyNoOtherCalls();
@@ -74,8 +77,25 @@ public class SignalRV4RecordBroadcasterTests
 
         _broadcast.Verify(b => b.BroadcastStorageCreateAsync(
             RealtimeCategories.Device,
-            It.Is<object>(p => (string)GetProp(p, "recordType")! == "apsSnapshot"
+            It.Is<object>(p => (string)GetProp(p, "colName")! == RealtimeCategories.Device
+                               && (string)GetProp(p, "recordType")! == "apsSnapshot"
                                && ReferenceEquals(GetProp(p, "doc"), snapshot))),
+            Times.Once);
+        _broadcast.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task BroadcastCreatedAsync_DeviceEvent_BroadcastsToDeviceCategory()
+    {
+        var deviceEvent = new DeviceEvent { Id = Guid.NewGuid() };
+
+        await Adapter<DeviceEvent>().BroadcastCreatedAsync([deviceEvent]);
+
+        _broadcast.Verify(b => b.BroadcastStorageCreateAsync(
+            RealtimeCategories.Device,
+            It.Is<object>(p => (string)GetProp(p, "colName")! == RealtimeCategories.Device
+                               && (string)GetProp(p, "recordType")! == "deviceEvent"
+                               && ReferenceEquals(GetProp(p, "doc"), deviceEvent))),
             Times.Once);
         _broadcast.VerifyNoOtherCalls();
     }

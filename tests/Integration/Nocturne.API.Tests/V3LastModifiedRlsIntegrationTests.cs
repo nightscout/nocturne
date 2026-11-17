@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration;
 /// A last-modified stamp is read under the same Row Level Security as the rows it summarises, so a
 /// share or a history-clamped member learns nothing of a row it cannot read, not even when it changed.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class V3LastModifiedRlsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)
@@ -63,7 +64,7 @@ public class V3LastModifiedRlsIntegrationTests(ApiIntegrationTestFixture fixture
     {
         await WithTenantScopeAsync(async services =>
         {
-            await using var context = await services.GetRequiredService<ITenantDbContextFactory>().CreateAsync();
+            await using var context = await services.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             context.AddRange(first, second);
             await context.SaveChangesAsync();
             context.Entry(first).Property("SysUpdatedAt").CurrentValue = firstStamp;

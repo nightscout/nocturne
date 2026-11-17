@@ -33,7 +33,7 @@ public class MigrationControllerUrlTests
     }
 
     private MigrationController Controller() =>
-        new(_migrations.Object, _connectors.Object, Mock.Of<ITenantAccessor>(), NullLogger<MigrationController>.Instance);
+        new(_migrations.Object, _connectors.Object, Mock.Of<ITenantAccessor>(), TimeProvider.System, NullLogger<MigrationController>.Instance);
 
     private void ConnectorUrl(string url) =>
         _connectors
@@ -43,6 +43,32 @@ public class MigrationControllerUrlTests
                 ConnectorName = "nightscout",
                 Configuration = JsonDocument.Parse(JsonSerializer.Serialize(new { url })),
             });
+
+    [Theory]
+    [InlineData(30, true)]
+    [InlineData(0, false)]
+    public async Task StartFromConnector_imports_the_history_the_connector_is_set_to(int historyDays, bool bounded)
+    {
+        _connectors
+            .Setup(c => c.GetConfigurationAsync("nightscout", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "nightscout",
+                Configuration = JsonDocument.Parse(JsonSerializer.Serialize(new { url = "https://ns.example", historyDays })),
+            });
+        StartMigrationRequest? started = null;
+        _migrations
+            .Setup(m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CancellationToken>()))
+            .Callback<StartMigrationRequest, TenantContext?, CancellationToken>((request, _, _) => started = request)
+            .ReturnsAsync(new MigrationJobInfo { Id = Guid.CreateVersion7(), Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow });
+
+        await Controller().StartFromConnector("nightscout", CancellationToken.None);
+
+        if (bounded)
+            started!.StartDate.Should().BeCloseTo(DateTime.UtcNow.AddDays(-historyDays), TimeSpan.FromMinutes(1));
+        else
+            started!.StartDate.Should().BeNull();
+    }
 
     private static void ShouldBeRefused(IActionResult? result)
     {

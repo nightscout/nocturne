@@ -4,9 +4,9 @@
   page number in the `@page` footer, so a loose sheet can still be placed.
 -->
 <script lang="ts">
-  import { getReportSubject } from "$api/reports.remote";
-  import { formatLocale, formatMediumDateRange, formatMediumDateTime } from "$lib/utils/formatting";
-  import { dayCount, endOfDay, startOfDay } from "$lib/utils/date-range";
+  import { getReportSubject } from "#lib/api/reports.remote.js";
+  import { formatLocale, formatMediumDateRange, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { dayCount, endOfDay, startOfDay } from "#lib/utils/date-range.js";
   import { cssString } from "./css-string";
   import type { ReportPrintMeta } from "./report-print.svelte";
 

@@ -1,8 +1,10 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
@@ -14,6 +16,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -59,12 +62,19 @@ public class DataSourceServiceDiscoveryTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context,
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new DemoDataPurgeRepository(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
         Mock.Of<IAuditContext>(),
         _connectorConfig.Object,
+        Nocturne.API.Tests.Infrastructure.ProfileActivationTestDeps.Writer(context),
+        [],
+        [],
+        TimeProvider.System,
         NullLogger<DataSourceService>.Instance);
 
     private async Task<List<DataSourceInfo>> DiscoverAsync()
@@ -80,11 +90,11 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         db.SaveChanges();
     }
 
-    private void SeedSnapshot(string? dataSource, string? device, DateTime timestamp) =>
+    private void SeedSnapshot(string? dataSource, string? device, DateTime timestamp, string aidAlgorithm = "Loop") =>
         Seed(db => db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId,
-            DataSource = dataSource, Device = device, Timestamp = timestamp, AidAlgorithm = "Loop",
+            DataSource = dataSource, Device = device, Timestamp = timestamp, AidAlgorithm = aidAlgorithm,
         }));
 
     private void SeedSensorGlucose(string? dataSource, string? device, DateTime timestamp) =>
@@ -107,6 +117,31 @@ public class DataSourceServiceDiscoveryTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId,
             DataSource = dataSource, Device = device, Timestamp = timestamp, Insulin = 1.5,
         }));
+
+    [Fact]
+    public async Task Discovery_ReportsTheWindowItsCountsCover()
+    {
+        SeedSensorGlucose(null, RigA, DateTime.UtcNow);
+        SeedSnapshot(null, RigB, DateTime.UtcNow);
+        SeedStateSpan("pump-only", DateTime.UtcNow);
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().HaveCount(3);
+        sources.Should().OnlyContain(s => s.TotalEntriesWindowDays == DataSourceService.DiscoveryWindowDays);
+    }
+
+    [Fact]
+    public async Task Discovery_CountsNothingOlderThanTheWindowItReports()
+    {
+        var edge = DateTime.UtcNow.AddDays(-DataSourceService.DiscoveryWindowDays);
+        SeedSensorGlucose(null, RigA, edge.AddHours(-1));
+        SeedSensorGlucose(null, RigB, edge.AddHours(1));
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().ContainSingle().Which.DeviceId.Should().Be(RigB);
+    }
 
     [Fact]
     public async Task Discovery_CountsASnapshotOnlySource()
@@ -162,6 +197,22 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         var info = sources.Should().ContainSingle(s => s.DeviceId == "pump-42").Subject;
         info.Category.Should().Be("demo");
         info.SourceType.Should().Be("demo");
+    }
+
+    [Theory]
+    [InlineData("OpenAps", "AndroidAps", "AndroidAPS", "aaps")]
+    [InlineData("AndroidAps", "OpenAps", "OpenAPS", "openaps")]
+    public async Task Discovery_NamesASnapshotOnlyRigByItsNewestSnapshotsAlgorithm(
+        string older, string newer, string name, string sourceType)
+    {
+        SeedSnapshot(null, RigA, DateTime.UtcNow.AddMinutes(-10), older);
+        SeedSnapshot(null, RigA, DateTime.UtcNow, newer);
+
+        var info = (await DiscoverAsync()).Should().ContainSingle(d => d.DeviceId == RigA).Subject;
+
+        info.Name.Should().Be(name);
+        info.SourceType.Should().Be(sourceType);
+        info.Category.Should().Be("aid-system");
     }
 
     [Fact]

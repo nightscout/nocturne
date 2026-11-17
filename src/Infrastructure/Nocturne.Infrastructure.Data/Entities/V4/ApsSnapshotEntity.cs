@@ -8,8 +8,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.ApsSnapshot
 /// </summary>
 [Table("aps_snapshots")]
-public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
+public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// Stable per-source identifier for synchronization. Unlike <see cref="V4TimeSeriesEntityBase.LegacyId"/> (insert-only),
     /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
@@ -85,6 +90,10 @@ public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
     /// </summary>
     [Column("enacted")]
     public bool Enacted { get; set; }
+
+    /// <inheritdoc cref="Nocturne.Core.Models.V4.ApsSnapshot.ClosedLoop"/>
+    [Column("closed_loop")]
+    public bool? ClosedLoop { get; set; }
 
     /// <summary>
     /// Enacted temp basal rate in U/hr

@@ -1,12 +1,11 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Platform;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -106,44 +105,16 @@ public class ServicesControllerScopeTests
             AuthType.SessionCookie,
             new HashSet<string>());
 
-    /// <summary>
-    /// Runs the authorization filters the action declares, so the assertion covers the resolved
-    /// scope decision rather than the attribute's mere presence. The demo-subject filter is an
-    /// <see cref="IAsyncAuthorizationFilter"/> and reads the database; it is asserted by its own
-    /// tests, and presence is pinned above.
-    /// </summary>
+    /// <remarks>
+    /// The demo-subject filter is an <see cref="IAsyncAuthorizationFilter"/> and reads the database,
+    /// so <see cref="ActionGate"/> does not run it; it is asserted by its own tests, and presence is
+    /// pinned above.
+    /// </remarks>
     private static IActionResult? Evaluate(
-        string actionName, bool authenticated, IReadOnlySet<string> grantedScopes)
-    {
-        var actionContext = new ActionContext(
-            NewHttpContext(authenticated, grantedScopes), new RouteData(), new ActionDescriptor());
-
-        foreach (var filter in Action(actionName).GetCustomAttributes(inherit: true)
-                     .OfType<IAuthorizationFilter>())
-        {
-            var authorizationContext = new AuthorizationFilterContext(actionContext, []);
-            filter.OnAuthorization(authorizationContext);
-            if (authorizationContext.Result is not null)
-                return authorizationContext.Result;
-        }
-
-        return null;
-    }
-
-    private static DefaultHttpContext NewHttpContext(
-        bool authenticated, IReadOnlySet<string> grantedScopes)
-    {
-        var httpContext = new DefaultHttpContext();
-        if (authenticated)
-        {
-            httpContext.Items["AuthContext"] = new AuthContext
-            {
-                IsAuthenticated = true,
-                SubjectId = Guid.CreateVersion7(),
-            };
-        }
-
-        httpContext.Items["GrantedScopes"] = grantedScopes;
-        return httpContext;
-    }
+        string actionName, bool authenticated, IReadOnlySet<string> grantedScopes) =>
+        ActionGate.Evaluate(
+            typeof(ServicesController),
+            Action(actionName),
+            grantedScopes,
+            authenticated ? new AuthContext { IsAuthenticated = true, SubjectId = Guid.CreateVersion7() } : null);
 }

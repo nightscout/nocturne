@@ -141,6 +141,10 @@ back to `<registry>/<repository>:<tag>`.
 {{- define "nocturne.api.internalUrl" -}}
 {{- printf "http://%s.%s.svc.cluster.local:%d" (include "nocturne.api.fullname" .) .Release.Namespace (int .Values.api.service.port) -}}
 {{- end -}}
+{{/* Internal web URL the API uses for chat-bot dispatch (rationale: ChatBotProvider) */}}
+{{- define "nocturne.web.internalUrl" -}}
+{{- printf "http://%s.%s.svc.cluster.local:%d" (include "nocturne.web.fullname" .) .Release.Namespace (int .Values.web.service.port) -}}
+{{- end -}}
 
 {{/* ============================================================
      Database helpers
@@ -229,4 +233,15 @@ postgresql.auth.existingSecret + custom secretKeys.
 {{- else if eq $role "web" -}}{{ $ctx.Values.externalDatabase.webSecret.existingSecretKey }}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+"true" when a removed toggle (api.autoscaling, api.pdb, web.autoscaling) asks to
+be on, whether given as a map with `enabled` or as a bare scalar, and whether
+the value is a bool, 1, or "true" in any case.
+*/}}
+{{- define "nocturne.removedToggleOn" -}}
+{{- $v := . -}}
+{{- if kindIs "map" . -}}{{- $v = get . "enabled" -}}{{- end -}}
+{{- if has (lower (toString $v)) (list "true" "1") -}}true{{- end -}}
 {{- end -}}

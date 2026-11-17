@@ -13,8 +13,10 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -65,7 +67,9 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
         var logger = NullLogger<ConnectorConfigurationService>.Instance;
 
         _service = new ConnectorConfigurationService(
-            _dbContext,
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             _encryptionService.Object,
             broadcastService,
             _auditContext.Object,
@@ -96,7 +100,8 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
         grant!.LegacySecretHash.Should().Be(HashUtils.Sha1Hex(apiSecret));
         grant.Label.Should().Be("Nightscout (migrated)");
         grant.TokenHash.Should().BeNull();
-        grant.SubjectId.Should().Be(_subjectId);
+        grant.SubjectId.Should().Be((await _dbContext.FindDeviceSubjectOf(_tenantId))!.Value,
+            "the secret belongs to the site, so it outlives the membership of whoever saved it");
         grant.Scopes.Should().Contain("glucose.readwrite");
         grant.Scopes.Should().Contain("treatments.readwrite");
         grant.Scopes.Should().Contain("devices.readwrite");
@@ -147,6 +152,16 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
             .ToListAsync();
 
         grants.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SaveSecrets_NightscoutWithNoAuthenticatedSubject_DoesNotCreateGrant()
+    {
+        _auditContext.Setup(a => a.SubjectId).Returns((Guid?)null);
+
+        await _service.SaveSecretsAsync("Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "s" });
+
+        (await _dbContext.OAuthGrants.AnyAsync()).Should().BeFalse();
     }
 
     [Fact]

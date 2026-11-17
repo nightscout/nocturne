@@ -3,15 +3,26 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -21,7 +32,7 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// <summary>
 /// Runs the API in-process on a real Kestrel port against a database of its own on
 /// <see cref="SharedPostgres"/> (production role bootstrap, migrated schema), shared by every test
-/// in the <c>ApiIntegration</c> collection.
+/// in one of the <see cref="ApiIntegrationShards"/>; each shard runs its own.
 /// </summary>
 /// <remarks>
 /// This used to boot the whole Aspire AppHost, which never completes on GitHub runners and
@@ -38,6 +49,13 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// </remarks>
 public class ApiIntegrationTestFixture : IAsyncLifetime
 {
+    public sealed class ControllableDemoModeService : IDemoModeService
+    {
+        public bool IsEnabled { get; set; }
+        public bool IsConfigured => IsEnabled;
+        public string? ServiceUrl => null;
+    }
+
     /// <summary>The instance key the API runs with.</summary>
     public const string InstanceKey = "test-secret-for-integration-tests";
 
@@ -52,6 +70,14 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
 
     private WebApplicationFactory<Nocturne.API.Program>? _factory;
     private TestDatabase? _database;
+
+    public ControllableDemoModeService DemoModeService { get; } = new();
+
+    /// <summary>
+    /// The clock the API issues and validates JWTs on, and nothing else. A test shifts it to age a
+    /// token without waiting out its lifetime.
+    /// </summary>
+    public OffsetClock JwtClock { get; } = new();
 
     public string ApiBaseUrl { get; private set; } = string.Empty;
 
@@ -166,24 +192,41 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         client.DefaultRequestHeaders.Add(ServiceNames.Headers.ClientIpSignature, signature);
     }
 
+    /// <summary>How many ports <see cref="InitializeAsync"/> tries before it gives up.</summary>
+    private const int StartAttempts = 5;
+
+    /// <summary>
+    /// The app pool's ceiling per host. Every API and parity shard runs a host against the one
+    /// <see cref="SharedPostgres"/> server, whose <c>max_connections</c> the default of 100 per host
+    /// would exceed.
+    /// </summary>
+    internal const int MaxPoolSize = 40;
+
     public async Task InitializeAsync()
     {
         _database = await SharedPostgres.CreateMigratedDatabaseAsync("api_integration");
-        var port = FreeLoopbackPort();
-        ApiBaseUrl = $"http://localhost:{port}";
 
-        _factory = new ApiFactory().WithWebHostBuilder(builder =>
+        // The port is chosen before the host is built, since BASE_DOMAIN and the CORS origins the API
+        // reads at startup carry it, so Kestrel cannot bind port 0. The probe releases the port before
+        // Kestrel binds it, and another host or a container can take it in between.
+        for (var attempt = 1; _factory is null; attempt++)
         {
-            builder.UseEnvironment("Development");
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", _database.AppConnectionString);
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", _database.MigratorConnectionString);
-            builder.UseSetting("INSTANCE_KEY", InstanceKey);
-            builder.UseSetting("BASE_DOMAIN", $"localhost:{port}");
-            builder.UseSetting("DemoService:Enabled", "false");
-        });
-        _factory.UseKestrel(options => options.ListenLocalhost(port));
-        _factory.StartServer();
-        TenantHost = $"{TenantSlug}.localhost:{port}";
+            var port = FreeLoopbackPort();
+            var factory = CreateFactory(_database, port);
+            try
+            {
+                factory.StartServer();
+            }
+            catch (IOException ex) when (ex.InnerException is AddressInUseException && attempt < StartAttempts)
+            {
+                await factory.DisposeAsync();
+                continue;
+            }
+
+            _factory = factory;
+            ApiBaseUrl = $"http://localhost:{port}";
+            TenantHost = $"{TenantSlug}.localhost:{port}";
+        }
 
         using var apex = CreateApexClient();
         using var probe = await apex.GetAsync("/alive");
@@ -290,14 +333,11 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var removedSlugs = new List<string>();
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "DELETE FROM tenants WHERE id <> @id RETURNING slug";
+            cmd.CommandText = "DELETE FROM tenants WHERE id <> @id";
             cmd.Parameters.AddWithValue("id", TenantId);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                removedSlugs.Add(reader.GetString(0));
+            await cmd.ExecuteNonQueryAsync();
         }
 
         // Back to the seeded tenant as the seed left it: active, its owner and Public its only
@@ -321,16 +361,29 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // The API caches tenant resolution by slug, and a later test may seed the same slug anew.
-        var cache = Services.GetRequiredService<IMemoryCache>();
-        foreach (var slug in removedSlugs.Append(TenantSlug))
-            TenantResolutionMiddleware.EvictTenant(cache, slug);
+        await ClearApiCachesAsync(Services, TenantId);
 
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 
         // The shared client starts every test as a client the rate limits have not seen.
         if (ApiClient is not null)
             PresentNewClientAddress(ApiClient);
+    }
+
+    /// <summary>
+    /// Drops every in-memory cache the API holds (tenant resolution by slug, the tenant caches
+    /// behind <see cref="ITenantCache"/>, therapy settings and timezones): each is derived from
+    /// rows a cleanup truncates, so otherwise a test reads what the previous one cached. The
+    /// distributed tier is keyed by tenant and the local tier sits in the same memory cache.
+    /// </summary>
+    internal static async Task ClearApiCachesAsync(
+        IServiceProvider services, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        ((MemoryCache)services.GetRequiredService<IMemoryCache>()).Clear();
+
+        using var scope = services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ITenantCache>()
+            .RemoveTenantAsync(tenantId, cancellationToken);
     }
 
     /// <summary>The tables <see cref="CleanupDatabaseAsync"/> empties between tests.</summary>
@@ -368,8 +421,10 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "temp_basals",
         "basal_injections",
         "notes",
+        "rejected_uploads",
         "device_events",
         "state_spans",
+        "profile_activations",
         "linked_records",
         "therapy_settings",
         "basal_schedules",
@@ -380,10 +435,18 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "pump_snapshots",
         "uploader_snapshots",
         "device_status_extras",
+        // The devices those records are attributed to: a device one test registers would otherwise
+        // show up in a later test's device reads and attributions.
+        "patient_devices",
+        "devices",
         // The records the legacy activity endpoint decomposes into, besides state_spans.
         "heart_rates",
         "step_counts",
         "sleep_sessions",
+        "compression_low_suggestions",
+        // Health records a test may write directly through the v4 endpoints.
+        "lab_hba1c_results",
+        "body_weights",
         // A Nightscout import records what it has run, which a second import reads.
         "migration_runs",
         "migration_sources",
@@ -399,6 +462,31 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "oauth_clients",
         "auth_audit_log",
     ];
+
+    private WebApplicationFactory<Nocturne.API.Program> CreateFactory(TestDatabase database, int port)
+    {
+        var factory = new ApiFactory().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", database.AppConnectionString);
+            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", database.MigratorConnectionString);
+            builder.UseSetting($"{PostgreSqlConfiguration.SectionName}:{nameof(PostgreSqlConfiguration.MaxPoolSize)}", MaxPoolSize.ToString());
+            builder.UseSetting("INSTANCE_KEY", InstanceKey);
+            builder.UseSetting("BASE_DOMAIN", $"localhost:{port}");
+            builder.UseSetting("DemoService:Enabled", "false");
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<IDemoModeService>(DemoModeService);
+                services.Replace(ServiceDescriptor.Scoped<IJwtService>(sp => new JwtService(
+                    sp.GetRequiredService<IOptions<JwtOptions>>(),
+                    sp.GetRequiredService<ILogger<JwtService>>(),
+                    JwtClock)));
+                ContextOpenLog.Register(services);
+            });
+        });
+        factory.UseKestrel(options => options.ListenLocalhost(port));
+        return factory;
+    }
 
     private static int FreeLoopbackPort()
     {

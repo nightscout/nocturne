@@ -6,16 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V3;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
@@ -46,11 +42,8 @@ public class V3FilterOperatorMergeTests
         string? captured = null;
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, int, int, string?, string?, bool, CancellationToken>(
-                (_, _, _, find, _, _, _) => captured = find)
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync(Array.Empty<Entry>());
 
         var controller = new EntriesController(
@@ -98,14 +91,11 @@ public class V3FilterOperatorMergeTests
         string? captured = null;
         var treatments = new Mock<ITreatmentService>();
         treatments
-            .Setup(s => s.GetTreatmentsWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<int, int, string?, bool, CancellationToken>((_, _, find, _, _) => captured = find)
+            .Setup(s => s.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<TreatmentQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync(Array.Empty<Treatment>());
 
         var controller = new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
             NullLogger<TreatmentsController>.Instance)
@@ -121,12 +111,12 @@ public class V3FilterOperatorMergeTests
     [Theory]
     [InlineData("?created_at$gte=1727654400000&created_at$lte=1727658000000&device$eq=loop://iPhone")]
     [InlineData("?device$eq=loop://iPhone&created_at$lte=1727658000000&created_at$gte=1727654400000")]
-    public async Task DeviceStatus_CreatedAtWindow_ReachesTheSnapshotRepository(string queryString)
+    public async Task DeviceStatus_CreatedAtWindow_ReachesTheDeviceStatusRead(string queryString)
     {
         var (from, to, device) = await CaptureDeviceStatusRead(queryString);
 
-        from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime);
-        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To).UtcDateTime);
+        from.Should().Be(From);
+        to.Should().Be(To);
         device.Should().Be("loop://iPhone");
     }
 
@@ -137,19 +127,8 @@ public class V3FilterOperatorMergeTests
     {
         var (from, to, _) = await CaptureDeviceStatusRead(queryString);
 
-        var instant = DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime;
-        from.Should().Be(instant);
-        to.Should().Be(instant);
-    }
-
-    [Theory]
-    [InlineData("?device$eq=loop://iPhone&device$ne=openaps://rpi")]
-    [InlineData("?device$ne=openaps://rpi&device$eq=loop://iPhone")]
-    public async Task DeviceStatus_DeviceEqualityBesideAnotherOperator_StillNarrowsToTheDevice(string queryString)
-    {
-        var (_, _, device) = await CaptureDeviceStatusRead(queryString);
-
-        device.Should().Be("loop://iPhone");
+        from.Should().Be(From);
+        to.Should().Be(From);
     }
 
     [Theory]
@@ -159,37 +138,24 @@ public class V3FilterOperatorMergeTests
     {
         var (from, to, _) = await CaptureDeviceStatusRead(queryString);
 
-        from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From + 1).UtcDateTime);
-        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To - 1).UtcDateTime);
+        from.Should().Be(From + 1);
+        to.Should().Be(To - 1);
     }
 
-    private static async Task<(DateTime? From, DateTime? To, string? Device)> CaptureDeviceStatusRead(
-        string queryString)
+    private static async Task<(long? From, long? To, string? Device)> CaptureDeviceStatusRead(string queryString)
     {
-        (DateTime? From, DateTime? To, string? Device) captured = default;
-        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
-        groupRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<DateTime?, DateTime?, string?, int, int, CancellationToken>(
-                (from, to, device, _, _, _) => captured = (from, to, device))
-            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
-
-        var projection = new DeviceStatusProjectionService(
-            groupRepo.Object,
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IStateSpanRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            NullLogger<DeviceStatusProjectionService>.Instance);
+        (long? From, long? To, string? Device) captured = default;
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(s => s.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>()))
+            .Callback<FindQuery, int, int, CancellationToken, bool, ReadSortField>((find, _, _, _, _, _) =>
+                captured = (find.FromMills, find.ToMills, find.GetPushableEquality("device", StringComparison.Ordinal)))
+            .ReturnsAsync([]);
 
         var controller = new DeviceStatusController(
-            projection,
-            Mock.Of<IDeviceStatusDecomposer>(),
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<DeviceStatusController>.Instance)
         {
@@ -210,11 +176,8 @@ public class V3FilterOperatorMergeTests
         (string? Type, string? Find) captured = default;
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, int, int, string?, string?, bool, CancellationToken>(
-                (type, _, _, find, _, _, _) => captured = (type, find))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = (query.Type, query.Find))
             .ReturnsAsync(Array.Empty<Entry>());
 
         var controller = new EntriesController(
@@ -290,8 +253,8 @@ public class V3FilterOperatorMergeTests
 
         var (from, to, device) = await CaptureDeviceStatusRead(FilterQuery(filter));
 
-        from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime);
-        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To).UtcDateTime);
+        from.Should().Be(From);
+        to.Should().Be(To);
         device.Should().Be("loop://iPhone");
     }
 

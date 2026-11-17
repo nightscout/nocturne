@@ -4,9 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// PostgreSQL entity recording how far dedup reconciliation has processed for a tenant.
-/// One row per tenant, holding the last reconciled link as a
-/// (<c>sys_created_at</c>, <c>id</c>) keyset cursor.
+/// PostgreSQL entity recording how far dedup reconciliation and the singleton prune have processed
+/// for a tenant, each as a (<c>sys_created_at</c>, <c>id</c>) keyset cursor, and the state of its full
+/// deduplication run. One row per tenant.
 /// </summary>
 [Table("dedup_reconcile_state")]
 public class DedupReconcileStateEntity : ITenantScoped
@@ -31,4 +31,51 @@ public class DedupReconcileStateEntity : ITenantScoped
     /// </summary>
     [Column("last_reconciled_link_id")]
     public Guid? LastReconciledLinkId { get; set; }
+
+    /// <summary>
+    /// The reconcile cursor's ingestion time when the batch after it last failed. Null when no
+    /// batch has failed since the cursor last moved.
+    /// </summary>
+    [Column("failed_batch_cursor_created_at")]
+    public DateTime? FailedBatchCursorCreatedAt { get; set; }
+
+    /// <summary>The reconcile cursor's link id when the batch after it last failed.</summary>
+    [Column("failed_batch_cursor_id")]
+    public Guid? FailedBatchCursorId { get; set; }
+
+    /// <summary>
+    /// How many passes in a row the batch after <see cref="FailedBatchCursorCreatedAt"/> and
+    /// <see cref="FailedBatchCursorId"/> has failed.
+    /// </summary>
+    [Column("failed_batch_attempts")]
+    public int FailedBatchAttempts { get; set; }
+
+    /// <summary>
+    /// Ingestion time of the last primary link the singleton prune examined. Null before the
+    /// prune's first page, and after a restart that found no links.
+    /// </summary>
+    [Column("prune_cursor_created_at")]
+    public DateTime? PruneCursorCreatedAt { get; set; }
+
+    /// <summary>Id of the last primary link the singleton prune examined.</summary>
+    [Column("prune_cursor_id")]
+    public Guid? PruneCursorId { get; set; }
+
+    /// <summary>
+    /// When the singleton prune last restarted from the tenant's first link. Null until its first pass.
+    /// </summary>
+    [Column("prune_cursor_reset_at")]
+    public DateTime? PruneCursorResetAt { get; set; }
+
+    /// <summary>
+    /// The tenant's latest full deduplication run as JSON: its status, running totals and the totals
+    /// at its last resume point (<see cref="Services.Deduplication.DeduplicationAdmin"/>). Null until a
+    /// run is first requested.
+    /// </summary>
+    [Column("run", TypeName = "jsonb")]
+    public string? Run { get; set; }
+
+    /// <summary>When a cancel of the running full run was asked for; null when none is waiting.</summary>
+    [Column("run_cancel_requested_at")]
+    public DateTime? RunCancelRequestedAt { get; set; }
 }

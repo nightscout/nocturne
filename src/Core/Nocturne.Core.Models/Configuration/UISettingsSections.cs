@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Models.Configuration;
 
 /// <summary>
@@ -9,7 +11,7 @@ public sealed record UISettingsSection(
     string Name,
     Type Type,
     Func<UISettingsConfiguration, object?> Get,
-    Action<UISettingsConfiguration, object> Set
+    Action<UISettingsConfiguration, object?> Set
 )
 {
     /// <summary>
@@ -18,6 +20,18 @@ public sealed record UISettingsSection(
     /// make it stick.
     /// </summary>
     public IReadOnlyList<string> OmittedProperties { get; init; } = [];
+
+    /// <summary>
+    /// The scope a caller needs to read the section, or null for presentation config every member
+    /// renders with. Set on a section that reveals a data category.
+    /// </summary>
+    public string? ReadScope { get; init; }
+
+    /// <summary>
+    /// Whether the section is withheld from a viewer without an account (a guest or share link)
+    /// whatever its scopes: it holds household contact details or delivery credentials.
+    /// </summary>
+    public bool MemberOnly { get; init; }
 }
 
 /// <summary>
@@ -32,6 +46,16 @@ public static class UISettingsSections
     public const string Notifications = "notifications";
 
     /// <summary>
+    /// Name of the section carrying <see cref="FeatureSettings"/>.
+    /// </summary>
+    public const string Features = "features";
+
+    /// <summary>
+    /// Name of the section carrying <see cref="DataQualitySettings"/>.
+    /// </summary>
+    public const string DataQuality = "dataQuality";
+
+    /// <summary>
     /// Every section, in the order the aggregate declares them.
     /// </summary>
     public static IReadOnlyList<UISettingsSection> All { get; } =
@@ -40,43 +64,54 @@ public static class UISettingsSections
             "devices",
             typeof(DeviceSettings),
             s => s.Devices,
-            (s, v) => s.Devices = (DeviceSettings)v
-        ),
+            (s, v) => s.Devices = (DeviceSettings?)v
+        )
+        {
+            // Connected devices carry serial numbers and battery state.
+            ReadScope = Scope.DevicesRead,
+        },
         new(
             "algorithm",
             typeof(AlgorithmSettings),
             s => s.Algorithm,
-            (s, v) => s.Algorithm = (AlgorithmSettings)v
+            (s, v) => s.Algorithm = (AlgorithmSettings)v!
         ),
         new(
-            "features",
+            Features,
             typeof(FeatureSettings),
             s => s.Features,
-            (s, v) => s.Features = (FeatureSettings)v
+            (s, v) => s.Features = (FeatureSettings)v!
         ),
         new(
             Notifications,
             typeof(NotificationSettings),
             s => s.Notifications,
-            (s, v) => s.Notifications = (NotificationSettings)v
+            (s, v) => s.Notifications = (NotificationSettings?)v
         )
         {
             OmittedProperties = ["alarmConfiguration"],
+            // Alarm thresholds and profiles decide when a low alert fires.
+            ReadScope = Scope.AlertsRead,
+            // The alarm configuration carries emergency contacts and push-delivery keys, and a
+            // guest link holds alerts.read by default.
+            MemberOnly = true,
         },
         new(
             "services",
             typeof(ServicesSettings),
             s => s.Services,
-            (s, v) => s.Services = (ServicesSettings)v
+            (s, v) => s.Services = (ServicesSettings?)v
         )
         {
             OmittedProperties = ["availableServices"],
+            // The tenant's connector configuration, which only tenant administration reads.
+            ReadScope = Scope.TenantSettings,
         },
         new(
-            "dataQuality",
+            DataQuality,
             typeof(DataQualitySettings),
             s => s.DataQuality,
-            (s, v) => s.DataQuality = (DataQualitySettings)v
+            (s, v) => s.DataQuality = (DataQualitySettings)v!
         ),
     ];
 

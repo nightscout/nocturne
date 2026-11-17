@@ -54,6 +54,7 @@ export interface BotApiClient {
     create(
       platform: string,
       platformUserId: string,
+      platformUserName: string | null,
       tenantSlug: string | null,
       source: "connect-slash" | "oauth2-finalize",
       signal?: AbortSignal,

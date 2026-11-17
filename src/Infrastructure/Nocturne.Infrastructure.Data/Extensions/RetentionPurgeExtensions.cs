@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -10,9 +11,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <remarks>
 /// <para>
 /// The tenant reach the DELETE needs comes from
-/// <see cref="RlsPinningExtensions.CreateTenantPinnedContextAsync"/> and cannot come from a
+/// <see cref="INocturneDbContextFactory.CreateForTenantAsync"/> and cannot come from a
 /// <c>set_config</c> issued as its own command: EF opens and closes the connection around each
-/// command, and the pool's DISCARD ALL clears the session variable on the way back. Every
+/// command, and <c>TenantConnectionInterceptor</c> overwrites the session variable on the next open. Every
 /// tenant-scoped table is <c>FORCE ROW LEVEL SECURITY</c>, so an unpinned DELETE evaluates
 /// <c>tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid</c> against
 /// NULL, matches nothing, and reports success having deleted no rows.
@@ -55,19 +56,26 @@ public static partial class RetentionPurgeExtensions
     /// <param name="timestampColumn">Age column. Must be a bare lowercase SQL identifier.</param>
     /// <param name="minAge">Retention window. Rows strictly older than this are deleted.</param>
     /// <param name="batchSize">Rows per statement. Must be at least 1.</param>
+    /// <param name="linkedRecordType">
+    /// The <see cref="Core.Models.RecordTypeKeys"/> key the table's rows are linked under in
+    /// <c>linked_records</c>, or null for a table deduplication does not cover. When given, each
+    /// batch deletes the purged rows' links in the same statement, so a hard delete leaves no link
+    /// behind for a sweep to find (<see cref="Services.Deduplication.LinkedRecordTypes.DeleteOrphanedLinksAsync"/>).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>Total number of rows deleted.</returns>
+    /// <returns>Total number of rows deleted, links not counted.</returns>
     /// <exception cref="ArgumentException">An identifier is not a bare lowercase identifier.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="minAge"/> is not positive, or <paramref name="batchSize"/> is below 1.
     /// </exception>
     public static async Task<int> PurgeOlderThanAsync(
-        this IDbContextFactory<NocturneDbContext> factory,
+        this INocturneDbContextFactory factory,
         Guid tenantId,
         string table,
         string timestampColumn,
         TimeSpan minAge,
         int batchSize = DefaultBatchSize,
+        string? linkedRecordType = null,
         CancellationToken ct = default)
     {
         // Both identifiers are interpolated into SQL, so they are validated rather than trusted:
@@ -96,14 +104,37 @@ public static partial class RetentionPurgeExtensions
                 LIMIT {{batchSize}})
             """;
 
+        object[] parameters = [cutoff, tenantId];
+
+        // The links go in the same statement as their rows, so neither can outlive the other. The
+        // slice is a CTE both deletes read, so they agree on it; the row delete stays the outer
+        // statement so the command's affected rows still count rows.
+        if (linkedRecordType is not null)
+        {
+            sql = $$"""
+                WITH doomed AS (
+                    SELECT ctid, id FROM {{table}}
+                    WHERE tenant_id = {1} AND {{timestampColumn}} < {0}
+                    LIMIT {{batchSize}}),
+                unlinked AS (
+                    DELETE FROM linked_records
+                    WHERE tenant_id = {1} AND record_type = {2}
+                      AND record_id IN (SELECT id FROM doomed))
+                DELETE FROM {{table}}
+                WHERE tenant_id = {1}
+                  AND ctid IN (SELECT ctid FROM doomed)
+                """;
+            parameters = [cutoff, tenantId, linkedRecordType];
+        }
+
         var totalDeleted = 0;
         int batchDeleted;
 
         do
         {
-            await using var db = await factory.CreateTenantPinnedContextAsync(tenantId, ct);
+            await using var db = await factory.CreateForTenantAsync(tenantId, ct);
 
-            batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, [cutoff, tenantId], ct);
+            batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
 
             totalDeleted += batchDeleted;
         }

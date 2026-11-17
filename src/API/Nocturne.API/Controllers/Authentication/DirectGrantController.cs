@@ -1,11 +1,11 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Controllers.Authentication;
 
@@ -23,7 +23,8 @@ namespace Nocturne.API.Controllers.Authentication;
 /// (<see cref="Connectors.Core.Utilities.HashUtils.Sha256Hex"/>); the plaintext is returned once at
 /// creation and cannot be retrieved again.
 ///
-/// Scopes are validated and normalized via <see cref="Scope.Normalize"/> before storage.
+/// Scopes are capped at the caller's own (<see cref="Scope.ValidateDelegation"/>) and normalized via
+/// <see cref="Scope.Normalize"/> before storage.
 /// All mutations are audit-logged through <see cref="IAuthAuditService"/>.
 /// </remarks>
 /// <seealso cref="DirectGrantTokenHandler"/>
@@ -31,22 +32,23 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="Scope"/>
 [ApiController]
 [Route("api/auth/direct-grants")]
+[RequireInteractiveSession]
 [Tags("Authentication")]
 public class DirectGrantController : ControllerBase
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly ISubjectRepository _subjects;
     private readonly IDirectGrantService _directGrantService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectGrantController"/> class.
     /// </summary>
-    /// <param name="dbContext">The application database context used to read and write grant records.</param>
+    /// <param name="subjects">The repository that finds the tenant's device subject, the holder of its site tokens.</param>
     /// <param name="directGrantService">The service that creates, lists, and revokes direct grants.</param>
     public DirectGrantController(
-        NocturneDbContext dbContext,
+        ISubjectRepository subjects,
         IDirectGrantService directGrantService)
     {
-        _dbContext = dbContext;
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _directGrantService = directGrantService;
     }
 
@@ -56,10 +58,11 @@ public class DirectGrantController : ControllerBase
     /// <param name="request">The create request containing the human-readable label, desired scopes, and optional expiry.</param>
     /// <returns>A <see cref="CreateDirectGrantResponse"/> containing the grant ID and the single-use plaintext token.</returns>
     [HttpPost]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(typeof(CreateDirectGrantResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CreateDirectGrantResponse>> Create([FromBody] CreateDirectGrantRequest request)
     {
         var auth = HttpContext.GetAuthContext();
@@ -68,10 +71,15 @@ public class DirectGrantController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
+        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+        {
+            return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
+        }
+
         var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
 
         var result = await _directGrantService.CreateAsync(
-            _dbContext, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
+            pinnedTenantId: null, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
             limitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
@@ -103,7 +111,7 @@ public class DirectGrantController : ControllerBase
         }
 
         var grants = await _directGrantService.ListAsync(
-            _dbContext, auth.SubjectId.Value, HttpContext.RequestAborted);
+            pinnedTenantId: null, auth.SubjectId.Value, HttpContext.RequestAborted);
 
         // An imported token authenticates as the holder itself, so a caller can be the holder and
         // would otherwise see every site token twice.
@@ -115,7 +123,7 @@ public class DirectGrantController : ControllerBase
             }
 
             grants.AddRange(await _directGrantService.ListAsync(
-                _dbContext, holderId, HttpContext.RequestAborted));
+                pinnedTenantId: null, holderId, HttpContext.RequestAborted));
         }
 
         return Ok(grants);
@@ -127,7 +135,7 @@ public class DirectGrantController : ControllerBase
     /// <param name="id">The GUID of the grant to revoke.</param>
     /// <returns><c>204 No Content</c> on success (including when already revoked); <c>404 Not Found</c> if the grant does not belong to the current user.</returns>
     [HttpDelete("{id:guid}")]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -140,7 +148,7 @@ public class DirectGrantController : ControllerBase
         }
 
         var found = await _directGrantService.RevokeAsync(
-            _dbContext, id, auth.SubjectId.Value,
+            pinnedTenantId: null, id, auth.SubjectId.Value,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
@@ -153,7 +161,7 @@ public class DirectGrantController : ControllerBase
             }
 
             found = await _directGrantService.RevokeAsync(
-                _dbContext, id, holderId,
+                pinnedTenantId: null, id, holderId,
                 HttpContext.Connection.RemoteIpAddress?.ToString(),
                 Request.Headers.UserAgent.ToString(),
                 ct: HttpContext.RequestAborted);
@@ -171,7 +179,7 @@ public class DirectGrantController : ControllerBase
     /// The tenant's device-token holder, when the caller may manage it, and nothing otherwise.
     /// </summary>
     /// <remarks>
-    /// A site's uploader tokens belong to nobody (see <see cref="DeviceSubjectFilter"/>), so no
+    /// A site's uploader tokens belong to nobody (see <see cref="ISubjectRepository.FindDeviceSubjectAsync"/>), so no
     /// person's own list would ever contain them. Revoking a device is the operation someone
     /// reaches for when a phone is lost, so it cannot be the one thing this screen cannot do.
     /// Gated on <see cref="Scope.MembersManage"/> rather than shown to every member, because a
@@ -184,8 +192,7 @@ public class DirectGrantController : ControllerBase
             return [];
         }
 
-        return await _dbContext.FindDeviceSubjectOf(
-            _dbContext.TenantId, HttpContext.RequestAborted) is { } holderId
+        return await _subjects.FindDeviceSubjectAsync(HttpContext.RequestAborted) is { } holderId
             ? [holderId]
             : [];
     }

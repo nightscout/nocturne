@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "unevaluable-composite-without-operator",
-  "description": "a composite with conditions but no operator skips the rule; with neither it evaluates false",
+  "description": "a composite with conditions but no operator, or with neither, cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

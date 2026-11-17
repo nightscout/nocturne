@@ -1,4 +1,6 @@
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Platform.InstanceKey;
+using Nocturne.API.Services.Platform.Releases;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.NotificationTemplates;
@@ -139,6 +141,62 @@ public static class BuiltInNotificationTemplates
             Source = "membership"
         });
 
+        registry.Register(new NotificationTemplate
+        {
+            Type = ReleaseNoticeJob.UpdateAvailableType,
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "refresh-cw",
+            Source = ReleaseNoticeJob.Source,
+            DefaultActions = [ReleaseNotesAction()]
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = ReleaseNoticeJob.ReleaseInstalledType,
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "gift",
+            Source = ReleaseNoticeJob.Source,
+            DefaultActions = [ReleaseNotesAction()]
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InstanceKeyChangeService.TenantNoticeType,
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "key-round",
+            Source = InstanceKeyChangeService.Source
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InstanceKeyChangeService.PlatformNoticeType,
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "key-round",
+            Source = InstanceKeyChangeService.Source,
+            DefaultActions =
+            [
+                new NotificationActionDto
+                {
+                    ActionId = InstanceKeyChangeService.OpenPlatformSettingsActionId,
+                    Label = InstanceKeyChangeService.OpenPlatformSettingsActionId,
+                    Icon = "key-round",
+                    Variant = "default"
+                }
+            ]
+        });
+
         return registry;
     }
+
+    private static NotificationActionDto ReleaseNotesAction() => new()
+    {
+        ActionId = ReleaseNoticeJob.ReleaseNotesActionId,
+        Label = "release_notes",
+        Icon = "info",
+        Variant = "default"
+    };
 }

@@ -113,6 +113,7 @@ class Program
                 defaultValue: ServiceNames.Defaults.PostgresUsername);
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
+                new GenerateParameterDefault { MinLength = 32, Special = false },
                 secret: true
             ).WithPublishMetadata(
                 "PostgreSQL bootstrap password",
@@ -153,6 +154,10 @@ class Program
                 // Aspire's default moves with its releases (18.x from 13.5); a major
                 // Postgres upgrade cannot reuse an existing data volume.
                 .WithImageTag("17.6")
+                // max_connections: API pool 100 (PostgreSqlConfiguration.MaxPoolSize) + web pool 10 (@chat-adapter/state-pg's pg.Pool default)
+                // + migrator 5 + superuser_reserved_connections 3 + 12 for operators and sibling tools = 130.
+                // The stock 100 lets the API pool alone take every slot.
+                .WithArgs("-c", "max_connections=130")
                 .WithUserName(postgresUsername)
                 .WithPassword(postgresPassword)
                 .WithBindMount(pgInitPath, "/docker-entrypoint-initdb.d", isReadOnly: true)
@@ -242,10 +247,16 @@ class Program
         // Secret parameters. AddParameter handles dashboard prompting and
         // env var override (Parameters__name) for free.
         // ------------------------------------------------------------------
-        var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true)
+        // Generated and kept in user secrets on first run; a value already set there wins. Publish
+        // leaves it blank in the .env template.
+        var instanceKey = builder
+            .AddParameter(
+                ServiceNames.Parameters.InstanceKey,
+                new GenerateParameterDefault { MinLength = 64, Special = false },
+                secret: true)
             .WithPublishMetadata(
                 "Instance key",
-                "Minimum 12 characters: used for JWT signing and service authentication");
+                "Minimum 32 characters: used for JWT signing and service authentication");
 
         // Discord bot credentials. Optional — only required if Discord bot
         // features are enabled for a deployment. Empty-string defaults let
@@ -277,6 +288,13 @@ class Program
                 "Trusted proxy ranges",
                 "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare's published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty.",
                 defaultValue: "127.0.0.1/32");
+
+        // Sources allowed to frame the signed-in app. Empty forbids framing it; share links and
+        // the clock face are frameable regardless (see security-headers.ts in the web app).
+        var allowedFrameAncestors = builder.AddParameter("allowed-frame-ancestors", "", secret: false)
+            .WithPublishMetadata(
+                "Allowed frame ancestors",
+                "Space-separated origins allowed to embed the signed-in app in an iframe, e.g. https://ha.example.com:8123 for a Home Assistant dashboard. Leave empty to forbid it; share links can always be embedded.");
 
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
@@ -339,8 +357,9 @@ class Program
         // pinned so the generated compose bakes a concrete
         // http://nocturne-api:8080 (mirrors the web service's fixed internal
         // port) instead of an empty NOCTURNE_API_PORT placeholder. This port is
-        // never host-published — YARP is the only entry point. Production images
-        // default to Production.
+        // never host-published — YARP is the only entry point. The bundle pins
+        // Production rather than leaving it to the image default: the Development-only
+        // surface must never be one stray variable away in a deployed stack.
         IResourceBuilder<IResourceWithServiceDiscovery> api;
         if (builder.ExecutionContext.IsRunMode)
         {
@@ -355,6 +374,9 @@ class Program
                 .WithAspNetCoreUrls("http")
                 .WithHttpHealthCheck("/alive")
                 .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
+            AlertsNativeBuild.AddTo(builder, watchedApi, solutionRoot,
+                AlertsNativeBuild.CommandRuns("cargo", "--version"));
             // Without a dashboard there is no collector, and the exporter would retry every second.
             if (includeDashboard)
             {
@@ -367,6 +389,13 @@ class Program
             api = builder
                 .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
                 .WithHttpEndpoint(name: "http", targetPort: 8080)
+                .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
+                // Self-hosted stacks share a small box with Postgres and the web app. Under a 2 GB
+                // limit on 2 vCPUs, workstation GC with a conserving heap held ~100 MiB less than
+                // the per-core server GC at rest and ~250 MiB less at an overload peak, while
+                // serving more of that overload, for ~10 ms more at the median under steady load.
+                .WithEnvironment("DOTNET_gcServer", "0")
+                .WithEnvironment("DOTNET_GCConserveMemory", "5")
                 .PublishAsDockerComposeService((_, _) => { })
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
                 .WithRemoteImageTag("latest")
@@ -468,6 +497,7 @@ class Program
                 .WithEnvironment("DISCORD_APPLICATION_ID", discordApplicationId)
                 .WithEnvironment("DISCORD_CLIENT_SECRET", discordClientSecret)
                 .WithEnvironment("BASE_DOMAIN", baseDomain)
+                .WithEnvironment("ALLOWED_FRAME_ANCESTORS", allowedFrameAncestors)
                 // NOTE: BOT_LINK_HMAC_SECRET is not injected — oauth-state.ts
                 // reuses INSTANCE_KEY (already wired above) to sign the
                 // Discord OAuth2 state parameter. See src/Web/packages/app/
@@ -492,9 +522,13 @@ class Program
         }
 
         IResourceBuilder<IResourceWithEndpoints> web;
+        var devOptions = DevOptions.From(builder.Configuration);
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            if (devOptions.LiveSampleData)
+                apiEnvironment.WithEnvironment("SampleData__Live", "true");
+
             var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
             var bridge = builder.AddPnpmApp(
                 "nocturne-bridge-build",
@@ -514,13 +548,17 @@ class Program
 
             ConfigureWebEnvironment(viteWeb);
 
-            // Dev auto-login, on unless NOCTURNE_DEV_AUTO_LOGIN is false (apphost
-            // appsettings or the host environment, e.g.
-            // `NOCTURNE_DEV_AUTO_LOGIN=false aspire start`): the web login page
-            // redirects through /api/v4/dev-only/auth/login instead of the
-            // passkey UI, since a seeded tenant's passkey is held by no one. Run
-            // mode only — the backing controller exists only in Development.
-            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", true))
+            // Waited for so the first page anyone opens is the seeded dashboard, never /setup.
+            if (devOptions.AutoSeed.Enabled)
+            {
+                var devSeed = builder.AddDevTenantSeed(
+                    "nocturne-dev-seed", api, devOptions.AutoSeed.SampleDataDays);
+                viteWeb.WaitForCompletion(devSeed);
+                devSeed.WithParentRelationship(viteWeb);
+            }
+
+            // Run mode only: the backing controller exists only in Development.
+            if (devOptions.AutoLogin)
             {
                 viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", "true");
             }
@@ -837,12 +875,12 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            // Explicit domain runs on 443, so URLs omit the port; the default
-            // local domain keeps the gateway port and must carry it in
-            // BASE_DOMAIN — consumers build URLs (and strip the port for the
-            // WebAuthn rp.id) from it.
+            // An explicit domain outside a worktree runs on 443, so URLs omit the
+            // port; otherwise the gateway port (1612, or dynamic in a worktree)
+            // must be carried in BASE_DOMAIN — consumers build URLs (and strip
+            // the port for the WebAuthn rp.id) from it.
             var gatewayEndpoint = gateway.GetEndpoint("https");
-            var baseDomainExpr = hasExplicitDomain
+            var baseDomainExpr = hasExplicitDomain && !isWorktree
                 ? ReferenceExpression.Create($"{customDomain}")
                 : ReferenceExpression.Create(
                     $"{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
@@ -866,7 +904,7 @@ class Program
 
             // Show the gateway URL on the web resource in the Aspire dashboard
             // so users can click through to the app via the HTTPS gateway.
-            if (hasExplicitDomain)
+            if (hasExplicitDomain && !isWorktree)
             {
                 web.WithUrl($"https://{customDomain}", customDomain);
             }
@@ -878,6 +916,19 @@ class Program
                     ),
                     "Gateway"
                 );
+            }
+
+            if (devOptions.AutoSeed.Enabled)
+            {
+                // Read from the allocated port: an explicit domain is on 443 only outside a worktree.
+                var devTenantHost = $"{DevTenantSeeder.Slug}.{customDomain}";
+                gateway.WithUrls(context => context.Urls.Add(new ResourceUrlAnnotation
+                {
+                    Url = gatewayEndpoint.Port == 443
+                        ? $"https://{devTenantHost}"
+                        : $"https://{devTenantHost}:{gatewayEndpoint.Port}",
+                    DisplayText = "Dev tenant (if seeded)",
+                }));
             }
 
             // Warn if custom domain doesn't resolve (no-op for *.localhost,
@@ -894,14 +945,40 @@ class Program
         // ------------------------------------------------------------------
         if (enableWatchtower)
         {
+            // The API's release check reads Watchtower's read-only HTTP API (history, config) over
+            // the stack network to tell owners when an update installs. Watchtower reports neither
+            // its interval nor its next run, so both containers take the interval from one value.
+            // Leaving the update endpoint off keeps the periodic polls running. The published
+            // compose turns the endpoints on only when the token is set
+            // (PortainerComposePublisherExtensions.GateWatchtowerApiOnToken).
+            var watchtowerApiToken = builder
+                .AddParameter(
+                    "watchtower-api-token",
+                    new GenerateParameterDefault { MinLength = 32, Special = false },
+                    secret: true)
+                .WithPublishMetadata(
+                    "Watchtower API token",
+                    "Optional. Any random string, e.g. from openssl rand -hex 24. Lets the API read when Watchtower last checked for updates, so update notices show the install time.");
+            var watchtowerPollInterval = builder.AddParameter("watchtower-poll-interval", "86400")
+                .WithPublishMetadata(
+                    "Watchtower poll interval",
+                    "Seconds between Watchtower's checks for new images. The API uses it to tell owners when an update installs.",
+                    defaultValue: "86400");
+
             builder
                 .AddContainer("watchtower", "ghcr.io/nicholas-fedor/watchtower", "latest")
                 .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
                 .WithEnvironment("WATCHTOWER_CLEANUP", "true")
-                .WithEnvironment("WATCHTOWER_POLL_INTERVAL", "86400")
+                .WithEnvironment("WATCHTOWER_POLL_INTERVAL", watchtowerPollInterval)
                 .WithEnvironment("WATCHTOWER_INCLUDE_STOPPED", "false")
                 .WithEnvironment("WATCHTOWER_REVIVE_STOPPED", "false")
+                .WithEnvironment("WATCHTOWER_HTTP_API_ENDPOINTS", "history,config")
+                .WithEnvironment("WATCHTOWER_HTTP_API_TOKEN", watchtowerApiToken)
                 .PublishAsDockerComposeService((_, _) => { });
+
+            apiEnvironment
+                .WithEnvironment("ReleaseCheck__Watchtower__Token", watchtowerApiToken)
+                .WithEnvironment("ReleaseCheck__Watchtower__PollIntervalSeconds", watchtowerPollInterval);
         }
 
         // These steps depend on the "publish-compose" pipeline step, which only
@@ -914,6 +991,7 @@ class Program
             builder.AddPortainerComposePublisher();
             builder.AddByoProxyComposePublisher();
             builder.AddPostgresDataComposePublisher();
+            builder.AddInstallScriptPublisher();
         }
 
         var app = builder.Build();

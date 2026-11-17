@@ -11,7 +11,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// <summary>
 /// Guards the per-action authorization invariant for the V1/V2/V3 (Nightscout-compat) plane:
 /// every write endpoint (POST/PUT/PATCH/DELETE) must carry a <see cref="RequireScopeAttribute"/>
-/// or a <see cref="RequirePermissionAttribute"/> (e.g. [RequireAdmin]) so that a read-only or
+/// or a <see cref="RequirePermissionAttribute"/> (e.g. [RequireSuperuser]) so that a read-only or
 /// public (unauthenticated) grant cannot create, update, or delete data.
 ///
 /// Without this, the controller-level <c>HasPermissions</c> policy only checks that the

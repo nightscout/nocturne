@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using static Nocturne.Core.Clinical.Tests.Statistics.WindowEnd;
 
 namespace Nocturne.Core.Clinical.Tests.Statistics;
 
@@ -25,7 +26,7 @@ public class StatisticsServiceTDDTests
 
     public StatisticsServiceTDDTests()
     {
-        _sut = new StatisticsService();
+        _sut = new StatisticsService(TimeProvider.System);
     }
 
     #region CalculateTreatmentSummary — Basic Scenarios
@@ -55,8 +56,8 @@ public class StatisticsServiceTDDTests
         };
         var carbIntakes = new[]
         {
-            new CarbIntake { Carbs = 45 },
-            new CarbIntake { Carbs = 15 },
+            MakeCarbIntake(45, Day1Mills),
+            MakeCarbIntake(15, Day1Mills),
         };
 
         var result = _sut.CalculateTreatmentSummary(boluses, carbIntakes);
@@ -111,12 +112,12 @@ public class StatisticsServiceTDDTests
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         result.TotalBolus.Should().Be(6.8);
         result.TotalBasal.Should().Be(0);
         result.TotalInsulin.Should().Be(6.8);
-        result.BolusCount.Should().Be(3);
+        result.ManualBolusCount.Should().Be(3);
     }
 
     [Fact]
@@ -129,7 +130,7 @@ public class StatisticsServiceTDDTests
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
-            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         result.TotalBasal.Should().Be(1.3);
         result.TotalBolus.Should().Be(0);
@@ -151,7 +152,7 @@ public class StatisticsServiceTDDTests
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         result.Tdd.Should().Be(10.0, "70U / 7 days = 10 U/day");
         result.WindowDays.Should().Be(7);
@@ -178,7 +179,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         // TreatmentSummary in v4 only tracks bolus (basal comes from TempBasals)
         summary.Totals.Insulin.Bolus.Should().Be(delivery.TotalBolus,
@@ -201,7 +202,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         summary.Totals.Insulin.Bolus.Should().Be(delivery.TotalBolus,
             "bolus totals should match between methods");
@@ -226,8 +227,8 @@ public class StatisticsServiceTDDTests
         };
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
-        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), tempBasals);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
+        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), tempBasals, StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         var ratiosGrandTotal = ratios.DailyData.Sum(d => d.Total);
 
@@ -249,7 +250,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         (delivery.BolusPercent + delivery.BasalPercent).Should().BeApproximately(100.0, 0.1,
             "InsulinDelivery basal% + bolus% should sum to 100");
@@ -292,7 +293,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         // Bolus total from TreatmentSummary should match delivery bolus total
         summary.Totals.Insulin.Bolus.Should().Be(delivery.TotalBolus,
@@ -301,7 +302,132 @@ public class StatisticsServiceTDDTests
         // Bolus should be meal boluses + SMBs
         delivery.TotalBolus.Should().BeGreaterThan(0);
         delivery.TotalBasal.Should().BeGreaterThan(0);
-        delivery.BolusCount.Should().Be(11, "3 meals + 8 SMBs = 11 boluses");
+        delivery.ManualBolusCount.Should().Be(11, "the 8 automatic-flagged records are stored as manual until #2412, so 3 meals + 8 = 11");
+    }
+
+    [Fact]
+    public void InsulinDelivery_PerDayFigures_DivideTheWindowTotalsByWindowDays()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.5, Day1Mills),
+            MakeBolus(3.0, Day2Mills),
+            MakeBolus(2.0, Day3Mills),
+            MakeBolus(1.5, Day3Mills + 24 * 3_600_000L),
+        };
+        var algorithmBoluses = new[] { MakeBolus(3.5, Day1Mills, automatic: true) };
+        var carbs = new[]
+        {
+            MakeCarbIntake(45, Day1Mills),
+            MakeCarbIntake(30, Day2Mills),
+            MakeCarbIntake(20, Day3Mills),
+        };
+        var tempBasals = new[]
+        {
+            MakeScheduledTempBasal(rate: 1.0, durationMinutes: 24 * 60, mills: Day1Mills),
+        };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            boluses, algorithmBoluses, tempBasals, carbs, StartDate, EndDate, Mills(EndDate));
+
+        result.WindowDays.Should().Be(7);
+        result.TotalBolusPerDay.Should().Be(2.07, "14.5 U over 7 days");
+        result.ScheduledBasalPerDay.Should().Be(3.43, "24 U over 7 days");
+        result.MealBoluses.Should().Be(3);
+        result.CorrectionBoluses.Should().Be(1);
+        result.MealBolusesPerDay.Should().Be(0.4, "3 meal boluses over 7 days");
+        result.CorrectionBolusesPerDay.Should().Be(0.1, "1 correction bolus over 7 days");
+    }
+
+    [Fact]
+    public void InsulinDelivery_MealAndCorrectionPercent_AreSharesOfManualBolusCount()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.0, Day1Mills),
+            MakeBolus(3.0, Day2Mills),
+            MakeBolus(2.0, Day3Mills),
+            MakeBolus(1.5, Day3Mills + 24 * 3_600_000L),
+        };
+        var carbs = new[]
+        {
+            MakeCarbIntake(40, Day1Mills),
+            MakeCarbIntake(30, Day2Mills),
+            MakeCarbIntake(20, Day3Mills),
+        };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), carbs, StartDate, EndDate, Mills(EndDate));
+
+        result.ManualBolusCount.Should().Be(4);
+        result.MealBolusPercent.Should().Be(75);
+        result.CorrectionBolusPercent.Should().Be(25);
+    }
+
+    [Fact]
+    public void InsulinDelivery_MealAndCorrectionPercent_RoundToOneDecimal()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.0, Day1Mills),
+            MakeBolus(1.0, Day2Mills),
+            MakeBolus(1.0, Day3Mills),
+        };
+        var carbs = new[] { MakeCarbIntake(40, Day1Mills) };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), carbs, StartDate, EndDate, Mills(EndDate));
+
+        result.MealBolusPercent.Should().Be(33.3);
+        result.CorrectionBolusPercent.Should().Be(66.7);
+    }
+
+    [Fact]
+    public void InsulinDelivery_NoManualBoluses_PercentsAreZero()
+    {
+        var algorithmBoluses = new[] { MakeBolus(0.5, Day1Mills, automatic: true) };
+
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(), algorithmBoluses, Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(),
+            StartDate, EndDate, Mills(EndDate));
+
+        result.ManualBolusCount.Should().Be(0);
+        result.MealBolusPercent.Should().Be(0);
+        result.CorrectionBolusPercent.Should().Be(0);
+        result.MealBolusesPerDay.Should().Be(0);
+        result.CorrectionBolusesPerDay.Should().Be(0);
+        result.TotalBolusPerDay.Should().Be(0.07, "0.5 U over 7 days");
+    }
+
+    [Fact]
+    public void InsulinDelivery_NoBasal_ScheduledBasalPerDayIsZero()
+    {
+        var result = _sut.CalculateInsulinDeliveryStatistics(
+            [MakeBolus(2.0, Day1Mills)], Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(),
+            StartDate, EndDate, Mills(EndDate));
+
+        result.ScheduledBasalPerDay.Should().Be(0);
+        result.TotalBasalPerDay.Should().Be(0);
+    }
+
+    [Fact]
+    public void BasalAnalysis_TotalDeliveredPerDay_DividesTotalDeliveredByWindowDays()
+    {
+        var tempBasals = new[] { MakeTempBasal(rate: 1.0, durationMinutes: 600, mills: Day1Mills) };
+
+        var result = _sut.CalculateBasalAnalysis(tempBasals, StartDate, EndDate, Mills(EndDate));
+
+        result.WindowDays.Should().Be(7);
+        result.Stats.TotalDelivered.Should().Be(10);
+        result.Stats.TotalDeliveredPerDay.Should().Be(1.43, "10 U over 7 days");
+    }
+
+    [Fact]
+    public void BasalAnalysis_NoTempBasals_TotalDeliveredPerDayIsZero()
+    {
+        var result = _sut.CalculateBasalAnalysis(Array.Empty<TempBasal>(), StartDate, EndDate, Mills(EndDate));
+
+        result.Stats.TotalDeliveredPerDay.Should().Be(0);
     }
 
     #region LoopSystem Overlap
@@ -322,10 +448,10 @@ public class StatisticsServiceTDDTests
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals,
-            Array.Empty<CarbIntake>(), StartDate, EndDate);
+            Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         var ratios = _sut.CalculateDailyBasalBolusRatios(
-            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals);
+            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals, StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         delivery.TotalBasal.Should().BeApproximately(1.417, 0.01,
             "11 clipped to 5-min windows + last record at full 30 min = 1.417 U, not 6.0 U (naive)");
@@ -348,7 +474,7 @@ public class StatisticsServiceTDDTests
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals,
-            Array.Empty<CarbIntake>(), StartDate, EndDate);
+            Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         delivery.TotalBasal.Should().BeApproximately(2.083, 0.01,
             "each clipped window uses its own record's rate; naive would be 7.5 U");
@@ -369,7 +495,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         // Only bolus insulin should be reported
         summary.Totals.Insulin.Bolus.Should().Be(11.0);
@@ -403,7 +529,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         // Basal comes from TempBasal: 20/24 U/hr * 24 hr = 20U
         delivery.TotalBasal.Should().BeApproximately(20.0, 0.01, "long-acting basal = 20U via TempBasal");
@@ -435,7 +561,7 @@ public class StatisticsServiceTDDTests
             MakeTempBasal(rate: 0.8, durationMinutes: 60, mills: Day2Mills), // 0.8U
         };
 
-        var result = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), tempBasals);
+        var result = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), tempBasals, StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(2);
         result.DailyData.Should().HaveCount(2);
@@ -460,11 +586,39 @@ public class StatisticsServiceTDDTests
             MakeBolus(20.0, Day2Mills),
         };
 
-        var result = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>());
+        var result = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         // AverageTdd divides by DaysWithData (days with data), not date range
         result.DaysWithData.Should().Be(2);
         result.AverageTdd.Should().Be(15.0, "30U / 2 days with data = 15 U/day");
+    }
+
+    [Fact]
+    public void DailyRatios_Carbs_ShouldSumPerDayWithoutChangingTheInsulinAverages()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(10.0, Day1Mills),
+            MakeBolus(20.0, Day2Mills),
+        };
+        var carbs = new[]
+        {
+            MakeCarbIntake(45.0, Day1Mills),
+            MakeCarbIntake(30.5, Day1Mills + 3_600_000),
+            MakeCarbIntake(60.0, Day3Mills), // carbs logged, no insulin
+            MakeCarbIntake(0, Day2Mills),
+        };
+
+        var result = _sut.CalculateDailyBasalBolusRatios(
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), StartDate, Mills(EndDate), TimeZoneInfo.Utc, carbIntakes: carbs);
+
+        result.DailyData.Select(d => (d.Date, d.Carbs)).Should().Equal(
+            ("2024-01-01", 75.5),
+            ("2024-01-02", 0.0),
+            ("2024-01-03", 60.0));
+        result.DailyData.Single(d => d.Date == "2024-01-03").Total.Should().Be(0);
+        result.DaysWithData.Should().Be(2, "a carb-only day is not a day with insulin");
+        result.AverageTdd.Should().Be(15.0);
     }
 
     #endregion
@@ -487,8 +641,8 @@ public class StatisticsServiceTDDTests
         };
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
-        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>());
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
+        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         // InsulinDelivery: 70U / 7 days = 10 U/day
         delivery.WindowDays.Should().Be(7);
@@ -564,8 +718,8 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(emptyBoluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            emptyBoluses, emptyAlgorithmBoluses, emptyTempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
-        var ratios = _sut.CalculateDailyBasalBolusRatios(emptyBoluses, emptyAlgorithmBoluses, emptyTempBasals);
+            emptyBoluses, emptyAlgorithmBoluses, emptyTempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
+        var ratios = _sut.CalculateDailyBasalBolusRatios(emptyBoluses, emptyAlgorithmBoluses, emptyTempBasals, StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         summary.Totals.Insulin.Bolus.Should().Be(0);
         delivery.TotalInsulin.Should().Be(0);
@@ -583,7 +737,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
+            boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         // 20 * 0.05 = 1.0U
         summary.Totals.Insulin.Bolus.Should().BeApproximately(1.0, 0.001,
@@ -601,7 +755,7 @@ public class StatisticsServiceTDDTests
         };
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
+            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
 
         delivery.TotalBasal.Should().Be(0);
     }
@@ -641,8 +795,8 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate);
-        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), tempBasals);
+            boluses, Array.Empty<Bolus>(), tempBasals, Array.Empty<CarbIntake>(), StartDate, EndDate, Mills(EndDate));
+        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<Bolus>(), tempBasals, StartDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         var expectedTotalBolus = dailyExpectedBolus.Sum();
         var expectedTotalBasal = dailyExpectedBasal.Sum();
@@ -663,10 +817,12 @@ public class StatisticsServiceTDDTests
 
     #region ClipOverlappingTempBasals
 
+    private const long Minute = 60_000L;
+    private static readonly long Now = Day1Mills + 12 * 60 * Minute;
+
     [Fact]
     public void Clip_NonOverlapping_ShouldBeUnchanged()
     {
-        // 3 hourly records, perfectly adjacent — clip is a no-op
         var records = new[]
         {
             MakeTempBasal(rate: 1.0, durationMinutes: 60, mills: Day1Mills),
@@ -674,12 +830,9 @@ public class StatisticsServiceTDDTests
             MakeTempBasal(rate: 1.2, durationMinutes: 60, mills: Day1Mills + 7_200_000L),
         };
 
-        var clipped = StatisticsService.ClipOverlappingTempBasals(records);
+        var clipped = StatisticsService.ClipOverlappingTempBasals(records, Now);
 
-        clipped.Should().HaveCount(3);
-        for (int i = 0; i < clipped.Count; i++)
-            clipped[i].EffectiveEndMills.Should().Be(records[i].EndMills!.Value,
-                $"non-overlapping record {i} should be unchanged");
+        Spans(clipped).Should().Equal(records.Select(r => (r.StartMills, r.EndMills!.Value)));
     }
 
     [Fact]
@@ -687,19 +840,68 @@ public class StatisticsServiceTDDTests
     {
         var record = MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills);
 
-        var clipped = StatisticsService.ClipOverlappingTempBasals(new[] { record });
+        var clipped = StatisticsService.ClipOverlappingTempBasals(new[] { record }, Now);
 
-        clipped.Should().HaveCount(1);
-        clipped[0].EffectiveEndMills.Should().Be(record.EndMills!.Value);
+        Spans(clipped).Should().Equal((record.StartMills, record.EndMills!.Value));
+    }
+
+    [Fact]
+    public void Clip_RunningRecordWithNothingAfterIt_RunsToNow()
+    {
+        var running = Running(Day1Mills);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([running], Now);
+
+        Spans(clipped).Should().Equal((Day1Mills, Now));
+    }
+
+    [Fact]
+    public void Clip_RunningRecord_RunsToTheNextRecordOfItsDevice()
+    {
+        var running = Running(Day1Mills);
+        var next = MakeTempBasal(rate: 0.5, durationMinutes: 30, mills: Day1Mills + 90 * Minute);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([running, next], Now);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 90 * Minute),
+            (Day1Mills + 90 * Minute, Day1Mills + 120 * Minute));
+    }
+
+    [Fact]
+    public void Clip_RunningRecordThatStartsAfterNow_DeliversNothing()
+    {
+        StatisticsService.ClipOverlappingTempBasals([Running(Now + Minute)], Now).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Clip_Cancel_EndsTheTempBeforeItAndThenTheScheduleRuns()
+    {
+        var temp = MakeTempBasal(rate: 2.0, durationMinutes: 30, mills: Day1Mills);
+        var cancel = Cancel(Day1Mills + 10 * Minute);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([temp, cancel], Now);
+
+        Spans(clipped).Should().Equal((Day1Mills, Day1Mills + 10 * Minute));
+    }
+
+    [Fact]
+    public void Clip_CancelAtTheInstantANewTempStarts_KeepsTheNewTemp()
+    {
+        var temp = MakeTempBasal(rate: 2.0, durationMinutes: 30, mills: Day1Mills + 10 * Minute);
+        var cancel = Cancel(Day1Mills + 10 * Minute);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([temp, cancel], Now);
+
+        Spans(clipped).Should().Equal((Day1Mills + 10 * Minute, Day1Mills + 40 * Minute));
     }
 
     [Fact]
     public void Clip_Overlapping_ShouldTruncateToNextStart()
     {
-        // 3 records starting every 5 min, each with 30-min duration
         var t0 = Day1Mills;
-        var t1 = Day1Mills + 5 * 60_000L;
-        var t2 = Day1Mills + 10 * 60_000L;
+        var t1 = Day1Mills + 5 * Minute;
+        var t2 = Day1Mills + 10 * Minute;
         var records = new[]
         {
             MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: t0),
@@ -707,69 +909,531 @@ public class StatisticsServiceTDDTests
             MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: t2),
         };
 
-        var clipped = StatisticsService.ClipOverlappingTempBasals(records);
+        var clipped = StatisticsService.ClipOverlappingTempBasals(records, Now);
 
-        clipped.Should().HaveCount(3);
-        clipped[0].EffectiveEndMills.Should().Be(t1, "first record clipped to second's start");
-        clipped[1].EffectiveEndMills.Should().Be(t2, "second record clipped to third's start");
-        clipped[2].EffectiveEndMills.Should().Be(records[2].EndMills!.Value, "last record unchanged");
+        Spans(clipped).Should().Equal((t0, t1), (t1, t2), (t2, t2 + 30 * Minute));
     }
 
     [Fact]
-    public void Clip_MultipleDeviceGroups_ShouldClipWithinGroupOnly()
+    public void Clip_ExactSameStartInOneStream_CountsOnce()
     {
-        // Device A: one 60-min record at t0
-        // Device B: one 60-min record at t0 + 5 min
-        // Device A's record must NOT be clipped by Device B's record
-        var t0 = Day1Mills;
-        var tB = Day1Mills + 5 * 60_000L;
-
-        var recordA = new TempBasal
-        {
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(t0).UtcDateTime,
-            EndTimestamp   = DateTimeOffset.FromUnixTimeMilliseconds(t0 + 60 * 60_000L).UtcDateTime,
-            Rate           = 1.0,
-            Origin         = TempBasalOrigin.Algorithm,
-            Device         = "PumpA",
-        };
-        var recordB = new TempBasal
-        {
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(tB).UtcDateTime,
-            EndTimestamp   = DateTimeOffset.FromUnixTimeMilliseconds(tB + 60 * 60_000L).UtcDateTime,
-            Rate           = 1.0,
-            Origin         = TempBasalOrigin.Algorithm,
-            Device         = "PumpB",
-        };
-
-        var clipped = StatisticsService.ClipOverlappingTempBasals(new[] { recordA, recordB });
-
-        clipped.Should().HaveCount(2);
-        var a = clipped.Single(c => c.Tb.Device == "PumpA");
-        var b = clipped.Single(c => c.Tb.Device == "PumpB");
-
-        a.EffectiveEndMills.Should().Be(recordA.EndMills!.Value,
-            "device A is not clipped by device B");
-        b.EffectiveEndMills.Should().Be(recordB.EndMills!.Value,
-            "device B is not clipped by device A");
-    }
-
-    [Fact]
-    public void Clip_ExactSameStart_ZeroDuration()
-    {
-        // Two records with identical start (exact cross-source duplicate)
         var records = new[]
         {
             MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills),
-            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills), // same device (null), same start
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills),
         };
 
-        var clipped = StatisticsService.ClipOverlappingTempBasals(records);
+        var clipped = StatisticsService.ClipOverlappingTempBasals(records, Now);
 
-        clipped.Should().HaveCount(2);
-        // Whichever sorts first gets EffectiveEnd = Day1Mills (zero duration)
-        clipped.Should().Contain(c => c.EffectiveEndMills == c.Tb.StartMills,
-            "one duplicate collapses to zero duration");
+        Spans(clipped).Should().Equal((Day1Mills, Day1Mills + 30 * Minute));
     }
+
+    [Fact]
+    public void Clip_StreamsThatDoNotOverlap_AreBothKeptWhole()
+    {
+        var loop = Stream("openaps://Trio", Day1Mills, count: 3, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var mirror = Stream("tidepool", Day1Mills + 60 * Minute, count: 3, everyMinutes: 5, durationMinutes: 30);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. loop, .. mirror], Now);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 5 * Minute),
+            (Day1Mills + 5 * Minute, Day1Mills + 10 * Minute),
+            (Day1Mills + 10 * Minute, Day1Mills + 40 * Minute),
+            (Day1Mills + 60 * Minute, Day1Mills + 65 * Minute),
+            (Day1Mills + 65 * Minute, Day1Mills + 70 * Minute),
+            (Day1Mills + 70 * Minute, Day1Mills + 100 * Minute));
+    }
+
+    [Fact]
+    public void Clip_MirrorOverlappingTheLoop_IsClippedWhereTheLoopRuns()
+    {
+        // The loop runs from 30 to 50 min; the mirror writes 30-min temps every 10 min from 0 to 60 min.
+        var loop = Stream("openaps://Trio", Day1Mills + 30 * Minute, count: 4, everyMinutes: 5, durationMinutes: 5, loop: true);
+        var mirror = Stream("tidepool", Day1Mills, count: 7, everyMinutes: 10, durationMinutes: 30);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, .. loop], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "tidepool")).Should().Equal(
+            (Day1Mills, Day1Mills + 10 * Minute),
+            (Day1Mills + 10 * Minute, Day1Mills + 20 * Minute),
+            (Day1Mills + 20 * Minute, Day1Mills + 30 * Minute),
+            (Day1Mills + 50 * Minute, Day1Mills + 60 * Minute),
+            (Day1Mills + 60 * Minute, Day1Mills + 90 * Minute));
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Should().Equal(
+            (Day1Mills + 30 * Minute, Day1Mills + 35 * Minute),
+            (Day1Mills + 35 * Minute, Day1Mills + 40 * Minute),
+            (Day1Mills + 40 * Minute, Day1Mills + 45 * Minute),
+            (Day1Mills + 45 * Minute, Day1Mills + 50 * Minute));
+    }
+
+    [Fact]
+    public void Clip_PumpSwitch_TheOldStreamsRunningLastRecordEndsAtTheNewStreamsFirstRecord()
+    {
+        var old = Stream("openaps://Trio", Day1Mills, count: 2, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var oldRunning = RunningTemp("openaps://Trio", Day1Mills + 10 * Minute, loop: true);
+        var replacement = new[]
+        {
+            Temp("medtronic", Day1Mills + 30 * Minute, 30),
+            Temp("medtronic", Day1Mills + 60 * Minute, 30),
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. old, oldRunning, .. replacement], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Should().Equal(
+            (Day1Mills, Day1Mills + 5 * Minute),
+            (Day1Mills + 5 * Minute, Day1Mills + 10 * Minute),
+            (Day1Mills + 10 * Minute, Day1Mills + 30 * Minute));
+        Spans(clipped.Where(tb => tb.Device == "medtronic")).Should().Equal(
+            (Day1Mills + 30 * Minute, Day1Mills + 60 * Minute),
+            (Day1Mills + 60 * Minute, Day1Mills + 90 * Minute));
+    }
+
+    [Fact]
+    public void Clip_MirrorWithARunningLastRecord_StillLosesToTheLoopsClosedRecords()
+    {
+        var loop = Stream("openaps://Trio", Day1Mills, count: 3, everyMinutes: 10, durationMinutes: 10, loop: true);
+        var mirrorRunning = RunningTemp("tidepool", Day1Mills + 15 * Minute);
+        var mirror = new[] { Temp("tidepool", Day1Mills + 5 * Minute, 30), mirrorRunning };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, .. loop], Now);
+
+        clipped.Should().NotContain(tb => tb.Device == "tidepool");
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 10 * Minute),
+            (Day1Mills + 10 * Minute, Day1Mills + 20 * Minute),
+            (Day1Mills + 20 * Minute, Day1Mills + 30 * Minute));
+    }
+
+    [Fact]
+    public void Clip_MirrorCopyStampedJustAfterTheLoopsRunningTemp_DoesNotEndIt()
+    {
+        var loop = new[]
+        {
+            Temp("openaps://Trio", Day1Mills - 5 * Minute, 5, loop: true),
+            RunningTemp("openaps://Trio", Day1Mills, loop: true),
+        };
+        var mirror = new[]
+        {
+            Temp("tidepool", Day1Mills - 5 * Minute, 10),
+            Temp("tidepool", Day1Mills + Minute, 10),
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, .. loop], Now);
+
+        clipped.Should().OnlyContain(tb => tb.Device == "openaps://Trio");
+        Spans(clipped).Should().Equal((Day1Mills - 5 * Minute, Day1Mills), (Day1Mills, Now));
+    }
+
+    [Fact]
+    public void Clip_MirrorRunningCopyStampedJustAfterTheLoopsRunningTemp_KeepsTheLoopsRate()
+    {
+        var loop = new[]
+        {
+            Temp("openaps://Trio", Day1Mills - 5 * Minute, 5, loop: true),
+            RunningTemp("openaps://Trio", Day1Mills, loop: true),
+        };
+        var mirrorRunning = RunningTemp("tidepool", Day1Mills + Minute);
+        mirrorRunning.Rate = 0.5;
+        var mirror = new[] { Temp("tidepool", Day1Mills - 5 * Minute, 10), mirrorRunning };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, .. loop], Now);
+
+        clipped.Should().OnlyContain(tb => tb.Device == "openaps://Trio" && tb.Rate == 1.5);
+        Spans(clipped).Should().Equal((Day1Mills - 5 * Minute, Day1Mills), (Day1Mills, Now));
+    }
+
+    [Fact]
+    public void Clip_MirrorWithAnEarlierRecordAndOnePastTheSkewTolerance_EndsTheRunningTempThere()
+    {
+        var running = RunningTemp("openaps://Trio", Day1Mills, loop: true);
+        var mirror = new[]
+        {
+            Temp("tidepool", Day1Mills - 30 * Minute, 10),
+            Temp("tidepool", Day1Mills + 20 * Minute, 10),
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, running], Now);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills - 30 * Minute, Day1Mills - 20 * Minute),
+            (Day1Mills, Day1Mills + 20 * Minute),
+            (Day1Mills + 20 * Minute, Day1Mills + 30 * Minute));
+        clipped.Select(tb => tb.Device).Should().Equal("tidepool", "openaps://Trio", "tidepool");
+    }
+
+    [Fact]
+    public void Clip_RunningRecordOlderThanTheLongestTemp_EndsADayAfterItStarts()
+    {
+        var running = Running(Day1Mills);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([running], Day1Mills + 30 * 60 * Minute);
+
+        Spans(clipped).Should().Equal((Day1Mills, Day1Mills + 24 * 60 * Minute));
+    }
+
+    [Fact]
+    public void Clip_MirrorAheadWithARunningLastRecord_LeavesTheLoopsRunningTempToNow()
+    {
+        var loop = Stream("openaps://Trio", At(0), count: 12, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var mirror = WithRate(0.5, [
+            .. Stream("tidepool", At(-1), count: 12, everyMinutes: 5, durationMinutes: 30),
+            RunningTemp("tidepool", At(59))]);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [.. loop, RunningTemp("openaps://Trio", At(60), loop: true), .. mirror], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "tidepool")).Should().Equal((At(-1), At(0)));
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Last().Should().Be((At(60), Now));
+    }
+
+    [Fact]
+    public void Clip_MirrorBehindWithARunningLastRecord_LeavesTheLoopsRunningTempToNow()
+    {
+        var loop = Stream("openaps://Trio", At(0), count: 12, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var mirror = WithRate(0.5, [
+            .. Stream("tidepool", At(1), count: 12, everyMinutes: 5, durationMinutes: 30),
+            RunningTemp("tidepool", At(61))]);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [.. loop, RunningTemp("openaps://Trio", At(60), loop: true), .. mirror], Now);
+
+        clipped.Should().OnlyContain(tb => tb.Device == "openaps://Trio");
+        Spans(clipped).Last().Should().Be((At(60), Now));
+    }
+
+    [Fact]
+    public void Clip_MirrorBehindRunningPastTheLoopsLastRecord_LeavesTheLoopsRunningTempToNow()
+    {
+        var loop = Stream("openaps://Trio", At(0), count: 12, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var mirror = WithRate(0.5, Stream("tidepool", At(1), count: 13, everyMinutes: 5, durationMinutes: 30));
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [.. loop, RunningTemp("openaps://Trio", At(60), loop: true), .. mirror], Now);
+
+        clipped.Should().OnlyContain(tb => tb.Device == "openaps://Trio");
+        Spans(clipped).Last().Should().Be((At(60), Now));
+    }
+
+    [Fact]
+    public void Clip_MirrorAheadAndClosed_LeavesTheLoopsRunningTempToNow()
+    {
+        var loop = Stream("openaps://Trio", At(0), count: 12, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var mirror = WithRate(0.5, Stream("tidepool", At(-1), count: 13, everyMinutes: 5, durationMinutes: 30));
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [.. loop, RunningTemp("openaps://Trio", At(60), loop: true), .. mirror], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "tidepool")).Should().Equal((At(-1), At(0)));
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Last().Should().Be((At(60), Now));
+    }
+
+    [Fact]
+    public void Clip_MirrorFillingAGapInTheLoop_DeliversOnlyInTheGap()
+    {
+        TempBasal[] loop =
+        [
+            .. Stream("openaps://Trio", At(0), count: 12, everyMinutes: 5, durationMinutes: 5, loop: true),
+            .. Stream("openaps://Trio", At(120), count: 6, everyMinutes: 5, durationMinutes: 5, loop: true),
+            RunningTemp("openaps://Trio", At(150), loop: true),
+        ];
+        var mirror = WithRate(0.5, [
+            .. Stream("tidepool", At(1), count: 30, everyMinutes: 5, durationMinutes: 5),
+            RunningTemp("tidepool", At(151))]);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. loop, .. mirror], Now);
+
+        var fromMirror = Spans(clipped.Where(tb => tb.Device == "tidepool")).ToList();
+        fromMirror.First().Item1.Should().Be(At(60));
+        fromMirror.Last().Item2.Should().Be(At(120));
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Last().Should().Be((At(150), Now));
+    }
+
+    [Fact]
+    public void Clip_SwitchBackToALowerRankedPumpWithEarlierHistory_EndsTheLoopsRunningTempAtItsRecords()
+    {
+        var oldPump = WithRate(0.8, Stream("medtronic", At(-300), count: 6, everyMinutes: 30, durationMinutes: 30));
+        var loop = Stream("openaps://Trio", At(-120), count: 36, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var newPump = WithRate(0.8, [
+            .. Stream("medtronic", At(90), count: 3, everyMinutes: 30, durationMinutes: 30),
+            RunningTemp("medtronic", At(180))]);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [.. oldPump, .. loop, RunningTemp("openaps://Trio", At(60), loop: true), .. newPump], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Last().Should().Be((At(60), At(90)));
+        Spans(clipped.Where(tb => tb.Device == "medtronic" && tb.StartMills >= At(0))).Should().Equal(
+            (At(90), At(120)), (At(120), At(150)), (At(150), At(180)), (At(180), Now));
+    }
+
+    [Fact]
+    public void Clip_SwitchBackToALowerRankedPumpWithOneEarlierRecord_EndsTheLoopsRunningTempAtItsRecords()
+    {
+        var loop = Stream("openaps://Trio", At(-120), count: 36, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var newPump = WithRate(0.8, Stream("medtronic", At(90), count: 21, everyMinutes: 30, durationMinutes: 30));
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [Temp("medtronic", At(-300), 30), .. loop, RunningTemp("openaps://Trio", At(60), loop: true), .. newPump],
+            Now);
+
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Last().Should().Be((At(60), At(90)));
+        var fromNewPump = Spans(clipped.Where(tb => tb.Device == "medtronic" && tb.StartMills >= At(0))).ToList();
+        fromNewPump.First().Item1.Should().Be(At(90));
+        fromNewPump.Last().Item2.Should().Be(Now);
+        fromNewPump.Sum(span => span.Item2 - span.Item1).Should().Be(Now - At(90));
+    }
+
+    [Fact]
+    public void Clip_LoopStopsWhileTheMirrorRecordsOn_TheMirrorTakesOverPastTheSkewTolerance()
+    {
+        var loop = Stream("openaps://Trio", At(0), count: 11, everyMinutes: 5, durationMinutes: 5, loop: true);
+        var mirror = WithRate(0.5, Stream("tidepool", At(1), count: 60, everyMinutes: 5, durationMinutes: 5));
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(
+            [.. loop, RunningTemp("openaps://Trio", At(55), loop: true), .. mirror], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "openaps://Trio")).Last().Should().Be((At(55), At(66)));
+        var fromMirror = Spans(clipped.Where(tb => tb.Device == "tidepool")).ToList();
+        fromMirror.First().Should().Be((At(66), At(71)));
+        fromMirror.Last().Should().Be((At(296), At(301)));
+        clipped.Should().NotContain(tb => tb.EndMills > At(301));
+    }
+
+    [Fact]
+    public void Clip_MirrorWhoseEarlierRecordsAreNotInTheInput_ReadsAsASuccessor()
+    {
+        var running = RunningTemp("openaps://Trio", Day1Mills, loop: true);
+        var mirrorInWindow = Temp("tidepool", Day1Mills + 20 * Minute, 10);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([mirrorInWindow, running], Now);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 20 * Minute),
+            (Day1Mills + 20 * Minute, Day1Mills + 30 * Minute));
+    }
+
+    [Fact]
+    public void Clip_MirrorRecordSpanningAGapInTheLoop_KeepsThePiecesTheLoopLeavesOpen()
+    {
+        var loop = new[]
+        {
+            Temp("openaps://Trio", Day1Mills, 10, loop: true),
+            Temp("openaps://Trio", Day1Mills + 20 * Minute, 10, loop: true),
+        };
+        var mirror = Temp("tidepool", Day1Mills - 5 * Minute, 40);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([mirror, .. loop], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "tidepool")).Should().Equal(
+            (Day1Mills - 5 * Minute, Day1Mills),
+            (Day1Mills + 10 * Minute, Day1Mills + 20 * Minute),
+            (Day1Mills + 30 * Minute, Day1Mills + 35 * Minute));
+    }
+
+    [Fact]
+    public void Clip_LoopStreamKnownOnlyByItsSnapshotLink_Wins()
+    {
+        var loop = Temp("openaps://Trio", Day1Mills, 30);
+        loop.ApsSnapshotId = Guid.NewGuid();
+        var mirror = Stream("tidepool", Day1Mills, count: 3, everyMinutes: 10, durationMinutes: 10);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, loop], Now);
+
+        clipped.Should().ContainSingle().Which.Device.Should().Be("openaps://Trio");
+    }
+
+    [Fact]
+    public void Clip_NoSnapshotEvidence_TheAidUploaderWinsWithFewerRecords()
+    {
+        var loop = Temp("openaps://Trio", Day1Mills, 30);
+        var mirror = Stream("tidepool", Day1Mills, count: 3, everyMinutes: 10, durationMinutes: 10);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, loop], Now);
+
+        clipped.Should().ContainSingle().Which.Device.Should().Be("openaps://Trio");
+    }
+
+    [Fact]
+    public void Clip_NoSnapshotEvidence_TwoOverlappingWindowsPickTheSameStream()
+    {
+        // The mirror outnumbers the loop in the first window and not in the second.
+        var loop = Stream("openaps://Trio", Day1Mills, count: 12, everyMinutes: 10, durationMinutes: 30);
+        var mirror = Stream("tidepool", Day1Mills, count: 12, everyMinutes: 5, durationMinutes: 5);
+        TempBasal[] all = [.. loop, .. mirror];
+        bool StartsIn(TempBasal tb, long from, long to) => tb.StartMills >= from && tb.StartMills < to;
+
+        var first = StatisticsService.ClipOverlappingTempBasals(
+            all.Where(tb => StartsIn(tb, Day1Mills, Day1Mills + 60 * Minute)), Now);
+        var second = StatisticsService.ClipOverlappingTempBasals(
+            all.Where(tb => StartsIn(tb, Day1Mills + 30 * Minute, Day1Mills + 120 * Minute)), Now);
+
+        bool InOverlap(TempBasal tb) => tb.StartMills < Day1Mills + 60 * Minute && tb.EndMills > Day1Mills + 30 * Minute;
+        first.Where(InOverlap).Select(tb => tb.Device).Should().OnlyContain(d => d == "openaps://Trio");
+        second.Where(InOverlap).Select(tb => tb.Device).Should().OnlyContain(d => d == "openaps://Trio");
+    }
+
+    [Fact]
+    public void Clip_NoLoopStream_TheStreamWithMoreRecordsWins()
+    {
+        var coarse = Temp("pump-a", Day1Mills, 30);
+        var fine = Stream("pump-b", Day1Mills + 10 * Minute, count: 2, everyMinutes: 5, durationMinutes: 5);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([coarse, .. fine], Now);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 10 * Minute),
+            (Day1Mills + 10 * Minute, Day1Mills + 15 * Minute),
+            (Day1Mills + 15 * Minute, Day1Mills + 20 * Minute),
+            (Day1Mills + 20 * Minute, Day1Mills + 30 * Minute));
+        clipped.Select(tb => tb.Device).Should().Equal("pump-a", "pump-b", "pump-b", "pump-a");
+    }
+
+    [Fact]
+    public void Clip_NoLoopStreamAndEqualCounts_TheEarlierStreamWins()
+    {
+        var earlier = Temp("pump-b", Day1Mills, 30);
+        var later = Temp("pump-a", Day1Mills + 10 * Minute, 30);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([later, earlier], Now);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 30 * Minute),
+            (Day1Mills + 30 * Minute, Day1Mills + 40 * Minute));
+        clipped.Select(tb => tb.Device).Should().Equal("pump-b", "pump-a");
+    }
+
+    [Fact]
+    public void Clip_MirrorJudgedByAnotherDevicesSnapshot_LosesToTheLoopStatingItsOrigin()
+    {
+        var loop = WithRate(0, Stream("loop://iPhone", Day1Mills, count: 6, everyMinutes: 5, durationMinutes: 30));
+        foreach (var tb in loop)
+            tb.OriginEvidence = TempBasalOriginEvidence.Reported;
+        var mirror = WithRate(3.0, [Temp("tidepool", Day1Mills, 30)]);
+        mirror[0].OriginEvidence = TempBasalOriginEvidence.OtherDevice;
+        mirror[0].ApsSnapshotId = Guid.NewGuid();
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, .. loop], Now);
+
+        clipped.Should().OnlyContain(tb => tb.Device == "loop://iPhone");
+        clipped.Sum(tb => StatisticsService.GetTempBasalInsulin(tb)!.Value).Should().Be(0, "the loop's own records say it zero-temped");
+    }
+
+    [Fact]
+    public void Clip_StreamJudgedOnlyByAnotherDevice_RanksBelowAStreamStatingItsOrigin()
+    {
+        var stated = Temp("pump-a", Day1Mills, 30);
+        stated.OriginEvidence = TempBasalOriginEvidence.Reported;
+        var mirror = Stream("pump-b", Day1Mills, count: 3, everyMinutes: 10, durationMinutes: 10);
+        foreach (var tb in mirror)
+            tb.OriginEvidence = TempBasalOriginEvidence.OtherDevice;
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. mirror, stated], Now);
+
+        clipped.Should().ContainSingle().Which.Device.Should().Be("pump-a", "the mirror's three records would otherwise outnumber it");
+    }
+
+    [Fact]
+    public void Clip_RunningRecordBeforeAnUploadGap_StopsAfterTheLongestTempAPumpAccepts()
+    {
+        var running = Running(Day1Mills);
+        var next = MakeTempBasal(rate: 0.5, durationMinutes: 30, mills: Day1Mills + 3 * 24 * 60 * Minute);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([running, next], next.EndMills!.Value);
+
+        Spans(clipped).Should().Equal(
+            (Day1Mills, Day1Mills + 24 * 60 * Minute),
+            (next.StartMills, next.EndMills!.Value));
+    }
+
+    [Fact]
+    public void Clip_RunningRecordBeforeItsStreamsNextRecord_IsEndedByAnotherStreamRecordingOn()
+    {
+        var running = RunningTemp("pump-a", At(0));
+        TempBasal[] after = [Temp("pump-a", At(180), 30), Temp("pump-a", At(210), 30)];
+        TempBasal[] other = [Temp("pump-b", At(-30), 20), Temp("pump-b", At(30), 5)];
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([running, .. after, .. other], Now);
+
+        Spans(clipped.Where(tb => tb.Device == "pump-a")).Should().Equal(
+            (At(0), At(30)), (At(180), At(210)), (At(210), At(240)));
+    }
+
+    [Fact]
+    public void InsulinDelivery_MirrorOverlappingTheLoop_CountsTheLoopOnce()
+    {
+        var loop = Stream("openaps://Trio", Day1Mills, count: 12, everyMinutes: 5, durationMinutes: 30, loop: true);
+        var mirror = Stream("tidepool", Day1Mills + 2 * Minute, count: 12, everyMinutes: 5, durationMinutes: 5);
+        foreach (var tb in mirror)
+            tb.Rate = 3.0;
+
+        var loopOnly = _sut.CalculateInsulinDeliveryStatistics([], [], loop, [], StartDate, EndDate, Mills(EndDate));
+        var both = _sut.CalculateInsulinDeliveryStatistics([], [], [.. loop, .. mirror], [], StartDate, EndDate, Mills(EndDate));
+
+        both.TotalBasal.Should().BeApproximately(loopOnly.TotalBasal, 1e-9);
+    }
+
+    [Fact]
+    public void InsulinDelivery_RunningTemp_CountsToTheWindowEnd()
+    {
+        var running = Running(Mills(EndDate) - 120 * Minute);
+
+        var delivery = _sut.CalculateInsulinDeliveryStatistics([], [], [running], [], StartDate, EndDate, Mills(EndDate));
+
+        delivery.TotalBasal.Should().BeApproximately(2.0, 1e-9);
+    }
+
+    [Fact]
+    public void InsulinDelivery_WindowEndingAfterNow_StopsARunningTempAtNow()
+    {
+        var now = Mills(EndDate) - 90 * Minute;
+        var running = Running(Mills(EndDate) - 120 * Minute);
+
+        var delivery = _sut.CalculateInsulinDeliveryStatistics([], [], [running], [], StartDate, EndDate, now);
+
+        delivery.TotalBasal.Should().BeApproximately(0.5, 1e-9);
+        delivery.WindowDays.Should().Be(7);
+    }
+
+    private static IEnumerable<(long, long)> Spans(IEnumerable<TempBasal> clipped) =>
+        clipped.Select(tb => (tb.StartMills, tb.EndMills!.Value));
+
+    private static TempBasal Running(long mills)
+    {
+        var tb = MakeTempBasal(rate: 1.0, durationMinutes: 0, mills);
+        tb.EndTimestamp = null;
+        return tb;
+    }
+
+    private static TempBasal RunningTemp(string device, long mills, bool loop = false)
+    {
+        var tb = Temp(device, mills, 0, loop);
+        tb.EndTimestamp = null;
+        return tb;
+    }
+
+    private static long At(int minutes) => Day1Mills + minutes * Minute;
+
+    private static TempBasal[] WithRate(double rate, TempBasal[] temps)
+    {
+        foreach (var tb in temps)
+            tb.Rate = rate;
+        return temps;
+    }
+
+    private static TempBasal Cancel(long mills) => MakeTempBasal(rate: 0, durationMinutes: 0, mills);
+
+    private static TempBasal Temp(string device, long mills, double durationMinutes, bool loop = false)
+    {
+        var tb = MakeTempBasal(rate: 1.5, durationMinutes, mills);
+        tb.Device = device;
+        if (loop)
+            tb.OriginEvidence = TempBasalOriginEvidence.Snapshot;
+        return tb;
+    }
+
+    private static TempBasal[] Stream(
+        string device, long from, int count, int everyMinutes, double durationMinutes, bool loop = false) =>
+        [.. Enumerable.Range(0, count).Select(i => Temp(device, from + i * everyMinutes * Minute, durationMinutes, loop))];
 
     #endregion
 
@@ -783,6 +1447,22 @@ public class StatisticsServiceTDDTests
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills ?? Day1Mills).UtcDateTime,
             Automatic = automatic,
         };
+    }
+
+    private static CarbIntake MakeCarbIntake(double carbs, long mills)
+    {
+        return new CarbIntake
+        {
+            Carbs = carbs,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
+        };
+    }
+
+    private static TempBasal MakeScheduledTempBasal(double rate, double durationMinutes, long mills)
+    {
+        var tempBasal = MakeTempBasal(rate, durationMinutes, mills);
+        tempBasal.Origin = TempBasalOrigin.Scheduled;
+        return tempBasal;
     }
 
     private static TempBasal MakeTempBasal(double rate, double durationMinutes, long? mills = null)

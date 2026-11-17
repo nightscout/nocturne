@@ -9,6 +9,9 @@ namespace Nocturne.API.OpenApi;
 /// for runtime Scalar docs. Moves the XML summary into description and derives a readable
 /// title from the action method name.
 /// </summary>
+/// <remarks>
+/// The XML <c>&lt;remarks&gt;</c> are dropped; see <see cref="SummaryToDescriptionOperationProcessor"/>.
+/// </remarks>
 public sealed class SummaryToDescriptionOperationTransformer : IOpenApiOperationTransformer
 {
     public Task TransformAsync(
@@ -16,9 +19,7 @@ public sealed class SummaryToDescriptionOperationTransformer : IOpenApiOperation
         OpenApiOperationTransformerContext context,
         CancellationToken cancellationToken)
     {
-        // Move current summary → description (only if description is empty).
-        if (!string.IsNullOrWhiteSpace(operation.Summary) && string.IsNullOrWhiteSpace(operation.Description))
-            operation.Description = operation.Summary;
+        operation.Description = SummaryToDescriptionOperationProcessor.PublishedDescription(operation.Summary);
 
         // Derive a readable title from the action method name.
         var methodName = (context.Description.ActionDescriptor as ControllerActionDescriptor)

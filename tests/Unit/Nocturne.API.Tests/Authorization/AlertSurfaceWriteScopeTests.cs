@@ -2,12 +2,10 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
-using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -47,7 +45,8 @@ public class AlertSurfaceWriteScopeTests
     ];
 
     /// <summary>
-    /// Write actions on the alert surface that deliberately carry no scope gate, with the reason.
+    /// Write actions on the alert surface that deliberately carry no scope gate, or only a read
+    /// gate, with the reason.
     /// Anything else fails <see cref="EveryAlertSurfaceWriteAction_RequiresAlertsReadWrite"/>.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Ungated =
@@ -70,6 +69,12 @@ public class AlertSurfaceWriteScopeTests
             ["NotificationsController.MarkAsRead"] = "read state on the caller's own row",
             ["NotificationsController.MarkAllAsRead"] = "read state on the caller's own rows",
             ["NotificationsController.DismissNotification"] = "archive flag on the caller's own row",
+
+            // Gated on alerts.read rather than alerts.readwrite, so a share or guest link holding
+            // alerts.read can say it saw a firing alarm. AlertReceiptService appends one receipt per
+            // viewer and touches no excursion, instance, mute or delivery, so escalation is unchanged
+            // for everyone, including the caller.
+            ["AlertsController.MarkSeen"] = "append-only receipt; changes no alert state",
         };
 
     /// <summary>
@@ -236,6 +241,17 @@ public class AlertSurfaceWriteScopeTests
     }
 
     [Fact]
+    public void AnAlertsAcknowledgeCaller_ReachesOnlyTheSnooze()
+    {
+        var reached = GatedWriteActions()
+            .Where(x => Evaluate(x.Controller, x.Action, authenticated: true,
+                new HashSet<string> { Scope.AlertsAcknowledge }) is null)
+            .Select(x => $"{x.Controller.Name}.{x.Action.Name}");
+
+        reached.Should().BeEquivalentTo(["AlertsController.SnoozeInstance"]);
+    }
+
+    [Fact]
     public void ReadOnlyGuestSession_IsDeniedEveryAlertSurfaceWrite()
     {
         // The widest grant a guest link can hold: ValidateGrantScopes caps a guest at
@@ -378,48 +394,15 @@ public class AlertSurfaceWriteScopeTests
             yield return declared.WriteScope;
     }
 
-    /// <summary>
-    /// Runs the gate an action actually declares, in MVC's order: the authorization filters first,
-    /// then the action filters (<see cref="RequireDeclaredWriteScopeAttribute"/> is one). Returns
-    /// the short-circuit result, or null when the request would proceed to the handler.
-    /// </summary>
     private static IActionResult? Evaluate(
-        Type controller, MethodInfo action, bool authenticated, IReadOnlySet<string> grantedScopes)
-    {
-        var httpContext = new DefaultHttpContext();
-        if (authenticated)
-            httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
-        httpContext.Items["GrantedScopes"] = grantedScopes;
-
-        var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
-        var filters = action.GetCustomAttributes(inherit: true);
-
-        foreach (var filter in filters.OfType<IAuthorizationFilter>())
-        {
-            var authorizationContext = new AuthorizationFilterContext(actionContext, []);
-            filter.OnAuthorization(authorizationContext);
-            if (authorizationContext.Result is not null)
-                return authorizationContext.Result;
-        }
-
-        var executingContext = new ActionExecutingContext(
-            actionContext, [], new Dictionary<string, object?>(), ControllerInstance(controller));
-
-        foreach (var filter in filters.OfType<IActionFilter>())
-        {
-            filter.OnActionExecuting(executingContext);
-            if (executingContext.Result is not null)
-                return executingContext.Result;
-        }
-
-        return null;
-    }
+        Type controller, MethodInfo action, bool authenticated, IReadOnlySet<string> grantedScopes) =>
+        ActionGate.Evaluate(
+            controller, action, grantedScopes, authenticated ? new AuthContext { IsAuthenticated = true } : null);
 
     /// <summary>
-    /// A controller instance for reading <see cref="IWriteScopedController.WriteScope"/> and for
-    /// running the write-scope filters. The getter returns a constant and the filters touch nothing
-    /// else, so the controller is left unconstructed — these controllers take services with no
-    /// mockable constructor.
+    /// A controller instance for reading <see cref="IWriteScopedController.WriteScope"/>. The getter
+    /// returns a constant, so the controller is left unconstructed — these controllers take services
+    /// with no mockable constructor.
     /// </summary>
     private static object ControllerInstance(Type controller) =>
         RuntimeHelpers.GetUninitializedObject(controller);

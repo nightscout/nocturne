@@ -7,9 +7,6 @@ namespace Nocturne.Core.Models.Configuration;
 /// </summary>
 public class WebhookNotificationSettings
 {
-    /// <summary>
-    /// Whether webhook delivery is enabled.
-    /// </summary>
     [JsonPropertyName("enabled")]
     public bool Enabled { get; init; }
 
@@ -31,9 +28,6 @@ public class WebhookNotificationSettings
     [JsonPropertyName("hasSecret")]
     public bool HasSecret { get; init; }
 
-    /// <summary>
-    /// Signature version sent with webhook requests.
-    /// </summary>
     [JsonPropertyName("signatureVersion")]
     public string SignatureVersion { get; init; } = "v1";
 }

@@ -1,14 +1,16 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import { bg, bgDelta, bgLabel, formatLocale, time } from "$lib/utils/formatting";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
+  import { bg, bgDelta, bgLabel, formatLocale, time } from "#lib/utils/formatting.js";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import InspectionChart from "./InspectionChart.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     open: boolean;
     timestamp: Date;
     glucoseValue: number;
@@ -60,6 +62,7 @@
     onClose,
     onNavigateDelivery,
     onNavigateTreatment,
+    glucoseUnits,
   }: Props = $props();
 
   const sourceDisplayName = $derived(getDataSourceDisplayName(dataSource));
@@ -69,11 +72,11 @@
     () => timestamp,
   );
 
-  // Determine range status (at-threshold is "In Range", matching getGlucoseColor)
+  // Determine range status (at-threshold is "In range", matching getGlucoseColor)
   const rangeStatus = $derived.by(() => {
     if (glucoseValue > highThreshold) return "High";
     if (glucoseValue < lowThreshold) return "Low";
-    return "In Range";
+    return "In range";
   });
 
   // eslint-disable-next-line shadcn/require-static-classes -- the only badge tinted by glucose range; a Badge variant per range would serve this one call site.
@@ -104,9 +107,9 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-3">
         <span class="text-3xl font-bold text-(--glucose-color)" style:--glucose-color={glucoseColor}>
-          {bg(glucoseValue)}
+          {bg(glucoseValue, glucoseUnits)}
         </span>
-        <span class="text-sm text-muted-foreground">{bgLabel()}</span>
+        <span class="text-sm text-muted-foreground">{bgLabel(glucoseUnits)}</span>
         <Badge variant="outline" class={rangeBadgeClass}>
           {rangeStatus}
         </Badge>
@@ -128,7 +131,7 @@
     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm py-3">
       {#if delta != null}
         <span class="text-muted-foreground">Delta</span>
-        <span class="font-medium">{bgDelta(delta)} {bgLabel()}</span>
+        <span class="font-medium">{bgDelta(delta, true, glucoseUnits)} {bgLabel(glucoseUnits)}</span>
       {/if}
 
       {#if iob != null}
@@ -147,7 +150,7 @@
       {/if}
 
       {#if pumpMode}
-        <span class="text-muted-foreground">Pump Mode</span>
+        <span class="text-muted-foreground">Pump mode</span>
         <span class="font-medium">{pumpMode}</span>
       {/if}
 
@@ -173,6 +176,7 @@
     </div>
 
     <InspectionChart
+      {glucoseUnits}
       {glucoseData}
       centerTime={timestamp}
       predictionData={aps.predictionData}

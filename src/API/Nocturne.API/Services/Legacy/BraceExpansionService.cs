@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Nocturne.Core.Contracts.Legacy;
 
@@ -10,86 +11,80 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IBraceExpansionService"/>
 public class BraceExpansionService : IBraceExpansionService
 {
+    private static readonly Regex NumericRange = new(@"\{(\d+)\.\.(\d+)\}", RegexOptions.CultureInvariant);
+    private static readonly Regex Sequence = new(@"\{([^}]+)\}", RegexOptions.CultureInvariant);
+
     /// <inheritdoc/>
     /// <remarks>
-    /// Supports numeric ranges (e.g. <c>{14..16}</c>) and comma-separated alternatives
-    /// (e.g. <c>{foo,bar}</c>). Nested braces and leading-zero padding are also handled.
+    /// Supports numeric ranges (e.g. <c>{14..16}</c>, or descending <c>{16..14}</c>) and
+    /// comma-separated alternatives (e.g. <c>{foo,bar}</c>). Nested braces and leading-zero padding
+    /// are also handled. Every group yields at least one string, which is what bounds the work by
+    /// <see cref="TimePatternLimits"/>.
     /// </remarks>
-    /// <param name="pattern">The brace-expansion pattern to expand.</param>
-    /// <returns>An enumerable of the concrete strings produced by the expansion.</returns>
     public IEnumerable<string> ExpandBraces(string pattern)
     {
         if (string.IsNullOrEmpty(pattern))
-        {
-            return new[] { "" };
-        }
+            return [""];
 
-        // Handle numeric ranges like {14..16} or {00..15}
-        var numericRangeRegex = new Regex(@"\{(\d+)\.\.(\d+)\}");
-        var match = numericRangeRegex.Match(pattern);
+        if (pattern.Length > TimePatternLimits.MaxPatternLength)
+            throw new TimePatternRejectedException(
+                $"A time pattern may be at most {TimePatternLimits.MaxPatternLength} characters");
 
-        if (match.Success)
-        {
-            var startStr = match.Groups[1].Value;
-            var endStr = match.Groups[2].Value;
+        if (pattern.Count(c => c == '{') > TimePatternLimits.MaxGroups)
+            throw new TimePatternRejectedException(
+                $"A time pattern may have at most {TimePatternLimits.MaxGroups} brace groups");
 
-            if (int.TryParse(startStr, out var start) && int.TryParse(endStr, out var end))
-            {
-                var results = new List<string>();
-                var padLength = Math.Max(startStr.Length, endStr.Length);
-
-                for (var i = start; i <= end; i++)
-                {
-                    var paddedNumber = i.ToString().PadLeft(padLength, '0');
-                    var expandedPattern = pattern.Replace(match.Value, paddedNumber);
-
-                    // Recursively expand any remaining braces
-                    results.AddRange(ExpandBraces(expandedPattern));
-                }
-
-                return results;
-            }
-        }
-
-        // Handle sequence patterns like {a,b,c}
-        var sequenceRegex = new Regex(@"\{([^}]+)\}");
-        match = sequenceRegex.Match(pattern);
-
-        if (match.Success)
-        {
-            var content = match.Groups[1].Value;
-            var parts = content.Split(',');
-            var results = new List<string>();
-
-            foreach (var part in parts)
-            {
-                var expandedPattern = pattern.Replace(match.Value, part.Trim());
-
-                // Recursively expand any remaining braces
-                results.AddRange(ExpandBraces(expandedPattern));
-            }
-
-            return results;
-        }
-
-        // No braces found, return the pattern as-is
-        return new[] { pattern };
+        var results = new Expansion();
+        Expand(pattern, results);
+        return results.Patterns;
     }
 
-    /// <summary>
-    /// Convert expanded patterns into regular expressions suitable for MongoDB queries
-    /// </summary>
-    public IEnumerable<Regex> PatternsToRegex(
-        IEnumerable<string> patterns,
-        string? prefix = null,
-        string? suffix = null
-    )
+    private sealed class Expansion
     {
-        return patterns.Select(pattern =>
+        public List<string> Patterns { get; } = [];
+        public int Length { get; set; }
+    }
+
+    private static void Expand(string pattern, Expansion results)
+    {
+        var range = NumericRange.Match(pattern);
+        if (range.Success
+            && int.TryParse(range.Groups[1].ValueSpan, NumberStyles.None, CultureInfo.InvariantCulture, out var start)
+            && int.TryParse(range.Groups[2].ValueSpan, NumberStyles.None, CultureInfo.InvariantCulture, out var end))
         {
-            var regexPattern = (prefix ?? "") + Regex.Escape(pattern) + (suffix ?? "");
-            return new Regex(regexPattern, RegexOptions.Compiled);
-        });
+            if (Math.Abs((long)end - start) >= TimePatternLimits.MaxRangeSize)
+                throw new TimePatternRejectedException(
+                    $"A time pattern range may span at most {TimePatternLimits.MaxRangeSize} values");
+
+            var padLength = Math.Max(range.Groups[1].Length, range.Groups[2].Length);
+            var step = start <= end ? 1 : -1;
+            for (var i = start; ; i += step)
+            {
+                var padded = i.ToString(CultureInfo.InvariantCulture).PadLeft(padLength, '0');
+                Expand(pattern.Replace(range.Value, padded), results);
+                if (i == end)
+                    return;
+            }
+        }
+
+        var sequence = Sequence.Match(pattern);
+        if (sequence.Success)
+        {
+            foreach (var part in sequence.Groups[1].Value.Split(','))
+                Expand(pattern.Replace(sequence.Value, part.Trim()), results);
+            return;
+        }
+
+        if (results.Patterns.Count == TimePatternLimits.MaxExpansions)
+            throw new TimePatternRejectedException(
+                $"A time pattern may expand to at most {TimePatternLimits.MaxExpansions} patterns");
+
+        results.Length += pattern.Length + 1;
+        if (results.Length > TimePatternLimits.MaxExpandedLength)
+            throw new TimePatternRejectedException(
+                $"A time pattern may expand to at most {TimePatternLimits.MaxExpandedLength} characters");
+
+        results.Patterns.Add(pattern);
     }
 
     /// <summary>

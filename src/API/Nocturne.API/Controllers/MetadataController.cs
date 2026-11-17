@@ -1,18 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
-using Nocturne.API.Configuration;
 using Nocturne.API.Models.OAuth;
-using Nocturne.API.Multitenancy;
-using Nocturne.Connectors.Core.Extensions;
+using Nocturne.API.Services.Platform.InstanceKey;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Core.Models.Services;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers;
 
@@ -21,14 +20,12 @@ namespace Nocturne.API.Controllers;
 /// </summary>
 /// <remarks>
 /// Most of these endpoints exist only to pull types into the generated client that no other endpoint
-/// reaches — WebSocket event envelopes, connector configuration shapes, OAuth scope lists — and
-/// answer with a constant, usually an enum's values. Two serve real data: widget definitions return
-/// the widget catalogue, and multitenancy answers from configuration and the resolved tenant.
+/// reaches, and answer with a constant, usually an enum's values. Widget definitions serve real data:
+/// the widget catalogue.
 ///
 /// The class hides itself from the interactive API explorer with
-/// <see cref="ApiExplorerSettingsAttribute"/>, so an endpoint a client actually calls has to
-/// override that with <c>IgnoreApi = false</c> to reach the OpenAPI document at all; widget
-/// definitions, alert condition types, auth error codes and TOTP setup failures do.
+/// <see cref="ApiExplorerSettingsAttribute"/>, so an endpoint whose types must reach the generated
+/// client has to override that with <c>IgnoreApi = false</c> to reach the OpenAPI document at all.
 /// All endpoints are permitted during initial setup (<see cref="AllowDuringSetupAttribute"/>).
 /// </remarks>
 [ApiController]
@@ -39,130 +36,6 @@ namespace Nocturne.API.Controllers;
 [AllowAnonymous]
 public class MetadataController : ControllerBase
 {
-    /// <summary>
-    /// Get WebSocket event types metadata
-    /// This endpoint exists primarily to ensure NSwag generates TypeScript types for WebSocket events
-    /// </summary>
-    /// <returns>WebSocket events metadata</returns>
-    [HttpGet("websocket-events")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(WebSocketEventsMetadata), 200)]
-    public ActionResult<WebSocketEventsMetadata> GetWebSocketEvents()
-    {
-        return Ok(
-            new WebSocketEventsMetadata
-            {
-                AvailableEvents = Enum.GetValues<WebSocketEvents>(),
-                Description = "Available WebSocket event types for real-time communication",
-            }
-        );
-    }
-
-    /// <summary>
-    /// Get external URLs for documentation and website
-    /// This endpoint provides a single source of truth for all external Nocturne URLs
-    /// </summary>
-    /// <returns>External URLs configuration</returns>
-    [HttpGet("external-urls")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(ExternalUrls), 200)]
-    public ActionResult<ExternalUrls> GetExternalUrls()
-    {
-        return Ok(
-            new ExternalUrls
-            {
-                Website = UrlConstants.External.NocturneWebsite,
-                DocsBase = UrlConstants.External.NocturneDocsBase,
-                ConnectorDocs = new ConnectorDocsUrls
-                {
-                    Dexcom = UrlConstants.External.DocsDexcom,
-                    Libre = UrlConstants.External.DocsLibre,
-                    CareLink = UrlConstants.External.DocsCareLink,
-                    Nightscout = UrlConstants.External.DocsNightscout,
-                    Glooko = UrlConstants.External.DocsGlooko,
-                },
-            }
-        );
-    }
-    /// <summary>
-    /// Get treatment event types metadata
-    /// This endpoint exposes all available treatment event types for type-safe usage in frontend clients
-    /// </summary>
-    /// <returns>Treatment event types metadata</returns>
-    [HttpGet("treatment-event-types")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(TreatmentEventTypesMetadata), 200)]
-    public ActionResult<TreatmentEventTypesMetadata> GetTreatmentEventTypes()
-    {
-        return Ok(
-            new TreatmentEventTypesMetadata
-            {
-                AvailableTypes = Enum.GetValues<TreatmentEventType>(),
-                Configurations = EventTypeConfigurations.GetAll(),
-                Description = "Available treatment event types for diabetes management events",
-            }
-        );
-    }
-
-    /// <summary>
-    /// Get state span types metadata
-    /// This endpoint exposes all available state span categories and their states for type-safe usage in frontend clients
-    /// </summary>
-    /// <returns>State span types metadata</returns>
-    [HttpGet("state-span-types")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(StateSpanTypesMetadata), 200)]
-    public ActionResult<StateSpanTypesMetadata> GetStateSpanTypes()
-    {
-        return Ok(
-            new StateSpanTypesMetadata
-            {
-                AvailableCategories = Enum.GetValues<StateSpanCategory>(),
-                BasalDeliveryOrigins = Enum.GetValues<BasalDeliveryOrigin>(),
-                PumpModeStates = Enum.GetValues<PumpModeState>(),
-                PumpConnectivityStates = Enum.GetValues<PumpConnectivityState>(),
-                Description = "Available state span categories and their associated states",
-            }
-        );
-    }
-
-    /// <summary>
-    /// Get statistics metadata for type generation
-    /// This endpoint exists primarily to ensure NSwag generates TypeScript types for statistics models
-    /// </summary>
-    /// <returns>Statistics types metadata</returns>
-    [HttpGet("statistics-types")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(StatisticsTypesMetadata), 200)]
-    public ActionResult<StatisticsTypesMetadata> GetStatisticsTypes()
-    {
-        return Ok(
-            new StatisticsTypesMetadata
-            {
-                Description = "Statistics types for insulin delivery reports",
-            }
-        );
-    }
-
-    /// <summary>
-    /// Get connector property keys metadata
-    /// This endpoint exposes all available connector property keys for type-safe usage in frontend clients
-    /// </summary>
-    /// <returns>Connector property keys metadata</returns>
-    [HttpGet("connector-property-keys")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(ConnectorPropertyKeysMetadata), 200)]
-    public ActionResult<ConnectorPropertyKeysMetadata> GetConnectorPropertyKeys()
-    {
-        return Ok(
-            new ConnectorPropertyKeysMetadata
-            {
-                AvailableKeys = Enum.GetValues<ConnectorPropertyKey>(),
-                Description = "Available connector configuration property keys",
-            }
-        );
-    }
-
     /// <summary>
     /// Get widget definitions metadata
     /// This endpoint provides all available dashboard widget definitions for frontend configuration
@@ -184,50 +57,6 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
-    /// Get multitenancy configuration for the frontend
-    /// Provides details needed for tenant switching and display
-    /// </summary>
-    [HttpGet("multitenancy")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(MultitenancyInfo), 200)]
-    public ActionResult<MultitenancyInfo> GetMultitenancyInfo(
-        [FromServices] IOptions<BaseDomainOptions> config,
-        [FromServices] IOptions<OperatorConfiguration> operatorConfig,
-        [FromServices] ITenantAccessor tenantAccessor)
-    {
-        var tenantContext = tenantAccessor.Context;
-
-        return Ok(new MultitenancyInfo
-        {
-            BaseDomain = config.Value.BaseDomain,
-            SubdomainResolution = true,
-            AllowSelfServiceCreation = operatorConfig.Value.AllowSelfServiceCreation,
-            CurrentTenantSlug = tenantContext?.Slug,
-            CurrentTenantId = tenantContext?.TenantId,
-            CurrentTenantDisplayName = tenantContext?.DisplayName,
-        });
-    }
-
-    /// <summary>
-    /// Get data source categories metadata
-    /// This endpoint ensures NSwag generates TypeScript types for DataSourceCategory
-    /// </summary>
-    /// <returns>Data source categories metadata</returns>
-    [HttpGet("data-source-categories")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(DataSourceCategoriesMetadata), 200)]
-    public ActionResult<DataSourceCategoriesMetadata> GetDataSourceCategories()
-    {
-        return Ok(
-            new DataSourceCategoriesMetadata
-            {
-                AvailableCategories = Enum.GetValues<DataSourceCategory>(),
-                Description = "Available data source categories",
-            }
-        );
-    }
-
-    /// <summary>
     /// Get the alert condition tree shape. Exists solely so NSwag generates TypeScript
     /// interfaces for <see cref="ConditionNode"/> and every condition payload record
     /// — they're stored as opaque JSON on the rule entity and not otherwise reachable
@@ -243,7 +72,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
-            ValidationIssue = new RustValidationIssue("condition", "root", "conditions_empty", null),
+            ValidationIssue = new RustValidationIssue("condition", "composite", "list_empty", "conditions"),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
     }
@@ -269,6 +98,78 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// Get tracker realtime actions metadata
+    /// This endpoint ensures NSwag generates TypeScript types for TrackerRealtimeAction, the
+    /// <c>action</c> of every <c>trackerUpdate</c> event, which the web app validates against
+    /// </summary>
+    /// <returns>Tracker realtime actions metadata</returns>
+    [HttpGet("tracker-realtime-actions")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(TrackerRealtimeActionsMetadata), 200)]
+    public ActionResult<TrackerRealtimeActionsMetadata> GetTrackerRealtimeActions()
+    {
+        return Ok(
+            new TrackerRealtimeActionsMetadata
+            {
+                AvailableActions = Enum.GetValues<TrackerRealtimeAction>(),
+                Description = "Actions a trackerUpdate realtime event can carry",
+            }
+        );
+    }
+
+    /// <summary>
+    /// The ceilings the V4 API puts on a read, so a client can keep its requests inside them.
+    /// </summary>
+    /// <returns>The V4 read limits</returns>
+    [HttpGet("v4-api-limits")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(V4ApiLimitsMetadata), 200)]
+    public ActionResult<V4ApiLimitsMetadata> GetV4ApiLimits()
+    {
+        return Ok(new V4ApiLimitsMetadata { MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays });
+    }
+
+    /// <summary>
+    /// Exposes the phases a connector sync reports in the <c>phase</c> of every <c>syncProgress</c>
+    /// event, which the web app validates against
+    /// </summary>
+    /// <returns>Sync phase metadata</returns>
+    [HttpGet("sync-phases")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(SyncPhasesMetadata), 200)]
+    public ActionResult<SyncPhasesMetadata> GetSyncPhases()
+    {
+        return Ok(
+            new SyncPhasesMetadata
+            {
+                AvailablePhases = Enum.GetValues<SyncPhase>(),
+                Description = "Phases a syncProgress realtime event can carry",
+            }
+        );
+    }
+
+    /// <summary>
+    /// Get the Home Assistant hub's message shapes. Exists so the OpenAPI document, and every SDK
+    /// generated from it, carries the payload of each message <c>/hubs/home-assistant</c> sends.
+    /// </summary>
+    [HttpGet("home-assistant-hub-messages")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(HomeAssistantHubMessagesMetadata), 200)]
+    public ActionResult<HomeAssistantHubMessagesMetadata> GetHomeAssistantHubMessages()
+    {
+        return Ok(
+            new HomeAssistantHubMessagesMetadata
+            {
+                AcknowledgeOutcomes = Enum.GetValues<AlertAcknowledgementOutcome>(),
+                Description = "Payloads of the messages the Home Assistant hub sends, keyed by message name",
+            }
+        );
+    }
+
+    /// <summary>
     /// Get TOTP setup failure codes metadata
     /// This endpoint ensures NSwag generates TypeScript types for TotpSetupFailure, which the
     /// verify-setup endpoint returns as the <c>detail</c> of its 400 and the web app turns into copy
@@ -288,43 +189,44 @@ public class MetadataController : ControllerBase
             }
         );
     }
-}
-
-/// <summary>
-/// Metadata about available WebSocket events
-/// </summary>
-public class WebSocketEventsMetadata
-{
-    /// <summary>
-    /// Array of all available WebSocket event types
-    /// </summary>
-    public WebSocketEvents[] AvailableEvents { get; set; } = [];
 
     /// <summary>
-    /// Description of the WebSocket events
+    /// Get the shapes the instance key change notice carries in its metadata. Exists so the
+    /// generated client has <see cref="UndecryptableAlertChannel"/>, which the notice lists.
     /// </summary>
-    public string Description { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Metadata about available treatment event types
-/// </summary>
-public class TreatmentEventTypesMetadata
-{
-    /// <summary>
-    /// Array of all available treatment event types
-    /// </summary>
-    public TreatmentEventType[] AvailableTypes { get; set; } = [];
-
-    /// <summary>
-    /// Full configurations for each event type including field applicability
-    /// </summary>
-    public EventTypeConfiguration[] Configurations { get; set; } = [];
+    [HttpGet("instance-key-notice")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(InstanceKeyNoticeMetadata), 200)]
+    public ActionResult<InstanceKeyNoticeMetadata> GetInstanceKeyNotice()
+    {
+        return Ok(
+            new InstanceKeyNoticeMetadata
+            {
+                Description = "Shapes in the metadata of the instance key change notice",
+            }
+        );
+    }
 
     /// <summary>
-    /// Description of the treatment event types
+    /// Get permission atoms metadata
+    /// This endpoint ensures NSwag generates a TypeScript enum for PermissionAtom, which the
+    /// permission selector is checked against
     /// </summary>
-    public string Description { get; set; } = string.Empty;
+    /// <returns>Permission atoms metadata</returns>
+    [HttpGet("permission-atoms")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(PermissionAtomsMetadata), 200)]
+    public ActionResult<PermissionAtomsMetadata> GetPermissionAtoms()
+    {
+        return Ok(
+            new PermissionAtomsMetadata
+            {
+                AvailableAtoms = Enum.GetValues<PermissionAtom>(),
+                Description = "Atoms a tenant role, invite or member permission may confer",
+            }
+        );
+    }
 }
 
 /// <summary>
@@ -339,141 +241,6 @@ public class WidgetDefinitionsMetadata
 
     /// <summary>
     /// Description of the widget definitions
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Metadata about state span types for NSwag generation
-/// </summary>
-public class StateSpanTypesMetadata
-{
-    /// <summary>
-    /// Array of all available state span categories
-    /// </summary>
-    public StateSpanCategory[] AvailableCategories { get; set; } = [];
-
-    /// <summary>
-    /// Array of all basal delivery origin values
-    /// </summary>
-    public BasalDeliveryOrigin[] BasalDeliveryOrigins { get; set; } = [];
-
-    /// <summary>
-    /// Array of all pump mode states
-    /// </summary>
-    public PumpModeState[] PumpModeStates { get; set; } = [];
-
-    /// <summary>
-    /// Array of all pump connectivity states
-    /// </summary>
-    public PumpConnectivityState[] PumpConnectivityStates { get; set; } = [];
-
-    /// <summary>
-    /// Description of the state span types
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Metadata about statistics types for NSwag generation
-/// </summary>
-public class StatisticsTypesMetadata
-{
-    /// <summary>
-    /// Description of the statistics types
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Sample basal analysis response (for type generation)
-    /// </summary>
-    public BasalAnalysisResponse? SampleBasalAnalysis { get; set; }
-
-    /// <summary>
-    /// Sample daily basal/bolus ratio response (for type generation)
-    /// </summary>
-    public DailyBasalBolusRatioResponse? SampleDailyBasalBolusRatio { get; set; }
-
-    /// <summary>
-    /// Sample hourly basal percentile data (for type generation)
-    /// </summary>
-    public HourlyBasalPercentileData? SampleHourlyPercentile { get; set; }
-
-    /// <summary>
-    /// Sample daily basal/bolus ratio data (for type generation)
-    /// </summary>
-    public DailyBasalBolusRatioData? SampleDailyData { get; set; }
-
-    /// <summary>
-    /// Sample insulin delivery statistics (for type generation)
-    /// </summary>
-    public InsulinDeliveryStatistics? SampleInsulinDelivery { get; set; }
-}
-
-/// <summary>
-/// Metadata about connector property keys for NSwag generation
-/// </summary>
-public class ConnectorPropertyKeysMetadata
-{
-    /// <summary>
-    /// Array of all available connector property keys
-    /// </summary>
-    public ConnectorPropertyKey[] AvailableKeys { get; set; } = [];
-
-    /// <summary>
-    /// Description of the connector property keys
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Multitenancy configuration exposed to the frontend
-/// </summary>
-public class MultitenancyInfo
-{
-    /// <summary>
-    /// Base domain for subdomain-based tenant resolution (e.g. "nocturnecgm.com")
-    /// </summary>
-    public string? BaseDomain { get; set; }
-
-    /// <summary>
-    /// Whether subdomain-based tenant resolution is active
-    /// </summary>
-    public bool SubdomainResolution { get; set; }
-
-    /// <summary>
-    /// Slug of the tenant resolved for the current request
-    /// </summary>
-    public string? CurrentTenantSlug { get; set; }
-
-    /// <summary>
-    /// ID of the tenant resolved for the current request
-    /// </summary>
-    public Guid? CurrentTenantId { get; set; }
-
-    /// <summary>
-    /// Display name of the tenant resolved for the current request
-    /// </summary>
-    public string? CurrentTenantDisplayName { get; set; }
-
-    /// <summary>
-    /// Whether self-service tenant creation is allowed
-    /// </summary>
-    public bool AllowSelfServiceCreation { get; set; }
-}
-
-/// <summary>
-/// Metadata about data source categories for NSwag generation
-/// </summary>
-public class DataSourceCategoriesMetadata
-{
-    /// <summary>
-    /// Array of all available data source categories
-    /// </summary>
-    public DataSourceCategory[] AvailableCategories { get; set; } = [];
-
-    /// <summary>
-    /// Description of the data source categories
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }
@@ -514,6 +281,41 @@ public class AuthErrorCodesMetadata
 }
 
 /// <summary>
+/// The messages <see cref="Hubs.HomeAssistantHub"/> sends, one property per message, named for it.
+/// Each property is null in the response; it exists for its type.
+/// </summary>
+public class HomeAssistantHubMessagesMetadata
+{
+    /// <summary>
+    /// <c>glucose_reading</c>, to an instance whose credential may read glucose: a live sensor glucose
+    /// write on the canonical stream.
+    /// </summary>
+    public GlucoseReadingEvent? GlucoseReading { get; set; }
+
+    /// <summary>
+    /// <c>alert_dispatch</c>, to the instance an alert is addressed to: an alert fired, or a delivery
+    /// that failed while the instance was offline, replayed on <c>Subscribe</c>.
+    /// </summary>
+    public AlertPayload? AlertDispatch { get; set; }
+
+    /// <summary><c>alert_resolved</c>, to every instance of the tenant: an excursion closed.</summary>
+    public AlertResolvedEvent? AlertResolved { get; set; }
+
+    /// <summary>
+    /// <c>alert_acknowledged</c>, to every instance of the tenant: excursions were acknowledged for everyone.
+    /// </summary>
+    public AlertAcknowledgedEvent? AlertAcknowledged { get; set; }
+
+    /// <summary>All values the hub's <c>Acknowledge</c> method can return.</summary>
+    public AlertAcknowledgementOutcome[] AcknowledgeOutcomes { get; set; } = [];
+
+    /// <summary>
+    /// Description of the messages
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Metadata about TOTP setup failure codes for NSwag generation
 /// </summary>
 public class TotpSetupFailuresMetadata
@@ -526,5 +328,73 @@ public class TotpSetupFailuresMetadata
     /// <summary>
     /// Description of the TOTP setup failure codes
     /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about permission atoms for NSwag generation
+/// </summary>
+public class PermissionAtomsMetadata
+{
+    /// <summary>
+    /// Array of all atoms a tenant role, invite or member permission may confer
+    /// </summary>
+    public PermissionAtom[] AvailableAtoms { get; set; } = [];
+
+    /// <summary>
+    /// Description of the permission atoms
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about tracker realtime actions for NSwag generation
+/// </summary>
+public class TrackerRealtimeActionsMetadata
+{
+    /// <summary>
+    /// Array of all actions a tracker update event can carry
+    /// </summary>
+    public TrackerRealtimeAction[] AvailableActions { get; set; } = [];
+
+    /// <summary>
+    /// Description of the tracker realtime actions
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The ceilings the V4 API puts on a read
+/// </summary>
+public class V4ApiLimitsMetadata
+{
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public int MaxDateSpanDays { get; set; }
+}
+
+/// <summary>
+/// Metadata about connector sync phases for NSwag generation
+/// </summary>
+public class SyncPhasesMetadata
+{
+    /// <summary>
+    /// Array of all phases a sync progress event can carry
+    /// </summary>
+    public SyncPhase[] AvailablePhases { get; set; } = [];
+
+    /// <summary>
+    /// Description of the sync phases
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The metadata shapes of the <c>system.instance_key_changed</c> notice.
+/// </summary>
+public class InstanceKeyNoticeMetadata
+{
+    /// <summary>One entry of the notice's <c>AlertChannels</c> list.</summary>
+    public UndecryptableAlertChannel? AlertChannel { get; set; }
+
     public string Description { get; set; } = string.Empty;
 }

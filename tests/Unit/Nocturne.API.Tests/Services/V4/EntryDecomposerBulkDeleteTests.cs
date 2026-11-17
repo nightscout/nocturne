@@ -32,21 +32,34 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
     }
 
     private EntryDecomposer CreateDecomposer() =>
-        new(_dbContext, _sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _logger.Object);
+        new(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _logger.Object);
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task BulkDeleteAsync_WithTimeRange_DeletesAcrossAllRepos()
     {
         var find = "{\"mills\":{\"$gte\":1704067200000,\"$lte\":1704153600000}}";
-        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(10);
-        _mgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(2);
-        _calRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(10);
+        _mgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(2);
+        _calRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         var decomposer = CreateDecomposer();
         var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(13);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task BulkDeleteAsync_ForwardsTheCallersOriginToEveryRepo()
+    {
+        var find = "{\"mills\":{\"$gte\":1704067200000,\"$lte\":1704153600000}}";
+
+        await CreateDecomposer().BulkDeleteAsync(find, WriteOrigin.Backfill);
+
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()), Times.Once);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()), Times.Once);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -66,23 +79,23 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(0);
-        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task BulkDeleteAsync_WithATypeEquality_DeletesOnlyThatType()
     {
-        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(7);
+        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(7);
 
         var decomposer = CreateDecomposer();
         var count = await decomposer.BulkDeleteAsync("find[type]=sgv", WriteOrigin.Live);
 
         count.Should().Be(7);
-        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -98,7 +111,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         count.Should().Be(0);
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().Contain(m => m!.Contains("has no conditions"));
     }
 
@@ -112,12 +125,12 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         var count = await CreateDecomposer().BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(0);
-        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotContain(m => m!.Contains("forged-line") || m.Contains('\r') || m.Contains('\n') || m.Contains("other"));
     }
 
@@ -133,7 +146,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
 
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotContain(m => m!.Contains("secret-value"));
     }
 
@@ -150,7 +163,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(0);
-        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -163,7 +176,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         var decomposer = CreateDecomposer();
         var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
         count.Should().Be(0);
-        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -171,9 +184,9 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
     public async Task BulkDeleteAsync_WithPartialTimeRange_OnlyGte_Deletes()
     {
         var find = "{\"mills\":{\"$gte\":1704067200000}}";
-        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(5);
-        _mgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _calRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(5);
+        _mgRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _calRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, WriteOrigin.Live, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var decomposer = CreateDecomposer();
         var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);

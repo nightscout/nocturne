@@ -10,8 +10,27 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensorGlucose
 /// </summary>
 [Table("sensor_glucose")]
-public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity
+public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IDuplicateFlagged, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
+    /// <summary>
+    /// Whether another stream won this reading's bucket (<see cref="Core.Models.V4.CanonicalGlucoseStream"/>),
+    /// so canonical reads leave it out. Meaningful on visible rows only (live, not a duplicate); written
+    /// only by <see cref="Extensions.GlucoseStreamFlags"/>.
+    /// </summary>
+    [AuditIgnored]
+    [Column("is_secondary_stream")]
+    public bool IsSecondaryStream { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// FK to the patient's registered device record (resolved at ingest time)
     /// </summary>
@@ -69,6 +88,12 @@ public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevi
     /// </summary>
     [Column("delta")]
     public double? Delta { get; set; }
+
+    /// <summary>
+    /// Received signal strength the uploader reported for the reading
+    /// </summary>
+    [Column("rssi")]
+    public int? Rssi { get; set; }
 
     /// <summary>
     /// Whether this reading is smoothed or unsmoothed (enum stored as string). Null when unknown.

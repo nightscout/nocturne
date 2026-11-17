@@ -1,5 +1,3 @@
-import { startOfLocalDay } from "$lib/utils/now";
-
 /** The starting reads the document issued at parse time, keyed by request URL. */
 export interface InitialReads {
   /** The clock, in epoch milliseconds, the prefetched URLs were built from. */
@@ -15,7 +13,10 @@ declare global {
 
 /** The age the prefetch is built for is the JS download wait; a wider bound only widens the gap between the reads' `to` and the socket connecting. */
 const MAX_AGE_MS = 15_000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** The span the store's starting reads cover, ending now. */
+export const DAY_MS = 24 * 60 * 60 * 1000;
+/** The hours of glucose the store starts with: the sidebar sparkline draws from the store alone. */
+export const GLUCOSE_WINDOW_HOURS = 3;
 
 export function initialReadsStash(): InitialReads | undefined {
   return typeof window === "undefined" ? undefined : window.__nocturneInitialReads;
@@ -38,7 +39,7 @@ export function initialReadWindows(referenceMs: number): {
   return {
     oneDayAgo: new Date(oneDayAgoMs).toISOString(),
     to: new Date(referenceMs).toISOString(),
-    glucoseFrom: new Date(Math.min(startOfLocalDay(referenceMs), oneDayAgoMs)).toISOString(),
+    glucoseFrom: new Date(referenceMs - GLUCOSE_WINDOW_HOURS * 60 * 60 * 1000).toISOString(),
   };
 }
 

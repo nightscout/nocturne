@@ -1,7 +1,8 @@
 import type { RequestEvent } from "@sveltejs/kit";
-import { createServerApiClient } from "$lib/server/api-client-factory";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
+import { isApiOutage } from "#lib/server/api-outage.js";
+import { createServerApiClient } from "#lib/server/api-client-factory.js";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { getEffectiveHost, getOriginalProto } from "#lib/server/request-host.js";
 
 /**
  * Signs the request in as a guest when the API accepts its guest-session
@@ -44,5 +45,6 @@ export async function authenticateGuestSession(
     }
   } catch (error) {
     console.error("Failed to validate guest session:", error);
+    if (isApiOutage(error)) event.locals.sessionUnreadable = true;
   }
 }

@@ -4,6 +4,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -30,8 +33,8 @@ public class TempBasalRepositoryTests : IDisposable
 
         _context = _db.CreateContext();
         _repository = new TempBasalRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(_context),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<TempBasalRepository>.Instance);
     }
@@ -65,23 +68,6 @@ public class TempBasalRepositoryTests : IDisposable
         }
         await _context.SaveChangesAsync();
         return ids;
-    }
-
-    private async Task AddNonPrimaryLinkAsync(Guid tenantId, Guid recordId)
-    {
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            CanonicalId = Guid.NewGuid(),
-            RecordType = "tempbasal",
-            RecordId = recordId,
-            SourceTimestamp = 0,
-            DataSource = "test",
-            IsPrimary = false,
-            SysCreatedAt = DateTime.UtcNow,
-        });
-        await _context.SaveChangesAsync();
     }
 
     [Fact]
@@ -184,7 +170,7 @@ public class TempBasalRepositoryTests : IDisposable
     [Fact]
     public async Task GetActiveAtAsync_excludes_non_primary_linked_records()
     {
-        // Two overlapping windows; the more-recent one is marked non-primary via LinkedRecord.
+        // Two overlapping windows; the more-recent one is a non-primary duplicate of the older.
         // Result must be the primary (older) row, not the non-primary.
         var olderStart = new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc);
         var olderEnd = new DateTime(2026, 4, 30, 13, 0, 0, DateTimeKind.Utc);
@@ -195,8 +181,7 @@ public class TempBasalRepositoryTests : IDisposable
             (olderStart, olderEnd, 1.0),
             (newerStart, newerEnd, 2.5));
 
-        // Mark the more-recent row (index 1) as a non-primary duplicate.
-        await AddNonPrimaryLinkAsync(TenantA, ids[1]);
+        await DuplicateGroups.LinkAsync(_context, RecordType.TempBasal, ids[0], ids[1]);
 
         var result = await _repository.GetActiveAtAsync(
             new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
@@ -204,6 +189,28 @@ public class TempBasalRepositoryTests : IDisposable
 
         result.Should().NotBeNull();
         result!.Rate.Should().Be(1.0);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ResendOnTheSameSyncKey_KeepsTheAutomaticStamp()
+    {
+        var start = DateTime.UtcNow;
+        TempBasal Send(Dictionary<string, object?>? properties) => new()
+        {
+            StartTimestamp = start,
+            Rate = 1.0,
+            DataSource = "trio",
+            SyncIdentifier = "sync-1",
+            AdditionalProperties = properties,
+        };
+
+        await _repository.CreateAsync(Send(TempBasalAutomaticFlag.Keep(null, true)), WriteOrigin.Live);
+        var stamped = await _repository.CreateAsync(Send(TempBasalAutomaticFlag.Keep(null, true)), WriteOrigin.Live);
+        TempBasalAutomaticFlag.Of(stamped.AdditionalProperties).Should().BeTrue();
+
+        var unstamped = await _repository.CreateAsync(Send(null), WriteOrigin.Live);
+        TempBasalAutomaticFlag.Of(unstamped.AdditionalProperties).Should().BeTrue();
+        (await _context.TempBasals.CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -218,5 +225,24 @@ public class TempBasalRepositoryTests : IDisposable
         sql.Should().MatchRegex(@"t\.legacy_id = ANY \(@\w+\)",
             "one text[] parameter keeps one statement for every kept-id count");
         sql.Should().NotContain("IN (");
+    }
+
+    [Fact]
+    public async Task GetByLegacyIdsAsync_ReturnsTheLiveRowsUnderThoseIdsWhateverTheirRateKind()
+    {
+        var ids = await SeedAsync(TenantA,
+            (new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc), null, 0.5),
+            (new DateTime(2026, 9, 20, 13, 0, 0, DateTimeKind.Utc), null, 0.6),
+            (new DateTime(2026, 9, 20, 14, 0, 0, DateTimeKind.Utc), null, 0.7));
+        var rows = _context.TempBasals.Where(t => ids.Contains(t.Id)).OrderBy(t => t.Timestamp).ToList();
+        rows[0].LegacyId = "absolute";
+        rows[1].LegacyId = "percent";
+        rows[1].Percent = -20;
+        rows[2].LegacyId = "other";
+        await _context.SaveChangesAsync();
+
+        var found = await _repository.GetByLegacyIdsAsync(["absolute", "percent"]);
+
+        found.Select(t => t.LegacyId).Should().BeEquivalentTo("absolute", "percent");
     }
 }

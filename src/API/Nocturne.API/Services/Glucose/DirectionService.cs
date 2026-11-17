@@ -1,4 +1,6 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -27,6 +29,11 @@ namespace Nocturne.API.Services.Glucose;
 /// </remarks>
 public static class DirectionService
 {
+    private const int BucketCount = 4;
+    private const long BucketWidthMills = 5 * 60 * 1000;
+    private const long BucketHalfWidthMills = BucketWidthMills / 2;
+    private const double ErrorCodeCeiling = 39;
+
     /// <summary>
     /// Direction to character mapping - exact legacy mapping from direction.js
     /// </summary>
@@ -76,31 +83,93 @@ public static class DirectionService
         var recent = sortedEntries[0];
         var previous = sortedEntries[1];
 
-        // Get mean values (use Mgdl if available, otherwise Sgv)
-        var recentMean = recent.Mgdl != 0 ? recent.Mgdl : recent.Sgv ?? 0;
-        var previousMean = previous.Mgdl != 0 ? previous.Mgdl : previous.Sgv ?? 0;
+        return BuildDelta(recent.GlucoseMgdl(), previous.GlucoseMgdl(), recent, previous, units);
+    }
 
-        if (recentMean == 0 || previousMean == 0)
+    /// <summary>
+    /// Builds the 5 minute buckets <c>bgnow.js</c> reads, newest first. The newest reading anchors
+    /// bucket 0 at 2.5 minutes either side of it, and each older bucket sits 5 minutes earlier.
+    /// </summary>
+    public static IReadOnlyList<BgNowBucket> BuildBuckets(IEnumerable<Entry> entries)
+    {
+        var sorted = entries.OrderBy(e => e.Mills).ToList();
+        if (sorted.Count == 0)
+            return [];
+
+        var last = sorted[^1].Mills;
+        var buckets = new List<BgNowBucket>(BucketCount);
+        for (var i = 0; i < BucketCount; i++)
+        {
+            var fromMills = last - BucketHalfWidthMills - i * BucketWidthMills;
+            var toMills = fromMills + BucketWidthMills;
+            var inBucket = sorted.Where(e => e.Mills >= fromMills && e.Mills < toMills).ToList();
+            buckets.Add(
+                new BgNowBucket(
+                    fromMills,
+                    inBucket,
+                    inBucket.Where(e => e.GlucoseMgdl() > ErrorCodeCeiling).ToList(),
+                    inBucket.Where(e => e.GlucoseMgdl() < ErrorCodeCeiling).ToList()
+                )
+            );
+        }
+
+        return buckets;
+    }
+
+    /// <summary>
+    /// The change from the newest bucket (always holding the newest reading) to the next bucket holding a valid reading, taken on their
+    /// means. Null when the newest bucket holds only error codes or no older bucket has a valid reading.
+    /// </summary>
+    public static BucketDelta? CalculateBucketDelta(
+        IReadOnlyList<BgNowBucket> buckets,
+        string units
+    )
+    {
+        var recent = buckets.FirstOrDefault();
+        if (recent?.Last == null)
             return null;
 
-        // Calculate absolute difference and elapsed time
+        var previous = buckets.Skip(1).FirstOrDefault(b => b.Last != null);
+        if (previous == null)
+            return null;
+
+        var info = BuildDelta(
+            recent.Mean!.Value,
+            previous.Mean!.Value,
+            recent.Last,
+            previous.Last,
+            units
+        );
+        return info == null ? null : new BucketDelta(info, previous);
+    }
+
+    private static Core.Models.DeltaInfo? BuildDelta(
+        double recentMean,
+        double previousMean,
+        Entry? recent,
+        Entry? previous,
+        string units
+    )
+    {
+        if (recent == null || previous == null || recentMean == 0 || previousMean == 0)
+            return null;
+
         var absolute = recentMean - previousMean;
-        var elapsedMins = (recent.Mills - previous.Mills) / (60.0 * 1000); // Legacy interpolation logic - exactly matching bgnow.js
-        var isInterpolated = elapsedMins > 9; // Legacy uses 9 minutes threshold        // Calculate mean5MinsAgo - exact legacy algorithm
+        var elapsedMins = (recent.Mills - previous.Mills) / (60.0 * 1000);
+        var isInterpolated = elapsedMins > 9;
         var mean5MinsAgo = isInterpolated
             ? recentMean - ((recentMean - previousMean) / elapsedMins) * 5
-            : recentMean - (recentMean - previousMean);
+            : previousMean;
 
-        // Calculate mg/dL delta - exact legacy rounding
-        var mgdl = (int)Math.Round(recentMean - mean5MinsAgo);
+        var mgdl = (int)Math.Floor(recentMean - mean5MinsAgo + 0.5);
 
-        // Scale for display - legacy scaling logic
+        var useMmol = GlucoseUnits.Parse(units) == GlucoseUnit.Mmol;
         var scaled =
-            units == "mmol"
+            useMmol
                 ? RoundBGToDisplayFormat(ScaleMgdl(recentMean) - ScaleMgdl(mean5MinsAgo))
-                : mgdl; // Format display - exact legacy formatting
+                : mgdl;
         var display =
-            units == "mmol"
+            useMmol
                 ? (scaled >= 0 ? $"+{scaled:F1}" : $"{scaled:F1}")
                 : (scaled >= 0 ? $"+{scaled}" : scaled.ToString());
         return new Core.Models.DeltaInfo
@@ -112,8 +181,6 @@ public static class DirectionService
             Mgdl = mgdl,
             Scaled = scaled,
             Display = display,
-            Previous = previous,
-            Current = recent,
             Times = new Dictionary<string, long>
             {
                 ["recent"] = recent.Mills,
@@ -165,12 +232,9 @@ public static class DirectionService
         return $"&#{(int)character[0]};";
     }
 
-    /// <summary>
-    /// Scale mg/dL to mmol/L - exact legacy conversion
-    /// </summary>
     private static double ScaleMgdl(double mgdl)
     {
-        return mgdl / 18.0;
+        return mgdl / GlucoseConstants.MgdlPerMmol;
     }
 
     /// <summary>
@@ -178,6 +242,29 @@ public static class DirectionService
     /// </summary>
     private static double RoundBGToDisplayFormat(double value)
     {
-        return Math.Round(value, 1);
+        return ScaledRounding.Round(value, 1);
     }
 }
+
+/// <summary>
+/// One 5 minute window of readings. <see cref="Mean"/>, <see cref="Last"/> and
+/// <see cref="Entry.Mills"/> of <see cref="Last"/> come from the readings above 39 mg/dL; readings
+/// below 39 are sensor error codes and land in <see cref="Errors"/>, and 39 itself is in neither.
+/// </summary>
+public sealed record BgNowBucket(
+    long FromMills,
+    IReadOnlyList<Entry> Entries,
+    IReadOnlyList<Entry> Valid,
+    IReadOnlyList<Entry> Errors
+)
+{
+    public Entry? Last => Valid.Count > 0 ? Valid[^1] : null;
+
+    public double? Mean => Valid.Count > 0 ? Valid.Average(e => e.GlucoseMgdl()) : null;
+}
+
+/// <summary>
+/// A bucket delta with the older bucket it was taken against, which <c>bgnow.js</c> publishes as
+/// <c>delta.previous</c>.
+/// </summary>
+public sealed record BucketDelta(Core.Models.DeltaInfo Info, BgNowBucket Previous);

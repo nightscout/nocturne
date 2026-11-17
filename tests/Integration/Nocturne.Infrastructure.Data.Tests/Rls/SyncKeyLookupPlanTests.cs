@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -48,121 +46,38 @@ public class SyncKeyLookupPlanTests(RlsCompletenessFixture fx)
             "gen_random_uuid(), @tid, now() - make_interval(mins => g), 100, 'aaps', 'sync-' || g, now(), now()",
             async (factory, key) => await BGChecks(factory).FindBySyncIdentifierAsync(DataSource, key));
 
-    private static NoteRepository Notes(TestTenantDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+    private static NoteRepository Notes(TestNocturneDbContextFactory factory) =>
+        new(factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<NoteRepository>.Instance);
 
-    private static DeviceEventRepository DeviceEvents(TestTenantDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+    private static DeviceEventRepository DeviceEvents(TestNocturneDbContextFactory factory) =>
+        new(factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance);
 
-    private static BGCheckRepository BGChecks(TestTenantDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+    private static BGCheckRepository BGChecks(TestNocturneDbContextFactory factory) =>
+        new(factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<BGCheckRepository>.Instance);
 
     private async Task AssertLookupAsync(
-        string table, string columns, string values, Func<TestTenantDbContextFactory, string, Task<object?>> lookup)
+        string table, string columns, string values, Func<TestNocturneDbContextFactory, string, Task<object?>> lookup)
     {
         var tenant = Guid.NewGuid();
-        await SeedAsync(tenant, table, columns, values);
+        await PlanTestSupport.SeedAsync(fx, tenant, table, columns, values, Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await PlanTestSupport.SetTenantAsync(conn, tenant);
 
-        var capture = new LastReaderCapture();
+        var capture = new PlanTestSupport.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
             .AddInterceptors(capture)
             .Options) { TenantId = tenant };
 
-        (await lookup(new TestTenantDbContextFactory(ctx), "sync-7777")).Should().NotBeNull();
+        (await lookup(new TestNocturneDbContextFactory(ctx), "sync-7777")).Should().NotBeNull();
 
-        var plan = await ExplainAsync(conn, capture.Command!);
-        Descendants(plan, "Node Type").Should().NotContain("Seq Scan", plan.ToString());
-        Descendants(plan, "Index Name").Should().Equal(
+        var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);
+        plan.Descendants("Node Type").Should().NotContain("Seq Scan", plan.ToString());
+        plan.Descendants("Index Name").Should().Equal(
             [$"ix_{table}_tenant_source_sync_id"], $"the sync key has a partial unique index to probe; plan: {plan}");
-    }
-
-    private async Task SeedAsync(Guid tenant, string table, string columns, string values)
-    {
-        await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'sync-key-plan-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"sync-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        await SetTenantAsync(conn, tenant);
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"INSERT INTO {table} {columns} SELECT {values} FROM generate_series(1, {Rows}) g";
-            cmd.Parameters.AddWithValue("tid", tenant);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        await using var analyze = conn.CreateCommand();
-        analyze.CommandText = $"ANALYZE {table}";
-        await analyze.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-        cmd.Parameters.AddWithValue("tid", tenant.ToString());
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<JsonElement> ExplainAsync(NpgsqlConnection conn, NpgsqlCommand captured)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "EXPLAIN (FORMAT JSON) " + captured.CommandText;
-        foreach (NpgsqlParameter p in captured.Parameters)
-            cmd.Parameters.Add(p.Clone());
-
-        var json = (string)(await cmd.ExecuteScalarAsync())!;
-        return JsonDocument.Parse(json).RootElement.Clone();
-    }
-
-    private static IEnumerable<string> Descendants(JsonElement element, string property)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var p in element.EnumerateObject())
-            {
-                if (p.Name == property && p.Value.ValueKind == JsonValueKind.String)
-                    yield return p.Value.GetString()!;
-                foreach (var d in Descendants(p.Value, property))
-                    yield return d;
-            }
-        }
-        else if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in element.EnumerateArray())
-            foreach (var d in Descendants(item, property))
-                yield return d;
-        }
-    }
-
-    private sealed class LastReaderCapture : DbCommandInterceptor
-    {
-        public NpgsqlCommand? Command { get; private set; }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            var copy = new NpgsqlCommand(command.CommandText);
-            foreach (NpgsqlParameter p in command.Parameters)
-                copy.Parameters.Add(p.Clone());
-            Command = copy;
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
     }
 }

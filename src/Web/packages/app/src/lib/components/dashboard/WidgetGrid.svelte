@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { WidgetId } from "$lib/api/generated/nocturne-api-client";
-  import { knownTopWidgets, loadTopWidget, topWidgetPlaceholder } from "./widget-registry";
+  import type { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import { MAX_TOP_WIDGETS, knownTopWidgets, loadTopWidget, topWidgetPlaceholder } from "./widget-registry";
   import WidgetCard from "./widgets/WidgetCard.svelte";
   import WidgetPlaceholder from "./widgets/WidgetPlaceholder.svelte";
-  import { Card } from "$lib/components/ui/card";
+  import { Card } from "#lib/components/ui/card/index.js";
 
   interface Props {
     /** Ordered list of widget IDs to display */
@@ -12,13 +12,13 @@
     maxWidgets?: number;
   }
 
-  let { widgets, maxWidgets = 3 }: Props = $props();
+  let { widgets, maxWidgets = MAX_TOP_WIDGETS }: Props = $props();
 
   const displayWidgets = $derived(knownTopWidgets(widgets).slice(0, maxWidgets));
 </script>
 
 <Card size="flush" class="@container">
-  <div class="grid grid-cols-1 divide-y divide-border @md:grid-cols-3 @md:divide-x @md:divide-y-0">
+  <div class="grid grid-cols-1 divide-y divide-border @2xl:grid-cols-3 @2xl:divide-x @2xl:divide-y-0">
     {#each displayWidgets as widgetId (widgetId)}
       {#await loadTopWidget(widgetId)}
         <WidgetPlaceholder shape={topWidgetPlaceholder(widgetId)} />
@@ -29,7 +29,7 @@
              catch the slot renders nothing, forever, with no trace of why. -->
         <WidgetCard title="Widget unavailable">
           <p class="text-muted-foreground text-xs">
-            This widget couldn't be loaded. Reload the page to try again.
+            This widget could not be loaded. Reload the page to try again.
           </p>
         </WidgetCard>
       {/await}

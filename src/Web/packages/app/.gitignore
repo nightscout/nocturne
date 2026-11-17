@@ -1,6 +1,10 @@
 test-results
 node_modules
 
+# Vitest browser failure screenshots and attachments
+.vitest-attachments/
+__screenshots__/
+
 # Output
 .output
 .vercel
@@ -21,3 +25,7 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .fallow/
+
+# Vitest browser-mode failure output
+.vitest-attachments/
+__screenshots__/

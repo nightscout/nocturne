@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware.Handlers;
@@ -8,7 +7,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Services.Identity;
@@ -58,7 +57,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 {
     private readonly IJwtCredentialValidator _credentialValidator;
     private readonly ITenantMemberService _memberService;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly IOAuthGrantRepository _grants;
     private readonly TimeProvider _timeProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<HubTokenAuthorizer> _logger;
@@ -66,14 +65,14 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     public HubTokenAuthorizer(
         IJwtCredentialValidator credentialValidator,
         ITenantMemberService memberService,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        IOAuthGrantRepository grants,
         TimeProvider timeProvider,
         IConfiguration configuration,
         ILogger<HubTokenAuthorizer> logger)
     {
         _credentialValidator = credentialValidator;
         _memberService = memberService;
-        _dbContextFactory = dbContextFactory;
+        _grants = grants;
         _timeProvider = timeProvider;
         _configuration = configuration;
         _logger = logger;
@@ -131,7 +130,12 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             new HashSet<string> { Scope.FullAccess },
             HubCredentialKind.Infrastructure,
             SubjectId: null,
-            HistoryClamped: false);
+            HistoryClamped: false)
+        {
+            Source = new HubCredentialSource(
+                AuthType.InstanceKey, SubjectId: null, GrantId: null, new HashSet<string> { Scope.FullAccess },
+                LimitTo24Hours: false, ExpiresAt: null),
+        };
     }
 
     private async Task<HubAuthorization?> AuthorizeJwtAsync(
@@ -195,7 +199,13 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             HubCredentialKind.Subject,
             claims.SubjectId,
             MemberScopeResolver.IsHistoryClamped(
-                claims.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions));
+                claims.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions))
+        {
+            ClientId = claims.ClientId,
+            Source = new HubCredentialSource(
+                AuthType.OAuthAccessToken, claims.SubjectId, claims.GrantId,
+                Scope.Normalize(claims.Scopes), claims.LimitTo24Hours, claims.ExpiresAt),
+        };
     }
 
     /// <summary>
@@ -209,18 +219,13 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     /// and <see cref="Middleware.MemberScopeMiddleware"/> intersects the grant's scopes with the
     /// membership — <see cref="AuthType.DirectGrant"/> is a scoped credential, so membership cannot
     /// widen it and a demotion narrows it.
-    ///
-    /// It does not go through the token-exchange endpoint's direct-grant path: that reads
-    /// <c>oauth_grants</c> off the scoped context, which on a hub invocation was built before any
-    /// tenant was known and so matches no row.
     /// </remarks>
     private async Task<HubAuthorization?> AuthorizeDirectGrantAsync(
         string token, Guid connectionTenantId, string requiredScope)
     {
-        var grant = await DirectGrantTokenHandler.FindActiveGrantAsync(
-            _dbContextFactory, token, connectionTenantId, _timeProvider.GetUtcNow().UtcDateTime);
-
-        if (grant is null)
+        if (await DirectGrantTokenHandler.FindActiveGrantAsync(
+                _grants, token, connectionTenantId, _timeProvider.GetUtcNow().UtcDateTime)
+            is not var (grant, facts))
         {
             _logger.LogDebug(
                 "No active direct grant on tenant {ConnectionTenant} matches the hub token",
@@ -228,10 +233,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             return null;
         }
 
-        var membership = await _memberService.GetMemberAccessAsync(
-            grant.SubjectId, connectionTenantId);
-
-        if (membership is null)
+        if (facts?.Access is not { } membership)
         {
             _logger.LogWarning(
                 "Hub direct grant {GrantId} belongs to subject {SubjectId}, who is not a member of connection tenant {ConnectionTenant}",
@@ -253,6 +255,11 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             HubCredentialKind.Subject,
             grant.SubjectId,
             MemberScopeResolver.IsHistoryClamped(
-                grant.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions));
+                grant.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions))
+        {
+            Source = new HubCredentialSource(
+                AuthType.DirectGrant, grant.SubjectId, grant.Id, grant.Scopes.ToHashSet(),
+                grant.LimitTo24Hours, ExpiresAt: null),
+        };
     }
 }

@@ -255,7 +255,8 @@ describe("v3 history after a delete", () => {
 
     const next = await history(tenant, "treatments", cursor);
     const survivor = next.docs.find((t) => idOf(t) === meal);
-    expect(survivor).toMatchObject({ eventType: "Correction Bolus", insulin: 3.3 });
+    // A surviving half keeps the event type it was uploaded under.
+    expect(survivor).toMatchObject({ eventType: "Meal Bolus", insulin: 3.3 });
     expect(survivor!.isValid).toBeUndefined();
     // Nocturne's treatments always carry `carbs` (null when absent), live ones too; AAPS reads it
     // as a nullable Double, so null and missing are the same to it.
@@ -269,7 +270,7 @@ describe("v3 history after a delete", () => {
     const next = await history(tenant, "treatments", cursor);
     expect(next.docs.find((t) => idOf(t) === meal)).toMatchObject({ isValid: false });
     const carbs = next.docs.find((t) => t.carbs === 44);
-    expect(carbs).toMatchObject({ eventType: "Carb Correction" });
+    expect(carbs).toMatchObject({ eventType: "Meal Bolus" });
     expect(carbs!.isValid).toBeUndefined();
     expect(idOf(carbs!)).not.toBe(meal);
   });

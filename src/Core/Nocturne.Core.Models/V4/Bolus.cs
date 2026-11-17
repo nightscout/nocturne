@@ -56,7 +56,8 @@ public class Bolus : V4RecordBase, IDeviceAttributed
 
     /// <summary>
     /// How this bolus was initiated: <see cref="BolusKind.Manual"/> for user-initiated,
-    /// <see cref="BolusKind.Algorithm"/> for APS-delivered micro-boluses (SMBs).
+    /// <see cref="BolusKind.Algorithm"/> for any bolus delivered automatically (SMBs, automatic boluses),
+    /// which is every bolus with <see cref="Automatic"/> set.
     /// </summary>
     public BolusKind Kind { get; set; } = BolusKind.Manual;
 

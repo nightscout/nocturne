@@ -79,10 +79,6 @@ public class EntryV1Response
 {
     private readonly Entry _entry;
 
-    /// <summary>
-    /// Initializes a new instance wrapping the specified <see cref="Entry"/>.
-    /// </summary>
-    /// <param name="entry">The entry to wrap for V1 serialization.</param>
     public EntryV1Response(Entry entry)
     {
         _entry = entry;
@@ -221,10 +217,6 @@ public class EntryV3Response
 {
     private readonly Entry _entry;
 
-    /// <summary>
-    /// Initializes a new instance wrapping the specified <see cref="Entry"/>.
-    /// </summary>
-    /// <param name="entry">The entry to wrap for V3 serialization.</param>
     public EntryV3Response(Entry entry)
     {
         _entry = entry;

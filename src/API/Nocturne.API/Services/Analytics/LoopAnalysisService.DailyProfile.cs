@@ -1,0 +1,130 @@
+using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Schedules;
+using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Models.V4;
+
+namespace Nocturne.API.Services.Analytics;
+
+internal sealed partial class LoopAnalysisService
+{
+    public async Task<DailyProfileResponse> GetDailyProfileAsync(
+        LoopAnalysisFilter filter, TimeZoneInfo zone, CancellationToken ct = default)
+    {
+        var (primary, comparison, names) = await ForRangesAsync(
+            filter,
+            window => LoadDailyProfileAsync(window, zone, filter, ct),
+            (loaded, window) => DailyProfileCalculator.Calculate(
+                loaded.Inputs, Mask(filter, window, zone, loaded.Sources), window.From, window.To));
+        return new DailyProfileResponse { Primary = primary, Comparison = comparison, ProfileNames = names };
+    }
+
+    /// <param name="Inputs">What <see cref="DailyProfileCalculator"/> computes the window's daily profile from.</param>
+    /// <param name="Sources">The records the filter's mask is built from.</param>
+    /// <param name="Timeline">The therapy settings in force over the window, which the IOB/COB was computed against.</param>
+    private sealed record DailyProfileLoaded(
+        DailyProfileInputs Inputs, LoopAnalysisMaskSources Sources, TherapyTimeline Timeline) : ILoaded;
+
+    /// <param name="window">The range to load, read back further for carbs and device IOB/COB still acting at its start.</param>
+    /// <param name="zone">The time zone the target schedule's times of day are read in, carried on the inputs.</param>
+    /// <param name="filter">Gives now, which a temp basal still running stops at, and the history clamp's visible edge.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    private async Task<DailyProfileLoaded> LoadDailyProfileAsync(
+        Window window, TimeZoneInfo zone, LoopAnalysisFilter filter, CancellationToken ct)
+    {
+        var from = window.From;
+        var to = window.To;
+        var series = window.Series;
+        var lookbackUtc = series.InsulinReadStart.ToUtcDateTime();
+
+        // Carbs are read to the window's end, past the series' last tick, because the calculable time
+        // counts them. Snapshots are read from the insulin look-back, before the series' device read
+        // start, because the open-loop mask reads them too.
+        var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, to.ToUtcDateTime(), null, null, int.MaxValue, descending: false, ct: ct);
+        var deviceReadUntil = series.DeviceReadEnd.ToUtcDateTime();
+        var apsTask = apsSnapshotRepository.GetIobCobPointsAsync(lookbackUtc, deviceReadUntil, ct);
+        var pumpTask = pumpSnapshotRepository.GetIobPointsAsync(lookbackUtc, deviceReadUntil, ct);
+        var commonTask = LoadCommonAsync(window, ct);
+        await Task.WhenAll(carbTask, apsTask, pumpTask, commonTask);
+
+        var carbs = (await carbTask).ToList();
+        var apsPoints = await apsTask;
+        var common = await commonTask;
+        var now = filter.Now.ToMills();
+        var delivery = await DeliveryAsync(common, window, now, ct);
+
+        var iobCob = IobCobSeries.Build(
+            iobCalculator, cobCalculator, common.Boluses, carbs, common.TempBasals, delivery.Timeline, delivery.Scheduled,
+            DeviceReadings.Of(apsPoints, await pumpTask),
+            series.FirstTick, series.LastTick, now, series.IntervalMs, ct);
+
+        var inputs = new DailyProfileInputs
+        {
+            Zone = zone,
+            Glucose = [.. common.Glucose.Select(g => new GlucoseSample(g.Mills, g.Mgdl))],
+            Insulin = delivery.Insulin,
+            Carbs = [.. carbs.Where(c => c.Mills >= from && c.Mills < to).Select(c => new CarbEvent(c.Mills, c.Carbs, c.CorrelationId))],
+            IobCob = iobCob,
+            IobCobIntervalMs = TickMs,
+            HistoryVisibleFrom = filter.HistoryVisibleFrom is { } edge ? edge.ToMills() : null,
+            CalculatedIobCobTime = DailyProfileCalculator.CalculableIobCobTime(
+                delivery.Evidence,
+                common.Boluses.Where(b => b.Insulin > 0).Select(b => b.Mills)
+                    .Concat(carbs.Where(c => c.Carbs > 0).Select(c => c.Mills))),
+            TargetAt = await TargetRangesAsync(
+                delivery.HasTherapy ? common.Profiles : [], ActiveTemporaryTargets(common.Spans, to), zone, to, ct),
+        };
+
+        return new DailyProfileLoaded(inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= to.ToUtcDateTime())), to), delivery.Timeline);
+    }
+
+    /// <summary>
+    /// The target range in force at an instant: a running temporary target, read in mg/dL as
+    /// <see cref="TemporaryTargetUnits"/> reads it, else the schedule. The schedule is the
+    /// activation's own targets when it carries them, else the profile's stored version in force, as
+    /// <see cref="ActiveSchedule"/> reads it for one instant, from versions read once per profile.
+    /// </summary>
+    private async Task<Func<long, (double Low, double High)?>> TargetRangesAsync(
+        IReadOnlyList<ProfileSpan> profiles,
+        IEnumerable<(StateSpan Span, MillsInterval Interval)> temporaryTargets,
+        TimeZoneInfo zone,
+        long to,
+        CancellationToken ct)
+    {
+        var versions = await VersionsByProfileAsync(profiles, targetRangeScheduleRepository, ct);
+
+        var temporary = StepTimeline<(double Low, double High)>.LatestStartedWins(temporaryTargets
+            .Select(t => (t.Interval, Range: TemporaryTargetRange(t.Span)))
+            .Where(t => t.Range is not null)
+            .Select(t => new Step<(double Low, double High)>(t.Interval.Start, t.Interval.End, t.Range!.Value)));
+        var scheduled = StepTimeline<ProfileSpan>.LatestStartedWins(
+            profiles.Select(p => new Step<ProfileSpan>(p.StartMills, p.EndMills ?? to, p)));
+
+        return mills =>
+        {
+            if (temporary.TryAt(mills, out var target))
+                return target;
+            if (!scheduled.TryAt(mills, out var span))
+                return null;
+            var entries = span.Schedules?.Targets
+                ?? ProfileVersionCache.ActiveAt(
+                    versions[span.ProfileName], mills.ToUtcDateTime())?.Entries;
+            if (entries is null)
+                return null;
+            var shifted = mills + (span.Adjustment?.TimeshiftMs ?? 0);
+            return ScheduleResolution.FindRangeAtTime(entries, ScheduleEntryTime.SecondsOfDay(shifted, zone));
+        };
+    }
+
+    private static (double Low, double High)? TemporaryTargetRange(StateSpan span)
+    {
+        var (top, bottom) = TemporaryTargetUnits.ToMgdl(
+            (double?)span.Metadata.TryReadDecimal("targetTop"),
+            (double?)span.Metadata.TryReadDecimal("targetBottom"),
+            span.Metadata.TryReadString("units"));
+        return (bottom ?? top, top ?? bottom) is (double low, double high) ? (low, high) : null;
+    }
+}

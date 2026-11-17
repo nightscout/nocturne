@@ -35,7 +35,8 @@ public class LoopServiceParityTests
         var service = new LoopService(
             Mock.Of<ILogger<LoopService>>(),
             Options.Create(configuration),
-            mockFactory
+            mockFactory,
+            TimeProvider.System
         );
         return (service, mockFactory);
     }
@@ -54,13 +55,15 @@ public class LoopServiceParityTests
                     DeveloperTeamId = "TEAM123456",
                 }
             ),
-            factory
+            factory,
+            TimeProvider.System
         );
 
         var result = await service.SendNotificationAsync(
             new LoopNotificationData { EventType = "Temporary Override Cancel" },
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -102,6 +105,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -159,6 +163,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "192.168.1.100",
+            null,
             CancellationToken.None
         );
 
@@ -207,6 +212,7 @@ public class LoopServiceParityTests
             data,
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -234,6 +240,7 @@ public class LoopServiceParityTests
             new LoopNotificationData { EventType = "Temporary Override Cancel" },
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -268,6 +275,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -312,6 +320,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "10.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -359,6 +368,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -394,6 +404,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -433,6 +444,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "172.16.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -477,6 +489,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -509,6 +522,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -546,6 +560,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -577,6 +592,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -589,6 +605,29 @@ public class LoopServiceParityTests
 
         var difference = expiration - sentAt;
         Assert.Equal(5, difference.TotalMinutes, 0.1);
+
+        service.Dispose();
+    }
+
+    [Fact]
+    public async Task SendNotificationAsync_MarksPushTimeSensitiveAndContentAvailable()
+    {
+        var (service, factory) = CreateLoopService();
+
+        var result = await service.SendNotificationAsync(
+            new LoopNotificationData { EventType = "Temporary Override Cancel" },
+            CreateValidLoopSettings(),
+            "127.0.0.1",
+            null,
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success, result.Message);
+        var push = factory.LastPush;
+        Assert.NotNull(push);
+        Assert.Equal("time-sensitive", push.GetApsProperty("interruption-level"));
+        Assert.Equal("1", push.GetApsProperty("content-available"));
+        Assert.Contains("Cancel Temporary Override", push.GetApsProperty("alert"));
 
         service.Dispose();
     }

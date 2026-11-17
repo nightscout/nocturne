@@ -1,0 +1,125 @@
+---
+title: Google Health
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Google Health
+
+Nocturne can import steps, heart rate, weight and sleep from Google Health. Each Nocturne
+server connects through one Google OAuth client that its operator sets up once; the people
+using the server only click **Connect**.
+
+## Connecting your Google Health data
+
+1. In the Google Health app on your phone, make sure the data you want is there and linked to
+   your Google account.
+2. In Nocturne, open **Site settings > Connectors & Apps** and choose **Google Health**.
+3. Click **Connect Google Health**, pick your Google account, and allow the data Nocturne asks
+   to read.
+4. Back in Nocturne, click **Refresh inventory** to see what Google has, choose the data types to
+   import, and click **Save selection and import**.
+
+Nocturne then syncs about every 15 minutes. It imports the last seven days first; set
+**Import data from** to an earlier date to bring in older history, which arrives a month at a
+time in the background.
+
+Access is read-only: Nocturne never writes to Google Health.
+
+<Callout type="info" title="Google Health is not enabled on this server">
+
+  If Nocturne says your operator hasn't enabled Google Health, the server has no Google client
+  yet. Whoever runs your Nocturne server needs to follow the steps below.
+
+</Callout>
+
+### Disconnecting and deleting
+
+**Disconnect** stops syncing and revokes Nocturne's access in Google. If the same Google account
+is still connected in another tenant on this server, Nocturne keeps that access so the other
+tenant keeps syncing; it is revoked when the last tenant disconnects. Data already imported stays
+in Nocturne. Once disconnected, **Delete imported Google Health data** removes everything that
+came from Google Health; your data in Google is not touched.
+
+## Setting up Google Health on your server
+
+This part is for the person who runs the Nocturne server. If you self-host Nocturne, that is you.
+
+### 1. Create the Google OAuth client
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project (or reuse one)
+   and enable the **Google Health API**.
+2. Under **Google Auth Platform**, configure the consent screen: app name, support email, and
+   audience **External**.
+3. Under **Clients**, create an OAuth client of type **Web application**.
+4. Under **Authorized redirect URIs**, add the **Callback URL** that Nocturne shows in the next
+   step. It has this form, with your own address in place of the example:
+
+```
+https://nocturne.example.com/api/v4/google-health/oauth/callback
+```
+
+Every tenant uses that same address; Nocturne sends each person back to their own subdomain
+afterwards.
+
+5. Copy the **Client ID** and **Client secret**.
+
+### 2. Give Nocturne the client
+
+Sign in as an instance administrator and open **Settings > Administration > Integrations**. On the
+**Google Health** card:
+
+1. Enter the **Client ID** (ending in `.apps.googleusercontent.com`) and the **Client secret**.
+2. Check the **Callback URL**. Nocturne fills it in from `BASE_DOMAIN`. Change it only when your
+   public address is different, or when `BASE_DOMAIN` is not set. It must end in
+   `/api/v4/google-health/oauth/callback` and match the redirect URI in Google Cloud exactly.
+3. Turn on **Enabled** and select **Save**.
+
+The change applies to new requests and sync jobs at once. You do not have to restart Nocturne.
+The **Connect Google Health** button then appears for everyone on the server. Each person still
+authorizes their own Google account and controls consent in Google.
+
+To keep a stored value, leave its field blank when you save. Nocturne encrypts the client secret
+on the server and never sends it back to the browser. Only instance administrators can see or
+change this card. Tenant owners and administrators cannot.
+
+If you turn Google Health off or remove the card's settings, connections and syncing stop.
+Imported data is kept.
+
+<Callout type="info" title="Upgrading from an earlier version">
+
+  Earlier versions read the client from the `GOOGLE_HEALTH_CLIENT_ID`,
+  `GOOGLE_HEALTH_CLIENT_SECRET` and `GOOGLE_HEALTH_REDIRECT_URI` environment variables. Nocturne
+  no longer reads them. After you upgrade, enter the same client ID and secret on the
+  **Google Health** card. If you set `GOOGLE_HEALTH_REDIRECT_URI`, enter the same value as the
+  **Callback URL**. With the same client ID, existing connections keep working. You can then
+  remove the variables from your `.env`.
+
+</Callout>
+
+### 3. Who can connect
+
+Google limits what an unverified app can do, and these limits apply to your client:
+
+- While the consent screen's publishing status is **Testing**, only the Google accounts you add
+  as test users can connect, and Google expires their refresh tokens after **7 days**. Each person then
+  has to connect again.
+- Publishing to **Production** removes the seven-day expiry of the testing status. This is not
+  the same as verification: an unverified app still shows a warning and can be used by at most
+  **100 users**. Google can still expire or revoke a refresh token for other reasons.
+- Serving more than 100 users requires Google's verification, which for health data includes a
+  **third-party security assessment**.
+
+For a server shared by family or a few friends, publishing to production and staying under 100
+users is usually enough. Google sets these rules and can change them, so check Google's
+requirements for your server.
+
+<Callout type="warning" title="Changing the client">
+
+  A Google connection belongs to the client it was made with. If you replace the client ID,
+  everyone who had connected sees **Reconnect** and has to click **Connect Google Health** again.
+  Their imported data is kept.
+
+</Callout>

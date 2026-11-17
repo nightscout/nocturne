@@ -2,8 +2,8 @@ namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>
 /// Well-known diabetes app directory. Ships bundled with Nocturne and updates
-/// with releases. Provides identity metadata for consent screens and for
-/// seeding pre-verified OAuth client rows per tenant via DCR.
+/// with releases. Provides the identity a dynamic registration receives when its
+/// redirect URIs prove it is the app it names.
 /// </summary>
 /// <seealso cref="KnownClientEntry"/>
 /// <seealso cref="Scope"/>
@@ -244,12 +244,14 @@ public class KnownClientEntry
     public string? LogoUri { get; set; }
 
     /// <summary>
-    /// Allowed redirect URIs to seed when the client registers via DCR.
+    /// The only redirect URIs a dynamic registration may submit and still receive this identity.
+    /// Empty means only a registration with no redirect URIs (device flow) is verified; an app with
+    /// a per-install callback registers unverified.
     /// </summary>
     public List<string> RedirectUris { get; set; } = [];
 
     /// <summary>
-    /// Typical scopes this app requests (informational, used for seeding).
+    /// Typical scopes this app requests (informational).
     /// </summary>
     public List<string> TypicalScopes { get; set; } = [];
 }

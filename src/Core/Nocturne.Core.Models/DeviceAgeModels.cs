@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
 
@@ -35,11 +36,20 @@ public class DeviceAgePreferences
     [JsonPropertyName("display")]
     public string Display { get; set; } = "hours";
 
-    /// <summary>
-    /// Whether to enable alert notifications
-    /// </summary>
     [JsonPropertyName("enableAlerts")]
     public bool EnableAlerts { get; set; }
+}
+
+/// <summary>
+/// The Nightscout alarm level scale. A device age below its info threshold, or with no change
+/// event found, is <see cref="None"/>.
+/// </summary>
+public static class DeviceAgeLevel
+{
+    public const int None = -3;
+    public const int Info = 0;
+    public const int Warn = 1;
+    public const int Urgent = 2;
 }
 
 /// <summary>
@@ -77,9 +87,6 @@ public class DeviceAgeInfo
     [JsonPropertyName("treatmentDate")]
     public long? TreatmentDate { get; set; }
 
-    /// <summary>
-    /// Notes from the treatment
-    /// </summary>
     [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
@@ -90,14 +97,11 @@ public class DeviceAgeInfo
     public int MinFractions { get; set; }
 
     /// <summary>
-    /// Notification level based on age thresholds
+    /// Alarm level for the age, on the <see cref="DeviceAgeLevel"/> scale
     /// </summary>
     [JsonPropertyName("level")]
-    public int Level { get; set; }
+    public int Level { get; set; } = DeviceAgeLevel.None;
 
-    /// <summary>
-    /// Display string for the age
-    /// </summary>
     [JsonPropertyName("display")]
     public string Display { get; set; } = "n/a";
 
@@ -113,15 +117,9 @@ public class DeviceAgeInfo
 /// </summary>
 public class SensorAgeInfo
 {
-    /// <summary>
-    /// Information for sensor start events
-    /// </summary>
     [JsonPropertyName("Sensor Start")]
     public DeviceAgeInfo SensorStart { get; set; } = new();
 
-    /// <summary>
-    /// Information for sensor change events
-    /// </summary>
     [JsonPropertyName("Sensor Change")]
     public DeviceAgeInfo SensorChange { get; set; } = new();
 
@@ -129,41 +127,26 @@ public class SensorAgeInfo
     /// The most recent valid event type ("Sensor Start" or "Sensor Change")
     /// </summary>
     [JsonPropertyName("min")]
-    public string Min { get; set; } = "Sensor Start";
+    public string Min { get; set; } = TreatmentTypes.SensorStart;
 }
 
-/// <summary>
-/// Notification information for device age alerts
-/// </summary>
 public class DeviceAgeNotification
 {
-    /// <summary>
-    /// Notification title
-    /// </summary>
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Notification message
-    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Pushover sound to use
-    /// </summary>
     [JsonPropertyName("pushoverSound")]
     public string PushoverSound { get; set; } = "incoming";
 
     /// <summary>
-    /// Notification level
+    /// The <see cref="DeviceAgeLevel"/> of the age that raised the notification
     /// </summary>
     [JsonPropertyName("level")]
-    public int Level { get; set; }
+    public int Level { get; set; } = DeviceAgeLevel.None;
 
-    /// <summary>
-    /// Notification group
-    /// </summary>
     [JsonPropertyName("group")]
     public string Group { get; set; } = string.Empty;
 }

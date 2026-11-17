@@ -24,7 +24,6 @@ public class BasalInjection : V4RecordBase, IDeviceAttributed
     /// <summary>Insulin units injected.</summary>
     public double Units { get; set; }
 
-    /// <summary>Optional user-supplied note.</summary>
     public string? Notes { get; set; }
 
     /// <summary>

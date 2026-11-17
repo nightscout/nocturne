@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -10,19 +12,25 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EfFirstPartyTokenRepository"/> class.
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public EfFirstPartyTokenRepository(NocturneDbContext context)
+    public EfFirstPartyTokenRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <inheritdoc />
     public async Task CreateAsync(RefreshTokenRecord record, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        await AddAsync(db, record, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task AddAsync(NocturneDbContext db, RefreshTokenRecord record, CancellationToken ct)
     {
         // A demo tenant's visitor account is shared: anyone can obtain a session for it without
         // signing up, and GET /api/v4/account/sessions lists every session for the subject —
@@ -36,7 +44,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         // app's first automatic token refresh put the real client address back within one
         // access-token lifetime of any visit. Scrubbing at the single row-creating sink means no
         // path can repopulate them, including one added later.
-        var isDemoSubject = await _context.Subjects
+        var isDemoSubject = await db.Subjects
             .AsNoTracking()
             .Where(s => s.Id == record.SubjectId)
             .Select(s => (bool?)s.IsDemoSubject)
@@ -45,7 +53,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         var scrub = isDemoSubject is true;
 
         if (scrub)
-            await TrimDemoSessionsAsync(record.SubjectId, ct);
+            await TrimDemoSessionsAsync(db, record.SubjectId, ct);
 
         var entity = new RefreshTokenEntity
         {
@@ -60,8 +68,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             ExpiresAt = record.ExpiresAt,
         };
 
-        _context.RefreshTokens.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        db.RefreshTokens.Add(entity);
     }
 
     /// <summary>
@@ -76,26 +83,35 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// without signing up. Deletes rather than revokes: a revoked row still occupies the table.
     /// <para>
     /// Expired and revoked rows go first, so a live session is only displaced once there is nothing
-    /// dead left to clear. Concurrent callers can each observe a count under the cap and each
-    /// insert, so the true ceiling is the cap plus the number of simultaneous writers — bounded,
-    /// which is the property being bought here.
+    /// dead left to clear. A row rotated inside <see cref="RefreshTokenRotation.GracePeriod"/> is
+    /// kept: it is how a request still carrying it finds the successor to replay. So the rows a
+    /// visitor looping refresh holds are bounded by that window rather than by the cap. Concurrent
+    /// callers can each observe a count under the cap and each insert, so the true ceiling is the
+    /// cap plus the number of simultaneous writers: bounded, which is the property being bought
+    /// here.
     /// </para>
     /// </remarks>
-    private async Task TrimDemoSessionsAsync(Guid subjectId, CancellationToken ct)
+    private static async Task TrimDemoSessionsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
 
         // Ordered newest-first with a tiebreaker, so "which rows are surplus" does not depend on
         // how the provider breaks ties between rows issued in the same instant — which visitors
         // arriving together routinely are.
-        var rows = await _context.RefreshTokens
+        var replayableSince = now - RefreshTokenRotation.GracePeriod;
+        var rows = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId)
             .OrderByDescending(t => t.IssuedAt)
             .ThenByDescending(t => t.Id)
-            .Select(t => new { t.Id, IsDead = t.RevokedAt != null || t.ExpiresAt <= now })
+            .Select(t => new
+            {
+                t.Id,
+                IsDead = t.RevokedAt != null || t.ExpiresAt <= now,
+                IsReplayable = t.ReplacedByTokenId != null && t.RevokedAt > replayableSince && t.ExpiresAt > now,
+            })
             .ToListAsync(ct);
 
-        var doomed = rows.Where(r => r.IsDead).Select(r => r.Id).ToList();
+        var doomed = rows.Where(r => r.IsDead && !r.IsReplayable).Select(r => r.Id).ToList();
 
         // Only what is still live counts against the cap, and one slot is left for the row the
         // caller is about to add.
@@ -111,17 +127,18 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         // inside the same SaveChanges as the insert, so the trim and the new row commit together,
         // and it does not depend on a provider that implements bulk delete. The set it loads is
         // bounded by the cap.
-        var entities = await _context.RefreshTokens
+        var entities = await db.RefreshTokens
             .Where(t => doomed.Contains(t.Id))
             .ToListAsync(ct);
 
-        _context.RefreshTokens.RemoveRange(entities);
+        db.RefreshTokens.RemoveRange(entities);
     }
 
     /// <inheritdoc />
     public async Task<RefreshTokenRecord?> FindByHashAsync(string tokenHash, CancellationToken ct = default)
     {
-        var entity = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.RefreshTokens
             .AsNoTracking()
             .Where(t => t.TokenHash == tokenHash)
             .FirstOrDefaultAsync(ct);
@@ -139,7 +156,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         Guid? replacedByTokenId = null,
         CancellationToken ct = default)
     {
-        var entity = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.RefreshTokens
             .Where(t => t.Id == tokenId)
             .FirstOrDefaultAsync(ct);
 
@@ -149,36 +167,49 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         entity.RevokedAt = DateTime.UtcNow;
         entity.RevokedReason = reason;
         entity.ReplacedByTokenId = replacedByTokenId;
-        entity.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
-    public async Task<bool> TryMarkRotatedAsync(
+    public async Task<bool> TryRotateAsync(
         Guid tokenId,
-        Guid replacedByTokenId,
+        RefreshTokenRecord successor,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        await using var db = await _contexts.CreateAsync(ct);
 
-        // Single atomic UPDATE ... WHERE id = @id AND revoked_at IS NULL. The database admits
-        // exactly one concurrent caller while the row is still active, so parallel refresh
-        // requests cannot each mint a successor and fork the token chain.
-        var affected = await _context.RefreshTokens
-            .Where(t => t.Id == tokenId && t.RevokedAt == null)
-            .ExecuteUpdateAsync(
-                s => s
-                    .SetProperty(t => t.RevokedAt, now)
-                    .SetProperty(t => t.RevokedReason, "Rotated")
-                    .SetProperty(t => t.ReplacedByTokenId, (Guid?)replacedByTokenId)
-                    // Rotation is the token being exchanged — stamp last use here since the
-                    // rotation path never reaches UpdateLastUsedAsync.
-                    .SetProperty(t => t.LastUsedAt, now)
-                    .SetProperty(t => t.UpdatedAt, now),
-                ct);
+        return await db.ExecuteInTransactionAsync(
+            async token =>
+            {
+                var now = DateTime.UtcNow;
 
-        return affected == 1;
+                // Single atomic UPDATE ... WHERE id = @id AND revoked_at IS NULL. The database admits
+                // exactly one concurrent caller while the row is still active, so parallel refresh
+                // requests cannot each mint a successor and fork the token chain.
+                var affected = await db.RefreshTokens
+                    .Where(t => t.Id == tokenId && t.RevokedAt == null)
+                    .ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(t => t.RevokedAt, now)
+                            .SetProperty(t => t.RevokedReason, "Rotated")
+                            .SetProperty(t => t.ReplacedByTokenId, (Guid?)successor.Id)
+                            // Rotation is the token being exchanged: stamp last use here since the
+                            // rotation path never reaches UpdateLastUsedAsync.
+                            .SetProperty(t => t.LastUsedAt, now)
+                            .SetProperty(t => t.UpdatedAt, now),
+                        token);
+
+                if (affected != 1)
+                    return false;
+
+                await AddAsync(db, successor, token);
+                await db.SaveChangesAsync(token);
+                return true;
+            },
+            verifySucceeded: async (claimed, token) =>
+                claimed && await db.RefreshTokens.AnyAsync(t => t.Id == successor.Id, token),
+            ct: ct);
     }
 
     /// <inheritdoc />
@@ -187,7 +218,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
-        var tokens = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var tokens = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
 
@@ -196,10 +228,9 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         {
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }
@@ -210,7 +241,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
-        var tokens = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var tokens = await db.RefreshTokens
             .Where(t => t.OidcSessionId == oidcSessionId && t.RevokedAt == null)
             .ToListAsync(ct);
 
@@ -219,10 +251,9 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         {
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }
@@ -234,13 +265,11 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
-        Guid.TryParse(sessionId, out var legacyTokenId);
+        await using var db = await _contexts.CreateAsync(ct);
 
-        var tokens = await _context.RefreshTokens
-            .Where(t => t.SubjectId == subjectId
-                && t.RevokedAt == null
-                && (t.OidcSessionId == sessionId
-                    || (t.OidcSessionId == null && t.Id == legacyTokenId)))
+        var tokens = await db.RefreshTokens
+            .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
+            .Where(RefreshTokenEntity.InSession(sessionId))
             .ToListAsync(ct);
 
         var now = DateTime.UtcNow;
@@ -248,10 +277,9 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         {
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }
@@ -263,9 +291,10 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
-        Guid.TryParse(currentSessionId, out var legacyTokenId);
+        await using var db = await _contexts.CreateAsync(ct);
+        var isCurrent = RefreshTokenEntity.InSession(currentSessionId).Compile();
 
-        var tokens = await _context.RefreshTokens
+        var tokens = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
 
@@ -273,18 +302,15 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         var count = 0;
         foreach (var token in tokens)
         {
-            var isCurrent = token.OidcSessionId == currentSessionId
-                || (token.OidcSessionId == null && token.Id == legacyTokenId);
-            if (isCurrent)
+            if (isCurrent(token))
                 continue;
 
             token.RevokedAt = now;
             token.RevokedReason = reason;
-            token.UpdatedAt = now;
             count++;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return count;
     }
@@ -292,7 +318,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// <inheritdoc />
     public async Task UpdateLastUsedAsync(string tokenHash, CancellationToken ct = default)
     {
-        await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        await db.RefreshTokens
             .Where(t => t.TokenHash == tokenHash)
             .ExecuteUpdateAsync(
                 s => s
@@ -304,7 +331,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// <inheritdoc />
     public async Task<int> PruneExpiredAsync(DateTime cutoff, CancellationToken ct = default)
     {
-        return await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        return await db.RefreshTokens
             .Where(t => t.ExpiresAt < cutoff || (t.RevokedAt != null && t.RevokedAt < cutoff))
             .ExecuteDeleteAsync(ct);
     }
@@ -314,7 +342,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         Guid subjectId,
         CancellationToken ct = default)
     {
-        return await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        return await db.RefreshTokens
             .AsNoTracking()
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .OrderByDescending(t => t.LastUsedAt ?? t.IssuedAt)
@@ -330,6 +359,31 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
                 IsCurrent = false
             })
             .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasLiveSessionAsync(
+        Guid subjectId, string? sessionId, DateTime now, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateForSubjectAsync(subjectId, ct);
+        var live = db.RefreshTokens.Where(t =>
+            t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > now);
+        if (sessionId != null)
+            live = live.Where(RefreshTokenEntity.InSession(sessionId));
+        return await live.AnyAsync(ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// On a platform context, as the demo reset that retires the visitor ran it before the move:
+    /// the table carries no tenant, and with no subject pinned every row of the subject is in reach.
+    /// </remarks>
+    public async Task<int> DeleteAllForSubjectAsync(Guid subjectId, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreatePlatformAsync(ct);
+        return await db.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .ExecuteDeleteAsync(ct);
     }
 
     private static RefreshTokenRecord ToRecord(RefreshTokenEntity entity) =>

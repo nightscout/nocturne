@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CoachMarkContext } from "@nocturne/coach";
+import { coachLabels } from "./copy.svelte";
 import type { CoachMarkAdapter, MarkRegistration, SequenceConfig } from "@nocturne/coach";
 
 const sequences: SequenceConfig = {
@@ -19,7 +20,7 @@ function makeRegistration(key: string): MarkRegistration {
 }
 
 async function mounted(): Promise<CoachMarkContext> {
-  const context = new CoachMarkContext(adapter, sequences);
+  const context = new CoachMarkContext(adapter, coachLabels(), sequences);
   await context.initialize();
   context.register(makeRegistration("onboarding.a"));
   context.register(makeRegistration("onboarding.b"));

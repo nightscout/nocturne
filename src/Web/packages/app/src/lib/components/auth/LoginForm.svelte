@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ComponentProps } from "svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as InputGroup from "$lib/components/ui/input-group";
-  import { Label } from "$lib/components/ui/label";
+  import { untrack, type ComponentProps } from "svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
@@ -11,21 +11,22 @@
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import * as InputOTP from "$lib/components/ui/input-otp";
-  import { FormError, FormField, useSubmission } from "$lib/forms";
+  import * as InputOTP from "#lib/components/ui/input-otp/index.js";
+  import { FormError, FormField, useSubmission } from "#lib/forms/index.js";
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
     setAuthCookies,
     signInWithAuthenticator,
     signInWithRecoveryCode,
-  } from "$routes/(unauthenticated)/auth/auth.remote";
+  } from "#routes/(unauthenticated)/auth/auth.remote.js";
   import {
     discoverableLoginOptions,
     loginOptions,
     loginComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
-  import { goto, invalidateAll } from "$app/navigation";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
+  import { invalidateAll } from "$app/navigation";
+  import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
   import { describePasskeyError } from "./passkey-errors";
   import {
@@ -41,15 +42,21 @@
     returnUrl?: string;
     onSuccess?: () => void;
     /**
-     * Whether this page is served on a host that resolves no tenant. Passkeys, authenticator
-     * codes, and recovery codes are all checked against a resolved tenant's members, so on such
-     * a host only the identity-provider path can complete a sign-in and it is the only one
-     * offered.
+     * Whether this page is served on a host that resolves no tenant. Passkeys and recovery codes
+     * are checked against a resolved tenant's members, so on such a host only the
+     * identity-provider path can start a sign-in and it is the only one offered.
      */
     tenantless?: boolean;
+    /** A step-up token from an identity-provider sign-in that still needs the authenticator code. */
+    pendingStepUpToken?: string;
   }
 
-  let { returnUrl = "/", onSuccess, tenantless = false }: Props = $props();
+  let {
+    returnUrl = "/",
+    onSuccess,
+    tenantless = false,
+    pendingStepUpToken,
+  }: Props = $props();
 
   const oidcQuery = getOidcProviders();
 
@@ -73,7 +80,9 @@
 
   // UI mode
   type LoginMode = "default" | "username" | "recovery" | "totp";
-  let mode = $state<LoginMode>("default");
+  let mode = $state<LoginMode>(
+    untrack(() => (pendingStepUpToken ? "totp" : "default"))
+  );
   let isLoading = $state(false);
   let isRedirecting = $state(false);
   let selectedProvider = $state<string | null>(null);
@@ -85,10 +94,10 @@
   let passkeyError = $state<string | null>(null);
 
   const recovery = useSubmission({
-    fallback: "We couldn't sign you in just now. Please try again.",
+    fallback: "Could not sign you in just now. Try again.",
   });
   const authenticator = useSubmission({
-    fallback: "We couldn't sign you in just now. Please try again.",
+    fallback: "Could not sign you in just now. Try again.",
   });
 
   // Browser support
@@ -102,10 +111,10 @@
   /** Submitted from the code field's onComplete, so a full code submits itself. */
   let totpFormEl = $state<HTMLFormElement | null>(null);
   /**
-   * Proof from the API that the passkey step succeeded. The authenticator code is
-   * a second factor, so it is only accepted alongside this token.
+   * Proof from the API that the passkey or identity-provider step succeeded. The
+   * authenticator code is a second factor, so it is only accepted alongside this token.
    */
-  let stepUpToken = $state("");
+  let stepUpToken = $state(untrack(() => pendingStepUpToken ?? ""));
 
   async function handleAuthResult(result: {
     success?: boolean;
@@ -119,7 +128,7 @@
   }) {
     if (!result.success) {
       passkeyError =
-        result.error ?? "We couldn't sign you in. Please try again.";
+        result.error ?? "Could not sign you in. Try again.";
       return;
     }
 
@@ -127,7 +136,7 @@
     // no session yet — collect the code and finish there.
     if (result.totpRequired) {
       if (!result.stepUpToken) {
-        passkeyError = "We couldn't sign you in. Please try again.";
+        passkeyError = "Could not sign you in. Try again.";
         return;
       }
       stepUpToken = result.stepUpToken;
@@ -152,8 +161,7 @@
     if (onSuccess) {
       onSuccess();
     } else {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      await goto(returnUrl, { invalidateAll: true });
+      await goToReturnUrl(returnUrl, { refreshAll: true });
     }
   }
 
@@ -363,7 +371,7 @@
   </div>
 {:else}
   <div class="space-y-4">
-    {#if tenantless}
+    {#if tenantless && mode !== "totp"}
       <p class="text-sm text-muted-foreground">
         Passkeys, authenticator codes, and recovery codes are checked against one
         tenant, so they are used at that tenant's own web address.
@@ -405,7 +413,7 @@
       {/if}
 
       {#if !tenantless}
-        <div class="flex justify-center gap-3 text-xs">
+        <div class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs">
           {@render otherMethodLinks()}
         </div>
       {/if}
@@ -450,7 +458,7 @@
         </Button>
       </form>
 
-      <div class="flex justify-between text-xs">
+      <div class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs">
         {@render backToSignIn("Back")}
         <div class="flex gap-3">
           {@render otherMethodLinks()}
@@ -466,7 +474,7 @@
           await recovery.run(submit, onSuccess);
         })}
       >
-        <input type="hidden" name="returnUrl" value={returnUrl} />
+        <input {...signInWithRecoveryCode.fields.returnUrl.as("hidden", returnUrl)} />
 
         <FormError issues={recovery.error} focusOnShow />
 
@@ -483,7 +491,7 @@
               </InputGroup.Addon>
               <InputGroup.Input
                 {...field}
-                name="username"
+                name={signInWithRecoveryCode.fields.username.as("text").name}
                 type="text"
                 placeholder="your-username"
                 autocomplete="username"
@@ -509,7 +517,7 @@
               </InputGroup.Addon>
               <InputGroup.Input
                 {...field}
-                name="code"
+                name={signInWithRecoveryCode.fields.code.as("text").name}
                 type="text"
                 placeholder="XXXX-XXXX"
                 class="font-mono"
@@ -540,29 +548,29 @@
       </div>
 
     {:else if mode === "totp"}
-      <!-- Second step after the passkey: the authenticator code, verified on the server. -->
+      <!-- Second step after a passkey or identity provider: the authenticator code, verified on the server. -->
       <form
         bind:this={totpFormEl}
         class="space-y-3"
+        data-testid="authenticator-step"
         {...signInWithAuthenticator.enhance(async ({ submit }) => {
           await authenticator.run(submit, onSuccess);
         })}
       >
-        <input type="hidden" name="returnUrl" value={returnUrl} />
-        <input type="hidden" name="stepUpToken" value={stepUpToken} />
+        <input {...signInWithAuthenticator.fields.returnUrl.as("hidden", returnUrl)} />
+        <input {...signInWithAuthenticator.fields.stepUpToken.as("hidden", stepUpToken)} />
 
         <FormError issues={authenticator.error} focusOnShow />
 
         <p class="text-sm text-muted-foreground">
-          Your passkey was accepted. Enter the current code from your authenticator
-          app to finish signing in.
+          Enter the current code from your authenticator app to finish signing in.
         </p>
 
         <div class="space-y-2">
           <Label for="totp-code-input">Authenticator code</Label>
           <div class="flex justify-center">
             <InputOTP.Root
-              name="code"
+              name={signInWithAuthenticator.fields.code.as("text").name}
               inputId="totp-code-input"
               maxlength={6}
               bind:value={totpCode}

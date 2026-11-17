@@ -17,7 +17,7 @@ public class StatisticsServiceBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _service = new StatisticsService();
+        _service = new StatisticsService(TimeProvider.System);
         _dayEntries = SensorGlucoseFactory.Generate(288);
         _weekEntries = SensorGlucoseFactory.Generate(2016);
         _quarterEntries = SensorGlucoseFactory.Generate(25920);

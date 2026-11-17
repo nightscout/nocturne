@@ -5,7 +5,9 @@ using Nocturne.API.Services.Monitoring;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Realtime;
 
@@ -55,6 +57,12 @@ public interface ISignalRBroadcastService
     /// </summary>
     Task BroadcastClearAlarmAsync(NotificationBase clearAlarm);
 
+    /// <summary>
+    /// Broadcast an alert engine alarm or all-clear to alarm subscribers, as one of the
+    /// <see cref="Alerts.EngineAlarmEvents"/>.
+    /// </summary>
+    Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify);
+
     // Storage events
     /// <summary>
     /// Broadcast storage create event (replaces socket.io 'create' event in storage namespace)
@@ -72,20 +80,16 @@ public interface ISignalRBroadcastService
     Task BroadcastStorageDeleteAsync(string collectionName, object data);
 
     /// <summary>
-    /// Broadcast a tracker instance update, routed by its definition's visibility: a Public instance
-    /// reaches the tenant's authorized clients, a Private one only its owner's subject group.
+    /// Broadcast a tracker instance update to the tenant's authorized clients, as a
+    /// <c>trackerUpdate</c> event.
     /// </summary>
-    /// <remarks>
-    /// Mirrors the HTTP read rule in
-    /// <see cref="Nocturne.Infrastructure.Data.Repositories.TrackerRepository.GetActiveInstancesAsync"/>:
-    /// only a Public definition is visible tenant-wide, otherwise just to its owner.
-    /// </remarks>
-    Task BroadcastTrackerUpdateAsync(
-        string action,
-        TrackerInstanceDto trackerInstance,
-        string ownerSubjectId,
-        TrackerVisibility visibility
-    );
+    Task BroadcastTrackerUpdateAsync(TrackerRealtimeAction action, TrackerInstanceDto trackerInstance);
+
+    /// <summary>
+    /// Tell the tenant's authorized clients that a tracker definition was created, changed or
+    /// deleted, as a <c>trackerDefinitionUpdate</c> event carrying its id.
+    /// </summary>
+    Task BroadcastTrackerDefinitionUpdateAsync(Guid definitionId);
 
     /// <summary>
     /// Broadcast configuration change event to subscribers via ConfigHub
@@ -115,12 +119,23 @@ public interface ISignalRBroadcastService
     Task BroadcastNotificationUpdatedAsync(string userId, InAppNotificationDto notification);
 
     /// <summary>
-    /// Broadcast an alert engine event (alert_dispatch, alert_resolved, alert_acknowledged)
-    /// to the tenant's alert subscribers group.
+    /// Broadcast an alert engine event to the tenant's alert subscribers group only. Resolutions and
+    /// acknowledgements go through <see cref="BroadcastAlertResolvedAsync"/> and
+    /// <see cref="BroadcastAlertAcknowledgedAsync"/>, which also reach Home Assistant.
     /// </summary>
     /// <param name="eventName">The event name to broadcast</param>
     /// <param name="payload">The event payload</param>
     Task BroadcastAlertEventAsync(string eventName, object payload);
+
+    /// <summary>
+    /// Broadcast <c>alert_resolved</c> to the tenant's alert subscribers and Home Assistant instances.
+    /// </summary>
+    Task BroadcastAlertResolvedAsync(AlertResolvedEvent resolved);
+
+    /// <summary>
+    /// Broadcast <c>alert_acknowledged</c> to the tenant's alert subscribers and Home Assistant instances.
+    /// </summary>
+    Task BroadcastAlertAcknowledgedAsync(AlertAcknowledgedEvent acknowledged);
 
     /// <summary>
     /// Broadcast a device actuation intent to the tenant's authenticated DataHub clients.
@@ -152,9 +167,9 @@ public interface ISignalRBroadcastService
     Task BroadcastSyncProgressAsync(SyncProgressEvent progress);
 
     /// <summary>
-    /// Broadcast glucose reading to Home Assistant subscribers via HomeAssistantHub
+    /// Broadcast <c>glucose_reading</c> to the tenant's Home Assistant instances that may read glucose.
     /// </summary>
-    Task BroadcastHomeAssistantGlucoseAsync(object glucoseData);
+    Task BroadcastHomeAssistantGlucoseAsync(GlucoseReadingEvent reading);
 }
 
 /// <summary>
@@ -262,8 +277,6 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         {
             _logger.LogError(ex, "Error broadcasting data update");
         }
-
-        await BroadcastHomeAssistantGlucoseAsync(data);
 
         // Tenant-tagged ping to cross-tenant overview subscribers. Same "{tenantId}:" group
         // scheme but on OverviewHub, so no collision with DataHub groups. Minimal payload:
@@ -382,13 +395,28 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
+    public async Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify)
+    {
+        try
+        {
+            await _alarmHubContext
+                .Clients.Group(TenantGroup("alarm-subscribers"))
+                .SendCoreAsync(eventName, new[] { notify });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting {EventName}", eventName);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task BroadcastStorageCreateAsync(string collectionName, object data)
     {
         try
         {
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("create", new[] { data });
+                .SendCoreAsync("create", new[] { WithWireDocument(data) });
         }
         catch (Exception ex)
         {
@@ -411,7 +439,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             );
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("update", new[] { data });
+                .SendCoreAsync("update", new[] { WithWireDocument(data) });
         }
         catch (Exception ex)
         {
@@ -447,6 +475,15 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <summary>
+    /// Resolves a <see cref="StorageDocumentEvent"/> against the payload serializer this hub sends
+    /// with. Any other payload passes through.
+    /// </summary>
+    private object WithWireDocument(object data) =>
+        data is StorageDocumentEvent document
+            ? document.OnWire(_hubProtocolOptions.Value.PayloadSerializerOptions)
+            : data;
+
+    /// <summary>
     /// Resolves a <see cref="StorageDeleteEvent"/> against the payload serializer this hub sends with,
     /// which is the only serializer whose output a client ever sees. Any other payload passes through.
     /// </summary>
@@ -467,12 +504,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
-    public async Task BroadcastTrackerUpdateAsync(
-        string action,
-        TrackerInstanceDto trackerInstance,
-        string ownerSubjectId,
-        TrackerVisibility visibility
-    )
+    public async Task BroadcastTrackerUpdateAsync(TrackerRealtimeAction action, TrackerInstanceDto trackerInstance)
     {
         try
         {
@@ -481,17 +513,29 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 action
             );
             var payload = new { action, instance = trackerInstance };
-            var group = visibility == TrackerVisibility.Public
-                ? RealtimeGroups.Authorized
-                : RealtimeGroups.ForSubject(ownerSubjectId);
             await _dataHubContext
-                .Clients.Group(TenantGroup(group))
+                .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
                 .SendCoreAsync("trackerUpdate", new[] { payload });
             _logger.LogDebug("Tracker update broadcast completed for action {Action}", action);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting tracker update event");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastTrackerDefinitionUpdateAsync(Guid definitionId)
+    {
+        try
+        {
+            await _dataHubContext
+                .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
+                .SendCoreAsync("trackerDefinitionUpdate", new object[] { new { definitionId } });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting tracker definition update event");
         }
     }
 
@@ -655,8 +699,22 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         {
             _logger.LogError(ex, "Error broadcasting alert event {EventName}", eventName);
         }
+    }
 
-        // Also relay to Home Assistant subscribers
+    /// <inheritdoc />
+    public Task BroadcastAlertResolvedAsync(AlertResolvedEvent resolved) =>
+        BroadcastAlertEventWithHomeAssistantAsync("alert_resolved", resolved);
+
+    /// <inheritdoc />
+    public Task BroadcastAlertAcknowledgedAsync(AlertAcknowledgedEvent acknowledged) =>
+        BroadcastAlertEventWithHomeAssistantAsync("alert_acknowledged", acknowledged);
+
+    // alert_dispatch does not come through here: an instance receives it once, on its ha:{instance}
+    // group, from HomeAssistantProvider, which also records the delivery.
+    private async Task BroadcastAlertEventWithHomeAssistantAsync(string eventName, object payload)
+    {
+        await BroadcastAlertEventAsync(eventName, payload);
+
         try
         {
             await _homeAssistantHubContext
@@ -731,14 +789,14 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
-    public async Task BroadcastHomeAssistantGlucoseAsync(object glucoseData)
+    public async Task BroadcastHomeAssistantGlucoseAsync(GlucoseReadingEvent reading)
     {
         try
         {
             _logger.LogDebug("Broadcasting glucose_reading to HA subscribers");
             await _homeAssistantHubContext
                 .Clients.Group(TenantGroup("ha-glucose"))
-                .SendCoreAsync("glucose_reading", new[] { glucoseData });
+                .SendCoreAsync("glucose_reading", new object[] { reading });
         }
         catch (Exception ex)
         {

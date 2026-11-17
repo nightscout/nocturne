@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { copyToClipboard } = vi.hoisted(() => ({ copyToClipboard: vi.fn() }));
 
-vi.mock("$lib/utils", () => ({ copyToClipboard }));
+vi.mock("#lib/utils/index.js", () => ({ copyToClipboard }));
 
 import RecoveryCodes from "./RecoveryCodes.svelte";
 

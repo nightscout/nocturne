@@ -37,18 +37,6 @@ public static class UrlConstants
         public const string DocsLibre = NocturneDocsBase + "/connectors/libre";
 
         /// <summary>
-        /// Setup guide for the Medtronic CareLink connector.
-        /// </summary>
-        /// <seealso cref="DataSources.MiniMedConnector"/>
-        public const string DocsCareLink = NocturneDocsBase + "/connectors/carelink";
-
-        /// <summary>
-        /// Setup guide for the upstream Nightscout bridging connector.
-        /// </summary>
-        /// <seealso cref="DataSources.NightscoutConnector"/>
-        public const string DocsNightscout = NocturneDocsBase + "/connectors/nightscout";
-
-        /// <summary>
         /// Setup guide for the Glooko connector.
         /// </summary>
         /// <seealso cref="DataSources.GlookoConnector"/>

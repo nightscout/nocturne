@@ -3,15 +3,19 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.API.Services.Entries;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -24,8 +28,8 @@ public class EntryDecomposerTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var mockDedup = new Mock<IDeduplicationService>();
-        var ctxFactory = new TestTenantDbContextFactory(_context);
+        var mockDedup = new Mock<IDuplicateLinker>();
+        var ctxFactory = new TestNocturneDbContextFactory(_context);
         var sgRepo = new SensorGlucoseRepository(ctxFactory, mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<SensorGlucoseRepository>.Instance);
         var mgRepo = new MeterGlucoseRepository(ctxFactory, new Mock<IAuditContext>().Object, NullLogger<MeterGlucoseRepository>.Instance);
         var calRepo = new CalibrationRepository(ctxFactory, new Mock<IAuditContext>().Object, NullLogger<CalibrationRepository>.Instance);
@@ -37,7 +41,7 @@ public class EntryDecomposerTests : IDisposable
             .ReturnsAsync((GlucoseProcessing?)null);
         var glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
 
-        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, glucoseResolver, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), NullLogger<EntryDecomposer>.Instance);
+        _decomposer = new EntryDecomposer(sgRepo, mgRepo, calRepo, glucoseResolver, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), NullLogger<EntryDecomposer>.Instance);
     }
 
     public void Dispose()
@@ -121,24 +125,121 @@ public class EntryDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_SgvEntry_UsesSgvOverMgdlWhenBothPresent()
+    public async Task DecomposeAsync_SgvEntryWithRawFields_ReadsBackAsTheLegacyEntryWithThem()
     {
-        // Arrange - Sgv and Mgdl may differ; Sgv takes priority for SGV entries
         var entry = new Entry
         {
-            Id = "sgv-priority",
+            Id = "sgv-raw-fields",
             Type = "sgv",
             Mills = 1700000000000,
-            Sgv = 130.0,
-            Mgdl = 125.0
+            Sgv = 120.0,
+            Delta = 0,
+            Rssi = 100,
+            Filtered = 125_000,
+            Unfiltered = 131_500.5,
         };
 
-        // Act
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        var stored = SensorGlucoseMapper.ToDomainModel(_context.SensorGlucose.Single(e => e.LegacyId == "sgv-raw-fields"));
+        var projected = EntryProjection.FromSensorGlucose(stored);
+        projected.Delta.Should().Be(0);
+        projected.Rssi.Should().Be(100);
+        projected.Filtered.Should().Be(125_000);
+        projected.Unfiltered.Should().Be(131_500.5);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReSentSgvEntry_ReplacesTheRawFields()
+    {
+        var entry = new Entry
+        {
+            Id = "sgv-raw-update", Type = "sgv", Mills = 1700000000000, Sgv = 120.0,
+            Delta = 2, Rssi = 90, Filtered = 1, Unfiltered = 2,
+        };
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        entry.Delta = -3.5;
+        entry.Rssi = null;
+        entry.Filtered = 3;
+        entry.Unfiltered = null;
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        var stored = _context.SensorGlucose.Single(e => e.LegacyId == "sgv-raw-update");
+        stored.Delta.Should().Be(-3.5);
+        stored.Rssi.Should().BeNull();
+        stored.Filtered.Should().Be(3);
+        stored.Unfiltered.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithoutRawFields_ReadsBackWithoutThem()
+    {
+        await _decomposer.DecomposeAsync(
+            new Entry { Id = "sgv-no-raw", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        var projected = EntryProjection.FromSensorGlucose(
+            SensorGlucoseMapper.ToDomainModel(_context.SensorGlucose.Single(e => e.LegacyId == "sgv-no-raw")));
+        projected.Delta.Should().BeNull();
+        projected.Rssi.Should().BeNull();
+        projected.Filtered.Should().BeNull();
+        projected.Unfiltered.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntry_StoresSgvNotAStaleMgdl()
+    {
+        var entry = new Entry { Id = "sgv-priority", Type = "sgv", Mills = 1700000000000, Sgv = 130.0, Mgdl = 125.0 };
+
         var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
-        // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
-        sg.Mgdl.Should().Be(130.0, "Sgv should take priority over Mgdl for SGV entries");
+        sg.Mgdl.Should().Be(130.0);
+    }
+
+    [Theory]
+    [InlineData("{\"sgv\":150}")]
+    [InlineData("{\"sgv\":\"150\"}")]
+    [InlineData("{\"mgdl\":150}")]
+    public async Task PatchEntryAsync_ChangingOneGlucoseField_StoresAndServesTheNewValue(string patch)
+    {
+        await _decomposer.DecomposeAsync(
+            new Entry { Id = "sgv-patch", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }, WriteOrigin.Live);
+        var service = NewEntryService("sgv-patch");
+
+        var patched = await service.PatchEntryAsync("sgv-patch", JsonDocument.Parse(patch).RootElement);
+
+        _context.ChangeTracker.Clear();
+        _context.SensorGlucose.Single(e => e.LegacyId == "sgv-patch").Mgdl.Should().Be(150);
+        patched!.GlucoseMgdl().Should().Be(150);
+    }
+
+    [Fact]
+    public async Task UpdateEntryAsync_AnEditedSgvSentWithTheStaleMgdl_StoresTheEditedSgv()
+    {
+        await _decomposer.DecomposeAsync(
+            new Entry { Id = "sgv-put", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }, WriteOrigin.Live);
+        var service = NewEntryService("sgv-put");
+
+        await service.UpdateEntryAsync(
+            "sgv-put",
+            new Entry { Type = "sgv", Mills = 1700000000000, Sgv = 150.0, Mgdl = 120.0 });
+
+        _context.ChangeTracker.Clear();
+        _context.SensorGlucose.Single(e => e.LegacyId == "sgv-put").Mgdl.Should().Be(150);
+    }
+
+    private EntryService NewEntryService(string id)
+    {
+        _context.ChangeTracker.Clear();
+        var projected = EntryProjection.FromSensorGlucose(
+            SensorGlucoseMapper.ToDomainModel(_context.SensorGlucose.Single(e => e.LegacyId == id)));
+        var store = new Mock<IEntryStore>();
+        store.Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(projected);
+        return new EntryService(store.Object, _decomposer, Mock.Of<IEntryCache>(), NullLogger<EntryService>.Instance);
     }
 
     [Fact]
@@ -408,7 +509,7 @@ public class EntryDecomposerTests : IDisposable
         // Assert
         result.CreatedRecords.Should().BeEmpty();
         result.UpdatedRecords.Should().BeEmpty();
-        result.CorrelationId.Should().NotBeNull("a correlation ID is always generated");
+        result.CorrelationId.Should().BeNull("nothing was written under one");
         result.SkippedUnsupported.Should().Be(1);
     }
 

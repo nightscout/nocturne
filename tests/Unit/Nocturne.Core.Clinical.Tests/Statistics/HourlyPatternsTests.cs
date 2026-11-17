@@ -8,7 +8,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 [Trait("Category", "Unit")]
 public class HourlyPatternsTests
 {
-    private readonly StatisticsService _service = new();
+    private readonly StatisticsService _service = new(TimeProvider.System);
 
     private static readonly DateTime FirstDay = new(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc);
 
@@ -93,7 +93,7 @@ public class HourlyPatternsTests
         _service.CalculateHourlyPatterns([], TimeZoneInfo.Utc).Thresholds!.TargetTop = 200;
 
         _service.HourlyBandThresholds.Should().BeEquivalentTo(new GlycemicThresholds());
-        new StatisticsService().CalculateHourlyPatterns([], TimeZoneInfo.Utc)
+        new StatisticsService(TimeProvider.System).CalculateHourlyPatterns([], TimeZoneInfo.Utc)
             .Thresholds.Should().BeEquivalentTo(new GlycemicThresholds());
     }
 

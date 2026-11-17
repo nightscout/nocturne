@@ -5,14 +5,15 @@
  * Integrates with the existing alarm system for flashing behavior.
  */
 
-import { browser } from "$app/environment";
-import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
-import { bg as formatBg, bgDelta as formatBgDelta } from "$lib/utils/formatting";
+import { browser } from "$app/env";
+import type { TitleFaviconSettings } from "#lib/stores/serverSettings.js";
+import type { AlarmVisualSettings } from "#lib/types/alarm-profile.js";
+import { bg as formatBg, bgDelta as formatBgDelta } from "#lib/utils/formatting.js";
 import { directionGlyph, type GlucoseTileVariant } from "@nocturne/ui/glucose";
 import { renderGlucoseIcon } from "@nocturne/ui/glucose-icon";
-import type { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
-import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+import type { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
+import { getEngineHost } from "water-ui";
 
 /** Resolve CSS variable to its computed value */
 function resolveCssVar(name: string): string {
@@ -65,6 +66,11 @@ export class TitleFaviconService {
   private currentStatus: GlucoseTileVariant = "neutral";
   private currentTitle = "";
 
+  private lastFavicon: { bg: number | null; variant: GlucoseTileVariant; muted: boolean } | null = null;
+  private classObserver: MutationObserver | null = null;
+  /** The favicon to draw once the engine boot in progress is over; see {@link paintFavicon}. */
+  private pendingFavicon: (() => string) | null = null;
+
   /**
    * Initialize the service - call once on app startup
    */
@@ -92,6 +98,9 @@ export class TitleFaviconService {
       document.head.appendChild(this.linkElement);
     }
 
+    this.classObserver = new MutationObserver(() => this.redrawFavicon());
+    this.classObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
     this.initialized = true;
   }
 
@@ -104,19 +113,21 @@ export class TitleFaviconService {
    * @param variant - The server's status for this reading, through `getGlucoseTileVariant`
    * @param isDisconnected - Whether the client is disconnected from server
    * @param isStale - Whether the data is stale (old)
-   * @param timeSinceReading - Human-readable time since last reading (e.g., "5 min ago")
+   * @param timeSinceReading - Human-readable time since last reading (e.g., "5m ago")
    */
   update(
     bg: number,
     direction: string,
-    delta: number,
+    delta: number | null,
     settings: TitleFaviconSettings,
     variant: GlucoseTileVariant,
     isDisconnected: boolean = false,
     isStale: boolean = false,
     timeSinceReading: string = ""
   ): void {
-    if (!browser || !this.initialized || !settings.enabled) {
+    if (!browser || !this.initialized) return;
+    if (!settings.enabled) {
+      this.lastFavicon = null;
       return;
     }
 
@@ -134,22 +145,26 @@ export class TitleFaviconService {
     }
 
     // Update favicon - use grey when disconnected or stale
-    if (settings.faviconEnabled && this.canvas && this.ctx && this.linkElement) {
-      let color: string;
-      if (isDisconnected || isStale) {
-        color = DISCONNECTED_COLOR();
-      } else {
-        color = settings.faviconColorCoded ? STATUS_COLORS[variant]() : resolveCssVar("--muted-foreground");
-      }
-      const faviconDataUrl = this.generateFaviconDataUrl(
-        settings.faviconShowBg ? bg : null,
-        color
-      );
-      // Only update if not currently flashing
-      if (!this.flashInterval) {
-        this.linkElement.href = faviconDataUrl;
-      }
+    if (!settings.faviconEnabled) {
+      this.lastFavicon = null;
+    } else if (this.canvas && this.ctx && this.linkElement) {
+      this.lastFavicon = {
+        bg: settings.faviconShowBg ? bg : null,
+        variant,
+        muted: isDisconnected || isStale || !settings.faviconColorCoded,
+      };
+      this.redrawFavicon();
     }
+  }
+
+  /**
+   * Repaints the favicon from the last reading, resolving the CSS variables again.
+   */
+  private redrawFavicon(): void {
+    if (!this.lastFavicon || this.flashInterval || !this.linkElement) return;
+    const { bg, variant, muted } = this.lastFavicon;
+    const color = muted ? DISCONNECTED_COLOR() : STATUS_COLORS[variant]();
+    this.paintFavicon(() => this.generateFaviconDataUrl(bg, color));
   }
 
   /**
@@ -220,11 +235,9 @@ export class TitleFaviconService {
 
       // Update favicon with alarm color
       if (this.canvas && this.ctx && this.linkElement && this.currentAlarmVisual) {
-        const faviconDataUrl = this.generateFaviconDataUrl(
-          this.currentBg,
-          this.currentAlarmVisual.flashColor || STATUS_COLORS[this.currentStatus]()
-        );
-        this.linkElement.href = faviconDataUrl;
+        const bg = this.currentBg;
+        const color = this.currentAlarmVisual.flashColor || STATUS_COLORS[this.currentStatus]();
+        this.paintFavicon(() => this.generateFaviconDataUrl(bg, color));
       }
     } else {
       // Flash OFF - show normal state or blank
@@ -233,11 +246,13 @@ export class TitleFaviconService {
       // Show original/dim favicon
       if (this.linkElement) {
         if (this.originalFavicon) {
+          this.pendingFavicon = null;
           this.linkElement.href = this.originalFavicon;
         } else if (this.canvas && this.ctx) {
           // Generate dim favicon
-          const faviconDataUrl = this.generateFaviconDataUrl(this.currentBg, resolveCssVar("--muted-foreground"));
-          this.linkElement.href = faviconDataUrl;
+          const bg = this.currentBg;
+          const color = resolveCssVar("--muted-foreground");
+          this.paintFavicon(() => this.generateFaviconDataUrl(bg, color));
         }
       }
     }
@@ -249,7 +264,7 @@ export class TitleFaviconService {
   private buildTitle(
     bg: number,
     direction: string,
-    delta: number,
+    delta: number | null,
     settings: TitleFaviconSettings,
     isDisconnected: boolean = false,
     isStale: boolean = false,
@@ -278,7 +293,7 @@ export class TitleFaviconService {
       bgParts.push(directionGlyph(direction));
     }
 
-    if (settings.showDelta && delta !== undefined && !isDisconnected) {
+    if (settings.showDelta && delta != null && !isDisconnected) {
       bgParts.push(formatBgDelta(delta));
     }
 
@@ -292,6 +307,28 @@ export class TitleFaviconService {
     }
 
     return parts.join(" - ");
+  }
+
+  /**
+   * Sets the favicon to what `draw` returns, waiting out an engine boot first: drawing reads the
+   * canvas back from the GPU, and a readback issued during device and pipeline creation stalls
+   * with it, measured at 400 ms against 50 ms. A newer request made while waiting replaces the
+   * older one, so only the latest is drawn.
+   */
+  private paintFavicon(draw: () => string): void {
+    const engine = getEngineHost();
+    const waiting = this.pendingFavicon !== null;
+    if (!waiting && !engine.booting) {
+      if (this.linkElement) this.linkElement.href = draw();
+      return;
+    }
+    this.pendingFavicon = draw;
+    if (waiting) return;
+    void engine.whenNotBooting().then(() => {
+      const latest = this.pendingFavicon;
+      this.pendingFavicon = null;
+      if (latest && this.linkElement && this.canvas) this.linkElement.href = latest();
+    });
   }
 
   /**
@@ -317,12 +354,14 @@ export class TitleFaviconService {
     if (!browser) return;
 
     this.stopFlashing();
+    this.lastFavicon = null;
 
     if (this.originalTitle) {
       document.title = this.originalTitle;
     }
 
     if (this.linkElement && this.originalFavicon) {
+      this.pendingFavicon = null;
       this.linkElement.href = this.originalFavicon;
     }
   }
@@ -333,6 +372,10 @@ export class TitleFaviconService {
   destroy(): void {
     if (!browser) return;
     this.stopFlashing();
+    this.classObserver?.disconnect();
+    this.classObserver = null;
+    this.lastFavicon = null;
+    this.pendingFavicon = null;
     this.canvas = null;
     this.ctx = null;
     this.initialized = false;

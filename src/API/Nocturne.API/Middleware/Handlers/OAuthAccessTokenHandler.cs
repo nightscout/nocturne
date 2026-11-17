@@ -118,6 +118,7 @@ public class OAuthAccessTokenHandler : IAuthHandler
             Permissions = claims.Permissions,
             Scopes = claims.Scopes,
             TokenId = claims.GrantId,
+            ClientId = claims.ClientId,
             RawToken = token,
             ExpiresAt = claims.ExpiresAt,
             LimitTo24Hours = claims.LimitTo24Hours,

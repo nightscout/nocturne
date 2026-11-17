@@ -13,7 +13,6 @@ public interface IProfileScopedRepository<TRecord> : ILegacyKeyedRepository<TRec
 {
     /// <summary>Retrieve all records belonging to a named profile store, newest first.</summary>
     /// <param name="profileName">The profile name to filter by.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<TRecord>> GetByProfileNameAsync(string profileName, CancellationToken ct = default);
 
     /// <summary>
@@ -22,13 +21,26 @@ public interface IProfileScopedRepository<TRecord> : ILegacyKeyedRepository<TRec
     /// </summary>
     /// <param name="profileName">The profile name to filter by.</param>
     /// <param name="timestamp">The point-in-time to query against.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<TRecord?> GetActiveAtAsync(string profileName, DateTime timestamp, CancellationToken ct = default);
 
     /// <summary>Retrieve all records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records (e.g. from one profile upload).</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<TRecord>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default);
+
+    /// <summary>Every record carrying any of <paramref name="correlationIds"/>, in one query.</summary>
+    Task<IEnumerable<TRecord>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// For each of <paramref name="profileNames"/> that has records, the one
+    /// <see cref="GetByProfileNameAsync"/> returns first, in one query.
+    /// </summary>
+    Task<IEnumerable<TRecord>> GetNewestByProfileNamesAsync(
+        IEnumerable<string> profileNames, CancellationToken ct = default);
+
+    /// <summary>Every record filed under any of <paramref name="profileNames"/>, in one query.</summary>
+    Task<IEnumerable<TRecord>> GetByProfileNamesAsync(
+        IEnumerable<string> profileNames, CancellationToken ct = default);
 
     /// <summary>
     /// Delete all records whose legacy ObjectId starts with <paramref name="prefix"/>, replacing an
@@ -36,7 +48,6 @@ public interface IProfileScopedRepository<TRecord> : ILegacyKeyedRepository<TRec
     /// </summary>
     /// <param name="prefix">Legacy ObjectId prefix to match.</param>
     /// <param name="origin">Origin recorded against the delete.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default);
 }

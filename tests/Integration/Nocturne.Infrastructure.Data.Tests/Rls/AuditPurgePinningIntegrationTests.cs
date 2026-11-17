@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -18,11 +20,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 /// NULL, matches nothing, and reports success having deleted zero rows — the purge appears to
 /// work and never removes anything.
 ///
-/// <see cref="RlsPinningExtensions.CreateTenantPinnedContextAsync"/> sets the carrier the
-/// interceptor writes when the connection opens, so the GUC is present for the DELETE itself.
+/// <see cref="INocturneDbContextFactory.CreateForTenantAsync"/> pins the tenant the interceptor
+/// writes when the connection opens, so the GUC is present for the DELETE itself.
 ///
-/// Each case seeds its own tenant, as <see cref="RlsCarrierResetIntegrationTests"/> does:
-/// <see cref="RlsCompletenessFixture"/> is seedless in the sense that it stands up no rows of
+/// Each case seeds its own tenant: <see cref="RlsCompletenessFixture"/> is seedless in the sense that it stands up no rows of
 /// its own, not that its collection forbids them.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -53,7 +54,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         // The broken form: the pin is issued as its own command, so the connection closes and
         // resets the GUC before the DELETE runs. Bounded by tenant_id so that if the pin ever
         // did carry, this could not reach another test's rows in the shared container.
-        await using (var unpinned = await factory.CreateDbContextAsync())
+        await using (var unpinned = await factory.CreatePlatformAsync())
         {
             await unpinned.Database.ExecuteSqlRawAsync(
                 "SELECT set_config('app.current_tenant_id', {0}, false)", [tenant.ToString()]);
@@ -214,7 +215,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
-    private IDbContextFactory<NocturneDbContext> BuildFactory(IInterceptor? extra = null)
+    private INocturneDbContextFactory BuildFactory(IInterceptor? extra = null)
     {
         if (extra is null)
         {
@@ -225,7 +226,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
 
             var provider = services.BuildServiceProvider();
             _owned.Add(provider);
-            return provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+            return provider.GetRequiredService<INocturneDbContextFactory>();
         }
 
         var dataSource = new NpgsqlDataSourceBuilder(_fx.AppConnectionString).Build();
@@ -330,9 +331,10 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     }
 
     private sealed class PlainContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
+        : SingleReaderDbContextFactory
     {
-        public NocturneDbContext CreateDbContext() => new(options);
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
+            ValueTask.FromResult(new NocturneDbContext(options));
     }
 
     private sealed class CapturingInterceptor : DbCommandInterceptor

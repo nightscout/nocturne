@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
@@ -284,14 +286,67 @@ public class ResponseComparer
                 return;
         }
 
+        if (expected.TryGetValue<string>(out var expectedText) && actual.TryGetValue<string>(out var actualText))
+        {
+            foreach (var normaliser in _options.ValueNormalisers.Where(n => n.Fields.Contains(fieldName)))
+            {
+                expected = JsonValue.Create(normaliser.Pattern.Replace(expectedText, normaliser.Replacement));
+                actual = JsonValue.Create(normaliser.Pattern.Replace(actualText, normaliser.Replacement));
+                expectedText = expected.GetValue<string>();
+                actualText = actual.GetValue<string>();
+            }
+        }
+
         // Standard value comparison
         var expectedJson = expected.ToJsonString();
         var actualJson = actual.ToJsonString();
 
-        if (expectedJson != actualJson)
+        if (expectedJson != actualJson
+            && !(ReloadLagToleranceFor(path) is { } tolerance && IsWithinTolerance(expectedJson, actualJson, tolerance)))
         {
             result.AddDifference(path, expectedJson, actualJson);
         }
+    }
+
+    private static readonly Regex NumberToken = new(@"-?\d+(?:\.\d+)?", RegexOptions.Compiled);
+
+    private decimal? ReloadLagToleranceFor(string path)
+    {
+        var segments = path.Split('.');
+        foreach (var (pattern, tolerance) in _options.ReloadLagTolerances)
+        {
+            var patternSegments = pattern.Split('.');
+            if (patternSegments.Length == segments.Length
+                && patternSegments.Zip(segments).All(pair => pair.First == "*" || pair.First == pair.Second))
+                return tolerance;
+        }
+
+        return null;
+    }
+
+    private static bool IsWithinTolerance(string expected, string actual, decimal tolerance)
+    {
+        var expectedNumbers = NumberToken.Matches(expected);
+        var actualNumbers = NumberToken.Matches(actual);
+        if (expectedNumbers.Count != 1 || actualNumbers.Count != 1)
+            return false;
+
+        if (NumberToken.Replace(expected, "#") != NumberToken.Replace(actual, "#"))
+            return false;
+
+        // A display string is formatted text, so "0" against "0.00" is a difference in itself.
+        if (expected.StartsWith('"') && FractionDigits(expectedNumbers[0].Value) != FractionDigits(actualNumbers[0].Value))
+            return false;
+
+        var difference = decimal.Parse(expectedNumbers[0].Value, CultureInfo.InvariantCulture)
+            - decimal.Parse(actualNumbers[0].Value, CultureInfo.InvariantCulture);
+        return Math.Abs(difference) <= tolerance;
+    }
+
+    private static int FractionDigits(string number)
+    {
+        var point = number.IndexOf('.');
+        return point < 0 ? 0 : number.Length - point - 1;
     }
 
     private static bool IsValidTimestamp(string value)
@@ -358,6 +413,12 @@ public class ComparisonResult
 public record Difference(string Path, string? Expected, string? Actual);
 
 /// <summary>
+/// Rewrites the part of a string value matching <paramref name="Pattern"/> in the named fields
+/// before comparison, for a value that is nondeterministic only in part.
+/// </summary>
+public record ValueNormaliser(Regex Pattern, string Replacement, IReadOnlySet<string> Fields);
+
+/// <summary>
 /// Options for response comparison
 /// </summary>
 public class ComparisonOptions
@@ -394,6 +455,45 @@ public class ComparisonOptions
         "serverTime",
         "dateString"
     };
+
+    /// <summary>
+    /// Partial rewrites applied to string values before comparison
+    /// </summary>
+    public IReadOnlyList<ValueNormaliser> ValueNormalisers { get; init; } = [];
+
+    /// <summary>
+    /// The body paths whose number may differ by the paired amount, a <c>*</c> segment standing for
+    /// any one key. Nightscout serves the properties it computed when its last reload finished, and
+    /// Nocturne computes them at the request. The parity wait reads at least a second after that
+    /// reload started, by design (<see cref="Parity.ParityTestBase.WaitForNightscoutBodyAsync"/>),
+    /// so the two are a second or two apart. A value derived from now therefore lands one tick
+    /// apart: an IOB near a rounding boundary a hundredth, a displayed COB a tenth, and the minutes
+    /// within the hour of a device age one minute, whenever a minute ticks in that lag. The
+    /// unrounded COB moves by what the carbs absorb in that lag: 0.02 g is 3.6 seconds at the test
+    /// profile's 20 g/h. The age, days and hours of a device change only at an hour boundary, which
+    /// a lag of a second or two crosses about once in 2,000 tests, so they compare exactly. Every
+    /// other path compares exactly.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Path, decimal Tolerance)> ReloadLagToleranceTable =
+    [
+        ("Body.state.iob", 0.01m),
+        ("Body.state.bwp", 0.01m),
+        ("Body.iob.display", 0.01m),
+        ("Body.iob.displayLine", 0.01m),
+        ("Body.cob.cob", 0.02m),
+        ("Body.cob.treatmentCOB.cob", 0.02m),
+        ("Body.cob.display", 0.1m),
+        ("Body.cob.displayLine", 0.1m),
+        ("Body.cage.minFractions", 1m),
+        ("Body.iage.minFractions", 1m),
+        ("Body.bage.minFractions", 1m),
+        ("Body.sage.*.minFractions", 1m)
+    ];
+
+    /// <summary>
+    /// Body paths compared with a tolerance, empty unless <see cref="WithReloadLagTolerance"/>
+    /// </summary>
+    public IReadOnlyList<(string Path, decimal Tolerance)> ReloadLagTolerances { get; init; } = [];
 
     /// <summary>
     /// HTTP headers to compare
@@ -435,40 +535,56 @@ public class ComparisonOptions
         AllowExtraActualFields = false
     };
 
+    public ComparisonOptions()
+    {
+    }
+
+    private ComparisonOptions(ComparisonOptions source)
+    {
+        DynamicFields = new HashSet<string>(source.DynamicFields);
+        IdFields = new HashSet<string>(source.IdFields);
+        TimestampFields = new HashSet<string>(source.TimestampFields);
+        HeadersToCompare = new HashSet<string>(source.HeadersToCompare);
+        ValueNormalisers = source.ValueNormalisers;
+        ReloadLagTolerances = source.ReloadLagTolerances;
+        AllowExtraActualFields = source.AllowExtraActualFields;
+        StatusCodeOnlyForErrors = source.StatusCodeOnlyForErrors;
+    }
+
+    /// <summary>
+    /// Create options with additional fields whose presence is checked but whose value is not
+    /// </summary>
+    public ComparisonOptions WithPresenceOnlyFields(params string[] fields)
+    {
+        var options = new ComparisonOptions(this);
+        options.IdFields.UnionWith(fields);
+        return options;
+    }
+
+    /// <summary>
+    /// Create options that compare the paths of <see cref="ReloadLagToleranceTable"/> to within their tolerance
+    /// </summary>
+    public ComparisonOptions WithReloadLagTolerance() => new(this) { ReloadLagTolerances = ReloadLagToleranceTable };
+
     /// <summary>
     /// Create options with additional fields to ignore
     /// </summary>
     public ComparisonOptions WithIgnoredFields(params string[] fields)
     {
-        var options = new ComparisonOptions
-        {
-            DynamicFields = new HashSet<string>(DynamicFields),
-            IdFields = new HashSet<string>(IdFields),
-            TimestampFields = new HashSet<string>(TimestampFields),
-            HeadersToCompare = new HashSet<string>(HeadersToCompare),
-            AllowExtraActualFields = AllowExtraActualFields
-        };
-
-        foreach (var field in fields)
-        {
-            options.DynamicFields.Add(field);
-        }
-
+        var options = new ComparisonOptions(this);
+        options.DynamicFields.UnionWith(fields);
         return options;
     }
 
     /// <summary>
     /// Create options that require strict field matching (no extra fields allowed)
     /// </summary>
-    public ComparisonOptions WithStrictFieldMatching()
-    {
-        return new ComparisonOptions
-        {
-            DynamicFields = new HashSet<string>(DynamicFields),
-            IdFields = new HashSet<string>(IdFields),
-            TimestampFields = new HashSet<string>(TimestampFields),
-            HeadersToCompare = new HashSet<string>(HeadersToCompare),
-            AllowExtraActualFields = false
-        };
-    }
+    public ComparisonOptions WithStrictFieldMatching() => new(this) { AllowExtraActualFields = false };
+
+    /// <summary>
+    /// Create options that rewrite what <paramref name="pattern"/> matches in the string values of
+    /// <paramref name="fields"/> to <paramref name="replacement"/> before comparing them
+    /// </summary>
+    public ComparisonOptions WithNormalisedValues(Regex pattern, string replacement, params string[] fields) =>
+        new(this) { ValueNormalisers = [.. ValueNormalisers, new ValueNormaliser(pattern, replacement, fields.ToHashSet())] };
 }

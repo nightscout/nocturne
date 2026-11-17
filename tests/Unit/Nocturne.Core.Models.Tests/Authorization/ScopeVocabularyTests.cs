@@ -144,10 +144,16 @@ public class ScopeVocabularyTests
     [InlineData(Scope.StepCountReadWrite, Scope.StepCountRead)]
     [InlineData(Scope.SleepReadWrite, Scope.SleepRead)]
     [InlineData(Scope.FoodReadWrite, Scope.FoodRead)]
-    public void TryGetImpliedReadScope_NarrowsEveryTieredScope(string readWrite, string expectedRead)
+    public void NarrowerScopes_NarrowsEveryTieredScopeToItsRead(string readWrite, string expectedRead)
     {
-        Scope.TryGetImpliedReadScope(readWrite, out var readScope).Should().BeTrue();
-        readScope.Should().Be(expectedRead);
+        Scope.NarrowerScopes(readWrite).Should().Contain(expectedRead);
+    }
+
+    [Fact]
+    public void NarrowerScopes_NarrowsAlertsReadWriteToReadAndAcknowledge()
+    {
+        Scope.NarrowerScopes(Scope.AlertsReadWrite)
+            .Should().BeEquivalentTo([Scope.AlertsRead, Scope.AlertsAcknowledge]);
     }
 
     [Theory]
@@ -158,11 +164,12 @@ public class ScopeVocabularyTests
     [InlineData(Scope.DeviceActuate)]
     [InlineData(Scope.FullAccess)]
     [InlineData(Scope.MembersManage)]
-    public void TryGetImpliedReadScope_HasNoCounterpartForAnUntieredScope(string scope)
+    [InlineData(Scope.AlertsAcknowledge)]
+    public void NarrowerScopes_IsEmptyForAnUntieredScope(string scope)
     {
         // Notably "*": a superuser membership on a read-only credential must not downgrade the
         // wildcard to some read scope, it must simply not survive.
-        Scope.TryGetImpliedReadScope(scope, out _).Should().BeFalse();
+        Scope.NarrowerScopes(scope).Should().BeEmpty();
     }
 
     [Fact]

@@ -12,6 +12,11 @@ public static class GlucoseConstants
     public const double MgdlPerMmol = 18.0182;
 
     /// <summary>
+    /// <see cref="MgdlPerMmol"/> for decimal arithmetic. A cast of the double is a different number.
+    /// </summary>
+    public const decimal MgdlPerMmolDecimal = 18.0182m;
+
+    /// <summary>
     /// Bottom of the consensus in-range band in mg/dL — the boundary time-in-range is measured
     /// against and below which a reading is drawn as low, before any tenant threshold overrides it.
     /// Not the legacy Nightscout <c>bgTargetBottom</c> alarm setting, which ships 80; that one is
@@ -23,6 +28,12 @@ public static class GlucoseConstants
     /// Top of the consensus in-range band in mg/dL. See <see cref="TargetBottomMgdl"/>.
     /// </summary>
     public const double TargetTopMgdl = 180;
+
+    /// <summary>
+    /// Top of the tight target band in mg/dL, which shares its bottom with
+    /// <see cref="TargetBottomMgdl"/>.
+    /// </summary>
+    public const double TightTargetTopMgdl = 140;
 
     /// <summary>
     /// Clinically significant hypoglycaemia in mg/dL: the level-2 boundary the consensus reports
@@ -40,6 +51,23 @@ public static class GlucoseConstants
     /// above anything a CGM reports as a number, so a larger value is a sentinel or a unit error.
     /// </summary>
     public const double MaxPlausibleMgdl = 600;
+
+    /// <summary>
+    /// Estimated A1c in NGSP percent below which the report counts the target as met. A care team
+    /// sets an individual target; this is the general one.
+    /// </summary>
+    public const double A1cTargetPercent = 7;
+
+    /// <summary>
+    /// Coefficient of variation in percent at or below which glucose counts as stable.
+    /// </summary>
+    public const double CoefficientOfVariationTargetPercent = 36;
+
+    /// <summary>
+    /// Coefficient of variation in percent above which glucose counts as variable. Between this and
+    /// <see cref="CoefficientOfVariationTargetPercent"/> it counts as moderate.
+    /// </summary>
+    public const double CoefficientOfVariationVariablePercent = 50;
 
     /// <summary>
     /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading

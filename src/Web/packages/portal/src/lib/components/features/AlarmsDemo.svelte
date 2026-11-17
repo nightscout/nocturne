@@ -14,26 +14,9 @@
     import { Switch } from "@nocturne/ui/ui/switch";
     import { Button } from "@nocturne/ui/ui/button";
     import * as Select from "@nocturne/ui/ui/select";
+    import { severity, severityVar } from "@nocturne/app/components/alerts/severity.ts";
+    import { severityLabel } from "@nocturne/app/components/alerts/severityLabel.svelte.ts";
 
-    // ── Inlined helpers (from app/alerts/severity.ts + alertTime.ts) ──────────
-    function severityVar(s: string | undefined): string {
-        if (s === "critical") return "var(--status-critical)";
-        if (s === "warning")  return "var(--status-warning)";
-        if (s === "info")     return "var(--status-info)";
-        return "var(--muted-foreground)";
-    }
-    function severityLabel(s: string | undefined): string {
-        if (s === "critical") return "Critical";
-        if (s === "warning")  return "Warning";
-        if (s === "info")     return "Info";
-        return s ?? "";
-    }
-    function severityChip(s: string | undefined): string {
-        if (s === "critical") return "bg-status-critical/15 text-status-critical";
-        if (s === "warning")  return "bg-status-warning/15 text-status-warning";
-        if (s === "info")     return "bg-status-info/15 text-status-info";
-        return "bg-muted text-muted-foreground";
-    }
     function formatTime(d: Date): string {
         try { return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(d); }
         catch { return d.toISOString().slice(11, 16); }
@@ -257,7 +240,7 @@
                                 aria-hidden="true"
                             ></span>
                             <span class="flex-1 min-w-0 truncate">{r.name}</span>
-                            <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold {severityChip(r.severity)}">
+                            <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold {severity(r.severity, "chip")}">
                                 {r.disabled ? "Off" : "On"}
                             </span>
                         </Collapsible.Trigger>
@@ -399,7 +382,7 @@
                             </span>
                             <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold {isResolved
                                 ? 'bg-glucose-in-range/15 text-glucose-in-range'
-                                : severityChip(ev.severity)}">
+                                : severity(ev.severity, "chip")}">
                                 {isResolved ? "Resolved" : severityLabel(ev.severity)}
                             </span>
                             <span class="flex-1 min-w-0 truncate">{ev.ruleName}</span>

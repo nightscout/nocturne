@@ -1,3 +1,6 @@
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Identity;
+using Nocturne.Infrastructure.Data.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,20 +32,29 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 [Produces("application/json")]
 public class DevAuthController : ControllerBase
 {
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
+    private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISessionService _sessionService;
     private readonly IOptions<OidcOptions> _oidcOptions;
     private readonly IOptions<BaseDomainOptions> _baseDomainOptions;
     private readonly ILogger<DevAuthController> _logger;
 
     public DevAuthController(
-        NocturneDbContext db,
+        INocturneDbContextFactory dbFactory,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
+        IPasskeyCredentialRepository passkeys,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<DevAuthController> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
+        _tenants = tenants;
+        _members = members;
+        _passkeys = passkeys;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions;
         _baseDomainOptions = baseDomainOptions;
@@ -52,7 +64,7 @@ public class DevAuthController : ControllerBase
     /// <summary>
     /// Log in as a tenant member without a WebAuthn ceremony and set the normal
     /// session cookies. Navigating a browser to this URL on a tenant subdomain
-    /// (e.g. https://sleepy.nocturne.localhost:1612/api/v4/dev-only/auth/login)
+    /// (e.g. https://dev.nocturne.localhost:1612/api/v4/dev-only/auth/login)
     /// leaves it authenticated and redirects into the app. The tenant resolves
     /// from the ?tenant slug, else from the request host; the member from
     /// ?username, else the first owner-role member, else the first member.
@@ -69,7 +81,8 @@ public class DevAuthController : ControllerBase
         [FromQuery] string? format,
         CancellationToken ct)
     {
-        var (error, response) = await IssueSessionAsync(tenant, username, ct);
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var (error, response) = await IssueSessionAsync(db, tenant, username, ct);
         if (error != null)
             return error;
 
@@ -88,7 +101,8 @@ public class DevAuthController : ControllerBase
     public async Task<ActionResult<DevLoginResponse>> LoginJson(
         [FromBody] DevLoginRequest request, CancellationToken ct)
     {
-        var (error, response) = await IssueSessionAsync(request.Tenant, request.Username, ct);
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var (error, response) = await IssueSessionAsync(db, request.Tenant, request.Username, ct);
         if (error != null)
             return error;
         return Ok(response);
@@ -105,34 +119,27 @@ public class DevAuthController : ControllerBase
     public async Task<ActionResult<DevIdentityFixtureFile>> ExportPasskeyFixture(
         [FromQuery] string? username, CancellationToken ct)
     {
-        var credentials = await _db.PasskeyCredentials
-            .AsNoTracking()
-            .Include(c => c.Subject)
-            .Where(c => c.Subject != null && !c.Subject.IsSystemSubject && c.Subject.IsActive)
-            .ToListAsync(ct);
+        var holders = await _passkeys.ListHoldersAsync(ct);
 
-        var identities = credentials
-            .Where(c => !DevIdentityFixtureSeeder.IsSyntheticCredentialId(c.CredentialId))
-            .GroupBy(c => c.SubjectId)
-            .Select(group =>
+        var identities = holders
+            .Select(holder => new DevIdentityDto
             {
-                var subject = group.First().Subject!;
-                return new DevIdentityDto
-                {
-                    SubjectId = subject.Id,
-                    Name = subject.Name,
-                    Username = subject.Username,
-                    Email = subject.Email,
-                    Credentials = group.Select(c => new DevIdentityCredentialDto
+                SubjectId = holder.Subject.Id,
+                Name = holder.Subject.Name,
+                Username = holder.Subject.Username,
+                Email = holder.Subject.Email,
+                Credentials = holder.Credentials
+                    .Where(c => !DevIdentityFixtureSeeder.IsSyntheticCredentialId(c.CredentialId))
+                    .Select(c => new DevIdentityCredentialDto
                     {
                         CredentialId = Convert.ToBase64String(c.CredentialId),
                         PublicKey = Convert.ToBase64String(c.PublicKey),
-                        Transports = c.Transports,
+                        Transports = c.Transports.ToList(),
                         Label = c.Label,
                         AaGuid = c.AaGuid,
                     }).ToList(),
-                };
             })
+            .Where(i => i.Credentials.Count > 0)
             .Where(i => username == null
                 || string.Equals(i.Username, username, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(i.Name, username, StringComparison.OrdinalIgnoreCase))
@@ -142,6 +149,7 @@ public class DevAuthController : ControllerBase
     }
 
     private async Task<(ActionResult? Error, DevLoginResponse? Response)> IssueSessionAsync(
+        NocturneDbContext db,
         string? tenantSlug, string? username, CancellationToken ct)
     {
         var slug = tenantSlug;
@@ -150,17 +158,16 @@ public class DevAuthController : ControllerBase
             slug = SubdomainParser.Extract(Request.Host.Host, _baseDomainOptions.Value.BaseDomain);
         }
 
-        TenantEntity? tenant;
+        TenantRecord? tenant;
         if (!string.IsNullOrWhiteSpace(slug))
         {
-            tenant = await _db.Tenants.AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Slug == slug, ct);
+            tenant = await _tenants.FindBySlugAsync(slug, ct);
             if (tenant == null)
                 return (NotFound(new { error = $"No tenant with slug '{slug}'" }), null);
         }
         else
         {
-            tenant = await _db.Tenants.SoleTenantAsync(ct);
+            tenant = await _tenants.FindSoleTenantAsync(ct);
             if (tenant is null)
                 return (BadRequest(new
                 {
@@ -168,29 +175,20 @@ public class DevAuthController : ControllerBase
                 }), null);
         }
 
-        // tenant_members/tenant_roles carry no RLS policies today, but set the
-        // context's TenantId so the connection interceptor pins the GUC on every
-        // open (a raw set_config would be reset when EF closes the connection).
-        _db.TenantId = tenant.Id;
-
-        var members = await _db.TenantMembers
-            .AsNoTracking()
-            .Include(m => m.Subject)
-            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
-            .Where(m => m.TenantId == tenant.Id)
-            .ToListAsync(ct);
+        // ?tenant= may name a tenant other than the host's; the repository pins the read to it.
+        var members = await _members.ListMembersAsync(tenant.Id, ct);
 
         var candidates = DevTenantMemberSelection.Candidates(members);
         if (candidates.Count == 0)
             return (BadRequest(new { error = $"Tenant '{tenant.Slug}' has no members" }), null);
 
-        TenantMemberEntity? member;
+        TenantMemberRecord? member;
         if (!string.IsNullOrWhiteSpace(username))
         {
             member = candidates.FirstOrDefault(m =>
                 string.Equals(m.Username, username, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(m.Subject!.Username, username, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(m.Subject!.Name, username, StringComparison.OrdinalIgnoreCase));
+                || string.Equals(m.SubjectUsername, username, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(m.SubjectName, username, StringComparison.OrdinalIgnoreCase));
             if (member == null)
                 return (NotFound(new
                 {
@@ -199,7 +197,7 @@ public class DevAuthController : ControllerBase
         }
         else
         {
-            member = DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id);
+            member = DevTenantMemberSelection.PickOwnerOrFirst(candidates);
         }
 
         var session = await _sessionService.IssueSessionAsync(
@@ -219,7 +217,7 @@ public class DevAuthController : ControllerBase
             tenant.Id,
             tenant.Slug,
             member.SubjectId,
-            member.Username ?? member.Subject!.Username ?? member.Subject!.Name,
+            member.Username ?? member.SubjectUsername ?? member.SubjectName ?? string.Empty,
             session.AccessToken,
             session.RefreshToken,
             session.ExpiresInSeconds));

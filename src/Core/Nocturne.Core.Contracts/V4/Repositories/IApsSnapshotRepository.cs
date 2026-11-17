@@ -23,7 +23,6 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Matching <see cref="ApsSnapshot"/> records.</returns>
     new Task<IEnumerable<ApsSnapshot>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
 
@@ -37,12 +36,48 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// </remarks>
     /// <param name="from">Inclusive start of the time window.</param>
     /// <param name="to">Inclusive end of the time window.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// The prediction curves of the snapshots whose <see cref="ApsSnapshot.PredictedStartTimestamp"/>
+    /// is within a time window, thinned to at most one per device per five minutes of it, ordered by
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// Within a five-minute bucket an enacted snapshot wins over one that was not, then the newest:
+    /// uploaders post every one to five minutes and some post a cycle twice, so thinning keeps each
+    /// device's predictions evenly weighted, and the enacted one is the prediction the loop acted on.
+    /// Snapshots with no curve are left out, and so is the default curve of one that carries oref's
+    /// curves, which is a copy of its IOB curve.
+    /// </remarks>
+    /// <param name="from">Inclusive start of the window, on the prediction start.</param>
+    /// <param name="to">Exclusive end of the window.</param>
+    Task<IReadOnlyList<ApsPredictionPoint>> GetPredictionsAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every <see cref="ApsLoopCycle"/> within a time window, with the newest before it and the
+    /// oldest after it so a gap that straddles either end is bounded, ordered oldest-first and read
+    /// without the snapshots' JSON blob columns.
+    /// </summary>
+    /// <param name="from">Inclusive start of the time window.</param>
+    /// <param name="to">Inclusive end of the time window.</param>
+    Task<IReadOnlyList<ApsLoopCycle>> GetLoopCyclesAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets <see cref="ApsSnapshot.ClosedLoop"/> on the Loop snapshots in a time window to the
+    /// <c>dosingEnabled</c> of the newest Loop settings (therapy settings carrying it) starting at or
+    /// before each one, or to null when none does.
+    /// </summary>
+    /// <param name="from">Inclusive start of the window.</param>
+    /// <param name="to">
+    /// Inclusive end of the window; null runs to the next Loop settings version after
+    /// <paramref name="from"/>, or to the newest Loop snapshot when there is none.
+    /// </param>
+    /// <returns>The number of snapshots changed.</returns>
+    Task<int> StampLoopClosedLoopAsync(DateTime from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
     /// <summary>
@@ -55,7 +90,6 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// for resume-watermark calculation rather than by an as-of upper bound.
     /// </remarks>
     /// <param name="asOf">Optional inclusive upper bound on Timestamp.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsOfAsync(DateTime? asOf, CancellationToken ct = default);
 
     /// <summary>
@@ -70,7 +104,6 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// and skips its backfill.
     /// </remarks>
     /// <param name="source">Optional connector data source filter.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
@@ -78,7 +111,6 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// for the current tenant, or <c>null</c> if none exist.
     /// </summary>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestEnactedTimestampAsync(DateTime? asOf, CancellationToken ct = default);
 
     /// <summary>
@@ -86,6 +118,15 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// tenant, or <c>null</c> if no snapshot has recorded one.
     /// </summary>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// The marks of the snapshots of <paramref name="devices"/> after <paramref name="after"/> through
+    /// <paramref name="through"/>, and of each device's first <paramref name="following"/> after that,
+    /// leaving out <paramref name="excluded"/>, in one query. A null device matches every device and
+    /// takes its own <paramref name="following"/>.
+    /// </summary>
+    Task<IReadOnlyList<ApsSnapshotMark>> GetMarksAsync(
+        IReadOnlyCollection<string?> devices, DateTime after, DateTime through, int following,
+        IReadOnlyCollection<Guid> excluded, CancellationToken ct = default);
 }

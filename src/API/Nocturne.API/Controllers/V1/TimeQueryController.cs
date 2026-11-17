@@ -3,8 +3,10 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -86,7 +88,7 @@ public class TimeQueryController : ControllerBase
     [ProducesResponseType(500)]
     public async Task<ActionResult> GetTimeBasedEntriesWithPrefix(
         string prefix,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -112,7 +114,7 @@ public class TimeQueryController : ControllerBase
     public async Task<ActionResult> GetTimeBasedEntriesWithPrefixAndRegex(
         string prefix,
         string regex,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -123,7 +125,7 @@ public class TimeQueryController : ControllerBase
     private async Task<ActionResult> GetTimeBasedEntriesInternal(
         string? prefix = null,
         string? regex = null,
-        int count = 10,
+        int? count = null,
         string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -138,8 +140,10 @@ public class TimeQueryController : ControllerBase
 
         try
         {
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+
             // Validate parameters
-            if (count < 0)
+            if (pageSize < 0)
             {
                 _logger.LogWarning("Invalid count parameter: {Count}", count);
                 return BadRequest($"Count must be non-negative, got {count}");
@@ -155,34 +159,18 @@ public class TimeQueryController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            var entriesArray = entries.Take(count).ToArray();
+            var entriesArray = entries.Take(pageSize).ToArray();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries for time query",
                 entriesArray.Length
             );
 
-            // Handle different output formats
-            if (format != null && !format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(entriesArray, format);
-                    var contentType = DataFormatService.GetContentType(format);
-                    return Content(formattedData, contentType);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to format data as {Format}, falling back to JSON",
-                        format
-                    );
-                    return Ok(entriesArray);
-                }
-            }
-
-            return Ok(entriesArray);
+            return EntriesResult(entriesArray, format);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -298,23 +286,13 @@ public class TimeQueryController : ControllerBase
 
         try
         {
-            // Extract query parameters
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
-            {
-                if (param.Key != "storage" && param.Key != "field")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
-            }
-
             // Generate debug information
             var echo = _timeQueryService.GenerateTimeQueryEcho(
                 prefix: prefix,
                 regex: regex,
                 storage: storage,
                 fieldName: field,
-                queryParameters: queryParameters
+                queryString: Request.QueryString.Value
             );
 
             _logger.LogDebug(
@@ -323,6 +301,10 @@ public class TimeQueryController : ControllerBase
             );
 
             return Ok(echo);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -368,7 +350,7 @@ public class TimeQueryController : ControllerBase
     public async Task<ActionResult> GetSlicedData(
         string storage,
         string field,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -407,7 +389,7 @@ public class TimeQueryController : ControllerBase
         string storage,
         string field,
         string type,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -448,7 +430,7 @@ public class TimeQueryController : ControllerBase
         string field,
         string type,
         string prefix,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -491,7 +473,7 @@ public class TimeQueryController : ControllerBase
         string type,
         string prefix,
         string regex,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -517,7 +499,7 @@ public class TimeQueryController : ControllerBase
         string? type = null,
         string? prefix = null,
         string? regex = null,
-        int count = 10,
+        int? count = null,
         string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -535,8 +517,10 @@ public class TimeQueryController : ControllerBase
 
         try
         {
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+
             // Validate parameters
-            if (count < 0)
+            if (pageSize < 0)
             {
                 _logger.LogWarning("Invalid count parameter: {Count}", count);
                 return BadRequest($"Count must be non-negative, got {count}");
@@ -565,34 +549,18 @@ public class TimeQueryController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            var entriesArray = entries.Take(count).ToArray();
+            var entriesArray = entries.Take(pageSize).ToArray();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries for slice query",
                 entriesArray.Length
             );
 
-            // Handle different output formats
-            if (format != null && !format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(entriesArray, format);
-                    var contentType = DataFormatService.GetContentType(format);
-                    return Content(formattedData, contentType);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to format data as {Format}, falling back to JSON",
-                        format
-                    );
-                    return Ok(entriesArray);
-                }
-            }
-
-            return Ok(entriesArray);
+            return EntriesResult(entriesArray, format);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -617,6 +585,9 @@ public class TimeQueryController : ControllerBase
             );
         }
     }
+
+    private ActionResult EntriesResult(Entry[] entries, string? format) =>
+        this.EntriesText(entries, format) ?? Ok(entries);
 
     /// <summary>
     /// The request's <c>find[...]</c> pairs alone, so no other key (<c>token</c>, <c>secret</c>, a

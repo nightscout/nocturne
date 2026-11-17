@@ -2,7 +2,9 @@ using Nocturne.API.Services.Health;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Glucose;
@@ -57,13 +59,31 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
-    public Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
-        StateSpanCategory category,
+    public Task<IEnumerable<StateSpan>> GetStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
         string? source,
-        DateTime from,
+        bool? active,
         int count,
+        int skip,
+        bool descending,
         CancellationToken cancellationToken = default)
-        => _repository.GetStateSpansStartingFromAsync(category, source, from, count, cancellationToken);
+        => _repository.GetStateSpansInCategoriesAsync(
+            categories, state, from, to, source, active, count, skip, descending, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> CountStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        CancellationToken cancellationToken = default)
+        => _repository.CountStateSpansInCategoriesAsync(
+            categories, state, from, to, source, active, cancellationToken);
 
     /// <inheritdoc />
     public Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
@@ -97,6 +117,7 @@ public class StateSpanService : IStateSpanService
     public Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default) =>
         _repository.FoldStoredSpansAsync(cancellationToken);
 
+    /// <inheritdoc />
     public async Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
         CancellationToken cancellationToken = default)
@@ -109,6 +130,30 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpanUpsert>> UpsertStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => stateSpans.Count == 0
+            ? Task.FromResult<IReadOnlyList<StateSpanUpsert>>([])
+            : _repository.BulkUpsertAsync(stateSpans, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => _repository.UpdateStateSpansAsync(stateSpans, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan>> GetStateSpansAroundAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime through,
+        IReadOnlyCollection<string?> followingSources,
+        int following,
+        CancellationToken cancellationToken = default)
+        => _repository.GetStateSpansAroundAsync(category, from, through, followingSources, following, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<bool> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default)
@@ -117,6 +162,24 @@ public class StateSpanService : IStateSpanService
 
         return (await _repository.DeleteStateSpanAsync(id, cancellationToken)).Count > 0;
     }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<Guid, DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default)
+        => _repository.ResolveDeletedAsync(ids, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<StateSpan> RestoreStateSpanAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => _repository.RestoreAsync(id, WriteOrigin.Live, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<BulkRestoreResult<StateSpan>> BulkRestoreStateSpansAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+        => _repository.BulkRestoreAsync(ids, WriteOrigin.Live, cancellationToken);
 
     /// <inheritdoc />
     public async Task<StateSpan?> UpdateStateSpanAsync(
@@ -145,7 +208,6 @@ public class StateSpanService : IStateSpanService
 
     /// <inheritdoc />
     public async Task<IEnumerable<Activity>> GetActivitiesAsync(
-        string? type = null,
         int count = 10,
         int skip = 0,
         DateTime? from = null,
@@ -153,12 +215,11 @@ public class StateSpanService : IStateSpanService
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
-            "Getting activities with type: {Type}, count: {Count}, skip: {Skip}",
-            type, count, skip);
+            "Getting activities with count: {Count}, skip: {Skip}",
+            count, skip);
 
         // Get Activity StateSpans from repository
         var stateSpans = await _repository.GetActivityStateSpansAsync(
-            type: type,
             count: count,
             skip: skip,
             from: from,

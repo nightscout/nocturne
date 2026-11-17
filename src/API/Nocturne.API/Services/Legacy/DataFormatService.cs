@@ -1,4 +1,8 @@
+using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using Microsoft.Net.Http.Headers;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Legacy;
@@ -9,13 +13,85 @@ namespace Nocturne.API.Services.Legacy;
 /// </summary>
 public static class DataFormatService
 {
+    private static readonly JsonSerializerOptions RelaxedEscaping = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private static readonly (string MediaType, string? Format)[] Offered =
+    [
+        ("text/plain", "txt"),
+        ("text/tab-separated-values", "tsv"),
+        ("text/csv", "csv"),
+        ("application/json", null),
+    ];
+
+    /// <summary>
+    /// The text format a request asks for, or <see langword="null"/> when the response is JSON. A
+    /// <paramref name="format"/> of csv, tsv or txt wins; any other value is ignored. Otherwise
+    /// offered types are ranked by quality, specificity, then position in the <c>Accept</c> header,
+    /// as Express's <c>res.format</c> does. A <c>q=0</c> range refuses a type.
+    /// </summary>
+    /// <remarks>
+    /// NIGHTSCOUT-COMPAT: Nightscout answers <c>*/*</c> and a missing <c>Accept</c> with the text
+    /// layout; Nocturne answers JSON, so only an explicit text type or <c>text/*</c> selects text.
+    /// </remarks>
+    public static string? NegotiateFormat(string? format, IList<MediaTypeHeaderValue> accept)
+    {
+        if (format?.ToLowerInvariant() is ("csv" or "tsv" or "txt") and { } requested)
+        {
+            return requested;
+        }
+
+        (string? Format, double Quality, int Specificity, int Index)? best = null;
+        foreach (var (mediaType, offeredFormat) in Offered)
+        {
+            if (BestMatch(accept, mediaType) is not { } match || match.Quality <= 0)
+                continue;
+
+            if (
+                best is null
+                || (match.Quality, match.Specificity, -match.Index).CompareTo(
+                    (best.Value.Quality, best.Value.Specificity, -best.Value.Index)
+                ) > 0
+            )
+            {
+                best = (offeredFormat, match.Quality, match.Specificity, match.Index);
+            }
+        }
+
+        return best?.Format;
+    }
+
+    private static (double Quality, int Specificity, int Index)? BestMatch(
+        IList<MediaTypeHeaderValue> accept,
+        string mediaType
+    )
+    {
+        var offered = new MediaTypeHeaderValue(mediaType);
+        (double Quality, int Specificity, int Index)? best = null;
+        for (var index = 0; index < accept.Count; index++)
+        {
+            var range = accept[index];
+            var specificity =
+                range.MediaType.Equals(mediaType, StringComparison.OrdinalIgnoreCase) ? 2
+                : range.MatchesAllSubTypes && range.Type.Equals(offered.Type, StringComparison.OrdinalIgnoreCase) ? 1
+                : 0;
+            if (specificity > 0 && (best is null || specificity > best.Value.Specificity))
+            {
+                best = (range.Quality ?? 1, specificity, index);
+            }
+        }
+
+        return best;
+    }
+
     public static string FormatEntries(Entry[] entries, string format)
     {
         return format.ToLowerInvariant() switch
         {
-            "csv" => FormatEntriesAsCsv(entries),
-            "tsv" => FormatEntriesAsTsv(entries),
-            "txt" => FormatEntriesAsText(entries),
+            "csv" => FormatEntriesSeparated(entries, ","),
+            "tsv" or "txt" => FormatEntriesSeparated(entries, "\t"),
             _ => throw new ArgumentException($"Unsupported format: {format}"),
         };
     }
@@ -56,63 +132,23 @@ public static class DataFormatService
         };
     }
 
-    private static string FormatEntriesAsCsv(Entry[] entries)
-    {
-        var sb = new StringBuilder();
-
-        // CSV Header
-        sb.AppendLine(
-            "_id,mills,date,dateString,sgv,mbg,type,direction,device,filtered,unfiltered,rssi,noise"
+    private static string FormatEntriesSeparated(Entry[] entries, string separator) =>
+        string.Join(
+            "\r\n",
+            entries.Select(entry =>
+                string.Join(
+                    separator,
+                    JsonString(entry.DateString),
+                    entry.Mills.ToString(CultureInfo.InvariantCulture),
+                    entry.Sgv?.ToString(CultureInfo.InvariantCulture),
+                    JsonString(entry.Direction),
+                    JsonString(entry.Device)
+                )
+            )
         );
 
-        foreach (var entry in entries)
-        {
-            sb.AppendLine(FormatEntryAsCsvRow(entry));
-        }
-
-        return sb.ToString();
-    }
-
-    private static string FormatEntriesAsTsv(Entry[] entries)
-    {
-        var sb = new StringBuilder();
-
-        // TSV Header
-        sb.AppendLine(
-            "_id\tmills\tdate\tdateString\tsgv\tmbg\ttype\tdirection\tdevice\tfiltered\tunfiltered\trssi\tnoise"
-        );
-
-        foreach (var entry in entries)
-        {
-            sb.AppendLine(FormatEntryAsTsvRow(entry));
-        }
-
-        return sb.ToString();
-    }
-
-    private static string FormatEntriesAsText(Entry[] entries)
-    {
-        var sb = new StringBuilder();
-
-        foreach (var entry in entries)
-        {
-            sb.AppendLine(
-                $"Entry {entry.Id}: {entry.Sgv ?? entry.Mgdl} mg/dL at {entry.DateString} ({entry.Type})"
-            );
-        }
-
-        return sb.ToString();
-    }
-
-    private static string FormatEntryAsCsvRow(Entry entry)
-    {
-        return $"{EscapeCsvField(entry.Id ?? "")},{entry.Mills},{entry.Date?.ToString("o") ?? ""},{EscapeCsvField(entry.DateString ?? "")},{entry.Sgv?.ToString() ?? ""},{entry.Mgdl.ToString()},{EscapeCsvField(entry.Type)},{EscapeCsvField(entry.Direction ?? "")},{EscapeCsvField(entry.Device ?? "")},{entry.Filtered?.ToString() ?? ""},{entry.Unfiltered?.ToString() ?? ""},{entry.Rssi?.ToString() ?? ""},{entry.Noise?.ToString() ?? ""}";
-    }
-
-    private static string FormatEntryAsTsvRow(Entry entry)
-    {
-        return $"{EscapeTsvField(entry.Id ?? "")}\t{entry.Mills}\t{entry.Date?.ToString("o") ?? ""}\t{EscapeTsvField(entry.DateString ?? "")}\t{entry.Sgv?.ToString() ?? ""}\t{entry.Mgdl.ToString()}\t{EscapeTsvField(entry.Type)}\t{EscapeTsvField(entry.Direction ?? "")}\t{EscapeTsvField(entry.Device ?? "")}\t{entry.Filtered?.ToString() ?? ""}\t{entry.Unfiltered?.ToString() ?? ""}\t{entry.Rssi?.ToString() ?? ""}\t{entry.Noise?.ToString() ?? ""}";
-    }
+    private static string JsonString(string? value) =>
+        value is null ? "" : JsonSerializer.Serialize(value, RelaxedEscaping);
 
     private static string FormatTreatmentsAsCsv(Treatment[] treatments)
     {

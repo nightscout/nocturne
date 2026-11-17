@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
+  import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
   import { brandColors } from "./brand-colors";
 
   interface Props {

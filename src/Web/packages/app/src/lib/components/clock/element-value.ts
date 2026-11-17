@@ -8,10 +8,10 @@
  * omits it, the builder substitutes a placeholder so it stays selectable.
  */
 
-import type { ClockElement, ClockSettings } from "$lib/api";
-import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
-import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
+import type { ClockElement, ClockSettings } from "#lib/api/index.js";
+import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+import { bg, bgDelta, bgLabel } from "#lib/utils/formatting.js";
 import { formatClockTime } from "./clock-time";
 import { readingAgePhrase } from "./staleness";
 
@@ -19,7 +19,7 @@ import { readingAgePhrase } from "./staleness";
  * The face's units. A face saved before it carried units reads as mg/dL, as the
  * API defaults it.
  */
-function faceUnits(settings: ClockSettings | undefined): GlucoseUnits {
+export function faceUnits(settings: ClockSettings | undefined): GlucoseUnits {
   return settings?.glucoseUnits === "mmol" ? "mmol" : "mg/dl";
 }
 

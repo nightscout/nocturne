@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Covers dynamic client registration, authorization endpoint validation,
 /// token exchange (happy path and error cases), and scope enforcement.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
 {
@@ -43,6 +44,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "PKCE Test User");
+        _accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
 
         Log($"Seeded tenant {_tenantId}, subject {_subjectId}");
     }

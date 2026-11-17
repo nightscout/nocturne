@@ -7,7 +7,9 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Core.Contracts.Auth;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -24,7 +26,7 @@ public class OidcProviderServiceOAuth2Tests
     {
         var options = Options.Create(new OidcOptions { Providers = [.. providers] });
         return new OidcProviderService(
-            dbContext: null!, // config-managed reads never touch the database
+            providers: Mock.Of<IOidcProviderRepository>(), // config-managed reads never touch the database
             new Mock<IHttpClientFactory>().Object,
             NullLogger<OidcProviderService>.Instance,
             new EphemeralDataProtectionProvider(),

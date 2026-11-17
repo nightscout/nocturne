@@ -1,6 +1,29 @@
-export function serializeCalloutToMarkdown(type: string | undefined, content: string): string {
-	const calloutType = type ?? 'info';
-	return `<Callout type="${calloutType}">\n${content}\n</Callout>`;
+const PLAIN_SCALAR = /^[\p{L}\p{N}_][\p{L}\p{N}_ ./@+()'-]*$/u;
+const RESERVED_SCALAR = /^(?:true|false|null|yes|no|on|off|y|n|~)$/i;
+const LINE_SEPARATORS = /[\p{Zl}\p{Zp}]/gu;
+
+function isNumeric(value: string): boolean {
+	return !Number.isNaN(Number(value.replace(/_/g, '')));
+}
+
+function yamlScalar(value: string): string {
+	const plain =
+		PLAIN_SCALAR.test(value) &&
+		!value.endsWith(' ') &&
+		!RESERVED_SCALAR.test(value) &&
+		!isNumeric(value);
+	if (plain) return value;
+	return JSON.stringify(value).replace(
+		LINE_SEPARATORS,
+		(c) => `\\u${c.charCodeAt(0).toString(16)}`
+	);
+}
+
+function yamlValue(value: unknown): string {
+	if (Array.isArray(value)) return `[${value.map((item) => yamlValue(item)).join(', ')}]`;
+	if (typeof value === 'string') return yamlScalar(value);
+	if (typeof value === 'object' && value !== null) return JSON.stringify(value);
+	return String(value);
 }
 
 export function generateFrontmatter(metadata: Record<string, unknown>): string {
@@ -8,14 +31,7 @@ export function generateFrontmatter(metadata: Record<string, unknown>): string {
 
 	for (const [key, value] of Object.entries(metadata)) {
 		if (value === undefined || value === null) continue;
-
-		if (Array.isArray(value)) {
-			lines.push(`${key}: [${value.join(', ')}]`);
-		} else if (typeof value === 'boolean') {
-			lines.push(`${key}: ${value}`);
-		} else {
-			lines.push(`${key}: ${value}`);
-		}
+		lines.push(`${yamlScalar(key)}: ${yamlValue(value)}`);
 	}
 
 	lines.push('---');

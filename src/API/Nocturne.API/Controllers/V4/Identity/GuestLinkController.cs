@@ -5,6 +5,7 @@ using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 
@@ -37,6 +38,7 @@ public class GuestLinkController : ControllerBase
     /// Create a new guest link for temporary read-only data sharing.
     /// </summary>
     [HttpPost]
+    [RequireInteractiveSession]
     [Authorize]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
@@ -86,6 +88,23 @@ public class GuestLinkController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
         }
+    }
+
+    /// <summary>
+    /// The categories the caller may share on a new guest link, and the ones ticked by default.
+    /// </summary>
+    [HttpGet("scope-options")]
+    [Authorize]
+    [DenyDemoSubject]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(GuestLinkScopeOptions), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<GuestLinkScopeOptions> GetGuestLinkScopeOptions()
+    {
+        if (!HttpContext.HasScope(Scope.SharingGuest))
+            return Forbid();
+
+        return Ok(GuestLinkService.ScopeOptions(HttpContext.GetGrantedScopes()));
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ namespace Nocturne.Connectors.Glooko.Xt;
 ///     included — and files bolus-wizard calculations and pump alarms inside that blob. See
 ///     <see cref="GlookoXtProvenance"/>.
 /// </remarks>
-public class GlookoXtRecordMapper(ILogger logger)
+public class GlookoXtRecordMapper(ILogger logger, TimeProvider? timeProvider = null)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -45,7 +45,7 @@ public class GlookoXtRecordMapper(ILogger logger)
         var list = records as IList<GlookoXtRecord> ?? records.ToList();
         var unit = GlookoXtGlucoseUnits.Resolve(unitSetting, GlucoseValues(list));
         var batch = new GlookoXtMappedBatch();
-        var now = DateTime.UtcNow;
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         var streamBasals = new List<(long Id, DateTime At, GlookoXtRecord Record, GlookoXtProvenance? Provenance, string Device)>();
 
         foreach (var record in list)

@@ -36,7 +36,6 @@ public class ResponseCachePolicyTests
     [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetConnectivity))]
     [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetOverrides))]
     [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetTemporaryTargets))]
-    [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetProfiles))]
     [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetExercise))]
     [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetIllness))]
     [InlineData(typeof(StateSpansController), nameof(StateSpansController.GetTravel))]
@@ -45,6 +44,7 @@ public class ResponseCachePolicyTests
     [InlineData(typeof(V1EntriesController), nameof(V1EntriesController.GetCurrentEntry))]
     [InlineData(typeof(V1EntriesController), nameof(V1EntriesController.GetEntries))]
     [InlineData(typeof(ProfileController), nameof(ProfileController.GetProfileSummary))]
+    [InlineData(typeof(ProfileController), nameof(ProfileController.GetActiveSchedules))]
     [InlineData(typeof(PredictionController), nameof(PredictionController.GetProfileSnapshot))]
     [InlineData(typeof(TreatmentLogController), nameof(TreatmentLogController.GetStats))]
     public void MutableReads_AreNeverStored(Type controller, string action)
@@ -81,6 +81,7 @@ public class ResponseCachePolicyTests
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetGriTimeline), 300)]
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetEHbA1cTimeline), 300)]
     [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetRangeAnalytics), 60)]
+    [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetPeriodComparison), 60)]
     [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetWeekdayAverages), 60)]
     [InlineData(typeof(SensorIntegrityController), nameof(SensorIntegrityController.Analyze), 60)]
     [InlineData(typeof(CgmComparisonController), nameof(CgmComparisonController.Compare), 60)]

@@ -56,6 +56,15 @@ public interface IMetadataPublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Upserts the active-program readings a connector reports as effective
+    /// <see cref="ProfileActivation"/>s, keyed by their <see cref="ProfileActivation.SyncIdentifier"/>.
+    /// </summary>
+    Task<bool> PublishProfileActivationsAsync(
+        IEnumerable<ProfileActivation> activations,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default);
+
     Task<bool> PublishSystemEventsAsync(
         IEnumerable<SystemEvent> systemEvents,
         string source,
@@ -114,31 +123,23 @@ public interface IMetadataPublisher
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads the persisted backfill low-water mark for one of <paramref name="source"/>'s data
-    /// collections. A mark means an earlier backfill crawl of that collection stopped before
-    /// reaching the source's beginning — history older than the mark may be missing, and the
-    /// connector should resume the crawl below it. <c>null</c> means no incomplete backfill.
+    /// Reads <paramref name="source"/>'s persisted crawl state: a map of named times that a
+    /// connector's crawls keep across runs (see
+    /// <see cref="Services.BaseConnectorService{TConfig}.CrawlAndPublishAsync{T}"/>). Empty when
+    /// none is held.
     /// </summary>
     /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
-    /// <param name="collection">The data collection key (e.g. <c>Glucose</c>, <c>Treatments</c>).</param>
-    Task<DateTime?> GetBackfillLowWaterMarkAsync(
+    Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
         string source,
-        string collection,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Persists (or clears, with <c>null</c>) the backfill low-water mark for one of
-    /// <paramref name="source"/>'s data collections. Connectors update the mark as each page of
-    /// a newest-first backfill lands, so a crawl killed mid-run (process restart, publish
-    /// failure) can resume from where it stopped instead of stranding the older history below
-    /// the resume cursor forever.
+    /// Applies <paramref name="changes"/> to <paramref name="source"/>'s crawl state in one write:
+    /// a key with a time is stored, a key with <c>null</c> removed, and every other key kept.
     /// </summary>
     /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
-    /// <param name="collection">The data collection key (e.g. <c>Glucose</c>, <c>Treatments</c>).</param>
-    /// <param name="lowWaterMark">The oldest successfully published record time, or <c>null</c> once the crawl reaches the source's beginning.</param>
-    Task SetBackfillLowWaterMarkAsync(
+    Task SetBackfillLowWaterMarksAsync(
         string source,
-        string collection,
-        DateTime? lowWaterMark,
+        IReadOnlyDictionary<string, DateTime?> changes,
         CancellationToken cancellationToken = default);
 }

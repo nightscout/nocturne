@@ -22,7 +22,7 @@ public class UploaderSnapshotRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantA;
-        _repository = new UploaderSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
+        _repository = new UploaderSnapshotRepository(new TestNocturneDbContextFactory(_context), new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
     }
 
     public void Dispose()

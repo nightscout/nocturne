@@ -1,27 +1,17 @@
 //! Wall-clock leaves: time_of_day, day_of_week, time_since_last_carb/bolus.
 
-use chrono::{DateTime, Datelike, NaiveDateTime, NaiveTime, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc, Weekday};
 use chrono_tz::Tz;
 
 use super::Env;
 use crate::compare::{Unit, elapsed};
-use crate::enums::{DayOfWeek, EnumValue, WireEnum};
+use crate::enums::DayOfWeek;
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
 
-/// `HH:mm` exactly: two digits each, 00-23 and 00-59.
-pub(crate) fn parse_hh_mm(s: &str) -> Option<NaiveTime> {
-    let two_digits = |t: &str| {
-        (t.len() == 2 && t.bytes().all(|b| b.is_ascii_digit()))
-            .then(|| t.parse().ok())
-            .flatten()
-    };
-    let (hh, mm) = s.split_once(':')?;
-    NaiveTime::from_hms_opt(two_digits(hh)?, two_digits(mm)?, 0)
-}
-
-/// An IANA zone id, matched exactly and then ignoring ASCII case, since
-/// stored ids are often mis-cased (`ETC/GMT-2`). Windows ids do not resolve,
-/// and tzdb backward links (`US/Pacific`) do (engine-semantics.md §4).
+/// The tenant's zone id: an IANA zone id, matched exactly and then ignoring
+/// ASCII case, since stored tenant ids are often mis-cased (`ETC/GMT-2`).
+/// Windows ids do not resolve, and tzdb backward links (`US/Pacific`) do
+/// (engine-semantics.md §4).
 fn find_tz(id: &str) -> Option<Tz> {
     id.parse().ok().or_else(|| {
         chrono_tz::TZ_VARIANTS
@@ -53,20 +43,11 @@ fn local(now: DateTime<Utc>, tz: Option<Tz>) -> NaiveDateTime {
 }
 
 /// Half-open `[from, to)` window; `from > to` wraps midnight. A per-rule
-/// timezone wins and fails closed when it does not resolve; without one the
-/// window is in the tenant's zone.
+/// timezone wins; without one the window is in the tenant's zone.
 pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
-    let (Some(from), Some(to)) = (
-        p.from.as_deref().and_then(parse_hh_mm),
-        p.to.as_deref().and_then(parse_hh_mm),
-    ) else {
-        return false;
-    };
-    let local = match p.timezone.as_deref().filter(|id| !id.is_empty()) {
-        Some(id) => match find_tz(id) {
-            Some(tz) => local(env.now, Some(tz)),
-            None => return false,
-        },
+    let (from, to) = (p.from, p.to);
+    let local = match p.timezone {
+        Some(tz) => local(env.now, Some(tz)),
         None => tenant_local(env),
     };
     let current = local.time();
@@ -77,16 +58,18 @@ pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
     }
 }
 
-/// Today, in the tenant's zone, is one of `days`; an undefined day never
-/// matches.
+/// Today, in the tenant's zone, is one of `days`.
 pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
-    let today = tenant_local(env).weekday().num_days_from_sunday();
-    DayOfWeek::from_ordinal(i64::from(today)).is_some_and(|today| {
-        p.days
-            .iter()
-            .flatten()
-            .any(|d| *d == EnumValue::Known(today))
-    })
+    let today = match tenant_local(env).weekday() {
+        Weekday::Sun => DayOfWeek::Sunday,
+        Weekday::Mon => DayOfWeek::Monday,
+        Weekday::Tue => DayOfWeek::Tuesday,
+        Weekday::Wed => DayOfWeek::Wednesday,
+        Weekday::Thu => DayOfWeek::Thursday,
+        Weekday::Fri => DayOfWeek::Friday,
+        Weekday::Sat => DayOfWeek::Saturday,
+    };
+    p.days.contains(&today)
 }
 
 /// Elapsed minutes since `anchor` as a double; a missing anchor is +infinity,
@@ -96,10 +79,7 @@ pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>, en
         Some(anchor) => elapsed(env.now, anchor, Unit::Minutes),
         None => Some(f64::INFINITY),
     };
-    p.operator
-        .known()
-        .zip(since)
-        .is_some_and(|(op, since)| op.apply(since, f64::from(p.minutes)))
+    since.is_some_and(|since| p.operator.apply(since, f64::from(p.minutes.get())))
 }
 
 #[cfg(test)]
@@ -142,11 +122,10 @@ mod tests {
         assert!(find_tz("AUS Eastern Standard Time").is_none());
     }
 
-    /// The other half of the documented divergence: `TZ_VARIANTS` carries tzdb backward
-    /// links that C#'s ICU-canonical scan rejects, so these resolve here and fail closed
-    /// under the managed engine. Pinned so a change to the set is a deliberate one.
+    /// `TZ_VARIANTS` carries tzdb backward links (engine-semantics.md §4), so these
+    /// resolve. Pinned so a change to the set is a deliberate one.
     #[test]
-    fn resolves_backward_links_that_the_managed_engine_rejects() {
+    fn resolves_backward_links() {
         assert_eq!(
             find_tz("Etc/Greenwich").map(Tz::name),
             Some("Etc/Greenwich")

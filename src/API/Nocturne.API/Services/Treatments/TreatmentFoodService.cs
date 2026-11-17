@@ -5,6 +5,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -16,17 +17,17 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="ITreatmentFoodService"/>
 public class TreatmentFoodService : ITreatmentFoodService
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ITreatmentFoodRepository _treatmentFoodRepository;
     private readonly ILogger<TreatmentFoodService> _logger;
 
     public TreatmentFoodService(
-        NocturneDbContext context,
+        INocturneDbContextFactory contexts,
         ITreatmentFoodRepository treatmentFoodRepository,
         ILogger<TreatmentFoodService> logger
     )
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _treatmentFoodRepository = treatmentFoodRepository;
         _logger = logger;
     }
@@ -37,7 +38,8 @@ public class TreatmentFoodService : ITreatmentFoodService
         CancellationToken cancellationToken = default
     )
     {
-        var carbIntakeEntity = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var carbIntakeEntity = await db
             .Set<CarbIntakeEntity>()
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == carbIntakeId, cancellationToken);
@@ -53,7 +55,7 @@ public class TreatmentFoodService : ITreatmentFoodService
         );
 
         var attributedCarbs = entries.Sum(entry => entry.Carbs);
-        var totalCarbs = (decimal)carbIntakeEntity.Carbs;
+        var totalCarbs = carbIntakeEntity.Carbs.ToDecimal();
 
         return new TreatmentFoodBreakdown
         {
@@ -86,6 +88,12 @@ public class TreatmentFoodService : ITreatmentFoodService
         _logger.LogDebug("Creating food entry for carb intake {CarbIntakeId}", entry.CarbIntakeId);
         return await _treatmentFoodRepository.CreateAsync(entry, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task AddManyAsync(
+        IReadOnlyCollection<TreatmentFood> entries,
+        CancellationToken cancellationToken = default
+    ) => _treatmentFoodRepository.CreateManyAsync(entries, cancellationToken);
 
     /// <inheritdoc />
     public async Task<TreatmentFood?> UpdateAsync(

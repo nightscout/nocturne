@@ -1,24 +1,29 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { Chart, Calendar, Layer, Tooltip } from "layerchart";
+  import { Chart, Layer, Path, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
-  import { timeMonth, timeWeek, timeMonths } from "d3-time";
-  import { Button } from "$lib/components/ui/button";
+  import { timeMonth, timeMonths } from "d3-time";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  import {
+    formatGlucoseValue,
+    formatLocale,
+    formatMonthLabel,
+    formatShortDate,
+    formatWeekdayDate,
+  } from "#lib/utils/formatting.js";
+  import { toDayString } from "#lib/utils/date-range.js";
+  import { firstDayOfWeek } from "#lib/components/calendar/calendar-date.js";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
   import { yearCalendarBounds } from "./year-bounds";
+  import { layoutYear, monthOutlinePath } from "./week-layout";
   import VisibleChart from "./VisibleChart.svelte";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
-  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
-  import type {
-    DailySummaryDay,
-    YearCalendarDatum,
-    YearWeekColumn,
-  } from "./calendar-datum";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
+  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import type { DailySummaryDay, YearCalendarDatum } from "./calendar-datum";
 
 
   let {
@@ -31,15 +36,18 @@
     transformYearData,
     getCellFill,
     getCellHatch,
-    getWeekColumns,
     navigateToDayInReview,
     glucoseColorScale,
+    glucoseBands,
     units,
     unitLabel,
     formatUnits,
     getVisibleCounts,
-    sentinelElement = $bindable(),
-  }: {
+    sentinelElement = $bindable()
+
+    /** Texture laid over a cell's fill to mark its band in black and white. */
+    /** Very-low, low, high and very-high boundaries in mg/dL, in the order the colour ranges run. */
+  }: { 
     year: number;
     yearIndex: number;
     loadingYears: Set<number>;
@@ -48,13 +56,10 @@
     yearData: Map<number, DailySummaryDay[]>;
     transformYearData: (days: DailySummaryDay[]) => YearCalendarDatum[];
     getCellFill: (data: YearCalendarDatum | undefined) => string;
-    /** Texture laid over a cell's fill to mark its band in black and white. */
     getCellHatch?: (data: YearCalendarDatum | undefined) => TextureKey | null;
-    getWeekColumns: (
-      cells: Array<{ x: number; data?: { date?: Date } }>
-    ) => YearWeekColumn[];
     navigateToDayInReview: (dateStr: string) => void;
     glucoseColorScale: (mgdl: number) => string;
+    glucoseBands: readonly number[];
     units: GlucoseUnits;
     unitLabel: string;
     formatUnits: (value: number | null) => string;
@@ -85,7 +90,10 @@
   });
   const SCREEN_CELL = 24;
   const PRINT_CELL_MAX = 32;
-  const columnCount = $derived(timeWeek.count(bounds.start, bounds.end) + 1);
+  const firstDay = $derived(firstDayOfWeek(formatLocale()));
+  const layout = $derived(layoutYear(bounds.start, bounds.end, firstDay));
+  const columnCount = $derived(layout.columns.length);
+  const datumByDay = $derived(new Map(chartData.map((d) => [d.dateString, d])));
   const cellSize = $derived(
     print.active && chartWidth > 0
       ? Math.min(PRINT_CELL_MAX, chartWidth / columnCount)
@@ -110,7 +118,7 @@
   ></div>
 
   <!-- Year Label -->
-  <div class="mb-3 flex items-center gap-3">
+  <div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
     <h2 class="text-xl font-bold tabular-nums">{year}</h2>
     {#if failed}
       <span class="text-sm text-destructive">Some year data could not be loaded.</span>
@@ -133,8 +141,8 @@
     >
       <div
         class="h-60 min-w-(--screen-w) print:h-(--print-h) print:min-w-0"
-        style:--screen-w="{columnCount * SCREEN_CELL}px"
-        style:--print-h="{cellSize * 7 + 20}px"
+        style:--screen-w="{(columnCount + 1) * SCREEN_CELL}px"
+        style:--print-h="{cellSize * 7 + 44}px"
         bind:clientWidth={chartWidth}
       >
         <VisibleChart label={`${year} daily chart`} eager={yearIndex === 0}>
@@ -143,7 +151,7 @@
             x="date"
             c="value"
             cScale={scaleThreshold().unknown("transparent")}
-            cDomain={[54, 70, 180, 250]}
+            cDomain={[...glucoseBands]}
             cRange={[
               "var(--glucose-very-low)",
               "var(--glucose-low)",
@@ -155,96 +163,91 @@
           >
             {#snippet children({ context })}
               <Layer type="svg">
-                <Calendar
-                  start={bounds.start}
-                  end={bounds.end}
-                  {cellSize}
-                  monthPath
-                  monthLabel={false}
-                >
-                  {#snippet children({ cells, cellSize })}
-                    <!-- Month labels (clickable → calendar) -->
-                    {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
-                      {@const monthX =
-                        timeWeek.count(
-                          bounds.start,
-                          timeWeek.ceil(monthDate)
-                        ) * cellSize[0]}
-                      <a
-                        href={resolve(
-                          `/calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`
-                        )}
-                      >
-                        <text
-                          x={monthX}
-                          y={-5}
-                          font-size="12"
-                          class="fill-muted-foreground hover:fill-primary cursor-pointer"
-                        >
-                          {formatMonthLabel(monthDate)}
-                        </text>
-                      </a>
-                    {/each}
-                    <!-- Native <rect> per cell: layerchart marks each call
-                         registerMark() on mount and every registration re-runs the
-                         chart's mark deriveds over all marks, so ~365 cells/year
-                         (x multiple stacked years) cost O(N^2) and stalled the page.
-                         Cells carry pre-scaled pixel coords and per-cell handlers,
-                         so native <rect> keeps behaviour while registering nothing. -->
-                    {#each cells as cell, i (i)}
-                      {@const padding = 1}
-                      {@const cellDate = cell.data?.dateString}
-                      {@const hatch = getCellHatch?.(cell.data)}
-                      <!-- svelte-ignore a11y_click_events_have_key_events -->
-                      <!-- svelte-ignore a11y_no_static_element_interactions -->
-                      <rect
-                        x={cell.x + padding}
-                        y={cell.y + padding}
-                        width={cellSize[0] - padding * 2}
-                        height={cellSize[1] - padding * 2}
-                        rx={4}
-                        fill={getCellFill(cell.data)}
-                        onpointermove={(e: PointerEvent) =>
-                          context.tooltip?.show(e, cell.data)}
-                        onpointerleave={() => context.tooltip?.hide()}
-                        onclick={() => {
-                          if (cellDate) {
-                            navigateToDayInReview(cellDate);
-                          }
-                        }}
-                      />
-                      {#if hatch}
-                        <rect
-                          x={cell.x + padding}
-                          y={cell.y + padding}
-                          width={cellSize[0] - padding * 2}
-                          height={cellSize[1] - padding * 2}
-                          rx={4}
-                          fill="none"
-                          pointer-events="none"
-                          class={patternClass(hatch)}
-                        />
-                      {/if}
-                    {/each}
-                    <!-- Week number labels -->
-                    {@const weekCols = getWeekColumns(cells)}
-                    {#each weekCols as wk (wk.x)}
-                      <a
-                        href={resolve(`/reports/week-to-week?from=${wk.from}&to=${wk.to}&isDefault=false`)}
-                      >
-                        <text
-                          x={wk.x + cellSize[0] / 2}
-                          y={7 * cellSize[1] + 14}
-                          text-anchor="middle"
-                          font-size="9"
-                          class="fill-muted-foreground hover:fill-primary cursor-pointer"
-                        >
-                          {wk.weekNumber}
-                        </text>
-                      </a>
-                    {/each}
-                  {/snippet}
-                </Calendar>
+                {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
+                  <Path
+                    pathData={monthOutlinePath(monthDate, bounds.start, firstDay, [cellSize, cellSize])}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeOpacity={0.2}
+                  />
+                {/each}
+                <!-- Month labels (clickable → calendar) -->
+                {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
+                  {@const monthX =
+                    layout.columns.find((c) => c.start >= monthDate)?.column ?? 0}
+                  <a
+                    href={resolve(`calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`)}
+                  >
+                    <text
+                      x={monthX * cellSize}
+                      y={-5}
+                      font-size="12"
+                      class="fill-muted-foreground hover:fill-primary cursor-pointer"
+                    >
+                      {formatMonthLabel(monthDate)}
+                    </text>
+                  </a>
+                {/each}
+                <!-- Native <rect> per cell: layerchart marks each call
+                     registerMark() on mount and every registration re-runs the
+                     chart's mark deriveds over all marks, so ~365 cells/year
+                     (x multiple stacked years) cost O(N^2) and stalled the page.
+                     Cells carry pre-scaled pixel coords and per-cell handlers,
+                     so native <rect> keeps behaviour while registering nothing. -->
+                {#each layout.days as day (day.date.getTime())}
+                  {@const padding = 1}
+                  {@const data = datumByDay.get(toDayString(day.date))}
+                  {@const hatch = getCellHatch?.(data)}
+                  {@const x = day.column * cellSize + padding}
+                  {@const y = day.row * cellSize + padding}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <rect
+                    x={x}
+                    y={y}
+                    width={cellSize - padding * 2}
+                    height={cellSize - padding * 2}
+                    rx={4}
+                    fill={getCellFill(data)}
+                    onpointermove={(e: PointerEvent) => context.tooltip?.show(e, data)}
+                    onpointerleave={() => context.tooltip?.hide()}
+                    onclick={() => {
+                      if (data?.dateString) {
+                        navigateToDayInReview(data.dateString);
+                      }
+                    }}
+                  ></rect>
+                  {#if hatch}
+                    <rect
+                      x={x}
+                      y={y}
+                      width={cellSize - padding * 2}
+                      height={cellSize - padding * 2}
+                      rx={4}
+                      fill="none"
+                      pointer-events="none"
+                      class={patternClass(hatch)}
+                    ></rect>
+                  {/if}
+                {/each}
+                {#each layout.columns as column (column.column)}
+                  {@const labelX = column.column * cellSize + cellSize / 2}
+                  {@const labelY = 7 * cellSize + 10}
+                  <a
+                    href={resolve(`reports/week-to-week?from=${column.from}&to=${column.to}&isDefault=false`)}
+                  >
+                    <text
+                      x={labelX}
+                      y={labelY}
+                      text-anchor="start"
+                      transform="rotate(45 {labelX} {labelY})"
+                      font-size="9"
+                      class="fill-muted-foreground hover:fill-primary cursor-pointer"
+                    >
+                      {formatShortDate(column.start)}
+                    </text>
+                  </a>
+                {/each}
               </Layer>
 
               <Tooltip.Root

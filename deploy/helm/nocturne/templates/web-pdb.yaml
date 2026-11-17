@@ -1,4 +1,9 @@
 {{- if .Values.web.pdb.enabled -}}
+{{- $min := .Values.web.pdb.minAvailable }}
+{{- $byMax := and (gt (int .Values.web.pdb.maxUnavailable) 0) (eq (int $min) 0) }}
+{{- if and (not $byMax) (not (hasSuffix "%" (toString $min))) (ge (int $min) (int .Values.web.replicaCount)) }}
+{{- fail "web.pdb.minAvailable must be below web.replicaCount: a budget that keeps every web pod available blocks every node drain." }}
+{{- end }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

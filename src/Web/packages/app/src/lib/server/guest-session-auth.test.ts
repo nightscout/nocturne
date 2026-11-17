@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
+// The tests set process.env per case; the getter reads it at each access.
+vi.mock("$app/env/private", () => ({
+  get INSTANCE_KEY() {
+    return process.env.INSTANCE_KEY;
+  },
+}));
+
 
 const { authenticateGuestSession } = await import("./guest-session-auth");
-const { AUTH_COOKIE_NAMES } = await import("$lib/config/auth-cookies");
+const { AUTH_COOKIE_NAMES } = await import("#lib/config/auth-cookies.js");
 
 /**
  * Answers `/api/auth/oidc/session` the way the API's handler chain does: a
@@ -70,5 +76,24 @@ describe("authenticateGuestSession", () => {
     expect(event.locals.isAuthenticated).toBe(true);
     expect(event.locals.isGuestSession).toBe(true);
     expect(event.locals.user?.permissions).toEqual(["api:entries:read"]);
+  });
+});
+
+describe("authenticateGuestSession when the API is down", () => {
+  it("marks the session unreadable rather than leaving it known to be signed out", async () => {
+    const event = guestRequest("real-guest-session");
+    const down = vi.fn<typeof fetch>(async () => new Response("bad gateway", { status: 502 }));
+
+    await authenticateGuestSession(event, "https://api.test", down);
+
+    expect(event.locals.sessionUnreadable).toBe(true);
+  });
+
+  it("does not mark it unreadable when the API says the guest session is not valid", async () => {
+    const event = guestRequest("garbage");
+
+    await authenticateGuestSession(event, "https://api.test", sessionApi("real-guest-session"));
+
+    expect(event.locals.sessionUnreadable).toBeUndefined();
   });
 });

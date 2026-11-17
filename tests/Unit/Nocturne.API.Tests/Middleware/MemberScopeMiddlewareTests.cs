@@ -1,16 +1,21 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
-using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -420,7 +425,8 @@ public class MemberScopeMiddlewareTests
         // carries.
         var publicScopes = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
 
-        var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+        var middleware = new MemberScopeMiddleware(
+            _ => Task.CompletedTask, Mock.Of<ITenantMembershipRepository>(), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         var context = new DefaultHttpContext();
         context.Items["AuthContext"] = new AuthContext
         {
@@ -535,12 +541,12 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
-    public async Task MigratedNightscoutGrant_OnOwnerMembership_KeepsEveryUploadScope()
+    public async Task MigratedNightscoutGrant_OnFullAccessMembership_KeepsEveryUploadScope()
     {
         // ConnectorConfigurationService seeds the migrated Nightscout secret with
-        // Normalize([health.readwrite]) against the subject who saved the connector secrets.
-        // That subject is a tenant member, so the grant is now intersected — the eight
-        // health.readwrite scopes every field uploader writes with must survive.
+        // Normalize([health.readwrite]) on the tenant's device subject, whose membership is full
+        // access. The grant is intersected with it, and the eight health.readwrite scopes every
+        // field uploader writes with must survive.
         var migratedGrantScopes = Scope.Normalize([Scope.HealthReadWrite]).ToList();
 
         var context = await ResolveAsync(OwnerPermissions, migratedGrantScopes, AuthType.ApiKey);
@@ -556,18 +562,10 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
-    public async Task ApiKey_WithNoMembershipRow_KeepsTheGrantScopesAndTrie()
+    public async Task ApiKey_WithNoMembershipRow_GetsNoPermissionTrie()
     {
-        // AuthenticationMiddleware exempts AuthType.ApiKey from the tenant-membership check, so an
-        // api-secret grant minted against a subject with no membership on this tenant (a platform
-        // admin who configured the connector, a member since removed) reaches the middleware with
-        // membership == null. It keeps the grant's own scopes rather than resolving to nothing.
-        //
-        // The trie is asserted alongside the scopes because they are separate carriers.
-        // ApiKeyHandler leaves AuthContext.Permissions empty, so the trie AuthenticationMiddleware
-        // builds is empty, and PolicyNames.HasPermissions — class-level on every V1/V2/V3
-        // controller — succeeds only on a non-empty trie. Scopes alone passing is not enough to
-        // keep the legacy uploader surface reachable.
+        // The trie is the carrier the legacy v1/v2/v3 surface authorizes on, so a grant whose
+        // subject holds no membership must not have one built from its own scopes.
         using var db = TestDbContextFactory.CreateSqlite();
 
         using (var seed = db.CreateContext())
@@ -578,15 +576,9 @@ public class MemberScopeMiddlewareTests
         var context = await ResolveAsync(
             db, Guid.CreateVersion7(), [Scope.TreatmentsReadWrite], AuthType.ApiKey);
 
-        var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
-
         var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
-        permissionTrie!.Check("api:treatments:create").Should().BeTrue(
-            "HasPermissionsHandler succeeds only on a non-empty trie");
-        permissionTrie.Check("api:entries:create").Should().BeFalse(
-            "the grant carries treatments.readwrite only");
+        permissionTrie!.Check("api:treatments:create").Should().BeFalse();
     }
 
     [Theory]
@@ -605,7 +597,7 @@ public class MemberScopeMiddlewareTests
 
         category.IsHistoryClamped.Should().BeTrue();
         scoped.HistoryClamped.Should().BeTrue(
-            "the scoped context was pinned before authentication, so it must be stamped here");
+            "a context created before authentication reads the clamp once it is resolved");
     }
 
     [Fact]
@@ -670,9 +662,103 @@ public class MemberScopeMiddlewareTests
         scoped.HistoryClamped.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task LastUsedWrite_RunsAfterTheRequestScopeIsDisposed_AndReadsNoRequestState()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], limitTo24Hours: true);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(db.ContextFactory);
+        services.AddScoped<IAuditContext, AuditContext>();
+        services.AddDataServices();
+        await using var provider = services.BuildServiceProvider();
+
+        var detached = new GatedFactory(provider.GetRequiredService<INocturneDbContextFactory>());
+        var middleware = new MemberScopeMiddleware(
+            _ => Task.CompletedTask, new TenantMembershipRepository(detached), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+
+        await using (var request = provider.CreateAsyncScope())
+        {
+            var context = new DefaultHttpContext { RequestServices = request.ServiceProvider };
+            context.Items["AuthContext"] = new AuthContext
+            {
+                IsAuthenticated = true,
+                AuthType = AuthType.SessionCookie,
+                SubjectId = subjectId,
+                TenantId = TestDatabaseSeeder.TenantId,
+                Scopes = [],
+            };
+            context.Items["GrantedScopes"] = Scope.Normalize([]);
+            context.Items["PermissionTrie"] = new PermissionTrie();
+            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()), subjectId);
+
+            await middleware.InvokeAsync(context);
+
+            request.ServiceProvider.GetRequiredService<ICategoryReadContext>().IsHistoryClamped
+                .Should().BeTrue("the request itself is clamped, so a context reading it would be too");
+        }
+
+        detached.Release();
+        var writer = await detached.Created.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        writer.TenantId.Should().Be(TestDatabaseSeeder.TenantId);
+        writer.HistoryClamped.Should().BeFalse();
+        writer.IsShareContext.Should().BeFalse();
+        writer.AuditContext.Should().BeNull();
+
+        DateTime? lastUsed = null;
+        for (var attempt = 0; attempt < 100 && lastUsed is null; attempt++)
+        {
+            await Task.Delay(20);
+            using var read = db.CreateContext();
+            lastUsed = await read.TenantMembers.AsNoTracking()
+                .Where(tm => tm.SubjectId == subjectId)
+                .Select(tm => tm.LastUsedAt)
+                .SingleAsync();
+        }
+
+        lastUsed.Should().NotBeNull("the write lands after the request's scope is gone");
+    }
+
     /// <summary>
-    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and scoped context, as
-    /// the request pipeline registers them, and returns both carriers of the history clamp.
+    /// Holds a tenant-pinned create until <see cref="Release"/>, so the write runs after the request
+    /// scope is disposed, and hands back the context it created.
+    /// </summary>
+    private sealed class GatedFactory(INocturneDbContextFactory inner) : INocturneDbContextFactory
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<NocturneDbContext> Created { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => _gate.SetResult();
+
+        public async ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default)
+        {
+            await _gate.Task;
+            var context = await inner.CreateForTenantAsync(tenantId, ct);
+            Created.SetResult(context);
+            return context;
+        }
+
+        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and returns it with a context
+    /// opened before the middleware ran that reads it, as one from the request's factory does.
     /// </summary>
     private static async Task<(CategoryReadContext Category, NocturneDbContext Scoped)> ResolveClampAsync(
         SqliteTestDatabase db,
@@ -683,9 +769,10 @@ public class MemberScopeMiddlewareTests
     {
         var category = new CategoryReadContext();
         var scoped = db.CreateContext();
+        scoped.ReadingFrom(reader: category);
         var services = new ServiceCollection();
         services.AddSingleton<ICategoryReadContext>(category);
-        services.AddSingleton(scoped);
+        services.AddSingleton(db.ContextFactory.AsNocturneFactory());
         using var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };
@@ -700,9 +787,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return (category, scoped);
@@ -735,7 +823,7 @@ public class MemberScopeMiddlewareTests
         AuthType authType)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => db.CreateContext());
+        services.AddSingleton(db.ContextFactory.AsNocturneFactory());
         using var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };
@@ -749,12 +837,22 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return context;
+    }
+
+    /// <summary>Reads the subject's membership as <see cref="AuthenticationMiddleware"/> does and leaves it on the request.</summary>
+    private static async Task StoreMembershipAsync(
+        HttpContext context, ITenantMembershipRepository members, Guid subjectId)
+    {
+        var (membership, _) = await RequestMembership.ReadAsync(
+            members, subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None);
+        membership.StoreOn(context);
     }
 
     /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>
@@ -821,7 +919,8 @@ public class MemberScopeMiddlewareTests
     {
         RequestDelegate next = _ => Task.CompletedTask;
 
-        var middleware = new MemberScopeMiddleware(next, NullLogger<MemberScopeMiddleware>.Instance);
+        var middleware = new MemberScopeMiddleware(
+            next, Mock.Of<ITenantMembershipRepository>(), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
 
         var context = new DefaultHttpContext();
         context.Items["AuthContext"] = authContext;

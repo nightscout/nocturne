@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "rate-of-change-unknown-direction",
-  "description": "an unrecognised direction evaluates false",
+  "description": "an unrecognised direction cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

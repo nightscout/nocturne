@@ -1,10 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -20,13 +17,17 @@ public interface IConnectorAttentionNotifier
     /// Reconciles the owner's notifications for <paramref name="connectorId"/> with
     /// <paramref name="attention"/>: files the one it asks for if not already up, and archives
     /// any of the other kind. Null archives both. Best-effort: a tenant with no owner, or a
-    /// notification store that cannot be written, must not fail the sync that raised it.
+    /// notification store that cannot be written, must not fail the sync that raised it. Runs in
+    /// the caller's scope, which must already be resolved to <paramref name="tenantId"/>.
     /// </summary>
     Task ApplyAsync(Guid tenantId, string connectorId, string connectorDisplayName, ConnectorAttention? attention, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
-public sealed class ConnectorAttentionNotifier(IServiceProvider services, ILogger<ConnectorAttentionNotifier> logger)
+public sealed class ConnectorAttentionNotifier(
+    ITenantOwnerResolver ownerResolver,
+    IInAppNotificationService notifications,
+    ILogger<ConnectorAttentionNotifier> logger)
     : IConnectorAttentionNotifier
 {
     public const string ReconnectRequiredType = "connector.reconnect_required";
@@ -40,10 +41,7 @@ public sealed class ConnectorAttentionNotifier(IServiceProvider services, ILogge
     {
         try
         {
-            using var scope = services.CreateScope();
-            var sp = scope.ServiceProvider;
-
-            var ownerSubjectId = await sp.GetRequiredService<ITenantOwnerResolver>().GetOwnerSubjectIdAsync(tenantId, cancellationToken);
+            var ownerSubjectId = await ownerResolver.GetOwnerSubjectIdAsync(tenantId, cancellationToken);
             if (ownerSubjectId is null)
             {
                 if (attention is not null)
@@ -51,16 +49,6 @@ public sealed class ConnectorAttentionNotifier(IServiceProvider services, ILogge
                 return;
             }
 
-            var tenant = await LoadTenantAsync(sp, tenantId, cancellationToken);
-            if (tenant is null) return;
-
-            // in_app_notifications is tenant-scoped under FORCE ROW LEVEL SECURITY; see
-            // ShareLinkRotatedNotifier for why both the accessor and the pooled context are pinned.
-            sp.GetRequiredService<ITenantAccessor>()
-                .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
-            sp.GetRequiredService<NocturneDbContext>().TenantId = tenantId;
-
-            var notifications = sp.GetRequiredService<IInAppNotificationService>();
             var active = await notifications.GetActiveNotificationsAsync(ownerSubjectId, cancellationToken);
 
             var wanted = attention?.Kind switch
@@ -80,11 +68,7 @@ public sealed class ConnectorAttentionNotifier(IServiceProvider services, ILogge
                     await notifications.ArchiveBySourceAsync(ownerSubjectId, type, connectorId, NotificationArchiveReason.Completed, cancellationToken);
             }
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Could not reconcile the reconnect notification for {Connector} on tenant {TenantId}", connectorId, tenantId);
         }
@@ -118,15 +102,4 @@ public sealed class ConnectorAttentionNotifier(IServiceProvider services, ILogge
             },
             cancellationToken: ct);
     }
-
-    private static async Task<TenantIdentity?> LoadTenantAsync(IServiceProvider sp, Guid tenantId, CancellationToken ct)
-    {
-        await using var db = await sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync(ct);
-        return await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => new TenantIdentity(t.Id, t.Slug, t.DisplayName))
-            .FirstOrDefaultAsync(ct);
-    }
-
-    private sealed record TenantIdentity(Guid Id, string Slug, string DisplayName);
 }

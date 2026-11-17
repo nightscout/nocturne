@@ -1,10 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -12,6 +9,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Connectors;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -169,8 +167,11 @@ public class ConnectorConfigurationScopeTests
         }
     }
 
-    [Fact]
-    public void WildcardGrant_KeepsTheWholeConnectorSurface()
+    [Theory]
+    [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.InstanceKey)]
+    [InlineData(AuthType.PlatformAccess)]
+    public void WildcardGrant_KeepsTheWholeConnectorSurface(AuthType authType)
     {
         // A legacy api-secret and an instance-key service credential both normalise to "*", and the
         // provisioning paths that configure a connector for a tenant authenticate that way.
@@ -178,7 +179,7 @@ public class ConnectorConfigurationScopeTests
 
         foreach (var (controller, action) in GatedActions())
         {
-            Evaluate(controller, action, authenticated: true, wildcard)
+            Evaluate(controller, action, authenticated: true, wildcard, authType)
                 .Should().BeNull($"a full-access grant must keep {controller.Name}.{action.Name}");
         }
     }
@@ -292,43 +293,24 @@ public class ConnectorConfigurationScopeTests
     private static object[] Filters(Type controller, MethodInfo action) =>
         [.. controller.GetCustomAttributes(inherit: true), .. action.GetCustomAttributes(inherit: true)];
 
-    /// <summary>
-    /// Runs the authorization filters an action actually declares, class-level first as MVC orders
-    /// them. Returns the short-circuit result, or null when the request would reach the handler.
-    /// </summary>
     private static IActionResult? Evaluate(
-        Type controller, MethodInfo action, bool authenticated, IReadOnlySet<string> grantedScopes)
+        Type controller, MethodInfo action, bool authenticated, IReadOnlySet<string> grantedScopes,
+        AuthType authType = AuthType.SessionCookie) =>
+        ActionGate.Evaluate(
+            controller, action, grantedScopes, authenticated ? NewAuthContext(authType, credentialScopes: []) : null);
+
+    private static AuthContext NewAuthContext(AuthType authType, string[] credentialScopes) => new()
     {
-        var actionContext = new ActionContext(
-            NewHttpContext(authenticated, grantedScopes, credentialScopes: []),
-            new RouteData(),
-            new ActionDescriptor());
+        IsAuthenticated = true,
+        AuthType = authType,
+        SubjectId = Guid.CreateVersion7(),
+        Scopes = [.. credentialScopes],
+    };
 
-        foreach (var filter in Filters(controller, action).OfType<IAuthorizationFilter>())
-        {
-            var authorizationContext = new AuthorizationFilterContext(actionContext, []);
-            filter.OnAuthorization(authorizationContext);
-            if (authorizationContext.Result is not null)
-                return authorizationContext.Result;
-        }
-
-        return null;
-    }
-
-    private static DefaultHttpContext NewHttpContext(
-        bool authenticated, IReadOnlySet<string> grantedScopes, string[] credentialScopes)
+    private static DefaultHttpContext NewHttpContext(IReadOnlySet<string> grantedScopes, string[] credentialScopes)
     {
         var httpContext = new DefaultHttpContext();
-        if (authenticated)
-        {
-            httpContext.Items["AuthContext"] = new AuthContext
-            {
-                IsAuthenticated = true,
-                SubjectId = Guid.CreateVersion7(),
-                Scopes = [.. credentialScopes],
-            };
-        }
-
+        httpContext.Items["AuthContext"] = NewAuthContext(AuthType.SessionCookie, credentialScopes);
         httpContext.Items["GrantedScopes"] = grantedScopes;
         return httpContext;
     }
@@ -350,7 +332,7 @@ public class ConnectorConfigurationScopeTests
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = NewHttpContext(authenticated: true, grantedScopes, credentialScopes),
+                HttpContext = NewHttpContext(grantedScopes, credentialScopes),
             },
         };
     }

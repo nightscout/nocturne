@@ -2,6 +2,7 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Services;
@@ -94,6 +95,34 @@ public class CareLinkAuthTokenProviderTests
             TimeSpan.FromSeconds(5));
     }
 
+    /// <summary>
+    /// A token whose expiry cannot be read gets a one hour lifetime from the injected clock, so the
+    /// session is retired on the shared buffer after that, however far real time has moved.
+    /// </summary>
+    [Theory]
+    [InlineData("opaque-token-without-dots")]
+    [InlineData("a.b.c")]
+    [InlineData("header.e30.signature")]
+    public async Task AcquireToken_WithAnUnreadableExpiry_FallsBackToOneHourFromTheClock(string accessToken)
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var handler = new CareLinkFakeHandler
+        {
+            TokenResponseJson = $$"""{"access_token":"{{accessToken}}","refresh_token":"rotated-refresh-token"}""",
+        };
+        var provider = CreateProvider(handler, clock);
+
+        provider.InitializeFromSecrets("pasted-refresh-token", clientId: null, tokenUrl: null, audience: null);
+
+        await provider.GetValidTokenAsync(
+            new CareLinkConnectorConfiguration { Username = "user@example.com", Server = "EU" },
+            CancellationToken.None);
+
+        var session = await provider.GetCachedSessionAsync();
+        session!.ExpiresAt.Should().Be(
+            clock.GetUtcNow().UtcDateTime.AddHours(1).AddMinutes(-DefaultTokenLifetimeBufferMinutes));
+    }
+
     /// <summary>The margin <see cref="AuthTokenProviderBase{TConfig}"/> applies unless overridden.</summary>
     private const int DefaultTokenLifetimeBufferMinutes = 5;
 
@@ -139,8 +168,9 @@ public class CareLinkAuthTokenProviderTests
             .Should().Be(expectedLogins);
     }
 
-    private static TestableProvider CreateProvider(CareLinkFakeHandler handler)
+    private static TestableProvider CreateProvider(CareLinkFakeHandler handler, TimeProvider? clock = null)
     {
+        clock ??= TimeProvider.System;
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.Setup(t => t.IsResolved).Returns(true);
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
@@ -150,11 +180,12 @@ public class CareLinkAuthTokenProviderTests
 
         return new TestableProvider(
             new HttpClient(handler),
-            new ConnectorTokenCache(),
+            new ConnectorTokenCache(clock),
             new ConnectorServerResolver<CareLinkConnectorConfiguration>(null, null, CareLinkConstants.Servers.Eu),
             tenantAccessor.Object,
             NullLogger<CareLinkAuthTokenProvider>.Instance,
             retryDelay.Object,
+            clock,
             handler);
     }
 
@@ -166,8 +197,9 @@ public class CareLinkAuthTokenProviderTests
         ITenantAccessor tenantAccessor,
         ILogger<CareLinkAuthTokenProvider> logger,
         IRetryDelayStrategy retryDelayStrategy,
+        TimeProvider timeProvider,
         HttpMessageHandler handler)
-        : CareLinkAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
+        : CareLinkAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy, timeProvider)
     {
         protected override CareLinkAuthFlowService CreateAuthFlow() => new(NullLogger.Instance, handler);
     }

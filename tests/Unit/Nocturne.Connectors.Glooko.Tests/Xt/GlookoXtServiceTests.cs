@@ -151,7 +151,7 @@ public class GlookoXtServiceTests
 
             Service = new GlookoConnectorService(
                 new HttpClient(), resolver, NullLogger<GlookoConnectorService>.Instance,
-                Mock.Of<IRetryDelayStrategy>(), Mock.Of<IRateLimitingStrategy>(), tokenProvider,
+                Mock.Of<IRetryDelayStrategy>(), tokenProvider,
                 Publisher.Object, xtDataClient: DataClient);
         }
     }

@@ -1,9 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Mappers;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -13,6 +18,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for Activity endpoints using in-memory database
 /// Tests the complete request/response cycle with real database operations
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class ActivityInMemoryIntegrationTests : ApiIntegrationTestBase
 {
@@ -649,6 +655,43 @@ public class ActivityInMemoryIntegrationTests : ApiIntegrationTestBase
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
         (await GetActivitiesAtAsync("sleep", at)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CreateActivities_XDripMotionClass_StoresAMotionSeriesAndReadsBackAsMotionClass()
+    {
+        var stillAt = DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeMilliseconds();
+        var walkingAt = stillAt + 600_000;
+
+        (await PostJsonAsync($"[{XDripMotionClass(stillAt, "still")}]")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PostJsonAsync($"[{XDripMotionClass(walkingAt, "walking")}]")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await GetStateSpansAsync("Exercise")).Should().BeEmpty();
+        var motion = await GetStateSpansAsync("Motion");
+        motion.Select(s => (s.State, s.StartMills, s.EndMills)).Should().BeEquivalentTo(
+            [("still", stillAt, (long?)walkingAt), ("walking", walkingAt, (long?)null)]);
+
+        var response = await AuthenticatedClient.GetAsync("/api/v1/activity?count=1000", CancellationToken.None);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var read = JsonNode.Parse(await response.Content.ReadAsStringAsync(CancellationToken.None))!.AsArray()
+            .Select(a => a!.AsObject())
+            .Where(a => (string?)a["type"] == "motion-class")
+            .Select(a => ((long?)a["mills"], (string?)a["class"], a["duration"]))
+            .ToList();
+        read.Should().BeEquivalentTo([(stillAt, "still", (JsonNode?)null), (walkingAt, "walking", (JsonNode?)null)]);
+    }
+
+    private static string XDripMotionClass(long at, string motionClass) =>
+        $$"""{"type":"motion-class","timeStamp":{{at}},"created_at":"{{DateTimeOffset.FromUnixTimeMilliseconds(at):yyyy-MM-dd'T'HH:mm:ss'Z'}}","class":"{{motionClass}}"}""";
+
+    private async Task<List<StateSpan>> GetStateSpansAsync(string category)
+    {
+        var response = await AuthenticatedClient.GetAsync(
+            $"/api/v4/state-spans?category={category}&limit=1000", CancellationToken.None);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var page = await response.Content.ReadFromJsonAsync<PaginatedResponse<StateSpan>>(
+            cancellationToken: CancellationToken.None);
+        return page!.Data.ToList();
     }
 
     private async Task<int> GetActivitiesAtAsync(string type, long mills)

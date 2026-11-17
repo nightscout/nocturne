@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Integration tests for the guest link lifecycle: creation, activation,
 /// session-based access, revocation, and listing.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
 {
@@ -41,6 +42,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Guest Link Test User");
+        _accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
 
         Log($"Seeded tenant {_tenantId}, subject {_subjectId}");
     }

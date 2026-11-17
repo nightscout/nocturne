@@ -11,15 +11,30 @@ public class PunchCardDay
     /// <summary>Local-midnight Unix milliseconds for the day.</summary>
     public long Timestamp { get; set; }
 
-    /// <summary>Approximate count of CGM readings for the day (5-min cadence assumed).</summary>
+    /// <summary>The next local midnight in Unix milliseconds: the exclusive end of the day, which is not always 24 hours after <see cref="Timestamp"/>.</summary>
+    public long EndTimestamp { get; set; }
+
+    /// <summary>Count of the day's CGM readings.</summary>
     public int TotalReadings { get; set; }
     public int InRangeCount { get; set; }
+    public int VeryLowCount { get; set; }
     public int LowCount { get; set; }
     public int HighCount { get; set; }
+    public int VeryHighCount { get; set; }
 
     public double InRangePercent { get; set; }
+
+    /// <summary>Share of readings below the very-low threshold.</summary>
+    public double VeryLowPercent { get; set; }
+
+    /// <summary>Share of readings from the very-low threshold up to the low threshold.</summary>
     public double LowPercent { get; set; }
+
+    /// <summary>Share of readings above the high threshold up to the very-high threshold.</summary>
     public double HighPercent { get; set; }
+
+    /// <summary>Share of readings above the very-high threshold.</summary>
+    public double VeryHighPercent { get; set; }
 
     /// <summary>Mean of every reading that day, mg/dL.</summary>
     public double AverageGlucose { get; set; }
@@ -28,7 +43,8 @@ public class PunchCardDay
     public double TotalInsulin { get; set; }
     public double TotalBolus { get; set; }
     public double TotalBasal { get; set; }
-    public double CarbToInsulinRatio { get; set; }
+    /// <inheritdoc cref="TreatmentSummary.CarbToInsulinRatio"/>
+    public double? CarbToInsulinRatio { get; set; }
 
     /// <summary>Sorted glucose readings for the day (mills + mg/dL only) for the profile-line view.</summary>
     public List<PunchCardEntry> Entries { get; set; } = new();
@@ -47,9 +63,23 @@ public class PunchCardMonthSummary
     public int DayCount { get; set; }
     public int TotalReadings { get; set; }
     public double InRangePercent { get; set; }
+    public double VeryLowPercent { get; set; }
     public double LowPercent { get; set; }
     public double HighPercent { get; set; }
+    public double VeryHighPercent { get; set; }
     public double AvgGlucose { get; set; }
+
+    /// <summary>
+    /// Total daily dose in units: the month's insulin over the calendar days the requested range
+    /// covers in it up to and including the tenant's today, whether or not the sensor read on those
+    /// days. Null when no insulin was recorded. Absent with the whole summary for a month with no readings.
+    /// </summary>
+    public double? Tdd { get; set; }
+
+    /// <summary>
+    /// Carbs per calendar day over the same days as <see cref="Tdd"/>. Null when no carbs were recorded.
+    /// </summary>
+    public double? AvgDailyCarbs { get; set; }
 }
 
 /// <summary>One month bucket within a punch-card response — days plus per-month maxes for chart scaling.</summary>
@@ -89,4 +119,7 @@ public class PunchCardResponse
     public double GlobalMaxCarbs { get; set; }
     public double GlobalMaxInsulin { get; set; }
     public double GlobalMaxCarbInsulinDiff { get; set; }
+
+    /// <summary>Why <see cref="Months"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }

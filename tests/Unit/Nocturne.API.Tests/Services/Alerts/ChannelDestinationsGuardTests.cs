@@ -19,7 +19,6 @@ public class ChannelDestinationsGuardTests
     /// </summary>
     private static readonly ChannelType[] DirectlyProvidedTypes =
     [
-        ChannelType.WebPush,
         ChannelType.InApp,
         ChannelType.Webhook,
         ChannelType.HomeAssistant,
@@ -63,6 +62,14 @@ public class ChannelDestinationsGuardTests
             .Where(t => ChannelDestinations.PlatformOf(t) is not null);
 
         withPlatform.Should().BeEquivalentTo(ChatBotProvider.SupportedChannelTypes);
+    }
+
+    [Fact]
+    public void Web_push_is_not_offered_and_is_replaced_by_in_app()
+    {
+        ChannelDestinations.Offered.Should().NotContain(ChannelType.WebPush,
+            "nothing receives a web push: there is no service worker, subscription or SignalR listener");
+        ChannelDestinations.SupersededBy(ChannelType.WebPush).Should().Equal(ChannelType.InApp);
     }
 
     [Fact]

@@ -4,7 +4,7 @@ title: SDKs
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import SdkList from '$lib/components/docs/SdkList.svelte';
+  import SdkList from '#lib/components/docs/SdkList.svelte';
 </script>
 
 # SDKs

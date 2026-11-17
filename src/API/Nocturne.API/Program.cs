@@ -15,6 +15,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Services.Health.Oura;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models.Authorization;
@@ -25,14 +26,17 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -135,7 +139,7 @@ builder.Services.AddDataProtection()
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// In-process, so each replica caches independently and entries are lost on restart.
+// In-process, so entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 // Add response caching for GET endpoints
@@ -143,21 +147,32 @@ builder.Services.AddResponseCaching();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
-builder.Services.AddHostedService<AuditRetentionService>();
-builder.Services.AddHostedService<SoftDeleteCleanupService>();
+builder.Services.AddScheduledJob<AuditRetentionJob>();
+builder.Services.AddScheduledJob<SoftDeleteCleanupJob>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
+builder.Services.AddSingleton<IGoogleHealthGrantHolders, PostgresGoogleHealthGrantHolders>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
-builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddScoped<GoogleHealthService>();
+builder.Services.AddScoped<IGoogleHealthService>(provider => provider.GetRequiredService<GoogleHealthService>());
+builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<GoogleHealthService>());
+builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
+builder.Services.AddScoped<OuraImportService>();
+builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<OuraImportService>());
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).
 builder.Services.AddScoped<SampleDataSeeder>();
+builder.Services.AddScoped<SampleDataLiveFeed>();
+if (SampleDataLiveFeed.IsEnabled(builder.Configuration))
+    builder.Services.AddHostedService<SampleDataLiveFeedService>();
 
+builder.Services.AddSingleton<ReadAccessLogWriter>();
+builder.Services.AddHostedService<ReadAccessLogDrain>();
 builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
@@ -189,6 +204,7 @@ builder.Services.AddOpenApi("nocturne", options =>
     options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
+    options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
@@ -200,6 +216,7 @@ builder.Services.AddOpenApi("nightscout", options =>
     options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
+    options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
@@ -218,10 +235,11 @@ builder.Services.AddMigrationServices();
 
 
 // Configure JWT authentication - derive signing key from instance key
-var secretKey =
-    builder.Configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-    ?? builder.Configuration[ServiceNames.ConfigKeys.InstanceKey]
-    ?? (isTesting ? "test-instance-key-for-unit-tests-minimum-length" : throw new InvalidOperationException("Instance key must be configured for JWT signing. Set Parameters:instance-key or INSTANCE_KEY."));
+var secretKey = isTesting
+    ? InstanceKeyDigest.ResolveKey(builder.Configuration) is { Length: > 0 } configuredKey
+        ? configuredKey
+        : "test-instance-key-for-unit-tests-minimum-length"
+    : InstanceKeyDigest.RequireKey(builder.Configuration);
 var key = Encoding.UTF8.GetBytes(secretKey);
 
 builder
@@ -287,9 +305,15 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader();
     });
+
+    options.AddPolicy(LegacyApiCorsPolicy.Name, LegacyApiCorsPolicy.Configure);
 });
+builder.Services.AddOptions<CorsOptions>().Configure<IConfiguration>((options, configuration) =>
+    options.AddPolicy(DocsSiteCorsPolicy.Name, policy =>
+        DocsSiteCorsPolicy.Configure(policy, DocsSiteCorsPolicy.Origins(configuration))));
 
 var app = builder.Build();
+var docsSiteOrigins = DocsSiteCorsPolicy.Origins(app.Configuration);
 
 var loopApnsKeyId = app.Services.GetRequiredService<IOptions<LoopConfiguration>>().Value.ApnsKeyId;
 app.Logger.LogInformation(
@@ -334,15 +358,28 @@ else
 }
 
 // Configure middleware pipeline
+app.UseSecurityHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-// Documentation paths get the any-origin policy, everything else the credentialed default.
-// The two branches are complementary so exactly one CORS middleware ever runs per request —
-// chaining both would emit conflicting Access-Control-Allow-Origin headers. Both sit ahead of
+// Documentation paths get the any-origin policy, foreign origins on the legacy API get
+// LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.
+// A listed documentation site is decided after tenant resolution instead; see DocsSiteCorsPolicy.
+// The branches are complementary so exactly one CORS middleware ever runs per request:
+// chaining two would emit conflicting Access-Control-Allow-Origin headers. All sit ahead of
 // UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
 // UseRouting so preflights short-circuit.
+bool FromDocsSite(HttpContext context) =>
+    !PublicDocsMiddleware.IsPublicDocsPath(context)
+    && DocsSiteCorsPolicy.IsListedOrigin(context, docsSiteOrigins, corsBaseDomain, corsAllowLocalhost);
+bool UsesLegacyApiCors(HttpContext context) =>
+    LegacyApiCorsPolicy.Applies(context, app.Configuration, corsBaseDomain, corsAllowLocalhost);
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
-app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
+app.UseWhen(
+    context => !FromDocsSite(context) && !PublicDocsMiddleware.IsPublicDocsPath(context) && UsesLegacyApiCors(context),
+    branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => !FromDocsSite(context) && !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesLegacyApiCors(context),
+    branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
 
@@ -352,47 +389,38 @@ app.UseNocturneForwardedHeaders(builder.Configuration);
 // this keeps tenant-scoped responses isolated per tenant and per credential in the shared cache.
 app.UseResponseCaching();
 
-// Strip .json suffixes before routing so /api/v1/treatments.json matches
-// the TreatmentsController route /api/v1/treatments. Must run before
-// UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
-
-// Serve v1 under /api/v2 wherever v2 has no route of its own, as Nightscout does. After the
-// .json strip so /api/v2/entries.json is judged as /api/v2/entries, and before UseRouting so
-// the rewritten path is what the router sees.
 app.UseMiddleware<V2FallbackMiddleware>();
 
-// Routing must run here, not where minimal hosting would insert it, so that
-// TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
+// Here rather than where minimal hosting would insert it, so the middleware below see the
+// matched endpoint.
 app.UseRouting();
 
-// Ahead of the documentation branch below, which jumps straight to its endpoint and would
-// otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
-// UseRouting to have run. Everything without a policy passes through untouched, and no policy
-// partitions on anything this position withholds: all but one partition on pre-auth request data
-// (the remote address or the Host), and translation-drafts partitions on the raw credential
-// because HttpContext.Items["AuthContext"] is not populated until AuthenticationMiddleware,
-// further down.
+// The policies are attached to endpoints, so this needs UseRouting to have run. Everything
+// without a policy passes through untouched, and no policy partitions on anything this position
+// withholds: all but one partition on pre-auth request data (the remote address or the Host),
+// and translation-drafts partitions on the raw credential because HttpContext.Items["AuthContext"]
+// is not populated until AuthenticationMiddleware, further down.
 app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();
-
-// Redirect OIDC callbacks from apex to the originating tenant subdomain
-app.UseMiddleware<OidcCallbackRedirectMiddleware>();
-
-// Resolve tenant from subdomain (must run before authentication)
+app.UseMiddleware<ApexCallbackRelayMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
-
-// Block API traffic for freshly provisioned tenants with no passkey credentials
+app.UseWhen(
+    context => FromDocsSite(context) && DocsSiteCorsPolicy.AdmitsTenant(context),
+    branch => branch.UseCors(DocsSiteCorsPolicy.Name));
+app.UseWhen(
+    context => FromDocsSite(context) && !DocsSiteCorsPolicy.AdmitsTenant(context) && UsesLegacyApiCors(context),
+    branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => FromDocsSite(context) && !DocsSiteCorsPolicy.AdmitsTenant(context) && !UsesLegacyApiCors(context),
+    branch => branch.UseCors());
 app.UseMiddleware<TenantSetupMiddleware>();
-
-// Add Nightscout authentication middleware
 app.UseMiddleware<AuthenticationMiddleware>();
-
-// Add member scope middleware (resolves membership role and restricts scopes)
 app.UseMiddleware<MemberScopeMiddleware>();
-
-// Add audit context middleware (captures actor metadata for mutation audit log)
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/hubs"),
+    hubs => hubs.UseMiddleware<ReaderRecordingMiddleware>());
 app.UseMiddleware<AuditContextMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.
@@ -414,7 +442,6 @@ app.UseMiddleware<AuditContextMiddleware>();
 // directly.
 app.UseAuthorization();
 
-// Add compatibility proxy middleware (background comparison against Nightscout for v1/v2/v3 GET requests)
 app.UseMiddleware<CompatibilityProxyMiddleware>();
 
 // Map native API controllers
@@ -438,6 +465,7 @@ app.MapScalarApiReference((options, httpContext) =>
 {
     options.WithTheme(ScalarTheme.Mars);
     options.WithOpenApiRoutePattern("/openapi/{documentName}.json");
+    options.WithOperationTitleSource(OperationTitleSource.Path);
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
     options.AddHeadContent(MermaidLazyLoader.HeadContent);
@@ -449,11 +477,18 @@ app.MapScalarApiReference((options, httpContext) =>
     // tenant (a bare instance, or a share host), in which case the reference still
     // renders and only "Send request" is unusable.
     var scalarAuth = httpContext.Items[ScalarAuthContext.HttpContextItemKey] as ScalarAuthContext;
+    var demoToken = scalarAuth?.BearerToken is { Length: > 0 } token ? token : null;
 
-    // Pre-configure authentication so Scalar's "Authorize" UI works out of the box.
+    // Scalar selects every listed scheme that a document defines, all at once, and an
+    // unauthorized oauth2 then sends an empty "Authorization: Bearer" over any bearer token.
+    // So the list names exactly one scheme per document: apiSecret is the Nightscout
+    // document's, the other the Nocturne document's. AddPreferredSecuritySchemes appends to
+    // the list rather than replacing it.
     options
-        .AddPreferredSecuritySchemes("oauth2", "bearer", "apiSecret")
-        .AddAuthorizationCodeFlow("oauth2", flow =>
+        .AddPreferredSecuritySchemes(
+            demoToken is null ? SecuritySchemeDefinitions.OAuth2 : SecuritySchemeDefinitions.Bearer,
+            SecuritySchemeDefinitions.ApiSecret)
+        .AddAuthorizationCodeFlow(SecuritySchemeDefinitions.OAuth2, flow =>
         {
             // The client is registered per tenant against this exact redirect URI;
             // authorize-time matching is byte-exact. Left unset when no tenant resolved,
@@ -462,23 +497,25 @@ app.MapScalarApiReference((options, httpContext) =>
             {
                 flow.ClientId = scalarAuth.ClientId;
                 flow.RedirectUri = scalarAuth.RedirectUri;
+
+                // The spec's endpoints are relative, and Scalar passes them to `new URL()`
+                // with no base, which throws ("Failed to authorize oauth2 flow").
+                var origin = new Uri(scalarAuth.RedirectUri).GetLeftPart(UriPartial.Authority);
+                flow.AuthorizationUrl = origin + SecuritySchemeDefinitions.AuthorizationUrl;
+                flow.TokenUrl = origin + SecuritySchemeDefinitions.TokenUrl;
             }
             flow.Pkce = Pkce.Sha256;
             flow.SelectedScopes = [Scope.FullAccess];
         })
-        .AddApiKeyAuthentication("apiSecret", apiKey =>
+        .AddApiKeyAuthentication(SecuritySchemeDefinitions.ApiSecret, apiKey =>
         {
             apiKey.Value = string.Empty;
         });
 
     // On a demo tenant, hand Scalar a token for the shared demo member so requests work
     // with no sign-in step. Never populated for a real tenant.
-    if (scalarAuth?.BearerToken is { Length: > 0 } demoToken)
-    {
-        options
-            .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
-            .AddHttpAuthentication("bearer", bearer => bearer.Token = demoToken);
-    }
+    if (demoToken is not null)
+        options.AddHttpAuthentication(SecuritySchemeDefinitions.Bearer, bearer => bearer.Token = demoToken);
 }).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
 // Add root endpoint to serve a basic info page. The payload includes the tenant's latest
@@ -488,15 +525,15 @@ app.MapScalarApiReference((options, httpContext) =>
 // API surface. A public info page would need the latest_entry payload stripped first.
 app.MapGet(
     "/",
-    async (IEntryStore entryStore) =>
+    async (IEntryService entries) =>
     {
-        // Check database connection by fetching the latest entry
+        // The latest entry may be a cache hit; database_status says whether one was served, not that the database was reached.
         string databaseStatus = "unknown";
         object? latestEntry = null;
 
         try
         {
-            var entry = await entryStore.GetCurrentAsync();
+            var entry = await entries.GetCurrentEntryAsync();
 
             if (entry != null)
             {
@@ -553,7 +590,7 @@ app.Services.GetRequiredService<CredentialPathRedactor>()
 var isNSwagGeneration = IsRunningInNSwagContext();
 
 if (!isNSwagGeneration)
-    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>();
+    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineNativeLibrary>();
 if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     // Validate that the migrator connection string is present and uses a different role.
@@ -586,7 +623,7 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
             migratorConnectionString, Nocturne.API.Services.BackgroundJobLiveStates.ByTable, logger);
     }
 
-    // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.
+    // Validate RLS, ownership, default privileges, and the context pool's isolation under the app role.
     await app.Services.ValidateDatabaseConfigurationAsync();
 
     // Sync config-managed OIDC providers to the database (satisfies FK constraints)
@@ -626,10 +663,11 @@ if (!app.Environment.IsDevelopment() && DevOnlyEndpoints.IsOptedIn(app.Configura
 if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 {
     using var devSeedScope = app.Services.CreateScope();
-    var devSeedDb = devSeedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
     var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DevIdentityFixtureSeeder.SeedAsync(
-        devSeedDb, app.Configuration, devSeedLogger, CancellationToken.None);
+        devSeedScope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Auth.ISubjectRepository>(),
+        devSeedScope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Auth.IPasskeyCredentialRepository>(),
+        app.Configuration, app.Services.GetRequiredService<TimeProvider>(), devSeedLogger, CancellationToken.None);
 }
 
 await app.RunAsync();

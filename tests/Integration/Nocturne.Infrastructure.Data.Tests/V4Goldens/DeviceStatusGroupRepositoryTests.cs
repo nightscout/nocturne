@@ -32,7 +32,7 @@ public class DeviceStatusGroupRepositoryTests
             new PumpSnapshot { Timestamp = T0.AddMinutes(-4), Device = "synthetic://a", DataSource = "test" },
             WriteOrigin.Backfill);
 
-        var page = await r.Groups.GetAsync(null, null, null, limit: 10, offset: 0);
+        var page = await r.Groups.GetAsync(null, null, null, limit: 10, offset: 0, descending: true);
 
         page.Select(Shape).Should().Equal(
             (full, "APUE"),
@@ -58,9 +58,26 @@ public class DeviceStatusGroupRepositoryTests
 
         var paged = new List<Guid?>();
         for (var offset = 0; offset < 5; offset++)
-            paged.AddRange((await r.Groups.GetAsync(null, null, null, limit: 1, offset)).Select(g => Shape(g).Correlation));
+            paged.AddRange((await r.Groups.GetAsync(null, null, null, limit: 1, offset, descending: true)).Select(g => Shape(g).Correlation));
 
         paged.Should().BeEquivalentTo(ids).And.OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task GetOldestAsync_PagesFromTheOldestStatus_WhicheverTableAnchorsIt()
+    {
+        using var scope = await _fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var r = new Repos(scope);
+        var newest = await r.StatusAsync(T0, aps: true);
+        var newer = await r.StatusAsync(T0.AddMinutes(-1), pump: true);
+        var older = await r.StatusAsync(T0.AddMinutes(-2), uploader: true);
+        var oldest = await r.StatusAsync(T0.AddMinutes(-3), extras: true);
+
+        var firstPage = await r.Groups.GetAsync(null, null, null, limit: 2, offset: 0, descending: false);
+        var secondPage = await r.Groups.GetAsync(null, null, null, limit: 2, offset: 2, descending: false);
+
+        firstPage.Select(g => Shape(g).Correlation).Should().Equal(oldest, older);
+        secondPage.Select(g => Shape(g).Correlation).Should().Equal(newer, newest);
     }
 
     [Fact]
@@ -116,7 +133,7 @@ public class DeviceStatusGroupRepositoryTests
 
         (await r.Groups.GetModifiedSinceAsync(0, 100)).Select(h => (Shape(h.Record), h.Deleted))
             .Should().Equal(((correlation, "P"), false));
-        (await r.Groups.GetAsync(null, null, null, 10, 0)).Select(Shape).Should().Equal((correlation, "P"));
+        (await r.Groups.GetAsync(null, null, null, 10, 0, descending: true)).Select(Shape).Should().Equal((correlation, "P"));
 
         await r.Pumps.DeleteAsync(pump.Id, WriteOrigin.Backfill);
 
@@ -136,10 +153,10 @@ public class DeviceStatusGroupRepositoryTests
         await r.StatusAsync(T0, uploader: true);
         await r.StatusAsync(T0, extras: true);
 
-        var whole = (await r.Groups.GetAsync(null, null, null, limit: 10, offset: 0)).Select(AnchorId).ToList();
+        var whole = (await r.Groups.GetAsync(null, null, null, limit: 10, offset: 0, descending: true)).Select(AnchorId).ToList();
         var paged = new List<Guid>();
         for (var offset = 0; offset < 5; offset++)
-            paged.AddRange((await r.Groups.GetAsync(null, null, null, limit: 1, offset)).Select(AnchorId));
+            paged.AddRange((await r.Groups.GetAsync(null, null, null, limit: 1, offset, descending: true)).Select(AnchorId));
 
         whole.Should().HaveCount(5).And.BeInDescendingOrder();
         paged.Should().Equal(whole);

@@ -9,6 +9,10 @@ public class YearSummaryResponse
 
     [JsonPropertyName("griTimeline")]
     public GriTimelineResponse? GriTimeline { get; set; }
+
+    /// <summary>Why neither report is present; null when the tenant's timezone resolved.</summary>
+    [JsonPropertyName("timeZoneUnavailableReason")]
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -21,6 +25,10 @@ public class GriTimelineResponse
 
     [JsonPropertyName("periods")]
     public GriTimelinePeriod[] Periods { get; set; } = [];
+
+    /// <summary>Why <see cref="Periods"/> is empty; null when the tenant's timezone resolved.</summary>
+    [JsonPropertyName("timeZoneUnavailableReason")]
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -60,6 +68,14 @@ public class DataOverviewYearsResponse
 
     [JsonPropertyName("availableDataSources")]
     public string[] AvailableDataSources { get; set; } = [];
+
+    /// <summary>The band edges the year heatmaps colour a day's glucose against.</summary>
+    [JsonPropertyName("thresholds")]
+    public required GlycemicThresholds Thresholds { get; set; }
+
+    /// <summary>Why <see cref="Years"/> is empty; null when the tenant's timezone resolved.</summary>
+    [JsonPropertyName("timeZoneUnavailableReason")]
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -75,6 +91,10 @@ public class DailySummaryResponse
 
     [JsonPropertyName("days")]
     public DailySummaryDay[] Days { get; set; } = [];
+
+    /// <summary>Why <see cref="Days"/> is empty; null when the tenant's timezone resolved.</summary>
+    [JsonPropertyName("timeZoneUnavailableReason")]
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -88,6 +108,10 @@ public class EHbA1cTimelineResponse
 
     [JsonPropertyName("points")]
     public EHbA1cPoint[] Points { get; set; } = [];
+
+    /// <summary>Why <see cref="Points"/> is empty; null when the tenant's timezone resolved.</summary>
+    [JsonPropertyName("timeZoneUnavailableReason")]
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>

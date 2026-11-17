@@ -35,6 +35,24 @@ public class StatementTimeoutTests
     }
 
     [Fact]
+    public async Task RuntimePool_CarriesTheIdleInTransactionTimeout_BesideTheStatementTimeout()
+    {
+        var builder = new NpgsqlDataSourceBuilder(_fx.AppConnectionString);
+        PostgresRuntimeOptions.ApplyStatementTimeout(builder.ConnectionStringBuilder, 2);
+        PostgresRuntimeOptions.ApplyIdleInTransactionTimeout(builder.ConnectionStringBuilder, 600);
+        await using var dataSource = builder.Build();
+        await using var conn = await dataSource.OpenConnectionAsync();
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT current_setting('idle_in_transaction_session_timeout'), current_setting('statement_timeout')";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        reader.GetString(0).Should().Be("10min");
+        reader.GetString(1).Should().Be("2s");
+    }
+
+    [Fact]
     public async Task RuntimePool_CarriesConfiguredStatementTimeout()
     {
         await using var dataSource = BuildAppDataSource(_fx.AppConnectionString, statementTimeoutSeconds: 2);

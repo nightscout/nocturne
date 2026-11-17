@@ -1,12 +1,13 @@
 <script lang="ts">
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { TrackerMode } from "#lib/api/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import TrackerNotificationEditor from "./tracker-notification-editor.svelte";
   import type { TrackerNotification } from "./types";
 
   interface Props {
     notifications?: TrackerNotification[];
     class?: string;
-    mode?: "Duration" | "Event";
+    mode?: TrackerMode;
     lifespanHours?: number | undefined;
   }
 

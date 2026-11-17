@@ -50,15 +50,6 @@ public class CompositeDataEventSinkTests
     }
 
     [Fact]
-    public async Task BeforeDeleteAsync_FansOutToAllSinks()
-    {
-        await _sut.BeforeDeleteAsync("abc");
-
-        _sink1.Verify(s => s.BeforeDeleteAsync("abc", It.IsAny<CancellationToken>()), Times.Once);
-        _sink2.Verify(s => s.BeforeDeleteAsync("abc", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
     public async Task OnDeletedAsync_FansOutToAllSinks()
     {
         var entry = new Entry { Id = "1" };
@@ -67,6 +58,29 @@ public class CompositeDataEventSinkTests
 
         _sink1.Verify(s => s.OnDeletedAsync(entry, It.IsAny<CancellationToken>()), Times.Once);
         _sink2.Verify(s => s.OnDeletedAsync(entry, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OnWrittenAsync_FansOutToAllSinks()
+    {
+        var entries = new List<Entry> { new() { Id = "1" } };
+
+        await _sut.OnWrittenAsync(entries);
+
+        _sink1.Verify(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
+        _sink2.Verify(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OnWrittenAsync_FirstSinkFailure_DoesNotBlockSecondSink()
+    {
+        var entries = new List<Entry> { new() { Id = "1" } };
+        _sink1.Setup(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()))
+              .ThrowsAsync(new InvalidOperationException("boom"));
+
+        await _sut.OnWrittenAsync(entries);
+
+        _sink2.Verify(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

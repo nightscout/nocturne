@@ -37,6 +37,13 @@ public class LoginCodeEntity : ITenantScoped, IEntityCreated
     [Column("expires_at")]
     public DateTime ExpiresAt { get; set; }
 
+    /// <summary>
+    /// What the code can be exchanged for. A code redeems only at the endpoint for its purpose.
+    /// </summary>
+    [MaxLength(16)]
+    [Column("purpose")]
+    public LoginCodePurpose Purpose { get; set; } = LoginCodePurpose.Login;
+
     /// <summary>When the code was exchanged for a session; null until then.</summary>
     [Column("consumed_at")]
     public DateTime? ConsumedAt { get; set; }
@@ -47,4 +54,25 @@ public class LoginCodeEntity : ITenantScoped, IEntityCreated
     public TenantEntity? Tenant { get; set; }
 
     public SubjectEntity? Subject { get; set; }
+}
+
+/// <summary>What a <see cref="LoginCodeEntity"/> can be exchanged for.</summary>
+public enum LoginCodePurpose
+{
+    /// <summary>A full session, at <c>POST /api/auth/handoff</c>.</summary>
+    Login,
+
+    /// <summary>
+    /// One passkey enrolment for a member with no sign-in method left, at
+    /// <c>POST /api/auth/passkey/recovery-mode/redeem</c>, issued by one of the tenant's member
+    /// administrators. Redeemable only while the member is still one a member administrator may
+    /// recover.
+    /// </summary>
+    Recovery,
+
+    /// <summary>
+    /// As <see cref="Recovery"/>, issued by the operator, who may also recover an instance
+    /// administrator or a member of several tenants.
+    /// </summary>
+    OperatorRecovery,
 }

@@ -24,7 +24,6 @@ public interface IBolusCalculationRepository : ILegacyKeyedRepository<BolusCalcu
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<BolusCalculation>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -41,12 +40,10 @@ public interface IBolusCalculationRepository : ILegacyKeyedRepository<BolusCalcu
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="BolusCalculation"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records (e.g., bolus + wizard).</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<BolusCalculation>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default

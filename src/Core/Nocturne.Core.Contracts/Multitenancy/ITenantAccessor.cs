@@ -11,9 +11,6 @@ public interface ITenantAccessor
     /// </summary>
     Guid TenantId { get; }
 
-    /// <summary>
-    /// Whether a tenant has been resolved for the current request.
-    /// </summary>
     bool IsResolved { get; }
 
     /// <summary>

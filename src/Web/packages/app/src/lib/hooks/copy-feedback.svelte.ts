@@ -1,6 +1,6 @@
 import { SvelteMap } from "svelte/reactivity";
 import { toast } from "svelte-sonner";
-import { copyToClipboard } from "$lib/utils";
+import { copyToClipboard } from "#lib/utils/index.js";
 
 const RESET_MS = 2000;
 const DEFAULT_KEY = "default";
@@ -45,7 +45,7 @@ export function createCopyFeedback(): CopyFeedback {
     async copy(text, key = DEFAULT_KEY) {
       if (!(await copyToClipboard(text))) {
         toast.error(
-          "Couldn't copy to the clipboard. Copy it manually instead."
+          "Could not copy to the clipboard. Copy it manually instead."
         );
         return false;
       }

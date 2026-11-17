@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Chat } from "chat";
 import type { Adapter } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
@@ -24,6 +25,7 @@ export interface PlatformCredentials {
   fromName?: string;
   apiKey?: string;
   webhookSecret?: string;
+  webhookSecretToken?: string;
 }
 
 export interface BotOptions {
@@ -35,6 +37,19 @@ export interface BotOptions {
     resend?: PlatformCredentials | boolean;
   };
   postgresUrl: string;
+}
+
+/**
+ * The Telegram adapter skips verification when it has no secret token, which would leave its
+ * anonymous webhook accepting any caller's updates. Without a configured token it gets a random
+ * one nobody else holds, so webhook calls are refused while long polling still works.
+ */
+function telegramWebhookSecretToken(configured: string | undefined): string {
+  if (configured) return configured;
+  logger.warn(
+    "No Telegram webhook secret token is configured; Telegram webhook calls will be refused until one is set.",
+  );
+  return randomBytes(32).toString("hex");
 }
 
 export function createBot(options: BotOptions): Chat {
@@ -71,13 +86,13 @@ export function createBot(options: BotOptions): Chat {
   const telegram = platforms.telegram;
   if (telegram) {
     logger.info("Enabling Telegram adapter");
-    if (typeof telegram === "object") {
-      adapters.telegram = createTelegramAdapter({
-        botToken: telegram.botToken!,
-      });
-    } else {
-      adapters.telegram = createTelegramAdapter(); // env var fallback
-    }
+    const configured = typeof telegram === "object" ? telegram : undefined;
+    adapters.telegram = createTelegramAdapter({
+      botToken: configured?.botToken,
+      secretToken: telegramWebhookSecretToken(
+        configured?.webhookSecretToken || process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN,
+      ),
+    });
   }
 
   const whatsapp = platforms.whatsapp;

@@ -26,6 +26,7 @@ public static class SensorGlucoseMapper
             Filtered = model.Filtered,
             Unfiltered = model.Unfiltered,
             Delta = model.Delta,
+            Rssi = model.Rssi,
             GlucoseProcessing = model.GlucoseProcessing?.ToString(),
             SmoothedMgdl = model.SmoothedMgdl,
             UnsmoothedMgdl = model.UnsmoothedMgdl,
@@ -50,6 +51,7 @@ public static class SensorGlucoseMapper
             Filtered = entity.Filtered,
             Unfiltered = entity.Unfiltered,
             Delta = entity.Delta,
+            Rssi = entity.Rssi,
             GlucoseProcessing = Enum.TryParse<GlucoseProcessing>(entity.GlucoseProcessing, out var gp) ? gp : null,
             SmoothedMgdl = entity.SmoothedMgdl,
             UnsmoothedMgdl = entity.UnsmoothedMgdl,
@@ -76,6 +78,7 @@ public static class SensorGlucoseMapper
         entity.Filtered = model.Filtered;
         entity.Unfiltered = model.Unfiltered;
         entity.Delta = model.Delta;
+        entity.Rssi = model.Rssi;
         entity.GlucoseProcessing = model.GlucoseProcessing?.ToString();
         entity.SmoothedMgdl = model.SmoothedMgdl;
         entity.UnsmoothedMgdl = model.UnsmoothedMgdl;

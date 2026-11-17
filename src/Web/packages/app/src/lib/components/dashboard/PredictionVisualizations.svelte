@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Area, Spline, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
-  import type { PredictionData } from "$api/predictions.remote";
-  import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
+  import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import type { PredictionDisplayMode } from "#lib/stores/appearance-store.svelte.js";
 
   interface Props {
     showPredictions: boolean;

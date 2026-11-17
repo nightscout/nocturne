@@ -10,8 +10,14 @@ namespace Nocturne.Services.Demo.Services;
 /// </summary>
 public sealed record DemoTimeStep
 {
-    /// <summary>Step time (local, 5-minute cadence).</summary>
+    /// <summary>
+    /// The step's wall-clock time in the generator's zone, for the daily pattern. It repeats across a
+    /// fall-back hour; <see cref="Utc"/> does not.
+    /// </summary>
     public required DateTime Time { get; init; }
+
+    /// <summary>The step's instant, on a 5-minute cadence.</summary>
+    public required DateTime Utc { get; init; }
 
     /// <summary>The CGM entry for this step.</summary>
     public required Entry Entry { get; init; }
@@ -31,11 +37,23 @@ public sealed record DemoTimeStep
     /// <summary>Carbs on board from the oref simulator, after this step's doses.</summary>
     public required double Cob { get; init; }
 
-    /// <summary>Rate of the temp basal issued at this step, if any.</summary>
+    /// <summary>
+    /// Rate of the temp basal the loop chose at this step, if any. The pump ran it only when
+    /// <see cref="Loop"/> is <see cref="DemoLoopState.Closed"/>; in manual mode it is a suggestion.
+    /// </summary>
     public double? TempBasalRate { get; init; }
 
-    /// <summary>Duration (minutes) of the temp basal issued at this step, if any.</summary>
+    /// <summary>Duration (minutes) of <see cref="TempBasalRate"/>.</summary>
     public int? TempBasalDuration { get; init; }
+
+    /// <summary>The rate the loop asked for before its maxSafeBasal cut it to <see cref="TempBasalRate"/>.</summary>
+    public double? RequestedBasalRate { get; init; }
+
+    /// <summary>The loop's maxSafeBasal (U/h) at this step.</summary>
+    public double? MaxSafeBasalRate { get; init; }
+
+    /// <summary>What the loop was doing at this step.</summary>
+    public DemoLoopState Loop { get; init; }
 
     /// <summary>Scenario-effective insulin sensitivity (mg/dL per U) at this step.</summary>
     public required double EffectiveIsf { get; init; }

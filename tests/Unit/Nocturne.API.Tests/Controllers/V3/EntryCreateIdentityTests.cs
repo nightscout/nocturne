@@ -5,12 +5,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Controllers.V3;
 
@@ -55,7 +55,7 @@ public class EntryCreateIdentityTests
 
         var stored = _written.Should().ContainSingle().Subject;
         MongoObjectId.IsObjectId(stored.Id).Should().BeTrue();
-        var created = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
+        var created = result.Should().BeOfType<CreatedAtActionResult>().Subject;
         created.RouteValues!["id"].Should().Be(stored.Id);
     }
 

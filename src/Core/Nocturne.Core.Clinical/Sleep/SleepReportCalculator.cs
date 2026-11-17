@@ -80,7 +80,8 @@ public static class SleepReportCalculator
     // ── Overnight TIR ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// Computes overnight time-in-range percentages. Bucketing matches
+    /// Computes overnight time-in-range percentages, as minutes over covered minutes like
+    /// <see cref="TimeInRangePercentages"/>. Bucketing matches
     /// <c>StatisticsService.CalculateTimeInRange</c>: very low is <c>&lt; VeryLow</c>,
     /// low is <c>&lt; Low</c>, very high is <c>&gt; VeryHigh</c>, high is
     /// <c>&gt; TargetTop</c>, and everything else is in range.
@@ -97,28 +98,33 @@ public static class SleepReportCalculator
 
         if (readings.Count == 0) return null;
 
-        int veryLow = 0, low = 0, inRange = 0, high = 0, veryHigh = 0;
-        double sum = 0;
+        var instants = GlucoseCadence.Instants(
+            readings.OrderBy(g => g.Mills).ToList(),
+            thresholds
+        );
+        var (minutes, _) = GlucoseCadence.ReadingMinutes(instants);
 
-        foreach (var g in readings)
+        double veryLow = 0, low = 0, inRange = 0, high = 0, veryHigh = 0;
+
+        for (var i = 0; i < instants.Count; i++)
         {
-            sum += g.Mgdl;
-            if      (g.Mgdl < thresholds.VeryLow)   veryLow++;
-            else if (g.Mgdl < thresholds.Low)       low++;
-            else if (g.Mgdl > thresholds.VeryHigh)  veryHigh++;
-            else if (g.Mgdl > thresholds.TargetTop) high++;
-            else                                    inRange++;
+            var g = instants[i];
+            if      (g.Mgdl < thresholds.VeryLow)   veryLow += minutes[i];
+            else if (g.Mgdl < thresholds.Low)       low += minutes[i];
+            else if (g.Mgdl > thresholds.VeryHigh)  veryHigh += minutes[i];
+            else if (g.Mgdl > thresholds.TargetTop) high += minutes[i];
+            else                                    inRange += minutes[i];
         }
 
-        var n = (double)readings.Count;
+        var covered = minutes.Sum();
         return new SleepOvernightTir
         {
-            VeryLowPct  = veryLow  / n * 100,
-            LowPct      = low      / n * 100,
-            InRangePct  = inRange  / n * 100,
-            HighPct     = high     / n * 100,
-            VeryHighPct = veryHigh / n * 100,
-            MeanBg      = (int)Math.Round(sum / n),
+            VeryLowPct  = GlucoseCadence.PercentOfCovered(veryLow, covered),
+            LowPct      = GlucoseCadence.PercentOfCovered(low, covered),
+            InRangePct  = GlucoseCadence.PercentOfCovered(inRange, covered),
+            HighPct     = GlucoseCadence.PercentOfCovered(high, covered),
+            VeryHighPct = GlucoseCadence.PercentOfCovered(veryHigh, covered),
+            MeanBg      = (int)Math.Round(readings.Average(g => g.Mgdl)),
         };
     }
 
@@ -418,6 +424,9 @@ public static class SleepReportCalculator
             NightCount        = nights.Count,
             DaysInRange       = daysInRange,
             CoveragePct       = coveragePct,
+            ScoredNightCount  = scored.Count,
+            IncludesEstimatedScore = scored.Any(n => n.ScoreSource == SleepScoreSource.Computed),
+            TirNightCount     = tirNights.Count,
             MeanScore         = scored.Count   > 0 ? scored.Average(n => (double)n.SleepScore!.Value) : null,
             MeanTirPct        = tirNights.Count > 0 ? tirNights.Average(n => n.OvernightTirPct!.Value) : null,
             MeanAsleepMinutes = nights.Average(n => n.SleepMinutes),
@@ -456,26 +465,26 @@ public static class SleepReportCalculator
             ? d.ToDateTime(TimeOnly.MinValue)
             : night.InBedAt.AddHours(-12).Date;
 
-    /// <summary>Monday on or before <paramref name="day"/>.</summary>
-    private static DateTime WeekStartOf(DateTime day) => day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
+    /// <summary>The <paramref name="firstDay"/> on or before <paramref name="day"/>.</summary>
+    private static DateTime WeekStartOf(DateTime day, DayOfWeek firstDay) => day.AddDays(-(((int)day.DayOfWeek - (int)firstDay + 7) % 7));
 
     public static IReadOnlyList<SleepWeekSummary> ComputeWeekSummaries(
-        IReadOnlyList<SleepNightSummary> nights, DateTime from, DateTime to)
+        IReadOnlyList<SleepNightSummary> nights, DateOnly from, DateOnly to, DayOfWeek firstDay)
     {
-        var rangeStart = from.Date;
-        var rangeEnd   = to.Date;
+        var rangeStart = from.ToDateTime(TimeOnly.MinValue);
+        var rangeEnd   = to.ToDateTime(TimeOnly.MinValue);
         if (rangeEnd < rangeStart)
             return [];
 
         var nightsByWeek = nights
-            .GroupBy(n => WeekStartOf(DisplayDay(n)))
+            .GroupBy(n => WeekStartOf(DisplayDay(n), firstDay))
             .ToDictionary(g => g.Key, g => g.OrderBy(n => n.InBedAt).ToList());
 
         // A night starting shortly after midnight on the range's first day displays
         // under the previous day, which can fall in the week before the range —
         // widen the loop bounds to any such spillover weeks.
-        var firstWeek = WeekStartOf(rangeStart);
-        var lastWeek  = WeekStartOf(rangeEnd);
+        var firstWeek = WeekStartOf(rangeStart, firstDay);
+        var lastWeek  = WeekStartOf(rangeEnd, firstDay);
         if (nightsByWeek.Count > 0)
         {
             var minNightWeek = nightsByWeek.Keys.Min();

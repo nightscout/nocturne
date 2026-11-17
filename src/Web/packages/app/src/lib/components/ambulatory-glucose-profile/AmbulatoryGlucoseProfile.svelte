@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
   import { AreaChart, Tooltip } from "layerchart";
-  import BarChart3 from "@lucide/svelte/icons/chart-column";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     glucoseUnits,
     timeFormat,
-  } from "$lib/stores/appearance-store.svelte";
-  import { convertToDisplayUnits, bg, bgLabel, bgRange } from "$lib/utils/formatting";
-  import { CHART_TEXTURES, patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import type { AveragedStats } from "$lib/api";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { convertToDisplayUnits, bg, bgLabel, bgRange } from "#lib/utils/formatting.js";
+  import { CHART_TEXTURES, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import { GLUCOSE_BANDS } from "#lib/components/reports/percentile-band-colors.js";
+  import type { AveragedStats, GlycemicThresholds } from "#lib/api/index.js";
   import {
     formatHour as _formatHour,
     transformStats,
@@ -18,8 +19,10 @@
 
   let {
     averagedStats,
+    thresholds,
   }: {
     averagedStats?: AveragedStats[];
+    thresholds?: GlycemicThresholds;
   } = $props();
 
   // Use props directly - parent should provide pre-fetched stats
@@ -39,15 +42,18 @@
 
   const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
-  // Dynamic Y-axis domain based on units
-  const yDomain = $derived<[number, number]>(isMMOL ? [0, 22.2] : [0, 400]);
+  const tenantThresholds = tenantChartThresholds();
 
-  // Convert threshold values to display units
-  const lowThreshold = $derived(
-    convertToDisplayUnits(FALLBACK_GLUCOSE_THRESHOLDS.low, units)
-  );
-  const highThreshold = $derived(
-    convertToDisplayUnits(FALLBACK_GLUCOSE_THRESHOLDS.high, units)
+  // Dynamic Y-axis domain based on units
+  const yDomain = $derived<[number, number]>([
+    0,
+    convertToDisplayUnits(tenantThresholds.current.glucoseYMax, units),
+  ]);
+
+  const targetRange = $derived(
+    thresholds?.targetBottom != null && thresholds.targetTop != null
+      ? { low: thresholds.targetBottom, high: thresholds.targetTop }
+      : null
   );
 
   // Time format for X-axis labels
@@ -59,10 +65,7 @@
     v == null ? "–" : isMMOL ? v.toFixed(1) : Math.round(v).toString()
   );
 
-  // Band colors shared between the series fills and the tooltip swatches
-  const BAND_OUTER = "oklch(from var(--chart-1) l c h / 0.35)";
-  const BAND_INNER = "oklch(from var(--chart-1) l c h / 0.6)";
-  const MEDIAN_COLOR = "var(--chart-1)";
+  const { outer: BAND_OUTER, inner: BAND_INNER, median: MEDIAN_COLOR } = GLUCOSE_BANDS;
 
   // Drawn over the bands, so each label wears a paper-coloured halo to stay legible where a band crosses it.
   const RULE_LABEL_CLASS = "text-xs fill-foreground stroke-background [stroke-width:3px] [paint-order:stroke]";
@@ -129,47 +132,53 @@
     xDomain={[0, 24]}
     {yDomain}
     seriesLayout="overlap"
-    annotations={[
-      {
-        type: "range",
-        layer: "below",
-        y: [lowThreshold, highThreshold],
-        fill: CHART_TEXTURES["target-band"].color,
-        class: patternClass("target-band"),
-      },
-      {
-        type: "line",
-        layer: "above",
-        y: lowThreshold,
-        label: `Low ${bg(FALLBACK_GLUCOSE_THRESHOLDS.low)}`,
-        labelPlacement: "bottom-left",
-        labelXOffset: 4,
-        labelYOffset: 4,
-        props: {
-          label: { class: RULE_LABEL_CLASS },
-          line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
-        },
-      },
-      {
-        type: "line",
-        layer: "above",
-        y: highThreshold,
-        label: `High ${bg(FALLBACK_GLUCOSE_THRESHOLDS.high)}`,
-        labelPlacement: "top-left",
-        labelXOffset: 4,
-        labelYOffset: 4,
-        props: {
-          label: { class: RULE_LABEL_CLASS },
-          line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
-        },
-      },
-    ]}
+    annotations={targetRange
+      ? [
+          {
+            type: "range",
+            layer: "below",
+            y: [
+              convertToDisplayUnits(targetRange.low, units),
+              convertToDisplayUnits(targetRange.high, units),
+            ],
+            fill: CHART_TEXTURES["target-band"].color,
+            class: patternClass("target-band"),
+          },
+          {
+            type: "line",
+            layer: "above",
+            y: convertToDisplayUnits(targetRange.low, units),
+            label: `Low ${bg(targetRange.low)}`,
+            labelPlacement: "bottom-left",
+            labelXOffset: 4,
+            labelYOffset: 4,
+            props: {
+              label: { class: RULE_LABEL_CLASS },
+              line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
+            },
+          },
+          {
+            type: "line",
+            layer: "above",
+            y: convertToDisplayUnits(targetRange.high, units),
+            label: `High ${bg(targetRange.high)}`,
+            labelPlacement: "top-left",
+            labelXOffset: 4,
+            labelYOffset: 4,
+            props: {
+              label: { class: RULE_LABEL_CLASS },
+              line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
+            },
+          },
+        ]
+      : []}
     props={{
       area: { motion: { type: "tween", duration: 200 } },
       xAxis: {
         motion: { type: "tween", duration: 200 },
         ticks: HOUR_TICKS,
         format: formatHour,
+        tickOcclusion: { priority: "start-end" },
       },
       tooltip: { context: { mode: "bisect-x" } },
     }}
@@ -223,18 +232,19 @@
       { texture: "percentile-outer", label: "10–90%", color: BAND_OUTER },
       { texture: "percentile-inner", label: "25–75%", color: BAND_INNER },
       { texture: "percentile-median", label: "Median", color: MEDIAN_COLOR, shape: "line" },
-      { texture: "target-band", label: `Target range ${bgRange(FALLBACK_GLUCOSE_THRESHOLDS.low, FALLBACK_GLUCOSE_THRESHOLDS.high)}` },
+      ...(targetRange
+        ? [{ texture: "target-band" as const, label: `Consensus target range ${bgRange(targetRange.low, targetRange.high)}` }]
+        : []),
     ]}
   />
 </div>
 {:else}
-  <div
-    class="flex h-full w-full items-center justify-center text-muted-foreground"
-  >
-    <div class="text-center">
-      <BarChart3 class="mx-auto h-10 w-10 opacity-30" />
-      <p class="mt-2 font-medium">No pattern data</p>
-      <p class="text-sm">Need more readings to show your typical day</p>
-    </div>
+  <div class="flex h-full w-full items-center justify-center">
+    <EmptyState
+      art="report-pages"
+      size="compact"
+      title="No pattern data"
+      body="Need more readings to show your typical day"
+    />
   </div>
 {/if}

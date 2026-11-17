@@ -11,10 +11,11 @@ namespace Nocturne.Connectors.Glooko.Xt;
 ///     <see cref="Map"/> fans everything out into the types the tenant has enabled. Publishing
 ///     stays with the connector service, which owns the publisher and the sync result.
 /// </summary>
-public class GlookoXtSyncPath(IGlookoXtDataClient dataClient, ILogger logger)
+public class GlookoXtSyncPath(IGlookoXtDataClient dataClient, ILogger logger, TimeProvider? timeProvider = null)
 {
-    private readonly GlookoXtRecordMapper _recordMapper = new(logger);
-    private readonly GlookoXtExportMapper _exportMapper = new(logger);
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+    private readonly GlookoXtRecordMapper _recordMapper = new(logger, timeProvider);
+    private readonly GlookoXtExportMapper _exportMapper = new(logger, timeProvider);
 
     /// <summary>
     ///     The device catalogue is the same for every patient and changes when Glooko adds a
@@ -101,7 +102,7 @@ public class GlookoXtSyncPath(IGlookoXtDataClient dataClient, ILogger logger)
 
     private async Task<IReadOnlyDictionary<long, string>> ProductNamesAsync(IGlookoXtSession session, CancellationToken ct)
     {
-        if (ProductCatalogue.TryGetValue(GlookoXtConstants.ServerUrl, out var cached) && DateTime.UtcNow - cached.FetchedAt < ProductCatalogueLifetime)
+        if (ProductCatalogue.TryGetValue(GlookoXtConstants.ServerUrl, out var cached) && _clock.GetUtcNow().UtcDateTime - cached.FetchedAt < ProductCatalogueLifetime)
             return cached.Names;
 
         var names = new Dictionary<long, string>();
@@ -114,13 +115,13 @@ public class GlookoXtSyncPath(IGlookoXtDataClient dataClient, ILogger logger)
                     names[id] = product.Name;
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, ct))
         {
             logger.LogWarning(ex, "Could not read the Glooko XT device catalogue; records keep their sync source as device");
             return cached.Names ?? new Dictionary<long, string>();
         }
 
-        ProductCatalogue[GlookoXtConstants.ServerUrl] = (DateTime.UtcNow, names);
+        ProductCatalogue[GlookoXtConstants.ServerUrl] = (_clock.GetUtcNow().UtcDateTime, names);
         return names;
     }
 
@@ -130,7 +131,7 @@ public class GlookoXtSyncPath(IGlookoXtDataClient dataClient, ILogger logger)
         {
             return await session.GetAccountAsync(ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, ct))
         {
             logger.LogWarning(ex, "Could not read the Glooko XT account settings");
             return null;

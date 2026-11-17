@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
@@ -9,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -55,16 +55,10 @@ public class V4WriteScopeGatingTests
     /// </summary>
     private static class NotDataCategory
     {
-        /// <summary>Platform operator surface; the class carries [Authorize(Roles = "platform_admin")].</summary>
-        public const string PlatformAdminRole = "platform-admin role, not a data scope";
-
         /// <summary>
-        /// Tenant operator surface; [RequireAdmin] on the class or on every write action.
+        /// Superuser-only surface; [RequireSuperuser] on the class or on every write action.
         /// </summary>
-        public const string TenantAdminAttribute = "tenant-admin attribute, not a data scope";
-
-        /// <summary>Service-to-service surface; the class carries [RequireInstanceKeyAuth].</summary>
-        public const string InstanceKey = "instance-key service credential, not a data scope";
+        public const string SuperuserAttribute = "superuser attribute, not a data scope";
 
         /// <summary>Registered only when the API runs in Development.</summary>
         public const string DevelopmentOnly = "dev-only controller, absent outside Development";
@@ -132,17 +126,6 @@ public class V4WriteScopeGatingTests
         public const string PerRecordGuard = "per-record scope enforced in the handler";
 
         /// <summary>
-        /// Mints a capability rather than storing an observation, and the vocabulary that should
-        /// govern it is split: the permission atoms are <c>sharing.manage</c>/<c>sharing.guest</c>
-        /// while the OAuth scope is <c>sharing.readwrite</c>, which no seed role maps to and
-        /// <see cref="Scope.Normalize"/> keeps only for a client that was granted it
-        /// directly. Requiring either would strip the capability from every non-owner role, so it
-        /// stays ungated until the vocabulary is unified. NOT presentation state — the capability
-        /// this mints serves patient glucose to an anonymous caller.
-        /// </summary>
-        public const string SplitSharingVocabulary = "sharing capability, vocabulary split between atom and scope";
-
-        /// <summary>
         /// Deliberately <c>[AllowAnonymous]</c>. There is no credential to scope, so a scope gate
         /// cannot apply; whether the endpoint should be anonymous at all is the anonymous-endpoint
         /// audit's question, not this taxonomy's.
@@ -159,6 +142,12 @@ public class V4WriteScopeGatingTests
 
         /// <summary>Sends to an external service and persists no tenant row.</summary>
         public const string OutboundOnly = "outbound call, persists no tenant data";
+
+        /// <summary>
+        /// A record that the caller saw a firing alarm. Gated on <c>alerts.read</c> so a share or
+        /// guest link can make it; it changes no excursion, instance, mute or delivery.
+        /// </summary>
+        public const string AlertReceipt = "append-only receipt; changes no alert state";
     }
 
     /// <summary>
@@ -170,27 +159,21 @@ public class V4WriteScopeGatingTests
     /// decides which of these it is.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> GateExemptControllers =
-        new Dictionary<string, string>(StringComparer.Ordinal)
+        new Dictionary<string, string>(V4ScopeGuardExemptions.Controllers, StringComparer.Ordinal)
         {
-            ["AccessRequestController"] = NotDataCategory.PlatformAdminRole,
-            ["ConnectorAdminController"] = NotDataCategory.PlatformAdminRole,
-            ["DemoAdminController"] = NotDataCategory.PlatformAdminRole,
-            ["OidcProviderAdminController"] = NotDataCategory.PlatformAdminRole,
-            ["PlatformSettingsController"] = NotDataCategory.PlatformAdminRole,
-            ["SubjectAdminController"] = NotDataCategory.PlatformAdminRole,
-            ["TenantController"] = NotDataCategory.PlatformAdminRole,
-            ["TenantDirectGrantController"] = NotDataCategory.PlatformAdminRole,
+            ["SubjectAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantCreationInviteAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["PlatformPolicyController"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
-            ["DeduplicationController"] = NotDataCategory.TenantAdminAttribute,
-            ["MigrationController"] = NotDataCategory.TenantAdminAttribute,
-            ["StateSpanMaintenanceController"] = NotDataCategory.TenantAdminAttribute,
+            ["DeduplicationController"] = NotDataCategory.SuperuserAttribute,
+            ["MigrationController"] = NotDataCategory.SuperuserAttribute,
+            ["StateSpanMaintenanceController"] = NotDataCategory.SuperuserAttribute,
 
-            // CompatibilityController repeats [RequireAdmin] per action rather than carrying it on
+            // CompatibilityController repeats [RequireSuperuser] per action rather than carrying it on
             // the class.
-            ["CompatibilityController"] = NotDataCategory.TenantAdminAttribute,
+            ["CompatibilityController"] = NotDataCategory.SuperuserAttribute,
             ["ServicesController"] = NotDataCategory.TenantSettingsScope,
-
-            ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
+            ["RejectedUploadsController"] = NotDataCategory.TenantSettingsScope,
 
             ["DevAdminController"] = NotDataCategory.DevelopmentOnly,
             ["DevAuthController"] = NotDataCategory.DevelopmentOnly,
@@ -198,12 +181,14 @@ public class V4WriteScopeGatingTests
             ["SetupController"] = NotDataCategory.Setup,
             ["PlatformController"] = NotDataCategory.Setup,
             ["MyTenantsController"] = NotDataCategory.Setup,
+            ["TenantCreationInviteController"] = NotDataCategory.Setup,
 
             ["AvatarController"] = NotDataCategory.IdentityAndDelegation,
             ["ChatIdentityController"] = NotDataCategory.IdentityAndDelegation,
             ["ConnectedAppsController"] = NotDataCategory.IdentityAndDelegation,
             ["GuestLinkController"] = NotDataCategory.IdentityAndDelegation,
             ["MemberInviteController"] = NotDataCategory.IdentityAndDelegation,
+            ["MemberRecoveryController"] = NotDataCategory.IdentityAndDelegation,
             ["MembershipRequestController"] = NotDataCategory.IdentityAndDelegation,
             ["RoleController"] = NotDataCategory.IdentityAndDelegation,
             ["SessionsController"] = NotDataCategory.IdentityAndDelegation,
@@ -229,7 +214,6 @@ public class V4WriteScopeGatingTests
             // caller's categories, asserted by AlertReplayReadScopeTests.
             ["AlertReplayController"] = NotDataCategory.ComputesAndReturns,
 
-            ["ClockFacesController"] = NotDataCategory.SplitSharingVocabulary,
             ["CoachMarkController"] = NotDataCategory.PresentationState,
             ["UserPreferencesController"] = NotDataCategory.PresentationState,
 
@@ -259,8 +243,10 @@ public class V4WriteScopeGatingTests
             ["StateSpansController.CreateStateSpan"] = NotDataCategory.PerRecordGuard,
             ["StateSpansController.UpdateStateSpan"] = NotDataCategory.PerRecordGuard,
             ["StateSpansController.DeleteStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.RestoreStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.BulkRestoreStateSpans"] = NotDataCategory.PerRecordGuard,
 
-            // The rest of DiscrepancyController is [RequireAdmin]; the ingest route is deliberately
+            // The rest of DiscrepancyController is [RequireSuperuser]; the ingest route is deliberately
             // [AllowAnonymous], so there is no credential whose scopes could be checked.
             ["DiscrepancyController.IngestDiscrepancy"] = NotDataCategory.AnonymousByDeclaration,
 
@@ -293,6 +279,11 @@ public class V4WriteScopeGatingTests
             // .svx file as an upstream pull request and stores nothing locally.
             ["ContentContributionsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
             ["ContentContributionsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
+
+            ["AlertsController.MarkSeen"] = NotDataCategory.AlertReceipt,
+
+            // The clock face is the capability, and the face's owner turned acknowledging on.
+            ["ClockFaceAlertsController.MarkClockAlertSeen"] = NotDataCategory.AnonymousByDeclaration,
         };
 
     /// <summary>
@@ -341,6 +332,11 @@ public class V4WriteScopeGatingTests
             // schedules are the therapy category (therapy.read on the read side); v1 and v3 profile
             // writes require therapy.readwrite.
             ["ProfileController"] = Scope.TherapyReadWrite,
+            ["SetupTherapyController"] = Scope.TherapyReadWrite,
+
+            // therapy: an activation runs a stored profile, so recording, ending and deleting a
+            // person's profile switch takes therapy.readwrite, as writing the profile does.
+            ["ProfileActivationsController"] = Scope.TherapyReadWrite,
 
             // treatments: carb_intakes sits under treatments.read, POST /meals also writes a bolus,
             // and treatment_foods is keyed by carb intake (the food catalog is only read).
@@ -354,6 +350,7 @@ public class V4WriteScopeGatingTests
             // configuration written from the Patient Record settings form alongside therapy settings.
             ["BodyWeightController"] = Scope.TherapyReadWrite,
             ["GoogleHealthController"] = Scope.TenantSettings,
+            ["OuraController"] = Scope.TenantSettings,
 
             // treatments: state_spans is the decomposed form of the legacy treatment events
             // (temporary target, profile switch, exercise, illness, travel) and of the temp-basal
@@ -367,6 +364,7 @@ public class V4WriteScopeGatingTests
             // definition's thresholds become managed alert rules and acking an instance acks an
             // alert excursion. v1/v2 notification writes require alerts.readwrite.
             ["TrackersController"] = Scope.AlertsReadWrite,
+            ["TrackerLegacyFallbacksController"] = Scope.AlertsReadWrite,
 
             // alerts: UISettingsConfiguration is tenant-wide and carries NotificationSettings, the
             // alarm thresholds and profiles that decide whether a low-glucose alert fires.
@@ -384,6 +382,7 @@ public class V4WriteScopeGatingTests
             ["TenantAlertSettingsController"] = Scope.AlertsReadWrite,
             ["AlertCustomSoundsController"] = Scope.AlertsReadWrite,
             ["AlertInvitesController"] = Scope.AlertsReadWrite,
+            ["SetupAlertsController"] = Scope.AlertsReadWrite,
             ["NotificationsController"] = Scope.AlertsReadWrite,
 
             // devices: a reservoir report is stored as a manual-source pump_snapshots row, and a fill
@@ -392,11 +391,6 @@ public class V4WriteScopeGatingTests
 
             // Controllers that gate with a per-action [RequireScope] rather than a declaration. Their
             // categories are their own dedicated tables.
-            // treatments: the baseline admitting an activity write, underneath the per-record
-            // ActivityWriteScopeGuard that gates the record's own category. The rationale for the
-            // category is on ActivityController itself.
-            ["ActivityController"] = Scope.TreatmentsReadWrite,
-
             ["SleepController"] = Scope.SleepReadWrite,
             ["HeartRateController"] = Scope.HeartRateReadWrite,
             ["StepCountController"] = Scope.StepCountReadWrite,
@@ -406,6 +400,13 @@ public class V4WriteScopeGatingTests
             // The actions accept either member-personal capability scope; device.notify is the one
             // asserted, and neither is satisfiable by a read-only credential.
             ["ClientDevicesController"] = Scope.DeviceNotify,
+
+            // setup_hub_items and the tenant's strip dismissal are the owner's onboarding state, not
+            // a data category; the hub is owner-only like the onboarding answers it follows on from.
+            ["SetupHubController"] = Scope.FullAccess,
+
+            // See the ClockFacesController remarks.
+            ["ClockFacesController"] = Scope.SharingManage,
         };
 
     /// <summary>
@@ -436,13 +437,29 @@ public class V4WriteScopeGatingTests
             // only the connector_food_entries status, which is the food category.
             ["MealMatchingController.AcceptMatch"] = Scope.TreatmentsReadWrite,
             ["MealMatchingController.DismissMatch"] = Scope.FoodReadWrite,
+
+            // The setup hub's Devices item writes the same tables as PatientRecordController above,
+            // plus a tracker definition, which TrackersController gates on alerts.readwrite.
+            ["SetupDevicesController.ConfirmSetupDevice"] = Scope.DevicesReadWrite,
+            ["SetupDevicesController.AddSetupInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.SetTakesNoInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.AddSetupTracker"] = Scope.AlertsReadWrite,
+            ["SetupDevicesController.RemoveSetupInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.RemoveSetupTracker"] = Scope.AlertsReadWrite,
+
+            // The baseline admitting an activity write, underneath the per-record
+            // ActivityWriteScopeGuard that gates the record's own category. Create and update also
+            // admit sleep.readwrite; the rationale is on ActivityController itself.
+            ["ActivityController.CreateActivities"] = Scope.TreatmentsReadWrite,
+            ["ActivityController.UpdateActivity"] = Scope.TreatmentsReadWrite,
+            ["ActivityController.DeleteActivity"] = Scope.TreatmentsReadWrite,
         };
 
     [Fact]
     public void ReadOnlyGuestLinkScopes_CannotWriteGlucose()
     {
         // The maximum a guest link can hold: GuestLinkService.AllowedGuestScopes is read-only.
-        var guestScopes = Scope.Normalize([Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead]);
+        var guestScopes = Scope.Normalize([Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead, Scope.AlertsRead]);
 
         var result = Evaluate(NewSensorGlucoseController(), authenticated: true, guestScopes.ToArray());
 
@@ -569,7 +586,7 @@ public class V4WriteScopeGatingTests
                 if (IsGateExempt(controller, action))
                     continue;
 
-                var attributes = action.GetCustomAttributes(inherit: true);
+                var attributes = AppliedAttributes(controller, action);
                 var gated = attributes.Any(a => a is RequireDeclaredWriteScopeAttribute
                                                      or RequireScopeAttribute
                                                      or RequirePermissionAttribute);
@@ -599,7 +616,7 @@ public class V4WriteScopeGatingTests
 
         violations.Should().BeEmpty(
             "every write action under " + V4Namespace + " must carry [RequireDeclaredWriteScope] "
-            + "(base CRUD actions and their overrides), an explicit [RequireScope], or an entry in "
+            + "(base CRUD actions and their overrides), a [RequireScope] on it or its controller, or an entry in "
             + "GateExemptWriteActions stating why. Unprotected: " + string.Join("; ", violations));
 
         readSatisfiable.Should().BeEmpty(
@@ -643,10 +660,12 @@ public class V4WriteScopeGatingTests
     {
         var covered = new[]
         {
-            // StateSpanWriteScopeTests drives all three through the real handler.
+            // StateSpanWriteScopeTests drives all five through the real handler.
             "StateSpansController.CreateStateSpan",
             "StateSpansController.UpdateStateSpan",
             "StateSpansController.DeleteStateSpan",
+            "StateSpansController.RestoreStateSpan",
+            "StateSpansController.BulkRestoreStateSpans",
             // ActivityControllerV4Tests drives all three through the real handler.
             "ActivityController.CreateActivities",
             "ActivityController.UpdateActivity",
@@ -770,15 +789,12 @@ public class V4WriteScopeGatingTests
 
             var holds = reason switch
             {
-                NotDataCategory.PlatformAdminRole => attributes
-                    .OfType<AuthorizeAttribute>()
-                    .Any(a => a.Roles?.Contains("platform_admin", StringComparison.Ordinal) == true),
-                NotDataCategory.TenantAdminAttribute => CarriesAttribute(controller, "RequireAdminAttribute"),
+                _ when V4ScopeGuardExemptions.Controllers.ContainsKey(name) =>
+                    V4ScopeGuardExemptions.Carries(attributes, reason),
+                NotDataCategory.SuperuserAttribute => CarriesAttribute(controller, "RequireSuperuserAttribute"),
                 NotDataCategory.TenantSettingsScope => GovernsEveryWrite(controller,
                     a => a is RequireScopeAttribute scope
                          && scope.Scopes.Contains(Scope.TenantSettings, StringComparer.Ordinal)),
-                NotDataCategory.InstanceKey => attributes
-                    .Any(a => a.GetType().Name == "RequireInstanceKeyAuthAttribute"),
                 NotDataCategory.DevelopmentOnly => controller.Namespace == V4Namespace + ".DevOnly",
                 _ => true,
             };
@@ -836,7 +852,7 @@ public class V4WriteScopeGatingTests
         var controller = ApiAssembly.GetType(controllerTypeName)!;
 
         // The maximum a guest link holds (GuestLinkService.AllowedGuestScopes, read-only).
-        var guestScopes = Scope.Normalize([Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead]);
+        var guestScopes = Scope.Normalize([Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead, Scope.AlertsRead]);
 
         EvaluateAction(controller, actionName, authenticated: true, guestScopes.ToArray())
             .Should().BeOfType<ForbidResult>("a read-only session must not reach this write action");
@@ -927,43 +943,13 @@ public class V4WriteScopeGatingTests
         return context.Result;
     }
 
-    /// <summary>
-    /// Runs the filters an action actually declares (authorization filters first, as MVC does), so
-    /// the assertion covers both which gate is present and the scope it names.
-    /// </summary>
     private static IActionResult? EvaluateAction(
-        Type controller, string actionName, bool authenticated, params string[] grantedScopes)
-    {
-        var action = controller.GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new InvalidOperationException($"{controller.Name} has no action named {actionName}");
-        var filters = action.GetCustomAttributes(inherit: true);
-
-        var actionContext = new ActionContext(
-            NewHttpContext(authenticated, grantedScopes), new RouteData(), new ActionDescriptor());
-
-        foreach (var filter in filters.OfType<IAuthorizationFilter>())
-        {
-            var authorizationContext = new AuthorizationFilterContext(actionContext, new List<IFilterMetadata>());
-            filter.OnAuthorization(authorizationContext);
-            if (authorizationContext.Result is not null)
-                return authorizationContext.Result;
-        }
-
-        var executingContext = new ActionExecutingContext(
-            actionContext,
-            new List<IFilterMetadata>(),
-            new Dictionary<string, object?>(),
-            ScopeDeclarationInstance(controller));
-
-        foreach (var filter in filters.OfType<IActionFilter>())
-        {
-            filter.OnActionExecuting(executingContext);
-            if (executingContext.Result is not null)
-                return executingContext.Result;
-        }
-
-        return null;
-    }
+        Type controller, string actionName, bool authenticated, params string[] grantedScopes) =>
+        ActionGate.Evaluate(
+            controller,
+            actionName,
+            new HashSet<string>(grantedScopes),
+            authenticated ? new AuthContext { IsAuthenticated = true } : null);
 
     private static DefaultHttpContext NewHttpContext(bool authenticated, string[] grantedScopes)
     {
@@ -974,10 +960,21 @@ public class V4WriteScopeGatingTests
         return httpContext;
     }
 
+    /// <summary>The attributes MVC applies to an action: its controller's, then its own.</summary>
+    private static object[] AppliedAttributes(Type controller, MethodInfo action) =>
+        [.. controller.GetCustomAttributes(inherit: true), .. action.GetCustomAttributes(inherit: true)];
+
     /// <summary>The scopes an action's gate requires: the controller's declaration, or the explicit list.</summary>
+    /// <remarks>
+    /// The action's own gate when it has one: a controller-wide read gate alongside it still leaves
+    /// the action requiring the write scope. Without one, the controller's gate is the action's.
+    /// </remarks>
     private static IEnumerable<string> RequiredScopes(Type controller, MethodInfo action)
     {
-        var attributes = action.GetCustomAttributes(inherit: true);
+        var own = action.GetCustomAttributes(inherit: true);
+        var attributes = own.Any(a => a is RequireDeclaredWriteScopeAttribute or RequireScopeAttribute)
+            ? own
+            : controller.GetCustomAttributes(inherit: true);
 
         if (attributes.Any(a => a is RequireDeclaredWriteScopeAttribute)
             && ScopeDeclarationInstance(controller) is IWriteScopedController declared)

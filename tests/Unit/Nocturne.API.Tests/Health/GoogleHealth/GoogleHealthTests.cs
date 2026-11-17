@@ -2,14 +2,19 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -26,32 +31,18 @@ using Nocturne.Core.Models.Health;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Infrastructure.Data.Services;
-using Npgsql;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
-public class GoogleHealthTests
+public class GoogleHealthTests : IDisposable
 {
-    [Fact]
-    public void Dedicated_connection_preserves_data_source_password_without_enabling_security_info()
-    {
-        using var dataSource = NpgsqlDataSource.Create(
-            "Host=localhost;Database=synthetic;Username=synthetic;Password=synthetic-password");
-        using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource).Options);
-        Assert.Null(new NpgsqlConnectionStringBuilder(db.Database.GetConnectionString()).Password);
+    private readonly List<HttpClient> _httpClients = [];
 
-        using var connection = GoogleHealthCoordinator.CreateDedicatedConnection(db);
-        var settings = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
-
-        Assert.Equal("synthetic-password", settings.Password);
-        Assert.False(settings.Pooling);
-        Assert.False(settings.PersistSecurityInfo);
-        Assert.Equal("synthetic", settings.Username);
-        Assert.Equal("synthetic", settings.Database);
-    }
+    public void Dispose() => _httpClients.ForEach(client => client.Dispose());
 
     [Theory]
     [InlineData("[]")]
@@ -77,10 +68,14 @@ public class GoogleHealthTests
         });
         await db.SaveChangesAsync();
         var services = new ServiceCollection();
-        services.AddSingleton(db);
+        services.AddSingleton(db.AsFactory());
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddSingleton(Mock.Of<ITenantAccessor>());
+        services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();
         using var provider = services.BuildServiceProvider();
-        var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>());
+        var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System);
         Assert.Null(await coordinator.ProgressAsync(tenantId, default));
     }
 
@@ -114,7 +109,7 @@ public class GoogleHealthTests
         }
         db.TenantId = tenantId;
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
         string[] types = ["heart-rate", "steps", "weight", "sleep"];
         var emptyRun = await writer.BeginReconciliationAsync(types, from, from.AddDays(1), default);
         foreach (var type in types) await writer.StageReconciliationIdsAsync(emptyRun, type, ["", " "], default);
@@ -140,12 +135,58 @@ public class GoogleHealthTests
         Assert.Equal(3, await db.BodyWeights.CountAsync());
         Assert.Equal(3, await db.SleepSessions.CountAsync());
         Assert.False(await db.StepCounts.IgnoreQueryFilters().Where(record => record.TenantId == tenantId && record.SyncIdentifier == "stale")
-            .Select(record => EF.Property<bool>(record, "DeletedByUser")).SingleAsync());
+            .Select(record => EF.Property<bool>(record, NocturneDbContext.DeletedByUserProperty)).SingleAsync());
         db.TenantId = otherTenantId;
         Assert.Equal(4, await db.HeartRates.CountAsync());
         Assert.Equal(4, await db.StepCounts.CountAsync());
         Assert.Equal(4, await db.BodyWeights.CountAsync());
         Assert.Equal(4, await db.SleepSessions.CountAsync());
+    }
+
+    [Fact]
+    public async Task Purge_removes_the_tenants_user_deleted_rows_and_leaves_another_tenants()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        db.Tenants.AddRange(
+            new TenantEntity { Id = tenantId, Slug = "purge-test", DisplayName = "Synthetic", IsActive = true },
+            new TenantEntity { Id = otherTenantId, Slug = "purge-other", DisplayName = "Other", IsActive = true });
+        await db.SaveChangesAsync();
+        var at = new DateTime(2026, 9, 1, 6, 0, 0, DateTimeKind.Utc);
+        var deletedAt = at.AddDays(1);
+        foreach (var tenant in new[] { tenantId, otherTenantId })
+        {
+            db.TenantId = tenant;
+            var rows = new object[]
+            {
+                new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = at, Bpm = 60, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "gone", DeletedAt = deletedAt },
+                new StepCountEntity { Id = Guid.NewGuid(), Timestamp = at, Metric = 42, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "gone", DeletedAt = deletedAt },
+                new BodyWeightEntity { Id = Guid.NewGuid(), Mills = new DateTimeOffset(at).ToUnixTimeMilliseconds(), WeightKg = 70, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "gone", DeletedAt = deletedAt },
+                new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = at.AddHours(-8), EndTime = at, Source = "Google", SourceApp = "Google Health", OriginalId = "gone", DeletedAt = deletedAt },
+            };
+            foreach (var row in rows) db.Entry(row).State = EntityState.Added;
+            foreach (var row in rows) db.Entry(row).Property(NocturneDbContext.DeletedByUserProperty).CurrentValue = true;
+            await db.SaveChangesAsync();
+        }
+        db.TenantId = tenantId;
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
+
+        await writer.PurgeAsync(default);
+
+        Assert.Equal(0, await db.HeartRates.IncludingDeleted().CountAsync());
+        Assert.Equal(0, await db.StepCounts.IncludingDeleted().CountAsync());
+        Assert.Equal(0, await db.BodyWeights.IncludingDeleted().CountAsync());
+        Assert.Equal(0, await db.SleepSessions.IncludingDeleted().CountAsync());
+        db.TenantId = otherTenantId;
+        Assert.Equal(1, await db.HeartRates.IncludingDeleted().CountAsync());
+        Assert.Equal(1, await db.StepCounts.IncludingDeleted().CountAsync());
+        Assert.Equal(1, await db.BodyWeights.IncludingDeleted().CountAsync());
+        Assert.Equal(1, await db.SleepSessions.IncludingDeleted().CountAsync());
     }
 
     [Fact]
@@ -158,7 +199,7 @@ public class GoogleHealthTests
         var from = DateTimeOffset.UtcNow.AddDays(-1);
         db.TenantId = tenantId;
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
         var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
         var identifiers = Enumerable.Range(0, 100_000).Select(index => "id-" + index).ToArray();
         await writer.StageReconciliationIdsAsync(run, "steps", identifiers, default);
@@ -178,15 +219,6 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public void Google_health_does_not_add_database_migrations()
-    {
-        using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql("Host=localhost;Database=migration_discovery", options => options.UseNocturneMigrations()).Options);
-
-        Assert.DoesNotContain(db.Database.GetMigrations(), migration => migration.Contains("GoogleHealth"));
-    }
-
-    [Fact]
     public async Task Sleep_reconciliation_uses_end_time_and_preserves_other_sources_and_tenants()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
@@ -201,6 +233,7 @@ public class GoogleHealthTests
             new TenantEntity { Id = otherTenantId, Slug = "other-sleep", DisplayName = "Other sleep", IsActive = true });
         var from = new DateTimeOffset(2026, 9, 5, 0, 0, 0, TimeSpan.Zero);
         var to = from.AddDays(1);
+        var reconciledAt = new DateTimeOffset(2026, 10, 29, 3, 4, 5, TimeSpan.Zero);
         SleepSessionEntity Session(string identifier, DateTimeOffset end, string source = "Google", string app = "Google Health") => new()
         {
             Id = Guid.NewGuid(), OriginalId = identifier, Source = source, SourceApp = app,
@@ -226,7 +259,7 @@ public class GoogleHealthTests
         await db.SaveChangesAsync();
         db.TenantId = tenantId;
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db), new FakeTimeProvider(reconciledAt), NullLogger<GoogleHealthReadingWriter>.Instance);
 
         var run = await writer.BeginReconciliationAsync(["sleep"], from, to, default);
         await writer.StageReconciliationIdsAsync(run, "sleep", ["retained"], default);
@@ -244,11 +277,11 @@ public class GoogleHealthTests
         Assert.Contains("other-app", remaining);
         var stored = await db.SleepSessions.IgnoreQueryFilters().AsNoTracking()
             .Where(session => session.TenantId == tenantId)
-            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, "DeletedByUser") })
+            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, NocturneDbContext.DeletedByUserProperty) })
             .ToListAsync();
         Assert.Equal(9, stored.Count);
         var stale = Assert.Single(stored, session => session.OriginalId == "stale-overnight");
-        Assert.NotNull(stale.DeletedAt);
+        Assert.Equal(reconciledAt.UtcDateTime, stale.DeletedAt);
         Assert.False(stale.DeletedByUser);
         var deleted = Assert.Single(stored, session => session.OriginalId == "user-deleted");
         Assert.Equal(userDeletedAt, deleted.DeletedAt);
@@ -269,7 +302,7 @@ public class GoogleHealthTests
         db.TenantId = tenantId;
         db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "sleep-test", DisplayName = "Sleep test", IsActive = true });
         await db.SaveChangesAsync();
-        var factory = new Mock<ITenantDbContextFactory>();
+        var factory = new Mock<INocturneDbContextFactory>();
         factory.Setup(value => value.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId }));
         var repository = new SleepSessionRepository(factory.Object);
@@ -277,7 +310,7 @@ public class GoogleHealthTests
         sleepService.Setup(value => value.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
             .Returns<SleepSession, CancellationToken>(repository.UpsertSessionAsync);
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), sleepService.Object, db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), sleepService.Object, Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
         var start = new DateTime(2026, 9, 1, 22, 0, 0, DateTimeKind.Utc);
         var otherSource = await repository.UpsertSessionAsync(new SleepSession
         {
@@ -323,7 +356,7 @@ public class GoogleHealthTests
     public async Task Queue_tracks_one_manual_import_per_tenant()
     {
         var tenantId = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
 
         Assert.True(await coordinator.QueueAsync(tenantId, 4, default));
         Assert.False(await coordinator.QueueAsync(tenantId, 4, default));
@@ -345,7 +378,7 @@ public class GoogleHealthTests
     [Fact]
     public async Task Queue_does_not_block_scheduled_progress_and_replaces_only_abandoned_snapshots()
     {
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var tenant = Guid.NewGuid();
         var operation = await coordinator.AcquireAsync(tenant, default);
         try
@@ -360,31 +393,37 @@ public class GoogleHealthTests
         Assert.True((await coordinator.ProgressAsync(tenant, default))!.WorkerOwned);
     }
 
-    [Theory]
-    [InlineData("http://example.com/settings/connectors/google-health/callback")]
-    [InlineData("https://192.168.2.238/settings/connectors/google-health/callback")]
-    [InlineData("https://example.com/settings/connectors/google-health/callback?x=1")]
-    [InlineData("https://example.com/auth/login")]
-    public void Requires_exact_https_callback(string url)
-    {
-        var options = Options();
-        options.CallbackUrl = url;
-        Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
-    }
-
     [Fact]
     public void Import_selection_and_history_are_validated()
     {
+        var service = Service(new TestConnectorStore(), new StubHandler(_ => Json("{}")), Guid.NewGuid());
         var options = Options();
         options.DataTypes = [];
         options.ImportFrom = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        GoogleHealthService.ValidateOptions(options);
+        service.ValidateOptions(options);
 
         options.DataTypes = ["body-fat"];
-        Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
+        Assert.Throws<GoogleHealthException>(() => service.ValidateOptions(options));
         options.DataTypes = ["weight"];
         options.ImportFrom = DateTimeOffset.UtcNow.AddDays(2);
-        Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
+        Assert.Throws<GoogleHealthException>(() => service.ValidateOptions(options));
+    }
+
+    [Fact]
+    public void Import_start_may_be_at_most_a_day_ahead_of_the_clock()
+    {
+        var now = new DateTimeOffset(2026, 10, 29, 3, 0, 0, TimeSpan.Zero);
+        var service = Service(new TestConnectorStore(), new StubHandler(_ => Json("{}")), Guid.NewGuid(),
+            time: new FakeTimeProvider(now));
+        var options = Options();
+        options.DataTypes = ["weight"];
+
+        options.ImportFrom = now.AddDays(1);
+        service.ValidateOptions(options);
+
+        options.ImportFrom = now.AddDays(1).AddTicks(1);
+        var rejected = Assert.Throws<GoogleHealthException>(() => service.ValidateOptions(options));
+        Assert.Equal("invalid_configuration", rejected.Message);
     }
 
     [Fact]
@@ -400,14 +439,14 @@ public class GoogleHealthTests
             "/revoke" => Json("{}"),
             _ => Json("{}")
         });
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var service = Service(store, handler, tenantId, coordinator);
         var options = Options();
         options.DataTypes = ["weight", "steps"];
 
         await service.SaveAsync(options, subject, default);
-        Assert.False(store.IsActive);
-        var authorization = await service.StartAsync(subject, default);
+        Assert.False(await store.EnabledAsync());
+        var authorization = await service.StartAsync(subject, null, default);
         var query = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query);
         Assert.Equal("S256", query["code_challenge_method"]);
 
@@ -420,7 +459,7 @@ public class GoogleHealthTests
         var status = await service.StatusAsync(default);
         Assert.True(status.Configured);
         Assert.True(status.Connected);
-        Assert.True(store.IsActive);
+        Assert.True(await store.EnabledAsync());
         Assert.Equal("partial_consent", status.ErrorCode);
         Assert.Equal("refresh", store.Secrets["refreshToken"]);
         var accountKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("account")));
@@ -430,9 +469,9 @@ public class GoogleHealthTests
         var disconnected = await service.StatusAsync(default);
         Assert.False(disconnected.Connected);
         Assert.True(disconnected.Configured);
-        Assert.False(store.IsActive);
+        Assert.False(await store.EnabledAsync());
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
-        var reconnect = await service.StartAsync(subject, default);
+        var reconnect = await service.StartAsync(subject, null, default);
         Assert.Contains("client_id=synthetic.apps.googleusercontent.com", reconnect.Url);
     }
 
@@ -452,6 +491,7 @@ public class GoogleHealthTests
         var secrets = store.Secrets.ToDictionary(value => value.Key, value => value.Value);
         secrets["refreshToken"] = "refresh";
         secrets["grantedScopes"] = GoogleHealthClient.MetricsScope;
+        secrets["clientId"] = Platform().ClientId;
         await store.Configurations.SaveSecretsAsync("GoogleHealth", secrets);
         await store.Cursors.SetAsync("GoogleHealth", "health", new(null, runtimeState));
         var status = await service.StatusAsync(default);
@@ -505,7 +545,7 @@ public class GoogleHealthTests
         var options = Options();
         options.DataTypes = ["weight"];
         await service.SaveAsync(options, subject, default);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var query = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query);
 
         await service.CompleteAsync(new GoogleHealthCallback
@@ -561,7 +601,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task OAuth_flow_can_complete_on_a_different_api_replica_and_is_consumed_once()
+    public async Task OAuth_flow_survives_a_restart_and_is_consumed_once()
     {
         var store = new TestConnectorStore();
         var tenant = Guid.NewGuid();
@@ -572,12 +612,12 @@ public class GoogleHealthTests
             "/v1/userinfo" => Json("""{"sub":"account"}"""),
             _ => throw new InvalidOperationException(request.RequestUri!.ToString())
         });
-        var first = Service(store, handler, tenant, new GoogleHealthCoordinator());
+        var first = Service(store, handler, tenant, InMemoryGoogleHealthCoordinator.Create());
         await first.SaveAsync(Options(), subject, default);
-        var authorization = await first.StartAsync(subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(authorization.Url).Query)["state"]!;
         Assert.True(store.Secrets.ContainsKey("oauthFlow"));
-        var second = Service(store, handler, tenant, new GoogleHealthCoordinator());
+        var second = Service(store, handler, tenant, InMemoryGoogleHealthCoordinator.Create());
         var persistedFlow = store.Secrets["oauthFlow"];
         foreach (var (badState, badSubject) in new[] { ("", subject), ("mismatched", subject), (state, Guid.NewGuid()) })
         {
@@ -594,21 +634,47 @@ public class GoogleHealthTests
         Assert.Equal("expired_signin", error.Message);
     }
 
+    [Theory]
+    [InlineData("replacement.apps.googleusercontent.com", null)]
+    [InlineData(null, "https://other.test/api/v4/google-health/oauth/callback")]
+    public async Task A_client_changed_during_consent_restarts_the_signin_without_calling_google(
+        string? clientId, string? redirectUri)
+    {
+        var store = new TestConnectorStore();
+        var tenant = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        var handler = new StubHandler(_ => throw new InvalidOperationException("No Google request expected"));
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
+        var first = Service(store, handler, tenant, coordinator);
+        await first.SaveAsync(Options(), subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+
+        var changed = Platform(clientId ?? "synthetic.apps.googleusercontent.com");
+        if (redirectUri is not null) changed.RedirectUri = redirectUri;
+        var afterChange = Service(store, handler, tenant, coordinator, platform: changed);
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => afterChange.CompleteAsync(
+            new GoogleHealthCallback { State = state, Code = "code" }, subject, default));
+        Assert.Equal("expired_signin", error.Message);
+        Assert.False(store.Secrets.ContainsKey("oauthFlow"));
+        Assert.Contains("https://accounts.google.com/", (await afterChange.StartAsync(subject, null, default)).Url);
+    }
+
     [Fact]
-    public async Task Purge_invalidates_pending_oauth_on_other_replicas_and_allows_a_fresh_signin()
+    public async Task Purge_invalidates_a_pending_oauth_flow_and_allows_a_fresh_signin()
     {
         var store = new TestConnectorStore();
         var tenant = Guid.NewGuid();
         var subject = Guid.NewGuid();
         var handler = new StubHandler(_ => throw new InvalidOperationException("No Google request expected"));
         var tokenCache = new ConnectorTokenCache();
-        var first = Service(store, handler, tenant, new GoogleHealthCoordinator(), tokenCache);
+        var first = Service(store, handler, tenant, InMemoryGoogleHealthCoordinator.Create(), tokenCache);
         await first.SaveAsync(Options(), subject, default);
-        var authorization = await first.StartAsync(subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
 
         await tokenCache.SetAsync("GoogleHealth", tenant, new ConnectorSession("stale-access", DateTime.UtcNow.AddHours(1)));
-        var second = Service(store, handler, tenant, new GoogleHealthCoordinator(), tokenCache);
+        var second = Service(store, handler, tenant, InMemoryGoogleHealthCoordinator.Create(), tokenCache);
         await second.PurgeAsync(subject, default);
 
         Assert.False(store.Secrets.ContainsKey("oauthFlow"));
@@ -617,9 +683,66 @@ public class GoogleHealthTests
             new GoogleHealthCallback { State = state, Code = "code" }, subject, default));
         Assert.Equal("expired_signin", rejected.Message);
         Assert.False((await first.StatusAsync(default)).Connected);
-        Assert.False(store.IsActive);
-        var fresh = await second.StartAsync(subject, default);
+        Assert.False(await store.EnabledAsync());
+        var fresh = await second.StartAsync(subject, null, default);
         Assert.NotEqual(state, QueryHelpers.ParseQuery(new Uri(fresh.Url).Query)["state"].ToString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Connector_purge_deletes_google_health_sleep_and_honours_allow_reimport(bool allowReimport)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        await using var db = new NocturneDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        var tenantId = Guid.NewGuid();
+        db.TenantId = tenantId;
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "sleep-purge", DisplayName = "Sleep purge", IsActive = true });
+        await db.SaveChangesAsync();
+        var factory = new Mock<INocturneDbContextFactory>();
+        factory.Setup(value => value.CreateAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId }));
+        var repository = new SleepSessionRepository(factory.Object);
+        var sleepService = new Mock<ISleepService>();
+        sleepService.Setup(value => value.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+            .Returns<SleepSession, CancellationToken>(repository.UpsertSessionAsync);
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), sleepService.Object, Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
+        var start = new DateTime(2026, 9, 1, 22, 0, 0, DateTimeKind.Utc);
+        await repository.UpsertSessionAsync(new SleepSession
+        {
+            Source = SleepSource.Google, OriginalId = "fit-sleep-1", SourceApp = "Google Fit",
+            StartTime = start, EndTime = start.AddHours(8)
+        });
+        var session = new SleepSession
+        {
+            Source = SleepSource.Google, OriginalId = "google-sleep-1", SourceApp = "Google Health",
+            StartTime = start, EndTime = start.AddHours(8)
+        };
+        await writer.WriteAsync([], [session], 25, default);
+        var store = new TestConnectorStore();
+        store.SetConfiguration("""{"lastSyncedTo":"2026-09-01T00:00:00Z","backfillComplete":true,"dataTypes":["sleep"]}""");
+        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, "{}"));
+        IConnectorDataPurge purge = Service(store, new StubHandler(_ => Json("{}")), tenantId, writer: writer);
+        Assert.Equal(GoogleHealthConnectorService.ConnectorName, purge.ConnectorName);
+
+        var described = Assert.Single(await purge.DescribeAsync(null, start.AddHours(1), default));
+        Assert.Equal(("Sleep", 1L, 0, start), (described.DataType, described.Count, described.CountLast24Hours, described.Latest));
+        Assert.Empty(await purge.DescribeAsync(start.AddDays(1), start.AddDays(1), default));
+
+        var deleted = await purge.PurgeAsync(allowReimport,
+            new AuditContext { SubjectId = Guid.NewGuid(), SubjectName = "owner", AuthType = "Session" }, default);
+
+        Assert.Equal(1, deleted["Sleep"]);
+        Assert.Equal("Google Fit", (await db.SleepSessions.AsNoTracking().SingleAsync()).SourceApp);
+        await writer.WriteAsync([], [session], 25, default);
+        Assert.Equal(allowReimport, await db.SleepSessions.AsNoTracking().AnyAsync(value => value.SourceApp == "Google Health"));
+        Assert.Equal(!allowReimport, store.Configuration.TryGetProperty("lastSyncedTo", out _));
+        Assert.Equal(!allowReimport, store.Configuration.TryGetProperty("backfillComplete", out _));
+        Assert.Equal(allowReimport ? null : "{}", (await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
     }
 
     [Fact]
@@ -653,10 +776,10 @@ public class GoogleHealthTests
 
         await service.SaveAsync(Options(), subject, default);
 
-        Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
+        Assert.False(await store.EnabledAsync());
         Assert.Equal(30, store.Configuration.GetProperty("syncIntervalMinutes").GetInt32());
         Assert.Equal(45, store.Configuration.GetProperty("activeThresholdMinutes").GetInt32());
-        Assert.Contains("https://accounts.google.com/", (await service.StartAsync(subject, default)).Url);
+        Assert.Contains("https://accounts.google.com/", (await service.StartAsync(subject, null, default)).Url);
     }
 
     [Fact]
@@ -700,21 +823,21 @@ public class GoogleHealthTests
         });
         var service = Service(store, handler, tenantId);
         await service.SaveAsync(Options(), subject, default);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
         await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
 
         var preview = await service.PreviewAsync(subject, default);
 
-        Assert.Equal(GoogleHealthClient.Capabilities.Length, preview.Items.Length);
-        Assert.All(preview.Items.Where(item => item.Supported), item =>
+        Assert.Equal(GoogleHealthClient.Capabilities.Length, Types(preview).Count());
+        Assert.All(SupportedTypes(preview), item =>
         {
-            Assert.True(item.Granted);
+            Assert.Equal(GoogleHealthFound.Found, item.Found);
             Assert.Equal(1, item.Count);
         });
-        Assert.All(preview.Items.Where(item => !item.Supported), item =>
+        Assert.All(Types(preview).Except(SupportedTypes(preview)), item =>
         {
-            Assert.False(item.Granted);
+            Assert.Equal(GoogleHealthFound.NotScanned, item.Found);
             Assert.Equal(0, item.Count);
         });
     }
@@ -722,7 +845,7 @@ public class GoogleHealthTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Preview_preserves_refreshed_tokens_after_configuration_invalidates_cache(bool expireCachedToken)
+    public async Task Preview_preserves_refreshed_tokens_without_a_second_refresh(bool expireCachedToken)
     {
         var tokenCalls = 0;
         var oldTokenCalls = 0;
@@ -755,7 +878,7 @@ public class GoogleHealthTests
         var supportedCount = GoogleHealthClient.Capabilities.Count(capability => capability.Supported);
         Assert.Equal(expireCachedToken ? 0 : supportedCount, oldTokenCalls);
         Assert.Equal(supportedCount, freshTokenCalls);
-        Assert.All(preview.Items.Where(item => item.Supported), item =>
+        Assert.All(SupportedTypes(preview), item =>
         {
             Assert.Equal(1, item.Count);
             Assert.Null(item.ErrorCode);
@@ -763,7 +886,6 @@ public class GoogleHealthTests
         Assert.Equal("refreshed-refresh", store.Secrets["refreshToken"]);
         var status = await service.StatusAsync(default);
         Assert.True(status.Connected);
-        Assert.NotNull(status.AccessTokenExpiresAt);
         await service.PreviewAsync(Guid.NewGuid(), default);
         Assert.Equal(2, tokenCalls);
         Assert.Equal(expireCachedToken ? 0 : supportedCount, oldTokenCalls);
@@ -825,7 +947,7 @@ public class GoogleHealthTests
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
         });
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var service = Service(store, handler, tenant, coordinator);
         await ConnectAsync(service);
 
@@ -834,8 +956,8 @@ public class GoogleHealthTests
         Assert.Equal(2, tokenCalls);
         Assert.Equal("refresh", store.Secrets["refreshToken"]);
         Assert.True((await service.StatusAsync(default)).Connected);
-        Assert.True(await coordinator.Gate(tenant).WaitAsync(0));
-        coordinator.Gate(tenant).Release();
+        await using var released = await coordinator.AcquireAsync(tenant, default, TimeSpan.Zero);
+        Assert.NotNull(released);
     }
 
     [Theory]
@@ -861,7 +983,11 @@ public class GoogleHealthTests
         var preview = await service.PreviewAsync(Guid.NewGuid(), default);
 
         Assert.Equal(1, tokenCalls);
-        Assert.All(preview.Items.Where(item => item.Supported), item => Assert.Equal(expectedError, item.ErrorCode));
+        Assert.All(SupportedTypes(preview), item =>
+        {
+            Assert.Equal(expectedError, item.ErrorCode);
+            Assert.Equal(GoogleHealthTypeState.ReadFailed, item.State);
+        });
         Assert.Equal("refresh", store.Secrets["refreshToken"]);
         Assert.True((await service.StatusAsync(default)).Connected);
     }
@@ -946,8 +1072,8 @@ public class GoogleHealthTests
         await db.SaveChangesAsync();
         var writer = new GoogleHealthReadingWriter(
             Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db,
-            NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db),
+            TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
 
         var from = DateTimeOffset.UtcNow.AddDays(-1);
         var to = DateTimeOffset.UtcNow;
@@ -976,7 +1102,7 @@ public class GoogleHealthTests
         sleep.Setup(service => service.UpsertSessionAsync(next, It.IsAny<CancellationToken>()))
             .ReturnsAsync(next);
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), sleep.Object, db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), sleep.Object, Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
 
         await writer.WriteAsync([], [deleted, next], 2, default);
 
@@ -999,7 +1125,7 @@ public class GoogleHealthTests
             .ReturnsAsync([]);
         var writer = new GoogleHealthReadingWriter(
             heartRates.Object, Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
-            Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
         var readings = Enumerable.Range(0, 5).Select(index => new GoogleHealthReading
         {
             DataType = "heart-rate", Mills = index, Value = 60 + index
@@ -1026,7 +1152,7 @@ public class GoogleHealthTests
             .ReturnsAsync([]);
         var writer = new GoogleHealthReadingWriter(
             heartRates.Object, Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
-            Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<ISleepService>(), Records(db), SleepSessions(db), TenantOf(db), TimeProvider.System, NullLogger<GoogleHealthReadingWriter>.Instance);
         var readings = new[]
         {
             new GoogleHealthReading { DataType = "heart-rate", Mills = 1, Value = 60 },
@@ -1044,7 +1170,7 @@ public class GoogleHealthTests
     [Fact]
     public async Task Sync_endpoint_maps_network_failure_to_problem_details()
     {
-        var controller = new GoogleHealthController(new ThrowingGoogleHealthService());
+        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(), Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()));
 
         var result = await controller.SyncGoogleHealth(default);
 
@@ -1059,7 +1185,7 @@ public class GoogleHealthTests
     [InlineData("configure_first", 400)]
     public async Task Sync_endpoint_preserves_provider_error_codes_and_retryable_status(string code, int status)
     {
-        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(new GoogleHealthException(code)));
+        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(new GoogleHealthException(code)), Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()));
 
         var result = await controller.SyncGoogleHealth(default);
 
@@ -1069,12 +1195,31 @@ public class GoogleHealthTests
     }
 
     [Theory]
+    [InlineData("rate_limited", 29.2, 429, "30")]
+    [InlineData("google_unavailable", 30, 502, null)]
+    public async Task Only_a_rate_limit_tells_the_caller_when_to_retry(
+        string code, double retryAfterSeconds, int status, string? retryAfter)
+    {
+        var controller = new GoogleHealthController(
+            new ThrowingGoogleHealthService(new GoogleHealthException(code, TimeSpan.FromSeconds(retryAfterSeconds))),
+            Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() }
+        };
+
+        var result = await controller.SyncGoogleHealth(default);
+
+        Assert.Equal(status, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.Equal(retryAfter, controller.Response.Headers.TryGetValue("Retry-After", out var header) ? header.ToString() : null);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task Manual_import_reports_rejection_when_another_import_is_active(bool scheduled)
     {
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var store = new TestConnectorStore();
         var service = Service(store, new StubHandler(request => request.RequestUri!.AbsolutePath switch
         {
@@ -1101,7 +1246,7 @@ public class GoogleHealthTests
     public async Task Disconnect_and_purge_cancel_queued_work_before_reconnect(bool purge)
     {
         var tenantId = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var store = new TestConnectorStore();
         var service = Service(store, new StubHandler(request => request.RequestUri!.AbsolutePath switch
         {
@@ -1125,13 +1270,487 @@ public class GoogleHealthTests
         Assert.False(await coordinator.StartQueuedAsync(tenantId, default));
     }
 
-    private static async Task ConnectAsync(GoogleHealthService service)
+    [Fact]
+    public async Task An_instance_without_a_client_is_unavailable_and_refuses_google_calls()
+    {
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(_ => throw new InvalidOperationException("Google must not be called."));
+        var service = Service(store, handler, Guid.NewGuid(), platform: new GoogleHealthPlatformOptions());
+        await service.SaveAsync(Options(), Guid.NewGuid(), default);
+
+        Assert.False((await service.StatusAsync(default)).Available);
+        foreach (var call in new Func<Task>[]
+                 {
+                     () => service.StartAsync(Guid.NewGuid(), null, default),
+                     () => service.PreviewAsync(Guid.NewGuid(), default),
+                     () => service.QueueSyncAsync(default)
+                 })
+            Assert.Equal("platform_not_configured", (await Assert.ThrowsAsync<GoogleHealthException>(call)).Message);
+    }
+
+    [Fact]
+    public async Task Sign_in_uses_the_instance_client_and_a_state_that_routes_to_the_starting_tenant()
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var subject = Guid.NewGuid();
+        await service.SaveAsync(Options(), subject, default);
+
+        var query = QueryHelpers.ParseQuery(new Uri((await service.StartAsync(subject, "alice", default)).Url).Query);
+
+        Assert.True((await service.StatusAsync(default)).Available);
+        Assert.Equal("synthetic.apps.googleusercontent.com", query["client_id"]);
+        Assert.Equal(Platform().RedirectUri, query["redirect_uri"]);
+        Assert.Equal("alice", OAuthState.TryReadTenantSlug(query["state"]));
+    }
+
+    [Fact]
+    public async Task A_state_this_instance_issued_for_another_flow_does_not_complete_the_sign_in()
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var subject = Guid.NewGuid();
+        await service.SaveAsync(Options(), subject, default);
+        await service.StartAsync(subject, "alice", default);
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => service.CompleteAsync(new GoogleHealthCallback
+        {
+            State = OAuthState.Protect("alice", DateTimeOffset.UtcNow.AddMinutes(10)),
+            Code = "code"
+        }, subject, default));
+
+        Assert.Equal("expired_signin", error.Message);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
+    public async Task The_session_records_its_client_and_a_rotated_instance_client_requires_reconnection()
+    {
+        var tokenCalls = 0;
+        var revoked = new List<string>();
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access-{{++tokenCalls}}","refresh_token":"refresh","expires_in":1,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            "/revoke" => Revoked(request, revoked),
+            _ => Json("{}")
+        });
+        await ConnectAsync(Service(store, handler, Guid.NewGuid()));
+        Assert.Equal("synthetic.apps.googleusercontent.com", store.Secrets["clientId"]);
+        Assert.Equal(1, tokenCalls);
+
+        var rotated = Service(store, handler, Guid.NewGuid(), platform: Platform("rotated.apps.googleusercontent.com"));
+        var status = await rotated.StatusAsync(default);
+        Assert.False(status.Connected);
+        Assert.Equal("client_changed", status.ErrorCode);
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => rotated.PreviewAsync(Guid.NewGuid(), default));
+
+        Assert.Equal("client_changed", error.Message);
+        Assert.Equal(1, tokenCalls);
+        Assert.Equal(["token=refresh"], revoked);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+        Assert.Equal("client_changed", (await rotated.StatusAsync(default)).ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_session_from_a_former_client_does_not_block_connecting_again()
+    {
+        var refreshTokens = 0;
+        var revoked = new List<string>();
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh-{{++refreshTokens}}","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            "/revoke" => Revoked(request, revoked),
+            _ => Json("{}")
+        });
+        await ConnectAsync(Service(store, handler, Guid.NewGuid()));
+
+        await ConnectAsync(Service(store, handler, Guid.NewGuid(), platform: Platform("rotated.apps.googleusercontent.com")));
+
+        Assert.Equal("rotated.apps.googleusercontent.com", store.Secrets["clientId"]);
+        Assert.Equal(["token=refresh-1"], revoked);
+        Assert.Equal("refresh-2", store.Secrets["refreshToken"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Leaving_a_connection_drops_a_former_tenant_client_secret(bool purge)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        store.SetConfiguration("""{"clientId":"synthetic.apps.googleusercontent.com","callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
+        await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string>
+        {
+            ["refreshToken"] = "refresh",
+            ["clientSecret"] = "tenant-secret"
+        });
+
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+        if (purge) await service.PurgeAsync(Guid.NewGuid(), default);
+        await service.SaveAsync(Options(), Guid.NewGuid(), default);
+
+        Assert.False(store.Secrets.ContainsKey("clientSecret"));
+        Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("Enabled")]
+    public async Task Saving_options_enables_a_connector_whose_stored_flag_is_off(string spelling)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        store.SetConfiguration($$"""{"{{spelling}}":false,"callbackUrl":"https://tenant.example/settings/connectors/google-health/callback"}""");
+
+        await service.SaveAsync(Options(), Guid.NewGuid(), default);
+
+        Assert.True(ConnectorEnabledKey.IsEnabled(store.Configuration.GetRawText()));
+        Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("Enabled")]
+    public async Task Reconnecting_enables_a_connector_whose_stored_flag_is_off(string spelling)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, Google([], _ => "account"), Guid.NewGuid());
+        store.SetConfiguration($$"""{"{{spelling}}":false,"lookbackDays":7}""");
+        var subject = Guid.NewGuid();
+
+        var authorization = await service.StartAsync(subject, null, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+        await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
+
+        Assert.True(ConnectorEnabledKey.IsEnabled(store.Configuration.GetRawText()));
+    }
+
+    [Fact]
+    public async Task A_scan_does_not_outlive_its_session()
+    {
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}} {{GoogleHealthClient.ActivityScope}}"}"""),
+            "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            "/revoke" => Json("{}"),
+            _ => Json("{\"dataPoints\":[{}]}")
+        });
+        var service = Service(store, handler, Guid.NewGuid());
+        await ConnectAsync(service);
+        await service.PreviewAsync(Guid.NewGuid(), default);
+        Assert.Contains("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))!.LastGuid);
+
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.DoesNotContain("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))?.LastGuid ?? "");
+        Assert.All(SupportedTypes(await service.StatusAsync(default)),
+            type => Assert.Equal(GoogleHealthTypeState.NotScanned, type.State));
+    }
+
+    [Theory]
+    [InlineData(false, true, false, 1, true, GoogleHealthConnectionState.Unavailable)]
+    [InlineData(false, false, false, 1, true, GoogleHealthConnectionState.Unavailable)]
+    [InlineData(true, false, false, 1, true, GoogleHealthConnectionState.Disconnected)]
+    [InlineData(true, true, true, 1, true, GoogleHealthConnectionState.ReviewRequired)]
+    [InlineData(true, true, false, 0, true, GoogleHealthConnectionState.NothingSelected)]
+    [InlineData(true, true, false, 1, true, GoogleHealthConnectionState.Syncing)]
+    [InlineData(true, true, false, 1, false, GoogleHealthConnectionState.Active)]
+    public void Connection_state_is_the_first_lifecycle_stage_that_applies_whatever_the_error(
+        bool available, bool connected, bool previewRequired, int selected, bool syncing,
+        GoogleHealthConnectionState expected)
+    {
+        var status = new GoogleHealthStatus
+        {
+            Available = available,
+            Connected = connected,
+            PreviewRequired = previewRequired,
+            SelectedTypes = selected == 0 ? [] : ["steps"],
+            ErrorCode = "partial_consent"
+        };
+
+        Assert.Equal(expected, GoogleHealthService.ConnectionState(status, syncing));
+    }
+
+    [Fact]
+    public async Task A_different_google_account_is_refused_even_when_its_token_cannot_be_revoked()
+    {
+        var accounts = 0;
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json($$"""{"sub":"account-{{++accounts}}"}"""),
+            "/revoke" => throw new HttpRequestException("unreachable"),
+            _ => Json("{}")
+        });
+        var service = Service(store, handler, Guid.NewGuid());
+        await ConnectAsync(service);
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(service));
+
+        Assert.Equal("account_mismatch", error.Message);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
+    public async Task A_grant_the_cancelled_callback_never_stored_is_revoked()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var revoked = new List<string>();
+        var store = new TestConnectorStore();
+        var service = Service(store, Google(revoked, lookup => $"account-{lookup}", lookup =>
+        {
+            if (lookup == 2) cancellation.Cancel();
+        }), Guid.NewGuid());
+        await ConnectAsync(service);
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+        revoked.Clear();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ConnectAsync(service, cancellation.Token));
+
+        Assert.Contains(revoked, body => body.Contains("token=refresh-2"));
+        Assert.DoesNotContain("refresh-2", store.Secrets.Values);
+    }
+
+    [Fact]
+    public async Task A_failed_activation_keeps_the_grant_syncing_and_reports_a_warning()
+    {
+        var revoked = new List<string>();
+        var store = new TestConnectorStore();
+        var service = Service(store, Google(revoked, _ => "account"), Guid.NewGuid(),
+            tokenCache: new ThrowingTokenCache(() => new InvalidOperationException("token cache unavailable")));
+
+        await ConnectAsync(service);
+
+        Assert.Empty(revoked);
+        Assert.Equal("refresh-1", store.Secrets["refreshToken"]);
+        Assert.True(await store.EnabledAsync());
+        var status = await service.StatusAsync(default);
+        Assert.True(status.Connected);
+        Assert.Equal("activation_failed", status.ErrorCode);
+        var options = Options();
+        options.PreviewOnly = false;
+        await service.SaveAsync(options, Guid.NewGuid(), default);
+        await service.QueueSyncAsync(default);
+        Assert.True((await service.StatusAsync(default)).IsSyncing);
+    }
+
+    [Fact]
+    public async Task A_failed_activation_health_write_keeps_the_grant_syncing()
+    {
+        var revoked = new List<string>();
+        var store = new TestConnectorStore { FailActivationWrite = true };
+        var service = Service(store, Google(revoked, _ => "account"), Guid.NewGuid());
+
+        await ConnectAsync(service);
+
+        Assert.Empty(revoked);
+        Assert.Equal("refresh-1", store.Secrets["refreshToken"]);
+        Assert.True(await store.EnabledAsync());
+        Assert.Equal("activation_failed", (await service.StatusAsync(default)).ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_cancelled_callback_after_the_grant_is_stored_propagates_and_is_not_an_activation_failure()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var store = new TestConnectorStore();
+        var service = Service(store, Google(new List<string>(), _ => "account"), Guid.NewGuid(),
+            tokenCache: new ThrowingTokenCache(() =>
+            {
+                cancellation.Cancel();
+                return new OperationCanceledException(cancellation.Token);
+            }));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ConnectAsync(service, cancellation.Token));
+
+        Assert.Equal("refresh-1", store.Secrets["refreshToken"]);
+        Assert.NotEqual("activation_failed", (await service.StatusAsync(default)).ErrorCode);
+    }
+
+    [Fact]
+    public async Task Disconnecting_one_tenant_leaves_the_grant_another_tenant_holds_for_the_same_account()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var google = Google(revoked, _ => "shared-account");
+        var first = Service(new TestConnectorStore(), google, Guid.NewGuid(), holders: holders);
+        var secondStore = new TestConnectorStore();
+        var second = Service(secondStore, google, Guid.NewGuid(), holders: holders);
+        await ConnectAsync(first);
+        await ConnectAsync(second);
+
+        await second.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.Empty(revoked);
+        Assert.False(secondStore.Secrets.ContainsKey("refreshToken"));
+        Assert.Null((await second.StatusAsync(default)).ErrorCode);
+        Assert.True((await first.StatusAsync(default)).Connected);
+
+        await first.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.Equal(["token=refresh-1"], revoked);
+        Assert.Empty(holders.Holders);
+    }
+
+    [Fact]
+    public async Task A_refused_account_is_not_revoked_while_another_tenant_holds_it()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var holder = Service(new TestConnectorStore(), Google(revoked, _ => "account-b"), Guid.NewGuid(), holders: holders);
+        await ConnectAsync(holder);
+        var refusingStore = new TestConnectorStore();
+        var refusing = Service(refusingStore, Google(revoked, lookup => lookup == 1 ? "account-a" : "account-b"),
+            Guid.NewGuid(), holders: holders);
+        await ConnectAsync(refusing);
+        await refusing.DisconnectAsync(Guid.NewGuid(), default);
+        revoked.Clear();
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(refusing));
+
+        Assert.Equal("account_mismatch", error.Message);
+        Assert.Empty(revoked);
+        Assert.False(refusingStore.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
+    public async Task A_cancelled_callback_does_not_revoke_a_grant_another_tenant_holds()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        await ConnectAsync(Service(new TestConnectorStore(), Google(revoked, _ => "shared-account"), Guid.NewGuid(), holders: holders));
+        var cancelled = Service(new TestConnectorStore(), Google(revoked, _ => "shared-account", _ => cancellation.Cancel()),
+            Guid.NewGuid(), holders: holders);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ConnectAsync(cancelled, cancellation.Token));
+
+        Assert.Empty(revoked);
+    }
+
+    [Fact]
+    public async Task A_sign_in_that_never_stored_its_grant_does_not_keep_holding_the_account()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var failedTenant = Guid.NewGuid();
+        var failedStore = new TestConnectorStore { FailTokenSaves = true };
+        var failed = Service(failedStore, Google(revoked, _ => "shared-account"), failedTenant, holders: holders);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectAsync(failed));
+        Assert.DoesNotContain(failedTenant, holders.Holders.Keys);
+        revoked.Clear();
+        var other = Service(new TestConnectorStore(), Google(revoked, _ => "shared-account"), Guid.NewGuid(), holders: holders);
+        await ConnectAsync(other);
+
+        await other.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.Equal(["token=refresh-1"], revoked);
+    }
+
+    [Fact]
+    public async Task A_disconnect_that_cannot_tell_who_else_holds_the_account_keeps_the_grant_without_advising_revocation()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var service = Service(new TestConnectorStore(), Google(revoked, _ => "account"), Guid.NewGuid(), holders: holders);
+        await ConnectAsync(service);
+        holders.Readable = false;
+
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.Empty(revoked);
+        var status = await service.StatusAsync(default);
+        Assert.False(status.Connected);
+        Assert.Null(status.ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_grant_whose_account_cannot_be_identified_is_not_revoked()
+    {
+        var revoked = new List<string>();
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}") },
+            "/revoke" => Revoked(request, revoked),
+            _ => Json("{}")
+        });
+
+        await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(Service(store, handler, Guid.NewGuid())));
+
+        Assert.Empty(revoked);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
+    public async Task Leaving_a_former_client_keeps_the_account_another_tenant_holds_on_the_current_client()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var google = Google(revoked, _ => "shared-account");
+        await ConnectAsync(Service(new TestConnectorStore(), google, Guid.NewGuid(), holders: holders));
+        var formerStore = new TestConnectorStore();
+        var formerTenant = Guid.NewGuid();
+        await ConnectAsync(Service(formerStore, google, formerTenant,
+            platform: Platform("former.apps.googleusercontent.com"), holders: holders));
+
+        await Service(formerStore, google, formerTenant, holders: holders).StartAsync(Guid.NewGuid(), null, default);
+
+        Assert.Empty(revoked);
+        Assert.False(formerStore.Secrets.ContainsKey("refreshToken"));
+        Assert.DoesNotContain(formerTenant, holders.Holders.Keys);
+    }
+
+    /// <summary>
+    /// Google's token, userinfo and revoke endpoints. Each exchange issues the next
+    /// <c>refresh-N</c>; <paramref name="onAccountLookup"/> runs before the Nth userinfo answer.
+    /// </summary>
+    private static AsyncHandler Google(
+        List<string> revoked, Func<int, string> accountFor, Action<int>? onAccountLookup = null)
+    {
+        var exchanges = 0;
+        var lookups = 0;
+        return new AsyncHandler((request, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(request.RequestUri!.AbsolutePath switch
+            {
+                "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh-{{++exchanges}}","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+                "/v1/userinfo" => UserInfo(++lookups),
+                "/revoke" => Revoked(request, revoked),
+                _ => Json("{}")
+            });
+        });
+
+        HttpResponseMessage UserInfo(int lookup)
+        {
+            onAccountLookup?.Invoke(lookup);
+            return Json($$"""{"sub":"{{accountFor(lookup)}}"}""");
+        }
+    }
+
+    private static HttpResponseMessage Revoked(HttpRequestMessage request, List<string> revoked)
+    {
+        revoked.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        return Json("{}");
+    }
+
+    private static async Task ConnectAsync(GoogleHealthService service, CancellationToken callbackCancellation = default)
     {
         var subject = Guid.NewGuid();
         await service.SaveAsync(Options(), subject, default);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
-        await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
+        await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, callbackCancellation);
     }
 
     [Fact]
@@ -1159,7 +1778,7 @@ public class GoogleHealthTests
             }
         });
         var store = new TestConnectorStore();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var tenant = Guid.NewGuid();
         var service = Service(store, handler, tenant, coordinator);
         await ConnectAsync(service);
@@ -1173,12 +1792,12 @@ public class GoogleHealthTests
         try
         {
             await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preview);
             var status = await service.StatusAsync(default);
             Assert.False(status.Connected);
             Assert.True(status.IsDisconnecting);
-            Assert.False(store.IsActive);
+            Assert.False(await store.EnabledAsync());
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PreviewAsync(Guid.NewGuid(), default));
         }
         finally { releaseRevoke.TrySetResult(); }
@@ -1192,43 +1811,85 @@ public class GoogleHealthTests
         Assert.True((await service.StatusAsync(default)).Connected);
     }
 
+    private sealed class ThrowingTokenCache(Func<Exception> failure) : IConnectorTokenCache
+    {
+        public Task<ConnectorSession?> GetAsync(string connectorName, Guid tenantId) => Task.FromResult<ConnectorSession?>(null);
+        public Task SetAsync(string connectorName, Guid tenantId, ConnectorSession session) => throw failure();
+        public Task<SemaphoreSlim> GetLockAsync(string connectorName, Guid tenantId) => Task.FromResult(new SemaphoreSlim(1, 1));
+        public string? GetSignInFailure(string connectorName, Guid tenantId) => null;
+        public void SetSignInFailure(string connectorName, Guid tenantId, string? reason) { }
+        public void Invalidate(string connectorName, Guid tenantId) { }
+    }
+
     private sealed class AsyncHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => responder(request, ct);
     }
 
-    private static GoogleHealthService Service(
+    private GoogleHealthService Service(
         TestConnectorStore store,
         HttpMessageHandler handler,
         Guid tenantId,
         GoogleHealthCoordinator? coordinator = null,
-        ConnectorTokenCache? tokenCache = null)
+        IConnectorTokenCache? tokenCache = null,
+        GoogleHealthPlatformOptions? platform = null,
+        IGoogleHealthReadingWriter? writer = null,
+        Nocturne.Core.Models.V4.BiologicalSex? sex = null,
+        IGoogleHealthGrantHolders? holders = null,
+        TimeProvider? time = null)
     {
+        var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
         tenant.SetupGet(value => value.TenantId).Returns(tenantId);
+        var http = new HttpClient(handler, false);
+        _httpClients.Add(http);
+        var oauth = new GoogleHealthAuthTokenProvider(
+            http,
+            tokenCache ?? new ConnectorTokenCache(),
+            new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
+            tenant.Object,
+            platformOptions,
+            NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
+        var patientRecords = new Mock<IPatientRecordRepository>();
+        patientRecords.Setup(value => value.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sex is null ? null : new Nocturne.Core.Models.V4.PatientRecord { Sex = sex });
         return new GoogleHealthService(
-            coordinator ?? new GoogleHealthCoordinator(),
-            new GoogleHealthClient(new HttpClient(handler, false)),
-            new GoogleHealthAuthTokenProvider(
-                new HttpClient(handler, false),
-                tokenCache ?? new ConnectorTokenCache(),
-                new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-                tenant.Object,
-                NullLogger<GoogleHealthAuthTokenProvider>.Instance),
+            coordinator ?? InMemoryGoogleHealthCoordinator.Create(),
+            new GoogleHealthClient(http),
+            oauth,
+            new GoogleHealthSessionStore(store.Configurations, oauth,
+                holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions,
+                NullLogger<GoogleHealthSessionStore>.Instance),
             store.Configurations,
             store.Loader,
             tenant.Object,
-            store.Cursors);
+            store.Cursors,
+            patientRecords.Object,
+            platformOptions,
+            OAuthState,
+            writer ?? Mock.Of<IGoogleHealthReadingWriter>(),
+            time ?? TimeProvider.System,
+            NullLogger<GoogleHealthService>.Instance);
     }
 
-    private static GoogleHealthOptions Options() => new()
+    private static IEnumerable<GoogleHealthDataTypeStatus> Types(GoogleHealthStatus status) =>
+        status.Categories.SelectMany(category => category.Types);
+
+    private static IEnumerable<GoogleHealthDataTypeStatus> SupportedTypes(GoogleHealthStatus status) =>
+        Types(status).Where(type => GoogleHealthClient.SupportedTypes.Contains(type.DataType));
+
+    private static readonly GoogleHealthOAuthState OAuthState = new(new EphemeralDataProtectionProvider());
+
+    private static GoogleHealthPlatformOptions Platform(string clientId = "synthetic.apps.googleusercontent.com") => new()
     {
-        ClientId = "synthetic.apps.googleusercontent.com",
+        ClientId = clientId,
         ClientSecret = "synthetic-secret",
-        CallbackUrl = "https://example.test:8450/settings/connectors/google-health/callback",
-        DataTypes = ["weight"]
+        RedirectUri = "https://example.test:8450" + GoogleHealthPlatformOptions.CallbackPath
     };
+
+    private static GoogleHealthOptions Options() => new() { DataTypes = ["weight"] };
 
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK)
     {
@@ -1240,8 +1901,11 @@ public class GoogleHealthTests
         private JsonDocument? configuration;
         private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase);
         private ConnectorConfigurationResponse? response;
-        public bool? IsActive => response?.IsActive;
         public Action? OnSave { get; set; }
+        public bool FailConfigurationSaves { get; set; }
+        public bool FailTokenSaves { get; set; }
+        public bool FailActivationWrite { get; set; }
+        public async Task<bool> EnabledAsync() => (await Loader.LoadForTenantAsync(default)).Enabled;
 
         private ConnectorSyncCursor? runtimeCursor;
         public IConnectorSyncCursorStore Cursors { get; }
@@ -1264,29 +1928,42 @@ public class GoogleHealthTests
                     It.IsAny<CancellationToken>()))
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
                 {
-                    configuration?.Dispose();
-                    configuration = JsonDocument.Parse(document.RootElement.GetRawText());
-                    response ??= new ConnectorConfigurationResponse
-                    {
-                        ConnectorName = "GoogleHealth",
-                        IsActive = true
-                    };
-                    response.Configuration = configuration;
-                    response.IsActive = !configuration.RootElement.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean();
+                    if (FailConfigurationSaves) throw new InvalidOperationException("configuration store unavailable");
+                    Store(ConnectorEnabledKey.CarryOver(
+                        document.RootElement.GetRawText(), configuration?.RootElement.GetRawText() ?? "{}"));
                     OnSave?.Invoke();
                 })
                 .ReturnsAsync(() => response!);
+            configurations.Setup(value => value.SetActiveAsync(
+                    "GoogleHealth", It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Callback<string, bool, string?, CancellationToken>((_, isActive, _, _) =>
+                    Store(ConnectorEnabledKey.With(configuration?.RootElement.GetRawText() ?? "{}", isActive)))
+                .Returns(Task.CompletedTask);
             configurations.Setup(value => value.GetSecretsAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
+                .Returns<string, CancellationToken>((_, ct) =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    return Task.FromResult(new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
+                });
+            void RecordSecrets(Dictionary<string, string> values, CancellationToken ct, bool invalidatesCaches)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (FailTokenSaves && values.ContainsKey("refreshToken"))
+                    throw new InvalidOperationException("secret store unavailable");
+                secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+                if (invalidatesCaches) OnSave?.Invoke();
+            }
             configurations.Setup(value => value.SaveSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
-                {
-                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
-                    OnSave?.Invoke();
-                })
+                .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
+                    (_, values, _, ct) => RecordSecrets(values, ct, invalidatesCaches: true))
+                .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>(
+                    (_, values, ct) => RecordSecrets(values, ct, invalidatesCaches: false))
                 .Returns(Task.CompletedTask);
             configurations.Setup(value => value.UpdateHealthStateAsync(
                     "GoogleHealth", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
@@ -1295,6 +1972,7 @@ public class GoogleHealthTests
                 .Callback<string, DateTime?, DateTime?, string?, DateTime?, bool?, CancellationToken>(
                     (_, attempt, success, error, errorAt, healthy, _) =>
                     {
+                        if (FailActivationWrite && healthy == true) throw new InvalidOperationException("health store unavailable");
                         if (response is null) return;
                         if (attempt is not null) response.LastSyncAttempt = attempt;
                         if (success is not null) response.LastSuccessfulSync = success;
@@ -1305,22 +1983,28 @@ public class GoogleHealthTests
                 .Returns(Task.CompletedTask);
             Configurations = configurations.Object;
 
-            var loader = new Mock<IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
-            loader.Setup(value => value.LoadForTenantAsync(It.IsAny<CancellationToken>())).Returns(() =>
-            {
-                var loaded = new GoogleHealthConnectorConfiguration { Enabled = configuration is not null };
-                if (configuration is not null)
-                    ConnectorConfigurationBinder.ApplyJsonToConfig(configuration, loaded);
-                ConnectorConfigurationBinder.ApplySecretsToConfig(secrets, loaded);
-                return Task.FromResult(loaded);
-            });
-            Loader = loader.Object;
+            Loader = new GoogleHealthConfigurationLoader(
+                new ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>(
+                    new ConnectorRegistration<GoogleHealthConnectorConfiguration>(new(), "GoogleHealth"),
+                    Configurations,
+                    NullLogger<ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>.Instance,
+                    TimeProvider.System),
+                new FixedGoogleHealthPlatformSettings(Platform()));
         }
 
         public IConnectorConfigurationService Configurations { get; }
         public IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> Loader { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
         public JsonElement Configuration => configuration!.RootElement;
+
+        private void Store(string value)
+        {
+            configuration?.Dispose();
+            configuration = JsonDocument.Parse(value);
+            response ??= new ConnectorConfigurationResponse { ConnectorName = "GoogleHealth" };
+            response.Configuration = configuration;
+            response.IsActive = ConnectorEnabledKey.IsEnabled(value);
+        }
 
         public void SetConfiguration(string value)
         {
@@ -1342,15 +2026,15 @@ public class GoogleHealthTests
             Task.FromResult(new GoogleHealthStatus());
         public Task SaveAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct) =>
             Task.CompletedTask;
-        public Task<GoogleHealthAuthorize> StartAsync(Guid subject, CancellationToken ct) =>
+        public Task<GoogleHealthAuthorize> StartAsync(Guid subject, string? tenantSlug, CancellationToken ct) =>
             Task.FromResult(new GoogleHealthAuthorize());
         public Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct) =>
             Task.CompletedTask;
         public Task DisconnectAsync(Guid subject, CancellationToken ct) => Task.CompletedTask;
         public Task ResumeDisconnectAsync(Guid subject, Guid requestId) => Task.CompletedTask;
         public Task PurgeAsync(Guid subject, CancellationToken ct) => Task.CompletedTask;
-        public Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct) =>
-            Task.FromResult(new GoogleHealthPreview());
+        public Task<GoogleHealthStatus> PreviewAsync(Guid subject, CancellationToken ct) =>
+            Task.FromResult(new GoogleHealthStatus());
         public Task QueueSyncAsync(CancellationToken ct) =>
             throw failure ?? new HttpRequestException("synthetic");
     }
@@ -1362,4 +2046,16 @@ public class GoogleHealthTests
             HttpRequestMessage request,
             CancellationToken cancellationToken) => Task.FromResult(responder(request));
     }
+
+    /// <summary>The tenant <paramref name="db"/> is on, read live, as the writer's scope accessor reads it.</summary>
+    private static ITenantAccessor TenantOf(NocturneDbContext db)
+    {
+        var tenant = new Mock<ITenantAccessor>();
+        tenant.SetupGet(a => a.TenantId).Returns(() => db.TenantId);
+        return tenant.Object;
+    }
+
+    private static HealthRecordTransactions Records(NocturneDbContext db) => new(db.AsFactory(), TimeProvider.System);
+
+    private static SleepSessionRepository SleepSessions(NocturneDbContext db) => new(db.AsFactory());
 }

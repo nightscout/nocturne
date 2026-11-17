@@ -1,48 +1,50 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { AvailableConnector } from "$lib/api/generated/nocturne-api-client";
+  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,
     getSchema as getConnectorSchema,
     getEffectiveConfiguration as getConnectorEffectiveConfig,
     setActive as setConnectorActive,
-  } from "$lib/api/generated/configurations.generated.remote";
-  import { normalizeConnectorJsonSchema, type JsonSchema } from "$lib/utils/connector-json-schema";
+  } from "#lib/api/generated/configurations.generated.remote.js";
+  import { normalizeConnectorJsonSchema, type JsonSchema } from "#lib/utils/connector-json-schema.js";
   import {
     saveConfiguration,
     saveSecrets,
-  } from "$lib/api/generated/configurations.generated.remote";
+  } from "#lib/api/generated/configurations.generated.remote.js";
   import {
     getServicesOverview,
     getConnectorCapabilities,
     getConnectorDataSummary,
-  } from "$lib/api/generated/services.generated.remote";
-  import { getMyPermissions } from "$lib/api/generated/myPermissions.generated.remote";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/services.generated.remote.js";
+  import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import ConnectorConfigForm from "$lib/components/settings/ConnectorConfigForm.svelte";
-  import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
-  import GlookoXtConnectPanel from "$lib/components/connectors/GlookoXtConnectPanel.svelte";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import ConnectorConfigForm from "#lib/components/settings/ConnectorConfigForm.svelte";
+  import CareLinkConnectPanel from "#lib/components/connectors/CareLinkConnectPanel.svelte";
+  import GlookoXtConnectPanel from "#lib/components/connectors/GlookoXtConnectPanel.svelte";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
 
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Lock from "@lucide/svelte/icons/lock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
-  import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import ConnectorDangerZone from "#lib/components/connectors/ConnectorDangerZone.svelte";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   interface Props {
     /** Pre-select a specific connector (skips selection grid) */
@@ -53,6 +55,8 @@
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
     showToggle?: boolean;
+    /** Show the configuration form. False for a connector that has nothing to configure. Default: true */
+    showConfiguration?: boolean;
     /** Show danger zone (delete config/data). Default: false */
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
@@ -61,6 +65,8 @@
     primaryAction?: "save-and-finish" | "save-only";
     /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /** See the config form's `saveLabel`. */
+    saveLabel?: string;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -72,10 +78,12 @@
     onComplete,
     onCancel,
     showToggle = connectorId !== undefined,
+    showConfiguration = true,
     showDangerZone = false,
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
+    saveLabel,
     extras,
   }: Props = $props();
 
@@ -186,7 +194,7 @@
 
   // --- UI state ---
   let isSaving = $state(false);
-  let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(
+  let saveMessage = $state<{ type: "success" | "error"; text: string; wash?: boolean } | null>(
     null
   );
 
@@ -316,6 +324,7 @@
       saveMessage = {
         type: "success",
         text: active ? "Connector enabled" : "Connector disabled",
+        wash: active,
       };
     } catch (e) {
       saveMessage = {
@@ -392,7 +401,7 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage}
+        {#if canManage && showConfiguration}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -400,33 +409,15 @@
       </div>
 
       <!-- Save Message -->
-      {#if saveMessage}
-        <Card variant={saveMessage.type === "error" ? "destructive" : "success"}>
+      {#if saveMessage?.type === "error"}
+        <Card variant="destructive">
           <CardContent class="flex items-center gap-3 py-3">
-            {#if saveMessage.type === "error"}
-              <AlertCircle class="h-5 w-5 text-destructive" />
-            {:else}
-              <div
-                class="h-5 w-5 rounded-full bg-success flex items-center justify-center"
-              >
-                <svg
-                  class="h-3 w-3 text-success-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="3"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-            {/if}
+            <AlertCircle class="h-5 w-5 text-destructive" />
             <p class="text-sm">{saveMessage.text}</p>
           </CardContent>
         </Card>
+      {:else if saveMessage}
+        <SuccessBanner wash={saveMessage.wash}>{saveMessage.text}</SuccessBanner>
       {/if}
 
       <!-- Enable/Disable Toggle -->
@@ -434,7 +425,7 @@
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
-              <Label size="lg">Enable Connector</Label>
+              <Label size="lg">Enable connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
               </p>
@@ -464,7 +455,7 @@
             </p>
           </CardContent>
         </Card>
-      {:else if hasRuntimeConfig}
+      {:else if showConfiguration && hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -473,28 +464,18 @@
           {hasSecrets}
           {showEnvVarHints}
           credentials={isGlookoXt ? glookoXtCredentials : undefined}
+          {saveLabel}
           onSave={handleSave}
         />
-      {:else}
-        <Card>
-          <CardContent class="py-8">
-            <div class="text-center">
-              <AlertCircle
-                class="h-12 w-12 mx-auto mb-4 text-muted-foreground"
-              />
-              <p class="font-medium">No Runtime Configuration Available</p>
-              <p class="text-sm text-muted-foreground mt-2">
-                This connector does not support runtime configuration.
-                {#if connectorInfo?.documentationUrl}
-                  Check the documentation for environment variable
-                  configuration.
-                {:else}
-                  Configure via environment variables on the server.
-                {/if}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {:else if showConfiguration}
+        <EmptyState
+          art="plug"
+          variant="card"
+          title="No runtime configuration available"
+          body={connectorInfo?.documentationUrl
+            ? "This connector does not support runtime configuration. Check the documentation for environment variable configuration."
+            : "This connector does not support runtime configuration. Configure via environment variables on the server."}
+        />
       {/if}
 
       <!-- Extras snippet -->
@@ -510,7 +491,7 @@
       {#if showCapabilities && connectorCapabilities}
         <Card>
           <CardHeader>
-            <CardTitle>Sync Capabilities</CardTitle>
+            <CardTitle>Sync capabilities</CardTitle>
             <CardDescription>
               What this connector supports for manual sync
             </CardDescription>

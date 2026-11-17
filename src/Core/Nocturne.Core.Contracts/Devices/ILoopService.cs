@@ -16,12 +16,13 @@ public interface ILoopService
     /// <param name="data">Loop notification data containing event type and parameters</param>
     /// <param name="loopSettings">Loop settings from user profile containing device token and bundle ID</param>
     /// <param name="remoteAddress">IP address of the requesting client</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    /// <param name="isApnsProduction">The profile's APNs environment; when null the configured environment decides</param>
     /// <returns>Loop notification response indicating success or failure</returns>
     Task<LoopNotificationResponse> SendNotificationAsync(
         LoopNotificationData data,
         LoopProfileSettings? loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken = default
     );
 
@@ -32,9 +33,5 @@ public interface ILoopService
     /// <returns>True if configuration is valid, false otherwise</returns>
     bool IsConfigurationValid();
 
-    /// <summary>
-    /// Gets the current Loop configuration status for debugging
-    /// </summary>
-    /// <returns>Configuration status information</returns>
     object GetConfigurationStatus();
 }

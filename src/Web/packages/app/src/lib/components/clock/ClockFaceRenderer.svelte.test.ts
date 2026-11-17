@@ -1,11 +1,19 @@
 import { render } from "vitest-browser-svelte";
-import { describe, it, expect } from "vitest";
-import type { ClockFaceConfig } from "$lib/api";
-import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-import { TRACKER_SHOW_OPTIONS } from "$lib/clock-builder";
+import { describe, it, expect, vi } from "vitest";
+import type { ClockFaceConfig } from "#lib/api/index.js";
+import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+import { TRACKER_SHOW_OPTIONS } from "#lib/clock-builder/index.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { formatLocale } from "#lib/utils/formatting.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";
+
+const sevenMinutesAgo = new Intl.RelativeTimeFormat(formatLocale(), {
+  style: "narrow",
+  numeric: "auto",
+}).format(-7, "minute");
 
 const config: ClockFaceConfig = {
   rows: [
@@ -26,6 +34,7 @@ const reading: ClockGlucoseSource = {
   direction: "Flat",
   lastUpdated: Date.now() - 7 * 60_000,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const noReading: ClockGlucoseSource = {
@@ -34,6 +43,7 @@ const noReading: ClockGlucoseSource = {
   direction: "",
   lastUpdated: null,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 /** Computed value of a CSS variable, to compare a rendered colour against. */
@@ -77,8 +87,20 @@ describe("ClockFaceRenderer", () => {
     const { text, glucoseColor } = face(reading);
 
     expect(text).toContain("55 mg/dL");
-    expect(text).toContain("7m ago");
+    expect(text).toContain(sevenMinutesAgo);
     expect(glucoseColor("55 mg/dL")).not.toBe(WHITE);
+  });
+
+  it("colours the reading by the tenant's thresholds when the source carries them", () => {
+    const at75 = { ...reading, currentBG: 75 };
+    const fallbackColor = face(at75).glucoseColor("75 mg/dL");
+    const tenantColor = face({
+      ...at75,
+      thresholds: { ...resolveChartThresholds(), low: 80, high: 160 },
+    }).glucoseColor("75 mg/dL");
+
+    expect(fallbackColor).toBe(cssColor("--glucose-in-range"));
+    expect(tenantColor).toBe(cssColor("--glucose-low"));
   });
 
   it("renders in the face's units, not the viewer's", () => {
@@ -90,13 +112,62 @@ describe("ClockFaceRenderer", () => {
     expect(face(reading, mmolFace).text).toContain("3.1 mmol/L");
   });
 
+  it("draws a chart's axis ticks in the face's units, not the viewer's", async () => {
+    glucoseUnits.current = "mg/dl";
+    const chartFace: ClockFaceConfig = {
+      rows: [{ elements: [{ type: "chart", hours: 3, width: 400, height: 200 }] }],
+      settings: { glucoseUnits: "mmol" },
+    };
+    const { container } = render(Harness, {
+      config: chartFace,
+      glucose: reading,
+      showCharts: true,
+    });
+
+    await vi.waitFor(() => {
+      const ticks = [...container.querySelectorAll(".lc-axis-tick-label")].map(
+        (t) => t.textContent?.trim() ?? ""
+      );
+      expect(ticks.length).toBeGreaterThan(0);
+      expect(ticks.some((t) => /^\d+\.\d$/.test(t))).toBe(true);
+    });
+  });
+
+  it("draws a background chart's axis ticks in the face's units, not the viewer's", async () => {
+    glucoseUnits.current = "mg/dl";
+    const backgroundFace: ClockFaceConfig = {
+      rows: [
+        {
+          elements: [
+            { type: "chart", hours: 3, chartConfig: { asBackground: true } },
+            { type: "sg", size: 40 },
+          ],
+        },
+      ],
+      settings: { glucoseUnits: "mmol" },
+    };
+    const { container } = render(Harness, {
+      config: backgroundFace,
+      glucose: reading,
+      showCharts: true,
+    });
+
+    await vi.waitFor(() => {
+      const ticks = [...container.querySelectorAll(".lc-axis-tick-label")].map(
+        (t) => t.textContent?.trim() ?? ""
+      );
+      expect(ticks.length).toBeGreaterThan(0);
+      expect(ticks.some((t) => /^\d+\.\d$/.test(t))).toBe(true);
+    });
+  });
+
   it("paints a muted element in the theme's muted foreground", () => {
     const muted: ClockFaceConfig = {
       rows: [{ elements: [{ type: "age", size: 14, style: { color: "muted" } }] }],
       settings: config.settings,
     };
 
-    expect(face(reading, muted).glucoseColor("7m ago")).toBe(
+    expect(face(reading, muted).glucoseColor(sevenMinutesAgo)).toBe(
       cssColor("--muted-foreground")
     );
   });

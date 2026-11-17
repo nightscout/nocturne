@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import * as Item from "../item/index.js";

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
@@ -8,19 +9,21 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/alexa endpoint.
 /// Covers Alexa Smart Home skill integration.
 /// </summary>
-public class AlexaParityTests : ParityTestBase
+[Collection(ParityShards.Two)]
+public partial class AlexaParityTests : ParityTestBase
 {
+    [GeneratedRegex(@" as of [^.]*\.")]
+    private static partial Regex ClockPhrase();
+
     public AlexaParityTests(ParityTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
     protected override ComparisonOptions GetComparisonOptions()
     {
-        // Alexa responses may include timestamps that differ
-        return ComparisonOptions.Default.WithIgnoredFields(
-            "sessionId",
-            "requestId",
-            "timestamp"
-        );
+        // The age in "as of <age>" is read from each server's clock at its own instant
+        return ComparisonOptions.Default
+            .WithIgnoredFields("sessionId", "requestId", "timestamp")
+            .WithNormalisedValues(ClockPhrase(), " as of <age>.", "text", "content");
     }
 
     #region POST /api/v1/alexa
@@ -104,9 +107,26 @@ public class AlexaParityTests : ParityTestBase
                 intent = new
                 {
                     name = "MetricNow",
+                    // Alexa resolves the spoken value to a slot type entry; both servers read
+                    // the resolved name, and Nightscout answers "unknown" without one.
                     slots = new
                     {
-                        metric = new { value = "bg" }
+                        metric = new
+                        {
+                            name = "metric",
+                            value = "blood sugar",
+                            resolutions = new
+                            {
+                                resolutionsPerAuthority = new[]
+                                {
+                                    new
+                                    {
+                                        status = new { code = "ER_SUCCESS_MATCH" },
+                                        values = new[] { new { value = new { name = "bg", id = "bg" } } },
+                                    },
+                                },
+                            },
+                        },
                     }
                 }
             }

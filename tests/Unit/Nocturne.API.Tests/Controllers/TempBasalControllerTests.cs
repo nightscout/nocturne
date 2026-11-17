@@ -8,6 +8,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -63,6 +64,41 @@ public class TempBasalControllerTests
         created[0].StartTimestamp.Should().Be(T0.UtcDateTime);
         created[0].EndTimestamp.Should().Be(T0.UtcDateTime.AddMinutes(30));
         created[0].Origin.Should().Be(TempBasalOrigin.Algorithm);
+    }
+
+    [Theory]
+    [InlineData(TempBasalOrigin.Algorithm, true)]
+    [InlineData(TempBasalOrigin.Manual, false)]
+    [InlineData(TempBasalOrigin.Scheduled, null)]
+    public async Task CreateTempBasals_StampsAutomaticFromAnExplicitOrigin(TempBasalOrigin origin, bool? expected)
+    {
+        var request = Request();
+        request.Origin = origin;
+
+        var result = await _controller.CreateTempBasals([request], CancellationToken.None);
+
+        var created = ((ObjectResult)result.Result!).Value.Should().BeOfType<TempBasal[]>().Subject;
+        TempBasalAutomaticFlag.Of(created[0].AdditionalProperties).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("Trio", TempBasalOrigin.Algorithm)]
+    [InlineData("openaps://AndroidAPS", TempBasalOrigin.Algorithm)]
+    [InlineData("xdrip", TempBasalOrigin.Manual)]
+    [InlineData(null, TempBasalOrigin.Manual)]
+    public async Task CreateTempBasals_DefaultsAnOmittedOriginByUploaderAndLeavesAutomaticUnstamped(
+        string? app, TempBasalOrigin expected)
+    {
+        var request = Request();
+        request.Origin = null;
+        request.App = app;
+
+        var result = await _controller.CreateTempBasals([request], CancellationToken.None);
+
+        var created = ((ObjectResult)result.Result!).Value.Should().BeOfType<TempBasal[]>().Subject;
+        created[0].Origin.Should().Be(expected);
+        created[0].OriginEvidence.Should().Be(TempBasalOriginEvidence.Uploader);
+        TempBasalAutomaticFlag.Of(created[0].AdditionalProperties).Should().BeNull();
     }
 
     [Fact]
@@ -198,6 +234,21 @@ public class TempBasalControllerTests
         await _controller.GetAll(null, null, V4ReadLimits.MaxPageSize + 1, -1);
 
         VerifyFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    [Fact]
+    public async Task GetAll_FullPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repo.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TempBasal()]);
+
+        var result = await _controller.GetAll(null, null, 1, 0);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TempBasal>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private void VerifyFetched(int limit, int offset) =>

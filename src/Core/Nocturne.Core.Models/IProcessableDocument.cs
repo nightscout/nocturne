@@ -14,23 +14,23 @@ namespace Nocturne.Core.Models;
 public interface IProcessableDocument
 {
     /// <summary>
-    /// Gets or sets the MongoDB ObjectId
+    /// MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
     string? Id { get; set; }
 
     /// <summary>
-    /// Gets or sets the ISO 8601 formatted creation timestamp
+    /// ISO 8601 formatted creation timestamp
     /// </summary>
     string? CreatedAt { get; set; }
 
     /// <summary>
-    /// Gets or sets the timestamp in milliseconds since Unix epoch
+    /// Timestamp in milliseconds since Unix epoch
     /// </summary>
     long Mills { get; set; }
 
     /// <summary>
-    /// Gets or sets the UTC offset in minutes
+    /// UTC offset in minutes
     /// </summary>
     int? UtcOffset { get; set; }
 
@@ -41,10 +41,5 @@ public interface IProcessableDocument
     /// <returns>Dictionary of field names and their text content to sanitize</returns>
     Dictionary<string, string?> GetSanitizableFields();
 
-    /// <summary>
-    /// Sets a sanitized text field value
-    /// </summary>
-    /// <param name="fieldName">The field name</param>
-    /// <param name="sanitizedValue">The sanitized value</param>
     void SetSanitizedField(string fieldName, string? sanitizedValue);
 }

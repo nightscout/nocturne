@@ -216,19 +216,6 @@ const strings = {
 		list: {
 			buttonTitle: 'Lists',
 			dropdownTitle: 'Lists'
-		},
-		searchAndReplace: {
-			buttonTitle: 'Search and Replace',
-			showMore: 'Show More',
-			goBack: 'Go Back',
-			searchAndReplace: 'Search and Replace',
-			searchPlaceholder: 'Search...',
-			caseSensitive: 'Case Sensitive',
-			goToPrevious: 'Go to Previous',
-			goToNext: 'Go to Next',
-			replacePlaceholder: 'Replace...',
-			replace: 'Replace',
-			replaceAll: 'Replace All'
 		}
 	}
 };

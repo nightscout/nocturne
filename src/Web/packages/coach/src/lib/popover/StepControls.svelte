@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { getCoachMarkContext } from "../context.svelte.js";
+
+  const ctx = getCoachMarkContext();
   let {
     currentStep,
     totalSteps,
@@ -21,12 +24,12 @@
 
 <div class="coach-step-controls">
   {#if totalSteps > 1}
-    <span class="coach-step-indicator">{currentStep + 1} of {totalSteps}</span>
+    <span class="coach-step-indicator">{ctx.labels.stepCounter(currentStep + 1, totalSteps)}</span>
   {/if}
 
   <div class="coach-step-buttons">
     {#if !isFirst}
-      <button type="button" class="coach-btn coach-btn--ghost" onclick={onback}>Back</button>
+      <button type="button" class="coach-btn coach-btn--ghost" onclick={onback}>{ctx.labels.back}</button>
     {/if}
 
     {#if isLast && action}
@@ -34,9 +37,9 @@
         >{action.label}</a
       >
     {:else if !isLast}
-      <button type="button" class="coach-btn coach-btn--primary" onclick={onnext}>Next</button>
+      <button type="button" class="coach-btn coach-btn--primary" onclick={onnext}>{ctx.labels.next}</button>
     {:else}
-      <button type="button" class="coach-btn coach-btn--primary" onclick={oncomplete}>Got it</button>
+      <button type="button" class="coach-btn coach-btn--primary" onclick={oncomplete}>{ctx.labels.gotIt}</button>
     {/if}
   </div>
 </div>

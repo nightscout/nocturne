@@ -4,53 +4,37 @@ using Nocturne.Core.Models;
 namespace Nocturne.Core.Clinical.Statistics;
 
 /// <summary>
-/// Which population a variance is taken over: a <see cref="Sample"/> divides by <c>n - 1</c>, a
-/// <see cref="Population"/> by <c>n</c>. Which one a given glycemic metric is defined against is a
-/// clinical question, so every caller states its own rather than inheriting a default.
-/// </summary>
-public enum VarianceMode
-{
-    /// <summary>Bessel-corrected: <c>n - 1</c>, and zero for fewer than two readings.</summary>
-    Sample,
-
-    /// <summary>Uncorrected: <c>n</c>, and zero for no readings.</summary>
-    Population,
-}
-
-/// <summary>
 /// The arithmetic that glucose statistics are assembled from — variance, median and estimated A1C —
 /// in one place, so a divisor or a formula exists once rather than once per metric.
 /// </summary>
 public static class GlucoseStatistics
 {
     /// <summary>
-    /// Variance of <paramref name="values"/> about <paramref name="mean"/>. The mean is supplied
-    /// rather than derived because callers differ on whether they centre on the raw average or on
-    /// the rounded one <c>StatisticsService.CalculateMean</c> returns. A series too short for
-    /// <paramref name="mode"/> to divide by has no spread to report and gives zero, never NaN.
+    /// Sample variance (divisor <c>n - 1</c>) of <paramref name="values"/> about
+    /// <paramref name="mean"/>. Every glycaemic metric here takes its spread from this one divisor.
+    /// The mean is supplied rather than derived because callers differ on whether they centre on
+    /// the raw average or on the rounded one <c>StatisticsService.CalculateMean</c> returns. Fewer
+    /// than two readings have no spread to report and give zero, never NaN.
     /// </summary>
-    public static double Variance(IReadOnlyCollection<double> values, double mean, VarianceMode mode)
+    public static double Variance(IReadOnlyCollection<double> values, double mean)
     {
-        if (values.Count < (mode == VarianceMode.Sample ? 2 : 1))
+        if (values.Count < 2)
             return 0;
 
         var sumOfSquares = values.Sum(value => Math.Pow(value - mean, 2));
-        return sumOfSquares / (mode == VarianceMode.Sample ? values.Count - 1 : values.Count);
+        return sumOfSquares / (values.Count - 1);
     }
 
-    /// <inheritdoc cref="Variance(IReadOnlyCollection{double}, double, VarianceMode)"/>
-    public static double StandardDeviation(
-        IReadOnlyCollection<double> values,
-        double mean,
-        VarianceMode mode
-    ) => Math.Sqrt(Variance(values, mean, mode));
+    /// <inheritdoc cref="Variance(IReadOnlyCollection{double}, double)"/>
+    public static double StandardDeviation(IReadOnlyCollection<double> values, double mean) =>
+        Math.Sqrt(Variance(values, mean));
 
     /// <summary>
-    /// Standard deviation about the raw arithmetic mean of <paramref name="values"/>, and zero for
-    /// an empty series.
+    /// Sample standard deviation about the raw arithmetic mean of <paramref name="values"/>, and
+    /// zero for fewer than two readings.
     /// </summary>
-    public static double StandardDeviation(IReadOnlyCollection<double> values, VarianceMode mode) =>
-        values.Count == 0 ? 0 : StandardDeviation(values, values.Average(), mode);
+    public static double StandardDeviation(IReadOnlyCollection<double> values) =>
+        values.Count == 0 ? 0 : StandardDeviation(values, values.Average());
 
     /// <summary>
     /// Median of an already-sorted, non-empty series: the middle reading, or the midpoint of the
@@ -60,6 +44,27 @@ public static class GlucoseStatistics
         sortedValues.Count % 2 == 0
             ? (sortedValues[sortedValues.Count / 2 - 1] + sortedValues[sortedValues.Count / 2]) / 2.0
             : sortedValues[sortedValues.Count / 2];
+
+    /// <summary>
+    /// Linearly interpolated percentile (0-100) of an already-sorted series; 0 for an empty one.
+    /// </summary>
+    public static double Percentile(IList<double> sortedValues, double percentile)
+    {
+        if (sortedValues.Count == 0)
+            return 0;
+
+        var index = (percentile / 100) * (sortedValues.Count - 1);
+        var lower = (int)Math.Floor(index);
+        var upper = (int)Math.Ceiling(index);
+
+        if (lower == upper)
+        {
+            return sortedValues[lower];
+        }
+
+        var weight = index - lower;
+        return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+    }
 
     /// <summary>
     /// <paramref name="values"/> in ascending order, for <see cref="Median"/> and percentiles. An

@@ -1,10 +1,13 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
-import { checkOnboarding } from "$lib/server/onboarding-check";
-import { getRequestStatus } from "$lib/server/request-status";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
-import { toIsoString } from "$lib/utils/api-date";
-import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
+import { checkOnboarding } from "#lib/server/onboarding-check.js";
+import { getRequestStatus } from "#lib/server/request-status.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
+import { toIsoString } from "#lib/utils/api-date.js";
+import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
+import { autoLoginEndpoint, autoLoginRedirect } from "#lib/server/auto-login.js";
+import { PILL_ROWS_COOKIE, parsePillRows } from "#lib/components/status-pills/pill-rows.js";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [
@@ -22,7 +25,31 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
   return permissions.some((p) => GLUCOSE_READ_PERMISSIONS.includes(p));
 }
 
-export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent }) => {
+/** A failed read hides the banner: it is a nudge, and must not take the shell down with it. */
+async function readShowBackupSignInPrompt(apiClient: App.Locals["apiClient"]): Promise<boolean> {
+  try {
+    return (await apiClient.backupSignInPrompt.getBackupSignInPrompt()).show ?? false;
+  } catch (error) {
+    console.error("Failed to read the backup sign-in prompt:", error);
+    return false;
+  }
+}
+
+/** A failed read hides the switcher: it is navigation, and must not take the shell down with it. */
+async function readTenantTargets(
+  apiClient: App.Locals["apiClient"]
+): Promise<TenantSwitcherTarget[]> {
+  try {
+    return toTenantSwitcherTargets(await apiClient.myTenants.getMyTenants(true));
+  } catch (error) {
+    console.error("Failed to read the tenant switcher targets:", error);
+    return [];
+  }
+}
+
+export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent, depends }) => {
+  depends(SHELL_DATA_KEY);
+
   // Untracked, so SvelteKit reuses this load's data across client navigations instead of re-running
   // it whenever the path changes: the URL only shapes a cookie flag and the login return address.
   const { protocol, pathname, search, origin } = untrack(() => ({
@@ -39,6 +66,16 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   // Tenant status drives the anonymous-access gate and the demo banner. Shared with the root
   // layout's tenantless check, and null on failure — default to no anonymous access then
   // (fail safe: require sign-in rather than over-expose).
+  // Started with the status call so the prompt read adds no round-trip of its own; it never
+  // rejects, so a redirect below leaves nothing unhandled.
+  const backupSignInPrompt =
+    locals.user && !locals.isGuestSession
+      ? readShowBackupSignInPrompt(locals.apiClient)
+      : Promise.resolve(false);
+  const tenantTargets =
+    locals.user && !locals.isGuestSession
+      ? readTenantTargets(locals.apiClient)
+      : Promise.resolve([]);
   const status = await getRequestStatus(locals);
   const anonymousReadAccess = status?.anonymousReadAccess ?? false;
 
@@ -47,7 +84,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   // (it grants public read only under ShareAccess); this gate just avoids rendering the shell and
   // then bursting 401s on the bare host.
   // Security headers for the share host (Referrer-Policy, X-Robots-Tag) are applied for every
-  // response in hooks.server.ts (shareHostSecurityHandle).
+  // response in hooks.server.ts (securityHeadersHandle).
   const publicViewAllowed = locals.isShareHost && anonymousReadAccess;
 
   // Resolved above every redirect below, because none of them reaches anywhere a share host can
@@ -61,6 +98,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   }
 
   // Guest sessions bypass onboarding — the data owner's instance is already set up.
+  let onboardingComplete = false;
   if (!locals.isGuestSession && !publicViewAllowed) {
     // If the instance needs setup, redirect there regardless of auth state.
     // This covers fresh installs where no tenant or credentials exist yet.
@@ -72,6 +110,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     if (!onboarding.isComplete) {
       throw redirect(303, "/setup");
     }
+    onboardingComplete = true;
   }
 
   // A fresh instance with no resolved tenant reports "setup_required" — send it to setup rather
@@ -93,7 +132,8 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   //
   // Where auto-login applies (a demo tenant, or dev auto-login) the visitor goes straight to its
   // endpoint: the status in hand already decides it, and the login page would only fetch it again
-  // to redirect onward, costing every first visit a round-trip.
+  // to redirect onward, costing every first visit a round-trip. A demo visitor reaches this when
+  // no session was minted in hooks (mintDemoSession).
   if (!locals.isAuthenticated || !locals.user) {
     if (!publicViewAllowed) {
       const returnUrl = pathname + search;
@@ -124,12 +164,19 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   const isDemo = status?.isDemo ?? false;
   const nextResetAt = toIsoString(status?.nextResetAt);
 
+  const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
+  const resolvedTenantTargets = await tenantTargets;
+
   return {
     user: locals.user ?? null,
     isGuestSession: locals.isGuestSession ?? false,
     guestExpiresAt: locals.guestExpiresAt ?? null,
     canViewRealtimeData,
+    showBackupSignInPrompt,
+    tenantTargets: resolvedTenantTargets,
     isDemo,
     nextResetAt,
+    onboardingComplete,
+    pillRows: parsePillRows(cookies.get(PILL_ROWS_COOKIE)),
   };
 };

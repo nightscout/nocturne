@@ -201,7 +201,7 @@ public class CareLinkAuthTokenProviderRetryTests
         ILogger<CareLinkAuthTokenProvider> logger,
         IRetryDelayStrategy retryDelayStrategy,
         HttpMessageHandler handler)
-        : CareLinkAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
+        : CareLinkAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy, TimeProvider.System)
     {
         protected override CareLinkAuthFlowService CreateAuthFlow() => new(NullLogger.Instance, handler);
     }

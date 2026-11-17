@@ -7,7 +7,9 @@ using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services;
@@ -29,20 +31,15 @@ public class SupportDiagnosticsServiceTests
             .Setup(c => c.GetConnectorStatusesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var factory = new Mock<ITenantDbContextFactory>();
-        factory
-            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => ValueTask.FromResult(NewContext()));
-
         var broken = NewContext();
-        var uiSettings = new UISettingsService(broken, NullLogger<UISettingsService>.Instance);
+        var uiSettings = new UISettingsService(broken.AsFactory(), TimeProvider.System, NullLogger<UISettingsService>.Instance);
         await broken.DisposeAsync();
 
         var sut = new SupportDiagnosticsService(
             connectorHealth.Object,
             uiSettings,
             Mock.Of<ITherapySettingsResolver>(),
-            factory.Object,
+            new AlertRepository(new TestNocturneDbContextFactory(NewContext())),
             NullLogger<SupportDiagnosticsService>.Instance
         );
 

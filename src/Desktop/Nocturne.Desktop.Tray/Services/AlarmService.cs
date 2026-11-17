@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 
@@ -10,13 +9,7 @@ namespace Nocturne.Desktop.Tray.Services;
 /// </summary>
 public sealed class AlarmService : IDisposable
 {
-    private readonly SettingsService _settingsService;
     private bool _initialized;
-
-    public AlarmService(SettingsService settingsService)
-    {
-        _settingsService = settingsService;
-    }
 
     public void Initialize()
     {
@@ -33,21 +26,6 @@ public sealed class AlarmService : IDisposable
         if (args.Level == AlarmLevel.Clear)
         {
             ClearAlarmToasts();
-            return;
-        }
-
-        // Parse the alert type from the server notification data
-        string? alertType = null;
-        if (args.Data.TryGetProperty("alertType", out var typeProp))
-        {
-            alertType = typeProp.GetString();
-        }
-
-        var disabled = _settingsService.Settings.DisabledAlarmTypes;
-
-        // If the server sent an alert type, check if the user has disabled it
-        if (alertType is not null && disabled.Contains(alertType))
-        {
             return;
         }
 

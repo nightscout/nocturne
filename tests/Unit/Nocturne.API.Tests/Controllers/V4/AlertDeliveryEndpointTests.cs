@@ -4,11 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
@@ -18,7 +21,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 [Trait("Category", "Unit")]
 public class AlertDeliveryEndpointTests
 {
-    private readonly Mock<ITenantDbContextFactory> _contextFactoryMock = new();
+    private readonly Mock<INocturneDbContextFactory> _contextFactoryMock = new();
     private readonly Mock<IAlertAcknowledgementService> _acknowledgementServiceMock = new();
     private readonly Mock<IAlertDeliveryService> _deliveryServiceMock = new();
     private readonly Mock<ITenantAccessor> _tenantAccessorMock = new();
@@ -100,10 +103,52 @@ public class AlertDeliveryEndpointTests
     }
 
     [Fact]
+    public void GetPendingDeliveries_RequiresAlertsReadWrite()
+    {
+        var gate = typeof(AlertsController).GetMethod(nameof(AlertsController.GetPendingDeliveries))!
+            .GetCustomAttributes(typeof(RequireScopeAttribute), inherit: true)
+            .Cast<RequireScopeAttribute>()
+            .Should().ContainSingle().Subject;
+
+        gate.RequiredScopes.Should().Equal(Scope.AlertsReadWrite);
+    }
+
+    [Fact]
+    public void GetPendingDeliveries_RefusesAnAlertsReadOnlyCaller()
+    {
+        Authorize(new HashSet<string> { Scope.AlertsRead }).Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public void GetPendingDeliveries_RefusesAGuestLinkCaller()
+    {
+        var guestScopes = Scope.Normalize(
+            Scope.ValidateGrantScopes(Scope.AllowedGuestScopes, OAuthGrantTypes.Guest));
+
+        guestScopes.Should().Contain(Scope.AlertsRead);
+        Authorize(guestScopes).Should().BeOfType<ForbidResult>();
+    }
+
+    [Theory]
+    [InlineData(Scope.AlertsReadWrite)]
+    [InlineData(Scope.FullAccess)]
+    public void GetPendingDeliveries_AdmitsAnAlertsReadWriteCaller(string scope)
+    {
+        Authorize(new HashSet<string> { scope }).Should().BeNull();
+    }
+
+    private static IActionResult? Authorize(IReadOnlySet<string> grantedScopes) =>
+        ActionGate.Evaluate(
+            typeof(AlertsController),
+            nameof(AlertsController.GetPendingDeliveries),
+            grantedScopes,
+            new AuthContext { IsAuthenticated = true });
+
+    [Fact]
     public void Heartbeat_Returns200()
     {
         // Arrange
-        var controller = new SystemController(new BotHealthService());
+        var controller = new SystemController(new BotHealthService(TimeProvider.System));
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

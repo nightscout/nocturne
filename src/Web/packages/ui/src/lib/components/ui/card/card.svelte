@@ -9,19 +9,21 @@
     variant = "default",
     size = "default",
     interactive = false,
+    bareWhenNarrow = false,
     children,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
     variant?: CardVariant;
     size?: CardSize;
     interactive?: boolean;
+    bareWhenNarrow?: boolean;
   } = $props();
 </script>
 
 <div
   bind:this={ref}
   data-slot="card"
-  class={cn(cardVariants({ variant, size, interactive }), className)}
+  class={cn(cardVariants({ variant, size, interactive, bareWhenNarrow }), className)}
   {...restProps}
 >
   {@render children?.()}

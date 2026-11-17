@@ -1,25 +1,30 @@
 <script lang="ts">
+    import { Key } from "@nocturne/ui/keys";
     import {page} from "$app/state";
-    import {formatMediumDateRange} from "$lib/utils/formatting";
-    import { Button } from "$lib/components/ui/button";
-    import {ReportsFilterSidebar} from "$lib/components/layout";
-    import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
-    import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
-    import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
+    import {formatMediumDateRange} from "#lib/utils/formatting.js";
+    import { Button } from "#lib/components/ui/button/index.js";
+    import {ReportsFilterSidebar} from "#lib/components/layout/index.js";
+    import ResourceGuard from "#lib/components/reports/ResourceGuard.svelte";
+    import ReportPageSwitcher from "#lib/components/reports/ReportPageSwitcher.svelte";
+    import { loopAnalysisHeaderMark } from "#lib/components/reports/loop-analysis/loop-analysis-tour.svelte.js";
+    import HistoryLimitNotice from "#lib/components/layout/HistoryLimitNotice.svelte";
+    import ReportPrintHeader from "#lib/components/reports/print/ReportPrintHeader.svelte";
+    import PrintReportButton from "#lib/components/reports/print/PrintReportButton.svelte";
     import {
         createReportPrintContext,
         installPrintFitFallback,
         printReport,
-    } from "$lib/components/reports/print/report-print.svelte";
-    import {reportCategories} from "$lib/navigation/report-navigation.svelte";
+    } from "#lib/components/reports/print/report-print.svelte.js";
+    import {reportCategories, reportDescription, reportSubRouteTitle, reportTitle} from "#lib/navigation/report-navigation.svelte.js";
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
-    import Printer from "@lucide/svelte/icons/printer";
+    import ReportHeaderWashDeferred from "#lib/components/reports/ReportHeaderWashDeferred.svelte";
     import { toast } from "svelte-sonner";
     import { onMount } from "svelte";
-    import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
-    import {createResourceContext} from "$lib/hooks/resource-context.svelte";
+    import {useDateParams, setDateParamsContext, createSharedRangeUse} from "#lib/hooks/date-params.svelte.js";
+    import {createResourceContext} from "#lib/hooks/resource-context.svelte.js";
+    import {createReportSlots} from "#lib/hooks/report-slots.svelte.js";
 
     let {children} = $props();
 
@@ -45,13 +50,17 @@
     // Create resource context for layout-level loading/error handling
     const resourceCtx = createResourceContext();
 
+    // Filters a report adds to the Filters panel, below the date range.
+    createReportSlots();
+
     // Whether to use the ResourceGuard (skip for main reports page which has custom design)
     const useResourceGuard = $derived(page.url.pathname !== "/reports");
 
     const printCtx = createReportPrintContext();
 
-    async function handlePrint() {
-        if (printCtx.printing) return;
+    /** Resolves true once the print dialog has run, false when it never opened. */
+    async function handlePrint(): Promise<boolean> {
+        if (printCtx.printing) return false;
         printCtx.printing = true;
         const url = page.url.href;
         const preparationVersion = printCtx.preparationVersion;
@@ -60,9 +69,11 @@
                 () => printCtx.prepare(),
                 () => page.url.href === url && printCtx.preparationVersion === preparationVersion,
             );
+            return true;
         } catch (error) {
             console.error("Failed to prepare report for printing:", error);
-            toast.error("Unable to load the complete report. Please try again before printing.");
+            toast.error("Could not load the complete report. Try again before printing.");
+            return false;
         } finally {
             printCtx.printing = false;
         }
@@ -70,7 +81,7 @@
 
     onMount(() => {
         const keydown = (event: KeyboardEvent) => {
-            if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "p") {
+            if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === Key.P) {
                 event.preventDefault();
                 void handlePrint();
             }
@@ -83,12 +94,12 @@
     $effect(() => installPrintFitFallback(() => reportRoot));
 
     const registryTitles = $derived(
-        new Map(reportCategories().flatMap((c) => c.reports).map((r) => [r.href, r.title]))
+        new Map(reportCategories().flatMap((c) => c.reports.map((r) => [r.href, reportTitle(c, r)])))
     );
 
     // Extract report name from the URL
     const reportName = $derived.by(() => {
-        const declared = printCtx.meta.title ?? registryTitles.get(page.url.pathname);
+        const declared = registryTitles.get(page.url.pathname) ?? reportSubRouteTitle(page.url.pathname);
         if (declared) return declared;
 
         const pathSegments = page.url.pathname.split("/");
@@ -106,6 +117,8 @@
                 .join(" ") + " Report"
         );
     });
+
+    const description = $derived(reportDescription(page.url.pathname));
 
     // Show the range control only where the report actually reads the range
     const showFilters = $derived(
@@ -128,53 +141,45 @@
 </script>
 
 <svelte:head>
-    <title>{reportName} - Nightscout</title>
-    <meta
-            name="description"
-            content="Nightscout {reportName.toLowerCase()} with comprehensive data analysis and filtering capabilities"
-    />
+    <title>{reportName} - Nocturne</title>
+    {#if description}
+        <meta name="description" content={description}/>
+    {/if}
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<div class="@container relative min-h-full bg-background" bind:this={reportRoot} data-report-root>
+<!-- --headroom-top sits a Headroom panel flush under the sticky report header (h-14 plus its border). -->
+<div class="@container relative min-h-full bg-background [--headroom-top:calc(var(--app-sticky-top,0px)+3.5rem+1px)]" bind:this={reportRoot} data-report-root>
     {#if page.url.pathname !== "/reports"}
         <ReportPrintHeader title={reportName} period={printPeriod} />
 
         <div
                 class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
+                {@attach loopAnalysisHeaderMark()}
         >
-            <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
-                <div class="flex items-center gap-2">
-                    <!-- Report info -->
-                    <div class="flex items-center gap-3">
-                        <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
-                        {#if showFilters}
-                            <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="hidden sm:inline-flex"
-                                    onclick={() => (filterSidebarOpen = true)}
-                                    aria-label="Change date range"
-                            >
-                                <Calendar class="h-3.5 w-3.5"/>
-                                <span>{dateRangeDisplay}</span>
-                                <ChevronDown class="h-3 w-3 opacity-60"/>
-                            </Button>
-                        {/if}
-                    </div>
+            <!-- At 35% the darkest wash keeps the bar's text above 9:1 in either theme. -->
+            <ReportHeaderWashDeferred name={page.url.pathname} class="inset-0 opacity-35"/>
+            <div class="relative flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
+                <!-- Report info -->
+                <div class="flex min-w-0 items-center gap-3">
+                    <h1 class="truncate text-lg font-semibold text-foreground">{reportName}</h1>
+                    {#if showFilters}
+                        <Button
+                                variant="outline"
+                                size="sm"
+                                class="hidden shrink-0 @xl:inline-flex"
+                                onclick={() => (filterSidebarOpen = true)}
+                                aria-label="Change date range"
+                        >
+                            <Calendar class="h-3.5 w-3.5"/>
+                            <span>{dateRangeDisplay}</span>
+                            <ChevronDown class="h-3 w-3 opacity-60"/>
+                        </Button>
+                    {/if}
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <Button
-                            variant="outline"
-                            size="sm"
-                            onclick={handlePrint}
-                            disabled={printCtx.printing}
-                            aria-label="Print report"
-                    >
-                        <Printer class="w-4 h-4"/>
-                        <span class="hidden sm:inline">Print</span>
-                    </Button>
+                <div class="flex shrink-0 items-center gap-2">
+                    <PrintReportButton print={handlePrint} disabled={printCtx.printing}/>
                     {#if showFilters}
                         <Button
                                 variant="outline"
@@ -183,11 +188,12 @@
                                 aria-label="Filters"
                         >
                             <Filter class="w-4 h-4"/>
-                            <span class="hidden sm:inline">Filters</span>
+                            <span class="hidden @lg:inline">Filters</span>
                         </Button>
                     {/if}
                 </div>
             </div>
+            <ReportPageSwitcher />
         </div>
     {/if}
 

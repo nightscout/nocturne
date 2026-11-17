@@ -1,10 +1,12 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import UserPlus from "@lucide/svelte/icons/user-plus";
+  import { Artwork } from "water-ui";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
@@ -15,25 +17,26 @@
   import {
     getInviteInfo,
     acceptInvite,
-  } from "$lib/api/generated/memberInvites.generated.remote";
+  } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
     inviteOptions,
     inviteComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
   import {
     getOidcProviders,
     setAuthCookies,
-  } from "$routes/(unauthenticated)/auth/auth.remote";
-  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
-  import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
-  import PasskeyRegistrationForm from "$lib/components/auth/PasskeyRegistrationForm.svelte";
-  import InviteSummary from "$lib/components/members/InviteSummary.svelte";
+  } from "#routes/(unauthenticated)/auth/auth.remote.js";
+  import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
+  import OidcProviderButtons from "#lib/components/auth/OidcProviderButtons.svelte";
+  import PasskeyRegistrationForm from "#lib/components/auth/PasskeyRegistrationForm.svelte";
+  import InviteSummary from "#lib/components/members/InviteSummary.svelte";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
-  import { FormError, describeSubmitError } from "$lib/forms";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  } from "#lib/components/auth/passkey-errors.js";
+  import { FormError, describeSubmitError } from "#lib/forms/index.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { withWelcome } from "#lib/components/members/welcome.js";
 
   // ── URL params ────────────────────────────────────────────────────
   const token = $derived(page.url.searchParams.get("token") ?? "");
@@ -59,7 +62,7 @@
   // record with its validity flags set — the details of a spent invite aren't served to whoever
   // holds the link.
   const inviteError = $derived.by(() => {
-    if (!token) return "No invite token provided. Please check the link you were given.";
+    if (!token) return "No invite token provided. Check the link you were given.";
     if (inviteInfoQuery?.error)
       return describeSubmitError(
         inviteInfoQuery.error,
@@ -77,12 +80,12 @@
     acceptError = null;
     try {
       await acceptInvite(token);
-      await goto(resolve("/"), { replaceState: true });
+      await goHome(true);
     } catch (err) {
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
         err,
-        "We couldn't add you to this instance. Please try again in a moment."
+        "We could not add you to this instance. Try again in a moment."
       );
     } finally {
       isAccepting = false;
@@ -148,15 +151,17 @@
       passkeyError = describePasskeyError(
         err,
         "register",
-        "We couldn't create your account. Please try again."
+        "We could not create your account. Try again."
       );
     } finally {
       isRegistering = false;
     }
   }
 
-  function goHome() {
-    goto(resolve("/"), { replaceState: true });
+  function goHome(joined = false) {
+    const home = resolve("");
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved above; the welcome marker only adds a query
+    return goto(joined ? withWelcome(home) : home, { replace: true });
   }
 </script>
 
@@ -174,7 +179,7 @@
         >
           <AlertTriangle class="h-6 w-6 text-destructive" />
         </div>
-        <Card.Title class="text-2xl font-bold">Invite Unavailable</Card.Title>
+        <Card.Title class="text-2xl font-bold">Invite unavailable</Card.Title>
         <Card.Description>{inviteError}</Card.Description>
       </Card.Header>
     {:else if !inviteInfo}
@@ -195,9 +200,9 @@
         >
           <Check class="h-6 w-6 text-success" />
         </div>
-        <Card.Title class="text-2xl font-bold">You're In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You are in</Card.Title>
         <Card.Description>
-          Your account has been created and you've joined
+          We created your account and added you to
           {inviteInfo.tenantName ?? "the site"}.
         </Card.Description>
       </Card.Header>
@@ -205,7 +210,7 @@
       <Card.Content>
         <RecoveryCodes
           codes={recoveryCodes}
-          onContinue={goHome}
+          onContinue={() => goHome(true)}
           continueLabel="Continue to Nocturne"
         />
       </Card.Content>
@@ -217,7 +222,7 @@
         >
           <Check class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">You're Already In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You are already a member</Card.Title>
         <Card.Description>
           You already have access to
           <strong>{inviteInfo.tenantName ?? "this site"}</strong>.
@@ -225,7 +230,7 @@
       </Card.Header>
 
       <Card.Content>
-        <Button class="w-full" size="lg" onclick={goHome}>
+        <Button class="w-full" size="lg" onclick={() => goHome()}>
           Continue to Nocturne
         </Button>
       </Card.Content>
@@ -237,10 +242,10 @@
         >
           <UserPlus class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">Accept Invite</Card.Title>
+        <Card.Title class="text-2xl font-bold">Accept invite</Card.Title>
         {#if viewer?.name}
           <Card.Description>
-            You're signed in as <strong>{viewer.name}</strong>
+            You are signed in as <strong>{viewer.name}</strong>
           </Card.Description>
         {/if}
       </Card.Header>
@@ -263,7 +268,7 @@
                 Joining...
               {:else}
                 <UserPlus class="mr-2 h-5 w-5" />
-                Accept Invite
+                Accept invite
               {/if}
             </Button>
           {/if}
@@ -272,11 +277,13 @@
     {:else}
       <!-- Not authenticated — show OIDC + passkey options -->
       <Card.Header class="space-y-1 text-center">
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-        >
-          <UserPlus class="h-6 w-6 text-primary" />
-        </div>
+        <Artwork
+          icon={fingerprintArtwork}
+          palette="water"
+          motion="auto"
+          autoplay="once"
+          class="mx-auto mb-4 size-56"
+        />
         <Card.Title class="text-2xl font-bold">Join Nocturne</Card.Title>
       </Card.Header>
 

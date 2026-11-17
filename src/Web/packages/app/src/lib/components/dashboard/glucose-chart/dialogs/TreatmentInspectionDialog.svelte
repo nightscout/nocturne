@@ -1,7 +1,8 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
+  import { formatInsulinToCarbRatio } from "#lib/utils/formatting.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import {
     bg,
@@ -10,20 +11,24 @@
     formatInsulinDisplay,
     formatLocale,
     time,
-  } from "$lib/utils/formatting";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
-  import { entrySummary } from "$lib/utils/entry-summary";
-  import type { BolusCalculation } from "$lib/api";
-  import { CalculationType } from "$lib/api";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import { getAll as getBolusCalculations } from "$lib/api/generated/bolusCalculations.generated.remote";
+  } from "#lib/utils/formatting.js";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
+  import { entrySummary } from "#lib/utils/entry-summary.svelte.js";
+  import type { BolusCalculation, MealPeriod } from "#lib/api/index.js";
+  import { CalculationType } from "#lib/api/index.js";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+  import { getAll as getBolusCalculations } from "#lib/api/generated/bolusCalculations.generated.remote.js";
+  import { carbMarkerName } from "../meal-period-labels.svelte";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import { inspectionSearchWindow } from "./inspection-window";
   import InspectionChart from "./InspectionChart.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     open: boolean;
     timestamp: Date;
     bolusInsulin?: number;
@@ -31,6 +36,7 @@
     bolusDataSource?: string;
     carbGrams?: number;
     carbLabel?: string;
+    carbMealPeriod?: MealPeriod;
     carbDataSource?: string;
     entry?: EntryRecord | null;
     correlatedRecords?: EntryRecord[];
@@ -56,6 +62,7 @@
     bolusDataSource,
     carbGrams,
     carbLabel,
+    carbMealPeriod,
     carbDataSource,
     entry: _entry,
     correlatedRecords,
@@ -71,9 +78,11 @@
     onNavigateGlucose,
     onNavigateDelivery,
     onEditEntry,
+    glucoseUnits,
   }: Props = $props();
 
   const bolusSourceName = $derived(getDataSourceDisplayName(bolusDataSource));
+  const carbName = $derived(carbMarkerName({ label: carbLabel, mealPeriod: carbMealPeriod }));
   const carbSourceName = $derived(getDataSourceDisplayName(carbDataSource));
   // Show a single "Source" row if both come from the same source, otherwise per-treatment sources
   const unifiedSourceName = $derived(
@@ -100,7 +109,7 @@
     }
     if (carbGrams != null) {
       let carbText = `${formatCarbDisplay(carbGrams)}g carbs`;
-      if (carbLabel) carbText += ` (${carbLabel})`;
+      if (carbName) carbText += ` (${carbName})`;
       parts.push(carbText);
     }
     return parts.join(" + ");
@@ -165,7 +174,7 @@
         {/if}
         {#if carbGrams != null}
           <Badge variant={ENTRY_CATEGORIES.carbs.badge}>
-            {formatCarbDisplay(carbGrams)}g{carbLabel ? ` ${carbLabel}` : " carbs"}
+            {formatCarbDisplay(carbGrams)}g{carbName ? ` ${carbName}` : " carbs"}
           </Badge>
         {/if}
       </Dialog.Title>
@@ -187,7 +196,7 @@
       <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm py-3">
         {#if glucoseValue != null}
           <span class="text-muted-foreground">BG at time</span>
-          <span class="font-medium">{bg(glucoseValue)} {bgLabel()}</span>
+          <span class="font-medium">{bg(glucoseValue, glucoseUnits)} {bgLabel(glucoseUnits)}</span>
         {/if}
 
         {#if iob != null}
@@ -205,11 +214,11 @@
           <span class="font-medium">{unifiedSourceName}</span>
         {:else}
           {#if bolusSourceName}
-            <span class="text-muted-foreground">Bolus Source</span>
+            <span class="text-muted-foreground">Bolus source</span>
             <span class="font-medium">{bolusSourceName}</span>
           {/if}
           {#if carbSourceName}
-            <span class="text-muted-foreground">Carb Source</span>
+            <span class="text-muted-foreground">Carb source</span>
             <span class="font-medium">{carbSourceName}</span>
           {/if}
         {/if}
@@ -220,13 +229,13 @@
     {#if bolusCalc}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Decision Audit
+          Decision audit
         </p>
         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {#if bolusCalc.bloodGlucoseInput != null}
-            <span class="text-muted-foreground">BG Input</span>
+            <span class="text-muted-foreground">BG input</span>
             <span class="font-medium">
-              {bg(bolusCalc.bloodGlucoseInput)} {bgLabel()}
+              {bg(bolusCalc.bloodGlucoseInput, glucoseUnits)} {bgLabel(glucoseUnits)}
               {#if bolusCalc.bloodGlucoseInputSource}
                 <span class="text-xs text-muted-foreground">
                   ({bolusCalc.bloodGlucoseInputSource})
@@ -236,13 +245,13 @@
           {/if}
 
           {#if bolusCalc.carbInput != null}
-            <span class="text-muted-foreground">Carb Input</span>
+            <span class="text-muted-foreground">Carb input</span>
             <span class="font-medium">{bolusCalc.carbInput} g</span>
           {/if}
 
           {#if bolusCalc.carbRatio != null}
-            <span class="text-muted-foreground">Carb Ratio</span>
-            <span class="font-medium">1:{bolusCalc.carbRatio}</span>
+            <span class="text-muted-foreground">ICR</span>
+            <span class="font-medium">{formatInsulinToCarbRatio(bolusCalc.carbRatio)}</span>
           {/if}
 
           {#if bolusCalc.insulinRecommendation != null}
@@ -256,12 +265,12 @@
           {/if}
 
           {#if bolusCalc.insulinOnBoard != null}
-            <span class="text-muted-foreground">IOB Correction</span>
+            <span class="text-muted-foreground">IOB correction</span>
             <span class="font-medium">{bolusCalc.insulinOnBoard.toFixed(2)} U</span>
           {/if}
 
           {#if bolusCalc.calculationType}
-            <span class="text-muted-foreground">Calculation Type</span>
+            <span class="text-muted-foreground">Calculation type</span>
             <span>
               <Badge variant={calcTypeBadgeVariant}>
                 {bolusCalc.calculationType}
@@ -270,7 +279,7 @@
           {/if}
 
           {#if bolusCalc.splitNow != null && bolusCalc.splitExt != null}
-            <span class="text-muted-foreground">Split Bolus</span>
+            <span class="text-muted-foreground">Split bolus</span>
             <span class="font-medium">{bolusCalc.splitNow}% now / {bolusCalc.splitExt}% ext</span>
           {/if}
 
@@ -283,6 +292,7 @@
     {/if}
 
     <InspectionChart
+      {glucoseUnits}
       {glucoseData}
       centerTime={timestamp}
       predictionData={aps.predictionData}
@@ -297,7 +307,7 @@
     {#if correlatedRecords && correlatedRecords.length > 0}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Related Entries
+          Related entries
         </p>
         <div class="space-y-2">
           {#each correlatedRecords as record, i (record.data.id ?? `${record.data.mills}-${i}`)}
@@ -314,7 +324,7 @@
                 </div>
               </div>
               <Badge variant={category.badge}>
-                {category.name}
+                {entryCategoryName(record.kind)}
               </Badge>
             </Item>
           {/each}

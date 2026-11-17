@@ -17,7 +17,7 @@
  * ordering here can.
  *
  * `body` names a local holding `parseErrorBody(err)` — the RFC-7807 fields
- * recovered from a body NSwag left unparsed (`$lib/api/error-body`). They sit
+ * recovered from a body NSwag left unparsed (`#lib/api/error-body`). They sit
  * ahead of `message` because anything the server wrote beats NSwag's
  * boilerplate, and behind the parsed fields because those are the same fields
  * already decoded.
@@ -32,8 +32,9 @@ export default {
   remoteFunctionsOutput: 'api/generated',
   apiClientOutput: 'api/api-client.generated.ts',
   imports: {
-    schemas: '$lib/api/generated/schemas',
-    apiTypes: '$api',
+    schemas: '#lib/api/generated/schemas.js',
+    apiTypes: '#lib/api/index.js',
+    server: '#lib/api/remote-server.js',
   },
   nswagClientPath: './generated/nocturne-api-client',
   // Matches nswag.json: the client has no date reviver, so a date-time is the ISO
@@ -44,9 +45,10 @@ export default {
   errorHandling: {
     // `parseErrorBody` recovers the reason from an error body NSwag left unparsed;
     // both the 403 and 500 arms read it. `parseIssues` validates the structured
-    // issues the 400/409 arm forwards. See `$lib/api/error-body`.
+    // issues the 400/409 arm forwards, and `parseCode` the problem code the
+    // 400, 404, 409 and 429 arms forward. See `#lib/api/error-body`.
     imports: [
-      `import { parseErrorBody, parseIssues } from '$lib/api/error-body';`,
+      `import { parseCode, parseErrorBody, parseIssues } from '#lib/api/error-body.js';`,
     ],
 
     // The default redirects queries to /auth/login on 401. For a public share
@@ -57,11 +59,15 @@ export default {
     // normal error instead so unshared categories just fail their widget rather
     // than navigating away. Commands/forms already throw error(401) and never
     // redirected.
+    //
+    // The redirect carries no return address: a query cannot read `event.url`.
+    // The (authenticated) layout already sends an anonymous page load to login
+    // with one, so this arm only meets a session that lapsed after the page loaded.
     on401: (kind: string) =>
       kind === 'query'
-        ? `const { locals, url } = getRequestEvent();\n` +
+        ? `const { locals } = getRequestEvent();\n` +
           `    if (locals.isShareHost) throw error(401, 'Unauthorized');\n` +
-          '    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`)'
+          `    throw redirect(302, '/auth/login')`
         : `throw error(401, 'Unauthorized')`,
 
     // Forward the server's actual error message for 403 so the FE can show
@@ -96,6 +102,12 @@ export default {
     // `describeSubmitError` and `remoteErrorMessage` resolve the wording from
     // the status.
     //
+    // Each of those four statuses also forwards a well-formed `code`, the stable
+    // machine code a ProblemDetails carries as an extension, as `body.code`, so
+    // the page can pick its own translated sentence for a status that has
+    // several causes. On 404 and 429 it is the only thing taken from the body:
+    // the `detail` beside it still never reaches the page.
+    //
     // A forwarded 404 reaches a query and a command differently, and both are
     // wanted: a query awaited by a page load renders the not-found page, while a
     // command or form rejects its caller with an `HttpError(404)` — SvelteKit
@@ -108,9 +120,11 @@ export default {
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? ${reason('e', 'b')};\n` +
       `    const issues = parseIssues(e?.issues) ?? b?.issues;\n` +
-      `    if (status === 429) throw error(429, 'Too many requests');\n` +
-      `    if (status === 404) throw error(404, 'Not found');\n` +
-      `    if (status === 400 || status === 409) throw error(status, issues ? { message: message ?? 'Request rejected', issues } : message ?? 'Request rejected');\n` +
+      `    const code = parseCode(e?.code) ?? b?.code;\n` +
+      `    const coded = code ? { code } : {};\n` +
+      `    if (status === 429) throw error(429, 'Too many requests', coded);\n` +
+      `    if (status === 404) throw error(404, 'Not found', coded);\n` +
+      `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected', { ...(issues ? { issues } : {}), ...coded });\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,
   },
 };

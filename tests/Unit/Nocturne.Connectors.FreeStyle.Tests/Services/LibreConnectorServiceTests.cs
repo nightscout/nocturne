@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -153,6 +154,44 @@ public class LibreConnectorServiceTests
             && e.Device!.Contains("0M0001ABCD"));
     }
 
+    /// <summary>The readings and the sensor start are stamped with the service clock.</summary>
+    [Fact]
+    public async Task SyncDataAsync_StampsReadingsAndSensorStartWithTheClock()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var fixture = new ServiceFixture(
+            connectionsJson: Connections,
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"3/1/2026 11:55:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3},"
+                       + "\"sensor\":{\"deviceId\":\"d1\",\"sn\":\"0M0001ABCD\",\"a\":1760000000,\"w\":60,\"pt\":4}},"
+                       + "\"graphData\":[{\"factoryTimestamp\":\"3/1/2026 11:50:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}",
+            clock: clock);
+        List<SensorGlucose> glucose = [];
+        List<DeviceEvent> starts = [];
+        fixture.Glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => glucose.AddRange(records))
+            .ReturnsAsync(true);
+        fixture.Publisher
+            .Setup(p => p.Treatments.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(clock.GetUtcNow().UtcDateTime.AddDays(-1));
+        fixture.Publisher
+            .Setup(p => p.Device.PublishDeviceEventsAsync(
+                It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<DeviceEvent> records, string _, WriteOrigin _, CancellationToken _) => starts.AddRange(records))
+            .ReturnsAsync(true);
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents] }, fixture.Config, CancellationToken.None);
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        glucose.Should().HaveCount(2).And.OnlyContain(sg => sg.CreatedAt == now && sg.ModifiedAt == now);
+        starts.Should().ContainSingle().Which.CreatedAt.Should().Be(now);
+    }
+
     [Theory]
     [InlineData("null")]
     [InlineData("{\"sn\":\"\",\"a\":1760000000}")]
@@ -229,7 +268,8 @@ public class LibreConnectorServiceTests
             string? tokenToReturn = "valid-token",
             string? connectionsJson = null,
             string? graphJson = null,
-            Func<CancellationToken, Task>? onGraph = null)
+            Func<CancellationToken, Task>? onGraph = null,
+            TimeProvider? clock = null)
         {
             Config = new LibreLinkUpConnectorConfiguration
             {
@@ -253,9 +293,9 @@ public class LibreConnectorServiceTests
                 new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(null, null, null),
                 NullLogger<LibreConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 tokenProvider,
-                Publisher.Object);
+                Publisher.Object,
+                clock);
         }
     }
 }

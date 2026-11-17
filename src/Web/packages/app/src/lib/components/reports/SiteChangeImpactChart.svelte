@@ -1,14 +1,13 @@
 <script lang="ts">
   import { AreaChart, Rule } from "layerchart";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
-  import AlertCircle from "@lucide/svelte/icons/circle-alert";
-  import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { bg, bgValue, bgLabel, bgRange } from "#lib/utils/formatting.js";
   import type {
     SiteChangeImpactAnalysis,
     SiteChangeImpactDataPoint,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
 
   type CheckedImpactFields = Required<
     Pick<
@@ -31,29 +30,39 @@
 
   let { analysis }: Props = $props();
 
+  const targetRange = $derived(
+    analysis?.thresholds?.targetBottom != null && analysis.thresholds.targetTop != null
+      ? { low: analysis.thresholds.targetBottom, high: analysis.thresholds.targetTop }
+      : null
+  );
+
   // Format hours for X-axis (ticks are always on hour boundaries)
   function formatHoursFromChange(minutes: number): string {
     const hours = Math.round(minutes / 60);
-    if (hours === 0) return "Site Change";
+    if (hours === 0) return "Site change";
     if (hours > 0) return `+${hours}h`;
     return `${hours}h`;
   }
 
-  const MAX_X_TICKS = 13;
+  // About one label per 64px of plot, so labels keep a gap without occlusion thinning them unevenly.
+  let chartWidth = $state(0);
+  const maxXTicks = $derived(chartWidth > 0 ? Math.min(13, Math.max(3, Math.floor(chartWidth / 64))) : 13);
   const TICK_STEPS_HOURS = [1, 2, 3, 4, 6, 12];
 
-  // Hour ticks anchored on the change itself, thinned so labels never touch.
+  // Hour ticks anchored on the change itself, thinned so labels never touch. Ordered by distance
+  // from the change: occlusion with priority "start" keeps the first tick it can, so the
+  // "Site change" label always survives and the rest thin outwards from it.
   const hourlyTicks = $derived.by(() => {
     const [minMinutes, maxMinutes] = xDomain;
     const startHour = Math.ceil(minMinutes / 60);
     const endHour = Math.floor(maxMinutes / 60);
     const span = endHour - startHour;
-    const step = TICK_STEPS_HOURS.find((s) => span / s < MAX_X_TICKS) ?? 12;
+    const step = TICK_STEPS_HOURS.find((s) => span / s < maxXTicks) ?? 12;
     const ticks: number[] = [];
     for (let h = Math.ceil(startHour / step) * step; h <= endHour; h += step) {
       ticks.push(h * 60);
     }
-    return ticks;
+    return ticks.sort((a, b) => Math.abs(a) - Math.abs(b));
   });
 
   // Filter and validate data points to ensure all required fields are present
@@ -113,7 +122,7 @@
 
 <div class="@container w-full">
   {#if analysis && analysis.hasSufficientData && chartData.length > 0}
-    <div class="h-[400px] w-full">
+    <div class="h-[400px] w-full" bind:clientWidth={chartWidth}>
       <AreaChart
         data={chartData}
         x={(d) => d.minutesFromChange}
@@ -179,6 +188,7 @@
             tickMultiline: true,
             format: formatHoursFromChange,
             ticks: hourlyTicks,
+            tickOcclusion: { priority: "start" },
           },
           yAxis: {
             label: `Glucose (${bgLabel()})`,
@@ -186,11 +196,11 @@
         }}
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
       >
-        <!-- Target range overlay (70-180 mg/dL, plotted in display units) -->
         {#snippet aboveMarks()}
-          <!-- Horizontal reference lines for target range -->
-          <Rule y={bgValue(70)} class="stroke-success/50 stroke-1" dashArray="4 4" />
-          <Rule y={bgValue(180)} class="stroke-warning/50 stroke-1" dashArray="4 4" />
+          {#if targetRange}
+            <Rule y={bgValue(targetRange.low)} class="stroke-success/50 stroke-1" dashArray="4 4" />
+            <Rule y={bgValue(targetRange.high)} class="stroke-warning/50 stroke-1" dashArray="4 4" />
+          {/if}
           <!-- Vertical line at site change point -->
           <Rule x={0} class="stroke-primary stroke-2" />
         {/snippet}
@@ -203,7 +213,9 @@
         { texture: "percentile-outer", label: "10th–25th / 75th–90th percentile" },
         { texture: "percentile-inner", label: "25th–75th percentile" },
         { texture: "percentile-median", label: "Median glucose", shape: "line" },
-        { texture: "target-range-limit", label: `Target range (${bgRange(70, 180)})`, shape: "line" },
+        ...(targetRange
+          ? [{ texture: "target-range-limit" as const, label: `Consensus target range (${bgRange(targetRange.low, targetRange.high)})`, shape: "line" as const }]
+          : []),
       ]}
     />
 
@@ -242,32 +254,27 @@
       </dl>
     {/if}
   {:else if analysis && !analysis.hasSufficientData}
-    <div
-      class="flex h-[400px] w-full flex-col items-center justify-center text-muted-foreground"
-    >
-      <AlertCircle class="mx-auto h-10 w-10 opacity-30" />
-      <p class="mt-2 font-medium">Insufficient Data</p>
-      <p class="text-sm text-center max-w-md">
-        {#if (analysis.siteChangeCount ?? 0) < 2}
-          At least 2 site changes are required for meaningful analysis.
-          Currently found: {analysis.siteChangeCount ?? 0} site change(s).
-        {:else}
-          Not enough glucose readings around your site changes to generate a
-          reliable analysis.
-        {/if}
-      </p>
+    <div class="flex h-[400px] w-full items-center justify-center">
+      <EmptyState art="report-pages" size="compact" title="Insufficient data">
+        <p>
+          {#if (analysis.siteChangeCount ?? 0) < 2}
+            At least 2 site changes are required for meaningful analysis.
+            Currently found: {analysis.siteChangeCount ?? 0} site change(s).
+          {:else}
+            Not enough glucose readings around your site changes to generate a
+            reliable analysis.
+          {/if}
+        </p>
+      </EmptyState>
     </div>
   {:else}
-    <div
-      class="flex h-[400px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <SiteChangeIcon class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">No site change data available</p>
-        <p class="text-sm">
-          Site changes are required to analyze glucose patterns
-        </p>
-      </div>
+    <div class="flex h-[400px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No site change data available"
+        body="Site changes are required to analyze glucose patterns"
+      />
     </div>
   {/if}
 </div>

@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// - GET /api/v2/ddata/at[/{timestamp}] - Full DData at a time, now when omitted
 /// - GET /api/v2/ddata/raw - Raw DData without filtering
 /// </summary>
+[Collection(ParityShards.Two)]
 public class DDataParityTests : ParityTestBase
 {
     public DDataParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -20,13 +21,11 @@ public class DDataParityTests : ParityTestBase
 
     protected override ComparisonOptions GetComparisonOptions()
     {
-        // DData responses contain dynamic timestamps and computed values
-        return ComparisonOptions.Default.WithIgnoredFields(
-            "lastUpdated",
-            "serverTime",
-            "serverTimeEpoch",
-            "now"
-        );
+        // DData responses contain dynamic timestamps and computed values. Nocturne serves no store
+        // size, a fixed 0, where Nightscout serves Mongo's byte counts, so only their presence is checked.
+        return ComparisonOptions.Default
+            .WithIgnoredFields("lastUpdated", "serverTime", "serverTimeEpoch", "now")
+            .WithPresenceOnlyFields("dataSize", "indexSize");
     }
 
     #region Helper Methods
@@ -153,8 +152,13 @@ public class DDataParityTests : ParityTestBase
     [Fact]
     public async Task GetDDataAt_IsoDateString_ReturnsSameShape()
     {
-        await SeedEntrySequenceAsync(count: 5);
-        var isoDate = TestTimeProvider.GetTestTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        // Nightscout answers an earlier time from a copy of its in-memory data that it refills from
+        // Mongo, so the wait makes that copy start from the cleaned data, not the previous test's.
+        // The other tests here are ParityDivergences, which compare nothing with Nightscout.
+        await WaitForNightscoutEmptyAsync();
+        var at = TestTimeProvider.GetTestTime().AddHours(-1);
+        await SeedEntriesAsync(TestDataFactory.CreateEntrySequence(5, 5, startTime: at));
+        var isoDate = at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
         await AssertGetParityAsync($"/api/v2/ddata/at/{Uri.EscapeDataString(isoDate)}");
     }

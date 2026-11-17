@@ -14,6 +14,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.Core.Contracts.Auth;
+
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
@@ -100,7 +104,8 @@ public class DenyDemoSubjectAttributeTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext());
 
         var services = new ServiceCollection();
-        services.AddSingleton(dbFactory.Object);
+        services.AddSingleton(dbFactory.Object.AsNocturneFactory());
+        services.AddSingleton<ISubjectRepository>(new SubjectRepository(dbFactory.Object.AsNocturneFactory()));
 
         var httpContext = new DefaultHttpContext
         {

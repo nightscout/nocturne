@@ -8,7 +8,7 @@ public static class CareLinkDeviceStatusMapper
 {
     private const string GuardianFamily = "Guardian";
 
-    public static DeviceStatus? Map(CareLinkData? data)
+    public static DeviceStatus? Map(CareLinkData? data, DateTime now)
     {
         if (data == null)
             return null;
@@ -19,7 +19,7 @@ public static class CareLinkDeviceStatusMapper
 
         var timestamp = CareLinkTimestampParser.ParseSgTimestamp(data.MedicalDeviceTime, pumpOffsetMs);
         var mills = timestamp.HasValue
-            ? new DateTimeOffset(timestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            ? timestamp.Value.ToMills()
             : data.CurrentServerTime;
 
         var isGuardian = data.MedicalDeviceFamily?.Contains(GuardianFamily, StringComparison.OrdinalIgnoreCase) == true;
@@ -30,7 +30,7 @@ public static class CareLinkDeviceStatusMapper
             Id = Guid.CreateVersion7().ToString(),
             Mills = mills,
             Device = deviceName,
-            CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
         };
 
         if (isGuardian)

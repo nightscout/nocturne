@@ -7,9 +7,10 @@
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
-  import { formatWeekdayDate, hourLabel } from "$lib/utils/formatting";
+  import { formatWeekdayDate, hourLabel } from "#lib/utils/formatting.js";
   import { hourTicks } from "./engine/axis-ticks";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   interface Props {
     engine: ChartDataEngine;
@@ -21,9 +22,12 @@
     selectionDomain?: [Date, Date] | null;
     onSelectionChange?: (domain: [Date, Date] | null) => void;
     showTimeAxis?: boolean;
+    glucoseUnits?: GlucoseUnits;
     tracks: Snippet<[GlucoseChartContext]>;
     /** HTML overlays rendered after Svg but inside Chart (tooltips, etc.) */
     overlays?: Snippet<[GlucoseChartContext]>;
+    /** Draws at this size instead of measuring its box, which lets the server render it. */
+    size?: { width: number; height: number };
   }
 
   const {
@@ -36,8 +40,10 @@
     selectionDomain,
     onSelectionChange,
     showTimeAxis = true,
+    glucoseUnits,
     tracks,
     overlays,
+    size,
   }: Props = $props();
 
   let chartHeight = $state(0);
@@ -46,7 +52,7 @@
   const layout = $derived(
     computeTrackLayout(
       chartHeight,
-      engine.glucoseYMax,
+      engine.thresholds.glucoseYMax,
       engine.maxBasalRate,
       engine.maxIOB,
       {
@@ -67,7 +73,8 @@
         activity:
           (legend?.activitySpans ?? false) &&
           engine.displayActivitySpans.length > 0,
-      }
+      },
+      engine.minIOB
     )
   );
 
@@ -107,6 +114,9 @@
     get printing() {
       return print.active;
     },
+    get glucoseUnits() {
+      return glucoseUnits;
+    },
   };
   setGlucoseChartContext(ctx);
 </script>
@@ -119,9 +129,12 @@
     y="sgv"
     xScale={scaleTime()}
     xDomain={[chartXDomain.from, chartXDomain.to]}
-    yDomain={[0, engine.glucoseYMax]}
+    yDomain={[0, engine.thresholds.glucoseYMax]}
     {padding}
     tooltipContext={{ mode: "quadtree-x" }}
+    ssr={size !== undefined}
+    width={size?.width}
+    height={size?.height}
   >
     {#snippet children({ context })}
       {(chartHeight = context.height, "")}
@@ -136,7 +149,8 @@
             placement="bottom"
             ticks={hourTicks}
             format={tickLabel}
-            tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
+            tickOcclusion
+            tickLabelProps={{ class: "text-xs fill-muted-foreground", fontSize: 12 }}
           />
         {/if}
       </Svg>

@@ -15,7 +15,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [Tags("TenantAdmin")]
 [Route("api/v4/admin/state-spans")]
 [Produces("application/json")]
-[RequireAdmin]
+[RequireSuperuser]
 public class StateSpanMaintenanceController(
     IStateSpanService stateSpanService,
     ILogger<StateSpanMaintenanceController> logger) : ControllerBase

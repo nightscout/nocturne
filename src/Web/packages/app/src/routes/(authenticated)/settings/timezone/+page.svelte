@@ -1,18 +1,19 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import Globe from "@lucide/svelte/icons/globe";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import * as tz from "$api/generated/timezoneTimelines.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { TimezoneTimelineEntry } from "$api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import * as tz from "#lib/api/generated/timezoneTimelines.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import type { TimezoneTimelineEntry } from "#lib/api/index.js";
 
   const timelineQuery = tz.getTimeline();
   const entries = $derived<TimezoneTimelineEntry[]>(timelineQuery.current ?? []);
@@ -86,25 +87,27 @@
   }
 </script>
 
-<div class="mx-auto max-w-2xl space-y-6 p-4">
+<div class="@container mx-auto max-w-2xl space-y-6 p-4">
   <div class="space-y-1">
     <h1 class="text-xl font-semibold">Timezone history</h1>
     <p class="text-muted-foreground text-sm">
       Some sources (like Glooko) record times in local clock time. Tell Nocturne where you were over time
-      so those readings land at the right moment. Add an entry when you move or travel; daylight saving is
-      handled automatically.
+      so those readings land at the right moment. Add an entry when you move or travel. Nocturne handles
+      daylight saving automatically.
     </p>
   </div>
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Where you've been</Card.Title>
+      <Card.Title>Where you were</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if entries.length === 0}
-        <p class="text-muted-foreground text-sm">
-          No entries yet. Your home timezone is filled in automatically on the next sync.
-        </p>
+        <EmptyState
+          art="world-globe"
+          title="No entries yet"
+          body="Your home timezone is filled in automatically on the next sync."
+        />
       {:else}
         <ul class="divide-border divide-y">
           {#each entries as entry (entry.id)}
@@ -136,7 +139,7 @@
       <Card.Title>Add a location change</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid gap-3 @md:grid-cols-2">
         <div class="space-y-1.5">
           <Label for="tz-zone">Location (timezone)</Label>
           <TimezoneCombobox id="tz-zone" bind:value={newZone} />

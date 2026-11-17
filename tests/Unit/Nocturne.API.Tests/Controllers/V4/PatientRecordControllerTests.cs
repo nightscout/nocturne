@@ -1,12 +1,17 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -25,6 +30,8 @@ public class PatientRecordControllerTests
     private readonly Mock<ISensorSessionInferenceRunner> _sessionInference = new();
     private readonly Mock<ISensorSessionInferenceService> _inference = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly Mock<ITenantCache> _tenantCache = new();
+    private readonly Mock<IDeviceTrackerProvisioner> _trackerProvisioner = new();
     private readonly PatientRecordController _controller;
 
     private static readonly TenantContext Tenant = new(Guid.NewGuid(), "sleepy", "Sleepy", true, IsDemo: false);
@@ -46,8 +53,14 @@ public class PatientRecordControllerTests
             _sensorGlucoseRepo.Object,
             _reattribution.Object,
             _sessionInference.Object,
+            _trackerProvisioner.Object,
             _tenantAccessor.Object,
-            NullLogger<PatientRecordController>.Instance);
+            _tenantCache.Object,
+            TempBasalTestDeps.NoReresolution(),
+            NullLogger<PatientRecordController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
 
         _tenantAccessor.Setup(t => t.Context).Returns(Tenant);
         _sessionInference
@@ -82,6 +95,42 @@ public class PatientRecordControllerTests
         _sessionInference.Verify(r => r.RunAsync(
             Tenant, It.IsAny<Func<ISensorSessionInferenceService, CancellationToken, Task>>(), It.IsAny<CancellationToken>()), Times.Once);
         _inference.Verify(i => i.InferHistoryAsync(device, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private void GivenStoredRecord(string? timezone) =>
+        _recordRepo.Setup(x => x.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new PatientRecord { Timezone = timezone });
+
+    private void GivenUpdateEchoes() =>
+        _recordRepo
+            .Setup(x => x.UpdateAsync(It.IsAny<PatientRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientRecord m, WriteOrigin _, CancellationToken _) => m);
+
+    [Theory]
+    [InlineData("Australia/Sydney", "Europe/London")]
+    [InlineData(null, "Europe/London")]
+    [InlineData("Australia/Sydney", null)]
+    public async Task UpdatePatientRecord_ChangingTheTimezone_ClearsTheWholeEHbA1cFamily(string? stored, string? edited)
+    {
+        GivenStoredRecord(stored);
+        GivenUpdateEchoes();
+
+        await _controller.UpdatePatientRecord(new PatientRecord { Timezone = edited });
+
+        _tenantCache.Verify(c => c.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, It.IsAny<CancellationToken>()), Times.Once);
+        _tenantCache.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData("Australia/Sydney")]
+    [InlineData(null)]
+    public async Task UpdatePatientRecord_KeepingTheTimezone_ClearsNothing(string? timezone)
+    {
+        GivenStoredRecord(timezone);
+        GivenUpdateEchoes();
+
+        await _controller.UpdatePatientRecord(new PatientRecord { Timezone = timezone });
+
+        _tenantCache.VerifyNoOtherCalls();
     }
 
     private void GivenStored(PatientDevice device) =>
@@ -161,6 +210,31 @@ public class PatientRecordControllerTests
         await _controller.CreateDevice(new PatientDevice { DeviceCategory = DeviceCategory.InsulinPump, Manufacturer = "Tandem", Model = "t:slim X2" });
 
         _sessionInference.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CreateDevice_ProvisionsTheDevicesTrackersForTheCaller()
+    {
+        GivenCreateEchoes();
+        var subjectId = Guid.NewGuid();
+        _controller.HttpContext.Items[AuthContextKeys.AuthContext] =
+            new AuthContext { IsAuthenticated = true, SubjectId = subjectId };
+        var pump = new PatientDevice { DeviceCategory = DeviceCategory.InsulinPump, CatalogId = "omnipod-dash" };
+
+        await _controller.CreateDevice(pump);
+
+        _trackerProvisioner.Verify(
+            p => p.ProvisionAsync(pump, subjectId.ToString(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDevice_WithoutASubject_ProvisionsNoTrackers()
+    {
+        GivenCreateEchoes();
+
+        await _controller.CreateDevice(new PatientDevice { DeviceCategory = DeviceCategory.InsulinPump, CatalogId = "omnipod-dash" });
+
+        _trackerProvisioner.VerifyNoOtherCalls();
     }
 
     /// <summary>The device is already saved, so the request still succeeds.</summary>

@@ -1,14 +1,15 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, afterEach } from "vitest";
-import type { ClockSettings } from "$lib/api";
-import { glucoseUnits, timeFormat } from "$lib/stores/appearance-store.svelte";
-import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-import { renderClockElementValue } from "$lib/components/clock/element-value";
+import type { ClockSettings } from "#lib/api/index.js";
+import { glucoseUnits, timeFormat } from "#lib/stores/appearance-store.svelte.js";
+import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { renderClockElementValue } from "#lib/components/clock/element-value.js";
 import {
   ELEMENT_GROUPS,
   elementInfo,
   type ClockElementType,
-} from "$lib/clock-builder";
+} from "#lib/clock-builder/index.js";
 import ClockElementPreview from "./ClockElementPreview.svelte";
 import Harness from "./ClockElementPreviewHarness.test.svelte";
 
@@ -20,6 +21,7 @@ const glucose = {
   direction: "Flat",
   lastUpdated: now.getTime() - 7 * 60_000,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const noReading = {
@@ -28,6 +30,7 @@ const noReading = {
   direction: "",
   lastUpdated: null,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const mgdl12: ClockSettings = { glucoseUnits: "mg/dl", timeFormat: "12" };

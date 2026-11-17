@@ -1,3 +1,6 @@
+using System.Globalization;
+using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
@@ -12,10 +15,8 @@ namespace Nocturne.API.Services.Analytics;
 /// <inheritdoc cref="IActogramReportService"/>
 /// <remarks>
 /// Issues the required queries (glucose, sleep state spans, step counts,
-/// heart rates) sequentially: every dependency resolves through the same
-/// per-request scoped <c>NocturneDbContext</c>, and EF Core's
-/// <c>ConcurrencyDetector</c> rejects parallel operations on a single
-/// context with <c>InvalidOperationException</c>. Threshold resolution
+/// heart rates) sequentially (<see cref="Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory"/>).
+/// Threshold resolution
 /// mirrors <c>ProfileLoadStage</c>: the clinical low/high band is fixed, and the
 /// active profile's personal target is carried separately in
 /// <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/>
@@ -32,12 +33,15 @@ public sealed class ActogramReportService : IActogramReportService
     // Sleep spans are sparse (≤ a few per day). Cap is generous but bounded.
     private const int SleepSpanLimit = 10000;
 
+    private const int HourMarkSpacing = 6;
+
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly ISleepService _sleepService;
     private readonly IStepCountService _stepCountService;
     private readonly IHeartRateService _heartRateService;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly ITargetRangeResolver _targetRangeResolver;
+    private readonly TenantClockResolver _tenantClock;
     private readonly ILogger<ActogramReportService> _logger;
 
     public ActogramReportService(
@@ -47,6 +51,7 @@ public sealed class ActogramReportService : IActogramReportService
         IHeartRateService heartRateService,
         ITherapySettingsResolver therapySettingsResolver,
         ITargetRangeResolver targetRangeResolver,
+        TenantClockResolver tenantClock,
         ILogger<ActogramReportService> logger
     )
     {
@@ -56,23 +61,24 @@ public sealed class ActogramReportService : IActogramReportService
         _heartRateService = heartRateService;
         _therapySettingsResolver = therapySettingsResolver;
         _targetRangeResolver = targetRangeResolver;
+        _tenantClock = tenantClock;
         _logger = logger;
     }
 
     public async Task<ActogramReportData> GetAsync(
         long startTime,
         long endTime,
+        long? summaryStartTime = null,
+        long? summaryEndTime = null,
         CancellationToken cancellationToken = default
     )
     {
-        var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
-        var toDt = DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime;
+        var summaryStart = summaryStartTime ?? startTime;
+        var summaryEnd = summaryEndTime ?? endTime;
 
-        // Sequential awaits: every query below resolves through the same
-        // per-request scoped NocturneDbContext, and EF Core's ConcurrencyDetector
-        // rejects overlapping operations on a single context. Npgsql also
-        // serializes commands per connection, so Task.WhenAll buys no real
-        // throughput here even when it doesn't crash.
+        var fromDt = startTime.ToUtcDateTime();
+        var toDt = endTime.ToUtcDateTime();
+
         var glucoseRecords = await _sensorGlucoseRepository.GetForAnalyticsAsync(
             from: fromDt,
             to: toDt,
@@ -106,9 +112,9 @@ public sealed class ActogramReportService : IActogramReportService
 
         var thresholdsRaw = await BuildThresholdsAsync(endTime, cancellationToken);
 
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(
-            await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken)
-        );
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        var zone = clock.Zone ?? TimeZoneInfo.Utc;
+        var days = BuildDays(startTime, endTime, zone);
 
         var (glucoseData, glucoseYMax) = ChartDataService.BuildGlucoseData(
             glucoseRecords.ToList()
@@ -139,8 +145,8 @@ public sealed class ActogramReportService : IActogramReportService
                 {
                     return session.Stages.Select(stage => new ActogramSleepSpan
                     {
-                        StartMills = new DateTimeOffset(stage.StartTime, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        EndMills = new DateTimeOffset(stage.EndTime, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                        StartMills = stage.StartTime.ToMills(),
+                        EndMills = stage.EndTime.ToMills(),
                         State = stage.Stage.ToString().ToLowerInvariant(),
                     });
                 }
@@ -173,30 +179,68 @@ public sealed class ActogramReportService : IActogramReportService
             Thresholds = thresholds,
             HeartRates = heartRates,
             StepCounts = stepCounts,
-            StepDayTotals = SumStepsByLocalDay(stepRecords, startTime, endTime, tz),
+            Days = days,
+            StepDayTotals = SumStepsByDay(stepRecords, days, zone),
+            TimeZoneUnavailableReason = clock.Reason,
             SleepSpans = sleepSpans,
+            HeartRateSummary = SummariseHeartRates(heartRates, summaryStart, summaryEnd),
+            StepSummary = SummariseSteps(stepCounts, summaryStart, summaryEnd),
         };
     }
 
-    /// <summary>
-    /// Total steps per tenant-local calendar day, with every day the half-open window touches
-    /// present so a day without samples reads as 0 rather than as missing.
-    /// </summary>
-    private static Dictionary<string, int> SumStepsByLocalDay(
-        IEnumerable<StepCount> steps,
-        long startTime,
-        long endTime,
-        TimeZoneInfo tz
+    private static ActogramHeartRateSummary? SummariseHeartRates(
+        IEnumerable<HeartRatePointDto> heartRates,
+        long start,
+        long end
     )
     {
-        var totals = new Dictionary<string, int>(StringComparer.Ordinal);
-        var lastDay = LocalDate(endTime - 1, tz);
-        for (var day = LocalDate(startTime, tz); day <= lastDay; day = day.AddDays(1))
-            totals[day.ToString("O")] = 0;
+        var bpms = heartRates
+            .Where(h => h.Time >= start && h.Time < end)
+            .Select(h => h.Bpm)
+            .Order()
+            .ToList();
+        if (bpms.Count == 0)
+            return null;
 
+        return new ActogramHeartRateSummary
+        {
+            AverageBpm = (int)Math.Round(bpms.Average(), MidpointRounding.AwayFromZero),
+            RestingBpm = bpms[bpms.Count / 10],
+            MinBpm = bpms[0],
+            MaxBpm = bpms[^1],
+            ReadingCount = bpms.Count,
+        };
+    }
+
+    private static ActogramStepSummary SummariseSteps(
+        IEnumerable<StepBubbleDto> stepCounts,
+        long start,
+        long end
+    )
+    {
+        var total = stepCounts.Where(s => s.Time >= start && s.Time < end).Sum(s => s.Steps);
+        var dayCount = StatisticsService.WindowDays(
+            start.ToUtcDateTime(),
+            end.ToUtcDateTime());
+
+        return new ActogramStepSummary
+        {
+            TotalSteps = total,
+            DayCount = dayCount,
+            DailyAverage = (int)Math.Round((double)total / dayCount, MidpointRounding.AwayFromZero),
+        };
+    }
+
+    private static Dictionary<string, int> SumStepsByDay(
+        IEnumerable<StepCount> steps,
+        IReadOnlyList<ActogramDay> days,
+        TimeZoneInfo zone
+    )
+    {
+        var totals = days.ToDictionary(day => day.Date, _ => 0, StringComparer.Ordinal);
         foreach (var step in steps)
         {
-            var key = LocalDate(step.Mills, tz).ToString("O");
+            var key = LocalSlotBinning.LocalDay(step.Mills, zone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             if (totals.ContainsKey(key))
                 totals[key] += step.Metric;
         }
@@ -204,10 +248,25 @@ public sealed class ActogramReportService : IActogramReportService
         return totals;
     }
 
-    private static DateOnly LocalDate(long mills, TimeZoneInfo tz) =>
-        DateOnly.FromDateTime(
-            TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), tz).DateTime
-        );
+    private static List<ActogramDay> BuildDays(long startTime, long endTime, TimeZoneInfo zone)
+    {
+        var (firstDay, starts) = LocalSlotBinning.DayStarts(startTime, endTime, zone);
+        return Enumerable.Range(0, starts.Length - 1)
+            .Select(d => new ActogramDay
+            {
+                Date = firstDay.AddDays(d).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                StartMills = starts[d],
+                EndMills = starts[d + 1],
+                HourMarks = BuildHourMarks(firstDay.AddDays(d), zone),
+            })
+            .ToList();
+    }
+
+    private static List<long> BuildHourMarks(DateOnly day, TimeZoneInfo zone) =>
+        Enumerable.Range(0, 2)
+            .SelectMany(_ => Enumerable.Range(1, 3), (dayOffset, step) => (dayOffset, hour: step * HourMarkSpacing))
+            .Select(mark => LocalSlotBinning.LocalInstantMills(day.AddDays(mark.dayOffset), mark.hour, zone))
+            .ToList();
 
     private async Task<ChartThresholdsDto> BuildThresholdsAsync(long atMills, CancellationToken ct)
     {

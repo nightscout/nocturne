@@ -3,10 +3,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -15,6 +18,7 @@ namespace Nocturne.API.Controllers.V1;
 /// Implements the /api/v1/food/* endpoints from the legacy JavaScript implementation.
 /// </summary>
 /// <seealso cref="IFoodRepository"/>
+/// <seealso cref="IFoodService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
@@ -22,16 +26,23 @@ namespace Nocturne.API.Controllers.V1;
 public class FoodController : ControllerBase
 {
     private readonly IFoodRepository _foodRepository;
+    private readonly IFoodService _foodService;
     private readonly ILogger<FoodController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="FoodController"/>.
     /// </summary>
-    /// <param name="foodRepository">Repository for food records.</param>
+    /// <param name="foodRepository">Repository for reading food records.</param>
+    /// <param name="foodService">Service every food write goes through.</param>
     /// <param name="logger">Logger instance.</param>
-    public FoodController(IFoodRepository foodRepository, ILogger<FoodController> logger)
+    public FoodController(
+        IFoodRepository foodRepository,
+        IFoodService foodService,
+        ILogger<FoodController> logger
+    )
     {
         _foodRepository = foodRepository;
+        _foodService = foodService;
         _logger = logger;
     }
 
@@ -283,27 +294,12 @@ public class FoodController : ControllerBase
                 // Nightscout V1 API does NOT reject missing name - it creates the record anyway
                 // This matches legacy Nightscout behavior
 
-                // Set default unit if not provided
-                if (string.IsNullOrWhiteSpace(food.Unit))
-                {
-                    food.Unit = "g";
-                }
-
-                // Set default GI if not provided or invalid
-                if (food.Gi < 1 || food.Gi > 3)
-                {
-                    food.Gi = 2;
-                }
-
-                // Set created_at timestamp for parity with Nightscout
-                if (string.IsNullOrWhiteSpace(food.CreatedAt))
-                {
-                    food.CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                }
+                food.ApplyUnitAndGiDefaults();
             }
 
-            var createdFoods = await _foodRepository.CreateFoodAsync(
+            var createdFoods = await _foodService.CreateFoodAsync(
                 foodsToCreate,
+                FoodWriteMode.Legacy,
                 cancellationToken
             );
             var resultArray = createdFoods.ToArray();
@@ -386,19 +382,9 @@ public class FoodController : ControllerBase
                 return BadRequest("Food name is required");
             }
 
-            // Set default unit if not provided
-            if (string.IsNullOrWhiteSpace(food.Unit))
-            {
-                food.Unit = "g";
-            }
+            food.ApplyUnitAndGiDefaults();
 
-            // Set default GI if not provided or invalid
-            if (food.Gi < 1 || food.Gi > 3)
-            {
-                food.Gi = 2;
-            }
-
-            var updatedFood = await _foodRepository.UpdateFoodAsync(id, food, cancellationToken);
+            var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
             if (updatedFood == null)
             {
                 _logger.LogDebug("Food record not found for update with ID: {Id}", id);
@@ -482,7 +468,7 @@ public class FoodController : ControllerBase
                 return BadRequest("Food ID cannot be null or empty");
             }
 
-            var deleted = await _foodRepository.DeleteFoodAsync(id, cancellationToken);
+            var deleted = await _foodService.DeleteFoodAsync(id, cancellationToken);
             if (!deleted)
             {
                 _logger.LogDebug("Food record not found for deletion with ID: {Id}", id);
@@ -503,7 +489,6 @@ public class FoodController : ControllerBase
     /// <summary>
     /// Bulk delete food records by filter query
     /// Compatible with Nightscout's DELETE /api/v1/food?find[field]=value
-    /// Note: Nightscout V1 API doesn't officially support bulk delete, but returns 200 {} for such requests
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Empty object for parity with Nightscout</returns>
@@ -512,6 +497,7 @@ public class FoodController : ControllerBase
     [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/food")]
     [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     public async Task<ActionResult> DeleteFoodByFilter(
         CancellationToken cancellationToken = default
@@ -524,23 +510,27 @@ public class FoodController : ControllerBase
 
         try
         {
-            // Parse find query from query string
-            var findQuery = ParseFindQuery();
+            var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+            var query = FindQuery.Parse(find);
 
-            if (string.IsNullOrEmpty(findQuery))
+            if (query.IsEmpty)
             {
-                // Nightscout V1 returns 200 {} when no filter is provided
-                // This matches the legacy behavior where DELETE /api/v1/food doesn't exist
-                // but Nightscout's routing returns an empty success response
-                _logger.LogDebug("No filter query provided for bulk delete, returning empty response");
-                return Ok(new { });
+                _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
+                return BadRequest(
+                    "Find query parameter is required for bulk delete to prevent accidental data loss"
+                );
             }
 
-            var deletedCount = await _foodRepository.BulkDeleteFoodAsync(findQuery, cancellationToken);
+            if (Food.FindRefusal(query) is { } refusal)
+            {
+                _logger.LogWarning("Bulk delete food refused: the find names a condition it cannot apply");
+                return BadRequest(refusal);
+            }
 
-            _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, findQuery);
+            var deletedCount = await _foodService.BulkDeleteFoodAsync(find, cancellationToken);
 
-            // Nightscout returns 200 {} for delete operations
+            _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, find);
+
             return Ok(new { });
         }
         catch (Exception ex)
@@ -548,34 +538,5 @@ public class FoodController : ControllerBase
             _logger.LogError(ex, "Error bulk deleting food records");
             return StatusCode(500, "Internal server error while deleting food records");
         }
-    }
-
-    /// <summary>
-    /// Parse find query from query string parameters
-    /// Handles find[field]=value format
-    /// </summary>
-    /// <returns>JSON query string or null if no find parameters</returns>
-    private string? ParseFindQuery()
-    {
-        var query = HttpContext.Request.Query;
-        var findParams = new Dictionary<string, object>();
-
-        foreach (var param in query)
-        {
-            if (param.Key.StartsWith("find[") && param.Key.EndsWith("]"))
-            {
-                var field = param.Key[5..^1]; // Extract field name from find[field]
-                var value = param.Value.FirstOrDefault();
-                if (value != null)
-                {
-                    findParams[field] = value;
-                }
-            }
-        }
-
-        if (findParams.Count == 0)
-            return null;
-
-        return System.Text.Json.JsonSerializer.Serialize(findParams);
     }
 }

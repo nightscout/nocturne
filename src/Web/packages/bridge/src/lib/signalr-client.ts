@@ -6,6 +6,9 @@ import {
 import { createHash } from "crypto";
 import logger from "./logger.js";
 import MessageTranslator from "./message-translator.js";
+import { AlarmLevel, EngineAlarmEvents } from "../constants.js";
+import { fieldsOf, type Payload } from "./payload.js";
+import type { AlarmEvent } from "../types.js";
 
 interface SignalRConfig {
   hubUrl: string;
@@ -18,6 +21,10 @@ interface SignalRConfig {
   /** Extra headers sent on every SignalR HTTP request (negotiate + WebSocket
    *  upgrade). Used to pass X-Forwarded-Host for tenant resolution. */
   connectionHeaders?: Record<string, string>;
+  /** Asked before each reconnect; the client reconnects only on true and asks again on its next
+   *  attempt otherwise. A tenant's hubs are reached by slug, so a slug that came to name another
+   *  tenant would otherwise reconnect this client to that tenant's data. */
+  confirmReconnect?: () => Promise<boolean>;
 }
 
 function isSetupRequiredError(error: unknown): boolean {
@@ -37,6 +44,7 @@ class SignalRClient {
   private configHubUrl?: string;
   private instanceKey: string;
   private connectionHeaders: Record<string, string>;
+  private confirmReconnect?: () => Promise<boolean>;
   private isConnecting: boolean = false;
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,6 +65,7 @@ class SignalRClient {
     this.maxReconnectDelay = config.maxReconnectDelay;
     this.instanceKey = config.instanceKey;
     this.connectionHeaders = config.connectionHeaders ?? {};
+    this.confirmReconnect = config.confirmReconnect;
   }
 
   async connect(): Promise<void> {
@@ -93,7 +102,7 @@ class SignalRClient {
       logger.info("SignalR DataHub connection established");
 
       await this.authenticateWithDataHub();
-      await this.subscribeToStorageCollections();
+      this.messageHandler.handleRelayState(await this.subscribeToStorageCollections());
 
       if (this.alarmHubUrl) {
         this.alarmConnection = this.buildConnection(this.alarmHubUrl);
@@ -195,11 +204,13 @@ class SignalRClient {
 
     this.dataConnection.onclose(() => {
       logger.warn("SignalR DataHub connection closed");
+      this.messageHandler.handleRelayState(false);
       void this.handleHubClosed();
     });
 
     this.dataConnection.onreconnecting(() => {
       logger.info("SignalR DataHub connection lost, attempting to reconnect...");
+      this.messageHandler.handleRelayState(false);
     });
 
     this.dataConnection.onreconnected(async () => {
@@ -207,7 +218,7 @@ class SignalRClient {
       this.reconnectAttempts = 0;
 
       await this.authenticateWithDataHub();
-      await this.subscribeToStorageCollections();
+      this.messageHandler.handleRelayState(await this.subscribeToStorageCollections());
     });
 
     this.dataConnection.on("dataUpdate", (data: unknown) => {
@@ -265,6 +276,11 @@ class SignalRClient {
       logger.debug("Received trackerUpdate from SignalR:", data);
       this.messageHandler.handleTrackerUpdate(data);
     });
+
+    this.dataConnection.on("trackerDefinitionUpdate", (data: unknown) => {
+      logger.debug("Received trackerDefinitionUpdate from SignalR:", data);
+      this.messageHandler.handleTrackerDefinitionUpdate(data);
+    });
   }
 
   private setupAlarmEventHandlers(): void {
@@ -310,6 +326,18 @@ class SignalRClient {
       logger.debug("Received clear_alarm from SignalR:", clear);
       this.messageHandler.handleClearAlarm(clear);
     });
+
+    this.alarmConnection.on(EngineAlarmEvents.Alarm, (alarm: unknown) => {
+      this.messageHandler.handleEngineAlarm("alarm", alarm);
+    });
+
+    this.alarmConnection.on(EngineAlarmEvents.UrgentAlarm, (alarm: unknown) => {
+      this.messageHandler.handleEngineAlarm("urgent_alarm", alarm);
+    });
+
+    this.alarmConnection.on(EngineAlarmEvents.ClearAlarm, (clear: unknown) => {
+      this.messageHandler.handleEngineClearAlarm(clear);
+    });
   }
 
   private setupConfigEventHandlers(): void {
@@ -350,6 +378,7 @@ class SignalRClient {
       logger.info("Successfully subscribed to ConfigHub");
     } catch (error) {
       logger.error("Error subscribing to ConfigHub:", error);
+      SignalRClient.rethrowIfClosed(this.configConnection, error);
     }
   }
 
@@ -382,25 +411,25 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error authenticating with SignalR DataHub:", error);
+      SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
   }
 
-  private async subscribeToStorageCollections(): Promise<void> {
-    if (!this.dataConnection) return;
+  /** Resolves true once the hub has subscribed this connection to the tenant's storage events. */
+  private async subscribeToStorageCollections(): Promise<boolean> {
+    if (!this.dataConnection) return false;
 
     try {
-      const collections = ["entries", "treatments", "devicestatus", "profiles"];
-
-      logger.info("Subscribing to storage collections:", collections);
-      const subscribeResult = await this.dataConnection.invoke("Subscribe", {
-        collections: collections,
-      });
+      // No list asks the hub for every category it lets this connection read.
+      logger.info("Subscribing to storage collections");
+      const subscribeResult = await this.dataConnection.invoke("Subscribe", {});
 
       if (subscribeResult?.success) {
         logger.info(
           "Successfully subscribed to storage collections:",
           subscribeResult.collections,
         );
+        return true;
       } else {
         logger.warn(
           "Failed to subscribe to some storage collections:",
@@ -409,7 +438,9 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error subscribing to storage collections:", error);
+      SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
+    return false;
   }
 
   private async subscribeToAlarmHub(): Promise<void> {
@@ -438,7 +469,14 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error subscribing to SignalR AlarmHub:", error);
+      SignalRClient.rethrowIfClosed(this.alarmConnection, error);
     }
+  }
+
+  /** A hub that closes the connection under a call made while connecting refused the connection,
+   *  as the API does for a tenant other than the one the client expects; that fails the connect. */
+  private static rethrowIfClosed(connection: HubConnection | null, error: unknown): void {
+    if (connection?.state !== "Connected") throw error;
   }
 
   private async handleReconnect(isSetupRequired = false): Promise<void> {
@@ -464,12 +502,17 @@ class SignalRClient {
         if (this.connectPromise) await this.connectPromise;
         if (this.connectionLossPromise) await this.connectionLossPromise;
         if (
-          !this.disconnectRequested &&
-          !this.reconnectTimer &&
-          !this.isConnected()
+          this.disconnectRequested ||
+          this.reconnectTimer ||
+          this.isConnected()
         ) {
-          await this.connect();
+          return;
         }
+        if (this.confirmReconnect && !(await this.confirmReconnect().catch(() => false))) {
+          void this.handleReconnect();
+          return;
+        }
+        await this.connect();
       })();
     }, delay);
   }
@@ -521,6 +564,20 @@ class SignalRClient {
         this.configConnection.state === "Connected");
 
     return dataConnected && alarmConnected && configConnected;
+  }
+
+  /** The tenant's alarm still sounding, from the API's AlarmHub, as an `/alarm`
+   *  subscriber hears it. Null when nothing sounds or the AlarmHub connection
+   *  isn't open. */
+  async currentAlarm(): Promise<{ event: AlarmEvent; alarm: Payload } | null> {
+    if (!this.alarmConnection || this.alarmConnection.state !== "Connected") {
+      logger.warn("Cannot replay the sounding alarm: AlarmHub connection not open");
+      return null;
+    }
+    const notify = await this.alarmConnection.invoke<unknown>("CurrentAlarm");
+    if (!notify) return null;
+    const event: AlarmEvent = fieldsOf(notify).level === AlarmLevel.Urgent ? "urgent_alarm" : "alarm";
+    return { event, alarm: this.messageHandler.translateAlarm(event, notify) };
   }
 
   /** Forward an alarm ack to the API's AlarmHub. The v3 `/alarm` namespace

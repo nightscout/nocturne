@@ -1,18 +1,22 @@
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
 public sealed class GoogleHealthWorker(
     IServiceScopeFactory scopes,
     GoogleHealthCoordinator coordinator,
+    TimeProvider time,
     ILogger<GoogleHealthWorker> logger) : BackgroundService
 {
-    private const string ConnectorId = "googlehealth";
+    private static readonly string ConnectorId = ConnectorNames.Canonical(GoogleHealthConnectorService.ConnectorName);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -40,9 +44,8 @@ public sealed class GoogleHealthWorker(
                 if (claim is null) return;
                 if (await coordinator.DisconnectRequestAsync(tenantId, ct) is { } disconnect)
                 {
-                    using var recovery = scopes.CreateScope();
-                    recovery.ServiceProvider.GetRequiredService<ITenantAccessor>()
-                        .SetTenant(new(tenantId, "", "", true, false));
+                    await using var recovery = TenantJobScope.Open(
+                        scopes, new TenantContext(tenantId, "", "", true, false), $"connector:{ConnectorId}");
                     await recovery.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Health.IGoogleHealthService>()
                         .ResumeDisconnectAsync(disconnect.SubjectId, disconnect.RequestId);
                     return;
@@ -51,7 +54,13 @@ public sealed class GoogleHealthWorker(
                 var completed = false;
                 try
                 {
+                    // Dropped rather than failed; see GoogleHealthConfigurationLoader.
                     using var listing = scopes.CreateScope();
+                    if (!(await listing.ServiceProvider.GetRequiredService<IGoogleHealthPlatformSettings>().GetAsync(ct)).IsConfigured)
+                    {
+                        completed = true;
+                        return;
+                    }
                     var tenant = await listing.ServiceProvider.GetRequiredService<ITenantService>()
                         .GetByIdAsync(tenantId, ct);
                     if (tenant is not { IsActive: true })
@@ -83,9 +92,8 @@ public sealed class GoogleHealthWorker(
 
     private async Task<bool> SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
     {
-        using var scope = scopes.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-            .SetTenant(new(id, slug, displayName, true, false));
+        await using var scope = TenantJobScope.Open(
+            scopes, new TenantContext(id, slug, displayName, true, false), $"connector:{ConnectorId}");
         var sync = scope.ServiceProvider.GetRequiredService<IConnectorSyncService>();
         SyncResult result;
         while (true)
@@ -100,12 +108,12 @@ public sealed class GoogleHealthWorker(
             await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
         }
         var configurations = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>();
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
         if (result.Success)
         {
             logger.LogInformation("Google Health worker sync succeeded for tenant {TenantId} ({Slug})", id, slug);
             await configurations.UpdateHealthStateAsync(
-                "GoogleHealth",
+                GoogleHealthConnectorService.ConnectorName,
                 lastSyncAttempt: now,
                 lastSuccessfulSync: now,
                 lastErrorMessage: result.Message,
@@ -120,12 +128,12 @@ public sealed class GoogleHealthWorker(
             id, slug, result.Message, string.Join("; ", result.Errors));
 
         await configurations.UpdateHealthStateAsync(
-            "GoogleHealth",
+            GoogleHealthConnectorService.ConnectorName,
             lastSyncAttempt: now,
             lastErrorMessage: result.Message,
             lastErrorAt: now,
             isHealthy: false,
             ct: ct);
-            return true;
+        return true;
     }
 }

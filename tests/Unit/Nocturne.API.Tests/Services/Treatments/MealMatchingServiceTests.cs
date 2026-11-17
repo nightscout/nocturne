@@ -1,12 +1,18 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Microsoft.Extensions.Time.Testing;
+using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -14,6 +20,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -48,7 +55,7 @@ public class MealMatchingServiceTests
         _carbIntakeRepository
             .Setup(s => s.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new CarbIntake
             {
@@ -58,14 +65,29 @@ public class MealMatchingServiceTests
             }]);
     }
 
-    private MealMatchingService NewService() =>
+    private MealMatchingService NewService(TimeProvider? time = null, string? tenantZoneId = null) =>
         new(_foodEntryRepository.Object,
             _carbIntakeRepository.Object,
             _treatmentFoodService.Object,
             _notificationService.Object,
             _notificationRepository.Object,
             _settingsService.Object,
+            NewTenantClock(tenantZoneId),
+            time ?? TimeProvider.System,
             Mock.Of<ILogger<MealMatchingService>>());
+
+    private static TenantClockResolver NewTenantClock(string? zoneId)
+    {
+        var therapy = new Mock<ITherapySettingsResolver>();
+        therapy
+            .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(zoneId);
+        return new TenantClockResolver(
+            therapy.Object,
+            Mock.Of<ICategoryReadContext>(),
+            new ShareClockDouble(therapy.Object),
+            Mock.Of<ILogger<TenantClockResolver>>());
+    }
 
     /// <summary>
     /// The same service over a settings store that can no longer be read, which is what a failed
@@ -81,7 +103,8 @@ public class MealMatchingServiceTests
             TenantId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
         };
         var settings = new MyFitnessPalMatchingSettingsService(
-            context,
+            new SettingsRepository(context.AsFactory()),
+            TimeProvider.System,
             NullLogger<MyFitnessPalMatchingSettingsService>.Instance);
         await context.DisposeAsync();
 
@@ -92,6 +115,8 @@ public class MealMatchingServiceTests
             _notificationService.Object,
             _notificationRepository.Object,
             settings,
+            NewTenantClock(null),
+            TimeProvider.System,
             Mock.Of<ILogger<MealMatchingService>>());
     }
 
@@ -271,6 +296,78 @@ public class MealMatchingServiceTests
     }
 
     /// <summary>
+    /// The title names the meal's hour and day on the tenant's clock, not the host's. At 00:10 on
+    /// 21 July in Auckland it is still 20 July in UTC, so a host-zone or UTC comparison calls a
+    /// meal eaten at 23:30 the evening before "today".
+    /// </summary>
+    [Theory]
+    [InlineData("2026-07-21T00:10:00+12:00", "2026-07-20T23:30:00+12:00", "yesterday at 11:30pm")]
+    [InlineData("2026-07-21T00:10:00+12:00", "2026-07-21T00:05:00+12:00", "at 12:05am")]
+    [InlineData("2026-07-21T15:00:00+12:00", "2026-07-21T07:30:00+12:00", "at 7:30am")]
+    public async Task ProcessNewFoodEntriesAsync_WordsTheMealTimeInTheTenantsDay(
+        string now, string mealTime, string expectedPhrase)
+    {
+        var title = await RaisedTitleAsync(
+            new FakeTimeProvider(DateTimeOffset.Parse(now)),
+            "Pacific/Auckland",
+            DateTimeOffset.Parse(mealTime));
+
+        title.Should().Be($"Confirm you ate \"Breakfast\" {expectedPhrase}");
+    }
+
+    [Fact]
+    public async Task ProcessNewFoodEntriesAsync_WordsTheMealTimeInUtcWhenTheTenantHasNoZone()
+    {
+        var title = await RaisedTitleAsync(
+            new FakeTimeProvider(DateTimeOffset.Parse("2026-07-21T00:10:00+00:00")),
+            tenantZoneId: null,
+            DateTimeOffset.Parse("2026-07-20T23:30:00+00:00"));
+
+        title.Should().Be("Confirm you ate \"Breakfast\" yesterday at 11:30pm");
+    }
+
+    private async Task<string> RaisedTitleAsync(TimeProvider time, string? tenantZoneId, DateTimeOffset mealTime)
+    {
+        _carbIntakeRepository
+            .Setup(s => s.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new CarbIntake
+            {
+                Id = Guid.CreateVersion7(),
+                Carbs = 30,
+                Timestamp = mealTime.UtcDateTime,
+            }]);
+        var id = Guid.NewGuid();
+        var entry = Entry(id);
+        entry.ConsumedAt = mealTime;
+        _foodEntryRepository
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([entry]);
+        _foodEntryRepository
+            .Setup(r => r.GetPendingInTimeRangeAsync(
+                It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([entry]);
+
+        string? title = null;
+        _notificationService
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, string _, string t, NotificationCategory? _, NotificationUrgency? _,
+                string? _, string? _, string? _, string? _, List<NotificationActionDto>? _,
+                ResolutionConditions? _, Dictionary<string, object>? _, CancellationToken _) => title = t);
+
+        await NewService(time, tenantZoneId).ProcessNewFoodEntriesAsync(UserId, [id]);
+
+        return title.Should().NotBeNull().And.Subject!;
+    }
+
+    /// <summary>
     /// The suggestion carries the carb intake's own id, which is the key
     /// <see cref="MealMatchingService.AcceptMatchAsync"/> writes to
     /// <c>treatment_foods.carb_intake_id</c>. Reading candidates through the legacy treatment
@@ -284,7 +381,7 @@ public class MealMatchingServiceTests
         _carbIntakeRepository
             .Setup(s => s.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new CarbIntake
             {
@@ -323,7 +420,7 @@ public class MealMatchingServiceTests
         _carbIntakeRepository.Verify(
             s => s.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>(), true,
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }

@@ -179,6 +179,25 @@ public class SecretEncryptionService : ISecretEncryptionService
     }
 
     /// <inheritdoc />
+    public bool CanDecrypt(string? ciphertext)
+    {
+        if (!IsConfigured)
+        {
+            return false;
+        }
+
+        try
+        {
+            Decrypt(ciphertext ?? string.Empty);
+            return true;
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
     public Dictionary<string, string> EncryptSecrets(Dictionary<string, string> secrets)
     {
         if (secrets == null || secrets.Count == 0)

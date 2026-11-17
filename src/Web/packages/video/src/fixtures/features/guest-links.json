@@ -1,0 +1,299 @@
+{
+ "route": "/settings/members",
+ "params": {},
+ "capturedAt": 1792831658796,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792831500000,
+   "sgv": 140,
+   "direction": "Flat",
+   "delta": -0.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831200000,
+   "sgv": 141,
+   "direction": "Flat",
+   "delta": -0.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830900000,
+   "sgv": 142,
+   "direction": "Flat",
+   "delta": 1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830600000,
+   "sgv": 140,
+   "direction": "Flat",
+   "delta": -0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830300000,
+   "sgv": 141,
+   "direction": "Flat",
+   "delta": 0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830000000,
+   "sgv": 141,
+   "direction": "FortyFiveUp",
+   "delta": 2.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829700000,
+   "sgv": 138,
+   "direction": "Flat",
+   "delta": 1.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829400000,
+   "sgv": 136,
+   "direction": "Flat",
+   "delta": 0.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829100000,
+   "sgv": 136,
+   "direction": "Flat",
+   "delta": -0.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 136,
+   "direction": "FortyFiveUp",
+   "delta": 2.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 133,
+   "direction": "Flat",
+   "delta": 0.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 133,
+   "direction": "Flat",
+   "delta": 0.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 132,
+   "direction": "Flat",
+   "delta": 0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 131,
+   "direction": "Flat",
+   "delta": 1.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 129,
+   "direction": "FortyFiveUp",
+   "delta": 2.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 127,
+   "direction": "FortyFiveUp",
+   "delta": 2.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 125,
+   "direction": "Flat",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 123,
+   "direction": "Flat",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 121,
+   "direction": "Flat",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 119,
+   "direction": "FortyFiveUp",
+   "delta": 2.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 116,
+   "direction": "FortyFiveUp",
+   "delta": 3.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 113,
+   "direction": "Flat",
+   "delta": 1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 112,
+   "direction": "FortyFiveUp",
+   "delta": 3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 109,
+   "direction": "FortyFiveUp",
+   "delta": 3.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 105,
+   "direction": "FortyFiveUp",
+   "delta": 2.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 103,
+   "direction": "FortyFiveUp",
+   "delta": 2.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 100,
+   "direction": "Flat",
+   "delta": 1.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 99,
+   "direction": "Flat",
+   "delta": 1.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823100000,
+   "sgv": 97,
+   "direction": "FortyFiveUp",
+   "delta": 2.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822800000,
+   "sgv": 94,
+   "direction": "Flat",
+   "delta": 1.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822500000,
+   "sgv": 92,
+   "direction": "Flat",
+   "delta": 1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822200000,
+   "sgv": 91,
+   "direction": "Flat",
+   "delta": 1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821900000,
+   "sgv": 90,
+   "direction": "Flat",
+   "delta": 1.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821600000,
+   "sgv": 89,
+   "direction": "Flat",
+   "delta": 1.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821300000,
+   "sgv": 87,
+   "direction": "FortyFiveUp",
+   "delta": 2.1
+  }
+ ],
+ "results": {
+  "getMembers": "[[1,11],{\"id\":2,\"subjectId\":3,\"name\":4,\"isSystemSubject\":5,\"roles\":6,\"directPermissions\":7,\"label\":8,\"limitTo24Hours\":5,\"lastUsedAt\":7,\"sysCreatedAt\":9,\"isPlatformAdmin\":10},\"01a16d17-c4f3-753b-b1be-7c881a4d0cde\",\"01a16b32-1997-7b10-85b5-91a08435c080\",\"Public\",true,[],null,\"Public Access\",\"2026-10-24T08:47:16.723829Z\",false,{\"id\":12,\"subjectId\":13,\"name\":14,\"isSystemSubject\":10,\"roles\":15,\"directPermissions\":7,\"label\":7,\"limitTo24Hours\":10,\"lastUsedAt\":20,\"sysCreatedAt\":21,\"isPlatformAdmin\":10},\"01a16d17-c509-78ec-aa36-bd3e21cf6a24\",\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"dev\",[16],{\"roleId\":17,\"name\":18,\"slug\":19},\"01a16d17-c4ed-7907-bd8f-ab5230213432\",\"Owner\",\"owner\",\"2026-10-24T08:47:35.236407Z\",\"2026-10-24T08:47:16.746419Z\"]",
+  "getActiveAlerts": "[[]]",
+  "getPendingRequests": "[[]]",
+  "getMembershipRequestSettings": "[{\"allowRequests\":1},true]",
+  "getGuestLinks": "[[1],{\"id\":2,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":4,\"scopes\":5,\"createdAt\":14,\"expiresAt\":15,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-1b26-7f19-adfa-8ba2c103662d\",\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"School nurse\",[6,7,8,9,10,11,12,13],\"devices.read\",\"glucose.read\",\"heartrate.read\",\"reports.read\",\"sleep.read\",\"stepcount.read\",\"therapy.read\",\"treatments.read\",\"2026-10-24T08:47:38.791571Z\",\"2026-10-26T08:47:38.790721Z\",null,0]",
+  "getRoles": "[[1,11,17,42,48,61],{\"id\":2,\"name\":3,\"slug\":4,\"description\":5,\"permissions\":6,\"isSystem\":8,\"memberCount\":9,\"sysCreatedAt\":10},\"01a16d17-c4ed-7907-bd8f-ab5230213432\",\"Owner\",\"owner\",null,[7],\"*\",true,1,\"2026-10-24T08:47:16.718682Z\",{\"id\":12,\"name\":13,\"slug\":14,\"description\":5,\"permissions\":15,\"isSystem\":8,\"memberCount\":16,\"sysCreatedAt\":10},\"01a16d17-c4ee-7141-a065-b84d7a66ed09\",\"Denied\",\"denied\",[],0,{\"id\":18,\"name\":19,\"slug\":20,\"description\":5,\"permissions\":21,\"isSystem\":8,\"memberCount\":16,\"sysCreatedAt\":10},\"01a16d17-c4ee-786a-99d6-24d9055168a9\",\"Administrator\",\"admin\",[22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41],\"glucose.readwrite\",\"treatments.readwrite\",\"devices.readwrite\",\"heartrate.readwrite\",\"stepcount.readwrite\",\"sleep.readwrite\",\"food.readwrite\",\"reports.read\",\"therapy.readwrite\",\"alerts.readwrite\",\"identity.read\",\"members.invite\",\"members.manage\",\"tenant.settings\",\"roles.manage\",\"sharing.manage\",\"sharing.guest\",\"audit.read\",\"device.notify\",\"device.actuate\",{\"id\":43,\"name\":44,\"slug\":45,\"description\":5,\"permissions\":46,\"isSystem\":8,\"memberCount\":16,\"sysCreatedAt\":10},\"01a16d17-c4ee-7ad0-b323-fd507f9d711f\",\"Viewer\",\"viewer\",[47,29,40,41],\"glucose.read\",{\"id\":49,\"name\":50,\"slug\":51,\"description\":5,\"permissions\":52,\"isSystem\":8,\"memberCount\":16,\"sysCreatedAt\":10},\"01a16d17-c4ee-7b2e-95ac-316ca2927984\",\"Clinician\",\"clinician\",[47,53,54,55,56,57,58,29,59,60,40,41],\"treatments.read\",\"devices.read\",\"food.read\",\"heartrate.read\",\"stepcount.read\",\"sleep.read\",\"therapy.read\",\"alerts.read\",{\"id\":62,\"name\":63,\"slug\":64,\"description\":5,\"permissions\":65,\"isSystem\":8,\"memberCount\":16,\"sysCreatedAt\":10},\"01a16d17-c4ee-7ca6-9ca8-6dd17c165cca\",\"Caretaker\",\"caretaker\",[47,23,54,55,56,57,58,29,59,31,40,41]]",
+  "getShareLink": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":2,\"canReveal\":1,\"fullHistory\":1,\"scopes\":3,\"lastAccessedAt\":2},false,null,[]]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T09:02:35+00:00\"]",
+  "getAll": "[[]]",
+  "listInvites": "[[]]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16d17-c4e8-71a3-ba21-bc8e9d994f69\",\"films-1792831636689\",\"Sample\",true,\"2026-10-24T08:47:16.712818Z\"]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":7,\"trackers\":11,\"alarm\":4,\"predictions\":4,\"serverMills\":47},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},140,\"Flat\",null,-0.7,1792831500000,0,\"InRange\",[],0.88,[12,23,29,38],{\"id\":13,\"definitionId\":14,\"name\":15,\"icon\":16,\"category\":17,\"mode\":18,\"ageHours\":19,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":21,\"percentElapsed\":22},\"01a16d18-0afd-75d0-8e6a-103bf21ca66a\",\"01a16d18-0a6f-7bf8-8e91-27cbd274ce91\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",12.6,\"Info\",72,17,{\"id\":24,\"definitionId\":25,\"name\":26,\"icon\":27,\"category\":26,\"mode\":18,\"ageHours\":19,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":21,\"percentElapsed\":28},\"01a16d18-0b97-745f-8272-80535e6da83e\",\"01a16d18-0b03-719d-96e6-11ce5363b12a\",\"Reservoir\",\"cylinder\",18,{\"id\":30,\"definitionId\":31,\"name\":32,\"icon\":33,\"category\":34,\"mode\":18,\"ageHours\":35,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":36,\"percentElapsed\":37},\"01a16d18-0a67-73cb-8d09-77308f77d3d0\",\"01a16d18-0a38-7523-bead-d7fd1e23e2c8\",\"CGM Sensor\",\"radio\",\"Sensor\",226.6,240,94,{\"id\":39,\"definitionId\":40,\"name\":41,\"icon\":42,\"category\":43,\"mode\":18,\"ageHours\":44,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":45,\"percentElapsed\":46},\"01a16d18-0bb3-7ffa-8948-b371ab6d523d\",\"01a16d18-0b9d-7678-86bb-bf3d43c242dd\",\"Pump Battery\",\"battery\",\"Battery\",264.2,504,52,1792831660034]"
+ },
+ "phases": [
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "createGuestLink": "[{\"code\":1,\"fullUrl\":2,\"info\":3},\"NSH-4NTJ\",\"https://films-1792831636689.nocturne.localhost:59784/guest/NSH-4NTJ\",{\"id\":4,\"dataOwnerSubjectId\":5,\"createdBySubjectId\":5,\"label\":6,\"scopes\":7,\"createdAt\":16,\"expiresAt\":17,\"activatedAt\":18,\"activatedIp\":18,\"revokedAt\":18,\"dismissedAt\":18,\"status\":19},\"01a16d18-36d3-70f7-9974-b8d7cba7596b\",\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"Dr. Smith\",[8,9,10,11,12,13,14,15],\"devices.read\",\"glucose.read\",\"heartrate.read\",\"reports.read\",\"sleep.read\",\"stepcount.read\",\"therapy.read\",\"treatments.read\",\"2026-10-24T08:47:45.876979Z\",\"2026-10-26T08:47:45.8759946Z\",null,0]",
+    "getGuestLinks": "[[1,18],{\"id\":2,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":4,\"scopes\":5,\"createdAt\":14,\"expiresAt\":15,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-36d3-70f7-9974-b8d7cba7596b\",\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"Dr. Smith\",[6,7,8,9,10,11,12,13],\"devices.read\",\"glucose.read\",\"heartrate.read\",\"reports.read\",\"sleep.read\",\"stepcount.read\",\"therapy.read\",\"treatments.read\",\"2026-10-24T08:47:45.876979Z\",\"2026-10-26T08:47:45.875994Z\",null,0,{\"id\":19,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":20,\"scopes\":21,\"createdAt\":22,\"expiresAt\":23,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-1b26-7f19-adfa-8ba2c103662d\",\"School nurse\",[6,7,8,9,10,11,12,13],\"2026-10-24T08:47:38.791571Z\",\"2026-10-26T08:47:38.790721Z\"]"
+   },
+   "calls": {
+    "getGuestLinks": [
+     "[[1,18],{\"id\":2,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":4,\"scopes\":5,\"createdAt\":14,\"expiresAt\":15,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-36d3-70f7-9974-b8d7cba7596b\",\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"Dr. Smith\",[6,7,8,9,10,11,12,13],\"devices.read\",\"glucose.read\",\"heartrate.read\",\"reports.read\",\"sleep.read\",\"stepcount.read\",\"therapy.read\",\"treatments.read\",\"2026-10-24T08:47:45.876979Z\",\"2026-10-26T08:47:45.875994Z\",null,0,{\"id\":19,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":20,\"scopes\":21,\"createdAt\":22,\"expiresAt\":23,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-1b26-7f19-adfa-8ba2c103662d\",\"School nurse\",[6,7,8,9,10,11,12,13],\"2026-10-24T08:47:38.791571Z\",\"2026-10-26T08:47:38.790721Z\"]",
+     "[[1,18],{\"id\":2,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":4,\"scopes\":5,\"createdAt\":14,\"expiresAt\":15,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-36d3-70f7-9974-b8d7cba7596b\",\"01a16d17-c4fb-79e9-93f4-2504040ee053\",\"Dr. Smith\",[6,7,8,9,10,11,12,13],\"devices.read\",\"glucose.read\",\"heartrate.read\",\"reports.read\",\"sleep.read\",\"stepcount.read\",\"therapy.read\",\"treatments.read\",\"2026-10-24T08:47:45.876979Z\",\"2026-10-26T08:47:45.875994Z\",null,0,{\"id\":19,\"dataOwnerSubjectId\":3,\"createdBySubjectId\":3,\"label\":20,\"scopes\":21,\"createdAt\":22,\"expiresAt\":23,\"activatedAt\":16,\"activatedIp\":16,\"revokedAt\":16,\"dismissedAt\":16,\"status\":17},\"01a16d18-1b26-7f19-adfa-8ba2c103662d\",\"School nurse\",[6,7,8,9,10,11,12,13],\"2026-10-24T08:47:38.791571Z\",\"2026-10-26T08:47:38.790721Z\"]"
+    ]
+   },
+   "args": {
+    "getGuestLinks": [
+     "",
+     "[{\"includeDismissed\":1},true]"
+    ]
+   }
+  },
+  {
+   "results": {}
+  }
+ ]
+}

@@ -95,6 +95,15 @@ public class GoogleHealthConnectorServiceTests
         public override DateTimeOffset GetUtcNow() => initial.AddSeconds(Reads++);
     }
 
+    /// <summary>A sub-second instant mid-month, so a test's day and month arithmetic and the live
+    /// window's minute rounding read the same clock as the service.</summary>
+    private static readonly DateTimeOffset Now = new(2026, 10, 21, 4, 24, 59, 999, TimeSpan.Zero);
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
     private sealed class TestTimeProvider : TimeProvider
     {
         private long ticks;
@@ -131,23 +140,24 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
-    public async Task Sync_requires_a_durable_oauth_session()
+    public async Task A_session_from_a_former_client_is_revoked_and_cleared_without_reading()
     {
-        var fixture = new Fixture(_ => Json("{}"));
+        var requests = new List<string>();
+        var fixture = new Fixture(request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath + " " + request.Content?.ReadAsStringAsync().GetAwaiter().GetResult());
+            return Json("{}");
+        });
+        fixture.SetSession("refresh", GoogleHealthClient.MetricsScope);
         var config = fixture.Configuration();
-        config.RefreshToken = null;
-        fixture.SetSession(null, GoogleHealthClient.MetricsScope);
+        config.SessionClientId = "former.apps.googleusercontent.com";
 
-        var result = await fixture.Service.SyncDataAsync(
-            new SyncRequest(), config, CancellationToken.None);
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Equal("reconnect_required", result.Message);
-        fixture.Writer.Verify(value => value.WriteAsync(
-            It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
-            It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
-            It.IsAny<int>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal("client_changed", result.Message);
+        Assert.Equal(["/revoke token=refresh"], requests);
+        Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
     }
 
     [Fact]
@@ -190,7 +200,6 @@ public class GoogleHealthConnectorServiceTests
         Assert.Equal("reconnect_required", result.Message);
         Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
         using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
-        Assert.False(saved.RootElement.GetProperty("enabled").GetBoolean());
         Assert.Equal("2026-01-01T00:00:00Z", saved.RootElement.GetProperty("importFrom").GetString());
         Assert.Equal(14, saved.RootElement.GetProperty("historyDays").GetInt32());
         Assert.Equal("kept", saved.RootElement.GetProperty("sentinel").GetString());
@@ -269,14 +278,14 @@ public class GoogleHealthConnectorServiceTests
             "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
             var path when path.Contains("/weight/") => CaptureRange(request, requestedFrom.Add),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
-        });
+        }, new FixedTimeProvider(Now));
         fixture.StoredConfiguration = JsonSerializer.Serialize(new { importFrom = (string?)null, lastSyncedTo = watermark });
 
         var result = await fixture.Service.SyncDataAsync(fixture.Configuration(), CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.Equal(new DateTimeOffset(2026, 9, 10, 9, 55, 0, TimeSpan.Zero), requestedFrom[0]);
-        var today = DateTimeOffset.UtcNow.Date;
+        var today = Now.UtcDateTime.Date;
         var monthStart = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
         Assert.Equal(today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart, requestedFrom[1].UtcDateTime.Date);
     }
@@ -396,7 +405,7 @@ public class GoogleHealthConnectorServiceTests
             "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
             var path when path.Contains("/weight/") => CaptureRange(request, requestedFrom.Add),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
-        });
+        }, new FixedTimeProvider(Now));
         var config = fixture.Configuration();
         config.ImportFrom = "2000-01-01T00:00:00.0000000+00:00";
         config.HistoryDays = 7;
@@ -404,7 +413,7 @@ public class GoogleHealthConnectorServiceTests
         var result = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(result.Success);
-        var today = DateTimeOffset.UtcNow.Date;
+        var today = Now.UtcDateTime.Date;
         Assert.Equal(today, requestedFrom[0].UtcDateTime.Date);
         var firstMonth = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
         Assert.Equal(firstMonth, requestedFrom[1].UtcDateTime.Date);
@@ -412,7 +421,7 @@ public class GoogleHealthConnectorServiceTests
         var repeated = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(repeated.Success);
-        Assert.InRange(requestedFrom[2], DateTimeOffset.UtcNow.AddMinutes(-6), DateTimeOffset.UtcNow);
+        Assert.InRange(requestedFrom[2], Now.AddMinutes(-6), Now);
         Assert.Equal(firstMonth.AddMonths(-1), requestedFrom[3].UtcDateTime.Date);
     }
 
@@ -427,9 +436,9 @@ public class GoogleHealthConnectorServiceTests
             ? Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
             : ++reads == (failHistorical ? 2 : 1)
                 ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-                : Json("""{"dataPoints":[]}"""));
+                : Json("""{"dataPoints":[]}"""), new FixedTimeProvider(Now));
         var config = fixture.Configuration();
-        if (noHistory) config.ImportFrom = DateTimeOffset.UtcNow.Date.ToString("O");
+        if (noHistory) config.ImportFrom = Now.UtcDateTime.Date.ToString("O");
 
         var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
 
@@ -452,11 +461,11 @@ public class GoogleHealthConnectorServiceTests
                 new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
             var path when path.Contains("/weight/") => CaptureRange(request, retryRanges.Add),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
-        });
+        }, new FixedTimeProvider(Now));
         var config = fixture.Configuration();
         config.HistoryDays = 7;
 
-        var today = DateTimeOffset.UtcNow.Date;
+        var today = Now.UtcDateTime.Date;
         var monthStart = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
         var windowFrom = today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart;
         var retryDays = Math.Max(1, (int)Math.Ceiling((today - windowFrom).TotalDays / 2));
@@ -475,7 +484,7 @@ public class GoogleHealthConnectorServiceTests
         var retried = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(retried.Success);
-        Assert.InRange(retryRanges[0], DateTimeOffset.UtcNow.AddMinutes(-6), DateTimeOffset.UtcNow);
+        Assert.InRange(retryRanges[0], Now.AddMinutes(-6), Now);
         Assert.Equal(today.AddDays(-retryDays), retryRanges[1].UtcDateTime.Date);
     }
 
@@ -791,6 +800,30 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Sync_writes_nothing_while_another_holder_has_the_gate()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
+            : Json("{\"dataPoints\":[]}"));
+        var config = fixture.Configuration();
+        var gateReleased = false;
+        bool? wroteAfterRelease = null;
+        fixture.Writer.Setup(value => value.BeginReconciliationAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTimeOffset>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Callback(() => wroteAfterRelease ??= gateReleased)
+            .ReturnsAsync(() => Guid.NewGuid());
+        await fixture.Gate.WaitAsync();
+        var pending = fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+        Assert.False(pending.IsCompleted);
+        gateReleased = true;
+        fixture.Gate.Release();
+
+        Assert.True((await pending).Success);
+        Assert.True(wroteAfterRelease);
+    }
+
+    [Fact]
     public async Task Waiting_sync_does_not_restore_a_disconnected_session()
     {
         var fixture = new Fixture(_ => throw new InvalidOperationException("Google must not be called"));
@@ -802,11 +835,8 @@ public class GoogleHealthConnectorServiceTests
 
         var result = await pending;
 
-        Assert.False(result.Success);
-        Assert.Equal("reconnect_required", result.Message);
+        Assert.True(result.Success);
         Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
-        using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
-        Assert.False(saved.RootElement.GetProperty("enabled").GetBoolean());
         var skipped = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
         Assert.True(skipped.Success);
     }
@@ -885,7 +915,8 @@ public class GoogleHealthConnectorServiceTests
         private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase)
         {
             ["refreshToken"] = "refresh",
-            ["grantedScopes"] = GoogleHealthClient.MetricsScope
+            ["grantedScopes"] = GoogleHealthClient.MetricsScope,
+            ["accountKey"] = "account"
         };
 
         public Fixture(Func<HttpRequestMessage, HttpResponseMessage> responder, TimeProvider? timeProvider = null)
@@ -903,6 +934,11 @@ public class GoogleHealthConnectorServiceTests
                 .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
                 .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) =>
+                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
+                .Returns(Task.CompletedTask);
             configurations.Setup(value => value.GetConfigurationAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new ConnectorConfigurationResponse
@@ -918,8 +954,6 @@ public class GoogleHealthConnectorServiceTests
                     ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null;
                     LastSavedConfiguration = document.RootElement.GetRawText();
                     StoredConfiguration = LastSavedConfiguration;
-                    if (currentConfiguration is not null && document.RootElement.TryGetProperty("enabled", out var enabled))
-                        currentConfiguration.Enabled = enabled.GetBoolean();
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var cursorStore = new Mock<IConnectorSyncCursorStore>();
@@ -962,6 +996,7 @@ public class GoogleHealthConnectorServiceTests
                     JsonSerializer.Serialize(currentConfiguration!))!;
                 loaded.RefreshToken = secrets.GetValueOrDefault("refreshToken");
                 loaded.GrantedScopes = secrets.GetValueOrDefault("grantedScopes");
+                loaded.Enabled = !string.IsNullOrWhiteSpace(loaded.RefreshToken);
                 return loaded;
             });
             var oauth = new GoogleHealthAuthTokenProvider(
@@ -969,19 +1004,25 @@ public class GoogleHealthConnectorServiceTests
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 tenant.Object,
-                NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+                TestPlatform.Options(),
+                NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+                Mock.Of<IRetryDelayStrategy>());
             Service = new GoogleHealthConnectorService(
                 new HttpClient(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 new GoogleHealthClient(new HttpClient(handler, false)),
-                oauth,
+                new GoogleHealthSessionStore(configurations.Object, oauth,
+                    Mock.Of<IGoogleHealthGrantHolders>(), tenant.Object, TestPlatform.Options(),
+                    NullLogger<GoogleHealthSessionStore>.Instance),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,
                 cursorStore.Object,
                 tenant.Object,
                 loader.Object,
-                NullLogger<GoogleHealthConnectorService>.Instance, timeProvider: timeProvider);
+                NullLogger<GoogleHealthConnectorService>.Instance,
+                Mock.Of<IRetryDelayStrategy>(),
+                timeProvider: timeProvider);
         }
 
         public GoogleHealthConnectorService Service { get; }
@@ -1004,9 +1045,7 @@ public class GoogleHealthConnectorServiceTests
 
         public GoogleHealthConnectorConfiguration Configuration() => currentConfiguration = new()
         {
-            ClientId = "client.apps.googleusercontent.com",
-            ClientSecret = "secret",
-            CallbackUrl = "https://example.test/settings/connectors/google-health/callback",
+            SessionClientId = TestPlatform.ClientId,
             RefreshToken = secrets["refreshToken"],
             GrantedScopes = secrets["grantedScopes"],
             SyncSteps = false,

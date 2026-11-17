@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { formatMediumDate } from "$lib/utils/formatting";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import * as Select from "$lib/components/ui/select";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Cpu from "@lucide/svelte/icons/cpu";
   import Activity from "@lucide/svelte/icons/activity";
   import Droplets from "@lucide/svelte/icons/droplets";
@@ -27,14 +27,19 @@
   import {
     type PatientDevice,
     type DiscoveredSource,
+    type DeviceCatalogEntry,
     DeviceCategory,
     AidAlgorithm,
-  } from "$api";
+  } from "#lib/api/index.js";
   import {
     deviceCategoryLabels,
     aidAlgorithmLabels,
   } from "./labels";
   import { DeviceListState } from "./state.svelte";
+  import { FormError, useSubmission } from "#lib/forms/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import DeviceNameCombobox from "./DeviceNameCombobox.svelte";
+  import { trackerNote } from "./device-catalog";
 
   interface Props {
     /** "inline" = wizard-style card forms, "dialog" = settings-style dialog CRUD */
@@ -44,6 +49,8 @@
   let { variant = "dialog" }: Props = $props();
 
   const deviceList = new DeviceListState();
+  const inlineSubmission = useSubmission();
+  const dialogSubmission = useSubmission();
 
   // ── Category icons (for inline variant) ─────────────────────────
 
@@ -70,7 +77,22 @@
   let inlineCategory = $state("");
   let inlineManufacturer = $state("");
   let inlineModel = $state("");
+  let inlineCatalogId = $state("");
   let inlineAidAlgorithm = $state("");
+
+  const inlineEntry = $derived(deviceList.catalog.find((e) => e.id === inlineCatalogId));
+
+  function pickInline(entry: DeviceCatalogEntry) {
+    inlineCatalogId = entry.id ?? "";
+    inlineCategory = entry.category ?? inlineCategory;
+    inlineManufacturer = entry.manufacturer ?? "";
+    inlineModel = entry.name ?? "";
+  }
+
+  function nameInline(name: string) {
+    inlineCatalogId = "";
+    inlineModel = name;
+  }
 
   let showInlineAid = $derived(inlineCategory === DeviceCategory.InsulinPump);
   let canAddInline = $derived(
@@ -81,8 +103,10 @@
     inlineCategory = "";
     inlineManufacturer = "";
     inlineModel = "";
+    inlineCatalogId = "";
     inlineAidAlgorithm = "";
     showInlineForm = false;
+    inlineSubmission.clear();
   }
 
   // ── Dialog variant state ────────────────────────────────────────
@@ -94,6 +118,7 @@
   let deviceCategory = $state<string>(DeviceCategory.InsulinPump);
   let deviceManufacturer = $state("");
   let deviceModel = $state("");
+  let deviceCatalogId = $state("");
   let deviceAidAlgorithm = $state<string>("");
   let deviceSerialNumber = $state("");
   let deviceStartDate = $state("");
@@ -103,11 +128,28 @@
 
   let showAidAlgorithm = $derived(deviceCategory === DeviceCategory.InsulinPump);
 
+  const dialogEntry = $derived(deviceList.catalog.find((e) => e.id === deviceCatalogId));
+
+  function pickDialog(entry: DeviceCatalogEntry) {
+    deviceCatalogId = entry.id ?? "";
+    deviceCategory = entry.category ?? deviceCategory;
+    deviceManufacturer = entry.manufacturer ?? "";
+    deviceModel = entry.name ?? "";
+  }
+
+  function nameDialog(name: string) {
+    deviceCatalogId = "";
+    deviceModel = name;
+  }
+
   const activeForm = $derived(editing?.id ? deviceList.updateForm : deviceList.createForm);
   const dialogSaving = $derived(!!deviceList.createForm.pending || !!deviceList.updateForm.pending);
   // updateDevice's schema is { id, request: PatientDeviceSchema } — fields must nest under "request."
   // for SvelteKit's dot-path form parsing; createDevice's schema is flat.
-  const namePrefix = $derived(editing?.id ? "request." : "");
+  // updateDevice takes the record's fields under `request`; createDevice takes them flat.
+  const deviceFields = $derived(
+    editing?.id ? deviceList.updateForm.fields.request : deviceList.createForm.fields,
+  );
 
   function openDialog(device?: PatientDevice) {
     if (device) {
@@ -115,6 +157,7 @@
       deviceCategory = device.deviceCategory ?? DeviceCategory.InsulinPump;
       deviceManufacturer = device.manufacturer ?? "";
       deviceModel = device.model ?? "";
+      deviceCatalogId = device.catalogId ?? "";
       deviceAidAlgorithm = device.aidAlgorithm ?? "";
       deviceSerialNumber = device.serialNumber ?? "";
       deviceStartDate = device.startDate
@@ -130,6 +173,7 @@
       deviceCategory = DeviceCategory.InsulinPump;
       deviceManufacturer = "";
       deviceModel = "";
+      deviceCatalogId = "";
       deviceAidAlgorithm = "";
       deviceSerialNumber = "";
       deviceStartDate = "";
@@ -137,6 +181,7 @@
       deviceIsCurrent = true;
       deviceNotes = "";
     }
+    dialogSubmission.clear();
     dialogOpen = true;
   }
 
@@ -193,12 +238,12 @@
             </div>
             <div class="flex-1 min-w-0">
               <Card.Title class="text-sm font-medium">
-                {[device.manufacturer, device.model].filter(Boolean).join(" ") || "Unknown Device"}
+                {[device.manufacturer, device.model].filter(Boolean).join(" ") || "Unknown device"}
               </Card.Title>
               <Card.Description size="sm">
                 {device.deviceCategory
                   ? (deviceCategoryLabels[device.deviceCategory] ?? device.deviceCategory)
-                  : "Unknown Category"}
+                  : "Unknown category"}
                 {#if device.aidAlgorithm && device.aidAlgorithm !== AidAlgorithm.None}
                   &middot; {aidAlgorithmLabels[device.aidAlgorithm] ?? device.aidAlgorithm}
                 {/if}
@@ -223,19 +268,47 @@
   {#if showInlineForm}
     <Card.Root>
       <Card.Header>
-        <Card.Title class="text-sm">Add a Device</Card.Title>
+        <Card.Title class="text-sm">Add a device</Card.Title>
       </Card.Header>
       <form
         {...deviceList.createForm.enhance(async ({ submit }) => {
-          await submit();
-          if (deviceList.createForm.result) resetInlineForm();
+          await inlineSubmission.run(submit, () => {
+            if (deviceList.createForm.result) resetInlineForm();
+          });
         })}
       >
         <Card.Content class="@container space-y-4">
+          <FormError issues={inlineSubmission.error} />
           <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2 @sm:col-span-2">
+              <Label for="device-name-inline">Device</Label>
+              <DeviceNameCombobox
+                id="device-name-inline"
+                catalog={deviceList.catalog}
+                value={inlineModel}
+                catalogId={inlineCatalogId}
+                onPick={pickInline}
+                onCustom={nameInline}
+              />
+              <input {...deviceList.createForm.fields.model.as("hidden", inlineModel)} />
+              {#if inlineCatalogId}
+                <input {...deviceList.createForm.fields.catalogId.as("hidden", inlineCatalogId)} />
+              {/if}
+              {#if trackerNote(inlineEntry)}
+                <p class="text-xs text-muted-foreground">{trackerNote(inlineEntry)}</p>
+              {/if}
+            </div>
+
             <div class="space-y-2">
-              <Label for="device-category">Device Category</Label>
-              <Select.Root type="single" name="deviceCategory" bind:value={inlineCategory}>
+              <Label for="device-category">Device category</Label>
+              <Select.Root
+                type="single"
+                name={deviceList.createForm.fields.deviceCategory.as("select").name}
+                bind:value={inlineCategory}
+                onValueChange={(v: string) => {
+                  if (inlineEntry && inlineEntry.category !== v) inlineCatalogId = "";
+                }}
+              >
                 <Select.Trigger id="device-category">
                   {inlineCategory
                     ? (labelFor(deviceCategoryLabels, inlineCategory) ?? inlineCategory)
@@ -252,27 +325,17 @@
             <div class="space-y-2">
               <Label for="manufacturer">Manufacturer</Label>
               <Input
-                name="manufacturer"
+                name={deviceList.createForm.fields.manufacturer.as("text").name}
                 id="manufacturer"
                 bind:value={inlineManufacturer}
-                placeholder="e.g. Dexcom, Omnipod"
-              />
-            </div>
-
-            <div class="space-y-2">
-              <Label for="model">Model</Label>
-              <Input
-                name="model"
-                id="model"
-                bind:value={inlineModel}
-                placeholder="e.g. G7, DASH"
+                placeholder="e.g. Dexcom, Insulet"
               />
             </div>
 
             {#if showInlineAid}
               <div class="space-y-2">
-                <Label for="aid-algorithm">AID Algorithm</Label>
-                <Select.Root type="single" name="aidAlgorithm" bind:value={inlineAidAlgorithm}>
+                <Label for="aid-algorithm">AID algorithm</Label>
+                <Select.Root type="single" name={deviceList.createForm.fields.aidAlgorithm.as("select").name} bind:value={inlineAidAlgorithm}>
                   <Select.Trigger id="aid-algorithm">
                     {inlineAidAlgorithm
                       ? (labelFor(aidAlgorithmLabels, inlineAidAlgorithm) ?? inlineAidAlgorithm)
@@ -287,7 +350,7 @@
               </div>
             {/if}
           </div>
-          <input type="hidden" name="b:isCurrent" value="on" />
+          <input {...deviceList.createForm.fields.isCurrent.as("hidden", true)} />
           {#each deviceList.createForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
@@ -297,15 +360,21 @@
             Cancel
           </Button>
           <Button type="submit" disabled={!canAddInline || !!deviceList.createForm.pending}>
-            {deviceList.createForm.pending ? "Adding..." : "Add Device"}
+            {deviceList.createForm.pending ? "Adding..." : "Add device"}
           </Button>
         </Card.Footer>
       </form>
     </Card.Root>
   {:else}
-    <Button variant="outline" onclick={() => (showInlineForm = true)}>
+    <Button
+      variant="outline"
+      onclick={() => {
+        inlineSubmission.clear();
+        showInlineForm = true;
+      }}
+    >
       <Plus class="h-4 w-4 mr-1" />
-      Add Device
+      Add device
     </Button>
   {/if}
 
@@ -313,9 +382,12 @@
   <!-- ── Dialog variant (settings-style) ───────────────────────── -->
 
   {#if deviceList.items.length === 0}
-    <p class="text-sm text-muted-foreground py-4 text-center">
-      No devices added yet. Add your first device to get started.
-    </p>
+    <EmptyState
+      art="cgm-sensor"
+      variant="outline"
+      title="No devices added yet"
+      body="Add your first device to get started."
+    />
   {:else}
     <div class="space-y-3">
       {#each deviceList.items as device, i (device.id)}
@@ -402,7 +474,7 @@
   <div class="pt-2">
     <Button size="sm" onclick={() => openDialog()}>
       <Plus class="mr-2 h-4 w-4" />
-      Add Device
+      Add device
     </Button>
   </div>
 
@@ -412,7 +484,7 @@
       <div>
         <h4 class="text-sm font-medium">Discovered sources</h4>
         <p class="text-xs text-muted-foreground">
-          Streams seen in recent readings that aren't linked to a device yet. Register one to
+          Streams seen in recent readings that are not linked to a device yet. Register one to
           attribute its readings.
         </p>
       </div>
@@ -452,7 +524,7 @@
     <Dialog.Content class="sm:max-w-lg">
       <Dialog.Header>
         <Dialog.Title>
-          {editing ? "Edit Device" : "Add Device"}
+          {editing ? "Edit device" : "Add device"}
         </Dialog.Title>
         <Dialog.Description>
           {editing
@@ -463,17 +535,45 @@
 
       <form
         {...activeForm.enhance(async ({ submit }) => {
-          await submit();
-          if (activeForm.result) dialogOpen = false;
+          await dialogSubmission.run(submit, () => {
+            if (activeForm.result) dialogOpen = false;
+          });
         })}
       >
+        <FormError issues={dialogSubmission.error} />
         {#if editing?.id}
-          <input type="hidden" name="id" value={editing.id} />
+          <input {...deviceList.updateForm.fields.id.as("hidden", editing.id)} />
         {/if}
         <div class="@container space-y-4 py-4">
           <div class="space-y-2">
+            <Label for="device-name">Device</Label>
+            <DeviceNameCombobox
+              id="device-name"
+              catalog={deviceList.catalog}
+              value={deviceModel}
+              catalogId={deviceCatalogId}
+              onPick={pickDialog}
+              onCustom={nameDialog}
+            />
+            <input {...deviceFields.model.as("hidden", deviceModel)} />
+            {#if deviceCatalogId}
+              <input {...deviceFields.catalogId.as("hidden", deviceCatalogId)} />
+            {/if}
+            {#if trackerNote(dialogEntry)}
+              <p class="text-xs text-muted-foreground">{trackerNote(dialogEntry)}</p>
+            {/if}
+          </div>
+
+          <div class="space-y-2">
             <Label for="device-category">Category</Label>
-            <Select.Root type="single" name="{namePrefix}deviceCategory" bind:value={deviceCategory}>
+            <Select.Root
+              type="single"
+              name={deviceFields.deviceCategory.as("select").name}
+              bind:value={deviceCategory}
+              onValueChange={(v: string) => {
+                if (dialogEntry && dialogEntry.category !== v) deviceCatalogId = "";
+              }}
+            >
               <Select.Trigger id="device-category">
                 {labelFor(deviceCategoryLabels, deviceCategory) ?? deviceCategory}
               </Select.Trigger>
@@ -485,31 +585,20 @@
             </Select.Root>
           </div>
 
-          <div class="grid gap-4 @sm:grid-cols-2">
-            <div class="space-y-2">
-              <Label for="device-manufacturer">Manufacturer</Label>
-              <Input
-                name="{namePrefix}manufacturer"
-                id="device-manufacturer"
-                bind:value={deviceManufacturer}
-                placeholder="e.g. Medtronic, Dexcom"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="device-model">Model</Label>
-              <Input
-                name="{namePrefix}model"
-                id="device-model"
-                bind:value={deviceModel}
-                placeholder="e.g. 780G, G7"
-              />
-            </div>
+          <div class="space-y-2">
+            <Label for="device-manufacturer">Manufacturer</Label>
+            <Input
+              name={deviceFields.manufacturer.as("text").name}
+              id="device-manufacturer"
+              bind:value={deviceManufacturer}
+              placeholder="e.g. Medtronic, Dexcom"
+            />
           </div>
 
           {#if showAidAlgorithm}
             <div class="space-y-2">
-              <Label for="device-aid">AID Algorithm</Label>
-              <Select.Root type="single" name="{namePrefix}aidAlgorithm" bind:value={deviceAidAlgorithm}>
+              <Label for="device-aid">AID algorithm</Label>
+              <Select.Root type="single" name={deviceFields.aidAlgorithm.as("select").name} bind:value={deviceAidAlgorithm}>
                 <Select.Trigger id="device-aid">
                   {deviceAidAlgorithm
                     ? (labelFor(aidAlgorithmLabels, deviceAidAlgorithm) ?? deviceAidAlgorithm)
@@ -525,9 +614,9 @@
           {/if}
 
           <div class="space-y-2">
-            <Label for="device-serial">Serial Number</Label>
+            <Label for="device-serial">Serial number</Label>
             <Input
-              name="{namePrefix}serialNumber"
+              name={deviceFields.serialNumber.as("text").name}
               id="device-serial"
               bind:value={deviceSerialNumber}
               placeholder="Optional"
@@ -536,18 +625,18 @@
 
           <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
-              <Label for="device-start">Start Date</Label>
+              <Label for="device-start">Start date</Label>
               <Input
-                name="{namePrefix}startDate"
+                name={deviceFields.startDate.as("date").name}
                 id="device-start"
                 type="date"
                 bind:value={deviceStartDate}
               />
             </div>
             <div class="space-y-2">
-              <Label for="device-end">End Date</Label>
+              <Label for="device-end">End date</Label>
               <Input
-                name="{namePrefix}endDate"
+                name={deviceFields.endDate.as("date").name}
                 id="device-end"
                 type="date"
                 bind:value={deviceEndDate}
@@ -558,7 +647,7 @@
           <div class="flex items-center gap-2">
             <Checkbox
               id="device-current"
-              name="{namePrefix}isCurrent"
+              name={deviceFields.isCurrent.as("checkbox").name}
               bind:checked={deviceIsCurrent}
             />
             <Label for="device-current">Currently in use</Label>
@@ -567,7 +656,7 @@
           <div class="space-y-2">
             <Label for="device-notes">Notes</Label>
             <Textarea
-              name="{namePrefix}notes"
+              name={deviceFields.notes.as("text").name}
               id="device-notes"
               bind:value={deviceNotes}
               placeholder="Any additional notes about this device"
@@ -607,7 +696,7 @@
     onOpenChange={(open) => {
       if (!open) deleteId = null;
     }}
-    title="Delete Device"
+    title="Delete device"
     confirmLabel="Delete"
     destructive
     onConfirm={handleDelete}

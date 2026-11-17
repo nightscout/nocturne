@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { Chart, Svg, Axis, Tooltip } from "layerchart";
+  import { Chart, Svg, Axis, Circle, Path, Rect, Tooltip } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
-  import { timeScale } from "$lib/components/charts/scale-guards";
-  import { getActogramData } from "$api/actogram.remote";
-  import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
-  import { bg, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
-  import { resolveChartColor } from "$lib/utils/chart-colors";
-  import { FALLBACK_GLUCOSE_Y_MAX } from "$lib/constants/glucose-thresholds";
+  import { timeScale } from "#lib/components/charts/scale-guards.js";
+  import { getActogramData } from "#lib/api/actogram.remote.js";
+  import { getBasalSeries } from "#lib/api/generated/chartDatas.generated.remote.js";
+  import { bg, bgLabel, formatLocale, toDate } from "#lib/utils/formatting.js";
+  import { resolveChartColor } from "#lib/utils/chart-colors.js";
+  import { FALLBACK_GLUCOSE_Y_MAX } from "#lib/constants/glucose-thresholds.js";
   import {
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
     HYPNOGRAM_LANE_LABELS,
     laneTexture,
-  } from "$lib/utils/sleep-stages";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import type { SleepStageInterval, SleepDawnPhenomenon } from "$lib/api";
+  } from "#lib/utils/sleep-stages.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
+  import type { SleepStageInterval, SleepDawnPhenomenon } from "#lib/api/index.js";
 
   interface Props {
     stages: SleepStageInterval[] | undefined;
@@ -246,7 +246,7 @@
           <!-- Lane backgrounds + labels -->
           {#each lanes as lane, i (lane)}
             {@const y = i * LANE_HEIGHT}
-            <rect
+            <Rect
               x={context.xScale(windowStart)}
               y={y}
               width={Math.max(context.xScale(windowEnd) - context.xScale(windowStart), 0)}
@@ -267,7 +267,7 @@
           {#if dawnWindow}
             {@const dx = context.xScale(dawnWindow.start)}
             {@const dw = Math.max(context.xScale(dawnWindow.end) - dx, 0)}
-            <rect x={dx} y={0} width={dw} height={stagesHeight} fill="var(--chart-4)" class="opacity-10 pointer-events-none" />
+            <Rect x={dx} y={0} width={dw} height={stagesHeight} fill="var(--chart-4)" class="opacity-10 pointer-events-none" />
             <text x={dx + 4} y={10} class="text-2xs fill-muted-foreground pointer-events-none">
               pre-wake window
             </text>
@@ -278,27 +278,27 @@
             {@const y = (laneIndex.get(span.lane) ?? 0) * LANE_HEIGHT}
             {@const x1 = context.xScale(span.start)}
             {@const x2 = context.xScale(span.end)}
-            <rect
+            <Rect
               x={x1}
               y={y + 2}
               width={Math.max(x2 - x1, 1)}
               height={LANE_HEIGHT - 6}
               data-lane={span.label.toLowerCase()}
               rx={2}
-              class={["fill-lane opacity-70", patternClass(laneTexture(span.lane))]}
+              class="fill-lane opacity-70 {patternClass(laneTexture(span.lane))}"
             />
           {/each}
 
           <!-- Glucose overlay across the stage-lane region -->
           {#if hasGlucose}
-            <path
-              d={buildGlucosePath((d) => context.xScale(d))}
+            <Path
+              pathData={buildGlucosePath((d) => context.xScale(d))}
               fill="none"
               class="stroke-muted-foreground/50 pointer-events-none"
-              stroke-width="1.5"
+              strokeWidth={1.5}
             />
             {#each glucosePoints as point, i (i)}
-              <circle
+              <Circle
                 cx={context.xScale(new Date(point.mills))}
                 cy={glucoseScale(point.sgv)}
                 r={2}
@@ -324,7 +324,7 @@
 
           <!-- Basal swim lane -->
           {#if hasBasal}
-            <rect
+            <Rect
               x={context.xScale(windowStart)}
               y={basalTop}
               width={Math.max(context.xScale(windowEnd) - context.xScale(windowStart), 0)}
@@ -347,7 +347,7 @@
               {#if h > 0}
                 {@const x1 = context.xScale(segStart)}
                 {@const x2 = context.xScale(segEnd)}
-                <rect
+                <Rect
                   x={x1}
                   y={basalLaneY(point.rate ?? 0)}
                   width={Math.max(x2 - x1, 1)}
@@ -360,12 +360,11 @@
 
             <!-- Scheduled rate, dashed step line -->
             {#if hasScheduledBasal}
-              <path
-                d={buildScheduledPath((d) => context.xScale(d))}
+              <Path
+                pathData={buildScheduledPath((d) => context.xScale(d))}
                 fill="none"
-                class="stroke-muted-foreground/50 pointer-events-none"
-                stroke-width="1"
-                stroke-dasharray="3,3"
+                class="stroke-muted-foreground/50 pointer-events-none [stroke-dasharray:3_3]"
+                strokeWidth={1}
               />
             {/if}
           {/if}
@@ -380,7 +379,7 @@
           />
 
           <!-- Interaction overlay for the tooltip (topmost layer) -->
-          <rect
+          <Rect
             role="presentation"
             x={0}
             y={0}
@@ -399,7 +398,7 @@
         </Svg>
 
         <Tooltip.Root
-          class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
+          class="print:hidden rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
         >
           {#snippet children({ data: tooltipData })}
             {@const d: TooltipData | undefined = tooltipData}

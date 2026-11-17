@@ -51,8 +51,15 @@ public abstract class TenantAwareHub : Hub
         => $"{tenantId}:{groupName}";
 
     /// <summary>
+    /// The tenant id a connection expects its host to resolve to. A client that reaches a tenant by
+    /// slug sends it so that a slug deleted and created again cannot attach it to the new tenant.
+    /// </summary>
+    public const string ExpectedTenantHeader = "X-Expected-Tenant-Id";
+
+    /// <summary>
     /// Validates that a tenant context exists from the HTTP upgrade handshake.
-    /// If no tenant context is available or the tenant is inactive, the connection is rejected.
+    /// If no tenant context is available, the tenant is inactive, or it is not the tenant named in
+    /// <see cref="ExpectedTenantHeader"/>, the connection is rejected before any hub method runs.
     /// </summary>
     public override async Task OnConnectedAsync()
     {
@@ -67,6 +74,13 @@ public abstract class TenantAwareHub : Hub
         if (!tenantContext.IsActive)
         {
             throw new HubException("Connection rejected: tenant is inactive.");
+        }
+
+        var expected = httpContext!.Request.Headers[ExpectedTenantHeader].ToString();
+        if (expected.Length > 0
+            && (!Guid.TryParse(expected, out var expectedId) || expectedId != tenantContext.TenantId))
+        {
+            throw new HubException("Connection rejected: the host resolves to another tenant.");
         }
 
         await base.OnConnectedAsync();

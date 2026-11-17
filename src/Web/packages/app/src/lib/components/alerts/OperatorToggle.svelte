@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
 
   type Op = "and" | "or";
 

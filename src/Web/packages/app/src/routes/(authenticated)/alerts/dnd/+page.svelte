@@ -3,41 +3,58 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     get as getDnd,
     update as updateDnd,
-  } from "$api/generated/tenantAlertSettings.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { TenantAlertSettingsResponse } from "$api-clients";
+  } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Save from "@lucide/svelte/icons/save";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import { EditorActionBar } from "$lib/components/layout";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { EditorActionBar } from "#lib/components/layout/index.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
+  import { isDndScheduleActiveNow, isDndScheduleConfigured } from "#lib/components/alerts/dnd.js";
 
-  // Manual DND is tenant-wide — it suppresses delivery of every non-critical
-  // alert for every member — so the server gates it on alerts.readwrite.
+  // Manual DND is tenant-wide: it silences every rule that is neither critical
+  // nor allowed through DND, for every member. The server gates it on
+  // alerts.readwrite.
   const canSetDnd = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );
 
   const dndQuery = $derived(canSetDnd ? getDnd() : undefined);
   retainQuery(() => dndQuery);
+  refreshOnReturn(() => void dndQuery?.refresh());
+
+  let latest = $state<TenantAlertSettingsResponse | null>(null);
+  $effect(() => {
+    const dnd = dndQuery?.current;
+    if (dnd) latest = dnd;
+  });
+  let scheduleStatus = $derived(
+    isDndScheduleActiveNow(latest)
+    ? "Scheduled, on now"
+      : isDndScheduleConfigured(latest)
+        ? "Scheduled"
+        : null,
+  );
 
   let saving = $state(false);
   let error = $state<string | null>(null);
@@ -67,6 +84,7 @@
   }
 
   function applyResponse(r: TenantAlertSettingsResponse | null): void {
+    latest = r;
     dndManualActive = r?.dndManualActive ?? false;
     dndManualUntilLocal = isoToLocal(r?.dndManualUntil);
     dndScheduleEnabled = r?.dndScheduleEnabled ?? false;
@@ -106,7 +124,7 @@
 </script>
 
 <svelte:head>
-  <title>Do Not Disturb · Alerts · Nocturne</title>
+  <title>Do not disturb · Alerts · Nocturne</title>
 </svelte:head>
 
 {#snippet heading()}
@@ -114,14 +132,14 @@
     type="button"
     variant="ghost"
     size="icon"
-    onclick={() => goto(resolve("/alerts"))}
+    onclick={() => goto(resolve('alerts'))}
     aria-label="Back to alerts"
   >
     <ArrowLeft class="h-4 w-4" />
   </Button>
   <div>
     <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-      <BellOff class="h-5 w-5" /> Do Not Disturb
+      <BellOff class="h-5 w-5" /> Do not disturb
     </h1>
     <p class="text-sm text-muted-foreground">
       Suppress non-critical alerts. Critical-severity rules and rules opted in via "Allow through DND" still fire.
@@ -171,11 +189,11 @@
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="flex items-center justify-between">
-          <Label for="dnd-manual">Do Not Disturb is currently</Label>
+          <Label for="dnd-manual">Do not disturb is currently</Label>
           <Switch
             id="dnd-manual"
             checked={dndManualActive}
-            onCheckedChange={(c: boolean) => (dndManualActive = c)}
+            onCheckedChange={(c: boolean) => dndManualActive = c}
           />
         </div>
         {#if dndManualActive}
@@ -185,8 +203,7 @@
               id="dnd-until"
               type="datetime-local"
               value={dndManualUntilLocal}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                (dndManualUntilLocal = e.currentTarget.value)}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) => dndManualUntilLocal = e.currentTarget.value}
             />
             <p class="text-xs text-muted-foreground">Leave blank to keep DND on indefinitely.</p>
           </div>
@@ -196,7 +213,12 @@
 
     <Card>
       <CardHeader>
-        <CardTitle>Schedule</CardTitle>
+        <div class="flex items-center justify-between gap-2">
+          <CardTitle>Schedule</CardTitle>
+          {#if scheduleStatus}
+            <span class="text-xs text-muted-foreground">{scheduleStatus}</span>
+          {/if}
+        </div>
         <CardDescription>Recurring quiet hours. Cross-midnight windows are allowed.</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -205,7 +227,7 @@
           <Switch
             id="dnd-schedule"
             checked={dndScheduleEnabled}
-            onCheckedChange={(c: boolean) => (dndScheduleEnabled = c)}
+            onCheckedChange={(c: boolean) => dndScheduleEnabled = c}
           />
         </div>
         {#if dndScheduleEnabled}
@@ -216,8 +238,7 @@
                 id="dnd-start"
                 type="time"
                 value={dndScheduleStart}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  (dndScheduleStart = e.currentTarget.value)}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => dndScheduleStart = e.currentTarget.value}
               />
             </div>
             <div class="space-y-2">
@@ -226,14 +247,19 @@
                 id="dnd-end"
                 type="time"
                 value={dndScheduleEnd}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  (dndScheduleEnd = e.currentTarget.value)}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => dndScheduleEnd = e.currentTarget.value}
               />
             </div>
           </div>
           <p class="text-xs text-muted-foreground">
-            Scheduled windows are interpreted in your timezone, set on your
-            <a href={resolve("/settings/patient")} class="underline">patient record</a>.
+            Scheduled windows are interpreted in your timezone, set on your 
+
+            <a
+              href={resolve('settings/patient')}
+              class="underline"
+            >patient record</a>
+
+            .
           </p>
         {/if}
       </CardContent>
@@ -244,9 +270,9 @@
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
           <ShieldAlert class="h-6 w-6 text-destructive" />
         </div>
-        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <h2 class="text-lg font-semibold">Access denied</h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
-          You do not have permission to change Do Not Disturb. Contact your
+          You do not have permission to change Do not disturb. Contact your
           tenant administrator for access.
         </p>
       </CardContent>

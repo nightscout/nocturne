@@ -70,6 +70,7 @@ export const TrackerCategory = {
 	Sensor: 'Sensor',
 	Cannula: 'Cannula',
 	Battery: 'Battery',
+	Pod: 'Pod',
 } as const;
 export type TrackerCategory = typeof TrackerCategory[keyof typeof TrackerCategory];
 

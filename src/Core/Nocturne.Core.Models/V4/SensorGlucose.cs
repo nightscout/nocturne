@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 using Nocturne.Core.Constants;
 
@@ -93,6 +94,16 @@ public class SensorGlucose : V4RecordBase, IDeviceAttributed
     /// Glucose delta in mg/dL over the last 5 minutes
     /// </summary>
     public double? Delta { get; set; }
+
+    /// <summary>
+    /// Received signal strength the uploader reported for the reading
+    /// </summary>
+    /// <remarks>
+    /// Omitted when null: the generated Java SDK rejects fields it does not know, so a client built
+    /// before this field existed would fail to parse every response that carried it.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Rssi { get; set; }
 
     /// <summary>
     /// Whether this glucose value has been algorithmically smoothed or is raw sensor output.

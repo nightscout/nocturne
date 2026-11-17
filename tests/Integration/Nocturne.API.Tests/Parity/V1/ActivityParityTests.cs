@@ -9,6 +9,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/activity endpoints.
 /// Covers: GET, GET/{id}, POST, PUT/{id}, DELETE/{id}
 /// </summary>
+[Collection(ParityShards.Two)]
 public class ActivityParityTests : ParityTestBase
 {
     public ActivityParityTests(ParityTestFixture fixture, ITestOutputHelper output)

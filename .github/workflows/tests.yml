@@ -32,6 +32,8 @@ jobs:
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
+      composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
+      sdk: ${{ steps.filter.outputs.sdk == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -52,15 +54,22 @@ jobs:
               - 'tests/**'
               - 'nocturne.sln'
               - 'docs/postgres/**'
-              - 'crates/**'
+              - &alert-crates 'crates/nocturne-alerts-*/**'
+              - &crates-workspace 'crates/Cargo.*'
+              - 'crates/clippy.toml'
             web:
               - *shared
               - 'src/Web/**'
               - 'src/API/**'
+              - '.vale.ini'
+              - '.vale/**'
             e2e:
               - *shared
               - 'src/**'
               - 'e2e/**'
+              - 'crates/**'
+              - 'scripts/Shared/**'
+              - 'scripts/alerts-native-build.cs'
               - 'Dockerfile.web'
               - 'docs/postgres/**'
             migrations:
@@ -72,13 +81,28 @@ jobs:
               - 'docs/postgres/**'
             crates:
               - *shared
-              - 'crates/**'
+              - *alert-crates
+              - *crates-workspace
+              - 'crates/clippy.toml'
               - 'src/API/**'
               - 'tests/Parity/**'
               - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            sdk:
+              - *shared
+              - 'sdk/**'
+              - '.github/workflows/sdk-publish.yml'
+            composeBundle:
+              - *shared
+              - 'src/Aspire/**'
+              - 'src/Core/Nocturne.Core.Constants/**'
+              - 'scripts/publish-release.cs'
+              - 'scripts/Shared/**'
+              - 'deploy/**'
+              - 'docs/diagrams/**'
+              - 'docs/postgres/container-init/**'
 
   # Compiles every test project once and runs the API client codegen (NSwag, then the
   # Zod schemas and remote functions through pnpm) as the API build's post-build step. The test jobs
@@ -88,11 +112,14 @@ jobs:
     needs: changes
     if: >-
       needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.crates == 'true'
-      || needs.changes.outputs.web == 'true'
+      || needs.changes.outputs.web == 'true' || needs.changes.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       BUILD_TESTS: ${{ needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.crates == 'true' }}
+      # A pull request may not add or keep a package with a moderate-or-worse advisory (see
+      # Directory.Packages.props); a push to main only warns, like the release builds.
+      NuGetAuditAsErrors: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-dotnet
@@ -101,6 +128,23 @@ jobs:
       - uses: ./.github/actions/setup-pnpm
         with:
           install: src/Web
+      # The API refuses to start without the nocturne_alerts cdylib, and Nocturne.Core.Alerts.Native
+      # packs it into every referencing output when crates/target/release holds it, so each test
+      # assembly below carries it to the test jobs.
+      - name: Cache cargo
+        if: env.BUILD_TESTS == 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile: see the alerts-ffi-parity job.
+          key: cargo-cdylib-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+      - name: Build nocturne_alerts cdylib
+        if: env.BUILD_TESTS == 'true'
+        working-directory: crates
+        run: cargo build --release -p nocturne-alerts-ffi
       # No job here builds nocturne.sln — CI builds named projects only (see Build below) — so this
       # is the only thing gating solution membership, and it has to hold in both directions.
       # scripts/Shared is the deliberate omission: scripts/ consumes it through `#:project`.
@@ -131,6 +175,8 @@ jobs:
       # Unit and Integration each hold a Nocturne.API.Tests and a Nocturne.Infrastructure.Data.Tests,
       # and `dotnet sln add` silently skips a second project of the same name in one folder, hence
       # a folder each and the check that every test project produced its assembly.
+      # From the .NET 11 SDK `dotnet sln add` also adds each project's references, and fails on the
+      # second one of a name; the build finds them through the test projects.
       - name: Build
         run: |
           set -euo pipefail
@@ -140,14 +186,14 @@ jobs:
           fi
           sln="$RUNNER_TEMP/ci/ci.slnx"
           dotnet new sln -n ci -o "$RUNNER_TEMP/ci" --format slnx
-          dotnet sln "$sln" add --solution-folder Unit tests/Unit/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Integration tests/Integration/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Parity \
-            tests/Parity/Nocturne.Alerts.ParityCorpus.Generator/Nocturne.Alerts.ParityCorpus.Generator.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Unit tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Integration tests/Integration/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Parity \
+            tests/Parity/Nocturne.Alerts.Corpus/Nocturne.Alerts.Corpus.csproj
           dotnet build "$sln" -p:GenerateNSwagClient=true
           missing=0
           for project in tests/Unit/*/*.csproj tests/Integration/*/*.csproj tests/Parity/*/*.csproj; do
-            dll="$(dirname "$project")/bin/Debug/net10.0/$(basename "$project" .csproj).dll"
+            dll="$(dirname "$project")/bin/Debug/net11.0/$(basename "$project" .csproj).dll"
             if [ ! -f "$dll" ]; then
               echo "::error file=$project::was not built ($dll is missing)"
               missing=1
@@ -163,7 +209,7 @@ jobs:
         if: env.BUILD_TESTS == 'true'
         run: |
           set -euo pipefail
-          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net10.0/*.staticwebassets.runtime.json | sort -u)
+          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net11.0/*.staticwebassets.runtime.json | sort -u)
           paths=()
           for root in "${roots[@]}"; do
             case "$root" in
@@ -204,13 +250,16 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-dotnet
       - uses: ./.github/actions/dotnet-build-output
-      # One solution of the unit test projects, so the assemblies are tested concurrently.
+      # One solution of the unit test projects, so the assemblies are tested concurrently. The build
+      # job packed the nocturne_alerts cdylib into every output, so a native test may not skip.
       - name: Test
+        env:
+          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
         run: |
           set -euo pipefail
           sln="$RUNNER_TEMP/unit/unit.slnx"
           dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
-          dotnet sln "$sln" add tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false tests/Unit/*/*.csproj
           dotnet test "$sln" --no-build \
             --filter "Category!=Integration" \
             --logger "trx;LogFileName=unit.trx" \
@@ -231,39 +280,18 @@ jobs:
           name: unit-trx
           path: "**/*.trx"
 
-  # The alert-engine golden corpus (tests/Parity/AlertEngineCorpus) is the normative
-  # spec for the Rust port of the leaf/node evaluation engine. While the C# engine is
-  # authoritative, any behavioural change to the evaluators/tracker must regenerate the
-  # corpus deliberately — this job fails if the committed corpus no longer matches what
-  # the engine produces.
-  alert-corpus-check:
-    needs: [changes, build]
-    if: needs.changes.outputs.dotnet == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup-dotnet
-      - uses: ./.github/actions/dotnet-build-output
-      - name: Verify alert engine corpus is current
-        run: |
-          dotnet run --no-build \
-            --project tests/Parity/Nocturne.Alerts.ParityCorpus.Generator -- --check
-
-  # Rust alert engine FFI: lints + tests the crates workspace, builds the
-  # nocturne_alerts cdylib, then runs the three-way parity suite (C# engine vs
-  # committed corpus vs Rust engine over the C ABI) on the build job's assemblies, which find
-  # the cdylib through NOCTURNE_ALERTS_NATIVE_DIR. NOCTURNE_ALERTS_REQUIRE_NATIVE
-  # turns silent skips (native lib not found) into a hard failure so the parity
-  # theories can never quietly stop running here.
+  # Rust alert engine: tests, lints and formats the crates workspace, including the golden corpus
+  # (tests/Parity/AlertEngineCorpus), the engine's normative spec. The corpus is frozen: a missing
+  # snapshot fails here, and NOCTURNE_CORPUS_BLESS=1 writes a new scenario's snapshot locally for
+  # review. The FFI parity suite (Nocturne.Alerts.Native.Tests: committed corpus vs Rust over the
+  # C ABI) runs in the unit job, on the cdylib the build job packed.
   alerts-ffi-parity:
-    needs: [changes, build]
+    needs: changes
     if: needs.changes.outputs.crates == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup-dotnet
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: stable
@@ -277,8 +305,9 @@ jobs:
             crates/target
           # Sources, not just the lockfile: actions/cache restores crates/target with
           # mtimes newer than the checked-out sources, and cargo's path-package fingerprint
-          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build.
-          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build. For
+          # the same reason there are no restore-keys. Only the crates this job builds are hashed.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/nocturne-alerts-*/**/*.rs', 'crates/**/Cargo.toml') }}
       # --all-features compiles the uniffi surface Prelude ships; the default-feature clippy
       # covers the cdylib the backend loads.
       - name: Rust tests, clippy, fmt
@@ -287,49 +316,7 @@ jobs:
           cargo test --workspace --all-features
           cargo clippy --workspace --all-targets -- -D warnings
           cargo clippy --workspace --all-targets --all-features -- -D warnings
-          cargo fmt --check
-      - name: Build nocturne_alerts cdylib
-        working-directory: crates
-        run: cargo build --release -p nocturne-alerts-ffi
-      - uses: ./.github/actions/dotnet-build-output
-      - name: Three-way parity tests (C# engine vs corpus vs Rust FFI)
-        env:
-          NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
-          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
-        run: |
-          dotnet test tests/Unit/Nocturne.Alerts.Native.Tests/Nocturne.Alerts.Native.Tests.csproj \
-            --no-build \
-            --logger "trx;LogFileName=alerts-ffi-parity.trx"
-      # Engine-seam tests (IAlertEvaluationEngine) plus every API test class holding a
-      # [NativeFact]/[NativeTheory], which the unit job skips for want of the cdylib. The
-      # classes are found by grep, each in a file named after it, so a new native test
-      # cannot be left out; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
-      - name: Engine seam and native-backed API tests
-        env:
-          NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
-          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
-          Alerts__Engine: rust
-        run: |
-          set -euo pipefail
-          filter="FullyQualifiedName~Services.Alerts.Engines"
-          while IFS= read -r file; do
-            class=$(basename "$file" .cs)
-            if ! grep -qE "class ${class}\b" "$file"; then
-              echo "::error file=$file::holds native tests but declares no class named $class"
-              exit 1
-            fi
-            filter="$filter|FullyQualifiedName~.${class}."
-          done < <(grep -rlE '\[Native(Fact|Theory)' tests/Unit/Nocturne.API.Tests --include='*.cs')
-          echo "Filter: $filter"
-          dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
-            --no-build \
-            --filter "$filter" \
-            --logger "trx;LogFileName=alerts-engine-seam.trx"
-      - uses: actions/upload-artifact@v6
-        if: failure()
-        with:
-          name: alerts-ffi-parity-trx
-          path: "**/*.trx"
+          cargo fmt --check -p nocturne-alerts-core -p nocturne-alerts-ffi
 
   # The desktop Companion's Tauri crate. Windows only: tauri-winrt-notification's `windows`
   # dependency does not compile elsewhere (see desktop-release.yml). generate_context! embeds
@@ -364,9 +351,12 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Tests with coverage
         if: ${{ !cancelled() }}
+        # Cargo 1.100's build-dir layout passes rustc one -L per dependency, which overflows the Windows
+        # command line into an @argfile that cargo-llvm-cov's rustc wrapper does not read, so the crate
+        # builds uninstrumented. Without the wrapper the coverage flags travel in RUSTFLAGS instead.
         run: |
           mkdir -p "$GITHUB_WORKSPACE/TestResults/desktop-rust"
-          cargo llvm-cov --locked --cobertura --output-path "$GITHUB_WORKSPACE/TestResults/desktop-rust/cobertura.xml"
+          cargo llvm-cov --locked --no-rustc-wrapper --cobertura --output-path "$GITHUB_WORKSPACE/TestResults/desktop-rust/cobertura.xml"
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -453,6 +443,32 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Lints every user-facing string against the ASD-STE100 rules in .vale/styles/Nocturne (the
+  # simple-english skill). wuchale extracts the strings from source into locales/en.po first, so the
+  # check reads this commit's strings, not the catalog the sync job last committed. Errors fail.
+  ui-copy:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Pinned so CI and a workstation run the same rule engine.
+      VALE_VERSION: 3.24.0
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          install: src/Web
+      - name: Install Vale
+        run: |
+          curl -sSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"             | sudo tar -xz -C /usr/local/bin vale
+          vale --version
+      - name: Lint UI copy
+        run: pnpm run lint:copy --min=error
+
   integration-db:
     needs: [changes, build]
     if: needs.changes.outputs.dotnet == 'true'
@@ -469,7 +485,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/integration/integration.slnx"
           dotnet new sln -n integration -o "$RUNNER_TEMP/integration" --format slnx
-          dotnet sln "$sln" add \
+          dotnet sln "$sln" add --include-references false \
             tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
             tests/Integration/Nocturne.Connectors.Tests/Nocturne.Connectors.Tests.csproj
           dotnet test "$sln" --no-build \
@@ -508,7 +524,7 @@ jobs:
   web-app-tests:
     needs: [changes, build]
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -527,6 +543,7 @@ jobs:
           working-directory: src/Web/packages/app
       - name: App unit tests
         run: |
+          node tools/ensure-check-deps.mjs
           pnpm exec svelte-kit sync
           pnpm exec vitest --config vitest.config.ts --run --coverage
       - name: App browser component tests
@@ -625,7 +642,7 @@ jobs:
   e2e:
     needs: [changes, images]
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -649,12 +666,21 @@ jobs:
         env:
           E2E_SKIP_BUILD: "1"
         run: pnpm e2e
+      # A native fault the runtime does not handle is logged by the kernel with the faulting
+      # library and offset ("segfault at ... in libfoo.so"); the OOM killer logs here too.
+      # The container's user owns the crash dumps, which the upload has to read.
+      - name: Collect crash diagnostics
+        if: failure()
+        run: |
+          sudo dmesg --ctime | grep -iE 'segfault|general protection|traps:|oom|killed process' || true
+          if [ -d e2e/crash-dumps ]; then sudo chmod -R a+rX e2e/crash-dumps; fi
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: e2e-artifacts
           path: |
             e2e/docker-compose-logs.txt
+            e2e/crash-dumps/
             e2e/playwright-report/
             e2e/test-results/
           if-no-files-found: ignore
@@ -683,11 +709,19 @@ jobs:
         env:
           E2E_SKIP_BUILD: "1"
         run: node scripts/migration-upgrade.ts
+      # As in the e2e job.
+      - name: Collect crash diagnostics
+        if: failure()
+        run: |
+          sudo dmesg --ctime | grep -iE 'segfault|general protection|traps:|oom|killed process' || true
+          if [ -d e2e/crash-dumps ]; then sudo chmod -R a+rX e2e/crash-dumps; fi
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: migration-upgrade-logs
-          path: e2e/docker-compose-logs.txt
+          path: |
+            e2e/docker-compose-logs.txt
+            e2e/crash-dumps/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -713,10 +747,11 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0"
+          dotnet-version: "11.0"
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          check-latest: true
       - uses: actions/download-artifact@v5
         with:
           pattern: coverage-*
@@ -807,6 +842,97 @@ jobs:
           echo "::error::No coverage report was produced (see the Report step)."
           exit 1
 
+  # The committed deploy/ bundle is what the portal and the release notes link on main, so it
+  # stays tracked.
+  compose-bundle-drift:
+    needs: changes
+    if: needs.changes.outputs.composeBundle == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          nuget-cache-key: nuget-compose-bundle
+      # The CLI has to match the Aspire packages the AppHost is built with.
+      - name: Install the Aspire CLI
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*<PackageVersion Include="Aspire.Hosting" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)
+          if [ -z "$version" ]; then
+            echo "::error::Directory.Packages.props has no Aspire.Hosting version."
+            exit 1
+          fi
+          curl -fsSL https://aspire.dev/install.sh | bash -s -- --version "$version"
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+      # The script publishes with --no-build, so the AppHost has to be built first.
+      - name: Build the AppHost
+        run: dotnet build src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj -p:GenerateNSwagClient=false
+      - name: Regenerate the bundle
+        run: dotnet run scripts/publish-release.cs
+      - name: The bundle matches the tree
+        run: |
+          set -euo pipefail
+          git add --intent-to-add -- deploy docs/diagrams
+          if git diff --quiet -- deploy docs/diagrams; then
+            exit 0
+          fi
+          {
+            echo '## The compose bundle is out of date'
+            echo
+            echo 'Run `dotnet run scripts/publish-release.cs` and commit the changes under `deploy/` and `docs/diagrams/`.'
+            echo
+            echo '```diff'
+            git diff -- deploy docs/diagrams | head -n 400 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat -- deploy docs/diagrams
+          echo "::error::The compose bundle is out of date. Run 'dotnet run scripts/publish-release.cs' and commit deploy/ and docs/diagrams/."
+          exit 1
+      - name: Postgres keeps its data volume
+        run: |
+          set -euo pipefail
+          service=$(awk '/^  nocturne-postgres-server:/{f=1;next} f&&/^  [^ ]/{exit} f' deploy/docker-compose/docker-compose.yaml)
+          if [ -z "$service" ]; then
+            echo "::error::deploy/docker-compose/docker-compose.yaml has no nocturne-postgres-server service."
+            exit 1
+          fi
+          if grep -Eq '^    volumes: \[\]' <<<"$service" || ! grep -q 'source: "nocturne-postgres-data"' <<<"$service"; then
+            echo "::error::The Postgres service has no nocturne-postgres-data volume, so its data would be lost on recreate."
+            exit 1
+          fi
+
+  # Generates the Java SDK from the filtered spec of the API build and fails when a model rejects
+  # an unknown response field or enum value. Only sdk/** (filter, config, templates) or a generator
+  # bump can bring that back: the filter strips the setting from every schema the API emits.
+  sdk-tolerant-models:
+    needs: [changes, build]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v5
+        with:
+          name: api-client
+          path: src/Web/packages/app/src/lib/api
+      - name: Filter spec to SDK endpoints (V4 + OAuth)
+        run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
+      - name: Generate Java SDK
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
+        with:
+          args: >-
+            generate
+            -i sdk/openapi-v4.json
+            -c sdk/java/config.yaml
+            -o sdk/java/out
+            --ignore-file-override sdk/java/.openapi-generator-ignore
+      - name: Verify models tolerate unknown fields and enum values
+        run: bash sdk/verify-tolerant-java-models.sh sdk/java/out
+
   # The single check to require on the branch: green when every job it needs passed or was
   # skipped for want of relevant changes.
   tests-passed:
@@ -814,16 +940,18 @@ jobs:
       - changes
       - build
       - unit
-      - alert-corpus-check
       - alerts-ffi-parity
       - desktop-rust
       - web-static
       - web-app-tests
+      - ui-copy
       - integration-db
       - integration-api
       - images
       - e2e
       - migration-upgrade
+      - compose-bundle-drift
+      - sdk-tolerant-models
       - coverage
     if: always()
     runs-on: ubuntu-latest

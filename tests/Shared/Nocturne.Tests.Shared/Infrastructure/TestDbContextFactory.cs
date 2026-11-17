@@ -1,10 +1,15 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.InMemory.Storage.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Tests.Shared.Infrastructure;
 
@@ -81,9 +86,9 @@ public sealed class SqliteTestDatabase : IDisposable
         ContextFactory = new PooledContextFactory(this);
 
         using var seed = CreateContext();
-        if (configure is null)
+        if (SchemaTemplates.For(configure) is { } template)
         {
-            SchemaTemplate.CopyInto(Connection);
+            template.CopyInto(Connection);
         }
         else
         {
@@ -118,13 +123,18 @@ public sealed class SqliteTestDatabase : IDisposable
 
     /// <summary>
     /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>
-    /// as the context pool, plus one scoped <see cref="NocturneDbContext"/> per service scope, every
-    /// one of them over the same connection.
+    /// as the context pool and behind <c>INocturneDbContextFactory</c>, every context over the same
+    /// connection, and the subject repository the authentication pipeline reads through.
     /// </summary>
     public IServiceCollection AddToServices(IServiceCollection services)
     {
         services.AddSingleton(ContextFactory);
-        services.AddScoped(_ => CreateContext());
+        services.AddSingleton(ContextFactory.AsNocturneFactory());
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddTransient<ITenantRepository, TenantRepository>();
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IRoleRepository, RoleRepository>();
+        services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
         return services;
     }
 
@@ -143,39 +153,36 @@ public sealed class SqliteTestDatabase : IDisposable
     public void Dispose() => Connection.Dispose();
 
     /// <summary>
-    /// The schema, created once per test process and copied page for page into each new
-    /// database. <c>EnsureCreated</c> diffs the whole model and runs its DDL, around half a second
-    /// every time, which made schema creation most of the unit suite's run time; a backup copy of
-    /// the finished database is a few milliseconds. A <c>configure</c> callback may replace
-    /// provider services, so those databases still build their own schema.
+    /// The <see cref="SqliteSchemaTemplate"/> a database's schema is copied from. A <c>configure</c>
+    /// callback may replace provider services, so a single static method gets a template built
+    /// with it, and one that reads changeable static state is cached as of its first call. Any
+    /// other delegate, a closure or a multicast one, may configure differently per call, so it
+    /// still builds its own schema.
     /// </summary>
-    private static class SchemaTemplate
+    private static class SchemaTemplates
     {
-        private static readonly Lazy<SqliteConnection> Template = new(Create, LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly SqliteSchemaTemplate Default = Build(configure: null);
 
-        // One connection is not safe for concurrent use, and test classes run in parallel.
-        private static readonly Lock CopyLock = new();
+        private static readonly ConcurrentDictionary<MethodInfo, SqliteSchemaTemplate> Configured = new();
 
-        public static void CopyInto(SqliteConnection destination)
-        {
-            lock (CopyLock)
+        public static SqliteSchemaTemplate? For(Action<DbContextOptionsBuilder<NocturneDbContext>>? configure) =>
+            configure switch
             {
-                Template.Value.BackupDatabase(destination);
-            }
-        }
+                null => Default,
+                { Target: null, HasSingleTarget: true } =>
+                    Configured.GetOrAdd(configure.Method, _ => Build(configure)),
+                _ => null,
+            };
 
-        private static SqliteConnection Create()
-        {
-            var connection = new SqliteConnection("DataSource=:memory:");
-            connection.Open();
-            var options = new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite(connection)
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options;
-            using var context = new NocturneDbContext(options);
-            context.Database.EnsureCreated();
-            return connection;
-        }
+        private static SqliteSchemaTemplate Build(Action<DbContextOptionsBuilder<NocturneDbContext>>? configure) =>
+            new(connection =>
+            {
+                var builder = new DbContextOptionsBuilder<NocturneDbContext>()
+                    .UseSqlite(connection)
+                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+                configure?.Invoke(builder);
+                return new NocturneDbContext(builder.Options);
+            });
     }
 
     private sealed class PooledContextFactory(SqliteTestDatabase db)

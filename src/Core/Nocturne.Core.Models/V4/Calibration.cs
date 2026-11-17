@@ -16,18 +16,9 @@ namespace Nocturne.Core.Models.V4;
 [JsonSchemaFlatten]
 public class Calibration : V4RecordBase
 {
-    /// <summary>
-    /// Calibration slope value
-    /// </summary>
     public double? Slope { get; set; }
 
-    /// <summary>
-    /// Calibration intercept value
-    /// </summary>
     public double? Intercept { get; set; }
 
-    /// <summary>
-    /// Calibration scale value
-    /// </summary>
     public double? Scale { get; set; }
 }

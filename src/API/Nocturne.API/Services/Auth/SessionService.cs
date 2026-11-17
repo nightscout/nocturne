@@ -49,46 +49,55 @@ public class SessionService : ISessionService
             ? Guid.CreateVersion7().ToString("N")
             : context.OidcSessionId;
 
-        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
+        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles, oidcSessionId);
         var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
             subjectId, oidcSessionId, context.DeviceDescription,
             context.IpAddress, context.UserAgent);
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
 
-        return new SessionTokenPair(accessToken, refreshToken, expiresIn);
+        return new SessionTokenPair(accessToken, refreshToken, expiresIn, subjectId);
     }
 
     /// <inheritdoc />
     public async Task<SessionTokenPair?> RotateSessionAsync(
         string refreshToken, SessionContext context, CancellationToken ct = default)
     {
+        if (await _refreshTokenService.FindOwnerAsync(refreshToken) is not { } owner)
+            return null;
+
+        if (await ReadRefreshClaimsAsync(refreshToken, owner.SubjectId, ct) is not { } claims)
+            return null;
+
+        var accessToken = _jwtService.GenerateAccessToken(
+            claims.Subject, claims.Permissions, claims.Roles, owner.SessionId);
+        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
+
         var newRefreshToken = await _refreshTokenService.RotateRefreshTokenAsync(
             refreshToken, context.IpAddress, context.UserAgent);
 
         if (newRefreshToken is null)
             return null;
 
-        var subjectId = await _refreshTokenService.ValidateRefreshTokenAsync(newRefreshToken);
+        return new SessionTokenPair(accessToken, newRefreshToken, expiresIn, owner.SubjectId);
+    }
 
-        if (subjectId is null)
-            return null;
-
-        var subject = await _subjectService.GetSubjectByIdAsync(subjectId.Value)
-            ?? throw new InvalidOperationException($"Subject {subjectId} not found.");
-
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId.Value);
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId.Value);
-
-        var subjectInfo = new SubjectInfo
+    /// <inheritdoc />
+    public async Task<SessionClaims?> ReadRefreshClaimsAsync(
+        string refreshToken, Guid subjectId, CancellationToken ct = default)
+    {
+        var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
+        if (subject is not { IsActive: true })
         {
-            Id = subject.Id,
-            Name = subject.Name,
-            Email = subject.Email,
-        };
+            await _refreshTokenService.RevokeRefreshTokenAsync(refreshToken, "Subject inactive");
+            return null;
+        }
 
-        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
-        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
+        var roles = await _subjectService.GetSubjectRolesAsync(subjectId);
+        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId);
 
-        return new SessionTokenPair(accessToken, newRefreshToken, expiresIn);
+        return new SessionClaims(
+            new SubjectInfo { Id = subject.Id, Name = subject.Name, Email = subject.Email },
+            roles,
+            permissions);
     }
 }

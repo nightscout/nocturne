@@ -7,10 +7,11 @@ namespace Nocturne.Core.Models.Alerts;
 public enum ChannelDestinationMode
 {
     /// <summary>
-    /// No destination: delivery is addressed to the account itself (browser push
-    /// subscriptions, the in-app notification centre).
+    /// A member's subject id: the caller's own when the editor leaves it blank, otherwise a
+    /// member of the rule's tenant. Checked on save and again on delivery, because the in-app
+    /// notification centre lists a notification only to the subject it names.
     /// </summary>
-    AccountRouted,
+    Member,
 
     /// <summary>The user types the destination and it is shape-checked on save.</summary>
     UserSupplied,

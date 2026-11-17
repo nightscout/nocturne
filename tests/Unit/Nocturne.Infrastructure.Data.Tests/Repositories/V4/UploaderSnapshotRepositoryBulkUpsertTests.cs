@@ -23,7 +23,7 @@ public class UploaderSnapshotRepositoryBulkUpsertTests : IDisposable
         var dbName = $"uploader_snapshot_upsert_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new UploaderSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
+        _repository = new UploaderSnapshotRepository(new TestNocturneDbContextFactory(_context), new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
     }
 
     public void Dispose()

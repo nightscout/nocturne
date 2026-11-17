@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Authorization;
@@ -17,11 +18,11 @@ public class ActivityWriteScopeGuardTests
     /// Stub decomposer that maps activity ids to a canned required scope, so the guard's
     /// scope-checking logic can be exercised without a real classifier or DbContext.
     /// </summary>
-    private static IActivityDecomposer Decomposer(Dictionary<string, string?> idToScope)
+    private static IActivityDecomposer Decomposer(Dictionary<string, string> idToScope)
     {
         var mock = new Mock<IActivityDecomposer>();
         mock.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
-            .Returns((Activity a) => idToScope.GetValueOrDefault(a.Id!));
+            .Returns((Activity a) => idToScope[a.Id!]);
         return mock.Object;
     }
 
@@ -29,14 +30,44 @@ public class ActivityWriteScopeGuardTests
         new HashSet<string>(scopes);
 
     [Fact]
-    public void FindMissingScope_AllRegular_ReturnsNull()
+    public void FindMissingScope_RegularRecordWithoutTreatmentsScope_ReturnsTreatmentsScope()
     {
-        var decomposer = Decomposer(new() { ["a"] = null, ["b"] = null });
+        var decomposer = Decomposer(new() { ["a"] = Scope.TreatmentsReadWrite });
 
         var missing = ActivityWriteScopeGuard.FindMissingScope(
-            [Activity("a"), Activity("b")], decomposer, Granted());
+            [Activity("a")], decomposer, Granted(Scope.HeartRateReadWrite));
+
+        missing.Should().Be(Scope.TreatmentsReadWrite);
+    }
+
+    [Fact]
+    public void FindMissingScope_RegularRecordWithTreatmentsScope_ReturnsNull()
+    {
+        var decomposer = Decomposer(new() { ["a"] = Scope.TreatmentsReadWrite });
+
+        var missing = ActivityWriteScopeGuard.FindMissingScope(
+            [Activity("a")], decomposer, Granted(Scope.TreatmentsReadWrite));
 
         missing.Should().BeNull();
+    }
+
+    [Fact]
+    public void FindMissingScope_MixedBatchNeedsEveryScopeItsRecordsNeed()
+    {
+        var decomposer = Decomposer(new()
+        {
+            ["hr"] = Scope.HeartRateReadWrite,
+            ["a"] = Scope.TreatmentsReadWrite,
+        });
+        var batch = new[] { Activity("hr"), Activity("a") };
+
+        ActivityWriteScopeGuard.FindMissingScope(batch, decomposer, Granted(Scope.HeartRateReadWrite))
+            .Should().Be(Scope.TreatmentsReadWrite);
+        ActivityWriteScopeGuard.FindMissingScope(batch, decomposer, Granted(Scope.TreatmentsReadWrite))
+            .Should().Be(Scope.HeartRateReadWrite);
+        ActivityWriteScopeGuard.FindMissingScope(
+            batch, decomposer, Granted(Scope.HeartRateReadWrite, Scope.TreatmentsReadWrite))
+            .Should().BeNull();
     }
 
     [Fact]

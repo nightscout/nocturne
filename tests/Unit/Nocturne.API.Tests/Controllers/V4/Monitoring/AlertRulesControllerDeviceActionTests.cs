@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -34,16 +35,20 @@ public class AlertRulesControllerDeviceActionTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
-        var factory = new TestTenantDbContextFactory(ctx);
+        var factory = new TestNocturneDbContextFactory(ctx);
 
         return new AlertRulesController(
             factory,
+            new TenantMembershipRepository(factory),
+            new AlertRepository(factory),
+            new AlertRuleRepository(factory),
+            MockTenantAccessor.Create(Tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
     }

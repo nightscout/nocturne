@@ -1,18 +1,24 @@
 <script lang="ts">
-  import * as Sheet from "$lib/components/ui/sheet";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
+  import { untrack } from "svelte";
+  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { RangeCalendar } from "$lib/components/ui/range-calendar";
-  import { dayCount } from "$lib/utils/date-range";
-  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
+  import { requireDateParamsContext, withRange, type RangeWrite } from "#lib/hooks/date-params.svelte.js";
+  import { getReportSlots } from "#lib/hooks/report-slots.svelte.js";
+  import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
+  import { dayCount, exceedsDaySpan, outsideDaySpan } from "#lib/utils/date-range.js";
+  import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
+  import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Filter from "@lucide/svelte/icons/funnel";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import type { ReadonlyURLSearchParams } from "$app/state";
 
   interface Props {
     open?: boolean;
@@ -23,6 +29,8 @@
 
   // Get shared date params from context (set by reports layout)
   const params = requireDateParamsContext();
+  const slots = getReportSlots();
+  const extension = $derived(slots?.filters ?? null);
 
   // Quick day presets
   const dayPresets = [
@@ -34,8 +42,11 @@
     { label: "90 Days", days: 90 },
   ];
 
+  const limits = getV4ApiLimits();
+  const maxDays = $derived(limits.current?.maxDateSpanDays);
+
   // === DRAFT STATE ===
-  // The pending date range selection before clicking "Apply Filters".
+  // The pending date range selection before clicking "Apply filters".
   // This is the single source of truth; the highlighted preset is derived from it.
   let draftCalendarValue = $state<DateRange | undefined>(undefined);
 
@@ -43,13 +54,17 @@
   // rather than the URL-only params: a default range seeded during hydration
   // never reaches the URL, so params.from/days can read as null while the range
   // on screen is intact.
+  // Only opening seeds the drafts: a range that changes while the panel is open leaves them be.
   $effect(() => {
     if (!open) return;
 
-    draftCalendarValue = {
-      start: parseDate(params.fromDay),
-      end: parseDate(params.toDay),
-    };
+    untrack(() => {
+      extension?.begin();
+      draftCalendarValue = {
+        start: parseDate(params.fromDay),
+        end: parseDate(params.toDay),
+      };
+    });
   });
 
   // The quick-selection preset to highlight: the whole-day span of the draft
@@ -67,6 +82,16 @@
     return dayPresets.some((p) => p.days === days) ? days : undefined;
   });
 
+  const pendingStart = $derived(
+    draftCalendarValue?.start && !draftCalendarValue.end ? draftCalendarValue.start : undefined
+  );
+  const isDateDisabled = $derived(outsideDaySpan(pendingStart, maxDays));
+  const draftTooLong = $derived(
+    !!draftCalendarValue?.start &&
+      !!draftCalendarValue.end &&
+      exceedsDaySpan(draftCalendarValue.start.toString(), draftCalendarValue.end.toString(), maxDays)
+  );
+
   function selectPreset(daysCount: number) {
     const endDate = today(getLocalTimeZone());
     draftCalendarValue = {
@@ -81,35 +106,48 @@
     }
   }
 
-  /**
-   * Return to the on-screen report's own default window and hand the range back
-   * to default mode, so navigating to another report can adjust it again.
-   * Resetting to a fixed 7 days shortened 30-day reports and pinned the result
-   * as a user choice.
-   */
-  function resetFilters() {
-    params.reset();
-    open = false;
-    onOpenChange?.(false);
+  /** Writes the range and the report's filters in one navigation, so one history entry. */
+  async function write(range: RangeWrite | null, report: (search: ReadonlyURLSearchParams) => URLSearchParams) {
+    const search = report(range ? withRange(page.url.searchParams, range) : page.url.searchParams);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- a query on the page on screen
+    await goto(`?${search.toString()}`, { reset: false });
   }
 
-  function applyFilters() {
+  /**
+   * Returns to the on-screen report's own default window and hands the range back
+   * to default mode, so navigating to another report can adjust it again.
+   */
+  async function resetFilters() {
+    open = false;
+    onOpenChange?.(false);
+    if (extension) await write(params.resetWrite(), extension.reset);
+    else params.reset();
+  }
+
+  async function applyFilters() {
     const start = draftCalendarValue?.start;
     const end = draftCalendarValue?.end;
 
-    if (start && end) {
-      // A range matching a "last N days" preset commits as a relative range so it
-      // stays anchored to today; anything else commits as an explicit custom range.
+    open = false;
+    onOpenChange?.(false);
+
+    // A range matching a "last N days" preset commits as a relative range so it
+    // stays anchored to today; anything else commits as an explicit custom range.
+    if (extension) {
+      const range =
+        start && end
+          ? selectedDays !== undefined
+            ? params.dayRangeWrite(selectedDays)
+            : params.customRangeWrite(start.toString(), end.toString())
+          : null;
+      await write(range, extension.apply);
+    } else if (start && end) {
       if (selectedDays !== undefined) {
         params.setDayRange(selectedDays);
       } else {
         params.setCustomRange(start.toString(), end.toString());
       }
     }
-
-    // Close the sidebar
-    open = false;
-    onOpenChange?.(false);
   }
 
   const dateRangeText = $derived.by(() => {
@@ -129,19 +167,23 @@
       <div class="flex items-center justify-between">
         <Sheet.Title class="flex items-center gap-2">
           <Filter class="h-5 w-5" />
-          Report Filters
+          Report filters
         </Sheet.Title>
       </div>
       <Sheet.Description>
-        Adjust the date range for your report.
+        {#if extension}
+          Set the date range and the filters for this report.
+        {:else}
+          Adjust the date range for your report.
+        {/if}
       </Sheet.Description>
     </Sheet.Header>
 
-    <ScrollArea class="h-[calc(100vh-180px)]">
+    <ScrollArea class="h-[calc(100dvh-180px)]">
       <div class="px-6 py-4 space-y-6">
         <!-- Quick Date Presets -->
         <div class="space-y-3">
-          <Label>Quick Selection</Label>
+          <Label>Quick selection</Label>
           <div class="grid grid-cols-3 gap-2">
             {#each dayPresets as preset (preset.days)}
               <Button
@@ -161,7 +203,7 @@
         <div class="space-y-3">
           <Label class="flex items-center">
             <Calendar class="h-4 w-4" />
-            Custom Date Range
+            Custom date range
           </Label>
           <div class="text-sm text-muted-foreground mb-2">
             {dateRangeText}
@@ -172,9 +214,21 @@
               captionLayout="dropdown"
               locale={formatLocale()}
               onValueChange={handleCalendarChange}
+              {isDateDisabled}
+              {maxDays}
             />
           </div>
+          {#if draftTooLong}
+            <p class="text-sm text-destructive" role="alert">
+              The date range must not be longer than {maxDays} days.
+            </p>
+          {/if}
         </div>
+
+        {#if extension}
+          <Separator />
+          {@render extension.fields()}
+        {/if}
       </div>
     </ScrollArea>
 
@@ -186,7 +240,7 @@
           <RotateCcw class="h-4 w-4 mr-2" />
           Reset
         </Button>
-        <Button class="flex-1" onclick={applyFilters}>Apply Filters</Button>
+        <Button class="flex-1" disabled={draftTooLong} onclick={applyFilters}>Apply filters</Button>
       </div>
     </div>
   </Sheet.Content>

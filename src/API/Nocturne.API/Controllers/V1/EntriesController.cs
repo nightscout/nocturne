@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +9,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -25,7 +23,6 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IDocumentProcessingService"/>
-/// <seealso cref="IProcessingStatusService"/>
 /// <seealso cref="IAlertOrchestrator"/>
 [ApiController]
 [Tags("V1")]
@@ -35,8 +32,8 @@ public class EntriesController : ControllerBase
 {
     private readonly IEntryService _entryService;
     private readonly IDocumentProcessingService _documentProcessingService;
-    private readonly IProcessingStatusService _processingStatusService;
     private readonly ICanonicalAlertEvaluator _alertEvaluator;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<EntriesController> _logger;
 
     /// <summary>
@@ -44,27 +41,28 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="entryService">Service handling glucose entry operations.</param>
     /// <param name="documentProcessingService">Service for async document processing and ingestion.</param>
-    /// <param name="processingStatusService">Service for querying async processing status.</param>
     /// <param name="alertEvaluator">Evaluates alert rules against the canonical stream after writes.</param>
+    /// <param name="timeProvider">Clock the default read window is measured from.</param>
     /// <param name="logger">Logger instance.</param>
     public EntriesController(
         IEntryService entryService,
         IDocumentProcessingService documentProcessingService,
-        IProcessingStatusService processingStatusService,
         ICanonicalAlertEvaluator alertEvaluator,
+        TimeProvider timeProvider,
         ILogger<EntriesController> logger
     )
     {
         _entryService = entryService;
         _documentProcessingService = documentProcessingService;
-        _processingStatusService = processingStatusService;
         _alertEvaluator = alertEvaluator;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
     /// <summary>
     /// Get the most recent glucose entry
-    /// This endpoint assumes SGV (sensor glucose value) type and returns the single most recent entry
+    /// This endpoint assumes SGV (sensor glucose value) type and returns the single most recent entry.
+    /// The response is never cached; a conditional request with <c>If-Modified-Since</c> can return 304.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The most recent glucose entry, or empty array if no entries exist</returns>
@@ -92,61 +90,32 @@ public class EntriesController : ControllerBase
 
         var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
 
-        // Set Last-Modified header for caching
-        DateTimeOffset lastModified;
-        if (currentEntry == null)
+        Entry[] current = currentEntry is null ? [] : [currentEntry];
+        if (NotModifiedSince(current) is { } notModified)
+        {
+            return notModified;
+        }
+
+        if (currentEntry is null)
         {
             _logger.LogDebug("No current entry found, returning empty array");
-            // Set Last-Modified to current time when no entries exist
-            lastModified = DateTimeOffset.UtcNow;
-            Response.Headers["Last-Modified"] = lastModified.ToString("R");
-            return Ok(Array.Empty<Entry>());
-        }
-        lastModified = DateTimeOffset.FromUnixTimeMilliseconds(currentEntry.Mills);
-        Response.Headers["Last-Modified"] = lastModified.ToString("R");
-
-        // Check If-Modified-Since header
-        if (Request.Headers.IfModifiedSince.Count > 0)
-        {
-            if (
-                DateTimeOffset.TryParse(
-                    Request.Headers.IfModifiedSince.First(),
-                    out var ifModifiedSince
-                )
-            )
-            {
-                if (lastModified <= ifModifiedSince)
-                {
-                    _logger.LogDebug(
-                        "Current entry not modified since {IfModifiedSince}, returning 304",
-                        ifModifiedSince
-                    );
-                    return StatusCode(
-                        304,
-                        new
-                        {
-                            status = 304,
-                            message = "Not modified",
-                            type = "internal",
-                        }
-                    );
-                }
-            }
+            return EntriesResult([]);
         }
 
         _logger.LogDebug(
-            "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
+            "Returning current entry with ID: {EntryId}, Mills: {Mills}, Glucose: {Glucose}",
             currentEntry.Id,
             currentEntry.Mills,
-            currentEntry.Sgv ?? currentEntry.Mgdl
+            currentEntry.GlucoseMgdl()
         );
 
         // Return as array to match legacy API format with V1 response structure
-        return Ok(new[] { currentEntry }.ToV1Responses());
+        return EntriesResult([currentEntry]);
     }
 
     /// <summary>
-    /// Get a specific entry by ID or get entries by type
+    /// Get a specific entry by ID or get entries by type.
+    /// A type spec behaves like the entries list: it honors <c>count</c> and <c>find[...]</c>, and the path type overrides any <c>find[type]</c>.
     /// </summary>
     /// <param name="spec">Either an entry ID (24-character hex string) or entry type (e.g., "sgv", "mbg", "cal")</param>
     /// <param name="count">Maximum number of entries to return for a type spec (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
@@ -183,23 +152,21 @@ public class EntriesController : ControllerBase
 
         if (isId)
         {
-            // Fetch specific entry by ID
             var entry = await _entryService.GetEntryByIdAsync(spec, cancellationToken);
-            if (entry == null)
+            Entry[] found = entry is null ? [] : [entry];
+            if (NotModifiedSince(found) is { } idNotModified)
+            {
+                return idNotModified;
+            }
+
+            if (entry is null)
             {
                 _logger.LogDebug("Entry with ID {Id} not found", spec);
-                // Set Last-Modified to current time when entry not found
-                var notFoundLastModified = DateTimeOffset.UtcNow;
-                Response.Headers["Last-Modified"] = notFoundLastModified.ToString("R");
-                return Ok(Array.Empty<Entry>());
+                return EntriesResult([]);
             }
 
             _logger.LogDebug("Found entry with ID: {Id}", spec);
-            // Set Last-Modified header
-            var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
-            Response.Headers["Last-Modified"] = lastModified.ToString("R");
-
-            return Ok(new[] { entry }.ToV1Responses());
+            return EntriesResult(found);
         }
 
         var entriesArray = await QueryEntriesAsync(
@@ -213,7 +180,7 @@ public class EntriesController : ControllerBase
         // Nightscout's format_entries stamps no Last-Modified and never answers 304 on an empty result.
         if (entriesArray.Length == 0)
         {
-            return Ok(Array.Empty<Entry>());
+            return EntriesResult([]);
         }
 
         if (NotModifiedSince(entriesArray) is { } notModified)
@@ -226,12 +193,13 @@ public class EntriesController : ControllerBase
             entriesArray.Length,
             spec
         );
-        return Ok(entriesArray.ToV1Responses());
+        return EntriesResult(entriesArray);
     }
 
     /// <summary>
     /// Get entries with optional query parameters
-    /// Supports advanced query features including find filters, date ranges, and pagination
+    /// Supports advanced query features including find filters, date ranges, and pagination.
+    /// The response is never cached; a conditional request with <c>If-Modified-Since</c> can return 304.
     /// </summary>
     /// <param name="count">Maximum number of entries to return (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
     /// <param name="type">Entry type filter (default: "sgv")</param>
@@ -287,68 +255,11 @@ public class EntriesController : ControllerBase
 
         _logger.LogDebug("Found {Count} entries", entriesArray.Length);
 
-        // Determine format from format parameter or Accept header (content negotiation)
-        var effectiveFormat = format;
-        if (
-            string.IsNullOrEmpty(effectiveFormat)
-            || effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            // Check Accept header for content negotiation (Nightscout compatibility)
-            var acceptHeader = Request.Headers.Accept.ToString().ToLowerInvariant();
-            if (acceptHeader.Contains("text/tab-separated-values"))
-            {
-                effectiveFormat = "tsv";
-            }
-            else if (acceptHeader.Contains("text/csv"))
-            {
-                effectiveFormat = "csv";
-            }
-            else if (
-                acceptHeader.Contains("text/plain")
-                && !acceptHeader.Contains("application/json")
-            )
-            {
-                // text/plain returns TSV for Nightscout compatibility
-                effectiveFormat = "tsv";
-            }
-        }
-
-        // Handle different output formats
-        if (
-            !string.IsNullOrEmpty(effectiveFormat)
-            && !effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            try
-            {
-                var formattedData = DataFormatService.FormatEntries(
-                    entriesArray,
-                    effectiveFormat
-                );
-                var contentType = DataFormatService.GetContentType(effectiveFormat);
-                return Content(formattedData, contentType);
-            }
-            catch (ArgumentException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Unsupported format requested: {Format}",
-                    effectiveFormat
-                );
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = $"Unsupported format: {effectiveFormat}. Supported formats: json, csv, tsv, txt",
-                        type = "client",
-                    }
-                );
-            }
-        }
-
-        return Ok(entriesArray.ToV1Responses());
+        return EntriesResult(entriesArray, format);
     }
+
+    private ActionResult EntriesResult(Entry[] entries, string? format = null) =>
+        this.EntriesText(entries, format) ?? Ok(entries.ToV1Responses());
 
     /// <summary>
     /// The v1 entries query shared by <see cref="GetEntries"/> and <see cref="GetEntry"/>.
@@ -362,8 +273,8 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        // Nightscout returns an empty array for count=0 or a negative count.
-        if (count is <= 0)
+        count = LegacyReadLimits.ZeroAsAbsent(count);
+        if (count is < 0)
         {
             return [];
         }
@@ -380,16 +291,23 @@ public class EntriesController : ControllerBase
             : string.IsNullOrEmpty(find) ? null
             : find;
 
-        // reverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
+        if (string.IsNullOrEmpty(dateString))
+        {
+            findQuery = LegacyFindDateWindow.Apply(
+                findQuery, _timeProvider.GetUtcNow(), "date", windowUnfiltered: true);
+        }
+
+        // ReverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
         // "rr" query parameter, so a nonzero "rr" value must never flip the sort order.
-        var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-            type: type,
-            count: LegacyReadLimits.ClampCount(count ?? 10),
-            skip: 0,
-            findQuery: findQuery,
-            dateString: dateString,
-            reverseResults: false,
-            cancellationToken: cancellationToken
+        var entries = await _entryService.QueryEntriesAsync(
+            new EntryQuery
+            {
+                Type = type,
+                Count = LegacyReadLimits.ClampCount(count ?? 10),
+                Find = findQuery,
+                DateString = dateString,
+            },
+            cancellationToken
         );
         return entries.ToArray();
     }
@@ -411,7 +329,8 @@ public class EntriesController : ControllerBase
 
     /// <summary>
     /// Stamps <c>Last-Modified</c> from the newest entry and answers a satisfied
-    /// <c>If-Modified-Since</c> with a 304.
+    /// <c>If-Modified-Since</c> with a 304. An empty result is never a 304, as in Nightscout's
+    /// <c>format_entries</c>.
     /// </summary>
     /// <returns>The 304 result, or <see langword="null"/> when the body should be sent.</returns>
     private ActionResult? NotModifiedSince(Entry[] entries)
@@ -423,7 +342,8 @@ public class EntriesController : ControllerBase
         Response.Headers["Last-Modified"] = lastModified.ToString("R");
 
         if (
-            Request.Headers.IfModifiedSince.Count > 0
+            entries.Length > 0
+            && Request.Headers.IfModifiedSince.Count > 0
             && DateTimeOffset.TryParse(Request.Headers.IfModifiedSince.First(), out var ifModifiedSince)
             && lastModified <= ifModifiedSince
         )
@@ -498,7 +418,7 @@ public class EntriesController : ControllerBase
             // Entries carrying no usable data are refused rather than written, but a refused entry
             // still occupies its position in the response: v1 uploaders require one response object
             // per submitted entry and treat a shorter array as a failed upload, which wedges the
-            // client on that batch forever (see PartitionStoredEntriesAsync).
+            // client on that batch forever (see IEntryService.UpsertUploadAsync).
             var acceptedIndices = new List<int>(entriesToCreate.Count);
             for (var i = 0; i < entriesToCreate.Count; i++)
             {
@@ -521,30 +441,15 @@ public class EntriesController : ControllerBase
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
             var processedArray = processedEntries.ToArray();
 
-            // Filter out duplicates using database-backed detection. Duplicates are
-            // excluded from the write but must still be echoed in the response: v1
-            // uploaders (Loop's NightscoutKit) require one response object per
-            // submitted entry, and treat a shorter array as a failed upload — the
-            // batch is then retried forever and the client never uploads anything
-            // newer. Legacy cgm-remote-monitor echoed dedup hits back with their _id.
-            var (uniqueEntries, responseEntries) = await PartitionStoredEntriesAsync(
+            var upload = await _entryService.UpsertUploadAsync(
                 processedArray,
+                Request?.Headers.UserAgent.ToString(),
                 cancellationToken
             );
 
-            // Create entries in database
-            var createdEntries = await _entryService.CreateEntriesAsync(
-                uniqueEntries,
-                cancellationToken: cancellationToken
-            );
-            var createdArray = createdEntries.ToArray();
+            await _alertEvaluator.EvaluateForEntriesAsync(upload.GlucoseMoved, cancellationToken);
 
-            _logger.LogDebug("Created {Count} entries", createdArray.Length);
-
-            // Evaluate alert rules against the latest created entry
-            await _alertEvaluator.EvaluateForEntriesAsync(createdArray, cancellationToken);
-
-            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, responseEntries);
+            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, upload.Response);
 
             return Ok(echo.ToV1Responses());
         }
@@ -567,12 +472,12 @@ public class EntriesController : ControllerBase
     /// Rebuilds the response in submitted order: the processed entry for every entry that was
     /// accepted, and the submitted entry unchanged for every one that was refused. The result has
     /// exactly one element per submitted entry, which is the contract v1 uploaders depend on —
-    /// see <see cref="PartitionStoredEntriesAsync"/>.
+    /// see <see cref="IEntryService.UpsertUploadAsync"/>.
     /// </summary>
     private static Entry[] BuildSubmittedOrderEcho(
         List<Entry> submitted,
         List<int> acceptedIndices,
-        List<Entry> acceptedResponses
+        IReadOnlyList<Entry> acceptedResponses
     )
     {
         if (acceptedResponses.Count != acceptedIndices.Count)
@@ -581,8 +486,8 @@ public class EntriesController : ControllerBase
                 $"Echo has {acceptedResponses.Count} entries for {acceptedIndices.Count} accepted entries");
         }
 
-        // Refused entries are already in place; accepted ones are replaced by what the write path
-        // resolved them to (the submitted entry, or the stored row it duplicated).
+        // Refused entries are already in place; accepted ones are replaced by what the upload
+        // echoes for them.
         var echo = submitted.ToArray();
         for (var i = 0; i < acceptedIndices.Count; i++)
         {
@@ -607,135 +512,9 @@ public class EntriesController : ControllerBase
                 + "timestamp or non-sgv type; they are echoed but not stored. Client {UserAgent}",
             refused,
             submitted,
-            SanitizeForLog(Request?.Headers.UserAgent.ToString())
+            LogText.Sanitize(Request?.Headers.UserAgent.ToString())
         );
     }
-
-    /// <summary>
-    /// Splits a processed upload batch into the entries to write and the entries to echo, using
-    /// one duplicate query per entry type for the whole batch instead of one per entry.
-    /// </summary>
-    /// <remarks>
-    /// The echo list carries the stored entry for every duplicate and the submitted entry
-    /// otherwise, so it always has one element per submitted entry — the response shape v1
-    /// uploaders require. Callers that do not echo (the async endpoint) discard it.
-    /// </remarks>
-    private async Task<(List<Entry> Unique, List<Entry> Response)> PartitionStoredEntriesAsync(
-        Entry[] processedArray,
-        CancellationToken cancellationToken
-    )
-    {
-        var probes = Array.ConvertAll(
-            processedArray,
-            entry => new EntryDuplicateProbe(entry.Device, entry.Type ?? "sgv", entry.Mills)
-        );
-
-        var duplicates = await _entryService.CheckForDuplicateEntriesAsync(probes, cancellationToken);
-
-        if (duplicates.Count != processedArray.Length)
-        {
-            throw new InvalidOperationException(
-                $"Duplicate check returned {duplicates.Count} results for {processedArray.Length} entries");
-        }
-
-        var uniqueEntries = new List<Entry>();
-        var responseEntries = new List<Entry>(processedArray.Length);
-
-        for (var i = 0; i < processedArray.Length; i++)
-        {
-            var entry = processedArray[i];
-            var duplicate = duplicates[i];
-
-            if (duplicate != null)
-            {
-                _logger.LogDebug(
-                    "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
-                    entry.Device,
-                    entry.Type,
-                    entry.Sgv,
-                    entry.Mills
-                );
-                responseEntries.Add(duplicate);
-                continue;
-            }
-
-            uniqueEntries.Add(entry);
-            responseEntries.Add(entry);
-        }
-
-        _logger.LogDebug(
-            "Filtered {Original} entries to {Unique} unique entries",
-            processedArray.Length,
-            uniqueEntries.Count
-        );
-
-        LogReuploadLoop(processedArray.Length, processedArray.Length - uniqueEntries.Count);
-
-        return (uniqueEntries, responseEntries);
-    }
-
-    /// <summary>
-    /// Records one line when a large upload is almost entirely already stored, which is what a
-    /// client re-sending its backlog every cycle looks like from the server. Names the uploader
-    /// (User-Agent) and the counts only — no entry values.
-    /// </summary>
-    private void LogReuploadLoop(int submitted, int duplicates)
-    {
-        if (submitted < ReuploadLoopMinimumBatch)
-            return;
-        if (duplicates < submitted * ReuploadLoopDuplicateRatio)
-            return;
-
-        var userAgent = SanitizeForLog(Request?.Headers.UserAgent.ToString());
-
-        _logger.LogInformation(
-            "Entries upload of {Submitted} entries was already stored ({Duplicates} duplicates); "
-                + "client {UserAgent} is re-sending stored readings",
-            submitted,
-            duplicates,
-            userAgent
-        );
-    }
-
-    /// <summary>Smallest upload that can be reported as a re-upload loop.</summary>
-    private const int ReuploadLoopMinimumBatch = 100;
-
-    /// <summary>Share of an upload that must already be stored to report a re-upload loop.</summary>
-    private const double ReuploadLoopDuplicateRatio = 0.95;
-
-    /// <summary>Cap on the logged User-Agent, which is attacker-controlled free text.</summary>
-    private const int MaxLoggedUserAgentLength = 200;
-
-    /// <summary>
-    /// Renders a caller-supplied header safe to log. Logs reach a line-oriented console exporter
-    /// and are shipped verbatim over OTLP, so a control, format or line-separator character in a
-    /// header value forges log lines or spoofs how they read.
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "(none)";
-
-        var capped = value.Length > MaxLoggedUserAgentLength
-            ? value[..MaxLoggedUserAgentLength]
-            : value;
-
-        return string.Create(capped.Length, capped, static (span, source) =>
-        {
-            for (var i = 0; i < source.Length; i++)
-                span[i] = IsUnsafeForLog(source[i]) ? ' ' : source[i];
-        });
-    }
-
-    /// <summary>
-    /// Control characters (which include ESC, so ANSI sequences are covered), Unicode format
-    /// characters such as the right-to-left override, and the line and paragraph separators.
-    /// </summary>
-    private static bool IsUnsafeForLog(char value) =>
-        char.IsControl(value)
-        || char.GetUnicodeCategory(value) is UnicodeCategory.Format
-            or UnicodeCategory.LineSeparator
-            or UnicodeCategory.ParagraphSeparator;
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
@@ -918,17 +697,23 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete an entry by ID
+    /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select.
+    /// A type spec deletes in bulk, needs full access (403 without it), and the path type overrides
+    /// any <c>find[type]</c>.
     /// </summary>
-    /// <param name="id">The entry ID to delete</param>
+    /// <param name="id">The entry ID to delete, an entry type, or <c>*</c> for every type</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>The <see cref="LegacyDeleteStatus"/> body, found or not</returns>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body</returns>
+    /// <remarks>
+    /// A type spec is the bulk delete with the path type replacing any <c>find[type]</c>.
+    /// </remarks>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
+    [ProducesResponseType(typeof(object), 403)]
     [ProducesResponseType(typeof(object), 500)]
     [ErrorEnvelope]
     public async Task<ActionResult> DeleteEntry(
@@ -941,6 +726,15 @@ public class EntriesController : ControllerBase
             id,
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
+
+        if (id == LegacyDeleteStatus.AnyId || LegacyEntryTypes.All.Contains(id))
+        {
+            // NIGHTSCOUT-COMPAT: Nightscout lets the entries delete permission sweep by type. This
+            // needs the bulk delete's full access.
+            return HttpContext?.HasScope(Scope.FullAccess) == true
+                ? await DeleteEntriesOfTypeAsync(id, cancellationToken)
+                : Forbid();
+        }
 
         // A 32-hex id is a record uuid, or a legacy id an older POST /api/v1/entries assigned.
         if (
@@ -973,7 +767,7 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Confirmation of bulk deletion</returns>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body</returns>
     [HttpDelete]
     [Authorize]
     [RequireScope(Scope.FullAccess)]
@@ -994,7 +788,40 @@ public class EntriesController : ControllerBase
 
         var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
-        if (!LegacyFindQueryString.HasConditions(findQuery))
+        return await DeleteMatchingEntriesAsync(findQuery, findQuery, cancellationToken);
+    }
+
+    /// <summary>
+    /// The bulk delete over the request's <c>find[...]</c> with <paramref name="type"/> as its
+    /// <c>find[type]</c>, or with none for <see cref="LegacyDeleteStatus.AnyId"/>. The type does not
+    /// count as a condition, so a type with no other find is refused like an empty bulk find.
+    /// </summary>
+    private async Task<ActionResult> DeleteEntriesOfTypeAsync(
+        string type,
+        CancellationToken cancellationToken
+    )
+    {
+        var find = LegacyFindQueryString.Resolve(HttpContext?.Request, null);
+        var withoutType = find is null ? null : WithoutFindType(find);
+        var typedFind =
+            type == LegacyDeleteStatus.AnyId ? withoutType : $"{withoutType}&find[type]={type}";
+
+        // NIGHTSCOUT-COMPAT: Nightscout deletes every entry of the type when the find is empty.
+        // The type does not count as a condition, so this refuses like an empty bulk find.
+        return await DeleteMatchingEntriesAsync(withoutType, typedFind, cancellationToken);
+    }
+
+    /// <summary>
+    /// Refuses with 400 unless <paramref name="conditionsFind"/> carries a condition, then deletes
+    /// with <paramref name="deleteFind"/>.
+    /// </summary>
+    private async Task<ActionResult> DeleteMatchingEntriesAsync(
+        string? conditionsFind,
+        string? deleteFind,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!LegacyFindQueryString.HasConditions(conditionsFind))
         {
             return BadRequest(
                 new
@@ -1006,195 +833,9 @@ public class EntriesController : ControllerBase
             );
         }
 
-        var deletedCount = await _entryService.DeleteEntriesAsync(findQuery, cancellationToken);
+        var deletedCount = await _entryService.DeleteEntriesAsync(deleteFind, cancellationToken);
 
         _logger.LogDebug("Successfully deleted {Count} entries with query", deletedCount);
-        return Ok(
-            new
-            {
-                status = 200,
-                message = $"Deleted {deletedCount} entries",
-                type = "success",
-                deletedCount = deletedCount,
-            }
-        );
+        return Ok(LegacyDeleteStatus.For(deletedCount));
     }
-
-    /// <summary>
-    /// Create new entries asynchronously
-    /// Accepts both single entries and arrays of entries, returns immediately with tracking information
-    /// </summary>
-    /// <param name="entryData">Entry data to create (can be single entry or array)</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Async processing response with correlation ID and status URL</returns>
-    [HttpPost("async")]
-    [Authorize]
-    [RequireScope(Scope.GlucoseReadWrite)]
-    [NightscoutEndpoint("/api/v1/entries/async")]
-    [ProducesResponseType(typeof(AsyncProcessingResponse), 202)]
-    [ProducesResponseType(typeof(object), 400)]
-    [ProducesResponseType(typeof(object), 500)]
-    public async Task<ActionResult<AsyncProcessingResponse>> CreateEntriesAsync(
-        [FromBody] object entryData,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var correlationId = Guid.CreateVersion7().ToString();
-
-        _logger.LogDebug(
-            "Async create entries endpoint requested with correlation ID: {CorrelationId} from {RemoteIpAddress}",
-            correlationId,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
-        try
-        {
-            if (!TryParseEntries(entryData, out var entriesToCreate))
-            {
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = "Invalid entry data format",
-                        type = "client",
-                        correlationId = correlationId,
-                    }
-                );
-            }
-
-            if (entriesToCreate.Count == 0)
-            {
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = "No valid entries provided",
-                        type = "client",
-                        correlationId = correlationId,
-                    }
-                );
-            }
-
-            // Basic validation (same as sync endpoint)
-            var validEntries = entriesToCreate.Where(HasMeaningfulData).ToList();
-
-            if (validEntries.Count == 0)
-            {
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = "No valid entries with meaningful data provided",
-                        type = "client",
-                        correlationId = correlationId,
-                    }
-                );
-            }
-
-            // Initialize processing status
-            await _processingStatusService.InitializeAsync(
-                correlationId,
-                validEntries.Count,
-                cancellationToken
-            );
-
-            // Prepare entries for processing
-            foreach (var entry in validEntries)
-            {
-                NormalizeEntry(entry);
-            }
-
-            // Process entries for sanitization and timestamp conversion
-            var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
-            var processedArray = processedEntries.ToArray();
-
-            // Filter out duplicates using database-backed detection
-            var (uniqueEntries, _) = await PartitionStoredEntriesAsync(
-                processedArray,
-                cancellationToken
-            );
-
-            // Create entries in database synchronously
-            var createdEntries = await _entryService.CreateEntriesAsync(
-                uniqueEntries,
-                cancellationToken: cancellationToken
-            );
-
-            // Mark processing as completed
-            await _processingStatusService.MarkCompletedAsync(
-                correlationId,
-                createdEntries.Count(),
-                cancellationToken
-            );
-
-            var response = new AsyncProcessingResponse
-            {
-                CorrelationId = correlationId,
-                Status = "completed",
-                StatusUrl = $"/api/v1/processing/status/{correlationId}",
-                EstimatedProcessingTime = TimeSpan.Zero,
-            };
-
-            _logger.LogInformation(
-                "Completed async entries request with correlation ID: {CorrelationId} for {EntryCount} entries",
-                correlationId,
-                createdEntries.Count()
-            );
-
-
-            return Accepted(response);
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Invalid JSON in async entries request with correlation ID: {CorrelationId}", correlationId);
-            return BadRequest(
-                new
-                {
-                    status = 400,
-                    message = "Invalid entry data format",
-                    type = "client",
-                    correlationId = correlationId,
-                }
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error processing async entries request with correlation ID: {CorrelationId}",
-                correlationId
-            );
-
-            // Try to mark as failed if status was initialized
-            try
-            {
-                await _processingStatusService.MarkFailedAsync(
-                    correlationId,
-                    new[] { ex.Message },
-                    cancellationToken
-                );
-            }
-            catch (Exception statusUpdateEx)
-            {
-                _logger.LogDebug(statusUpdateEx, "Failed to update processing status to failed");
-            }
-
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                    correlationId = correlationId,
-                }
-            );
-        }
-    }
-
 }

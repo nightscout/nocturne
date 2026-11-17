@@ -1,5 +1,5 @@
-import { randomUUID } from "$lib/utils";
-import type { UserAlarmConfiguration as ApiUserAlarmConfiguration } from "$lib/api";
+import { randomUUID } from "#lib/utils/index.js";
+import { AlarmTriggerType } from "#lib/api/index.js";
 
 /**
  * xDrip+-inspired Alarm Profile Types
@@ -15,25 +15,10 @@ import type { UserAlarmConfiguration as ApiUserAlarmConfiguration } from "$lib/a
  * - Re-raise for unacknowledged alarms
  */
 
-const ALARM_TRIGGER_TYPES = [
-  "High",
-  "Low",
-  "UrgentHigh",
-  "UrgentLow",
-  "RisingFast",
-  "FallingFast",
-  "StaleData",
-  "ForecastLow",
-  "Custom",
-] as const;
-
-/** Types of alarm triggers */
-export type AlarmTriggerType = (typeof ALARM_TRIGGER_TYPES)[number];
-
-const ALARM_PRIORITIES = ["Low", "Normal", "High", "Critical"] as const;
+const ALARM_TRIGGER_TYPES = Object.values(AlarmTriggerType);
 
 /** Priority levels for alarms */
-export type AlarmPriority = (typeof ALARM_PRIORITIES)[number];
+export type AlarmPriority = "Low" | "Normal" | "High" | "Critical";
 
 /** Audio settings for an alarm */
 export interface AlarmAudioSettings {
@@ -196,52 +181,6 @@ export interface EmergencyContactConfig {
   enabled: boolean;
 }
 
-/** Base channel configuration */
-export interface ChannelConfig {
-  enabled: boolean;
-  /** Minimum priority level to send through this channel */
-  minPriority: AlarmPriority;
-}
-
-/** Pushover-specific channel configuration */
-export interface PushoverChannelConfig extends ChannelConfig {
-  userKey?: string;
-  apiToken?: string;
-}
-
-/** Notification channels configuration */
-export interface NotificationChannelsConfig {
-  push: ChannelConfig;
-  email: ChannelConfig;
-  sms: ChannelConfig;
-  pushover?: PushoverChannelConfig;
-}
-
-/**
- * Complete user alarm configuration containing all profiles and global settings.
- * This is the root object stored in JSONB.
- */
-export interface UserAlarmConfiguration {
-  /** Version for migration purposes */
-  version: number;
-  /** Global master switch for all alarms */
-  enabled: boolean;
-  /** Global sound enabled setting */
-  soundEnabled: boolean;
-  /** Global vibration enabled setting */
-  vibrationEnabled: boolean;
-  /** Global volume level (0-100) */
-  globalVolume: number;
-  /** List of all configured alarm profiles */
-  profiles: AlarmProfileConfiguration[];
-  /** Custom sounds uploaded by the user */
-  customSounds: CustomSoundReference[];
-  /** Emergency contacts to notify for urgent alarms */
-  emergencyContacts: EmergencyContactConfig[];
-  /** Notification channels configuration */
-  channels: NotificationChannelsConfig;
-}
-
 /** Built-in sound presets */
 export interface SoundPreset {
   id: string;
@@ -266,13 +205,13 @@ export const BUILT_IN_SOUNDS: SoundPreset[] = [
 export const ALARM_TYPE_LABELS: Record<AlarmTriggerType, string> = {
   High: "High",
   Low: "Low",
-  UrgentHigh: "Urgent High",
-  UrgentLow: "Urgent Low",
-  RisingFast: "Rising Fast",
-  FallingFast: "Falling Fast",
-  StaleData: "Stale Data",
-  ForecastLow: "Forecast Low",
-  Custom: "Custom Range",
+  UrgentHigh: "Urgent high",
+  UrgentLow: "Urgent low",
+  RisingFast: "Rising fast",
+  FallingFast: "Falling fast",
+  StaleData: "Stale data",
+  ForecastLow: "Forecast low",
+  Custom: "Custom range",
 };
 
 /** Labels for alarm priorities */
@@ -284,40 +223,40 @@ export const PRIORITY_LABELS: Record<AlarmPriority, string> = {
 };
 
 const ALARM_TYPE_ALIASES: Record<string, AlarmTriggerType> = {
-  "urgent high": "UrgentHigh",
-  "urgent low": "UrgentLow",
-  "rising fast": "RisingFast",
-  "falling fast": "FallingFast",
-  "stale data": "StaleData",
-  "forecast low": "ForecastLow",
-  "custom range": "Custom",
-  "custom": "Custom",
-  "high": "High",
-  "low": "Low",
-  "élevé": "High",
-  "eleve": "High",
-  "haut": "High",
-  "haute": "High",
-  "bas": "Low",
-  "basse": "Low",
-  "faible": "Low",
-  "urgent élevé": "UrgentHigh",
-  "urgent eleve": "UrgentHigh",
-  "urgent haut": "UrgentHigh",
-  "urgent bas": "UrgentLow",
-  "hausse rapide": "RisingFast",
-  "baisse rapide": "FallingFast",
-  "données obsolètes": "StaleData",
-  "donnees obsoletes": "StaleData",
-  "prévision basse": "ForecastLow",
-  "prevision basse": "ForecastLow",
-  "personnalisé": "Custom",
-  "personnalise": "Custom",
+  "urgent high": AlarmTriggerType.UrgentHigh,
+  "urgent low": AlarmTriggerType.UrgentLow,
+  "rising fast": AlarmTriggerType.RisingFast,
+  "falling fast": AlarmTriggerType.FallingFast,
+  "stale data": AlarmTriggerType.StaleData,
+  "forecast low": AlarmTriggerType.ForecastLow,
+  "custom range": AlarmTriggerType.Custom,
+  "custom": AlarmTriggerType.Custom,
+  "high": AlarmTriggerType.High,
+  "low": AlarmTriggerType.Low,
+  "élevé": AlarmTriggerType.High,
+  "eleve": AlarmTriggerType.High,
+  "haut": AlarmTriggerType.High,
+  "haute": AlarmTriggerType.High,
+  "bas": AlarmTriggerType.Low,
+  "basse": AlarmTriggerType.Low,
+  "faible": AlarmTriggerType.Low,
+  "urgent élevé": AlarmTriggerType.UrgentHigh,
+  "urgent eleve": AlarmTriggerType.UrgentHigh,
+  "urgent haut": AlarmTriggerType.UrgentHigh,
+  "urgent bas": AlarmTriggerType.UrgentLow,
+  "hausse rapide": AlarmTriggerType.RisingFast,
+  "baisse rapide": AlarmTriggerType.FallingFast,
+  "données obsolètes": AlarmTriggerType.StaleData,
+  "donnees obsoletes": AlarmTriggerType.StaleData,
+  "prévision basse": AlarmTriggerType.ForecastLow,
+  "prevision basse": AlarmTriggerType.ForecastLow,
+  "personnalisé": AlarmTriggerType.Custom,
+  "personnalise": AlarmTriggerType.Custom,
 };
 
 export function normalizeAlarmType(value: string | null | undefined): AlarmTriggerType {
   if (!value) {
-    return "High";
+    return AlarmTriggerType.High;
   }
 
   const exact = ALARM_TRIGGER_TYPES.find((type) => type === value);
@@ -333,26 +272,7 @@ export function normalizeAlarmType(value: string | null | undefined): AlarmTrigg
   const labelMatch = ALARM_TRIGGER_TYPES.find(
     (key) => ALARM_TYPE_LABELS[key].toLowerCase() === lowered
   );
-  return labelMatch ?? "High";
-}
-
-export function normalizeAlarmPriority(
-  value: string | null | undefined
-): AlarmPriority {
-  if (!value) {
-    return "Normal";
-  }
-
-  const exact = ALARM_PRIORITIES.find((priority) => priority === value);
-  if (exact) {
-    return exact;
-  }
-
-  const lowered = value.trim().toLowerCase();
-  const labelMatch = ALARM_PRIORITIES.find(
-    (key) => PRIORITY_LABELS[key].toLowerCase() === lowered
-  );
-  return labelMatch ?? "Normal";
+  return labelMatch ?? AlarmTriggerType.High;
 }
 
 /** Colors for alarm types in UI */
@@ -370,7 +290,7 @@ export const ALARM_TYPE_COLORS: Record<AlarmTriggerType, { bg: string; border: s
 
 /** Create a new alarm profile with default settings */
 export function createDefaultAlarmProfile(
-  type: AlarmTriggerType = "High",
+  type: AlarmTriggerType = AlarmTriggerType.High,
   name?: string
 ): AlarmProfileConfiguration {
   const now = new Date().toISOString();
@@ -402,12 +322,12 @@ export function createDefaultAlarmProfile(
       customPattern: undefined,
     },
     visual: {
-      screenFlash: type === "UrgentHigh" || type === "UrgentLow",
+      screenFlash: type === AlarmTriggerType.UrgentHigh || type === AlarmTriggerType.UrgentLow,
       flashColor: defaults.flashColor,
       flashIntervalMs: 1000,
       persistentBanner: true,
       wakeScreen: true,
-      showEmergencyContacts: type === "UrgentHigh" || type === "UrgentLow",
+      showEmergencyContacts: type === AlarmTriggerType.UrgentHigh || type === AlarmTriggerType.UrgentLow,
     },
     snooze: {
       defaultMinutes: defaults.snoozeDefault,
@@ -418,7 +338,7 @@ export function createDefaultAlarmProfile(
     reraise: {
       enabled: true,
       intervalMinutes: defaults.reraiseMinutes,
-      escalate: type === "UrgentHigh" || type === "UrgentLow",
+      escalate: type === AlarmTriggerType.UrgentHigh || type === AlarmTriggerType.UrgentLow,
       escalationVolumeStep: 20,
     },
     schedule: {
@@ -428,7 +348,7 @@ export function createDefaultAlarmProfile(
       timezone: undefined,
     },
     priority: defaults.priority,
-    overrideQuietHours: type === "UrgentHigh" || type === "UrgentLow",
+    overrideQuietHours: type === AlarmTriggerType.UrgentHigh || type === AlarmTriggerType.UrgentLow,
     displayOrder: 0,
     createdAt: now,
     updatedAt: now,
@@ -448,7 +368,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
   forecastLeadTimeMinutes?: number;
 } {
   switch (type) {
-    case "UrgentHigh":
+    case AlarmTriggerType.UrgentHigh:
       return {
         name: "Urgent High",
         description: "Critical high glucose alert",
@@ -459,7 +379,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 5,
         priority: "Critical",
       };
-    case "High":
+    case AlarmTriggerType.High:
       return {
         name: "High",
         description: "Above target range",
@@ -470,7 +390,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 15,
         priority: "Normal",
       };
-    case "Low":
+    case AlarmTriggerType.Low:
       return {
         name: "Low",
         description: "Below target range",
@@ -481,7 +401,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 10,
         priority: "High",
       };
-    case "UrgentLow":
+    case AlarmTriggerType.UrgentLow:
       return {
         name: "Urgent Low",
         description: "Critical low glucose alert",
@@ -492,7 +412,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 5,
         priority: "Critical",
       };
-    case "RisingFast":
+    case AlarmTriggerType.RisingFast:
       return {
         name: "Rising Fast",
         description: "Glucose rising rapidly",
@@ -503,7 +423,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 15,
         priority: "Normal",
       };
-    case "FallingFast":
+    case AlarmTriggerType.FallingFast:
       return {
         name: "Falling Fast",
         description: "Glucose falling rapidly",
@@ -514,7 +434,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 10,
         priority: "High",
       };
-    case "StaleData":
+    case AlarmTriggerType.StaleData:
       return {
         name: "Stale Data",
         description: "No new readings received",
@@ -525,7 +445,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         reraiseMinutes: 15,
         priority: "Normal",
       };
-    case "ForecastLow":
+    case AlarmTriggerType.ForecastLow:
       return {
         name: "Forecast Low",
         description: "Predicted to go low soon",
@@ -537,7 +457,7 @@ function getDefaultsForType(type: AlarmTriggerType): {
         priority: "High",
         forecastLeadTimeMinutes: 30,
       };
-    case "Custom":
+    case AlarmTriggerType.Custom:
       return {
         name: "Custom Alarm",
         description: "Custom glucose range alert",
@@ -560,53 +480,4 @@ function getDefaultsForType(type: AlarmTriggerType): {
         priority: "Normal",
       };
   }
-}
-
-/** Create a default user alarm configuration */
-export function createDefaultUserAlarmConfiguration(): UserAlarmConfiguration {
-  return {
-    version: 1,
-    enabled: true,
-    soundEnabled: true,
-    vibrationEnabled: true,
-    globalVolume: 80,
-    profiles: [
-      createDefaultAlarmProfile("UrgentHigh"),
-      createDefaultAlarmProfile("High"),
-      createDefaultAlarmProfile("Low"),
-      createDefaultAlarmProfile("UrgentLow"),
-    ],
-    customSounds: [],
-    emergencyContacts: [],
-    channels: {
-      push: { enabled: true, minPriority: "Normal" },
-      email: { enabled: false, minPriority: "High" },
-      sms: { enabled: false, minPriority: "Critical" },
-    },
-  };
-}
-
-/**
- * The seam between this hand-written alarm model and the generated one it
- * mirrors. They agree at runtime: the generated enums are these same strings,
- * and its `Date` fields arrive and leave as ISO strings (the client parses with
- * no reviver). TypeScript cannot relate a string union to a string enum, nor
- * this model's required fields to the generated optional ones, so the
- * conversion is asserted here and nowhere else. The API side leaves fields
- * unset that this model requires; retiring this model for the generated types
- * is the real fix.
- */
-export function toApiAlarmConfiguration(
-  config: UserAlarmConfiguration
-): ApiUserAlarmConfiguration {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see the doc comment: same JSON, enum vs union typing
-  return config as unknown as ApiUserAlarmConfiguration;
-}
-
-/** The inverse of {@link toApiAlarmConfiguration}. */
-export function fromApiAlarmConfiguration(
-  config: ApiUserAlarmConfiguration
-): UserAlarmConfiguration {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see toApiAlarmConfiguration
-  return config as unknown as UserAlarmConfiguration;
 }

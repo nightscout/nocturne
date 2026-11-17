@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -98,36 +99,6 @@ public class GlookoStateSpanMapper
                 );
             }
 
-        if (series.ProfileChange != null)
-        {
-            var profileChanges = ConnectorFaults.NonNullRecords(series.ProfileChange, _logger, _connectorSource, "V3 profileChange").OrderBy(p => p.X).ToList();
-            for (var i = 0; i < profileChanges.Count; i++)
-            {
-                var change = profileChanges[i];
-                var startTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X);
-
-                DateTime? endTimestamp = null;
-                if (i < profileChanges.Count - 1)
-                    endTimestamp = _timeMapper.GetCorrectedGlookoTime(profileChanges[i + 1].X);
-
-                stateSpans.Add(
-                    new StateSpan
-                    {
-                        OriginalId = $"glooko_profile_{change.X}",
-                        Category = StateSpanCategory.Profile,
-                        State = ProfileState.Active.ToString(),
-                        StartTimestamp = startTimestamp,
-                        EndTimestamp = endTimestamp,
-                        Source = _connectorSource,
-                        Metadata = new Dictionary<string, object>
-                        {
-                            { "profileName", change.ProfileName ?? change.Label ?? "Unknown" }
-                        }
-                    }
-                );
-            }
-        }
-
         _logger.LogInformation(
             "[{ConnectorSource}] Transformed {Count} state spans from v3 data",
             _connectorSource,
@@ -135,6 +106,39 @@ public class GlookoStateSpanMapper
         );
 
         return stateSpans;
+    }
+
+    /// <summary>
+    ///     The v3 <c>profileChange</c> series as the profile the pump ran from each change until the next.
+    /// </summary>
+    public List<ProfileActivation> TransformV3ToProfileActivations(GlookoV3GraphResponse graphData)
+    {
+        var activations = new List<ProfileActivation>();
+        if (graphData?.Series?.ProfileChange == null)
+            return activations;
+
+        var profileChanges = ConnectorFaults
+            .NonNullRecords(graphData.Series.ProfileChange, _logger, _connectorSource, "V3 profileChange")
+            .OrderBy(p => p.X)
+            .ToList();
+        for (var i = 0; i < profileChanges.Count; i++)
+        {
+            var change = profileChanges[i];
+            activations.Add(new ProfileActivation
+            {
+                SyncIdentifier = $"glooko_profile_{change.X}",
+                StartTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X),
+                EndTimestamp = i < profileChanges.Count - 1
+                    ? _timeMapper.GetCorrectedGlookoTime(profileChanges[i + 1].X)
+                    : null,
+                Phase = ProfileActivationPhase.Effective,
+                Origin = ProfileActivationOrigin.Connector,
+                BaseProfileName = change.ProfileName ?? change.Label ?? "Unknown",
+                DataSource = _connectorSource,
+            });
+        }
+
+        return activations;
     }
 
     public List<StateSpan> TransformV3PumpModeToStateSpans(GlookoV3GraphResponse graphData)

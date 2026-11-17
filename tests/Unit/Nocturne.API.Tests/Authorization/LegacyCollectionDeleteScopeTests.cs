@@ -48,7 +48,7 @@ public class LegacyCollectionDeleteScopeTests
         ["NotificationsController"] =
             "clearing admin notifications is a tenant-administration action, not a data category",
         ["AuthorizationController"] =
-            "subject and role deletion is tenant administration, gated by [RequireAdmin]",
+            "subject and role deletion is gated by [RequireSuperuser]",
     };
 
     private static readonly string[] LegacyNamespaces =

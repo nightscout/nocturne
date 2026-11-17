@@ -1,12 +1,12 @@
-using System.Globalization;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Connectors.GoogleHealth.Services;
 
 namespace Nocturne.Connectors.GoogleHealth.Configurations;
 
 [ConnectorRegistration(
-    "GoogleHealth", ServiceNames.GoogleHealthConnector, "GOOGLE_HEALTH",
+    GoogleHealthConnectorService.ConnectorName, ServiceNames.GoogleHealthConnector, "GOOGLE_HEALTH",
     nameof(ConnectSource.GoogleHealth), DataSources.GoogleHealthConnector, "google-health",
     ConnectorCategory.Sync, "Import health and fitness data from Google Health", "Google Health",
     SupportsHistoricalSync = true,
@@ -23,17 +23,16 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
         SyncIntervalMinutes = 15;
     }
 
-    [ConnectorProperty(ConnectorPropertyKey.ClientId, Required = true)]
-    public string ClientId { get; set; } = string.Empty;
-
-    [ConnectorProperty(ConnectorPropertyKey.ClientSecret, Required = true, Secret = true)]
-    public string? ClientSecret { get; set; }
-
     [ConnectorProperty(ConnectorPropertyKey.RefreshToken, Secret = true, Hidden = true)]
     public string? RefreshToken { get; set; }
 
-    [ConnectorProperty(ConnectorPropertyKey.CallbackUrl, Required = true, Format = "uri")]
-    public string CallbackUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// The client <see cref="RefreshToken"/> was issued to, under the <c>clientId</c> key a former
+    /// per-tenant client was stored under, so such a session is checked against the instance client
+    /// like any other (<see cref="Services.GoogleHealthSessionStore.IssuedToAnotherClientAsync"/>).
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
+    public string? SessionClientId { get; set; }
 
     [ConnectorProperty(ConnectorPropertyKey.LookbackDays, DefaultValue = "7", MinValue = 1, MaxValue = 90)]
     public int HistoryDays { get; set; } = 7;
@@ -47,6 +46,21 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
 
+    /// <summary>
+    /// Whether the stored refresh token belongs to a client other than the instance's: a former
+    /// per-tenant client, or one the operator replaced. Google refuses it, so only a new sign-in
+    /// recovers.
+    /// </summary>
+    public bool IssuedToAnotherClient(GoogleHealthPlatformOptions platform) =>
+        platform.IsConfigured &&
+        !string.IsNullOrWhiteSpace(RefreshToken) &&
+        !string.Equals(SessionClientId, platform.ClientId, StringComparison.Ordinal);
+
+    public string[] ParsedGrantedScopes() => (GrantedScopes ?? string.Empty)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+
     [ConnectorProperty(ConnectorPropertyKey.SyncSteps, DefaultValue = "true")]
     public bool SyncSteps { get; set; } = true;
 
@@ -58,40 +72,4 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     [ConnectorProperty(ConnectorPropertyKey.SyncSleep, DefaultValue = "true")]
     public bool SyncSleep { get; set; } = true;
-
-    public static bool IsValidClientId(string clientId) =>
-        !string.IsNullOrWhiteSpace(clientId) &&
-        clientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal);
-
-    public static bool IsValidCallbackUrl(string callbackUrl) =>
-        Uri.TryCreate(callbackUrl, UriKind.Absolute, out var callback) &&
-        (callback.Scheme == Uri.UriSchemeHttps ||
-         callback.Scheme == Uri.UriSchemeHttp && callback.IsLoopback) &&
-        callback.HostNameType == UriHostNameType.Dns &&
-        callback.UserInfo == string.Empty &&
-        callback.Query == string.Empty &&
-        callback.Fragment == string.Empty &&
-        callback.AbsolutePath == "/settings/connectors/google-health/callback";
-
-    protected override void ValidateSourceSpecificConfiguration()
-    {
-        if (!IsValidClientId(ClientId))
-            throw new ArgumentException("Google Health ClientId is invalid.");
-
-        if (!IsValidCallbackUrl(CallbackUrl))
-            throw new ArgumentException("Google Health CallbackUrl is invalid.");
-
-        if (HistoryDays is < 1 or > 90)
-            throw new ArgumentException("Google Health LookbackDays must be between 1 and 90.");
-
-        if (!string.IsNullOrWhiteSpace(ImportFrom) &&
-            (!DateTimeOffset.TryParse(
-                 ImportFrom,
-                 CultureInfo.InvariantCulture,
-                 DateTimeStyles.RoundtripKind,
-                 out var importFrom) ||
-             importFrom < new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) ||
-             importFrom > DateTimeOffset.UtcNow.AddDays(1)))
-            throw new ArgumentException("Google Health ImportFrom is invalid.");
-    }
 }

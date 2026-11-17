@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// Parity tests for /api/v3/status endpoint.
 /// Returns server status including API version and enabled features.
 /// </summary>
+[Collection(ParityShards.Two)]
 public class StatusParityTests : ParityTestBase
 {
     public StatusParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -17,7 +18,6 @@ public class StatusParityTests : ParityTestBase
     {
         // Status responses include server-specific values that will differ
         return ComparisonOptions.Default.WithIgnoredFields(
-            "version",           // Different version strings
             "apiVersion",        // May differ between implementations
             "serverTime",        // Current server time
             "serverTimeEpoch",   // Same as above in epoch

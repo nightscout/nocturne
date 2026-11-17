@@ -65,9 +65,6 @@ public static class RoleSeeds
         [Denied] = [],
     };
 
-    /// <summary>
-    /// Display names for seed roles.
-    /// </summary>
     public static readonly Dictionary<string, string> DisplayNames = new()
     {
         [Owner] = "Owner",

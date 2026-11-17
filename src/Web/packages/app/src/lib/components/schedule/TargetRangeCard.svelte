@@ -1,26 +1,26 @@
 <script lang="ts">
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Target from "@lucide/svelte/icons/target";
   import Pencil from "@lucide/svelte/icons/pencil";
   import ScheduleView from "./ScheduleView.svelte";
-  import { createTargetRangeSchedule } from "$api/generated/profiles.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { createTargetRangeSchedule } from "#lib/api/generated/profiles.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     bgLabel,
-    bgThresholds,
     convertToDisplayUnits,
     convertFromDisplayUnits,
     timeStringToSeconds,
-  } from "$lib/utils/formatting";
-  import type { TargetRangeSchedule } from "$api-clients";
+  } from "#lib/utils/formatting.js";
+  import type { TargetRangeSchedule } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     profileName: string;
@@ -55,8 +55,7 @@
         high: convertToDisplayUnits(e.high ?? 0, displayUnits),
       }));
     } else {
-      const { targetLow, targetHigh } = bgThresholds();
-      draft = [{ time: "00:00", low: targetLow, high: targetHigh }];
+      draft = [{ time: "00:00" }];
     }
     saveError = null;
     editing = true;
@@ -106,13 +105,14 @@
   <Card>
     <CardContent class="space-y-4 pt-6">
       <ScheduleView
-        title="Target Range"
+        title="Target range"
         description="Desired blood glucose range"
         unit={bgLabel()}
         icon={Target}
         iconClass="text-glucose-in-range"
         entries={draft}
         onchange={(entries) => (draft = entries)}
+        range
         step={displayUnits === "mmol" ? 0.1 : 1}
         min={displayUnits === "mmol" ? 0.1 : 1}
       />
@@ -134,7 +134,7 @@
   </Card>
 {:else if schedule?.entries?.length}
   <ScheduleView
-    title="Target Range"
+    title="Target range"
     description="Desired blood glucose range"
     unit={bgLabel()}
     icon={Target}
@@ -155,22 +155,27 @@
   <Card>
     <CardHeader class="pb-3">
       <div class="flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
           <Target class="h-5 w-5 text-glucose-in-range" />
         </div>
         <div>
-          <CardTitle class="text-base">Target Range</CardTitle>
+          <CardTitle class="text-base">Target range</CardTitle>
           <CardDescription size="sm">Desired blood glucose range</CardDescription>
         </div>
       </div>
     </CardHeader>
     <CardContent>
-      <p class="text-sm text-muted-foreground">No target range configured.</p>
-      {#if !readOnly}
-        <Button variant="outline" size="sm" class="mt-3" onclick={startEdit}>
-          Set Target Range
-        </Button>
-      {/if}
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No target range configured"
+        action={readOnly ? undefined : setTargetRangeAction}
+      />
     </CardContent>
   </Card>
+  {#snippet setTargetRangeAction()}
+    <Button variant="outline" size="sm" onclick={startEdit}>
+      Set target range
+    </Button>
+  {/snippet}
 {/if}

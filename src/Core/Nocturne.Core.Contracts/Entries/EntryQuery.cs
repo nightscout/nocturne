@@ -2,10 +2,8 @@ namespace Nocturne.Core.Contracts.Entries;
 
 /// <summary>
 /// Value object encapsulating query parameters for entry reads.
-/// Used by <see cref="IEntryStore"/> and <see cref="IEntryCache"/> to filter and paginate results.
 /// </summary>
-/// <seealso cref="IEntryStore"/>
-/// <seealso cref="IEntryCache"/>
+/// <seealso cref="IEntryService.QueryEntriesAsync"/>
 public sealed record EntryQuery
 {
     /// <summary>
@@ -39,6 +37,11 @@ public sealed record EntryQuery
     /// instead of the default descending order.
     /// </summary>
     public bool ReverseResults { get; init; } = false;
+
+    /// <summary>
+    /// The field results are ordered by; <see cref="ReverseResults"/> sets the direction.
+    /// </summary>
+    public ReadSortField SortField { get; init; } = ReadSortField.Time;
 
     /// <summary>
     /// Optional explicit lower bound (inclusive) on entry timestamp, in Unix milliseconds.

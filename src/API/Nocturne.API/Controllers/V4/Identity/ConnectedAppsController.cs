@@ -75,8 +75,8 @@ public class ConnectedAppsController : ControllerBase
                 ClientName = g.ClientDisplayName,
                 ClientUri = g.ClientUri,
                 LogoUri = g.LogoUri,
-                IsVerified = g.IsKnownClient,
-                Scopes = g.Scopes,
+                Identity = g.ClientIdentity,
+                Scopes = Scope.ForDisplay(g.Scopes, g.GrantType),
                 Label = g.Label,
                 CreatedAt = g.CreatedAt,
                 LastUsedAt = g.LastUsedAt,
@@ -95,7 +95,7 @@ public class ConnectedAppsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="IOAuthGrantService.RevokeGrantAsync"/>
     [HttpDelete("{grantId}")]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Revoke(Guid grantId, CancellationToken ct)
@@ -142,8 +142,9 @@ public class ConnectedAppDto
     [JsonPropertyName("logoUri")]
     public string? LogoUri { get; set; }
 
-    [JsonPropertyName("isVerified")]
-    public bool IsVerified { get; set; }
+    /// <inheritdoc cref="OAuthGrantInfo.ClientIdentity"/>
+    [JsonPropertyName("identity")]
+    public OAuthClientIdentity Identity { get; set; }
 
     [JsonPropertyName("scopes")]
     public List<string> Scopes { get; set; } = [];

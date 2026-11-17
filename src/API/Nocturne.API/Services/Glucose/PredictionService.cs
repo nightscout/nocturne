@@ -1,7 +1,9 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Oref;
 using OrefModels = Nocturne.Core.Oref.Models;
 
@@ -15,7 +17,7 @@ namespace Nocturne.API.Services.Glucose;
 /// <seealso cref="IPredictionService"/>
 public class PredictionService : IPredictionService
 {
-    private readonly IEntryStore _store;
+    private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
     private readonly IBasalRateResolver _basalRate;
     private readonly ISensitivityResolver _sensitivity;
@@ -23,10 +25,11 @@ public class PredictionService : IPredictionService
     private readonly ITargetRangeResolver _targetRange;
     private readonly ITherapySettingsResolver _therapySettings;
     private readonly IPatientInsulinRepository _insulins;
+    private readonly TimeProvider _time;
     private readonly ILogger<PredictionService> _logger;
 
     public PredictionService(
-        IEntryStore store,
+        IEntryService entries,
         ITreatmentService treatments,
         IBasalRateResolver basalRate,
         ISensitivityResolver sensitivity,
@@ -34,9 +37,10 @@ public class PredictionService : IPredictionService
         ITargetRangeResolver targetRange,
         ITherapySettingsResolver therapySettings,
         IPatientInsulinRepository insulins,
+        TimeProvider timeProvider,
         ILogger<PredictionService> logger)
     {
-        _store = store;
+        _entries = entries;
         _treatments = treatments;
         _basalRate = basalRate;
         _sensitivity = sensitivity;
@@ -44,6 +48,7 @@ public class PredictionService : IPredictionService
         _targetRange = targetRange;
         _therapySettings = therapySettings;
         _insulins = insulins;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -53,24 +58,21 @@ public class PredictionService : IPredictionService
         DateTimeOffset? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var now = asOf ?? DateTimeOffset.UtcNow;
+        var now = asOf ?? _time.GetUtcNow();
         var nowMills = now.ToUnixTimeMilliseconds();
 
-        // Check if oref library is available
-        var orefAvailable = OrefService.IsAvailable();
-        _logger.LogInformation("[Predictions] Oref library available: {IsAvailable}, version: {Version}",
-            orefAvailable, orefAvailable ? OrefService.GetVersion() : "N/A");
+        var orefVersion = OrefVersion();
+        _logger.LogInformation("[Predictions] Oref library version: {Version}", orefVersion ?? "unavailable");
 
-        if (!orefAvailable)
+        if (orefVersion is null)
         {
-            _logger.LogWarning("Oref library is not available - returning fallback prediction");
-            return await GetFallbackPredictionsAsync(now, cancellationToken);
+            throw new InvalidOperationException("The oref library is not available");
         }
 
         // Fetch recent glucose readings (last 10 entries at-or-before the anchor for delta
         // calculation). ToMills bounds the query at the anchor so an as-of replay sees only
         // readings the user would have had at that moment.
-        var glucoseEntries = await _store.QueryAsync(
+        var glucoseEntries = await _entries.QueryEntriesAsync(
             new EntryQuery { Type = "sgv", Count = 10, ToMills = nowMills },
             cancellationToken);
 
@@ -81,11 +83,11 @@ public class PredictionService : IPredictionService
 
         // Convert to oref glucose readings
         var orefGlucose = glucoseEntries
-            .Where(e => e.Sgv.HasValue && e.Sgv > 0)
+            .Where(e => e.GlucoseMgdl() > 0)
             .OrderByDescending(e => e.Mills)
             .Select(e => new OrefModels.GlucoseReading
             {
-                Sgv = e.Sgv ?? 0,
+                Sgv = e.GlucoseMgdl(),
                 Date = e.Mills,
                 Direction = e.Direction
             })
@@ -97,13 +99,12 @@ public class PredictionService : IPredictionService
         }
 
         // Calculate glucose status (delta, avgdelta)
-        var glucoseStatus = OrefService.CalculateGlucoseStatus(orefGlucose);
+        var glucoseStatus = CalculateGlucoseStatus(orefGlucose);
         _logger.LogInformation("[Predictions] GlucoseStatus: glucose={Glucose}, delta={Delta}, status={HasStatus}",
             glucoseStatus?.Glucose ?? 0, glucoseStatus?.Delta ?? 0, glucoseStatus != null);
         if (glucoseStatus == null)
         {
-            _logger.LogWarning("Failed to calculate glucose status - using fallback");
-            return await GetFallbackPredictionsAsync(now, cancellationToken);
+            throw new InvalidOperationException("The glucose status could not be calculated");
         }
 
         // Fetch treatments in the 24h window ending at the anchor. 24h matches what
@@ -116,14 +117,16 @@ public class PredictionService : IPredictionService
             cancellationToken);
 
         // Convert to oref treatments
+        // A percent temp basal of unknown rate gives oref no delivery to work from, so it is left out
         var orefTreatments = treatments
+            .Where(t => t.EventType != TreatmentTypes.TempBasal || (t.DeliveredRate ?? t.Rate) is not null)
             .Select(t => new OrefModels.OrefTreatment
             {
                 EventType = t.EventType ?? "",
                 Mills = t.Mills,
                 Insulin = t.Insulin,
                 Carbs = t.Carbs,
-                Rate = t.Rate,
+                Rate = t.DeliveredRate ?? t.Rate,
                 Duration = (int?)(t.Duration ?? 0),
             })
             .ToList();
@@ -235,11 +238,9 @@ public class PredictionService : IPredictionService
             _logger.LogWarning(ex, "Failed to resolve profile from V4 resolvers, using defaults");
         }
 
-        // Return default profile (DIA falls back through resolver chain already, but we have no data)
-        var defaultDia = bolusInsulin?.Dia ?? 3.0;
         return new OrefModels.OrefProfile
         {
-            Dia = defaultDia,
+            Dia = await ResolveFallbackDiaAsync(profileId, nowMills, cancellationToken),
             CurrentBasal = 1.0,
             Sens = 50.0,
             CarbRatio = 10.0,
@@ -249,6 +250,19 @@ public class PredictionService : IPredictionService
             MaxBasal = 4.0,
             MaxDailyBasal = 2.0
         };
+    }
+
+    private async Task<double> ResolveFallbackDiaAsync(string? profileId, long nowMills, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _therapySettings.GetDIAAsync(nowMills, profileId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to resolve DIA, using the default");
+            return TherapySnapshot.DefaultDia;
+        }
     }
 
     private async Task<Core.Models.V4.PatientInsulin?> ResolveBolusInsulinAsync()
@@ -265,76 +279,11 @@ public class PredictionService : IPredictionService
     }
 
     /// <summary>
-    /// Get fallback predictions when oref is not available.
-    /// Uses simple linear extrapolation based on current delta.
-    /// Generates approximate curves for all prediction types for UI demonstration.
+    /// The loaded oref library's version, or null when it is not loaded. A seam over the static
+    /// native calls, so tests hold whether or not the library is present.
     /// </summary>
-    private async Task<GlucosePredictionResponse> GetFallbackPredictionsAsync(
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        // Get current entry
-        var currentEntry = await _store.GetCurrentAsync(cancellationToken);
+    internal virtual string? OrefVersion() => OrefService.IsAvailable() ? OrefService.GetVersion() : null;
 
-        if (currentEntry?.Sgv == null)
-        {
-            throw new InvalidOperationException("No glucose readings available");
-        }
-
-        var currentBg = currentEntry.Sgv.Value;
-        var delta = currentEntry.Delta ?? 0;
-
-        // Generate 48 points = 4 hours at 5-minute intervals
-        var mainPredictions = new List<double>();
-        var iobPredictions = new List<double>();
-        var ztPredictions = new List<double>();
-        var uamPredictions = new List<double>();
-        var cobPredictions = new List<double>();
-
-        for (int i = 0; i < 48; i++)
-        {
-            var minutes = i * 5;
-            var decayFactor = Math.Exp(-minutes / 60.0); // Delta decays over time
-
-            // Main prediction (weighted average approach)
-            var mainPredicted = currentBg + (delta * i * decayFactor * 0.8);
-            mainPredictions.Add(Math.Max(39, Math.Min(400, mainPredicted)));
-
-            // IOB prediction (assumes insulin brings glucose down more)
-            var iobPredicted = currentBg + (delta * i * decayFactor * 0.6) - (minutes * 0.3);
-            iobPredictions.Add(Math.Max(39, Math.Min(400, iobPredicted)));
-
-            // Zero Temp prediction (assumes no insulin, glucose rises more if rising)
-            var ztPredicted = currentBg + (delta * i * decayFactor * 1.2) + (delta > 0 ? minutes * 0.2 : 0);
-            ztPredictions.Add(Math.Max(39, Math.Min(400, ztPredicted)));
-
-            // UAM prediction (aggressive rise detection)
-            var uamPredicted = currentBg + (delta * i * decayFactor * 1.1);
-            uamPredictions.Add(Math.Max(39, Math.Min(400, uamPredicted)));
-
-            // COB prediction (carbs cause initial rise then insulin catches up)
-            var carbEffect = Math.Sin(minutes * Math.PI / 180.0) * 20; // Peak around 60 minutes
-            var cobPredicted = currentBg + (delta * i * decayFactor * 0.9) + carbEffect;
-            cobPredictions.Add(Math.Max(39, Math.Min(400, cobPredicted)));
-        }
-
-        return new GlucosePredictionResponse
-        {
-            Timestamp = now,
-            CurrentBg = currentBg,
-            Delta = delta,
-            EventualBg = mainPredictions.LastOrDefault(),
-            Iob = 0,
-            Cob = 0,
-            IntervalMinutes = 5,
-            Predictions = new PredictionCurves
-            {
-                Default = mainPredictions,
-                IobOnly = iobPredictions,
-                ZeroTemp = ztPredictions,
-                Uam = uamPredictions,
-                Cob = cobPredictions
-            }
-        };
-    }
+    internal virtual OrefModels.GlucoseStatus? CalculateGlucoseStatus(IEnumerable<OrefModels.GlucoseReading> readings) =>
+        OrefService.CalculateGlucoseStatus(readings);
 }

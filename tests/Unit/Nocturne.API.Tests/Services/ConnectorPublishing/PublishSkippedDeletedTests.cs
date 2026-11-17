@@ -1,14 +1,16 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.ConnectorPublishing;
-using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.Services.Entries;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
@@ -70,30 +72,14 @@ public class PublishSkippedDeletedTests : IDisposable
     }
 
     [Fact]
-    public async Task Treatments_the_user_deleted_are_counted_through_the_treatment_service_and_store()
+    public async Task Treatments_the_user_deleted_are_counted_through_the_treatment_service()
     {
-        var decomposer = new Mock<ITreatmentDecomposer>();
-        decomposer
-            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
-        var store = new TreatmentReadService(
-            Mock.Of<IV4ToLegacyProjectionService>(), decomposer.Object, Mock.Of<IDecompositionPipeline>(),
-            Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), NullLogger<TreatmentReadService>.Instance);
-        var service = new TreatmentService(
-            store, decomposer.Object, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
-            Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);
-        var publisher = new TreatmentPublisher(
-            new TestTenantDbContextFactory(_context), service, decomposer.Object, Mock.Of<ITreatmentCache>(),
-            Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), Mock.Of<ITempBasalRepository>(),
-            Mock.Of<IBasalInjectionRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
-            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _tally,
-            NullLogger<TreatmentPublisher>.Instance);
+        var service = new Mock<ITreatmentService>();
+        service
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BulkWrite<Treatment>([], skippedDeleted: 2));
 
-        var published = await publisher.PublishTreatmentsAsync(
+        var published = await TreatmentPublisherOver(service).PublishTreatmentsAsync(
             [new Treatment { Id = "t-1", EventType = "Note" }, new Treatment { Id = "t-2", EventType = "Note" }],
             "nightscout", WriteOrigin.Backfill);
 
@@ -102,18 +88,71 @@ public class PublishSkippedDeletedTests : IDisposable
     }
 
     [Fact]
-    public async Task Device_statuses_the_user_deleted_are_counted_through_the_decomposer()
+    public async Task A_treatment_that_can_never_be_stored_does_not_stall_the_publish()
     {
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer
-            .Setup(d => d.DecomposeAsync(
-                It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+        var refused = new Treatment { Id = "t-1", EventType = "Note" };
+        var service = new Mock<ITreatmentService>();
+        service
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BulkWrite<Treatment>([new Treatment { Id = "t-2", EventType = "Note" }], 0)
+            {
+                Rejected = [new BulkWriteRejection<Treatment>(0, refused, "value too long")],
+            });
+
+        var published = await TreatmentPublisherOver(service).PublishTreatmentsAsync(
+            [refused, new Treatment { Id = "t-2", EventType = "Note" }], "nightscout", WriteOrigin.Backfill);
+
+        published.Should().BeTrue();
+        _tally.Refused.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_failed_treatment_batch_still_counts_what_its_stored_prefix_skipped()
+    {
+        var service = new Mock<ITreatmentService>();
+        service
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TreatmentBatchFailedException(
+                new BulkWrite<Treatment>([new Treatment { Id = "t-1", EventType = "Note" }], skippedDeleted: 1),
+                failedIndex: 1, submitted: 2, failedOneStored: false, new TimeoutException()));
+
+        var published = await TreatmentPublisherOver(service).PublishTreatmentsAsync(
+            [new Treatment { Id = "t-1", EventType = "Note" }, new Treatment { Id = "t-2", EventType = "Note" }],
+            "nightscout", WriteOrigin.Backfill);
+
+        published.Should().BeFalse();
+        _tally.SkippedDeleted.Should().Be(1);
+    }
+
+    private TreatmentPublisher TreatmentPublisherOver(Mock<ITreatmentService> service)
+    {
+        service
+            .Setup(s => s.ResolveStoredIdentitiesAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Treatment>());
+        return new(
+            service.Object,
+            Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(),
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<ITempBasalRepository>(),
+            Mock.Of<IBasalInjectionRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
+            Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
+            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _tally,
+            Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance);
+    }
+
+    [Fact]
+    public async Task Device_statuses_the_user_deleted_are_counted_through_the_device_status_service()
+    {
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(d => d.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<DeviceStatus> statuses, string? _, WriteOrigin _, CancellationToken _) =>
+                new BulkWrite<DeviceStatus>(statuses, statuses.Count));
         var publisher = new DevicePublisher(
-            decomposer.Object, Mock.Of<IDeviceEventRepository>(), Mock.Of<IPatientDeviceStamper>(),
+            deviceStatuses.Object, Mock.Of<IDeviceEventRepository>(), Mock.Of<IPatientDeviceStamper>(),
             Mock.Of<IAuditContext>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPatientDeviceRepository>(),
             Mock.Of<IPumpSnapshotRepository>(), Mock.Of<IUploaderSnapshotRepository>(), _tally,
-            NullLogger<DevicePublisher>.Instance);
+            Mock.Of<ITenantAccessor>(), NullLogger<DevicePublisher>.Instance);
 
         var published = await publisher.PublishDeviceStatusAsync(
             [new DeviceStatus { Id = "ds-1" }, new DeviceStatus { Id = "ds-2" }], "nightscout", WriteOrigin.Backfill);
@@ -124,28 +163,17 @@ public class PublishSkippedDeletedTests : IDisposable
 
     private GlucosePublisher RealGlucosePublisher()
     {
-        var ctxFactory = new TestTenantDbContextFactory(_context);
+        var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var sensorGlucose = new SensorGlucoseRepository(
-            ctxFactory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance);
+            ctxFactory, Mock.Of<IDuplicateLinker>(), audit, NullLogger<SensorGlucoseRepository>.Instance);
         var meterGlucose = new MeterGlucoseRepository(ctxFactory, audit, NullLogger<MeterGlucoseRepository>.Instance);
         var calibration = new CalibrationRepository(ctxFactory, audit, NullLogger<CalibrationRepository>.Instance);
 
-        var config = new Mock<IGlucoseProcessingConfigProvider>();
-        config.Setup(c => c.GetSourceDefaultsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<GlucoseProcessingSourceDefault>());
-        config.Setup(c => c.GetPreferredProcessingAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GlucoseProcessing?)null);
-
-        var decomposer = new EntryDecomposer(
-            _context, sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
-            Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
-        var entryService = new EntryService(
-            Mock.Of<IEntryStore>(), decomposer, Mock.Of<IEntryCache>(), Mock.Of<IDataEventSink<Entry>>(),
-            NullLogger<EntryService>.Instance);
+        var entryService = WritingEntryService.Over(sensorGlucose, meterGlucose, calibration, audit);
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<ICanonicalAlertEvaluator>(), audit, _tally, NullLogger<GlucosePublisher>.Instance);
+            Mock.Of<ICanonicalAlertEvaluator>(), audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
     }
 }

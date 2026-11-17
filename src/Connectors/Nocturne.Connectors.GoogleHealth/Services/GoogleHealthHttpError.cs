@@ -2,9 +2,9 @@ namespace Nocturne.Connectors.GoogleHealth.Services;
 
 internal static class GoogleHealthHttpError
 {
-    public static TimeSpan? RetryAfter(HttpResponseMessage response) =>
+    public static TimeSpan? RetryAfter(HttpResponseMessage response, DateTimeOffset now) =>
         response.Headers.RetryAfter?.Delta ??
-        response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow;
+        response.Headers.RetryAfter?.Date - now;
 
     public static string? SafeProviderReason(string? reason) =>
         !string.IsNullOrWhiteSpace(reason) &&

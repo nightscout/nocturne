@@ -2,8 +2,10 @@
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Button } from "$lib/components/ui/button";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
 
   type ViewMode = "tir" | "profile";
 
@@ -16,6 +18,8 @@
     nextMonth: () => void;
     goToToday: () => void;
     setViewMode: (mode: ViewMode) => void;
+    showTirPercent: boolean;
+    setShowTirPercent: (show: boolean) => void;
   }
 
   let {
@@ -27,6 +31,8 @@
     nextMonth,
     goToToday,
     setViewMode,
+    showTirPercent,
+    setShowTirPercent,
   }: Props = $props();
 
   const currentMonth = $derived(viewDate.getMonth());
@@ -82,19 +88,38 @@
         </ToggleGroup.Item>
       </ToggleGroup.Root>
 
+      {#if viewMode === "tir"}
+        <div class="flex items-center gap-2">
+          <Switch
+            id="calendar-show-tir-percent"
+            checked={showTirPercent}
+            onCheckedChange={setShowTirPercent}
+          />
+          <Label for="calendar-show-tir-percent" variant="option">Show TIR %</Label>
+        </div>
+      {/if}
+
       <!-- Glucose colors -->
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div class="flex items-center gap-1.5">
+          <div class="h-3 w-3 rounded bg-glucose-very-high"></div>
+          <span class="text-sm">Very high</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="h-3 w-3 rounded bg-glucose-high"></div>
+          <span class="text-sm">High</span>
+        </div>
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-in-range"></div>
-          <span class="text-sm">In Range</span>
+          <span class="text-sm">In range</span>
         </div>
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-low"></div>
           <span class="text-sm">Low</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <div class="h-3 w-3 rounded bg-glucose-high"></div>
-          <span class="text-sm">High</span>
+          <div class="h-3 w-3 rounded bg-glucose-very-low"></div>
+          <span class="text-sm">Very low</span>
         </div>
       </div>
 
@@ -110,7 +135,7 @@
       {/if}
     </div>
     <div class="hidden @xl:block text-sm text-muted-foreground">
-      Click any day to view detailed report
+      Select any day to view detailed report
     </div>
   </div>
 </div>

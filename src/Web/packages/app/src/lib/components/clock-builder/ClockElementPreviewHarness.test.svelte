@@ -2,8 +2,8 @@
   // Mounts the real preview so the assertion covers its own reactivity. A
   // harness that re-rendered the component itself would pass whether or not the
   // preview keeps deriving its value from the source.
-  import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-  import type { InternalElement } from "$lib/clock-builder";
+  import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+  import type { InternalElement } from "#lib/clock-builder/index.js";
   import ClockElementPreview from "./ClockElementPreview.svelte";
 
   interface Props {

@@ -15,7 +15,6 @@ public interface IMealMatchingService
     /// </summary>
     /// <param name="userId">The user ID for notification delivery.</param>
     /// <param name="foodEntryIds">IDs of the newly imported food entries to evaluate.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task ProcessNewFoodEntriesAsync(string userId, IEnumerable<Guid> foodEntryIds, CancellationToken ct = default);
 
     /// <summary>
@@ -37,7 +36,6 @@ public interface IMealMatchingService
     /// </summary>
     /// <param name="userId">The user whose suggestion is withdrawn.</param>
     /// <param name="foodEntryId">The connector food entry that has gone away.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task WithdrawSuggestionAsync(string userId, Guid foodEntryId, CancellationToken ct = default);
 
     /// <summary>
@@ -45,7 +43,6 @@ public interface IMealMatchingService
     /// </summary>
     /// <param name="from">Start of date range</param>
     /// <param name="to">End of date range</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>List of suggested matches with scores</returns>
     Task<IReadOnlyList<SuggestedMealMatchResult>> GetSuggestionsAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);
 }

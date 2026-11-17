@@ -1,3 +1,6 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.ProfileActivations;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,6 +24,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -66,16 +70,16 @@ public class RecentActivityPublishTests : IDisposable
         _context.StepCounts.Add(new StepCountEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "act-steps", Timestamp = now, Metric = 500 });
         _context.SleepSessions.Add(new SleepSessionEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "act-sleep", Source = ActivityStateSpanMapper.SleepSessionSource,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "act-sleep", Source = ActivityStateSpanMapper.StoredSleepSessionSource,
             StartTime = now.AddHours(-8), EndTime = now, Type = "sleep", DetectionMethod = "manual",
         });
         _context.SleepSessions.Add(new SleepSessionEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "act-sleep-deleted", Source = ActivityStateSpanMapper.SleepSessionSource,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "act-sleep-deleted", Source = ActivityStateSpanMapper.StoredSleepSessionSource,
             StartTime = now.AddHours(-8), EndTime = now, Type = "sleep", DetectionMethod = "manual", DeletedAt = now,
         });
         await _context.SaveChangesAsync();
-        MarkDeletedByUser(_context.StateSpans.IgnoreQueryFilters().Single(s => s.OriginalId == "act-user-deleted"));
+        MarkDeletedByUser(_context.StateSpans.IgnoreQueryFilters().Single(s => s.LegacyId == "act-user-deleted"));
         MarkDeletedByUser(_context.SleepSessions.IgnoreQueryFilters().Single(s => s.OriginalId == "act-sleep-deleted"));
 
         var written = await Publisher().PublishRecentActivityAsync(
@@ -187,7 +191,7 @@ public class RecentActivityPublishTests : IDisposable
         State = "exercise",
         StartTimestamp = DateTime.UtcNow.AddHours(-3),
         Source = Source,
-        OriginalId = originalId,
+        LegacyId = originalId,
         DeletedAt = deletedAt,
     };
 
@@ -207,7 +211,10 @@ public class RecentActivityPublishTests : IDisposable
         Mock.Of<IHeartRateService>(),
         Mock.Of<ITenantOwnerResolver>(),
         Mock.Of<ITenantAccessor>(),
-        _context,
+        new ActivityDedupRepository(_context.AsFactory()),
+        new ConnectorConfigurationRepository(_context.AsFactory()),
+        Mock.Of<IProfileActivationRepository>(),
+        new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
         Mock.Of<IAuditContext>(),
         new PublishSkipTally(),
         NullLogger<MetadataPublisher>.Instance);

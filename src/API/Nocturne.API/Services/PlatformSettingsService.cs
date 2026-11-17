@@ -1,12 +1,18 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services;
 
-public record FieldDefinition(string Name, string Label, bool Required);
+public record FieldDefinition(string Name, string Label, bool Required, string? DefaultValue = null);
 
 public class PlatformSettingsSummary
 {
@@ -25,8 +31,9 @@ public class PlatformCredentials
 
 public class PlatformSettingsService
 {
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ISecretEncryptionService _encryption;
+    private readonly IOptions<BaseDomainOptions> _baseDomain;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -38,6 +45,12 @@ public class PlatformSettingsService
     /// </summary>
     private static readonly Dictionary<string, List<FieldDefinition>> CategorySchemas = new()
     {
+        [GoogleHealthPlatformSettings.Category] =
+        [
+            new("clientId", "Client ID", true),
+            new("clientSecret", "Client secret", true),
+            new("redirectUri", "Callback URL", true),
+        ],
         ["discord"] =
         [
             new("botToken", "Bot Token", true),
@@ -56,6 +69,8 @@ public class PlatformSettingsService
         ["telegram"] =
         [
             new("botToken", "Bot Token", true),
+            // Must match the secret_token passed to Telegram's setWebhook.
+            new("webhookSecretToken", "Webhook Secret Token", true),
         ],
         ["whatsapp"] =
         [
@@ -73,10 +88,20 @@ public class PlatformSettingsService
         ],
     };
 
-    public PlatformSettingsService(NocturneDbContext db, ISecretEncryptionService encryption)
+    /// <summary>Formats a field's value must match when one is supplied, with the message shown otherwise.</summary>
+    private static readonly Dictionary<(string Category, string Field), (Regex Pattern, string Message)> FieldFormats = new()
     {
-        _db = db;
+        // Telegram's setWebhook accepts only this alphabet and length for secret_token.
+        [("telegram", "webhookSecretToken")] = (
+            new Regex("^[A-Za-z0-9_-]{1,256}$", RegexOptions.CultureInvariant),
+            "Webhook Secret Token must be 1-256 characters of letters, digits, '_' or '-'"),
+    };
+
+    public PlatformSettingsService(INocturneDbContextFactory contexts, ISecretEncryptionService encryption, IOptions<BaseDomainOptions> baseDomain)
+    {
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _encryption = encryption;
+        _baseDomain = baseDomain;
     }
 
     public static IReadOnlyDictionary<string, List<FieldDefinition>> GetSchemas() => CategorySchemas;
@@ -88,9 +113,47 @@ public class PlatformSettingsService
             ? fields.Select(f => f.Name).ToHashSet()
             : [];
 
+    /// <summary>Errors for supplied values that do not match their field's format; blank values are skipped.</summary>
+    public static Dictionary<string, string> ValidateFormats(string category, IReadOnlyDictionary<string, string> fields)
+    {
+        var errors = new Dictionary<string, string>();
+        foreach (var (key, value) in fields)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            if (FieldFormats.TryGetValue((category, key), out var format) && !format.Pattern.IsMatch(value))
+                errors[key] = format.Message;
+        }
+        if (category == GoogleHealthPlatformSettings.Category)
+        {
+            if (fields.TryGetValue("clientId", out var clientId) && !string.IsNullOrWhiteSpace(clientId) &&
+                !GoogleHealthPlatformOptions.IsValidClientId(clientId))
+                errors["clientId"] = "invalid_client_id";
+            if (fields.TryGetValue("redirectUri", out var redirectUri) && !string.IsNullOrWhiteSpace(redirectUri) &&
+                !GoogleHealthPlatformOptions.IsValidRedirectUri(redirectUri))
+                errors["redirectUri"] = "invalid_redirect_uri";
+        }
+        return errors;
+    }
+
+    private List<FieldDefinition> SummaryFields(string category, PlatformSettingsEntity? entity)
+    {
+        if (category != GoogleHealthPlatformSettings.Category) return CategorySchemas[category];
+        var redirectUri = GoogleHealthPlatformSettings.DefaultRedirectUri(_baseDomain.Value);
+        if (_encryption.IsConfigured && entity is not null)
+        {
+            var encrypted = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.EncryptedJson, JsonOptions) ?? [];
+            redirectUri = _encryption.DecryptSecrets(encrypted).GetValueOrDefault("redirectUri")?.Trim() is { Length: > 0 } stored
+                ? stored
+                : redirectUri;
+        }
+        return CategorySchemas[category].Select(field => field.Name == "redirectUri"
+            ? field with { DefaultValue = redirectUri } : field).ToList();
+    }
+
     public async Task<List<PlatformSettingsSummary>> GetAllAsync()
     {
-        var entities = await _db.PlatformSettings.AsNoTracking().ToListAsync();
+        await using var db = await _contexts.CreateAsync();
+        var entities = await db.PlatformSettings.AsNoTracking().ToListAsync();
         return CategorySchemas.Keys.Select(category =>
         {
             var entity = entities.FirstOrDefault(e => e.Category == category);
@@ -99,35 +162,54 @@ public class PlatformSettingsService
                 Category = category,
                 Enabled = entity?.Enabled ?? false,
                 ConfiguredFields = entity?.ConfiguredFields ?? [],
-                Fields = CategorySchemas[category],
+                Fields = SummaryFields(category, entity),
             };
         }).ToList();
     }
 
     public async Task<PlatformSettingsSummary?> GetAsync(string category)
     {
+        await using var db = await _contexts.CreateAsync();
         if (!IsValidCategory(category)) return null;
-        var entity = await _db.PlatformSettings.AsNoTracking()
+        var entity = await db.PlatformSettings.AsNoTracking()
             .FirstOrDefaultAsync(e => e.Category == category);
         return new PlatformSettingsSummary
         {
             Category = category,
             Enabled = entity?.Enabled ?? false,
             ConfiguredFields = entity?.ConfiguredFields ?? [],
-            Fields = CategorySchemas[category],
+            Fields = SummaryFields(category, entity),
+        };
+    }
+
+    /// <summary>Decrypted credentials for one category, or null when absent or encryption is off.</summary>
+    public async Task<PlatformCredentials?> GetCredentialsAsync(string category, CancellationToken ct = default)
+    {
+        if (!_encryption.IsConfigured) return null;
+        await using var db = await _contexts.CreatePlatformAsync(ct);
+        var entity = await db.PlatformSettings.AsNoTracking().SingleOrDefaultAsync(e => e.Category == category, ct);
+        if (entity is null) return null;
+        var encrypted = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.EncryptedJson, JsonOptions) ?? [];
+        return new PlatformCredentials
+        {
+            Category = category,
+            Enabled = entity.Enabled,
+            Fields = _encryption.DecryptSecrets(encrypted),
         };
     }
 
     /// <summary>
-    /// Returns all decrypted platform credentials for bot initialization.
+    /// Returns all decrypted platform credentials for bot initialization, excluding Google Health.
     /// Only callable via instance-key auth (server-to-server).
     /// </summary>
     public async Task<List<PlatformCredentials>> GetAllDecryptedAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         if (!_encryption.IsConfigured)
             return [];
 
-        var entities = await _db.PlatformSettings.AsNoTracking().ToListAsync();
+        var entities = await db.PlatformSettings.AsNoTracking()
+            .Where(e => e.Category != GoogleHealthPlatformSettings.Category).ToListAsync();
         var results = new List<PlatformCredentials>();
         foreach (var entity in entities)
         {
@@ -151,6 +233,7 @@ public class PlatformSettingsService
     public async Task<(bool Success, Dictionary<string, string>? Errors)> UpsertAsync(
         string category, bool enabled, Dictionary<string, string> fields)
     {
+        await using var db = await _contexts.CreateAsync();
         if (!IsValidCategory(category))
             return (false, new() { ["category"] = "Unknown category" });
 
@@ -160,7 +243,7 @@ public class PlatformSettingsService
         var schema = CategorySchemas[category];
         var validFieldNames = GetValidFieldNames(category);
 
-        var entity = await _db.PlatformSettings
+        var entity = await db.PlatformSettings
             .FirstOrDefaultAsync(e => e.Category == category);
 
         // Merge: non-empty incoming fields overwrite, empty fields preserve existing
@@ -179,8 +262,17 @@ public class PlatformSettingsService
                 continue; // Strip unknown keys
 
             if (!string.IsNullOrWhiteSpace(value))
-                merged[key] = value;
+                merged[key] = category == GoogleHealthPlatformSettings.Category ? value.Trim() : value;
         }
+
+        if (category == GoogleHealthPlatformSettings.Category &&
+            string.IsNullOrWhiteSpace(merged.GetValueOrDefault("redirectUri")) &&
+            GoogleHealthPlatformSettings.DefaultRedirectUri(_baseDomain.Value) is { Length: > 0 } callback)
+            merged["redirectUri"] = callback;
+
+        var formatErrors = ValidateFormats(category, merged);
+        if (formatErrors.Count > 0)
+            return (false, formatErrors);
 
         // Validate required fields against merged result when enabling
         var errors = new Dictionary<string, string>();
@@ -213,7 +305,7 @@ public class PlatformSettingsService
                 EncryptedJson = encryptedJson,
                 ConfiguredFields = configuredFields,
             };
-            _db.PlatformSettings.Add(entity);
+            db.PlatformSettings.Add(entity);
         }
         else
         {
@@ -222,23 +314,24 @@ public class PlatformSettingsService
             entity.ConfiguredFields = configuredFields;
         }
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return (true, null);
     }
 
     public async Task<bool> DeleteAsync(string category)
     {
+        await using var db = await _contexts.CreateAsync();
         if (!IsValidCategory(category))
             return false;
 
-        var entity = await _db.PlatformSettings
+        var entity = await db.PlatformSettings
             .FirstOrDefaultAsync(e => e.Category == category);
 
         if (entity is null)
             return false;
 
-        _db.PlatformSettings.Remove(entity);
-        await _db.SaveChangesAsync();
+        db.PlatformSettings.Remove(entity);
+        await db.SaveChangesAsync();
         return true;
     }
 }

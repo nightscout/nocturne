@@ -1,14 +1,17 @@
 using System.Reflection;
 using System.Text.Json;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Services.Legacy;
 
@@ -20,15 +23,32 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IDDataService"/>
 public class DDataService : IDDataService
 {
-    private const long DeviceStatusWindowMills = 24L * 60 * 60 * 1000;
+    private const long DayMills = 24L * 60 * 60 * 1000;
+    private const long DeviceStatusWindowMills = DayMills;
+    private const long FrameEntriesWindowMills = 2 * DayMills;
+    private const long FrameTreatmentsWindowMills = 5 * DayMills / 2;
+    private const long LiveFrameWindowMills = 5L * 60 * 1000;
 
-    private readonly IEntryStore _store;
+    private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
     private readonly IProfileProjectionService _profiles;
-    private readonly DeviceStatusProjectionService _projectionService;
+    private readonly IDeviceStatusService _deviceStatuses;
     private readonly IFoodRepository _food;
     private readonly IActivityService _activities;
+    private readonly IStoreSizeReader _storeSize;
+    private readonly TimeProvider _time;
     private readonly ILogger<DDataService> _logger;
+
+    private static readonly (string EventType, long WindowMills)[] FrameLatestTreatments =
+    {
+        (TreatmentTypes.ProfileSwitch, 31 * 12 * DayMills),
+        (TreatmentTypes.SensorStart, 62 * DayMills),
+        (TreatmentTypes.SensorChange, 62 * DayMills),
+        (TreatmentTypes.SensorStop, 62 * DayMills),
+        (TreatmentTypes.SiteChange, 62 * DayMills),
+        (TreatmentTypes.InsulinChange, 62 * DayMills),
+        (TreatmentTypes.PumpBatteryChange, 62 * DayMills),
+    };
 
     // Device type fields that should be considered for recent device status
     private static readonly string[] DeviceTypeFields =
@@ -41,43 +61,87 @@ public class DDataService : IDDataService
     };
 
     public DDataService(
-        IEntryStore store,
+        IEntryService entries,
         ITreatmentService treatments,
         IProfileProjectionService profiles,
-        DeviceStatusProjectionService projectionService,
+        IDeviceStatusService deviceStatuses,
         IFoodRepository food,
         IActivityService activities,
+        IStoreSizeReader storeSize,
+        TimeProvider timeProvider,
         ILogger<DDataService> logger)
     {
-        _store = store;
+        _time = timeProvider;
+        _entries = entries;
         _treatments = treatments;
         _profiles = profiles;
-        _projectionService = projectionService;
+        _deviceStatuses = deviceStatuses;
         _food = food;
         _activities = activities;
+        _storeSize = storeSize;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public async Task<DData> GetDDataAsync(
+    public Task<DData> GetDDataAsync(
+        long timestamp,
+        CancellationToken cancellationToken = default
+    ) => GetDDataAsync(timestamp, DDataCollections.All, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<DData> GetDDataAsync(
+        long timestamp,
+        DDataCollections collections,
+        CancellationToken cancellationToken = default
+    ) => LoadDDataAsync(new DData { LastUpdated = timestamp }, collections, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<DDataFrame> GetDDataFrameAsync(
         long timestamp,
         CancellationToken cancellationToken = default
     )
     {
-        var ddata = new DData { LastUpdated = timestamp };
+        var isLive = Math.Abs(_time.GetUtcNow().ToUnixTimeMilliseconds() - timestamp) < LiveFrameWindowMills;
+        var frame = await LoadDDataAsync(
+            new DDataFrame
+            {
+                LastUpdated = timestamp,
+                Page = isLive ? null : new DDataFramePage { After = timestamp },
+            },
+            DDataCollections.All,
+            cancellationToken);
+        frame.Sgvs = frame.Sgvs.OrderBy(e => e.Mills).ToList();
+        return frame;
+    }
 
-        // Load data from various collections based on timestamp.
-        // Fetched sequentially — the underlying service shares a scoped DbContext
-        // which is not thread-safe for concurrent access.
-        await LoadSgvsAsync(ddata, timestamp, cancellationToken);
-        await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
-        await LoadMbgsAsync(ddata, timestamp, cancellationToken);
-        await LoadCalsAsync(ddata, timestamp, cancellationToken);
-        await LoadProfilesAsync(ddata, cancellationToken);
-        await LoadDeviceStatusAsync(ddata, timestamp, cancellationToken);
-        await LoadFoodAsync(ddata, cancellationToken);
-        await LoadActivityAsync(ddata, timestamp, cancellationToken);
-        await LoadDbStatsAsync(ddata, cancellationToken);
+    private async Task<T> LoadDDataAsync<T>(
+        T ddata,
+        DDataCollections collections,
+        CancellationToken cancellationToken
+    )
+        where T : DData
+    {
+        var timestamp = ddata.LastUpdated;
+
+        // Sequential: see INocturneDbContextFactory.
+        if (collections.HasFlag(DDataCollections.Sgvs))
+            await LoadSgvsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Treatments))
+            await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Mbgs))
+            await LoadMbgsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Cals))
+            await LoadCalsAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Profiles))
+            await LoadProfilesAsync(ddata, cancellationToken);
+        if (collections.HasFlag(DDataCollections.DeviceStatus))
+            await LoadDeviceStatusAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Food))
+            await LoadFoodAsync(ddata, cancellationToken);
+        if (collections.HasFlag(DDataCollections.Activity))
+            await LoadActivityAsync(ddata, timestamp, cancellationToken);
+        if (collections.HasFlag(DDataCollections.DbStats))
+            await LoadDbStatsAsync(ddata, cancellationToken);
 
         // Process treatments to create filtered lists
         var processedTreatments = ProcessTreatments(ddata.Treatments, false);
@@ -111,7 +175,7 @@ public class DDataService : IDDataService
     /// <inheritdoc />
     public async Task<DData> GetCurrentDDataAsync(CancellationToken cancellationToken = default)
     {
-        var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var currentTime = _time.GetUtcNow().ToUnixTimeMilliseconds();
         return await GetDDataAsync(currentTime, cancellationToken);
     }
 
@@ -123,25 +187,12 @@ public class DDataService : IDDataService
     {
         var ddata = await GetDDataAsync(timestamp, cancellationToken);
 
-        // Clone profiles and filter out temporary profile switches (containing "@@@@@")
-        var profiles =
-            JsonSerializer.Deserialize<List<Profile>>(JsonSerializer.Serialize(ddata.Profiles))
-            ?? new();
-        if (profiles.Count > 0 && profiles[0].Store != null)
-        {
-            var keysToRemove = profiles[0].Store.Keys.Where(k => k.Contains("@@@@@")).ToList();
-            foreach (var key in keysToRemove)
-            {
-                profiles[0].Store.Remove(key);
-            }
-        }
-
         return new DDataResponse
         {
             DeviceStatus = GetRecentDeviceStatus(ddata.DeviceStatus, timestamp),
             Sgvs = ddata.Sgvs,
             Cals = ddata.Cals,
-            Profiles = profiles,
+            Profiles = ddata.Profiles,
             Mbgs = ddata.Mbgs,
             Food = ddata.Food,
             Treatments = ddata.Treatments,
@@ -159,14 +210,14 @@ public class DDataService : IDDataService
 
         // filter & prepare 'Site Change' events
         ddata.SiteChangeTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Site Change"))
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.SiteChange))
             .OrderBy(t => t.Mills)
             .ToList();
 
         // filter & prepare 'Insulin Change' events
         ddata.InsulinChangeTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Insulin Change")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.InsulinChange)
             )
             .OrderBy(t => t.Mills)
             .ToList();
@@ -174,7 +225,7 @@ public class DDataService : IDDataService
         // filter & prepare 'Pump Battery Change' events
         ddata.BatteryTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Pump Battery Change")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.PumpBatteryChange)
             )
             .OrderBy(t => t.Mills)
             .ToList();
@@ -187,13 +238,13 @@ public class DDataService : IDDataService
 
         // filter & prepare 'Combo Bolus' events
         ddata.ComboBolusTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == "Combo Bolus")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == TreatmentTypes.ComboBolus)
             .OrderBy(t => t.Mills)
             .ToList();
 
         // filter & prepare 'Profile Switch' events
         var profileTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == "Profile Switch")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == TreatmentTypes.ProfileSwitch)
             .OrderBy(t => t.Mills)
             .ToList();
         if (preserveOriginalTreatments)
@@ -204,7 +255,7 @@ public class DDataService : IDDataService
 
         // filter & prepare temp basals
         var tempBasalTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Temp Basal"))
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.TempBasal))
             .ToList();
         if (preserveOriginalTreatments)
         {
@@ -361,34 +412,12 @@ public class DDataService : IDDataService
         for (int i = 0; i < convertedTreatments.Count; i++)
         {
             var treatment = convertedTreatments[i];
-            bool converted = false;
+            if (!TemporaryTargetUnits.IsMmol(treatment.TargetTop, treatment.TargetBottom, treatment.Units))
+                continue;
 
-            // If treatment is in mmol, convert to mg/dl
-            if (!string.IsNullOrEmpty(treatment.Units) && treatment.Units == "mmol")
-            {
-                if (treatment.TargetTop.HasValue)
-                    treatment.TargetTop = treatment.TargetTop * GlucoseConstants.MgdlPerMmol;
-                if (treatment.TargetBottom.HasValue)
-                    treatment.TargetBottom = treatment.TargetBottom * GlucoseConstants.MgdlPerMmol;
-                treatment.Units = "mg/dl";
-                converted = true;
-            }
-
-            // If we have a temp target that's below 20, assume it's mmol and convert to mg/dl for safety
-            if (
-                !converted
-                && (
-                    (treatment.TargetTop.HasValue && treatment.TargetTop < 20)
-                    || (treatment.TargetBottom.HasValue && treatment.TargetBottom < 20)
-                )
-            )
-            {
-                if (treatment.TargetTop.HasValue)
-                    treatment.TargetTop = treatment.TargetTop * GlucoseConstants.MgdlPerMmol;
-                if (treatment.TargetBottom.HasValue)
-                    treatment.TargetBottom = treatment.TargetBottom * GlucoseConstants.MgdlPerMmol;
-                treatment.Units = "mg/dl";
-            }
+            (treatment.TargetTop, treatment.TargetBottom) =
+                TemporaryTargetUnits.ToMgdl(treatment.TargetTop, treatment.TargetBottom, treatment.Units);
+            treatment.Units = "mg/dl";
         }
 
         return convertedTreatments;
@@ -613,6 +642,25 @@ public class DDataService : IDDataService
                 ) != null;
     }
 
+    private static EntryQuery FrameEntryQuery(DData ddata, string type, long timestamp) =>
+        new()
+        {
+            Type = type,
+            Count = 1000,
+            FromMills = ddata is DDataFrame ? timestamp - FrameEntriesWindowMills : null,
+            ToMills = ddata is DDataFrame ? timestamp : null,
+        };
+
+    private static string CreatedAtWindow(long fromMills, long toMills) =>
+        JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["created_at"] = new Dictionary<string, string>
+            {
+                ["$gte"] = fromMills.ToUtcDateTime().ToString("o"),
+                ["$lte"] = toMills.ToUtcDateTime().ToString("o"),
+            },
+        });
+
     private async Task LoadSgvsAsync(
         DData ddata,
         long timestamp,
@@ -622,8 +670,8 @@ public class DDataService : IDDataService
         try
         {
             // Load SGV entries with type filter - reduced count to prevent memory issues
-            var sgvs = await _store.QueryAsync(
-                new EntryQuery { Type = "sgv", Count = 1000 },
+            var sgvs = await _entries.QueryEntriesAsync(
+                FrameEntryQuery(ddata, "sgv", timestamp),
                 cancellationToken);
             ddata.Sgvs = sgvs.ToList();
         }
@@ -643,17 +691,53 @@ public class DDataService : IDDataService
         try
         {
             var treatments = await _treatments.GetTreatmentsAsync(
+                find: ddata is DDataFrame
+                    ? CreatedAtWindow(timestamp - FrameTreatmentsWindowMills, timestamp)
+                    : null,
                 count: 1000,
                 skip: 0,
                 cancellationToken: cancellationToken
             );
             ddata.Treatments = treatments.ToList();
+            if (ddata is DDataFrame)
+            {
+                ddata.Treatments = await MergeLatestFrameTreatmentsAsync(
+                    ddata.Treatments, timestamp, cancellationToken);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading treatments");
             ddata.Treatments = new List<Treatment>();
         }
+    }
+
+    private async Task<List<Treatment>> MergeLatestFrameTreatmentsAsync(
+        List<Treatment> windowed,
+        long timestamp,
+        CancellationToken cancellationToken)
+    {
+        var latest = new List<Treatment>();
+        foreach (var (eventType, windowMills) in FrameLatestTreatments)
+        {
+            try
+            {
+                var treatment = await _treatments.GetLatestTreatmentOfTypeAsync(
+                    eventType, timestamp - windowMills, timestamp, cancellationToken);
+                if (treatment is not null)
+                    latest.Add(treatment);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading the latest {EventType} treatment", eventType);
+            }
+        }
+
+        return windowed
+            .Concat(latest)
+            .DistinctBy(t => t.Id)
+            .OrderByDescending(t => t.Mills)
+            .ToList();
     }
 
     private async Task LoadMbgsAsync(
@@ -665,8 +749,8 @@ public class DDataService : IDDataService
         try
         {
             // Load MBG entries with type filter - reduced count to prevent memory issues
-            var mbgs = await _store.QueryAsync(
-                new EntryQuery { Type = "mbg", Count = 1000 },
+            var mbgs = await _entries.QueryEntriesAsync(
+                FrameEntryQuery(ddata, "mbg", timestamp),
                 cancellationToken);
             ddata.Mbgs = mbgs.ToList();
         }
@@ -686,8 +770,8 @@ public class DDataService : IDDataService
         try
         {
             // Load calibration entries with type filter - reduced count to prevent memory issues
-            var cals = await _store.QueryAsync(
-                new EntryQuery { Type = "cal", Count = 1000 },
+            var cals = await _entries.QueryEntriesAsync(
+                FrameEntryQuery(ddata, "cal", timestamp),
                 cancellationToken);
             ddata.Cals = cals.ToList();
         }
@@ -728,15 +812,15 @@ public class DDataService : IDDataService
             {
                 ["created_at"] = new Dictionary<string, string>
                 {
-                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
-                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o"),
+                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o"),
                 },
             };
-            var deviceStatuses = await _projectionService.GetAsync(
+            var deviceStatuses = await _deviceStatuses.GetDeviceStatusesAsync(
+                FindQuery.ParseDeviceStatus(JsonSerializer.Serialize(window)),
                 count: 1000,
                 skip: 0,
-                find: JsonSerializer.Serialize(window),
-                ct: cancellationToken
+                cancellationToken: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();
         }
@@ -784,21 +868,8 @@ public class DDataService : IDDataService
         }
     }
 
-    private Task LoadDbStatsAsync(DData ddata, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // For now, return empty stats - would need to implement database statistics collection
-            ddata.DbStats = new DbStats();
-            return Task.CompletedTask;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading database stats");
-            ddata.DbStats = new DbStats();
-            return Task.CompletedTask;
-        }
-    }
+    private async Task LoadDbStatsAsync(DData ddata, CancellationToken cancellationToken) =>
+        ddata.DbStats = await _storeSize.ReadAsync(cancellationToken);
 
     /// <inheritdoc />
     public DData Clone(DData ddata)

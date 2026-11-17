@@ -4,14 +4,14 @@ import type {
   BotApiClient,
   DirectoryCandidate,
 } from "@nocturne/bot";
-import type { ApiClient } from "$lib/api";
+import type { ApiClient } from "#lib/api/index.js";
 import {
   createServerApiClient,
   getApiBaseUrl,
-} from "$lib/server/api-client-factory";
-import { getHashedInstanceKey } from "$lib/server/instance-key";
-import { AlertAcknowledgementOutcome, ChannelType } from "$api-clients";
-import { errorStatus } from "$lib/forms/submit-error";
+} from "#lib/server/api-client-factory.js";
+import { getHashedInstanceKey } from "#lib/server/instance-key.js";
+import { AlertAcknowledgementOutcome, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 const CHANNEL_TYPES: readonly ChannelType[] = Object.values(ChannelType);
 
@@ -57,6 +57,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
           sort,
           device,
           source,
+          undefined,
           signal,
         );
       },
@@ -116,7 +117,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
       },
     },
     pendingLinks: {
-      create: async (platform, platformUserId, tenantSlug, source, signal) => {
+      create: async (platform, platformUserId, platformUserName, tenantSlug, source, signal) => {
         // NSwag generates tenantSlug as `string | undefined`; the bot
         // interface uses `string | null` to be explicit about "no slug
         // provided". Convert at the boundary.
@@ -124,6 +125,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
           {
             platform,
             platformUserId,
+            platformUserName: platformUserName ?? undefined,
             tenantSlug: tenantSlug ?? undefined,
             source,
           },

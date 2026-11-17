@@ -4,20 +4,24 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import BatteryMedium from "@lucide/svelte/icons/battery-medium";
   import BatteryWarning from "@lucide/svelte/icons/battery-warning";
   import Zap from "@lucide/svelte/icons/zap";
-  import { timeAgo } from "$lib/utils";
-  import { Now } from "$lib/hooks/now.svelte";
-  import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import WebSocketStatus from "$lib/components/WebSocketStatus.svelte";
-  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
+  import { Now } from "#lib/hooks/now.svelte.js";
+  import {
+    formatGlucoseDelta,
+    getUnitLabel,
+    relativeAge,
+    time,
+  } from "#lib/utils/formatting.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import WebSocketStatus from "#lib/components/WebSocketStatus.svelte";
+  import { getCurrentBatteryStatus } from "#lib/api/generated/batteries.generated.remote.js";
 
   let {
     bgDelta,
@@ -38,10 +42,10 @@
   const unitLabel = $derived(getUnitLabel(units));
   const displayLastUpdated = $derived(lastUpdated ?? realtimeStore.lastUpdated);
 
-  // `timeAgo` reads the clock once; re-derive it on a tick so the age
+  // `relativeAge` reads the clock once; re-derive it on a tick so the age
   // on screen keeps up with the reading it describes.
   const now = new Now();
-  const age = $derived(timeAgo(displayLastUpdated, undefined, now.current));
+  const age = $derived(relativeAge(displayLastUpdated, { now: now.current, fallback: "Unknown" }));
 
   // Battery data
   const batteryStatusPromise = $derived(
@@ -71,7 +75,7 @@
 <div class="grid grid-cols-1 @lg:grid-cols-3 gap-4">
   <Card>
     <CardHeader class="pb-2">
-      <CardTitle class="text-sm font-medium">BG Delta</CardTitle>
+      <CardTitle class="text-sm font-medium">BG delta</CardTitle>
     </CardHeader>
     <CardContent>
       <div class="text-2xl font-bold">
@@ -85,7 +89,7 @@
   {#await batteryStatusPromise}
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium">Last Updated</CardTitle>
+        <CardTitle class="text-sm font-medium">Last updated</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
@@ -101,7 +105,7 @@
       currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium">Last Updated</CardTitle>
+        <CardTitle class="text-sm font-medium">Last updated</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
@@ -144,7 +148,7 @@
   {:catch}
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium">Last Updated</CardTitle>
+        <CardTitle class="text-sm font-medium">Last updated</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">

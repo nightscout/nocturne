@@ -1,23 +1,24 @@
 <script lang="ts">
-  import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
+  import { a1cLabel, formatA1c } from "#lib/utils/a1c-formatting.js";
   import { PieChart, Text } from "layerchart";
-  import * as Card from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
-  import { Button } from "$lib/components/ui/button";
-  import { getReportsAnalysis } from "$api/reports.remote";
-  import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { getReportsAnalysis } from "#lib/api/reports.remote.js";
+  import HourlyGlucoseDistributionChart from "#lib/components/reports/HourlyGlucoseDistributionChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
   import {
     CHART_TEXTURES,
     patternClass,
     type GlucoseRange,
-  } from "$lib/components/charts/print/chart-print-patterns";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, formatShortDate } from "$lib/utils/formatting";
+  } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { bg, bgLabel, formatShortDate } from "#lib/utils/formatting.js";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -25,7 +26,7 @@
 
   const reportsResource = contextResource(
     () => getReportsAnalysis(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Glucose Distribution" }
+    { errorTitle: "Error loading glucose distribution" }
   );
 
   // In the URL so the chart the user is looking at can be refreshed and shared.
@@ -48,16 +49,16 @@
     });
 
     return [
-      range("Very Low", "very-low", tir?.veryLow ?? 0),
+      range("Very low", "very-low", tir?.veryLow ?? 0),
       range("Low", "low", tir?.low ?? 0),
       ...(showTightRange
         ? [
-            range("Tight Range", "tight-range", tir?.tightTarget ?? 0),
-            range("In Range", "in-range", (tir?.target ?? 0) - (tir?.tightTarget ?? 0)),
+            range("Tight range", "tight-range", tir?.tightTarget ?? 0),
+            range("In range", "in-range", (tir?.target ?? 0) - (tir?.tightTarget ?? 0)),
           ]
-        : [range("In Range", "in-range", tir?.target ?? 0)]),
+        : [range("In range", "in-range", tir?.target ?? 0)]),
       range("High", "high", tir?.high ?? 0),
-      range("Very High", "very-high", tir?.veryHigh ?? 0),
+      range("Very high", "very-high", tir?.veryHigh ?? 0),
     ];
   });
 
@@ -104,21 +105,18 @@
     </header>
 
     {#if !hasReadings}
-      <Card.Root>
-        <Card.Content class="py-12 text-center">
-          <p class="font-medium">No readings in this date range</p>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Distribution, {a1cLabel(true)} estimation and variability statistics need glucose
-            readings to be calculated. Try a wider date range.
-          </p>
-        </Card.Content>
-      </Card.Root>
+      <EmptyState
+        art="report-pages"
+        variant="card"
+        title="No readings in this date range"
+        body="Distribution, {a1cLabel(true)} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+      />
     {:else}
       <FigureStrip
         figures={[
           { label: "Mean", value: String(bg(overallStats.mean)), unit: bgLabel() },
           { label: "Median", value: String(bg(overallStats.median)), unit: bgLabel() },
-          { label: "Std Dev", value: String(bg(overallStats.stdDev)), unit: bgLabel() },
+          { label: "Std dev", value: String(bg(overallStats.stdDev)), unit: bgLabel() },
           { label: "Readings", value: String(overallStats.totalReadings) },
         ]}
       />
@@ -126,8 +124,8 @@
       <div class="grid gap-6 @3xl:grid-cols-2 print:grid-cols-2">
         <Card.Root>
           <Card.Header>
-            <div class="flex items-center justify-between">
-              <Card.Title class="text-lg">Distribution Chart</Card.Title>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <Card.Title class="text-lg">Distribution chart</Card.Title>
               <Button
                 variant="ghost"
                 size="sm"
@@ -135,7 +133,7 @@
                 onclick={() =>
                   (viewParams.tightRange = showTightRange ? "hide" : "show")}
               >
-                {showTightRange ? "Hide" : "Show"} Tight Range
+                {showTightRange ? "Hide" : "Show"} tight range
               </Button>
             </div>
           </Card.Header>
@@ -160,7 +158,7 @@
                         class="fill-foreground text-2xl font-bold"
                       />
                       <Text
-                        value="In Range"
+                        value="In range"
                         textAnchor="middle"
                         verticalAnchor="middle"
                         dy={16}
@@ -174,10 +172,8 @@
                   items={rangeStats.map((stat) => ({ texture: stat.texture, label: stat.key }))}
                 />
               {:else}
-                <div
-                  class="flex h-[300px] items-center justify-center text-muted-foreground"
-                >
-                  No data available
+                <div class="flex h-[300px] items-center justify-center">
+                  <EmptyState art="report-pages" size="compact" title="No data available" />
                 </div>
               {/if}
             </div>
@@ -186,7 +182,7 @@
 
         <Card.Root>
           <Card.Header>
-            <Card.Title class="text-lg">Distribution Statistics</Card.Title>
+            <Card.Title class="text-lg">Distribution statistics</Card.Title>
           </Card.Header>
           <Card.Content>
             <div class="overflow-x-auto print:overflow-visible">
@@ -220,7 +216,7 @@
 
       <Card.Root>
         <Card.Header>
-          <Card.Title class="text-lg">Hourly Distribution</Card.Title>
+          <Card.Title class="text-lg">Hourly distribution</Card.Title>
           <Card.Description>
             Percentage of time in each glucose range by hour of day
           </Card.Description>
@@ -253,13 +249,16 @@
                     )}
               </span>
             </div>
-            <ReliabilityBadge reliability={report.analysis?.reliability} />
+            <ReliabilityBadge
+              reliability={report.analysis?.reliability}
+              timeZoneUnavailableReason={report.timeZoneUnavailableReason}
+            />
           </Card.Content>
         </Card.Root>
 
         <Card.Root>
           <Card.Header>
-            <Card.Title class="text-lg">Glycemic Variability</Card.Title>
+            <Card.Title class="text-lg">Glycemic variability</Card.Title>
             <Card.Description>GVI and PGS metrics</Card.Description>
           </Card.Header>
           <Card.Content>
@@ -292,7 +291,7 @@
           <Card.Content>
             <div class="divide-y divide-border">
               <div class="flex flex-wrap items-baseline justify-between gap-x-2 py-2 first:pt-0 last:pb-0">
-                <span class="text-muted-foreground">Mean Total Daily Change</span>
+                <span class="text-muted-foreground">Mean total daily change</span>
                 <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
                   {overallStats.meanTotalDailyChange != null
                     ? `${bg(overallStats.meanTotalDailyChange)} ${bgLabel()}`
@@ -300,7 +299,7 @@
                 </span>
               </div>
               <div class="flex flex-wrap items-baseline justify-between gap-x-2 py-2 first:pt-0 last:pb-0">
-                <span class="text-muted-foreground">Time in Fluctuation</span>
+                <span class="text-muted-foreground">Time in fluctuation</span>
                 <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
                   {overallStats.timeInFluctuation != null
                     ? `${overallStats.timeInFluctuation.toFixed(1)}%`

@@ -9,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -194,11 +196,33 @@ public class TotpServiceTests : IDisposable
 
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id), code);
+        var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
 
         result.Should().NotBeNull();
         result!.SubjectId.Should().Be(subject.Id);
         result.Username.Should().Be(TestUsername);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task VerifyStepUpAsync_ReturnsTheHostAndInviteBindingTheTokenWasMintedWith(
+        bool forATenant, bool admittedByInvite)
+    {
+        var service = CreateService();
+        var secret = TotpHelper.GenerateSecret();
+        var subject = SeedSubject(TestUsername);
+        SeedCredential(subject.Id, secret, "Test TOTP");
+        Guid? tenantId = forATenant ? Guid.CreateVersion7() : null;
+        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+        var result = await service.VerifyStepUpAsync(
+            await service.CreateStepUpTokenAsync(subject.Id, tenantId, admittedByInvite), code);
+
+        result!.TenantId.Should().Be(tenantId);
+        result.AdmittedByInvite.Should().Be(admittedByInvite);
     }
 
     [Fact]
@@ -233,7 +257,7 @@ public class TotpServiceTests : IDisposable
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
         var result = await service.VerifyStepUpAsync(
-            await service.CreateStepUpTokenAsync(otherSubject.Id), code);
+            await service.CreateStepUpTokenAsync(otherSubject.Id, null, false), code);
 
         result.Should().BeNull("the step-up token names the account, so a code cannot be replayed onto another");
     }
@@ -248,7 +272,7 @@ public class TotpServiceTests : IDisposable
     {
         var service = CreateService();
 
-        var act = () => service.CreateStepUpTokenAsync(Guid.CreateVersion7());
+        var act = () => service.CreateStepUpTokenAsync(Guid.CreateVersion7(), null, false);
 
         await act.Should().ThrowAsync<DbUpdateException>();
     }
@@ -263,7 +287,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id);
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         await _dbContext.Subjects.Where(s => s.Id == subject.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
 
@@ -283,7 +307,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id), "000000");
+        var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), "000000");
 
         result.Should().BeNull();
     }
@@ -302,7 +326,7 @@ public class TotpServiceTests : IDisposable
         credential.LastUsedStep.Should().BeNull();
 
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id), code);
+        await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
 
         var updated = await _dbContext.TotpCredentials.AsNoTracking().FirstAsync(c => c.Id == credential.Id);
         updated.LastUsedAt.Should().NotBeNull();
@@ -321,7 +345,7 @@ public class TotpServiceTests : IDisposable
 
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        var first = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id), code);
+        var first = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
         first.Should().NotBeNull();
 
         var consumedStep = (await _dbContext.TotpCredentials.AsNoTracking()
@@ -334,7 +358,7 @@ public class TotpServiceTests : IDisposable
         stillMatchedStep.Should().Be(consumedStep!.Value);
 
         // Same code, still inside the ±1 step acceptance window, fresh step-up token.
-        var freshToken = await service.CreateStepUpTokenAsync(subject.Id);
+        var freshToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         var second = await service.VerifyStepUpAsync(freshToken, code);
 
         second.Should().BeNull("a code is consumed on first use, not valid for the whole window");
@@ -361,7 +385,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         var credential = SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id);
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         var first = await service.VerifyStepUpAsync(
@@ -397,7 +421,7 @@ public class TotpServiceTests : IDisposable
         SeedCredential(subject.Id, secret, "Test TOTP");
 
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id), code);
+        await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
 
         var row = await _dbContext.TotpStepUpTokens.AsNoTracking()
             .SingleAsync(t => t.SubjectId == subject.Id);
@@ -418,7 +442,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id);
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
 
         (await service.VerifyStepUpAsync(stepUpToken, "000000")).Should().BeNull();
 
@@ -442,7 +466,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id);
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         await _dbContext.TotpStepUpTokens.Where(t => t.SubjectId == subject.Id).ExecuteDeleteAsync();
 
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
@@ -461,7 +485,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id);
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         await _dbContext.TotpStepUpTokens
             .Where(t => t.SubjectId == subject.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.ExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
@@ -490,7 +514,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        await service.CreateStepUpTokenAsync(subject.Id);
+        await service.CreateStepUpTokenAsync(subject.Id, null, false);
         var row = await _dbContext.TotpStepUpTokens.AsNoTracking()
             .SingleAsync(t => t.SubjectId == subject.Id);
 
@@ -520,7 +544,7 @@ public class TotpServiceTests : IDisposable
 
         var created = await service.CompleteSetupAsync(code, "My Authenticator", setup.ChallengeToken);
 
-        var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(_subjectId), code);
+        var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(_subjectId, null, false), code);
 
         result.Should().BeNull("the setup code is recorded as consumed, so it cannot also sign in");
         var entity = await _dbContext.TotpCredentials.AsNoTracking().FirstAsync(c => c.Id == created.CredentialId);
@@ -641,7 +665,8 @@ public class TotpServiceTests : IDisposable
 
     private TotpService CreateService()
     {
-        return new TotpService(_dbContext, _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        var contexts = _dbContext.AsFactory();
+        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), _dataProtectionProvider, NullLogger<TotpService>.Instance);
     }
 
     private SubjectEntity SeedSubject(string username, Guid? subjectId = null)

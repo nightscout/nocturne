@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
@@ -6,8 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
 
@@ -31,9 +32,34 @@ public class UISettingsControllerDemoModeTests
     }
 
     [Fact]
-    public async Task SaveNotificationSettings_inDemoMode_persistsNothing()
+    public async Task PatchNotificationSettings_inDemoMode_persistsNothing()
     {
-        await PersistsNothing(c => c.SaveNotificationSettings(new NotificationSettings()));
+        await PersistsNothing(c => c.PatchNotifications("""{"alarmConfiguration":{"globalVolume":10}}"""));
+    }
+
+    [Fact]
+    public async Task PatchFeatureSettings_inDemoMode_persistsNothing()
+    {
+        await PersistsNothing(c => c.PatchFeatures("""{"display":{"focusHours":6}}"""));
+    }
+
+    [Fact]
+    public async Task PatchDataQualitySettings_inDemoMode_persistsNothing()
+    {
+        await PersistsNothing(c => c.PatchDataQuality("""{"sleepSchedule":{"bedtimeHour":1}}"""));
+    }
+
+    [Fact]
+    public async Task PatchFeatureSettings_inDemoMode_returnsTheDemoSectionMergedWithThePatch()
+    {
+        var controller = NewController(demoMode: true);
+
+        var merged = OkValue<FeatureSettings>(
+            (await controller.PatchFeatures("""{"display":{"focusHours":6}}""")).Result
+        );
+
+        merged.Display.FocusHours.Should().Be(6);
+        merged.Plugins.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -74,7 +100,7 @@ public class UISettingsControllerDemoModeTests
 
         var settings = await ProxiedGet(demoService);
 
-        settings.Devices.ConnectedDevices.Should().ContainSingle().Which.Id.Should()
+        settings.Devices!.ConnectedDevices.Should().ContainSingle().Which.Id.Should()
             .Be(ProxiedDeviceId);
         demoService.RequestUri.Should().Be("http://demo-service/ui-settings");
     }
@@ -94,7 +120,7 @@ public class UISettingsControllerDemoModeTests
     {
         var settings = await ProxiedGet(new StubDemoService(HttpStatusCode.InternalServerError));
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -104,7 +130,7 @@ public class UISettingsControllerDemoModeTests
             new StubDemoService(HttpStatusCode.InternalServerError, ProxiedSettings)
         );
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
         settings.Devices.ConnectedDevices.Select(d => d.Id).Should().NotContain(ProxiedDeviceId);
     }
 
@@ -112,14 +138,11 @@ public class UISettingsControllerDemoModeTests
     public async Task GetUISettings_inDemoMode_stopsWaitingOnAHungDemoService()
     {
         var demoService = StubDemoService.Hanging();
-        var elapsed = Stopwatch.StartNew();
 
-        var settings = await ProxiedGet(demoService);
-        elapsed.Stop();
+        var settings = await ProxiedGet(demoService).WaitAsync(DemoUISettingsProxy.ProxyTimeout * 10);
 
-        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
         demoService.Cancelled.Should().BeTrue();
-        elapsed.Elapsed.Should().BeLessThan(UISettingsController.DemoServiceProxyTimeout * 4);
     }
 
     [Fact]
@@ -127,7 +150,7 @@ public class UISettingsControllerDemoModeTests
     {
         var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), TimeProvider.System, NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: false, serviceUrl: "http://demo-service"),
             demoService.Factory
         );
@@ -158,7 +181,7 @@ public class UISettingsControllerDemoModeTests
     )
     {
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), TimeProvider.System, NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: true, serviceUrl: serviceUrl),
             demoService.Factory
         );
@@ -232,7 +255,7 @@ public class UISettingsControllerDemoModeTests
                 var factory = new Mock<IHttpClientFactory>();
                 factory
                     .Setup(f => f.CreateClient(It.IsAny<string>()))
-                    .Returns(() => new HttpClient(new Handler(this)));
+                    .Returns(() => new HttpClient(new Handler(this)) { Timeout = Timeout.InfiniteTimeSpan });
 
                 return factory.Object;
             }

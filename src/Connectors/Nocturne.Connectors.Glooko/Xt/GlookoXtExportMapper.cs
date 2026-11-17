@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Glooko.Xt;
 ///     and its duration — two mode changes in one minute differ by duration, which is how the
 ///     pump reports a retry.
 /// </summary>
-public class GlookoXtExportMapper(ILogger logger)
+public class GlookoXtExportMapper(ILogger logger, TimeProvider? timeProvider = null)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -40,7 +40,7 @@ public class GlookoXtExportMapper(ILogger logger)
     public GlookoXtMappedBatch Map(IEnumerable<GlookoXtExport> exports, string? unitSetting, GlookoXtMappedBatch? into = null)
     {
         var batch = into ?? new GlookoXtMappedBatch();
-        var now = DateTime.UtcNow;
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         var glucoseValues = new List<double>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 

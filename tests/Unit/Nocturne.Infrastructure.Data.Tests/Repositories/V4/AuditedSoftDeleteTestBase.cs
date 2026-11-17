@@ -37,7 +37,7 @@ public abstract class AuditedSoftDeleteTestBase<TEntity> : IDisposable
     }
 
     /// <summary>Builds the repository under test against <paramref name="auditContext"/>.</summary>
-    protected abstract void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext);
+    protected abstract void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext);
 
     /// <summary>The name <c>mutation_audit_log</c> records for this entity type.</summary>
     protected abstract string AuditEntityType { get; }
@@ -45,7 +45,7 @@ public abstract class AuditedSoftDeleteTestBase<TEntity> : IDisposable
     protected static ILogger<T> Logger<T>() => NullLogger<T>.Instance;
 
     protected void UseAuditContext(IAuditContext auditContext) =>
-        CreateRepository(new TestTenantDbContextFactory(_context), auditContext);
+        CreateRepository(new TestNocturneDbContextFactory(_context), auditContext);
 
     /// <summary>Persists <paramref name="row"/> and returns its id.</summary>
     protected Guid Add(TEntity row)
@@ -53,6 +53,16 @@ public abstract class AuditedSoftDeleteTestBase<TEntity> : IDisposable
         _context.Set<TEntity>().Add(row);
         _context.SaveChanges();
         return (Guid)_context.Entry(row).Property("Id").CurrentValue!;
+    }
+
+    /// <summary>
+    /// Persists <paramref name="rows"/> in one save: a save per row rescans every row the context
+    /// already tracks, which is quadratic in a seed of hundreds.
+    /// </summary>
+    protected void AddRange(IEnumerable<TEntity> rows)
+    {
+        _context.Set<TEntity>().AddRange(rows);
+        _context.SaveChanges();
     }
 
     private NocturneDbContext Verify() => _db.CreateContext();

@@ -37,7 +37,9 @@ public class UserDisplayPreferencesTests
             GlucoseUnits = "mmol",
             TimeFormat = "24",
             ColorTheme = "trio",
+            GlucoseRangePalette = "clarity",
             NightModeSchedule = true,
+            CalendarShowTirPercent = true,
             Prediction = new PredictionPreferences { Enabled = true, Minutes = 45, DisplayMode = "cone" },
             Chart = new ChartPreferences { LineColor = "#123456", AreaOpacity = 0.25, Lookback = 6 },
         };
@@ -47,7 +49,9 @@ public class UserDisplayPreferencesTests
         restored.GlucoseUnits.Should().Be("mmol");
         restored.TimeFormat.Should().Be("24");
         restored.ColorTheme.Should().Be("trio");
+        restored.GlucoseRangePalette.Should().Be("clarity");
         restored.NightModeSchedule.Should().BeTrue();
+        restored.CalendarShowTirPercent.Should().BeTrue();
         restored.Prediction!.Minutes.Should().Be(45);
         restored.Chart!.LineColor.Should().Be("#123456");
         restored.Chart.AreaOpacity.Should().Be(0.25);
@@ -175,6 +179,52 @@ public class UserDisplayPreferencesTests
         prefs.Validate().Should().NotBeNull().And.Contain(expectedField);
     }
 
+    [Theory]
+    [InlineData("theme")]
+    [InlineData("clarity")]
+    public void Validate_accepts_known_glucose_range_palettes(string palette)
+    {
+        new UserDisplayPreferences { GlucoseRangePalette = palette }.Validate().Should().BeNull();
+    }
+
+    [Fact]
+    public void Validate_rejects_unknown_glucose_range_palette()
+    {
+        new UserDisplayPreferences { GlucoseRangePalette = "rainbow" }.Validate()
+            .Should().NotBeNull().And.Contain("glucoseRangePalette");
+    }
+
+    [Fact]
+    public void MergeWith_replaces_glucose_range_palette_only_when_incoming_has_one()
+    {
+        var existing = new UserDisplayPreferences { GlucoseRangePalette = "clarity" };
+
+        existing.MergeWith(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        existing.GlucoseRangePalette.Should().Be("clarity");
+
+        existing.MergeWith(new UserDisplayPreferences { GlucoseRangePalette = "theme" });
+        existing.GlucoseRangePalette.Should().Be("theme");
+    }
+
+    [Fact]
+    public void MergeWith_replaces_calendar_show_tir_percent_only_when_incoming_has_one()
+    {
+        var existing = new UserDisplayPreferences { CalendarShowTirPercent = true };
+
+        existing.MergeWith(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        existing.CalendarShowTirPercent.Should().BeTrue();
+
+        existing.MergeWith(new UserDisplayPreferences { CalendarShowTirPercent = false });
+        existing.CalendarShowTirPercent.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToPresentationOnly_carries_calendar_show_tir_percent()
+    {
+        new UserDisplayPreferences { CalendarShowTirPercent = true }
+            .ToPresentationOnly().CalendarShowTirPercent.Should().BeTrue();
+    }
+
     [Fact]
     public void Validate_accepts_valid_nested_values()
     {
@@ -229,5 +279,85 @@ public class UserDisplayPreferencesTests
     {
         new UserDisplayPreferences { Chart = new ChartPreferences { Lookback = 0 } }
             .Validate().Should().NotBeNull().And.Contain("chart.lookback");
+    }
+
+    // ----- Energy unit -----
+
+    [Theory]
+    [InlineData("kJ")]
+    [InlineData("kcal")]
+    public void Validate_accepts_each_energy_unit(string unit)
+    {
+        new UserDisplayPreferences { EnergyUnit = unit }.Validate().Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("kj")]
+    [InlineData("Cal")]
+    [InlineData("")]
+    public void Validate_rejects_an_unknown_energy_unit(string unit)
+    {
+        new UserDisplayPreferences { EnergyUnit = unit }
+            .Validate().Should().NotBeNull().And.Contain("energyUnit");
+    }
+
+    [Fact]
+    public void MergeWith_keeps_the_energy_unit_when_the_patch_omits_it()
+    {
+        var existing = new UserDisplayPreferences { EnergyUnit = "kJ" };
+
+        existing.MergeWith(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+
+        existing.EnergyUnit.Should().Be("kJ");
+    }
+
+    [Fact]
+    public void MergeWith_replaces_the_energy_unit()
+    {
+        var existing = new UserDisplayPreferences { EnergyUnit = "kJ" };
+
+        existing.MergeWith(new UserDisplayPreferences { EnergyUnit = "kcal" });
+
+        existing.EnergyUnit.Should().Be("kcal");
+    }
+
+    [Fact]
+    public void An_explicit_energy_unit_survives_a_round_trip()
+    {
+        var restored = UserDisplayPreferences.Deserialize(
+            new UserDisplayPreferences { EnergyUnit = "kJ", RegionFormat = "en-GB" }.Serialize());
+
+        restored.EnergyUnit.Should().Be("kJ");
+        restored.EffectiveEnergyUnit.Should().Be("kJ");
+    }
+
+    [Fact]
+    public void The_resolved_energy_unit_is_not_stored()
+    {
+        var stored = new UserDisplayPreferences { EnergyUnit = "kJ", RegionFormat = "en-AU" }.Serialize();
+
+        stored.Should().Contain("\"energyUnit\"").And.NotContain("effectiveEnergyUnit");
+    }
+
+    [Fact]
+    public void The_resolved_energy_unit_is_still_served()
+    {
+        var served = System.Text.Json.JsonSerializer.Serialize(
+            new UserDisplayPreferences { RegionFormat = "en-NZ" },
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        served.Should().Contain("\"effectiveEnergyUnit\":\"kJ\"");
+    }
+
+    [Fact]
+    public void The_effective_energy_unit_follows_a_later_region_change()
+    {
+        var restored = UserDisplayPreferences.Deserialize(
+            new UserDisplayPreferences { RegionFormat = "en-GB" }.Serialize());
+
+        restored.RegionFormat = "en-AU";
+
+        restored.EnergyUnit.Should().BeNull();
+        restored.EffectiveEnergyUnit.Should().Be("kJ");
     }
 }

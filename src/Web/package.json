@@ -12,32 +12,34 @@
     "check": "pnpm --recursive check",
     "test": "pnpm --recursive test",
     "translations:sync": "cd packages/app && wuchale",
+    "test:copy-guard": "node --test \"utils/lintUiCopy/*.test.ts\"",
+    "lint:copy": "pnpm run test:copy-guard && cd packages/app && wuchale -l warn && cd ../.. && node utils/lintUiCopy/index.ts",
     "clean": "pnpm --recursive clean && rm -rf node_modules",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",
     "generate-remote-functions": "openapi-remote-codegen",
     "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas && pnpm run generate-remote-functions",
     "translations:stage": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --no-skip-worktree && git add src/Web/locales/",
-    "hide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example | xargs git update-index --skip-worktree",
-    "unhide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example | xargs git update-index --no-skip-worktree"
+    "hide-generated": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --skip-worktree",
+    "unhide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/ | xargs git update-index --no-skip-worktree"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@typescript/native-preview": "7.0.0-dev.20260513.1",
-    "openapi-remote-codegen": "0.8.0",
+    "openapi-remote-codegen": "0.9.0",
     "prettier": "^3.7.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vite-plugin-lingo": "^0.1.0",
     "zod": "^4.3.6"
   },
   "engines": {
-    "node": ">=24",
+    "node": "^24.22.1 || >=26.12.1",
     "pnpm": ">=9"
   },
   "dependencies": {
     "@wuchale/svelte": "^0.20.7",
-    "runed": "^0.37.0",
+    "runed": "^0.38.0",
     "wuchale": "^0.25.8"
   }
 }

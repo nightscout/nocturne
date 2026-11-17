@@ -159,17 +159,13 @@ public static class MemberScopeResolver
                 continue;
             }
 
-            // A readwrite membership on a read-only credential downgrades to read instead of
-            // dropping. SatisfiesScope answers false for a readwrite requirement met only by read,
-            // and NormalizeMemberPermissions does not add the read counterpart, so a member holding
-            // glucose.readwrite against a glucose.read token previously resolved to neither scope.
-            // Both sides permit the read counterpart: the membership because readwrite includes
-            // read, the credential because it granted read outright.
-            if (Scope.TryGetImpliedReadScope(memberScope, out var readScope)
-                && Scope.Satisfies(boundedCredentialScopes, readScope))
-            {
-                resolved.Add(readScope);
-            }
+            // A membership atom on a narrower credential downgrades to what both permit instead of
+            // dropping: glucose.readwrite on a glucose.read token resolves to glucose.read, and
+            // alerts.readwrite on an alerts.acknowledge token to alerts.acknowledge.
+            // NormalizeMemberPermissions does not add the narrower atoms, so without this the
+            // member resolved to neither.
+            resolved.UnionWith(Scope.NarrowerScopes(memberScope)
+                .Where(narrower => Scope.Satisfies(boundedCredentialScopes, narrower)));
         }
 
         return resolved;

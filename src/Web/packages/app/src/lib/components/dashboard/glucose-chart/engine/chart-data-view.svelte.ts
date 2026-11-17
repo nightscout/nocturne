@@ -5,15 +5,18 @@ import type {
   StateSpanCategory,
   ChartSpanKind,
   TrackerCategory,
-} from "$api-clients";
-import type { PredictionData } from "$lib/api/prediction-data";
-import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { distinct } from "$lib/utils/collections";
+  ProfileActivationDto,
+  MealPeriod,
+} from "#lib/api/generated/nocturne-api-client.js";
+import type { PredictionData } from "#lib/api/prediction-data.js";
+import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import { distinct } from "#lib/utils/collections.js";
+import { profileActivationLabel } from "#lib/utils/profile-activation-label.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 import { bisector } from "d3";
 // ===== Data Point Types =====
 
@@ -48,6 +51,7 @@ export interface CarbMarkerData {
   time: Date;
   carbs?: number;
   label?: string;
+  mealPeriod?: MealPeriod;
   treatmentId?: string;
   isOffset?: boolean;
   dataSource?: string;
@@ -111,6 +115,7 @@ export interface StateSpan {
   endTime: Date | null;
   color: string;
   metadata?: Record<string, unknown> | null;
+  profileActivation?: ProfileActivationDto | null;
 }
 
 /** A state span with display-clipped start/end times */
@@ -119,7 +124,7 @@ export interface DisplaySpan extends StateSpan {
   displayEnd: Date;
 }
 
-/** A profile span with extracted profile name */
+/** A profile span with its activation's label */
 export interface DisplayProfileSpan extends DisplaySpan {
   profileName: string;
 }
@@ -153,9 +158,6 @@ export interface StaleBasalRange {
   start: Date;
   end: Date;
 }
-
-const metadataString = (value: unknown): string | undefined =>
-  typeof value === "string" ? value : undefined;
 
 const metadataNumber = (value: unknown): number | undefined =>
   typeof value === "number" ? value : undefined;
@@ -242,14 +244,10 @@ export interface ChartDataEngine {
   readonly basalData: ChartBasalPoint[];
   readonly scheduledBasalData: ScheduledBasalPoint[];
   readonly maxIOB: number;
+  readonly minIOB: number;
   readonly maxBasalRate: number;
 
   // Thresholds
-  readonly lowThreshold: number;
-  readonly highThreshold: number;
-  readonly veryHighThreshold: number;
-  readonly veryLowThreshold: number;
-  readonly glucoseYMax: number;
   readonly thresholds: ChartThresholds;
   readonly medianGlucose: number;
 
@@ -365,6 +363,7 @@ export function createChartDataView(
   const cobData = $derived(serverChartData?.cobSeries ?? []);
   const basalData = $derived(serverChartData?.basalSeries ?? []);
   const maxIOB = $derived(serverChartData?.maxIob ?? 3);
+  const minIOB = $derived(serverChartData?.minIob ?? 0);
   const maxBasalRate = $derived(serverChartData?.maxBasalRate ?? 3.0);
 
   const scheduledBasalData = $derived(
@@ -378,11 +377,6 @@ export function createChartDataView(
   const resolvedThresholds = $derived(
     source.thresholdsOverride ?? resolveChartThresholds(serverChartData?.thresholds)
   );
-  const lowThreshold = $derived(resolvedThresholds.low);
-  const highThreshold = $derived(resolvedThresholds.high);
-  const veryHighThreshold = $derived(resolvedThresholds.veryHigh);
-  const veryLowThreshold = $derived(resolvedThresholds.veryLow);
-  const glucoseYMax = $derived(resolvedThresholds.glucoseYMax);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -416,8 +410,7 @@ export function createChartDataView(
     const profile = processSpans(profileSpans, rangeStart, rangeEnd).map(
       (span) => ({
         ...span,
-        profileName:
-          metadataString(span.metadata?.profileName) ?? span.state ?? "",
+        profileName: profileActivationLabel(span.profileActivation) ?? span.state ?? "",
       })
     );
 
@@ -479,28 +472,18 @@ export function createChartDataView(
   });
 
   // ---- Stale basal detection ----
-  const lastBasalSourceTime = $derived.by(() => {
-    if (displayBasalDeliverySpans.length === 0) return 0;
-    let latestEndTime = 0;
-    for (const span of displayBasalDeliverySpans) {
-      const endTime = span.endTime?.getTime() ?? span.startTime.getTime();
-      if (endTime > latestEndTime) {
-        latestEndTime = endTime;
-      }
-    }
-    return latestEndTime;
-  });
+  const lastPumpSyncTime = $derived(serverChartData?.lastPumpSyncMills ?? 0);
 
   const staleBasalData = $derived.by(() => {
-    if (lastBasalSourceTime === 0) return null;
+    if (lastPumpSyncTime === 0) return null;
     const rangeEndTime = displayDateRange.to.getTime();
-    const timeSinceLastUpdate = rangeEndTime - lastBasalSourceTime;
+    const timeSinceLastUpdate = rangeEndTime - lastPumpSyncTime;
     const rangeStartTime = displayDateRange.from.getTime();
     if (
       timeSinceLastUpdate > STALE_THRESHOLD_MS &&
-      lastBasalSourceTime >= rangeStartTime
+      lastPumpSyncTime >= rangeStartTime
     ) {
-      return dateSpan(lastBasalSourceTime, rangeEndTime);
+      return dateSpan(lastPumpSyncTime, rangeEndTime);
     }
     return null;
   });
@@ -724,23 +707,11 @@ export function createChartDataView(
     get maxIOB() {
       return maxIOB;
     },
+    get minIOB() {
+      return minIOB;
+    },
     get maxBasalRate() {
       return maxBasalRate;
-    },
-    get lowThreshold() {
-      return lowThreshold;
-    },
-    get highThreshold() {
-      return highThreshold;
-    },
-    get veryHighThreshold() {
-      return veryHighThreshold;
-    },
-    get veryLowThreshold() {
-      return veryLowThreshold;
-    },
-    get glucoseYMax() {
-      return glucoseYMax;
     },
     get thresholds() {
       return resolvedThresholds;

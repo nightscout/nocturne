@@ -7,7 +7,7 @@
  * viewer's local zone by default, the patient's configured zone on the server),
  * never UTC midnight, and the end bound is the last millisecond of the last day.
  */
-import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
+import { getLocalTimeZone, parseDate, parseDateTime, today, type DateValue } from "@internationalized/date";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -108,6 +108,19 @@ export function endOfDay(day: string, timeZone: string = getLocalTimeZone()): Da
   );
 }
 
+/** The wall-clock `HH:mm` on `day` in `timeZone`, or null when either is malformed. */
+export function timeOnDay(
+  day: string | null | undefined,
+  hhmm: string | null | undefined,
+  timeZone: string = getLocalTimeZone()
+): Date | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!isDayString(day) || !match) return null;
+  const [hour, minute] = [Number(match[1]), Number(match[2])];
+  if (hour > 23 || minute > 59) return null;
+  return parseDateTime(`${dayPart(day)}T${match[1]}:${match[2]}`).toDate(timeZone);
+}
+
 /**
  * Calendar days covered by an inclusive range: a Monday-to-Sunday range is 7,
  * and a single day is 1. Counted on the calendar, so DST transitions and
@@ -117,6 +130,23 @@ export function dayCount(from: string | Date, to: string | Date): number {
   const start = parseDate(toDay(from)).toDate("UTC").getTime();
   const end = parseDate(toDay(to)).toDate("UTC").getTime();
   return Math.max(1, Math.round((end - start) / MS_PER_DAY) + 1);
+}
+
+/** Whether an inclusive range covers more days than `maxDays`. A missing limit allows any range. */
+export function exceedsDaySpan(from: string | Date, to: string | Date, maxDays: number | undefined): boolean {
+  return maxDays !== undefined && dayCount(from, to) > maxDays;
+}
+
+/**
+ * A calendar's disabled-date test for a range with one end on `anchor`: a day that would
+ * stretch the range past `maxDays`. With no anchor or no limit, no day is disabled.
+ */
+export function outsideDaySpan(anchor: DateValue | undefined, maxDays: number | undefined): (day: DateValue) => boolean {
+  return (day) => {
+    if (anchor === undefined) return false;
+    const [from, to] = day.compare(anchor) < 0 ? [day, anchor] : [anchor, day];
+    return exceedsDaySpan(from.toString(), to.toString(), maxDays);
+  };
 }
 
 /** Every `YYYY-MM-DD` day in an inclusive range, in calendar order. */

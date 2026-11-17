@@ -4,7 +4,7 @@ import { refreshSummaryOnNewReading } from "./current-glucose-status.svelte";
 
 const queries = vi.hoisted(() => ({ created: 0 }));
 
-vi.mock("$api/generated/summaries.generated.remote", () => ({
+vi.mock("#lib/api/generated/summaries.generated.remote.js", () => ({
   getSummary: () => {
     queries.created++;
     return summary;

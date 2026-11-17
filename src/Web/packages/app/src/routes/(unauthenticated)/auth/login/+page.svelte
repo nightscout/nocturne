@@ -1,21 +1,23 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import KeyRound from "@lucide/svelte/icons/key-round";
+  import { Artwork } from "water-ui";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import { getAuthState } from "../auth.remote";
-  import { getAuthStatus } from "$lib/api/generated";
+  import { getAuthStatus } from "#lib/api/generated/index.js";
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
+  import { goToReturnUrl } from "#lib/navigation/return-url.js";
+  import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
   import { resolve } from "$app/paths";
-  import LoginForm from "$lib/components/auth/LoginForm.svelte";
-  import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
-  import GuestCodeForm from "$lib/components/auth/GuestCodeForm.svelte";
+  import LoginForm from "#lib/components/auth/LoginForm.svelte";
+  import RequestMembershipDialog from "#lib/components/members/RequestMembershipDialog.svelte";
+  import GuestCodeForm from "#lib/components/auth/GuestCodeForm.svelte";
   import {
     dismissGuestCode,
     restoreGuestCode,
-  } from "$lib/components/auth/guest-code-dismissal";
+  } from "#lib/components/auth/guest-code-dismissal.js";
 
   let { data } = $props();
 
@@ -35,8 +37,7 @@
   );
   const showGuestCode = $derived(guestCodePending && !guestCodeDismissed);
 
-  // Get return URL from query params
-  const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
+  const returnUrl = $derived(safeReturnUrl(page.url.searchParams.get("returnUrl")));
 
   // Resolved once by the root layout; here it decides which sign-in methods can work at all.
   const tenantless = $derived(page.data.tenantless === true);
@@ -45,33 +46,30 @@
   $effect(() => {
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      goto(returnUrl, { replaceState: true });
+      void goToReturnUrl(returnUrl, { replace: true });
     }
   });
 </script>
 
 <svelte:head>
-  <title>Login - Nocturne</title>
+  <title>Sign in - Nocturne</title>
 </svelte:head>
 
 <div class="flex flex-1 items-center justify-center p-4">
   <Card.Root class="w-full max-w-md" data-testid="sign-in-card">
     <Card.Header class="space-y-1 text-center">
-      <div
-        class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-      >
-        {#if showGuestCode}
+      {#if showGuestCode}
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
+        >
           <KeyRound class="h-6 w-6 text-primary" />
-        {:else}
-          <Fingerprint class="h-6 w-6 text-primary" />
-        {/if}
-      </div>
+        </div>
+      {/if}
       {#if showGuestCode}
         <Card.Title class="text-2xl font-bold">Enter your guest code</Card.Title>
         <Card.Description>
           Enter the code you were given to view health data. The code works
-          once — this device stays signed in for 48 hours.
+          once. This device stays signed in for 48 hours.
         </Card.Description>
       {:else}
         <Card.Title class="text-2xl font-bold">
@@ -84,9 +82,7 @@
     </Card.Header>
 
     {#if showGuestCode}
-      <Card.Content data-testid="login-guest-code">
-        <GuestCodeForm {returnUrl} />
-      </Card.Content>
+      <Card.Content data-testid="login-guest-code"><GuestCodeForm returnUrl={returnUrl} /></Card.Content>
 
       <Card.Footer class="flex flex-col space-y-2">
         <Button
@@ -103,7 +99,21 @@
       </Card.Footer>
     {:else}
       <Card.Content>
-        <LoginForm {returnUrl} {tenantless} />
+        <div class="mb-4 flex justify-center">
+          <Artwork
+            icon={fingerprintArtwork}
+            palette="water"
+            motion="auto"
+            autoplay="once"
+            class="size-56"
+          />
+        </div>
+
+        <LoginForm
+          returnUrl={returnUrl}
+          tenantless={tenantless}
+          pendingStepUpToken={data.stepUpToken}
+        />
       </Card.Content>
 
       <Card.Footer class="flex flex-col space-y-2">
@@ -127,30 +137,35 @@
             <Button
               variant="link"
               data-testid="request-membership-link"
-              onclick={() => (showRequestDialog = true)}
-            >
-              Request membership
-            </Button>
+              onclick={() => showRequestDialog = true}
+            >Request membership</Button>
           </div>
         {/if}
         <div class="text-center text-xs text-muted-foreground">
           <p>
-            By signing in, you agree to our
-            <a href={resolve("/terms")} class="underline hover:text-foreground">
-              Terms of Service
-            </a>
-            and
-            <a href={resolve("/privacy")} class="underline hover:text-foreground">
-              Privacy Policy
-            </a>
+            By signing in, you agree to our 
+
+            <a
+              href={resolve('terms')}
+              class="underline hover:text-foreground"
+            >terms of service</a>
+
+            and 
+
+            <a
+              href={resolve('privacy')}
+              class="underline hover:text-foreground"
+            >privacy policy</a>
           </p>
         </div>
         <div class="text-center text-xs text-muted-foreground">
           <p>
-            Having trouble signing in?
-            <a href={resolve("/auth/help")} class="underline hover:text-foreground">
-              Get help
-            </a>
+            Having trouble signing in? 
+
+            <a
+              href={resolve('auth/help')}
+              class="underline hover:text-foreground"
+            >Get help</a>
           </p>
         </div>
       </Card.Footer>
@@ -158,4 +173,4 @@
   </Card.Root>
 </div>
 
-<RequestMembershipDialog bind:open={showRequestDialog} />
+<RequestMembershipDialog bind:open={showRequestDialog} {returnUrl} />

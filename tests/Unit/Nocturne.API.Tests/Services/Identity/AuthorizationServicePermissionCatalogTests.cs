@@ -5,6 +5,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -34,9 +35,11 @@ public class AuthorizationServicePermissionCatalogTests : IDisposable
             new Mock<ISubjectService>().Object,
             roles.Object,
             new Mock<IDirectGrantService>().Object,
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             new Mock<IJwtService>().Object,
-            _dbContext,
-            new Nocturne.Infrastructure.Data.Services.CategoryReadContext()
+            new SubjectRepository(_dbContext.AsFactory()),
+            new Nocturne.Infrastructure.Data.Services.CategoryReadContext(),
+            TimeProvider.System
         );
     }
 

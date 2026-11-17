@@ -41,10 +41,8 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single
     /// registered <see cref="PatientDevice"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<DeviceEvent>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -53,7 +51,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         Guid? patientDeviceId = null,
         CancellationToken ct = default
     );
@@ -62,12 +59,11 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<IEnumerable<DeviceEvent>> IV4Repository<DeviceEvent>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, patientDeviceId: null, ct: ct);
 
     /// <summary>Delete <see cref="DeviceEvent"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
@@ -86,6 +82,9 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<IReadOnlyList<DeviceEvent>> GetAllCopiesAsync(
         DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
 
+    /// <summary>The events with <paramref name="ids"/>, deleted ones included, in no particular order.</summary>
+    Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>
     /// The events of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>)
     /// that the user deleted, oldest first.
@@ -98,12 +97,10 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="DeviceEvent"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<DeviceEvent>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
@@ -117,7 +114,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="asOf">When non-null, restricts to events with <c>Timestamp &lt;= asOf</c>; powers
     /// replay's <c>site_age</c> / <c>sensor_age</c> reconstruction. <c>null</c> returns the
     /// absolute latest.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
     Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct = default);
 
@@ -126,16 +122,32 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
         => GetLatestByEventTypeAsync(eventType, asOf: null, ct);
 
     /// <summary>
+    /// As <see cref="GetLatestByEventTypeAsync(DeviceEventType, DateTime?, CancellationToken)"/>, for the
+    /// most recent event of any of <paramref name="eventTypes"/>.
+    /// </summary>
+    Task<DeviceEvent?> GetLatestOfAnyTypeAsync(
+        IReadOnlyCollection<DeviceEventType> eventTypes, DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
     /// Retrieve the most recent <see cref="DeviceEvent"/> matching any of the specified <see cref="DeviceEventType"/> values.
     /// </summary>
     /// <param name="eventTypes">Array of <see cref="DeviceEventType"/> values to search for.</param>
     /// <param name="patientDeviceId">Optional filter restricting the search to events linked to a single
     /// registered patient device. Pass <c>null</c> to search tenant-wide.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
     Task<DeviceEvent?> GetLatestByEventTypesAsync(
         DeviceEventType[] eventTypes,
         Guid? patientDeviceId = null,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// The number of <see cref="DeviceEvent"/> records of any of <paramref name="eventTypes"/> dated at or
+    /// after <paramref name="since"/>, counted as <see cref="GetLatestByEventTypesAsync"/> reads them.
+    /// </summary>
+    Task<int> CountByEventTypesSinceAsync(
+        DeviceEventType[] eventTypes,
+        DateTime since,
         CancellationToken ct = default
     );
 }

@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -12,9 +13,9 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 
 /// <summary>
 /// Base class for the API integration tests: the API in-process on a real port and its own
-/// PostgreSQL database, from <see cref="ApiIntegrationTestFixture"/>.
+/// PostgreSQL database, from <see cref="ApiIntegrationTestFixture"/>. A derived class names its
+/// shard in <see cref="ApiIntegrationShards"/>.
 /// </summary>
-[Collection("ApiIntegration")]
 [Parity]
 public abstract class ApiIntegrationTestBase : IAsyncLifetime
 {
@@ -229,6 +230,20 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     }
 
     /// <summary>
+    /// An authenticated client whose credential is clamped to the last 24 hours of history.
+    /// </summary>
+    protected async Task<HttpClient> CreateHistoryClampedClientAsync(
+        string name = "Clamped Follower",
+        Guid? tenantId = null)
+    {
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        var (_, token) = await AuthTestHelpers.SeedHistoryClampedSubjectAsync(
+            conn, tenantId ?? Fixture.TenantId, name);
+        return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
+    }
+
+    /// <summary>
     /// Runs <paramref name="action"/> on the API's services in a scope pinned to the seeded tenant,
     /// as a request on its host would be.
     /// </summary>
@@ -237,7 +252,6 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
         return await action(scope.ServiceProvider);
     }
 

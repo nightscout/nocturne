@@ -116,7 +116,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("_id", "identifier", "mills", "date", "srvModified", "srvCreated", "sysTime", "created_at", "dateString");
+            .ScrubMembers("_id", "identifier", "lastModified", "mills", "date", "srvModified", "srvCreated", "sysTime", "created_at", "dateString");
     }
 
     #endregion

@@ -41,7 +41,7 @@ public class AidMetricsService : IAidMetricsService
 
     public AidSystemMetrics Calculate(
         IReadOnlyList<DeviceSegmentInput> deviceSegments,
-        IReadOnlyList<ApsSnapshot> apsSnapshots,
+        IReadOnlyList<ApsLoopCycle> loopCycles,
         IReadOnlyList<TempBasal> tempBasals,
         int siteChangeCount,
         string? cgmDeviceNames,
@@ -86,12 +86,8 @@ public class AidMetricsService : IAidMetricsService
                 continue;
 
             // Slice data to segment window
-            var segSnapshots = apsSnapshots
+            var segCycles = loopCycles
                 .Where(s => s.Timestamp >= segStart && s.Timestamp < segEnd)
-                .ToList();
-
-            var segTempBasals = tempBasals
-                .Where(t => t.StartTimestamp < segEnd && (t.EndTimestamp == null || t.EndTimestamp > segStart))
                 .ToList();
 
             var context = new AidDetectionContext
@@ -99,8 +95,8 @@ public class AidMetricsService : IAidMetricsService
                 Algorithm = segment.Algorithm,
                 StartDate = segStart,
                 EndDate = segEnd,
-                ApsSnapshots = segSnapshots,
-                TempBasals = segTempBasals,
+                LoopCycles = segCycles,
+                TempBasals = tempBasals,
             };
 
             var metrics = strategy.CalculateMetrics(context);
@@ -130,9 +126,9 @@ public class AidMetricsService : IAidMetricsService
         }
 
         if (aidDurationHours > 0)
-            result.AidActivePercent = Math.Round(weightedAidActive / aidDurationHours, 1);
+            result.AidActivePercent = ScaledRounding.Round(weightedAidActive / aidDurationHours, 1);
         if (pumpDurationHours > 0)
-            result.PumpUsePercent = Math.Round(weightedPumpUse / pumpDurationHours, 1);
+            result.PumpUsePercent = ScaledRounding.Round(weightedPumpUse / pumpDurationHours, 1);
 
         return result;
     }

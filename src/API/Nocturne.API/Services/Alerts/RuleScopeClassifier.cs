@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Models.Alerts;
 
@@ -16,19 +16,11 @@ public interface IRuleScopeClassifier
 {
     /// <summary>
     /// Classifies a rule from its stored <c>condition_type</c> + <c>condition_params</c>.
-    /// Never throws: an unavailable native engine or unintelligible response falls back
-    /// to <see cref="RuleScopeClass.Undirected"/> (all-only), the safe default that never
-    /// lets a scoped <c>lows</c>/<c>highs</c> mute wrongly silence a rule.
+    /// Never throws: params that are not JSON, or an engine failure, fall back to
+    /// <see cref="RuleScopeClass.Undirected"/> (all-only), the safe default that never lets a
+    /// scoped <c>lows</c>/<c>highs</c> mute wrongly silence a rule.
     /// </summary>
     RuleScopeClass Classify(AlertConditionType conditionType, string conditionParamsJson);
-
-    /// <summary>
-    /// Whether the native engine backing <see cref="Classify"/> can be loaded. False means
-    /// every call returns the <see cref="RuleScopeClass.Undirected"/> fallback, so scoped
-    /// <c>lows</c>/<c>highs</c> mutes cannot narrow-match any rule — callers that would
-    /// otherwise do bulk classification should skip the work and say so once.
-    /// </summary>
-    bool IsAvailable { get; }
 }
 
 /// <inheritdoc />
@@ -37,18 +29,11 @@ public sealed class RuleScopeClassifier : IRuleScopeClassifier
     private static readonly JsonElement EmptyParams = JsonDocument.Parse("{}").RootElement.Clone();
 
     private readonly ILogger<RuleScopeClassifier> _logger;
-    private readonly Lazy<bool> _available;
 
     public RuleScopeClassifier(ILogger<RuleScopeClassifier> logger)
     {
         _logger = logger;
-        // Probed once and cached: the answer cannot change over a process lifetime, and
-        // the alternative is one failed P/Invoke per rule on every classify.
-        _available = new Lazy<bool>(AlertsInterop.IsAvailable);
     }
-
-    /// <inheritdoc />
-    public bool IsAvailable => _available.Value;
 
     /// <inheritdoc />
     public RuleScopeClass Classify(AlertConditionType conditionType, string conditionParamsJson)
@@ -68,15 +53,7 @@ public sealed class RuleScopeClassifier : IRuleScopeClassifier
 
             return scopeClass.Value;
         }
-        catch (Exception ex) when (
-            ex is RustAlertEngineException
-                or JsonException
-                or DllNotFoundException
-                or EntryPointNotFoundException
-                // A wrong-architecture cdylib (an arm64 .so on the amd64 host) throws this
-                // rather than DllNotFoundException. Without it, classification faults out of
-                // the alert-rule create/update path as a 500 instead of degrading.
-                or BadImageFormatException)
+        catch (Exception ex) when (ex is RustAlertEngineException or JsonException)
         {
             return Fallback(conditionType, ex.Message, ex);
         }

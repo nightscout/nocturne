@@ -38,7 +38,7 @@ public class AnalyticsServiceTests
         _service = new AnalyticsService(
             _mockLogger.Object,
             mockOptions.Object
-        );
+        , TimeProvider.System);
     }
 
     #region Constructor Tests
@@ -54,7 +54,7 @@ public class AnalyticsServiceTests
         var service = new AnalyticsService(
             _mockLogger.Object,
             mockOptions.Object
-        );
+        , TimeProvider.System);
 
         // Assert
         service.Should().NotBeNull();
@@ -75,7 +75,7 @@ public class AnalyticsServiceTests
         var service = new AnalyticsService(
             _mockLogger.Object,
             mockOptions.Object
-        );
+        , TimeProvider.System);
 
         // Assert
         _mockLogger.Verify(
@@ -84,7 +84,7 @@ public class AnalyticsServiceTests
                     LogLevel.Information,
                     It.IsAny<EventId>(),
                     It.Is<It.IsAnyType>(
-                        (v, t) => v.ToString()!.Contains("Analytics service initialized")
+                        (v, t) => v!.ToString()!.Contains("Analytics service initialized")
                     ),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()
@@ -117,7 +117,7 @@ public class AnalyticsServiceTests
         var service = new AnalyticsService(
             _mockLogger.Object,
             mockOptions.Object
-        );
+        , TimeProvider.System);
 
         // Act
         var result = service.IsAnalyticsEnabled();
@@ -231,7 +231,7 @@ public class AnalyticsServiceTests
         var service = new AnalyticsService(
             _mockLogger.Object,
             mockOptions.Object
-        );
+        , TimeProvider.System);
 
         // Act
         await service.TrackApiCallAsync("/api/v1/entries", "GET", 100, 200);
@@ -536,7 +536,7 @@ public class AnalyticsServiceTests
         var service = new AnalyticsService(
             _mockLogger.Object,
             mockOptions.Object
-        );
+        , TimeProvider.System);
 
         var customEvent = new AnalyticsEvent { EventType = "test", Category = "test" };
 
@@ -831,11 +831,11 @@ public class AnalyticsServiceTests
         var service1 = new AnalyticsService(
             _mockLogger.Object,
             mockOptions1.Object
-        );
+        , TimeProvider.System);
         var service2 = new AnalyticsService(
             _mockLogger.Object,
             mockOptions2.Object
-        );
+        , TimeProvider.System);
 
         // Act & Assert
         // Same service instance should have consistent session ID

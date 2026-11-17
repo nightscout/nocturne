@@ -5,10 +5,19 @@ namespace Nocturne.Infrastructure.Data.Mappers;
 
 /// <summary>
 /// Mapper for converting between Activity and StateSpan for v1 API compatibility.
-/// Activities are stored as StateSpans with categories: Exercise, Sleep, Illness, Travel.
+/// Activities are stored as StateSpans with categories: Exercise, Illness, Travel, Motion.
 /// </summary>
 public static class ActivityStateSpanMapper
 {
+    /// <summary>
+    /// The activity type xDrip posts for each detected motion class. Each record marks the start of
+    /// a state that lasts until the next, so it is stored as a <see cref="StateSpanCategory.Motion"/>
+    /// span whose state is the record's <c>class</c>.
+    /// </summary>
+    public const string MotionClassType = "motion-class";
+
+    private const string MotionClassKey = "class";
+
     /// <summary>
     /// Activity type strings that map to Exercise category
     /// </summary>
@@ -49,7 +58,8 @@ public static class ActivityStateSpanMapper
     [
         StateSpanCategory.Exercise,
         StateSpanCategory.Illness,
-        StateSpanCategory.Travel
+        StateSpanCategory.Travel,
+        StateSpanCategory.Motion
     ];
 
     /// <summary>
@@ -67,10 +77,13 @@ public static class ActivityStateSpanMapper
     }
 
     /// <summary>
-    /// The stored <c>Source</c> of every sleep session <see cref="ToSleepSession"/> projects: the half
-    /// of its (Source, OriginalId) dedup key an activity does not carry.
+    /// The <c>Source</c> of every sleep session <see cref="ToSleepSession"/> projects: the half of its
+    /// (Source, OriginalId) dedup key an activity does not carry.
     /// </summary>
-    public const string SleepSessionSource = nameof(SleepSource.Manual);
+    public const SleepSource SleepSessionSource = SleepSource.Manual;
+
+    /// <summary><see cref="SleepSessionSource"/> as a sleep session row stores it.</summary>
+    public static readonly string StoredSleepSessionSource = SleepSessionSource.ToString();
 
     /// <summary>
     /// Projects a v1 Activity with a sleep-type into a <see cref="SleepSession"/>.
@@ -79,7 +92,7 @@ public static class ActivityStateSpanMapper
     {
         ArgumentNullException.ThrowIfNull(activity);
 
-        var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+        var start = activity.Mills.ToUtcDateTime();
         var end = activity.Duration is > 0
             ? start.AddMinutes(activity.Duration.Value)
             : start.AddHours(8); // default 8-hour session when no duration provided
@@ -94,7 +107,7 @@ public static class ActivityStateSpanMapper
             EndTime = end,
             Type = isNap ? SleepSessionType.Nap : SleepSessionType.Overnight,
             DetectionMethod = SleepDetectionMethod.Manual,
-            Source = SleepSource.Manual,
+            Source = SleepSessionSource,
             // Dedup key half for UpsertSessionAsync (Source + OriginalId); mirrors
             // ToStateSpan, which sets OriginalId = activity.Id on the StateSpan path
             OriginalId = activity.Id,
@@ -156,6 +169,9 @@ public static class ActivityStateSpanMapper
         if (string.IsNullOrEmpty(activityType))
             return StateSpanCategory.Exercise;
 
+        if (string.Equals(activityType, MotionClassType, StringComparison.Ordinal))
+            return StateSpanCategory.Motion;
+
         var lowerType = activityType.ToLowerInvariant();
 
         if (IllnessTypes.Any(t => lowerType.Contains(t)))
@@ -195,8 +211,11 @@ public static class ActivityStateSpanMapper
         var stateSpan = new StateSpan
         {
             Category = category,
-            State = activity.Type ?? category.ToString().ToLowerInvariant(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
+            State = (category == StateSpanCategory.Motion && activity.AdditionalProperties is { } props
+                    ? GetMetadataString(props, MotionClassKey)
+                    : null)
+                ?? activity.Type ?? category.ToString().ToLowerInvariant(),
+            StartTimestamp = activity.Mills.ToUtcDateTime(),
             EndTimestamp = CalculateEndTimestamp(activity),
             // DataSource is the connector a resume watermark is scoped by; EnteredBy is the
             // uploader name, and stays the fallback for activities posted through the v1 API.
@@ -218,13 +237,14 @@ public static class ActivityStateSpanMapper
         if (stateSpan == null || !IsActivityStateSpan(stateSpan))
             return null;
 
+        var isMotion = stateSpan.Category == StateSpanCategory.Motion;
         var activity = new Activity
         {
             Id = stateSpan.OriginalId ?? stateSpan.Id,
             Mills = stateSpan.StartMills,
-            Type = stateSpan.State,
+            Type = isMotion ? MotionClassType : stateSpan.State,
             EnteredBy = stateSpan.Source,
-            Duration = CalculateDuration(stateSpan)
+            Duration = isMotion ? null : CalculateDuration(stateSpan)
         };
 
         // Extract metadata values
@@ -262,7 +282,7 @@ public static class ActivityStateSpanMapper
     {
         if (activity.Duration.HasValue && activity.Duration.Value > 0)
         {
-            var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+            var start = activity.Mills.ToUtcDateTime();
             return start.AddMinutes(activity.Duration.Value);
         }
 

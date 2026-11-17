@@ -9,7 +9,7 @@ const JsonSchemaPropertySchema = z.looseObject({
   title: optional(z.string()),
   description: optional(z.string()),
   default: z.unknown().optional(),
-  enum: optional(z.array(z.string())),
+  enum: optional(z.array(z.union([z.string(), z.number()]))),
   minimum: optional(z.number()),
   maximum: optional(z.number()),
   minLength: optional(z.number()),

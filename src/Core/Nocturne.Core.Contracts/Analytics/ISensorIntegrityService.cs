@@ -24,7 +24,6 @@ public interface ISensorIntegrityService
     /// <param name="bySource">When <c>true</c>, also compute a per-data-source breakdown.</param>
     /// <param name="hypoOptions">Hypo-event search options; defaults applied when <c>null</c>.</param>
     /// <param name="config">Detector configuration; defaults applied when <c>null</c>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<SensorIntegrityReport> AnalyzeAsync(
         DateTime from,
         DateTime to,

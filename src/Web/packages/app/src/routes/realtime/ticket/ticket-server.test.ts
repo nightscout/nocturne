@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// The tests set process.env per case; the getter reads it at each access.
+vi.mock("$app/env/private", () => ({
+  get INSTANCE_KEY() {
+    return process.env.INSTANCE_KEY;
+  },
+}));
+import type { RealtimeGrant } from "@nocturne/bridge/ticket";
+
 /**
  * The ticket endpoint's one job beyond minting: telling the client whether a
  * ticket-less answer is worth retrying. The client treats a denial as terminal
@@ -8,29 +16,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const probe = vi.fn<typeof fetch>();
+const signed = vi.fn<(tenantId: string, grant: RealtimeGrant) => void>();
+const TENANT_ID = "0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b";
 
-vi.mock("@nocturne/bridge/ticket", () => ({
-  REALTIME_ADMISSION_PATH: "/api/v4/me/realtime-admission",
+vi.mock("@nocturne/bridge/ticket", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@nocturne/bridge/ticket")>()),
   signHandshakeTicket: (
     _secret: string,
     host: string,
-    tenantRelay: boolean,
-    subjectId?: string
-  ) =>
-    `${tenantRelay ? "member" : "restricted"}-ticket-for-${host}${
-      subjectId ? `:${subjectId}` : ""
-    }`,
+    tenantId: string,
+    grant: RealtimeGrant
+  ) => {
+    signed(tenantId, grant);
+    return `${grant.tenantRelay ? "member" : "restricted"}-ticket-for-${host}${
+      grant.subjectId ? `:${grant.subjectId}` : ""
+    }`;
+  },
 }));
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
-vi.mock("$lib/server/api-client-factory", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$lib/server/api-client-factory")>()),
+vi.mock("#lib/server/api-client-factory.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/server/api-client-factory.js")>()),
   getApiBaseUrl: () => apiBaseUrl,
 }));
-vi.mock("$lib/server/request-host", () => ({
+vi.mock("#lib/server/request-host.js", () => ({
   getEffectiveHost: () => effectiveHost,
   getOriginalProto: () => "https",
 }));
-vi.mock("$lib/config/auth-cookies", () => ({
+vi.mock("#lib/config/auth-cookies.js", () => ({
   AUTH_COOKIE_NAMES: {
     accessToken: "access",
     refreshToken: "refresh",
@@ -65,10 +76,13 @@ beforeEach(() => {
   apiBaseUrl = "http://api.internal";
   effectiveHost = "sleepy.nocturne.run";
   probe.mockReset();
+  signed.mockReset();
 });
 
-function admits(body: unknown) {
-  return new Response(JSON.stringify(body), { status: 200 });
+function admits(body: Record<string, unknown>) {
+  return new Response(JSON.stringify({ tenantId: TENANT_ID, ...body }), {
+    status: 200,
+  });
 }
 
 function refuses(status: number) {
@@ -126,6 +140,50 @@ describe("realtime ticket endpoint", () => {
     expect(await mint()).toEqual({
       token: "restricted-ticket-for-sleepy.nocturne.run",
     });
+  });
+
+  it("signs the admission's categories and history clamp into the ticket", async () => {
+    probe.mockResolvedValue(
+      admits({ tenantRelay: true, categories: ["entries", "care"], historyClamped: false })
+    );
+
+    await mint({ access: "member-session" });
+
+    expect(signed).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ categories: ["entries", "care"], historyClamped: false })
+    );
+  });
+
+  it("signs an admission silent on the clamp as clamped", async () => {
+    probe.mockResolvedValue(admits({ tenantRelay: true, categories: ["entries"] }));
+
+    await mint({ access: "member-session" });
+
+    expect(signed).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ historyClamped: true })
+    );
+  });
+
+  it("signs the tenant the API admitted the caller to into the ticket", async () => {
+    // The bridge refuses a ticket whose tenant its slug no longer names, so a
+    // ticket minted before a slug is deleted and created again reaches no room
+    // of the new tenant.
+    probe.mockResolvedValue(admits({ tenantRelay: true }));
+
+    await mint({ access: "member-session" });
+
+    expect(signed).toHaveBeenCalledWith(TENANT_ID, expect.anything());
+  });
+
+  it("mints no ticket, and reports it as retryable, when the admission names no tenant", async () => {
+    probe.mockResolvedValue(
+      new Response(JSON.stringify({ tenantRelay: true }), { status: 200 })
+    );
+
+    expect(await mint({ access: "member-session" })).toEqual({ token: null, retry: true });
+    expect(signed).not.toHaveBeenCalled();
   });
 
   it("asks with the caller's own credential and never the instance key", async () => {

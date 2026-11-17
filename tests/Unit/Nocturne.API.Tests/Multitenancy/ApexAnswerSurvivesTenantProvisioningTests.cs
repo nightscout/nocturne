@@ -1,3 +1,5 @@
+using Nocturne.API.Services.Auth;
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +12,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -28,11 +31,17 @@ namespace Nocturne.API.Tests.Multitenancy;
 public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolutionMiddlewareTestBase
 {
     private TenantService Provisioner() => new(
-        Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>(),
+        Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(),
+        new TenantRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
+        new TenantMembershipRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
+        new SubjectRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
         Root.GetRequiredService<IMemoryCache>(),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        TimeProvider.System,
         NullLogger<TenantService>.Instance);
 
     [Fact]

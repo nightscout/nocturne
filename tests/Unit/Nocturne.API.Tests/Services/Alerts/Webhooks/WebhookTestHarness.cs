@@ -39,7 +39,7 @@ internal static class WebhookTestHarness
             .Returns(new HttpClient(handler));
 
         return new WebhookRequestSender(
-            httpClientFactory.Object, NullLogger<WebhookRequestSender>.Instance);
+            httpClientFactory.Object, NullLogger<WebhookRequestSender>.Instance, TimeProvider.System);
     }
 
     internal sealed class CapturingWebhookHandler : HttpMessageHandler

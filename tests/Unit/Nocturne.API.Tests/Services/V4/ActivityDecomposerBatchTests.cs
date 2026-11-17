@@ -1,11 +1,16 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -13,6 +18,7 @@ public class ActivityDecomposerBatchTests : IDisposable
 {
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanRepository> _stateSpanRepoMock;
+    private readonly Mock<ISleepService> _sleepServiceMock;
     private readonly ActivityDecomposer _decomposer;
 
     public ActivityDecomposerBatchTests()
@@ -26,10 +32,19 @@ public class ActivityDecomposerBatchTests : IDisposable
                 It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<StateSpan> spans, CancellationToken _) => spans);
 
+        _sleepServiceMock = new Mock<ISleepService>();
+        _sleepServiceMock
+            .Setup(x => x.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SleepSession session, CancellationToken _) =>
+            {
+                session.Id = Guid.CreateVersion7().ToString();
+                return session;
+            });
+
         _decomposer = new ActivityDecomposer(
-            _context,
+            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System),
             _stateSpanRepoMock.Object,
-            NullLogger<ActivityDecomposer>.Instance);
+            _sleepServiceMock.Object, NullLogger<ActivityDecomposer>.Instance);
     }
 
     public void Dispose()
@@ -112,6 +127,32 @@ public class ActivityDecomposerBatchTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeBatchAsync_XDripMotionClass_BecomesMotionSpansAtTimeStampWithTheClassAsState()
+    {
+        const long stillAt = 1_780_000_000_123;
+        const long walkingAt = stillAt + 600_000;
+        var activities = System.Text.Json.JsonSerializer.Deserialize<List<Activity>>($$"""
+            [
+              {"type":"motion-class","timeStamp":{{stillAt}},"created_at":"2026-05-28T20:26:40Z","class":"still"},
+              {"type":"motion-class","timeStamp":{{walkingAt}},"created_at":"2026-05-28T20:36:40Z","class":"walking"}
+            ]
+            """)!;
+        List<StateSpan>? written = null;
+        _stateSpanRepoMock
+            .Setup(x => x.CreateActivitiesAsStateSpansAsync(
+                It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<StateSpan> spans, CancellationToken _) => written = spans.ToList())
+            .ReturnsAsync((IEnumerable<StateSpan> spans, CancellationToken _) => spans);
+
+        await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill);
+
+        written.Should().NotBeNull();
+        written!.Select(s => (s.Category, s.State, s.StartTimestamp, s.EndTimestamp)).Should().Equal(
+            (StateSpanCategory.Motion, "still", DateTimeOffset.FromUnixTimeMilliseconds(stillAt).UtcDateTime, (DateTime?)null),
+            (StateSpanCategory.Motion, "walking", DateTimeOffset.FromUnixTimeMilliseconds(walkingAt).UtcDateTime, (DateTime?)null));
+    }
+
+    [Fact]
     public async Task DecomposeBatchAsync_RoutesRegularActivityToStateSpans()
     {
         // Arrange
@@ -181,6 +222,60 @@ public class ActivityDecomposerBatchTests : IDisposable
 
         // All records produced in one decompose share a single non-empty correlation id
         result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+    }
+
+    [Theory]
+    [InlineData("sleep", SleepSessionType.Overnight)]
+    [InlineData("nap", SleepSessionType.Nap)]
+    public async Task DecomposeBatchAsync_RoutesSleepToTheSleepServiceAsASession(string type, SleepSessionType expected)
+    {
+        var activity = CreateRegularActivity("sl1", type);
+        activity.Duration = 420;
+
+        var result = await _decomposer.DecomposeBatchAsync([activity], WriteOrigin.Backfill);
+
+        _sleepServiceMock.Verify(
+            x => x.UpsertSessionAsync(
+                It.Is<SleepSession>(s => s.OriginalId == "sl1" && s.Type == expected
+                    && s.Source == ActivityStateSpanMapper.SleepSessionSource),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _stateSpanRepoMock.Verify(
+            x => x.CreateActivitiesAsStateSpansAsync(
+                It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        var stored = result.CreatedRecords.Should().ContainSingle().Which.Should().BeOfType<Activity>().Subject;
+        stored.Type.Should().Be(type);
+        stored.Mills.Should().Be(activity.Mills);
+        result.Wrote.Should().Equal(true);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_SleepTheUserDeleted_IsSkippedAndTheRestOfTheBatchIsStored()
+    {
+        _sleepServiceMock
+            .Setup(x => x.UpsertSessionAsync(It.Is<SleepSession>(s => s.OriginalId == "deleted"), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException("sleep session", "original id 'deleted'"));
+        var activities = new List<Activity>
+        {
+            CreateHeartRateActivity("hr1", 72),
+            CreateRegularActivity("deleted", "sleep"),
+            CreateRegularActivity("kept", "sleep"),
+            CreateRegularActivity("ex1", "exercise"),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill);
+
+        result.IsDeletedByUser(1).Should().BeTrue();
+        result.IsDeletedByUser(2).Should().BeFalse();
+        result.SkippedDeleted.Should().Be(1);
+        result.Wrote.Should().Equal(true, false, true, false);
+        result.CreatedRecords.OfType<Activity>().Select(a => a.Type).Should().Equal("sleep", "exercise");
+        _context.HeartRates.Should().ContainSingle();
+        _stateSpanRepoMock.Verify(
+            x => x.CreateActivitiesAsStateSpansAsync(
+                It.Is<IEnumerable<StateSpan>>(spans => spans.Count() == 1), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     #region NormalizeMills
@@ -314,14 +409,14 @@ public class ActivityDecomposerBatchTests : IDisposable
     #region Resent xDrip steps
 
     [Fact]
-    public async Task DecomposeAsync_XDripStepsResentWithoutId_UpdatesTheStoredRow()
+    public async Task DecomposeBatchAsync_XDripStepsResentWithoutId_UpdatesTheStoredRow()
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
 
-        await _decomposer.DecomposeAsync(CreateXDripUpload(at, 400), WriteOrigin.Live);
-        var resent = await _decomposer.DecomposeAsync(CreateXDripUpload(at, 650), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(CreateXDripUpload(nextAt, 90), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripUpload(at, 400)], WriteOrigin.Live);
+        var resent = await _decomposer.DecomposeBatchAsync([CreateXDripUpload(at, 650)], WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripUpload(nextAt, 90)], WriteOrigin.Live);
 
         resent.CreatedRecords.Should().BeEmpty();
         resent.UpdatedRecords.Should().ContainSingle().Which.As<StepCount>().Metric.Should().Be(650);
@@ -351,7 +446,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
-        await _decomposer.DecomposeAsync(CreateXDripUpload(at, 400), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripUpload(at, 400)], WriteOrigin.Live);
 
         var result = await _decomposer.DecomposeBatchAsync(
             [CreateXDripUpload(at, 650), CreateXDripUpload(nextAt, 10), CreateXDripUpload(nextAt, 90)],
@@ -432,17 +527,18 @@ public class ActivityDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_XDripHeartRateResentWithoutId_StoresEachSampleOnce()
+    public async Task DecomposeBatchAsync_XDripHeartRateResentWithoutId_StoresEachSampleOnce()
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
 
-        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
-        var resent = await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
-        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(nextAt, 88), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(at, 70)], WriteOrigin.Live);
+        var resent = await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(at, 70)], WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(nextAt, 88)], WriteOrigin.Live);
 
         resent.CreatedRecords.Should().BeEmpty();
-        resent.UpdatedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(70);
+        resent.UpdatedRecords.Should().BeEmpty();
+        resent.UnchangedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(70);
         _context.HeartRates.OrderBy(h => h.Timestamp)
             .Select(h => new { h.Timestamp, h.Bpm, h.Type, h.DataSource, h.SyncIdentifier })
             .Should().Equal(
@@ -469,7 +565,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     {
         const long at = 1_780_000_000_123;
         const long nextAt = at + 300_000;
-        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([CreateXDripHeartRateUpload(at, 70)], WriteOrigin.Live);
 
         var result = await _decomposer.DecomposeBatchAsync(
             [CreateXDripHeartRateUpload(at, 71), CreateXDripHeartRateUpload(nextAt, 80), CreateXDripHeartRateUpload(nextAt, 88)],
@@ -510,13 +606,13 @@ public class ActivityDecomposerBatchTests : IDisposable
 
     #endregion
 
-    #region IsStepCount
+    #region Classify
 
     [Theory]
-    [InlineData("steps-total", true)]
-    [InlineData("walk", false)]
-    [InlineData(null, false)]
-    public void IsStepCount_StepsKey_TrueOnlyForStepsTotalType(string? type, bool expected)
+    [InlineData("steps-total", ActivityDestination.StepCount)]
+    [InlineData("walk", ActivityDestination.StateSpan)]
+    [InlineData(null, ActivityDestination.StateSpan)]
+    public void Classify_StepsKey_IsAStepCountOnlyForStepsTotalType(string? type, ActivityDestination expected)
     {
         var activity = new Activity
         {
@@ -524,7 +620,26 @@ public class ActivityDecomposerBatchTests : IDisposable
             AdditionalProperties = new Dictionary<string, object> { ["steps"] = 1000 },
         };
 
-        _decomposer.IsStepCount(activity).Should().Be(expected);
+        _decomposer.Classify(activity).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(new[] { "bpm" }, "exercise", ActivityDestination.HeartRate)]
+    [InlineData(new[] { "metric" }, "exercise", ActivityDestination.StepCount)]
+    [InlineData(new[] { "bpm", "metric" }, "steps-total", ActivityDestination.HeartRate)]
+    [InlineData(new[] { "bpm" }, "sleep", ActivityDestination.HeartRate)]
+    [InlineData(new[] { "metric" }, "nap", ActivityDestination.StepCount)]
+    [InlineData(new string[0], "sleep", ActivityDestination.SleepSession)]
+    [InlineData(new string[0], "exercise", ActivityDestination.StateSpan)]
+    public void Classify_SensorKeysOutrankTheType(string[] keys, string type, ActivityDestination expected)
+    {
+        var activity = new Activity
+        {
+            Type = type,
+            AdditionalProperties = keys.ToDictionary(k => k, object (_) => 60),
+        };
+
+        _decomposer.Classify(activity).Should().Be(expected);
     }
 
     #endregion
@@ -568,10 +683,10 @@ public class ActivityDecomposerBatchTests : IDisposable
     [InlineData("illness")]
     [InlineData("travel")]
     [InlineData("restaurant")] // contains "rest" but is not an exact sleep type
-    public void RequiredWriteScope_RegularActivity_ReturnsNull(string type)
+    public void RequiredWriteScope_RegularActivity_ReturnsTreatmentsReadWrite(string type)
     {
         _decomposer.RequiredWriteScope(CreateRegularActivity("r", type))
-            .Should().BeNull();
+            .Should().Be(Scope.TreatmentsReadWrite);
     }
 
     #endregion
@@ -647,6 +762,40 @@ public class ActivityDecomposerBatchTests : IDisposable
     }
 
     #endregion
+
+    /// <summary>
+    /// What each activity of a batch wrote, by batch index, as the activity service reads it to
+    /// decide what to announce: a new step count heads the batch, so a heart rate's batch index differs
+    /// from its place among the heart rates.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ReportsWhatEachActivityWroteByBatchIndex()
+    {
+        await _decomposer.DecomposeBatchAsync(
+            [CreateHeartRateActivity("a0000000000000000000000a", 70), CreateHeartRateActivity("a0000000000000000000000b", 70),
+             CreateHeartRateActivity("a0000000000000000000000d", 70)],
+            WriteOrigin.Live);
+        var tombstone = _context.HeartRates.Single(h => h.OriginalId == "a0000000000000000000000d");
+        tombstone.DeletedAt = DateTime.UtcNow;
+        _context.Entry(tombstone).Property("DeletedByUser").CurrentValue = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await _decomposer.DecomposeBatchAsync(
+        [
+            CreateStepCountActivity("a0000000000000000000000f", 300),
+            CreateHeartRateActivity("a0000000000000000000000a", 70),
+            CreateHeartRateActivity("a0000000000000000000000b", 75),
+            CreateHeartRateActivity("a0000000000000000000000c", 79),
+            CreateHeartRateActivity("a0000000000000000000000c", 80),
+            CreateHeartRateActivity("a0000000000000000000000d", 70),
+        ], WriteOrigin.Live);
+
+        result.Wrote.Should().Equal(
+            [true, false, true, false, true, false],
+            "a new or changed record wrote; an unchanged re-send, a superseded duplicate and a user tombstone did not");
+        Enumerable.Range(0, 6).Where(result.IsDeletedByUser).Should().Equal([5]);
+    }
 
     #region Helpers
 

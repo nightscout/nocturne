@@ -13,31 +13,28 @@
   import {
     partialEngine,
     setGlucoseChartContext,
-  } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
-  import { computeTrackLayout } from "$lib/components/dashboard/glucose-chart/engine/track-layout";
-  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-
-  // Calendar receives raw entries without threshold context. Defaults: legacy
-  // sparkline values for low/high (70/180), ADA-style boundaries for veryLow/veryHigh.
-  // If we ever pass per-tenant thresholds down to the calendar, replace this.
-  const THRESHOLDS = {
-    low: 70,
-    high: 180,
-    veryLow: 55,
-    veryHigh: 250,
-    glucoseYMax: 350,
-    targetLow: null,
-    targetHigh: null,
-  };
+  } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
+  import { computeTrackLayout } from "#lib/components/dashboard/glucose-chart/engine/track-layout.js";
+  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
 
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
     entries: Array<{ mills: number; mgdl: number }>;
-    /** Unix milliseconds for the start of the calendar day */
-    dayStartMills?: number;
+    /** The calendar day in Unix milliseconds: its start and its exclusive end, the next local midnight */
+    day?: { startMills: number; endMills: number };
+    /** Overrides the realtime store's tenant thresholds; the shared fallbacks apply when neither is present. */
+    thresholds?: ChartThresholdsDto | null;
   }
 
-  let { entries, dayStartMills }: Props = $props();
+  let { entries, day, thresholds: supplied }: Props = $props();
+
+  const tenantThresholds = tenantChartThresholds();
+  const thresholds = $derived(
+    supplied ? resolveChartThresholds(supplied) : tenantThresholds.current
+  );
 
   const glucoseData = $derived(
     entries
@@ -49,10 +46,7 @@
   // Snap the x-domain to the calendar day, not the first/last reading.
   // Sparse days should show gaps instead of stretching partial data.
   const xDomain = $derived.by((): [Date, Date] | undefined => {
-    const start = dayStartMills;
-    if (start !== undefined) {
-      return [new Date(start), new Date(start + 24 * 60 * 60 * 1000 - 1)];
-    }
+    if (day) return [new Date(day.startMills), new Date(day.endMills - 1)];
 
     if (entries.length === 0) return undefined;
     const ref = new Date(entries[0].mills);
@@ -72,13 +66,15 @@
     get glucoseData() {
       return glucoseData;
     },
-    thresholds: THRESHOLDS,
+    get thresholds() {
+      return thresholds;
+    },
   });
 
   const layout = $derived(
     computeTrackLayout(
       chartHeight,
-      THRESHOLDS.glucoseYMax,
+      thresholds.glucoseYMax,
       0,
       0,
       { basal: false, iob: false, cob: false },
@@ -104,7 +100,7 @@
       y={(d) => d.sgv}
       xScale={scaleTime()}
       {xDomain}
-      yDomain={[0, THRESHOLDS.glucoseYMax]}
+      yDomain={[0, thresholds.glucoseYMax]}
       padding={{ top: 1, bottom: 1, left: 1, right: 1 }}
     >
       {#snippet children({ context })}

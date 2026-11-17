@@ -11,6 +11,14 @@ const LABEL_MAP: Record<string, string> = {
   connector_reconnect_required: "A connector needs you to sign in again",
   connector_reconnect_soon: "A connector's sign-in expires soon",
   connector_open_settings: "Open connector settings",
+  release_notes: "Release notes",
+  update_available: "A Nocturne update is available",
+  instance_key_changed: "Enter some secrets again",
+  instance_key_changed_platform: "Enter the platform credentials again",
+  open_connectors: "Open connectors",
+  open_alerts: "Open alerts",
+  open_platform_settings: "Open platform settings",
+  release_installed: "Nocturne is updated",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
@@ -24,6 +32,9 @@ const LABEL_MAP: Record<string, string> = {
   device_clock_deviation_subtitle:
     "A connected account's device clock ran at a different offset from its timezone for a while. Affected timestamps are adjusted as that data syncs, so some historical entries may shift.",
   declared_zone_changed: "Timezone updated from your connected account",
+  rejected_uploads: "Some uploads could not be stored",
+  rejected_uploads_subtitle:
+    "An uploader sent a record Nocturne could not store. Most uploaders treat it as saved, so it is kept under Data Quality for you to review or export.",
   declared_zone_changed_subtitle:
     "Your connected account now reports a different timezone, so a matching entry was added to your timezone timeline. You can review or edit it in settings.",
 };

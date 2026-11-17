@@ -1,42 +1,46 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
 /// <summary>
-/// Cross-tenant caregiver overview. Enumerates the subject's active memberships from a
-/// subject-pinned factory context (same pattern as <see cref="TenantService.GetTenantsForSubjectAsync"/>),
-/// then fans out per tenant: a fresh DI scope pinned via <see cref="ITenantAccessor"/> for the
-/// canonical glucose read, and a factory context pinned via <see cref="NocturneDbContext.TenantId"/>
-/// for alert rules and active excursions. Never touches the request-scoped DbContext, so the
-/// endpoint works from the apex (tenantless) in multi-tenant deployments.
+/// Cross-tenant caregiver overview. Enumerates the subject's active memberships through the
+/// subject-pinned <see cref="ITenantMembershipRepository.ListMembershipsOfSubjectAsync"/>,
+/// then fans out per tenant: every read of a tenant runs in a fresh DI scope opened for it with
+/// <see cref="TenantJobScope.OpenFor(IServiceProvider, TenantReader, string)"/>. Never reads as the
+/// request's tenant, so the endpoint works from the apex (tenantless) in multi-tenant deployments.
 /// </summary>
 /// <seealso cref="ITenantOverviewService"/>
 public class TenantOverviewService : ITenantOverviewService
 {
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private const string AuditEndpoint = "service:tenant-overview";
+
+    private readonly ITenantMembershipRepository _members;
+    private readonly IServiceProvider _scope;
     private readonly IGlucoseStatusClassifier _classifier;
+    private readonly TimeProvider _time;
     private readonly ILogger<TenantOverviewService> _logger;
 
     public TenantOverviewService(
-        IDbContextFactory<NocturneDbContext> factory,
-        IServiceScopeFactory scopeFactory,
+        ITenantMembershipRepository members,
+        IServiceProvider scope,
         IGlucoseStatusClassifier classifier,
+        TimeProvider timeProvider,
         ILogger<TenantOverviewService> logger)
     {
-        _factory = factory;
-        _scopeFactory = scopeFactory;
+        _members = members;
+        _scope = scope;
         _classifier = classifier;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -75,20 +79,12 @@ public class TenantOverviewService : ITenantOverviewService
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         CancellationToken ct = default)
     {
-        // The read spans tenants for one person, so the context is pinned to the subject rather
-        // than to a tenant.
-        await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
-        var memberships = await context.TenantMembers.AsNoTracking()
-            .Include(tm => tm.Tenant)
-            .Include(tm => tm.MemberRoles).ThenInclude(mr => mr.TenantRole)
-            .Where(tm => tm.SubjectId == subjectId)
-            .ToListAsync(ct);
+        var memberships = await _members.ListMembershipsOfSubjectAsync(subjectId, ct);
 
         var result = new List<GlucoseReadTenant>();
-        foreach (var membership in memberships)
+        foreach (var (tenant, membership) in memberships)
         {
-            var tenant = membership.Tenant;
-            if (tenant is null || !tenant.IsActive) continue;
+            if (!tenant.IsActive) continue;
 
             var effectivePermissions = membership.EffectivePermissions().ToHashSet();
             var allowed = MemberScopeResolver.Resolve(effectivePermissions, authType, tokenScopes);
@@ -102,26 +98,25 @@ public class TenantOverviewService : ITenantOverviewService
     }
 
     private async Task<TenantOverviewItem> BuildItemAsync(
-        TenantEntity tenant,
+        TenantRecord tenant,
         bool includeAlerts,
         bool historyClamped,
         CancellationToken ct)
     {
-        // Fresh scope per tenant: CanonicalGlucoseService caches per scope. The scope never passes
-        // through MemberScopeMiddleware, so the caller's clamp on this tenant is carried in here.
-        SensorGlucose? latest;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-                .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo));
-            if (historyClamped)
-                scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
-            latest = await scope.ServiceProvider
-                .GetRequiredService<ICanonicalGlucoseService>()
-                .GetLatestAsync(ct);
-        }
+        // A scope per tenant: the caller's request never passed through MemberScopeMiddleware for
+        // this tenant, so its clamp here is the one this membership decides, and every read below
+        // goes through the scope.
+        var reader = TenantReader.Of(_scope)
+            .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
+            .ClampedToDay(historyClamped);
+        await using var scope = TenantJobScope.OpenFor(_scope, reader, AuditEndpoint);
+        var latest = await scope.ServiceProvider
+            .GetRequiredService<ICanonicalGlucoseService>()
+            .GetLatestAsync(ct);
 
-        await using var db = await _factory.CreateTenantPinnedContextAsync(tenant.Id, ct);
+        await using var db = await scope.ServiceProvider
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreateAsync(ct);
 
         int? activeAlertCount = null;
         AlertRuleSeverity? highestSeverity = null;
@@ -140,7 +135,8 @@ public class TenantOverviewService : ITenantOverviewService
                 .Min();
         }
 
-        var thresholds = await _classifier.ResolveThresholdsAsync(db, ct);
+        var thresholds = _classifier.ResolveThresholds(
+            await scope.ServiceProvider.GetRequiredService<IAlertRepository>().GetEnabledRulesAsync(ct));
 
         var reading = latest is null
             ? null
@@ -151,7 +147,7 @@ public class TenantOverviewService : ITenantOverviewService
         var lastReadingAt = historyClamped ? null : tenant.LastReadingAt;
 
         var status = _classifier.Classify(
-            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, DateTime.UtcNow);
+            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, _time.GetUtcNow().UtcDateTime);
 
         return new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,

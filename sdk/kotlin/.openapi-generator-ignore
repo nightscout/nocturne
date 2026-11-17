@@ -1,0 +1,5 @@
+# Passed to the generator via --ignore-file-override (the output dir is
+# created fresh in CI, so the file can't live there).
+# Apache Oltu (retired to the Attic) backs these; see sdk/kotlin/templates/README.md
+**/auth/OAuth.kt
+**/auth/OAuthOkHttpClient.kt

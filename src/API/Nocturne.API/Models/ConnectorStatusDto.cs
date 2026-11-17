@@ -29,6 +29,11 @@ public class ConnectorStatusDto
     public long TotalEntries { get; set; }
 
     /// <summary>
+    /// Days back from now that <see cref="TotalEntries"/> covers, or null when it counts the connector's lifetime.
+    /// </summary>
+    public int? TotalEntriesWindowDays { get; set; }
+
+    /// <summary>
     /// Timestamp of the most recent entry imported by this connector.
     /// </summary>
     public DateTime? LastEntryTime { get; set; }

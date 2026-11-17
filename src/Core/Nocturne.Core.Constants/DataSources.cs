@@ -59,6 +59,11 @@ public static class DataSources
     public const string GoogleHealthConnector = "google-health-connector";
 
     /// <summary>
+    /// Data imported from an Oura data export archive.
+    /// </summary>
+    public const string OuraConnector = "oura-connector";
+
+    /// <summary>
     /// Data fetched from Glooko API via the Glooko connector.
     /// </summary>
     public const string GlookoConnector = "glooko-connector";
@@ -188,6 +193,11 @@ public static class DataSources
     /// </summary>
     public const string SensorSessionInference = "sensor-session-inference";
 
+    /// <summary>
+    /// Device events Nocturne records when a tracker is started or completed by hand.
+    /// </summary>
+    public const string Tracker = "tracker";
+
     // ============================================================================
     // AID/Loop System Sources
     // ============================================================================
@@ -197,9 +207,6 @@ public static class DataSources
     /// </summary>
     public const string Loop = "loop";
 
-    /// <summary>
-    /// Data from OpenAPS system.
-    /// </summary>
     public const string OpenAps = "openaps";
 
     /// <summary>
@@ -207,14 +214,8 @@ public static class DataSources
     /// </summary>
     public const string AndroidAps = "aaps";
 
-    /// <summary>
-    /// Data from iAPS app.
-    /// </summary>
     public const string IAps = "iaps";
 
-    /// <summary>
-    /// Data from Trio app.
-    /// </summary>
     public const string Trio = "trio";
 
     // ============================================================================

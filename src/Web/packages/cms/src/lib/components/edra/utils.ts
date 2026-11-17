@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import strings from './strings.ts';
 
 /**

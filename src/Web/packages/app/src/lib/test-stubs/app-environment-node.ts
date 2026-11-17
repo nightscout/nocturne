@@ -1,5 +1,5 @@
 /**
- * Stub for $app/environment in node test environment.
+ * Stub for $app/env in node test environment.
  * `browser` is false so store side-effects (DOM access) are skipped.
  */
 export const browser = false;

@@ -40,6 +40,7 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/v4/me/permissions", "GET")]
     [InlineData("/api/v4/user/preferences", "GET")]
     [InlineData("/api/auth/passkey/credentials", "GET")]
+    [InlineData("/api/auth/totp/login", "POST")]
     public async Task Apex_serves_a_caller_scoped_path_as_the_sole_tenant(string path, string method)
     {
         var tenantId = SeedTenant("theconen");
@@ -55,6 +56,7 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [Theory]
     [InlineData("/api/auth/oidc/session", "GET")]
     [InlineData("/api/v4/me/permissions", "GET")]
+    [InlineData("/api/auth/totp/login", "POST")]
     public async Task Apex_caller_scoped_path_stays_tenantless_on_a_multi_tenant_install(string path, string method)
     {
         SeedTenant("alpha");

@@ -8,9 +8,11 @@
   import { onMount } from "svelte";
   import { Button } from "@nocturne/ui/ui/button";
   import { resolve } from "$app/paths";
-  import { LINKS } from "$lib/data/links";
-  import { track } from "$lib/analytics";
-  import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
+  import { LINKS } from "#lib/data/links.js";
+  import { campaignUrl, track } from "#lib/analytics.js";
+  import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+  import { issueAge } from "#lib/utils/issue-age.js";
+  import { preferredLanguage } from "@nocturne/app/stores/appearance-store.svelte";
 
   const BRAND = { background: "var(--brand)", foreground: "white" };
 
@@ -144,19 +146,6 @@
       status = "error";
     }
   });
-
-  function relativeTime(iso: string): string {
-    const mins = (Date.now() - new Date(iso).getTime()) / 60000;
-    const hours = mins / 60;
-    const days = hours / 24;
-    const weeks = days / 7;
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${Math.floor(mins)}m`;
-    if (hours < 24) return `${Math.floor(hours)}h`;
-    if (days < 7) return `${Math.floor(days)}d`;
-    if (weeks < 5) return `${Math.floor(weeks)}w`;
-    return `${Math.floor(days / 30)}mo`;
-  }
 
   // mailto: hands off to the mail client, so a new tab would just be left orphaned.
   function opensNewTab(lane: Lane): boolean {
@@ -299,7 +288,7 @@
                 <span class="sr-only">Comments:</span>
                 {issue.comments}
               </span>
-              <span>{relativeTime(issue.updatedAt)}</span>
+              <span>{issueAge(issue.updatedAt, preferredLanguage.current)}</span>
             </div>
           </a>
         {/each}
@@ -320,10 +309,10 @@
       </div>
       <div class="flex flex-col gap-2.5 md:items-end">
         <Button
-          href={LINKS.donate}
+          href={campaignUrl(LINKS.donate, "get-involved")}
           target="_blank"
           rel="external noopener noreferrer"
-          onclick={() => track("Donate Click", { destination: "foundation" })}
+          onclick={() => track("Donate Click", { destination: "foundation", placement: "get-involved" })}
           variant="brand"
           size="cta"
           brand={BRAND}

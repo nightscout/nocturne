@@ -1,7 +1,10 @@
-using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.API.Helpers;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -43,6 +46,7 @@ public class ConnectorSyncService : IConnectorSyncService
     private readonly ILogger<ConnectorSyncService> _logger;
     private readonly ISyncProgressReporter _progressReporter;
     private readonly TenantRunGuard _runGuard;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ConnectorSyncService"/>.
@@ -52,12 +56,14 @@ public class ConnectorSyncService : IConnectorSyncService
     /// <param name="logger">The logger instance.</param>
     /// <param name="progressReporter">Reporter for streaming sync progress events to clients via SignalR.</param>
     /// <param name="runGuard">Refuses a sync for a connector and tenant that is already running.</param>
+    /// <param name="timeProvider">Clock the run's <see cref="SyncResult.DurationMs"/> is measured on.</param>
     public ConnectorSyncService(
         IServiceProvider serviceProvider,
         ITenantAccessor tenantAccessor,
         ILogger<ConnectorSyncService> logger,
         ISyncProgressReporter progressReporter,
-        TenantRunGuard runGuard
+        TenantRunGuard runGuard,
+        TimeProvider timeProvider
     )
     {
         _serviceProvider = serviceProvider;
@@ -65,6 +71,7 @@ public class ConnectorSyncService : IConnectorSyncService
         _logger = logger;
         _progressReporter = progressReporter;
         _runGuard = runGuard;
+        _timeProvider = timeProvider;
     }
 
     public async Task<SyncResult> TriggerSyncAsync(
@@ -73,7 +80,7 @@ public class ConnectorSyncService : IConnectorSyncService
         CancellationToken ct
     )
     {
-        var loggedConnectorId = SanitizeForLog(connectorId);
+        var loggedConnectorId = LogText.Sanitize(connectorId);
 
         if (request.WindowError() is { } windowError)
         {
@@ -99,16 +106,13 @@ public class ConnectorSyncService : IConnectorSyncService
 
         _logger.LogInformation("Manual sync triggered for connector {ConnectorId}", loggedConnectorId);
 
+        var started = _timeProvider.GetTimestamp();
+
         try
         {
-            using var scope = _serviceProvider.CreateScope();
-
-            if (_tenantAccessor.Context is { } tenantContext)
-            {
-                var scopedTenantAccessor =
-                    scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                scopedTenantAccessor.SetTenant(tenantContext);
-            }
+            // A manual sync is attributed as connector:<id>; a scheduled one runs as job:connector:<id>.
+            await using var scope = TenantJobScope.Open(
+                _serviceProvider, _tenantAccessor.Context, $"connector:{ConnectorNames.Canonical(connectorId)}");
 
             var executors = scope.ServiceProvider.GetServices<IConnectorSyncExecutor>();
             var executor = executors.FirstOrDefault(e =>
@@ -125,11 +129,8 @@ public class ConnectorSyncService : IConnectorSyncService
                 };
             }
 
-            // Attributed as ConnectorBackgroundService attributes a scheduled sync.
-            using var systemScope = SystemAuditScope.PushForScope(
-                scope.ServiceProvider, $"connector:{executor.ConnectorId}");
-
             var result = await executor.ExecuteSyncAsync(scope.ServiceProvider, request, ct, _progressReporter);
+            result.DurationMs = ElapsedMs(started);
 
             _logger.LogInformation(
                 "Manual sync for {ConnectorId} completed: Success={Success}, Message={Message}",
@@ -159,14 +160,15 @@ public class ConnectorSyncService : IConnectorSyncService
                 "Error during manual sync for connector {ConnectorId}",
                 loggedConnectorId
             );
-            return new SyncResult { Success = false, Message = $"Sync failed: {ex.Message}" };
+            return new SyncResult
+            {
+                Success = false,
+                Message = $"Sync failed: {ex.Message}",
+                DurationMs = ElapsedMs(started),
+            };
         }
     }
 
-    /// <summary>
-    /// The connector id arrives from the <c>{id}</c> route segment; stripping CR/LF keeps it
-    /// from forging log lines.
-    /// </summary>
-    private static string SanitizeForLog(string value) =>
-        value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    private long ElapsedMs(long started) =>
+        (long)_timeProvider.GetElapsedTime(started).TotalMilliseconds;
 }

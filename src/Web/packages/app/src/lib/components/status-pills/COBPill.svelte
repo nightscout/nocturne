@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { formatCarbDisplay, formatLocale } from "$lib/utils/formatting";
+  import { formatCarbDisplay, formatLocale } from "#lib/utils/formatting.js";
   import StatusPill from "./StatusPill.svelte";
   import type {
     COBPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface COBPillProps {
     data: COBPillData | null;
@@ -29,7 +29,7 @@
         minute: "2-digit",
       });
       const amount = `${formatCarbDisplay(data.lastCarbs.carbs)}g`;
-      items.push({ label: "Last Carbs", value: `${amount} @ ${timeStr}` });
+      items.push({ label: "Last carbs", value: `${amount} @ ${timeStr}` });
 
       // Food description if available
       if (data.lastCarbs.food) {

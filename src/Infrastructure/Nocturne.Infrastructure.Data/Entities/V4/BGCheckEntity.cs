@@ -8,8 +8,18 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BGCheck
 /// </summary>
 [Table("bg_checks")]
-public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted
+public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <inheritdoc />
     [AuditIgnored]
     [Column("upstream_fingerprint")]
@@ -26,6 +36,7 @@ public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFi
     /// </summary>
     [Column("glucose_type")]
     [MaxLength(32)]
+    [FitToColumn]
     public string? GlucoseType { get; set; }
 
     /// <summary>
@@ -33,6 +44,7 @@ public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFi
     /// </summary>
     [Column("units")]
     [MaxLength(32)]
+    [FitToColumn]
     public string? Units { get; set; }
 
     /// <summary>

@@ -4,13 +4,14 @@ import type {
   GlucosePoint,
   SeriesPoint,
 } from "./chart-data-view.svelte";
-import { BasalDeliveryOrigin } from "$api-clients";
+import { BasalDeliveryOrigin, type MealPeriod } from "#lib/api/generated/nocturne-api-client.js";
+import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import {
   bg,
   bgLabel,
   formatCarbDisplay,
   formatInsulinDisplay,
-} from "$lib/utils/formatting";
+} from "#lib/utils/formatting.js";
 
 // ===== Types =====
 
@@ -41,6 +42,7 @@ export interface InspectionContext {
   nearbyCarbs?: {
     carbs?: number;
     label?: string;
+    mealPeriod?: MealPeriod;
     treatmentId?: string;
     dataSource?: string;
   };
@@ -84,6 +86,12 @@ export function createPointInspection(
   finders: SeriesFinders,
   glucoseData: () => GlucosePoint[],
   seriesData: InspectionSeriesData,
+  glucoseUnits: () => GlucoseUnits | undefined = () => undefined,
+  /**
+   * Opens the picker even at a point with only glucose to inspect, because the picker offers
+   * more than inspection there (logging an entry at that time).
+   */
+  alwaysPick: () => boolean = () => false,
 ): PointInspection {
   let timestamp = $state<Date | null>(null);
   let glucosePoint = $state<{ sgv: number; color: string } | null>(null);
@@ -98,7 +106,7 @@ export function createPointInspection(
     opts.push({
       type: "glucose",
       label: "Glucose",
-      preview: `${bg(glucosePoint.sgv)} ${bgLabel()}`,
+      preview: `${bg(glucosePoint.sgv, glucoseUnits())} ${bgLabel(glucoseUnits())}`,
     });
 
     if (context.basalRate != null) {
@@ -173,6 +181,7 @@ export function createPointInspection(
         ? {
             carbs: nearbyCarb.carbs,
             label: nearbyCarb.label,
+            mealPeriod: nearbyCarb.mealPeriod,
             treatmentId: nearbyCarb.treatmentId,
             dataSource: nearbyCarb.dataSource,
           }
@@ -185,7 +194,7 @@ export function createPointInspection(
     const hasDelivery = basal != null || basalDelivery != null;
     const hasTreatment = nearbyBol != null || nearbyCarb != null;
 
-    if (!hasDelivery && !hasTreatment) {
+    if (!hasDelivery && !hasTreatment && !alwaysPick()) {
       activeDialog = "glucose";
     } else {
       activeDialog = "picker";

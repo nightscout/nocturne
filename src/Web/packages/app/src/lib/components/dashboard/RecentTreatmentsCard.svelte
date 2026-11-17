@@ -1,17 +1,20 @@
 <script lang="ts">
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  import { Key } from "@nocturne/ui/keys";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { time } from "$lib/utils/formatting";
-  import { entryDetails, entryLabel } from "$lib/utils/entry-summary";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { time } from "#lib/utils/formatting.js";
+  import { entryDetails, entryLabel } from "#lib/utils/entry-summary.svelte.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 
   interface ComponentProps {
     entries?: EntryRecord[];
@@ -36,7 +39,7 @@
   let selectedEntry = $state<EntryRecord | null>(null);
   let correlatedRecords = $state<EntryRecord[]>([]);
   const entryEditDialog = lazyComponent(
-    () => import("$lib/components/entries/EntryEditDialog.svelte"),
+    () => import("#lib/components/entries/EntryEditDialog.svelte"),
   );
 
   function handleEntryClick(entry: EntryRecord) {
@@ -74,7 +77,7 @@
               role="button"
               tabindex="0"
               onkeydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+                if (e.key === Key.Enter || e.key === Key.Space) {
                   e.preventDefault();
                   handleEntryClick(entry);
                 }
@@ -82,7 +85,7 @@
             >
               <div class="flex items-center gap-2 @md:gap-3">
                 <Badge variant={category.badge}>
-                  {category.name}
+                  {entryCategoryName(entry.kind)}
                 </Badge>
                 <div>
                   <div class="font-medium">
@@ -104,9 +107,7 @@
           {/each}
         </ul>
       {:else}
-        <p class="text-muted-foreground text-center py-8">
-          No recent entries
-        </p>
+        <EmptyState art="clock" size="compact" title="No recent entries" />
       {/if}
     </CardContent>
   </svelte:boundary>

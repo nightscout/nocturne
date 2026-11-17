@@ -2,10 +2,8 @@ namespace Nocturne.Core.Contracts.Treatments;
 
 /// <summary>
 /// Value object encapsulating query parameters for treatment reads.
-/// Used by <see cref="ITreatmentStore"/> and <see cref="ITreatmentCache"/> to filter and paginate results.
 /// </summary>
-/// <seealso cref="ITreatmentStore"/>
-/// <seealso cref="ITreatmentCache"/>
+/// <seealso cref="ITreatmentService.QueryTreatmentsAsync"/>
 public sealed record TreatmentQuery
 {
     /// <summary>
@@ -28,4 +26,10 @@ public sealed record TreatmentQuery
     /// instead of the default descending order.
     /// </summary>
     public bool ReverseResults { get; init; } = false;
+
+    /// <summary>
+    /// The field results are ordered by; <see cref="ReverseResults"/> sets the direction. Only
+    /// <see cref="ReadSortField.SrvModified"/> differs from time order.
+    /// </summary>
+    public ReadSortField SortField { get; init; } = ReadSortField.Time;
 }

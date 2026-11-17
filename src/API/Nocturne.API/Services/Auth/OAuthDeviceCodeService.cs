@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
-using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -24,7 +22,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private const int DeviceCodeExpirationMinutes = 30;
     private const int DefaultPollingInterval = 5;
 
-    private readonly NocturneDbContext _db;
+    private readonly IOAuthTokenRepository _tokens;
     private readonly IJwtService _jwtService;
     private readonly IOAuthClientService _clientService;
     private readonly IOAuthGrantService _grantService;
@@ -33,20 +31,20 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <summary>
     /// Initialises a new <see cref="OAuthDeviceCodeService"/>.
     /// </summary>
-    /// <param name="db">Database context for reading and writing device code records.</param>
+    /// <param name="tokens">The stored device codes.</param>
     /// <param name="jwtService">Used to generate and hash the opaque device code value.</param>
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
     /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthDeviceCodeService(
-        NocturneDbContext db,
+        IOAuthTokenRepository tokens,
         IJwtService jwtService,
         IOAuthClientService clientService,
         IOAuthGrantService grantService,
         ILogger<OAuthDeviceCodeService> logger
     )
     {
-        _db = db;
+        _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
         _jwtService = jwtService;
         _clientService = clientService;
         _grantService = grantService;
@@ -71,7 +69,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             userCode = GenerateUserCode();
             var normalized = NormalizeUserCode(userCode);
 
-            var exists = await _db.OAuthDeviceCodes.AnyAsync(d => d.UserCode == normalized, ct);
+            var exists = await _tokens.UserCodeExistsAsync(normalized, ct);
 
             if (!exists)
                 break;
@@ -98,18 +96,15 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         var scopesList = scopes.ToList();
         var normalizedUserCode = NormalizeUserCode(userCode);
 
-        var entity = new OAuthDeviceCodeEntity
-        {
-            ClientId = clientId,
-            DeviceCodeHash = deviceCodeHash,
-            UserCode = normalizedUserCode,
-            Scopes = scopesList,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(DeviceCodeExpirationMinutes),
-            Interval = DefaultPollingInterval,
-        };
-
-        _db.OAuthDeviceCodes.Add(entity);
-        await _db.SaveChangesAsync(ct);
+        await _tokens.StoreDeviceCodeAsync(
+            new NewDeviceCode(
+                clientId,
+                deviceCodeHash,
+                normalizedUserCode,
+                scopesList,
+                DateTime.UtcNow.AddMinutes(DeviceCodeExpirationMinutes),
+                DefaultPollingInterval),
+            ct);
 
         _logger.LogInformation(
             "Created device code for client {ClientId} with user code {UserCode}",
@@ -140,10 +135,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             normalized
         );
 
-        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
-            d => d.UserCode == normalized,
-            ct
-        );
+        var entity = await _tokens.FindDeviceCodeByUserCodeAsync(normalized, ct);
 
         if (entity == null)
         {
@@ -151,10 +143,11 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return null;
         }
 
+        var isExpired = IsExpired(entity);
         _logger.LogInformation(
             "Found device code: id={Id}, expired={Expired}, approved={Approved}, denied={Denied}",
             entity.Id,
-            entity.IsExpired,
+            isExpired,
             entity.IsApproved,
             entity.IsDenied
         );
@@ -168,9 +161,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             UserCode = entity.UserCode,
             ClientId = entity.ClientId,
             ClientDisplayName = client?.DisplayName,
-            IsKnownClient = client?.IsKnown ?? false,
-            Scopes = entity.Scopes,
-            IsExpired = entity.IsExpired,
+            Scopes = entity.Scopes.ToList(),
+            IsExpired = isExpired,
             IsApproved = entity.IsApproved,
             IsDenied = entity.IsDenied,
         };
@@ -180,16 +172,14 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     public async Task<bool> ApproveDeviceCodeAsync(
         string userCode,
         Guid subjectId,
+        IReadOnlySet<string> approverScopes,
         bool limitTo24Hours = false,
         CancellationToken ct = default
     )
     {
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
-            d => d.UserCode == normalized,
-            ct
-        );
+        var entity = await _tokens.FindDeviceCodeByUserCodeAsync(normalized, ct);
 
         if (entity == null)
         {
@@ -200,7 +190,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        if (entity.IsExpired)
+        if (IsExpired(entity))
         {
             _logger.LogWarning("Attempted to approve expired device code {UserCode}", normalized);
             return false;
@@ -234,20 +224,31 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        // Create a grant linking the user to the client with the requested scopes
+        var scopes = Scope.CapAt(entity.Scopes, approverScopes);
+        if (scopes.Count == 0)
+        {
+            _logger.LogWarning(
+                "Cannot approve device code {UserCode}: the approver holds none of the requested scopes",
+                normalized);
+            return false;
+        }
+
         var grant = await _grantService.CreateOrUpdateGrantAsync(
             client.Id,
             subjectId,
-            entity.Scopes,
+            scopes,
             limitTo24Hours: limitTo24Hours,
+            approvedByDeviceCode: true,
             ct: ct
         );
 
-        entity.ApprovedAt = DateTime.UtcNow;
-        entity.GrantId = grant.Id;
-        entity.SubjectId = subjectId;
-
-        await _db.SaveChangesAsync(ct);
+        if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct))
+        {
+            _logger.LogWarning(
+                "Cannot approve device code {UserCode}: it was deleted before the approval was stored",
+                normalized);
+            return false;
+        }
 
         _logger.LogInformation(
             "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}, created grant {GrantId} of type {GrantType}",
@@ -266,10 +267,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     {
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
-            d => d.UserCode == normalized,
-            ct
-        );
+        var entity = await _tokens.FindDeviceCodeByUserCodeAsync(normalized, ct);
 
         if (entity == null)
         {
@@ -277,7 +275,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        if (entity.IsExpired)
+        if (IsExpired(entity))
         {
             _logger.LogWarning("Attempted to deny expired device code {UserCode}", normalized);
             return false;
@@ -301,9 +299,13 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        entity.DeniedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync(ct);
+        if (!await _tokens.DenyDeviceCodeAsync(entity.Id, DateTime.UtcNow, ct))
+        {
+            _logger.LogWarning(
+                "Cannot deny device code {UserCode}: it was deleted before the denial was stored",
+                normalized);
+            return false;
+        }
 
         _logger.LogInformation(
             "Device code {UserCode} denied for client {ClientId}",
@@ -313,6 +315,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         return true;
     }
+
+    private static bool IsExpired(DeviceCodeRecord code) => DateTime.UtcNow >= code.ExpiresAt;
 
     /// <summary>
     /// Normalises a user code by stripping hyphens and spaces and converting to uppercase.

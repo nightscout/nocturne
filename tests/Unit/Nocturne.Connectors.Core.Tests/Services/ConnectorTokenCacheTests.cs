@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Xunit;
@@ -40,6 +41,34 @@ public class ConnectorTokenCacheTests
         var result = await _cache.GetAsync("dexcom", tenantId);
 
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ReturnsSession_OneSecondBeforeExpiry()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var cache = new ConnectorTokenCache(clock);
+        var tenantId = Guid.NewGuid();
+        await cache.SetAsync("dexcom", tenantId, new ConnectorSession("token", clock.GetUtcNow().UtcDateTime.AddMinutes(30)));
+
+        clock.Advance(TimeSpan.FromMinutes(30) - TimeSpan.FromSeconds(1));
+
+        (await cache.GetAsync("dexcom", tenantId)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ReturnsNull_AtExpiryAndOneSecondAfter()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var cache = new ConnectorTokenCache(clock);
+        var tenantId = Guid.NewGuid();
+        await cache.SetAsync("dexcom", tenantId, new ConnectorSession("token", clock.GetUtcNow().UtcDateTime.AddMinutes(30)));
+
+        clock.Advance(TimeSpan.FromMinutes(30));
+        (await cache.GetAsync("dexcom", tenantId)).Should().BeNull("a session expiring now is no longer valid");
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        (await cache.GetAsync("dexcom", tenantId)).Should().BeNull();
     }
 
     [Fact]

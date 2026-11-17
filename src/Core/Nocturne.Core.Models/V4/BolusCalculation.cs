@@ -17,9 +17,6 @@ namespace Nocturne.Core.Models.V4;
 [JsonSchemaFlatten]
 public class BolusCalculation : V4RecordBase
 {
-    /// <summary>
-    /// Blood glucose input value used for the calculation
-    /// </summary>
     public double? BloodGlucoseInput { get; set; }
 
     /// <summary>

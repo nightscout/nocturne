@@ -1,28 +1,35 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "#lib/forms/index.js";
   import {
     CarbIntakeFoodInputMode,
     type Food,
     type CarbIntakeFoodRequest,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
   import {
     getFoods as getAllFoods,
     createFood as createNewFood,
     updateFood as updateExistingFood,
-  } from "$api/generated/foods.generated.remote";
+  } from "#lib/api/generated/foods.generated.remote.js";
   import {
     getFavorites as getFavoriteFoods,
     addFavorite as addFavoriteFood,
     removeFavorite as removeFavoriteFood,
     getRecentFoods,
-  } from "$api/generated/foods.generated.remote";
+  } from "#lib/api/generated/foods.generated.remote.js";
   import FoodSearchCombobox from "./FoodSearchCombobox.svelte";
   import FoodNutritionalForm from "./FoodNutritionalForm.svelte";
   import TreatmentPortionsForm from "./TreatmentPortionsForm.svelte";
+  import {
+    DEFAULT_GI,
+    DEFAULT_PORTION,
+    DEFAULT_UNIT,
+    foodCategoryMap,
+    newFoodFrom,
+  } from "#lib/components/food/index.js";
 
   interface Props {
     open: boolean;
@@ -59,17 +66,24 @@
   let isCreatingNew = $state(false);
   let isLoggingWithoutSaving = $state(false);
 
-  // Editable food fields
-  let foodName = $state("");
-  let foodCategory = $state("");
-  let foodSubcategory = $state("");
-  let foodPortion = $state<number>(100);
-  let foodUnit = $state("g");
-  let foodCarbs = $state<number>(0);
-  let foodFat = $state<number>(0);
-  let foodProtein = $state<number>(0);
-  let foodEnergy = $state<number>(0);
-  let foodGi = $state<number>(2);
+  function emptyFoodDraft(name = ""): Food {
+    return {
+      type: "food",
+      name,
+      category: "",
+      subcategory: "",
+      portion: DEFAULT_PORTION,
+      unit: DEFAULT_UNIT,
+      carbs: 0,
+      fat: 0,
+      protein: 0,
+      energy: 0,
+      gi: DEFAULT_GI,
+    };
+  }
+
+  let foodDraft = $state<Food>(emptyFoodDraft());
+  const foodCarbs = $derived(foodDraft.carbs ?? 0);
 
   // Treatment request fields - both portions and carbs are editable
   let portions = $state(1);
@@ -80,9 +94,6 @@
   // Track which field was last edited
   let lastEditedField = $state<"portions" | "carbs">("portions");
 
-  // Collapsible state for food details
-  let nutritionDetailsOpen = $state(false);
-
   // Track which submit action to take
   let submitAction = $state<"create" | "update" | "saveAsNew">("create");
 
@@ -92,34 +103,25 @@
     event.preventDefault();
     await foodSave.run(async () => {
       const foodPayload: Food = {
-        _id: submitAction === "update" ? selectedFood?._id : undefined,
+        ...foodDraft,
         type: "food",
-        name: foodName.trim(),
-        category: foodCategory,
-        subcategory: foodSubcategory,
-        portion: foodPortion,
-        unit: foodUnit,
-        carbs: foodCarbs,
-        fat: foodFat,
-        protein: foodProtein,
-        energy: foodEnergy,
-        gi: foodGi,
+        name: (foodDraft.name ?? "").trim(),
       };
 
       if (submitAction === "create" || submitAction === "saveAsNew") {
-        const newFood: Food = await createNewFood(foodPayload);
+        const newFood: Food = await createNewFood(newFoodFrom(foodPayload));
         allFoods = [...allFoods, newFood];
         selectedFood = newFood;
         originalFood = { ...newFood };
-        toast.success("Food created successfully");
+        toastSaved("Food created successfully");
 
         const request = buildFoodRequest();
         request.foodId = newFood._id!;
-        onSubmit(request, newFood.name ?? foodName.trim());
+        onSubmit(request, newFood.name ?? foodPayload.name);
       } else if (submitAction === "update" && selectedFood?._id) {
         const updated: Food = await updateExistingFood({
           foodId: selectedFood._id,
-          request: foodPayload,
+          request: { ...foodPayload, _id: selectedFood._id },
         });
 
         const idx = allFoods.findIndex((f) => f._id === selectedFood?._id);
@@ -127,7 +129,7 @@
           allFoods[idx] = { ...allFoods[idx], ...updated };
         }
         originalFood = { ...selectedFood!, ...updated };
-        toast.success("Food updated successfully");
+        toastSaved("Food updated successfully");
 
         const request = buildFoodRequest();
         request.foodId = selectedFood._id;
@@ -176,35 +178,21 @@
   const hasEdits = $derived.by(() => {
     if (!originalFood) return false;
     return (
-      foodName !== (originalFood.name ?? "") ||
-      foodCategory !== (originalFood.category ?? "") ||
-      foodSubcategory !== (originalFood.subcategory ?? "") ||
-      foodPortion !== (originalFood.portion ?? 100) ||
-      foodUnit !== (originalFood.unit ?? "g") ||
-      foodCarbs !== (originalFood.carbs ?? 0) ||
-      foodFat !== (originalFood.fat ?? 0) ||
-      foodProtein !== (originalFood.protein ?? 0) ||
-      foodEnergy !== (originalFood.energy ?? 0) ||
-      foodGi !== (originalFood.gi ?? 2)
+      (foodDraft.name ?? "") !== (originalFood.name ?? "") ||
+      (foodDraft.category ?? "") !== (originalFood.category ?? "") ||
+      (foodDraft.subcategory ?? "") !== (originalFood.subcategory ?? "") ||
+      (foodDraft.portion ?? DEFAULT_PORTION) !== (originalFood.portion ?? DEFAULT_PORTION) ||
+      (foodDraft.unit ?? DEFAULT_UNIT) !== (originalFood.unit ?? DEFAULT_UNIT) ||
+      (foodDraft.carbs ?? 0) !== (originalFood.carbs ?? 0) ||
+      (foodDraft.fat ?? 0) !== (originalFood.fat ?? 0) ||
+      (foodDraft.protein ?? 0) !== (originalFood.protein ?? 0) ||
+      (foodDraft.energy ?? 0) !== (originalFood.energy ?? 0) ||
+      (foodDraft.gi ?? DEFAULT_GI) !== (originalFood.gi ?? DEFAULT_GI)
     );
   });
 
 
-  // Derived: categories from all foods
-  const categories = $derived.by(() => {
-    const catMap: Record<string, Record<string, boolean>> = {};
-    for (const food of allFoods) {
-      if (food.category) {
-        if (!catMap[food.category]) {
-          catMap[food.category] = {};
-        }
-        if (food.subcategory) {
-          catMap[food.category][food.subcategory] = true;
-        }
-      }
-    }
-    return catMap;
-  });
+  const categories = $derived(foodCategoryMap(allFoods));
 
 
   $effect(() => {
@@ -261,17 +249,7 @@
     isLoggingWithoutSaving = false;
     searchQuery = "";
 
-    // Reset food fields
-    foodName = "";
-    foodCategory = "";
-    foodSubcategory = "";
-    foodPortion = 100;
-    foodUnit = "g";
-    foodCarbs = 0;
-    foodFat = 0;
-    foodProtein = 0;
-    foodEnergy = 0;
-    foodGi = 2;
+    foodDraft = emptyFoodDraft();
 
     // Reset treatment fields
     portions = 1;
@@ -279,7 +257,6 @@
     timeOffsetMinutes = 0;
     note = "";
     lastEditedField = "portions";
-    nutritionDetailsOpen = false;
     isSubmitting = false;
     submitAction = "create";
   }
@@ -288,17 +265,7 @@
     selectedFood = food;
     originalFood = { ...food };
 
-    // Populate editable fields
-    foodName = food.name ?? "";
-    foodCategory = food.category ?? "";
-    foodSubcategory = food.subcategory ?? "";
-    foodPortion = food.portion ?? 100;
-    foodUnit = food.unit ?? "g";
-    foodCarbs = food.carbs ?? 0;
-    foodFat = food.fat ?? 0;
-    foodProtein = food.protein ?? 0;
-    foodEnergy = food.energy ?? 0;
-    foodGi = food.gi ?? 2;
+    foodDraft = { ...food };
 
     // Reset treatment fields - initialize carbs based on 1 portion
     portions = 1;
@@ -315,17 +282,7 @@
     isCreatingNew = true;
     isLoggingWithoutSaving = false;
 
-    // Use search query as initial name
-    foodName = searchQuery.trim();
-    foodCategory = "";
-    foodSubcategory = "";
-    foodPortion = 100;
-    foodUnit = "g";
-    foodCarbs = 0;
-    foodFat = 0;
-    foodProtein = 0;
-    foodEnergy = 0;
-    foodGi = 2;
+    foodDraft = emptyFoodDraft(searchQuery.trim());
 
     // Reset treatment fields
     portions = 1;
@@ -343,7 +300,7 @@
 
     // Use search query as the note (describes what was eaten)
     note = searchQuery.trim();
-    foodName = "";
+    foodDraft = emptyFoodDraft();
 
     // Reset treatment fields - user will enter carbs directly
     portions = 1;
@@ -405,7 +362,7 @@
   // Handle logging without saving - submit with no foodId, just carbs and note
   function handleLogWithoutSaving() {
     if (entryCarbs <= 0) {
-      toast.error("Please enter carbs amount");
+      toast.error("Enter the carbs amount");
       return;
     }
 
@@ -433,7 +390,7 @@
   // Derived: can submit
   const canSubmit = $derived(
     (selectedFood !== null ||
-      (isCreatingNew && foodName.trim()) ||
+      (isCreatingNew && (foodDraft.name ?? "").trim()) ||
       (isLoggingWithoutSaving && entryCarbs > 0)) &&
       !isSubmitting &&
       !submitting &&
@@ -444,7 +401,7 @@
 <Dialog.Root bind:open {onOpenChange}>
   <Dialog.Content class="max-w-4xl max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
-      <Dialog.Title>Add Food</Dialog.Title>
+      <Dialog.Title>Add food</Dialog.Title>
       <Dialog.Description>
         Search for an existing food or create a new one.
       </Dialog.Description>
@@ -477,19 +434,9 @@
       {:else if showForm}
         <!-- Nutritional fields form -->
         <FoodNutritionalForm
-          bind:foodName
-          bind:foodCategory
-          bind:foodSubcategory
-          bind:foodPortion
-          bind:foodUnit
-          bind:foodCarbs
-          bind:foodFat
-          bind:foodProtein
-          bind:foodEnergy
-          bind:foodGi
+          bind:draft={foodDraft}
           {selectedFood}
           {favorites}
-          bind:nutritionDetailsOpen
           {categories}
           {isCreatingNew}
           onToggleFavorite={() => selectedFood && toggleFavorite(selectedFood)}
@@ -531,7 +478,7 @@
           onclick={handleLogWithoutSaving}
           disabled={!canSubmit || isSubmitting || submitting}
         >
-          {isSubmitting || submitting ? "Logging..." : "Log Carbs"}
+          {isSubmitting || submitting ? "Logging..." : "Log carbs"}
         </Button>
       {:else if isCreatingNew}
         <!-- Creating new food - submit the create form -->
@@ -545,7 +492,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            Save & Add
+            Save & add
           {/if}
         </Button>
       {:else if selectedFood && hasEdits}
@@ -561,7 +508,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            Save as New
+            Save as new
           {/if}
         </Button>
         <Button
@@ -574,7 +521,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Updating...
           {:else}
-            Update & Add
+            Update & add
           {/if}
         </Button>
       {:else if selectedFood}
@@ -584,11 +531,11 @@
           onclick={handleAddFood}
           disabled={!canSubmit || isSubmitting || submitting}
         >
-          {isSubmitting || submitting ? "Adding..." : "Add Food"}
+          {isSubmitting || submitting ? "Adding..." : "Add food"}
         </Button>
       {:else}
         <!-- No selection yet -->
-        <Button type="button" disabled>Add Food</Button>
+        <Button type="button" disabled>Add food</Button>
       {/if}
     </Dialog.Footer>
   </Dialog.Content>

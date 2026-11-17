@@ -19,6 +19,7 @@ namespace Nocturne.API.Tests.Integration.Analytics;
 /// never leaks state between parallel context branches and always
 /// returns a consistent answer under concurrency.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class InsulinDeliveryParallelFetchTests : ApiIntegrationTestBase
 {
@@ -98,8 +99,8 @@ public class InsulinDeliveryParallelFetchTests : ApiIntegrationTestBase
                 because: "concurrent fetches must return the same TotalBasal");
             result.TotalInsulin.Should().Be(reference.TotalInsulin,
                 because: "concurrent fetches must return the same TotalInsulin");
-            result.BolusCount.Should().Be(reference.BolusCount,
-                because: "concurrent fetches must return the same BolusCount");
+            result.ManualBolusCount.Should().Be(reference.ManualBolusCount,
+                because: "concurrent fetches must return the same ManualBolusCount");
             result.BasalCount.Should().Be(reference.BasalCount,
                 because: "concurrent fetches must return the same BasalCount");
         }

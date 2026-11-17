@@ -35,6 +35,8 @@ public class InProcessConnectorPublisher : IConnectorPublisher
     /// <inheritdoc />
     public int SkippedDeleted => _skips.SkippedDeleted;
 
+    public int Refused => _skips.Refused;
+
     /// <summary>
     /// Initializes a new instance of <see cref="InProcessConnectorPublisher"/>.
     /// </summary>

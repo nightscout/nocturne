@@ -1,8 +1,11 @@
 using System.Text.Json;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.ChartData;
+using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -16,10 +19,6 @@ namespace Nocturne.API.Services.Analytics;
 /// the shared <see cref="ChartDataContext"/>, then assembles the final <see cref="DashboardChartData"/>
 /// DTO via <see cref="IChartDataAssembler"/>.
 /// </summary>
-/// <remarks>
-/// A fixed 8-hour buffer is prepended to <see cref="ChartDataContext.StartTime"/> so that IOB/COB
-/// calculations have enough treatment history to be accurate at the start of the requested window.
-/// </remarks>
 /// <seealso cref="IChartDataService"/>
 /// <seealso cref="IChartDataStage"/>
 /// <seealso cref="IChartDataAssembler"/>
@@ -32,9 +31,10 @@ public class ChartDataService : IChartDataService
     private readonly IChartDataAssembler _assembler;
     private readonly IBasalSeriesBuilder _basalSeriesBuilder;
     private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly IStateSpanRepository _stateSpanRepository;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IBasalRateResolver _basalRateResolver;
-    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<ChartDataService> _logger;
 
     /// <summary>
@@ -44,18 +44,20 @@ public class ChartDataService : IChartDataService
     /// <param name="assembler">The assembler that converts the completed context into the final DTO.</param>
     /// <param name="basalSeriesBuilder">Builds basal delivery series from temp basals and profile rates.</param>
     /// <param name="tempBasalRepository">Repository for fetching temp basal records.</param>
+    /// <param name="stateSpanRepository">Repository for fetching the override spans that scale the scheduled basal.</param>
     /// <param name="therapySettingsResolver">Resolves whether therapy settings (profile) data exists.</param>
     /// <param name="basalRateResolver">Resolves the active basal rate at a point in time.</param>
-    /// <param name="therapyTimelineResolver">Builds the therapy timeline that <see cref="IBasalSeriesBuilder"/> consumes.</param>
+    /// <param name="timeProvider">The clock a temp basal still running stops at.</param>
     /// <param name="logger">The logger instance.</param>
     public ChartDataService(
         IEnumerable<IChartDataStage> pipeline,
         IChartDataAssembler assembler,
         IBasalSeriesBuilder basalSeriesBuilder,
         ITempBasalRepository tempBasalRepository,
+        IStateSpanRepository stateSpanRepository,
         ITherapySettingsResolver therapySettingsResolver,
         IBasalRateResolver basalRateResolver,
-        ITherapyTimelineResolver therapyTimelineResolver,
+        TimeProvider timeProvider,
         ILogger<ChartDataService> logger
     )
     {
@@ -63,9 +65,10 @@ public class ChartDataService : IChartDataService
         _assembler = assembler;
         _basalSeriesBuilder = basalSeriesBuilder;
         _tempBasalRepository = tempBasalRepository;
+        _stateSpanRepository = stateSpanRepository;
         _therapySettingsResolver = therapySettingsResolver;
         _basalRateResolver = basalRateResolver;
-        _therapyTimelineResolver = therapyTimelineResolver;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -78,13 +81,11 @@ public class ChartDataService : IChartDataService
         CancellationToken cancellationToken = default
     )
     {
-        const long bufferMs = 8L * 60 * 60 * 1000;
         var context = new ChartDataContext
         {
             StartTime = startTime,
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
-            BufferStartTime = startTime - bufferMs,
             IncludeHealthSeries = includeHealthSeries,
         };
 
@@ -108,9 +109,34 @@ public class ChartDataService : IChartDataService
         if (hasData)
             defaultBasalRate = await _basalRateResolver.GetBasalRateAsync(endTime, ct: cancellationToken);
 
+        return await _basalSeriesBuilder.BuildAsync(
+            await GetDisplayTempBasalsAsync(startTime, endTime, cancellationToken),
+            startTime,
+            endTime,
+            defaultBasalRate,
+            await ScheduledBasal.OverridesAsync(_stateSpanRepository, startTime, endTime, cancellationToken),
+            cancellationToken
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<List<BasalDeliverySpanDto>> GetBasalDeliverySpansAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken = default
+    ) => MapBasalDeliverySpans(await GetDisplayTempBasalsAsync(startTime, endTime, cancellationToken));
+
+    #region Internal Helpers
+
+    private async Task<List<TempBasal>> GetDisplayTempBasalsAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken
+    )
+    {
         var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime,
-            to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
+            from: new ChartDataContext { StartTime = startTime, EndTime = endTime }.SeriesWindow.TempBasalReadStart.ToUtcDateTime(),
+            to: endTime.ToUtcDateTime(),
             device: null,
             source: null,
             limit: TempBasalQueryLimit,
@@ -118,24 +144,25 @@ public class ChartDataService : IChartDataService
             descending: false,
             ct: cancellationToken
         )).ToList();
-
-        var timeline = await _therapyTimelineResolver.BuildAsync(
-            startTime,
-            endTime + 1,
-            ct: cancellationToken
-        );
-
-        return await _basalSeriesBuilder.BuildAsync(
-            tempBasals,
-            startTime,
-            endTime,
-            defaultBasalRate,
-            timeline,
-            cancellationToken
-        );
+        return SelectDisplayTempBasals(tempBasals, startTime, endTime, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
     }
 
-    #region Internal Helpers
+    /// <summary>
+    /// The delivered pieces (<see cref="StatisticsService.ClipOverlappingTempBasals"/>) that overlap
+    /// the window. <paramref name="tempBasals"/> must reach back before the window, so a record
+    /// cancelled before it is cut by the record that cancelled it. A temp still running counts to
+    /// <paramref name="nowMills"/>, or to <paramref name="endTime"/> when that comes first: the
+    /// live chart asks for a window that ends ahead of now.
+    /// </summary>
+    internal static List<TempBasal> SelectDisplayTempBasals(
+        IEnumerable<TempBasal> tempBasals,
+        long startTime,
+        long endTime,
+        long nowMills
+    ) =>
+        StatisticsService.ClipOverlappingTempBasals(tempBasals, Math.Min(endTime, nowMills))
+            .Where(tb => tb.StartMills <= endTime && tb.EndMills > startTime)
+            .ToList();
 
     internal static (List<GlucosePointDto> data, double yMax) BuildGlucoseData(
         List<SensorGlucose> readings
@@ -178,7 +205,7 @@ public class ChartDataService : IChartDataService
 
     internal static List<CarbMarkerDto> BuildCarbMarkers(
         List<CarbIntake> carbIntakes,
-        string? timezone
+        TimeZoneInfo? zone
     )
     {
         var sorted = carbIntakes.Where(c => c.Carbs > 0).OrderBy(c => c.Mills).ToList();
@@ -188,7 +215,7 @@ public class ChartDataService : IChartDataService
             {
                 Time = c.Mills,
                 Carbs = c.Carbs,
-                Label = GetMealNameForTime(c.Mills, timezone),
+                MealPeriod = GetMealPeriod(c.Mills, zone),
                 TreatmentId = c.LegacyId ?? c.Id.ToString(),
                 IsOffset = false,
                 DataSource = c.DataSource ?? c.Device,
@@ -255,16 +282,17 @@ public class ChartDataService : IChartDataService
         List<TempBasal> tempBasals
     )
     {
-        return tempBasals
-            .Select(tb =>
+        return WithPieceIds(tempBasals.Where(tb => tb.Origin == TempBasalOrigin.Suspended || tb.Rate is not null))
+            .Select(piece =>
             {
+                var (tb, id) = piece;
                 var origin = BasalSeriesBuilder.MapTempBasalOrigin(tb.Origin);
                 return new BasalDeliverySpanDto
                 {
-                    Id = tb.LegacyId ?? tb.Id.ToString(),
+                    Id = id,
                     StartMills = tb.StartMills,
                     EndMills = tb.EndMills,
-                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate,
+                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate!.Value,
                     Origin = origin,
                     Source = tb.DataSource,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(origin),
@@ -274,23 +302,66 @@ public class ChartDataService : IChartDataService
             .ToList();
     }
 
+    /// <summary>
+    /// The later of the newest pump status's pump clock (its upload time when it reports none) and
+    /// the end of the newest temp basal, or the start of an open one. A pump running its scheduled
+    /// basal has no temp basal to show for it, which AAPS leaves for long stretches while its
+    /// devicestatus keeps reporting the pump every loop, so the temp basals alone date the pump's
+    /// last contact to whenever the last one ended.
+    /// </summary>
+    internal static long? LastPumpSyncMills(IEnumerable<TempBasal> tempBasals, PumpSnapshot? latestPump)
+    {
+        long? latest = null;
+        foreach (var tb in tempBasals)
+        {
+            var end = tb.EndMills ?? tb.StartMills;
+            if (latest is null || end > latest)
+                latest = end;
+        }
+
+        if (latestPump is not null)
+        {
+            var contact = UploaderTimestamp.ParseUtcDateTime(latestPump.Clock) is { } clock
+                ? clock.ToMills()
+                : latestPump.Mills;
+            if (latest is null || contact > latest)
+                latest = contact;
+        }
+
+        return latest;
+    }
+
     internal static List<ChartStateSpanDto> MapTempBasalSpans(
         List<TempBasal> tempBasals
     )
     {
-        return tempBasals
-            .Where(tb => tb.Origin == TempBasalOrigin.Manual)
-            .Select(tb => new ChartStateSpanDto
+        return WithPieceIds(tempBasals.Where(tb => tb.Origin == TempBasalOrigin.Manual))
+            .Select(piece => new ChartStateSpanDto
             {
-                Id = tb.LegacyId ?? tb.Id.ToString(),
+                Id = piece.Id,
                 Category = StateSpanCategory.PumpMode, // Rendered in dedicated tempBasalSpans list; category is informational
                 State = "TempBasal",
-                StartMills = tb.StartMills,
-                EndMills = tb.EndMills,
+                StartMills = piece.Tb.StartMills,
+                EndMills = piece.Tb.EndMills,
                 Color = ChartColor.InsulinTempBasal,
                 Metadata = null,
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Each delivered piece with its span id: the piece that starts its record gets the record's id,
+    /// and any later piece of a record that a winning stream interrupts gets that id with the piece's
+    /// start. The id depends only on the piece, not on the window it is served in, since the chart
+    /// joins responses by id.
+    /// </summary>
+    private static IEnumerable<(TempBasal Tb, string Id)> WithPieceIds(IEnumerable<TempBasal> pieces)
+    {
+        foreach (var tb in pieces)
+        {
+            var id = tb.LegacyId ?? tb.Id.ToString();
+            yield return (tb, tb.StartMills == tb.RecordStartMills ? id : $"{id}:{tb.StartMills}");
+        }
     }
 
     internal static List<SystemEventMarkerDto> MapSystemEvents(
@@ -323,20 +394,14 @@ public class ChartDataService : IChartDataService
             .Where(i => i.ExpectedEndAt.HasValue)
             .Where(i =>
             {
-                var expectedMills = new DateTimeOffset(
-                    i.ExpectedEndAt!.Value,
-                    TimeSpan.Zero
-                ).ToUnixTimeMilliseconds();
+                var expectedMills = i.ExpectedEndAt!.Value.ToMills();
                 return expectedMills >= startTime && expectedMills <= endTime;
             })
             .Select(i =>
             {
                 var def = defsList.FirstOrDefault(d => d.Id == i.DefinitionId);
                 var category = def?.Category ?? TrackerCategory.Custom;
-                var expectedMills = new DateTimeOffset(
-                    i.ExpectedEndAt!.Value,
-                    TimeSpan.Zero
-                ).ToUnixTimeMilliseconds();
+                var expectedMills = i.ExpectedEndAt!.Value.ToMills();
 
                 return new TrackerMarkerDto
                 {
@@ -391,18 +456,19 @@ public class ChartDataService : IChartDataService
         return (rate, origin);
     }
 
-    internal static string GetMealNameForTime(long mills, string? timezone)
+    internal static MealPeriod? GetMealPeriod(long mills, TimeZoneInfo? zone)
     {
-        var time = DateTimeOffset.FromUnixTimeMilliseconds(mills);
-        if (!string.IsNullOrEmpty(timezone))
-            time = TimeZoneInfo.ConvertTime(time, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
+        if (zone is null)
+            return null;
+
+        var time = TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), zone);
         return time.Hour switch
         {
-            >= 5 and < 11 => "Breakfast",
-            >= 11 and < 15 => "Lunch",
-            >= 15 and < 17 => "Snack",
-            >= 17 and < 21 => "Dinner",
-            _ => "Late Night",
+            >= 5 and < 11 => MealPeriod.Breakfast,
+            >= 11 and < 15 => MealPeriod.Lunch,
+            >= 15 and < 17 => MealPeriod.Snack,
+            >= 17 and < 21 => MealPeriod.Dinner,
+            _ => MealPeriod.LateNight,
         };
     }
 

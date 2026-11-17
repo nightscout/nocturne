@@ -1,10 +1,12 @@
+using System.Text;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
 /// <summary>
 /// Frozen, request-scoped snapshot of a tenant's therapy state for a single profile segment.
-/// Captures DIA, peak, schedules, CCP adjustment, and timezone so per-tick chart-data
+/// Captures DIA, schedules, CCP adjustment, and timezone so per-tick chart-data
 /// computations can resolve sensitivity / carb ratio / basal rate via in-memory lookup
 /// instead of awaiting four nested async calls per evaluation.
 /// </summary>
@@ -35,13 +37,12 @@ public sealed class TherapySnapshot
     public const int DefaultPeakMinutes = 75;
     public const double DefaultCarbsPerHour = 30.0;
 
-    private readonly IReadOnlyList<ScheduleEntry>? _sensitivityEntries;
-    private readonly IReadOnlyList<ScheduleEntry>? _carbRatioEntries;
-    private readonly IReadOnlyList<ScheduleEntry>? _basalEntries;
+    private readonly IReadOnlyList<TimedValue>? _sensitivityEntries;
+    private readonly IReadOnlyList<TimedValue>? _carbRatioEntries;
+    private readonly IReadOnlyList<TimedValue>? _basalEntries;
 
     public TherapySnapshot(
         double dia,
-        int peakMinutes,
         double carbsPerHour,
         TimeZoneInfo? timezone,
         double? ccpPercentage,
@@ -52,21 +53,25 @@ public sealed class TherapySnapshot
     )
     {
         Dia = dia;
-        PeakMinutes = peakMinutes;
         CarbsPerHour = carbsPerHour;
         Timezone = timezone;
         CcpPercentage = ccpPercentage;
         CcpTimeshiftMs = ccpTimeshiftMs;
-        _sensitivityEntries = sensitivityEntries?.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
-        _carbRatioEntries = carbRatioEntries?.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
-        _basalEntries = basalEntries?.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
+        _sensitivityEntries = Sorted(sensitivityEntries);
+        _carbRatioEntries = Sorted(carbRatioEntries);
+        _basalEntries = Sorted(basalEntries);
     }
+
+    private readonly record struct TimedValue(int Seconds, double Value);
+
+    private static List<TimedValue>? Sorted(IEnumerable<ScheduleEntry>? entries) =>
+        entries?
+            .Select(e => new TimedValue(ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), e.Value))
+            .OrderBy(e => e.Seconds)
+            .ToList();
 
     /// <summary>Duration of Insulin Action (hours).</summary>
     public double Dia { get; }
-
-    /// <summary>Insulin peak time (minutes).</summary>
-    public int PeakMinutes { get; }
 
     /// <summary>Carb absorption rate (g/hr). Profile-level constant; no schedule variation.</summary>
     public double CarbsPerHour { get; }
@@ -98,29 +103,61 @@ public sealed class TherapySnapshot
             ? DefaultBasalRate
             : ApplyForwardCcp(LookupAt(_basalEntries, ShiftedSecondsFromMidnight(timeMills)) ?? DefaultBasalRate);
 
-    private int ShiftedSecondsFromMidnight(long timeMills)
+    /// <summary>
+    /// The scheduled basal rate over <c>[fromMills, toMills)</c> as segments, each holding the rate
+    /// <see cref="BasalRateAt"/> reads at every instant inside it.
+    /// </summary>
+    public IEnumerable<BasalSegment> BasalSegments(long fromMills, long toMills) =>
+        _basalEntries is null
+            ? [new BasalSegment(fromMills, toMills, DefaultBasalRate, DefaultBasalRate, "")]
+            : BasalCalculator.BuildSegments(
+                new BasalWindow(fromMills, toMills),
+                [new ScheduleAssignment(
+                    fromMills,
+                    toMills,
+                    "",
+                    [.. _basalEntries.Select(e => new ScheduleEntry { TimeAsSeconds = e.Seconds, Value = e.Value })],
+                    CcpPercentage is { } pct && pct > 0 ? pct : 100,
+                    CcpTimeshiftMs,
+                    Timezone?.Id)]);
+
+    /// <summary>
+    /// Appends everything a lookup on this snapshot reads to <paramref name="sb"/>, so two snapshots
+    /// that append the same text answer every lookup alike.
+    /// </summary>
+    public void AppendFingerprint(StringBuilder sb)
     {
-        var shifted = timeMills + CcpTimeshiftMs;
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds(shifted);
-        if (Timezone is not null)
-            dto = TimeZoneInfo.ConvertTime(dto, Timezone);
-        return (int)dto.TimeOfDay.TotalSeconds;
+        sb.Append(Dia).Append(':')
+            .Append(CarbsPerHour).Append(':')
+            .Append(Timezone?.Id ?? "~").Append(':')
+            .Append(CcpPercentage?.ToString() ?? "~").Append(':')
+            .Append(CcpTimeshiftMs);
+        AppendEntries(sb, 's', _sensitivityEntries);
+        AppendEntries(sb, 'c', _carbRatioEntries);
+        AppendEntries(sb, 'b', _basalEntries);
     }
 
-    private static double? LookupAt(IReadOnlyList<ScheduleEntry> sortedEntries, int secondsFromMidnight)
+    private static void AppendEntries(StringBuilder sb, char schedule, IReadOnlyList<TimedValue>? entries)
     {
-        if (sortedEntries.Count == 0)
-            return null;
-
-        var result = sortedEntries[0].Value;
-        foreach (var entry in sortedEntries)
+        sb.Append('|').Append(schedule);
+        if (entries is null)
         {
-            if (secondsFromMidnight >= (entry.TimeAsSeconds ?? 0))
-                result = entry.Value;
-            else
-                break;
+            sb.Append('~');
+            return;
         }
-        return result;
+
+        foreach (var entry in entries)
+            sb.Append(entry.Seconds).Append('=').Append(entry.Value).Append(',');
+    }
+
+    private int ShiftedSecondsFromMidnight(long timeMills) =>
+        ScheduleEntryTime.SecondsOfDay(timeMills + CcpTimeshiftMs, Timezone);
+
+    private static double? LookupAt(IReadOnlyList<TimedValue> sortedEntries, int secondsFromMidnight)
+    {
+        return ScheduleEntryTime.TryEntryAt(sortedEntries, secondsFromMidnight, e => e.Seconds, out var entry)
+            ? entry.Value
+            : null;
     }
 
     private double ApplyInverseCcp(double value) =>
@@ -158,10 +195,14 @@ public sealed class TherapyTimeline
 
     public IReadOnlyList<TherapySegment> Segments => _segments;
 
+    /// <summary>The scheduled basal rate over the whole timeline; see <see cref="TherapySnapshot.BasalSegments"/>.</summary>
+    public IEnumerable<BasalSegment> BasalSegments() =>
+        _segments.SelectMany(s => s.Snapshot.BasalSegments(s.StartMills, s.EndMills));
+
     /// <summary>
     /// Returns the snapshot active at <paramref name="timeMills"/>.
     /// Advances the internal cursor when the caller queries forward in time.
-    /// Falls back to a linear scan if the query is not monotonic.
+    /// Falls back to a binary search over the segments if the query is not monotonic.
     /// </summary>
     public TherapySnapshot SnapshotAt(long timeMills)
     {
@@ -172,12 +213,19 @@ public sealed class TherapyTimeline
         if (_segments[_cursor].Contains(timeMills))
             return _segments[_cursor].Snapshot;
 
-        // Caller went backward — full scan, leave cursor unchanged for the common forward case.
-        for (var i = 0; i < _segments.Count; i++)
+        // Caller went backward: search, leaving the cursor for the common forward case.
+        var lo = 0;
+        var hi = _segments.Count - 1;
+        while (lo < hi)
         {
-            if (_segments[i].Contains(timeMills))
-                return _segments[i].Snapshot;
+            var mid = lo + (hi - lo + 1) / 2;
+            if (_segments[mid].StartMills <= timeMills)
+                lo = mid;
+            else
+                hi = mid - 1;
         }
+        if (_segments[lo].Contains(timeMills))
+            return _segments[lo].Snapshot;
 
         // Outside any segment — clamp to nearest. By contract callers query within
         // [first.StartMills, last.EndMills); we still return something sensible.

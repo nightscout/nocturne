@@ -240,6 +240,37 @@ describe("WebSocketClient handshake ticket handling", () => {
     expect(client.lastError).toBeNull();
   });
 
+  it("stops without retrying or notifying when the bridge refuses a share host", async () => {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient(config);
+    const onConnectError = vi.fn();
+    client.on("connect_error", onConnectError);
+
+    client.connect();
+    await lastSocket!.rejectHandshake("share_realtime_unsupported");
+    await new Promise<void>((resolve) => setTimeout(resolve, config.maxReconnectDelay * 3));
+
+    expect(client.connectionStatus).toBe("unauthorized");
+    expect(client.lastError).toBeNull();
+    expect(onConnectError).not.toHaveBeenCalled();
+    expect(lastSocket!.connectCalls).toBe(0);
+  });
+
+  it("opens no socket and asks for no ticket when realtime is disabled", async () => {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient({ ...config, disabled: true });
+
+    client.prefetchTicket();
+    client.connect();
+    client.ensureConnected();
+    await flush();
+
+    expect(lastSocket).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(client.connectionStatus).toBe("unauthorized");
+    expect(client.lastError).toBeNull();
+  });
+
   it("surfaces an error once a ticket outage outlasts the quiet retries", async () => {
     stubTicketEndpoint({ token: null, retry: true });
     const client = new WebSocketClient(config);
@@ -262,6 +293,28 @@ describe("WebSocketClient handshake ticket handling", () => {
 
     expect(client.connectionStatus).not.toBe("connected");
     expect(lastSocket!.disconnectCalls).toBeGreaterThan(0);
+  });
+});
+
+describe("WebSocketClient fresh ticket requests", () => {
+  it.each([
+    ["a fresh ticket", { token: "a-fresh-ticket" }, true, { token: "a-fresh-ticket", denied: false }],
+    ["a denial once realtime is denied", { token: null }, true, { token: null, denied: true }],
+    ["no ticket and no denial when the endpoint flags a retry", { token: null, retry: true }, true, { token: null, denied: false }],
+    ["no ticket and no denial when the endpoint fails", {}, false, { token: null, denied: false }],
+  ])("answers the bridge's request with %s", async (_case, body, ok, answered) => {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient(config);
+    client.connect();
+    const socket = lastSocket!;
+    await socket.handshake();
+
+    stubTicketEndpoint(body, ok);
+    const ack = vi.fn();
+    socket.handlers.get("realtime_ticket")!(ack);
+    await flush();
+
+    expect(ack).toHaveBeenCalledWith(answered);
   });
 });
 

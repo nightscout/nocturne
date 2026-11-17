@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import Harness from "./OverlayContinuityHarness.test.svelte";
@@ -47,14 +47,6 @@ function expectUninterrupted(watch: BackdropWatch, backdrop: Element): void {
 }
 
 describe("coach mark overlay continuity", () => {
-  // Unmounting the overlay pops its sentinel history entry, and the popstate
-  // that follows is a task of its own. Let the previous test's land before
-  // rendering, or the next provider sees a still-marked history entry and pops
-  // a second time — which in the runner's iframe walks off the test page.
-  beforeEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  });
-
   it("keeps the same backdrop across an organic sequence advance", async () => {
     render(Harness);
 
@@ -62,9 +54,9 @@ describe("coach mark overlay continuity", () => {
     const backdrop = page.getByTestId("coach-backdrop").element();
     const watch = watchBackdrop();
 
-    await page.getByRole("button", { name: "Got it" }).click();
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await expect.element(page.getByText("Second stop.")).toBeVisible();
-    await page.getByRole("button", { name: "Got it" }).click();
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await expect.element(page.getByText("Third stop.")).toBeVisible();
 
     expectUninterrupted(watch, backdrop);
@@ -78,9 +70,9 @@ describe("coach mark overlay continuity", () => {
     const backdrop = page.getByTestId("coach-backdrop").element();
     const watch = watchBackdrop();
 
-    await page.getByRole("button", { name: "Got it" }).click();
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await expect.element(page.getByText("Second stop.")).toBeVisible();
-    await page.getByRole("button", { name: "Got it" }).click();
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await expect.element(page.getByText("Third stop.")).toBeVisible();
 
     expectUninterrupted(watch, backdrop);
@@ -96,9 +88,38 @@ describe("coach mark overlay continuity", () => {
     await expect.element(page.getByText("First stop, part two.")).toBeVisible();
     const watch = watchBackdrop();
 
-    await page.getByRole("button", { name: "Got it" }).click();
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await expect.element(page.getByText("Second stop.")).toBeVisible();
 
     expectUninterrupted(watch, backdrop);
+  });
+});
+
+describe("coach mark labels", () => {
+  it("shows the label set the provider was given", async () => {
+    render(Harness, {
+      props: {
+        multiStep: true,
+        labels: {
+          dismiss: "Schliessen",
+          showTip: "Tipp zeigen",
+          back: "Zurueck",
+          next: "Weiter",
+          gotIt: "Fertig",
+          stepCounter: (current: number, total: number) => `${current}/${total}`,
+        },
+      },
+    });
+
+    await expect.element(page.getByText("First stop.")).toBeVisible();
+    await expect.element(page.getByText("1/2")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Weiter" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Schliessen" })).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Tipp zeigen" }).first())
+      .toBeInTheDocument();
+
+    await page.getByRole("button", { name: "Weiter" }).click();
+    await expect.element(page.getByRole("button", { name: "Fertig" })).toBeVisible();
   });
 });

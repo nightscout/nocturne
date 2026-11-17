@@ -3,13 +3,13 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { ApiException, type SyncResult } from "$api-clients";
-import { SyncRequestSchema } from "$lib/api/generated/schemas";
+import { ApiException, type SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+import { SyncRequestSchema } from "#lib/api/generated/schemas.js";
 
 let syncImpl: () => Promise<SyncResult>;
 let sentRequest: unknown;
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   triggerConnectorSync: (payload: { request: unknown }) => {
     sentRequest = payload.request;
     return syncImpl();
@@ -19,7 +19,7 @@ vi.mock("$api/generated/services.generated.remote", () => ({
 // The dialog uses Tooltip.Root, whose provider the app layout supplies; the wrapper stands in for it.
 import ConnectorDetailsDialog from "./connector-details-dialog-test-wrapper.svelte";
 
-const FALLBACK = "We couldn't start the sync. Please try again.";
+const FALLBACK = "We could not start the sync. Try again.";
 
 async function syncing(
   impl: () => Promise<SyncResult>,
@@ -45,7 +45,7 @@ async function syncing(
     },
   });
 
-  await page.getByRole("button", { name: "Sync Now" }).click();
+  await page.getByRole("button", { name: "Sync a date range" }).click();
 }
 
 const syncReturning = (result: SyncResult) => syncing(async () => result);
@@ -78,7 +78,7 @@ describe("ConnectorDetailsDialog", () => {
 
     await expect.element(page.getByText("Nightscout")).toBeVisible();
     expect(
-      page.getByRole("button", { name: "Sync Now" }).elements()
+      page.getByRole("button", { name: "Sync a date range" }).elements()
     ).toHaveLength(0);
   });
 
@@ -101,7 +101,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync Now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 
@@ -126,7 +126,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync Now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 
@@ -181,6 +181,24 @@ describe("ConnectorDetailsDialog", () => {
 
     await expect
       .element(page.getByText(/412 records were not added again/))
+      .toBeVisible();
+  });
+
+  // A refused record was answered but not stored; without the count the sync reads as clean.
+  it("says how many records could not be stored and where they are kept", async () => {
+    await syncReturning({
+      success: true,
+      message: "",
+      errors: [],
+      itemsSynced: { Boluses: 40 },
+      itemsRefused: 2,
+    });
+
+    await expect
+      .element(page.getByText(/2 records could not be stored/))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "Rejected uploads" }))
       .toBeVisible();
   });
 

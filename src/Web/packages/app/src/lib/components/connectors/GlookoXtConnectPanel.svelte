@@ -6,11 +6,11 @@
   import {
     requestCode as requestGlookoXtCode,
     complete as completeGlookoXtConnect,
-  } from "$lib/api/generated/glookoXtConnects.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  } from "#lib/api/generated/glookoXtConnects.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import MailCheck from "@lucide/svelte/icons/mail-check";
 

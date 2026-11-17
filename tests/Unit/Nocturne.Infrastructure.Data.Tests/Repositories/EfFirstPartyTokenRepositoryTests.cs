@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data;
@@ -24,7 +25,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantId;
-        _repository = new EfFirstPartyTokenRepository(_context);
+        _repository = new EfFirstPartyTokenRepository(_context.AsFactory());
     }
 
     public void Dispose()
@@ -70,9 +71,9 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         var count = await _repository.RevokeSessionForSubjectAsync(_subjectId, sessionA, "test");
 
         count.Should().Be(2);
-        _context.RefreshTokens.Single(t => t.Id == a1.Id).RevokedAt.Should().NotBeNull();
-        _context.RefreshTokens.Single(t => t.Id == a2.Id).RevokedAt.Should().NotBeNull();
-        _context.RefreshTokens.Single(t => t.Id == b1.Id).RevokedAt.Should().BeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == a1.Id).RevokedAt.Should().NotBeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == a2.Id).RevokedAt.Should().NotBeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == b1.Id).RevokedAt.Should().BeNull();
     }
 
     [Fact]
@@ -84,7 +85,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         var count = await _repository.RevokeSessionForSubjectAsync(_subjectId, sessionId, "test");
 
         count.Should().Be(0);
-        _context.RefreshTokens.Single(t => t.Id == theirs.Id).RevokedAt.Should().BeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == theirs.Id).RevokedAt.Should().BeNull();
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
             _subjectId, legacy.Id.ToString(), "test");
 
         count.Should().Be(1);
-        _context.RefreshTokens.Single(t => t.Id == legacy.Id).RevokedAt.Should().NotBeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == legacy.Id).RevokedAt.Should().NotBeNull();
     }
 
     [Fact]
@@ -111,10 +112,10 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         var count = await _repository.RevokeOtherSessionsForSubjectAsync(_subjectId, current, "test");
 
         count.Should().Be(2);
-        _context.RefreshTokens.Single(t => t.Id == mine1.Id).RevokedAt.Should().BeNull();
-        _context.RefreshTokens.Single(t => t.Id == mine2.Id).RevokedAt.Should().NotBeNull();
-        _context.RefreshTokens.Single(t => t.Id == legacy.Id).RevokedAt.Should().NotBeNull();
-        _context.RefreshTokens.Single(t => t.Id == theirs.Id).RevokedAt.Should().BeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == mine1.Id).RevokedAt.Should().BeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == mine2.Id).RevokedAt.Should().NotBeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == legacy.Id).RevokedAt.Should().NotBeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == theirs.Id).RevokedAt.Should().BeNull();
     }
 
     [Fact]
@@ -127,8 +128,8 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
             _subjectId, legacyCurrent.Id.ToString(), "test");
 
         count.Should().Be(1);
-        _context.RefreshTokens.Single(t => t.Id == legacyCurrent.Id).RevokedAt.Should().BeNull();
-        _context.RefreshTokens.Single(t => t.Id == other.Id).RevokedAt.Should().NotBeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == legacyCurrent.Id).RevokedAt.Should().BeNull();
+        _context.RefreshTokens.AsNoTracking().Single(t => t.Id == other.Id).RevokedAt.Should().NotBeNull();
     }
 
     [Fact]
@@ -166,7 +167,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         await _repository.CreateAsync(NewRecord(
             demoSubjectId, ipAddress: "203.0.113.44", userAgent: "Mozilla/5.0 (visitor)"));
 
-        var stored = _context.RefreshTokens.Single(t => t.SubjectId == demoSubjectId);
+        var stored = _context.RefreshTokens.AsNoTracking().Single(t => t.SubjectId == demoSubjectId);
         stored.IpAddress.Should().BeNull("a shared account must not accumulate visitor addresses");
         stored.UserAgent.Should().BeNull();
     }
@@ -182,7 +183,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         await _repository.CreateAsync(NewRecord(
             demoSubjectId, ipAddress: "198.51.100.9", userAgent: "Mozilla/5.0 (refresh)"));
 
-        _context.RefreshTokens
+        _context.RefreshTokens.AsNoTracking()
             .Where(t => t.SubjectId == demoSubjectId)
             .Should().OnlyContain(t => t.IpAddress == null && t.UserAgent == null,
                 "no path may repopulate them, including rotation");
@@ -198,7 +199,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         await _repository.CreateAsync(NewRecord(
             subjectId, ipAddress: "203.0.113.44", userAgent: "Mozilla/5.0 (real)"));
 
-        var stored = _context.RefreshTokens.Single(t => t.SubjectId == subjectId);
+        var stored = _context.RefreshTokens.AsNoTracking().Single(t => t.SubjectId == subjectId);
         stored.IpAddress.Should().Be("203.0.113.44");
         stored.UserAgent.Should().Be("Mozilla/5.0 (real)");
     }
@@ -212,7 +213,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         await _repository.CreateAsync(NewRecord(
             _otherSubjectId, ipAddress: "203.0.113.7", userAgent: "cli"));
 
-        var stored = _context.RefreshTokens.Single(t => t.SubjectId == _otherSubjectId);
+        var stored = _context.RefreshTokens.AsNoTracking().Single(t => t.SubjectId == _otherSubjectId);
         stored.IpAddress.Should().Be("203.0.113.7");
         stored.UserAgent.Should().Be("cli");
     }
@@ -232,7 +233,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
             await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
         }
 
-        _context.RefreshTokens.Count(t => t.SubjectId == demoSubjectId)
+        _context.RefreshTokens.AsNoTracking().Count(t => t.SubjectId == demoSubjectId)
             .Should().Be(DemoSessionLimits.MaxLiveSessions,
                 "an anonymous account anyone can obtain must not be able to grow the table without bound");
     }
@@ -257,7 +258,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
 
         await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
 
-        var surviving = _context.RefreshTokens
+        var surviving = _context.RefreshTokens.AsNoTracking()
             .Where(t => t.SubjectId == demoSubjectId && t.TokenHash.StartsWith("seed-"))
             .Select(t => t.TokenHash)
             .ToList();
@@ -306,7 +307,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
 
         await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
 
-        var surviving = _context.RefreshTokens
+        var surviving = _context.RefreshTokens.AsNoTracking()
             .Where(t => t.SubjectId == demoSubjectId)
             .Select(t => t.TokenHash)
             .ToList();
@@ -327,7 +328,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
             await _repository.CreateAsync(NewRecord(subjectId, ipAddress: null, userAgent: null));
         }
 
-        _context.RefreshTokens.Count(t => t.SubjectId == subjectId)
+        _context.RefreshTokens.AsNoTracking().Count(t => t.SubjectId == subjectId)
             .Should().Be(DemoSessionLimits.MaxLiveSessions + 5);
     }
 
@@ -341,8 +342,8 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
 
         await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
 
-        _context.RefreshTokens.Count(t => t.SubjectId == demoSubjectId).Should().Be(2);
-        _context.RefreshTokens.Any(t => t.Id == live.Id).Should().BeTrue(
+        _context.RefreshTokens.AsNoTracking().Count(t => t.SubjectId == demoSubjectId).Should().Be(2);
+        _context.RefreshTokens.AsNoTracking().Any(t => t.Id == live.Id).Should().BeTrue(
             "the oldest live session is only displaced once nothing dead is left to clear");
     }
 

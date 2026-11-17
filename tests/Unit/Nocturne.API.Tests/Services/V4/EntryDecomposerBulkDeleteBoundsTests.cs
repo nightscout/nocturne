@@ -39,11 +39,10 @@ public class EntryDecomposerBulkDeleteBoundsTests : IDisposable
 
     private EntryDecomposer CreateDecomposer()
     {
-        var factory = new TestTenantDbContextFactory(_context);
+        var factory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         return new EntryDecomposer(
-            _context,
-            new SensorGlucoseRepository(factory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance),
+            new SensorGlucoseRepository(factory, Mock.Of<IDuplicateLinker>(), audit, NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),
             Mock.Of<IGlucoseProcessingResolver>(),

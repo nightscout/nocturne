@@ -8,8 +8,8 @@
  * all, and is the only hardcoded set in the app.
  */
 
-import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
-import type { GlucoseThresholds } from "$lib/utils/chart-colors";
+import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { GlucoseThresholds } from "#lib/utils/chart-colors.js";
 
 export type { GlucoseThresholds };
 

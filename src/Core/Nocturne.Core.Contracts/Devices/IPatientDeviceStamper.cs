@@ -3,7 +3,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Core.Contracts.Devices;
 
 /// <summary>
-/// Stamps <see cref="IDeviceAttributed.PatientDeviceId"/> on ingested records by matching each
+/// Stamps <see cref="IPatientDeviceLinked.PatientDeviceId"/> on ingested records by matching each
 /// record's timestamp against the usage windows of the patient's registered devices.
 /// </summary>
 /// <seealso cref="IDeviceAttributed"/>
@@ -18,7 +18,6 @@ public interface IPatientDeviceStamper
     /// <param name="records">Records to stamp; already-stamped records are skipped.</param>
     /// <param name="categories">Device categories eligible to receive the records.</param>
     /// <param name="batchSource">Data source of the batch, used when a record carries no DataSource.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task StampAsync(
         IReadOnlyList<IDeviceAttributed> records,
         IReadOnlyList<DeviceCategory> categories,

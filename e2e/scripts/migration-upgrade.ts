@@ -10,9 +10,8 @@
 // E2E_SKIP_BUILD=1 reuses an existing nocturne-api:e2e instead of building it.
 
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { capture, compose, E2E_DIR, ensureImages, run } from "./lib.ts";
+import { capture, clearCrashDumps, compose, E2E_DIR, ensureImages, reportFailure, run } from "./lib.ts";
 
 const PROJECT = "nocturne-e2e-upgrade";
 const PREVIOUS = process.env.E2E_PREVIOUS_API_IMAGE ?? "ghcr.io/nightscout/nocturne/nocturne-api:latest";
@@ -31,10 +30,16 @@ interface Seeded {
 
 interface Snapshot {
   entries: number[];
+  /**
+   * Each distinct `eventType@created_at` served. Distinct, because a release before #2308 served a
+   * treatment's notes as a second document of the same event type and time, which a later one
+   * serves on the treatment itself: the same treatments read back, one document each.
+   */
   treatments: string[];
   alertRules: string[];
   share: { enabled: boolean; fullHistory: boolean; scopes: string[] } | null;
   connectorUrl: unknown;
+  connectorActive: boolean;
   labResults: number | null;
 }
 
@@ -84,14 +89,15 @@ async function snapshot(slug: string, auth: { token?: string; secret?: string })
   const treatments = await call<Array<{ eventType: string; created_at: string }>>("GET", "/api/v1/treatments.json?count=5000", h);
   const rules = await call<Array<{ name: string }>>("GET", "/api/v4/alert-rules", h);
   const share = await optional(() => call<NonNullable<Snapshot["share"]>>("GET", "/api/v4/share", h));
-  const connector = await call<{ configuration: { url?: unknown } }>("GET", "/api/v4/connectors/config/nightscout", h);
+  const connector = await call<{ configuration: { url?: unknown }; isActive: boolean }>("GET", "/api/v4/connectors/config/nightscout", h);
   const labs = await optional(() => call<unknown[]>("GET", "/api/v4/lab-results/hba1c", h));
   return {
     entries: entries.map((e) => e.date).sort((a, b) => a - b),
-    treatments: treatments.map((t) => `${t.eventType}@${Date.parse(t.created_at)}`).sort(),
+    treatments: [...new Set(treatments.map((t) => `${t.eventType}@${Date.parse(t.created_at)}`))].sort(),
     alertRules: rules.map((r) => r.name).sort(),
     share: share && { enabled: share.enabled, fullHistory: share.fullHistory, scopes: [...share.scopes].sort() },
     connectorUrl: connector.configuration.url,
+    connectorActive: connector.isActive,
     labResults: labs && labs.length,
   };
 }
@@ -118,7 +124,10 @@ async function seedTenant(i: number): Promise<Omit<Seeded, "expected">> {
   if (await optional(() => call("POST", "/api/v4/share/rotate", h)) && i % 2 === 0) {
     await call("PUT", "/api/v4/share/full-history", { ...h, body: { fullHistory: true } });
   }
-  await call("PUT", "/api/v4/connectors/config/nightscout", { ...h, body: { url: "http://mocks:8080/nightscout", isActive: false } });
+  // An enabled connector would sync from the mock, whose records move with the clock, and the
+  // tenant would gain them between the snapshots.
+  const connector = await call<{ isActive: boolean }>("PUT", "/api/v4/connectors/config/nightscout", { ...h, body: { url: "http://mocks:8080/nightscout", enabled: false } });
+  if (connector.isActive !== false) throw new Error(`${slug}: the Nightscout connector was not saved disabled`);
   await call("PUT", "/api/v4/connectors/config/nightscout/secrets", { ...h, body: { apiSecret: "e2e-fake-nightscout-secret" } });
   const grant = await call<{ token: string }>("POST", "/api/auth/direct-grants", { ...h, body: { label: "upgrade", scopes: ["*"] } });
   return { slug, accessToken: seeded.accessToken, apiToken: grant.token };
@@ -131,10 +140,19 @@ function assertSame(actual: Snapshot, expected: Snapshot, what: string) {
   assertEqual(known, before, what);
 }
 
-function assertEqual(actual: unknown, expected: unknown, what: string) {
-  const a = JSON.stringify(actual);
-  const e = JSON.stringify(expected);
-  if (a !== e) throw new Error(`${what} changed across the upgrade:\n  before ${e.slice(0, 600)}\n  after  ${a.slice(0, 600)}`);
+function assertEqual(actual: Record<string, unknown>, expected: Record<string, unknown>, what: string) {
+  if (JSON.stringify(actual) === JSON.stringify(expected)) return;
+  const changed = Object.keys(expected)
+    .filter((key) => JSON.stringify(actual[key]) !== JSON.stringify(expected[key]))
+    .map((key) => {
+      const [before, after] = [expected[key], actual[key]];
+      if (!Array.isArray(before) || !Array.isArray(after)) return `  ${key}: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`;
+      const [b, f] = [before.map((v) => JSON.stringify(v)), after.map((v) => JSON.stringify(v))];
+      const lost = b.filter((v) => !f.includes(v)).slice(0, 20).join(", ") || "none";
+      const gained = f.filter((v) => !b.includes(v)).slice(0, 20).join(", ") || "none";
+      return `  ${key} (${b.length} -> ${f.length}): lost ${lost}; gained ${gained}`;
+    });
+  throw new Error(`${what} changed across the upgrade:\n${changed.join("\n")}`);
 }
 
 async function main() {
@@ -147,6 +165,7 @@ async function main() {
   }
 
   await compose(PROJECT, ["down", "--volumes", "--remove-orphans", "--timeout", "5"], env);
+  clearCrashDumps();
   try {
     // 1. The previous release on a fresh database. It predates NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS,
     // so it runs as Development, the only way it exposes the seed endpoints.
@@ -186,8 +205,7 @@ async function main() {
     }
     console.log(`[upgrade] all ${TENANTS} tenants read back unchanged; total ${Math.round((Date.now() - started) / 1000)}s`);
   } catch (err) {
-    const logs = capture("docker", ["compose", "-p", PROJECT, "-f", join(E2E_DIR, "docker-compose.yml"), "logs", "--no-color", "--timestamps"]);
-    writeFileSync(join(E2E_DIR, "docker-compose-logs.txt"), logs);
+    reportFailure(PROJECT, { printLogs: false });
     throw err;
   } finally {
     if (process.env.E2E_KEEP_STACK !== "1") await compose(PROJECT, ["down", "--volumes", "--remove-orphans", "--timeout", "5"], env);

@@ -7,9 +7,10 @@ namespace Nocturne.Core.Models.Alerts;
 /// and the shape that destination must hold. Applied when a rule is saved.
 /// </summary>
 /// <remarks>
-/// The delivery path never inspects a destination: the bot service hands it to the platform
-/// adapter for the channel's type. A destination in the wrong shape therefore produces a
-/// channel that is accepted, stored, and silently never delivers.
+/// Apart from an <c>in_app</c> channel's member check, the delivery path never inspects a
+/// destination: the bot service hands it to the platform adapter for the channel's type. A
+/// destination in the wrong shape therefore produces a channel that is accepted, stored, and
+/// silently never delivers.
 /// </remarks>
 public static partial class ChannelDestinations
 {
@@ -21,8 +22,7 @@ public static partial class ChannelDestinations
     /// </summary>
     private static readonly Dictionary<ChannelType, ChannelDestinationMode> Modes = new()
     {
-        [ChannelType.WebPush] = ChannelDestinationMode.AccountRouted,
-        [ChannelType.InApp] = ChannelDestinationMode.AccountRouted,
+        [ChannelType.InApp] = ChannelDestinationMode.Member,
         [ChannelType.Webhook] = ChannelDestinationMode.UserSupplied,
         [ChannelType.DiscordDm] = ChannelDestinationMode.LinkedIdentity,
         [ChannelType.DiscordChannel] = ChannelDestinationMode.UserSupplied,
@@ -53,14 +53,17 @@ public static partial class ChannelDestinations
     };
 
     /// <summary>
-    /// Channel types that name a platform without naming a target, and the types that replace
-    /// them. No provider claims them, so a dispatch falls through to the unsupported-type branch
-    /// and is dropped.
+    /// Channel types with no delivery path, and the types that replace them. No provider claims
+    /// them, so a dispatch falls through to the unsupported-type branch and is recorded failed.
+    /// <see cref="ChannelType.Telegram"/> and <see cref="ChannelType.WhatsApp"/> name a platform
+    /// without naming a target; <see cref="ChannelType.WebPush"/> has no receiver, since there is
+    /// no push subscription or service worker for it to reach.
     /// </summary>
     private static readonly Dictionary<ChannelType, ChannelType[]> Superseded = new()
     {
         [ChannelType.Telegram] = [ChannelType.TelegramDm, ChannelType.TelegramGroup],
         [ChannelType.WhatsApp] = [ChannelType.WhatsAppDm],
+        [ChannelType.WebPush] = [ChannelType.InApp],
     };
 
     private static readonly Dictionary<ChannelType, DestinationShape> Shapes = new()
@@ -86,6 +89,10 @@ public static partial class ChannelDestinations
     /// <summary>Whether the user supplies this channel type's destination and it cannot deliver without one.</summary>
     public static bool RequiresDestination(ChannelType channelType) =>
         ModeOf(channelType) == ChannelDestinationMode.UserSupplied;
+
+    /// <summary>Whether this channel type's destination is a member's subject id.</summary>
+    public static bool RoutesToMember(ChannelType channelType) =>
+        ModeOf(channelType) == ChannelDestinationMode.Member;
 
     /// <summary>Whether this channel type's destination is filled in from the caller's linked chat identity.</summary>
     public static bool ResolvesFromLinkedIdentity(ChannelType channelType) =>

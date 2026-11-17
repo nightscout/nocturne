@@ -8,15 +8,16 @@ namespace Nocturne.Connectors.Core.Services;
 ///     Thread-safe, tenant-keyed cache for connector authentication sessions.
 ///     Registered as singleton. Per-tenant locking prevents duplicate auth requests.
 /// </summary>
-public class ConnectorTokenCache : IConnectorTokenCache
+public class ConnectorTokenCache(TimeProvider? timeProvider = null) : IConnectorTokenCache
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), ConnectorSession> _sessions = new();
     private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), string> _signInFailures = new();
 
     public Task<ConnectorSession?> GetAsync(string connectorName, Guid tenantId)
     {
-        if (_sessions.TryGetValue(Key(connectorName, tenantId), out var session) && session.ExpiresAt > DateTime.UtcNow)
+        if (_sessions.TryGetValue(Key(connectorName, tenantId), out var session) && session.ExpiresAt > _timeProvider.GetUtcNow().UtcDateTime)
             return Task.FromResult<ConnectorSession?>(session);
         return Task.FromResult<ConnectorSession?>(null);
     }

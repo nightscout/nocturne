@@ -8,6 +8,12 @@ namespace Nocturne.Core.Models.Configuration;
 /// addressable and separately persisted.
 /// In demo mode, these are generated from demo configuration; in production, they come from the database.
 /// Note: Therapy settings are managed via Nightscout Profiles (/api/v1/profile).
+/// <para>
+/// A section is null when it was withheld or not sent: a read omits each section whose
+/// <see cref="UISettingsSection.ReadScope"/> the caller does not hold, and a save leaves a null
+/// section's stored value untouched, so the read-modify-write a section save performs cannot
+/// overwrite a section its caller never saw.
+/// </para>
 /// </summary>
 public class UISettingsConfiguration
 {
@@ -15,7 +21,7 @@ public class UISettingsConfiguration
     /// Device settings including connected devices and device preferences
     /// </summary>
     [JsonPropertyName("devices")]
-    public DeviceSettings Devices { get; set; } = new();
+    public DeviceSettings? Devices { get; set; } = new();
 
     /// <summary>
     /// Algorithm settings including prediction, autosens, and loop configuration
@@ -33,13 +39,13 @@ public class UISettingsConfiguration
     /// Notification settings including alarms, quiet hours, and notification channels
     /// </summary>
     [JsonPropertyName("notifications")]
-    public NotificationSettings Notifications { get; set; } = new();
+    public NotificationSettings? Notifications { get; set; } = new();
 
     /// <summary>
     /// Services settings including connected services/connectors and sync preferences
     /// </summary>
     [JsonPropertyName("services")]
-    public ServicesSettings Services { get; set; } = new();
+    public ServicesSettings? Services { get; set; } = new();
 
     /// <summary>
     /// Data quality settings including sleep schedule and compression low detection
@@ -48,11 +54,6 @@ public class UISettingsConfiguration
     public DataQualitySettings DataQuality { get; set; } = new();
 }
 
-#region Device Settings
-
-/// <summary>
-/// Settings for connected devices
-/// </summary>
 public class DeviceSettings
 {
     [JsonPropertyName("connectedDevices")]
@@ -72,7 +73,7 @@ public class DeviceSettings
 }
 
 /// <summary>
-/// Represents a device connected to the user's diabetes management system.
+/// Device connected to the user's diabetes management system.
 /// </summary>
 public class ConnectedDevice
 {
@@ -110,10 +111,6 @@ public class CgmConfiguration
     public int SensorWarmupHours { get; set; } = 2;
 }
 
-#endregion
-
-#region Algorithm Settings
-
 /// <summary>
 /// Algorithm settings for predictions, autosens, and closed loop
 /// </summary>
@@ -135,9 +132,6 @@ public class AlgorithmSettings
     public SafetyLimits SafetyLimits { get; set; } = new();
 }
 
-/// <summary>
-/// Settings for glucose prediction algorithms.
-/// </summary>
 public class PredictionSettings
 {
     [JsonPropertyName("enabled")]
@@ -165,9 +159,6 @@ public class AutosensSettings
     public double Max { get; set; } = 1.2;
 }
 
-/// <summary>
-/// Carbohydrate absorption model settings.
-/// </summary>
 public class CarbAbsorptionSettings
 {
     [JsonPropertyName("defaultMinutes")]
@@ -212,10 +203,6 @@ public class SafetyLimits
     [JsonPropertyName("maxDailyBasalMultiplier")]
     public double MaxDailyBasalMultiplier { get; set; } = 3.0;
 }
-
-#endregion
-
-#region Feature Settings
 
 /// <summary>
 /// Feature settings including display preferences and plugins
@@ -319,8 +306,8 @@ public static class WidgetCatalog
     /// </summary>
     public static IReadOnlyList<WidgetDefinition> All { get; } =
     [
-        Top(WidgetId.BgDelta, "BG Delta",
-            "Blood glucose change with connection status and last updated time",
+        Top(WidgetId.BgDelta, "Current Glucose",
+            "The live reading with its trend, change and age",
             "TrendingUp"),
         Top(WidgetId.LastUpdated, "Last Updated",
             "Time since last glucose reading with device info",
@@ -338,13 +325,13 @@ public static class WidgetCatalog
             "Stacked chart showing time in glucose ranges",
             "BarChart3"),
         Top(WidgetId.DailySummary, "Daily Summary",
-            "Today's glucose statistics overview",
+            "Last 24 hours of glucose statistics",
             "CalendarDays"),
         Top(WidgetId.Clock, "Clock",
             "Current time and date display",
             "Clock"),
         Top(WidgetId.Tdd, "Total Daily Dose",
-            "Today's insulin with basal/bolus breakdown",
+            "Last 24 hours of insulin with basal/bolus breakdown",
             "PieChart"),
         Main(WidgetId.GlucoseChart, "Glucose Chart",
             "Main glucose trend chart with treatments",
@@ -524,9 +511,6 @@ public class BatteryDisplaySettings
     [JsonPropertyName("urgentThreshold")]
     public int UrgentThreshold { get; set; } = 20;
 
-    /// <summary>
-    /// Whether to enable battery low alerts
-    /// </summary>
     [JsonPropertyName("enableAlerts")]
     public bool EnableAlerts { get; set; } = true;
 
@@ -580,10 +564,6 @@ public class TrackerPillsSettings
     public string Visibility { get; set; } = "always";
 }
 
-#endregion
-
-#region Notification Settings
-
 /// <summary>
 /// Notification settings using the modern xDrip+-style alarm profile configuration.
 /// This class now directly wraps UserAlarmConfiguration for full customization.
@@ -597,11 +577,6 @@ public class NotificationSettings
     [JsonPropertyName("alarmConfiguration")]
     public UserAlarmConfiguration AlarmConfiguration { get; set; } = new();
 }
-
-#endregion
-
-
-#region Services Settings
 
 /// <summary>
 /// Services settings including connected services/connectors
@@ -624,7 +599,7 @@ public class ServicesSettings
 }
 
 /// <summary>
-/// Represents a service currently connected to the user's Nocturne instance.
+/// Service currently connected to the user's Nocturne instance.
 /// </summary>
 public class ConnectedService
 {
@@ -657,7 +632,7 @@ public class ConnectedService
 }
 
 /// <summary>
-/// Represents a service that can be connected to Nocturne but is not yet configured.
+/// Service that can be connected to Nocturne but is not yet configured.
 /// </summary>
 public class AvailableService
 {
@@ -692,10 +667,6 @@ public class SyncSettings
     public bool BackgroundRefresh { get; set; } = true;
 }
 
-#endregion
-
-#region Data Quality Settings
-
 /// <summary>
 /// Data quality settings including sleep schedule and compression low detection
 /// </summary>
@@ -707,9 +678,6 @@ public class DataQualitySettings
     [JsonPropertyName("sleepSchedule")]
     public SleepScheduleSettings SleepSchedule { get; set; } = new();
 
-    /// <summary>
-    /// Compression low detection settings
-    /// </summary>
     [JsonPropertyName("compressionLowDetection")]
     public CompressionLowDetectionSettings CompressionLowDetection { get; set; } = new();
 }
@@ -740,9 +708,6 @@ public class SleepScheduleSettings
     public string? Timezone { get; set; }
 }
 
-/// <summary>
-/// Compression low detection settings
-/// </summary>
 public class CompressionLowDetectionSettings
 {
     /// <summary>
@@ -758,5 +723,3 @@ public class CompressionLowDetectionSettings
     [JsonPropertyName("excludeFromStatistics")]
     public bool ExcludeFromStatistics { get; set; } = true;
 }
-
-#endregion

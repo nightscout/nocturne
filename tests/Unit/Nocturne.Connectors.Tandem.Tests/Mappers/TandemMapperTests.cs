@@ -22,7 +22,7 @@ public class TandemMapperTests
                 .UInt32(8, (uint)Raw));
         var events = TandemEventDecoder.Decode(blob);
 
-        var glucose = new TandemCgmMapper(NullLogger.Instance, Time).Map(events);
+        var glucose = new TandemCgmMapper(NullLogger.Instance, Time).Map(events, TandemTestClock.Now);
 
         glucose.Should().HaveCount(1);
         glucose[0].Mgdl.Should().Be(142);
@@ -39,7 +39,7 @@ public class TandemMapperTests
         var blob = TandemEventBuilder.ToBase64(
             new TandemEventBuilder(256, Raw, seqNum: 6).UInt16(4, 0).UInt32(8, (uint)Raw));
 
-        new TandemCgmMapper(NullLogger.Instance, Time).Map(TandemEventDecoder.Decode(blob))
+        new TandemCgmMapper(NullLogger.Instance, Time).Map(TandemEventDecoder.Decode(blob), TandemTestClock.Now)
             .Should().ContainSingle().Which.Mgdl.Should().Be(39);
     }
 
@@ -51,7 +51,7 @@ public class TandemMapperTests
         var blob = TandemEventBuilder.ToBase64(
             new TandemEventBuilder(256, Raw, seqNum: 6).UInt16(2, 6).UInt16(4, 0).UInt32(8, (uint)Raw));
 
-        new TandemCgmMapper(NullLogger.Instance, Time).Map(TandemEventDecoder.Decode(blob))
+        new TandemCgmMapper(NullLogger.Instance, Time).Map(TandemEventDecoder.Decode(blob), TandemTestClock.Now)
             .Should().BeEmpty();
     }
 
@@ -73,7 +73,7 @@ public class TandemMapperTests
 
         var events = TandemEventDecoder.Decode(TandemEventBuilder.ToBase64(completed, msg1));
 
-        var result = new TandemBolusMapper(NullLogger.Instance, Time).Map(events);
+        var result = new TandemBolusMapper(NullLogger.Instance, Time).Map(events, TandemTestClock.Now);
 
         result.Boluses.Should().ContainSingle();
         var bolus = result.Boluses[0];
@@ -102,7 +102,7 @@ public class TandemMapperTests
         var windowEnd = Time.ToUtc(Raw + 600);
 
         var basals = new TandemBasalMapper(NullLogger.Instance, Time)
-            .Map(events, windowEnd, ignoreZeroUnitBasal: false).Spans;
+            .Map(events, windowEnd, ignoreZeroUnitBasal: false, TandemTestClock.Now).Spans;
 
         basals.Should().HaveCount(2);
         basals[0].Rate.Should().Be(1.0);

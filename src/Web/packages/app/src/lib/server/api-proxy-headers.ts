@@ -1,8 +1,8 @@
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 import {
   CLIENT_IP_HEADER,
   CLIENT_IP_SIGNATURE_HEADER,
-} from "$lib/server/client-address";
+} from "#lib/server/client-address.js";
 
 /** The subset of SvelteKit's Cookies the proxy reads. */
 export interface ProxyCookieReader {

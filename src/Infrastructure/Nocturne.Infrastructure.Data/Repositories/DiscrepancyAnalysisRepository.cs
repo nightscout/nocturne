@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -10,15 +11,14 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the DiscrepancyAnalysisRepository class
     /// </summary>
-    /// <param name="context">The database context</param>
-    public DiscrepancyAnalysisRepository(NocturneDbContext context)
+    public DiscrepancyAnalysisRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -68,6 +68,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = new DiscrepancyAnalysisEntity
         {
             Id = Guid.CreateVersion7(),
@@ -94,7 +95,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
             ErrorMessage = errorMessage,
         };
 
-        _context.DiscrepancyAnalyses.Add(entity);
+        db.DiscrepancyAnalyses.Add(entity);
 
         // Add detailed discrepancies
         foreach (var discrepancy in discrepancies)
@@ -111,10 +112,10 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
                 Description = discrepancy.Description,
                 RecordedAt = DateTimeOffset.UtcNow,
             };
-            _context.DiscrepancyDetails.Add(detailEntity);
+            db.DiscrepancyDetails.Add(detailEntity);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return entity.Id;
     }
 
@@ -139,7 +140,8 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.DiscrepancyAnalyses.AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.DiscrepancyAnalyses.AsQueryable();
 
         if (!string.IsNullOrEmpty(requestPath))
         {
@@ -180,7 +182,8 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .DiscrepancyAnalyses.Where(a => a.Id == id)
             .Include(a => a.Discrepancies)
             .FirstOrDefaultAsync(cancellationToken);
@@ -199,7 +202,8 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.DiscrepancyAnalyses.AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.DiscrepancyAnalyses.AsQueryable();
 
         if (fromDate.HasValue)
         {
@@ -267,7 +271,8 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.DiscrepancyAnalyses.AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.DiscrepancyAnalyses.AsQueryable();
 
         if (fromDate.HasValue)
         {
@@ -332,14 +337,15 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default
     )
     {
-        var oldAnalyses = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var oldAnalyses = await db
             .DiscrepancyAnalyses.Where(a => a.AnalysisTimestamp < cutoffDate)
             .ToListAsync(cancellationToken);
 
         if (oldAnalyses.Any())
         {
-            _context.DiscrepancyAnalyses.RemoveRange(oldAnalyses);
-            await _context.SaveChangesAsync(cancellationToken);
+            db.DiscrepancyAnalyses.RemoveRange(oldAnalyses);
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         return oldAnalyses.Count;

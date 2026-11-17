@@ -22,7 +22,7 @@ public enum BolusKind
     Manual,
 
     /// <summary>
-    /// Algorithm-delivered micro-dose (SMB) from an APS system
+    /// Delivered automatically, by an APS system (SMBs, automatic boluses) or an AID pump
     /// </summary>
     Algorithm,
 }

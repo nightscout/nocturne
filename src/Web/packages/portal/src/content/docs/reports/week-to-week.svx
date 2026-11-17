@@ -1,0 +1,43 @@
+---
+title: Week to Week
+---
+
+# Week to Week
+
+The Week to Week report answers the question "how does each day of the week
+compare?". It draws each day of the week as its own line, on one 24-hour axis.
+
+## What it shows
+
+The chart has seven lines, one for each day of the week, from Sunday to
+Saturday. The horizontal axis is the time of day. The vertical axis is your
+glucose. The key under the chart names the line for each day.
+
+Where the lines are close together, your days are alike at that time. Where
+one line is far from the others, that day of the week is different.
+
+If the period is longer than one week, each line shows the average for that day
+of the week. For example, the Monday line is the average of all the Mondays in
+the period.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The report opens on the last 7 days. To compare this week with the week before:
+
+1. Look at the chart for this week. Find the times when one day is different.
+2. Select the left arrow above the chart. The chart moves back one week.
+3. Compare the same times on the chart for last week.
+4. To move forward one week, select the right arrow.
+5. To go back to the current week, select **Reset**.
+
+You can also open a week from the [Year Overview](/docs/reports/year-overview):
+select a week number under the calendar.
+
+## Good to know
+
+- The arrows always move by 7 days. They start from the first or last day of
+  the period on the screen.
+- If a week has no readings, the chart shows **No data available for this
+  week**.

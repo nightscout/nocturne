@@ -1,21 +1,32 @@
-using System.Linq;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Storage;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Jobs;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Platform;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.Health;
+using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -24,33 +35,6 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    // Replaces the registered IDbContextFactory<NocturneDbContext> with a decorator that
-    // normalizes the carrier properties on every acquisition. Applied immediately after
-    // AddDbContextFactory so the descriptor it wraps is the registered factory.
-    private static void DecorateWithCarrierReset(IServiceCollection services)
-    {
-        var descriptor = services.LastOrDefault(
-            d => d.ServiceType == typeof(IDbContextFactory<NocturneDbContext>))
-            ?? throw new InvalidOperationException(
-                "AddDbContextFactory<NocturneDbContext> must be registered before decorating it.");
-
-        services.Remove(descriptor);
-        services.Add(new ServiceDescriptor(
-            typeof(IDbContextFactory<NocturneDbContext>),
-            sp => new CarrierResettingDbContextFactory(ResolveInner(descriptor, sp)),
-            descriptor.Lifetime));
-    }
-
-    private static IDbContextFactory<NocturneDbContext> ResolveInner(
-        ServiceDescriptor descriptor, IServiceProvider sp)
-    {
-        var inner =
-            descriptor.ImplementationInstance
-            ?? descriptor.ImplementationFactory?.Invoke(sp)
-            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!);
-        return (IDbContextFactory<NocturneDbContext>)inner;
-    }
-
     /// <summary>
     /// Add PostgreSQL data services with explicit connection string
     /// </summary>
@@ -96,15 +80,17 @@ public static class ServiceCollectionExtensions
         }
 
         // Register interceptors as singletons so caches are shared across all DbContext instances.
+        services.TryAddSingleton(new HistoryCommitMargin(TimeSpan.FromMilliseconds(config.HistoryCommitMarginMilliseconds)));
         services.TryAddSingleton<TenantConnectionInterceptor>();
         services.TryAddSingleton<MutationAuditInterceptor>();
+        services.TryAddSingleton<PreparedStatementRepairInterceptor>();
 
         // Audit config cache (singleton — uses IDbContextFactory internally)
         services.TryAddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
-        // Register NpgsqlDataSource as a singleton - this manages the connection pool
         var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(config);
-        services.AddSingleton(dataSource);
+        services.AddSingleton(new ContextDataSource(dataSource));
+        services.AddSingleton(PostgresRuntimeOptions.BuildRawDataSource(config));
 
         // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
         // is never returned to a pool and reused, so a fault cannot poison later callers. Database
@@ -139,97 +125,76 @@ public static class ServiceCollectionExtensions
                 options.EnableServiceProviderCaching();
                 options.AddInterceptors(
                     sp.GetRequiredService<TenantConnectionInterceptor>(),
-                    sp.GetRequiredService<MutationAuditInterceptor>());
+                    sp.GetRequiredService<MutationAuditInterceptor>(),
+                    sp.GetRequiredService<PreparedStatementRepairInterceptor>());
             }
         );
 
-        // Normalize the context carriers to fail-closed defaults on every acquisition, so raw
-        // IDbContextFactory callers start from a known-safe tenant/subject/share state. See
-        // CarrierResettingDbContextFactory.
-        DecorateWithCarrierReset(services);
+        // AddDbContextFactory also registers the context itself as scoped. Every context comes from
+        // INocturneDbContextFactory instead, so that registration goes.
+        services.RemoveAll<NocturneDbContext>();
 
-        // Register scoped DbContext, repositories, and shared services.
+        // Register the context factory, repositories, and shared services.
         AddDataServices(services);
 
         return services;
     }
 
     /// <summary>
-    /// Register scoped NocturneDbContext, repository interfaces, deduplication, and query parser.
-    /// Called by AddPostgreSqlInfrastructure; also usable independently by test factories
-    /// that provide their own IDbContextFactory without creating an NpgsqlDataSource.
+    /// Register <see cref="INocturneDbContextFactory"/>, repository
+    /// interfaces and deduplication. Called by AddPostgreSqlInfrastructure; also usable independently
+    /// by test factories that provide their own IDbContextFactory without creating an NpgsqlDataSource.
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services)
     {
-        // Register scoped NocturneDbContext that sets TenantId from ITenantAccessor.
-        // All existing constructor injections of NocturneDbContext continue to work.
-        // The context is disposed when the scope ends.
-        services.AddScoped(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            var context = factory.CreateDbContext();
-            var tenantAccessor = sp.GetService<ITenantAccessor>();
-            if (tenantAccessor?.IsResolved == true)
-            {
-                context.TenantId = tenantAccessor.TenantId;
-            }
-            // Mark the scoped context as a share when the request is one. Carrier defaults (CSV
-            // null) are already set by CarrierResettingDbContextFactory; this path never resolves
-            // the CSV, so a share reading PHI here is denied (fail-closed) — share PHI reads go
-            // through ITenantDbContextFactory, which carries the CSV.
-            var categoryReadContext = sp.GetService<ICategoryReadContext>();
-            context.IsShareContext = categoryReadContext?.IsShare == true;
-            context.HistoryClamped = categoryReadContext?.IsHistoryClamped == true;
-            return context;
-        });
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
+        services.AddScoped(sp => new TenantReadContext(
+            sp.GetService<ITenantAccessor>(),
+            sp.GetService<ICategoryReadContext>(),
+            sp.GetService<IAuditContext>()));
+        services.TryAddSingleton(sp => new RootServiceProvider(sp));
+        services.TryAddTransient<NocturneDbContextFactory>();
+        services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
+        services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
-        // Per-request public-share category context, read by the factory and the scoped
-        // context above to stamp the RLS carrier properties.
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
-
-        // Register tenant-aware context factory for V4 repositories
-        services.AddScoped<ITenantDbContextFactory, TenantDbContextFactory>();
-
-        // Register deduplication service (required by repositories)
-        services.AddScoped<IDeduplicationService, DeduplicationService>();
+        services.AddScoped<IDuplicateLinker, DuplicateLinker>();
+        services.AddScoped<DuplicateReconciler>();
+        services.AddScoped<IDuplicateReconciler>(sp => sp.GetRequiredService<DuplicateReconciler>());
+        services.AddScoped<IDeduplicationAdmin, DeduplicationAdmin>();
 
         // Register all repositories via their port interfaces
         services.AddScoped<IFoodRepository, FoodRepository>();
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
+        services.AddTransient<IOAuthTokenRepository, OAuthTokenRepository>();
+        services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
+        services.AddTransient<IOAuthClientRepository, OAuthClientRepository>();
+        services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
+        services.AddTransient<ITenantCreationInviteRepository, TenantCreationInviteRepository>();
+        services.AddTransient<IPlatformPolicyRepository, PlatformPolicyRepository>();
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddTransient<ITenantRepository, TenantRepository>();
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
+        services.AddTransient<IRoleRepository, RoleRepository>();
+        services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
+        services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
+        services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();
+        services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddTransient<IJobLedger, JobLedgerRepository>();
+        services.AddScoped<SourceOwnedDataRepository>();
+        services.AddScoped<ISourceOwnedDataReader>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
+        services.AddScoped<ISourceOwnedDataPurge>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
+        services.AddScoped<IDemoDataPurge, DemoDataPurgeRepository>();
+        services.AddScoped<ICollectionLastModifiedReader, CollectionLastModifiedReader>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
 
         return services;
-    }
-
-    /// <summary>
-    /// Ensure the database is created and up to date
-    /// </summary>
-    /// <param name="serviceProvider">Service provider</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Task</returns>
-    public static async Task EnsureDatabaseCreatedAsync(
-        this IServiceProvider serviceProvider,
-        CancellationToken cancellationToken = default
-    )
-    {
-        using var scope = serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
-
-        try
-        {
-            logger.LogInformation("Ensuring PostgreSQL database is created and up to date");
-            await context.Database.EnsureCreatedAsync(cancellationToken);
-            logger.LogInformation("PostgreSQL database is ready");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to ensure PostgreSQL database is created");
-            throw;
-        }
     }
 
     /// <summary>
@@ -253,9 +218,18 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAlertRepositories(this IServiceCollection services)
     {
         services.AddScoped<IAlertTrackerRepository, AlertTrackerRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
+        services.AddScoped<IDndWindowRepository, DndWindowRepository>();
+        services.AddScoped<ITenantAlertSettingsRepository, TenantAlertSettingsRepository>();
         services.AddScoped<ITrackerRepository, TrackerRepository>();
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
+        services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();
+        services.AddScoped<IActivityRecordRepository, ActivityRecordRepository>();
+        services.AddScoped<IHeartRateRepository, HeartRateRepository>();
+        services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
+        services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();
+        services.AddScoped<IHealthRecordTransactions, HealthRecordTransactions>();
         services.AddScoped<ISystemEventRepository, SystemEventRepository>();
         services.AddScoped<IUserFoodFavoriteRepository, UserFoodFavoriteRepository>();
         services.AddScoped<ITreatmentFoodRepository, TreatmentFoodRepository>();
@@ -264,10 +238,17 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Persists Data Protection keys to <see cref="NocturneDbContext"/> so the key ring
-    /// survives container restarts. Call this on the builder returned by
-    /// <c>services.AddDataProtection()</c>.
+    /// survives container restarts (<see cref="NocturneDbXmlRepository"/>). Call this on the builder
+    /// returned by <c>services.AddDataProtection()</c>.
     /// </summary>
     public static IDataProtectionBuilder PersistKeysToNocturneDb(
         this IDataProtectionBuilder builder)
-        => builder.PersistKeysToDbContext<NocturneDbContext>();
+    {
+        builder.Services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(services =>
+            new ConfigureOptions<KeyManagementOptions>(options =>
+                options.XmlRepository = new NocturneDbXmlRepository(
+                    services.GetRequiredService<IDbContextFactory<NocturneDbContext>>(),
+                    services.GetRequiredService<ILogger<NocturneDbXmlRepository>>())));
+        return builder;
+    }
 }

@@ -13,7 +13,6 @@ public interface IDeviceAgeService
     /// <param name="prefs">User preferences controlling warning and alert thresholds.</param>
     /// <param name="patientDeviceId">Optional registered patient device to scope the underlying device
     /// events to. <c>null</c> uses the most recent matching event tenant-wide.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Age information for the cannula/infusion site.</returns>
     Task<DeviceAgeInfo> GetCannulaAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default);
 
@@ -23,7 +22,6 @@ public interface IDeviceAgeService
     /// <param name="prefs">User preferences controlling warning and alert thresholds.</param>
     /// <param name="patientDeviceId">Optional registered patient device to scope the underlying device
     /// events to. <c>null</c> uses the most recent matching event tenant-wide.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Sensor age information including both the session start and the most recent warm-up.</returns>
     Task<SensorAgeInfo> GetSensorAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default);
 
@@ -33,7 +31,6 @@ public interface IDeviceAgeService
     /// <param name="prefs">User preferences controlling warning and alert thresholds.</param>
     /// <param name="patientDeviceId">Optional registered patient device to scope the underlying device
     /// events to. <c>null</c> uses the most recent matching event tenant-wide.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Age information for the insulin reservoir.</returns>
     Task<DeviceAgeInfo> GetInsulinAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default);
 
@@ -43,7 +40,6 @@ public interface IDeviceAgeService
     /// <param name="prefs">User preferences controlling warning and alert thresholds.</param>
     /// <param name="patientDeviceId">Optional registered patient device to scope the underlying device
     /// events to. <c>null</c> uses the most recent matching event tenant-wide.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Age information for the pump battery.</returns>
     Task<DeviceAgeInfo> GetBatteryAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default);
 }

@@ -10,7 +10,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 public interface IDeviceAttributionWriter
 {
     /// <summary>
-    /// Persists <see cref="IDeviceAttributed.PatientDeviceId"/> for the given record ids in one batch.
+    /// Persists <see cref="IPatientDeviceLinked.PatientDeviceId"/> for the given record ids in one batch.
     /// Ids absent for this tenant are ignored.
     /// </summary>
     /// <returns>The number of rows updated.</returns>
@@ -22,7 +22,6 @@ public interface IDeviceAttributionWriter
 /// Reads and writes the unattributed backlog of one <see cref="IDeviceAttributed"/> record type,
 /// so a device registration can back-stamp the history it explains.
 /// </summary>
-/// <typeparam name="TRecord">The device-attributed record type.</typeparam>
 public interface IDeviceAttributedRepository<TRecord> : IDeviceAttributionWriter
     where TRecord : IDeviceAttributed
 {

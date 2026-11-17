@@ -3,10 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -24,9 +26,10 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alert-sounds")]
+[DenyNoAccountViewer]
 public class AlertCustomSoundsController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<AlertCustomSoundsController> _logger;
 
     /// <summary>
@@ -35,7 +38,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertCustomSoundsController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ILogger<AlertCustomSoundsController> logger)
     {
         _contextFactory = contextFactory;
@@ -57,11 +60,12 @@ public class AlertCustomSoundsController : ControllerBase
         if (file.Length > 512_000)
             return Problem(detail: "File exceeds 500KB limit", statusCode: 400, title: "Bad Request");
 
-        if (!file.ContentType.StartsWith("audio/"))
-            return Problem(detail: "File must be an audio type", statusCode: 400, title: "Bad Request");
-
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, ct);
+        var data = ms.ToArray();
+
+        if (AudioFormat.Detect(data) is not { } mimeType)
+            return Problem(detail: "File must be MP3, WAV, Ogg, FLAC, WebM, M4A or AAC audio", statusCode: 400, title: "Bad Request");
 
         await using var db = await _contextFactory.CreateAsync(ct);
 
@@ -70,9 +74,9 @@ public class AlertCustomSoundsController : ControllerBase
             Id = Guid.CreateVersion7(),
             TenantId = db.TenantId,
             Name = file.FileName,
-            MimeType = file.ContentType,
-            Data = ms.ToArray(),
-            FileSize = (int)file.Length,
+            MimeType = mimeType,
+            Data = data,
+            FileSize = data.Length,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -95,6 +99,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// List all custom sounds for the current tenant (metadata only, no audio data).
     /// </summary>
     [HttpGet]
+    [RequireScope(Scope.AlertsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<AlertCustomSoundResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<AlertCustomSoundResponse>>> GetSounds(CancellationToken ct)
@@ -121,6 +126,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// Stream the raw audio bytes for a custom sound.
     /// </summary>
     [HttpGet("{id:guid}/stream")]
+    [RequireScope(Scope.AlertsRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> StreamSound(Guid id, CancellationToken ct)
@@ -134,8 +140,8 @@ public class AlertCustomSoundsController : ControllerBase
         if (entity is null)
             return NotFound();
 
-        Response.Headers.CacheControl = "max-age=86400";
-        return File(entity.Data, entity.MimeType);
+        Response.Headers.CacheControl = "private, max-age=86400";
+        return File(entity.Data, AudioFormat.Detect(entity.Data) ?? "application/octet-stream");
     }
 
     /// <summary>

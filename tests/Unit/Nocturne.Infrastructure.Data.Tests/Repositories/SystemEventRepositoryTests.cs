@@ -25,7 +25,7 @@ public class SystemEventRepositoryTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId, "test", _saves);
         _context = _db.CreateContext();
-        _repository = new SystemEventRepository(_context);
+        _repository = new SystemEventRepository(_context.AsFactory());
     }
 
     private sealed class SaveCounter : SaveChangesInterceptor

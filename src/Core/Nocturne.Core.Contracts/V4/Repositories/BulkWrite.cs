@@ -11,7 +11,6 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <remarks>
 /// A collection expression builds one with nothing skipped.
 /// </remarks>
-/// <typeparam name="TRecord">The record type written.</typeparam>
 [CollectionBuilder(typeof(BulkWrite), nameof(BulkWrite.Create))]
 public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skippedDeleted) : IReadOnlyList<TRecord>
 {
@@ -23,10 +22,34 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     public int SkippedDeleted { get; } = skippedDeleted;
 
     /// <summary>
-    /// The written records that updated a stored row in place rather than inserting one; every other
-    /// written record was inserted. The same instances the collection enumerates.
+    /// The written records that updated a stored row in place rather than inserting one. The same
+    /// instances the collection enumerates.
     /// </summary>
     public IReadOnlyList<TRecord> Updated { get; init; } = [];
+
+    /// <summary>
+    /// The records whose stored row already held what they carry, so nothing was written for them.
+    /// Disjoint from <see cref="Updated"/>; the same instances the collection enumerates.
+    /// </summary>
+    public IReadOnlyList<TRecord> Unchanged { get; init; } = [];
+
+    /// <summary>The records that inserted a row: those neither <see cref="Updated"/> nor <see cref="Unchanged"/>.</summary>
+    public IReadOnlyList<TRecord> Created
+    {
+        get
+        {
+            if (Updated.Count == 0 && Unchanged.Count == 0)
+                return written;
+            var stored = new HashSet<object?>(Updated.Concat(Unchanged).Cast<object?>(), ReferenceEqualityComparer.Instance);
+            return written.Where(r => !stored.Contains(r)).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Submitted records not written because writing them fails the same way every time, in
+    /// submission order. The rest of the batch was still written.
+    /// </summary>
+    public IReadOnlyList<BulkWriteRejection<TRecord>> Rejected { get; init; } = [];
 
     public int Count => written.Count;
 
@@ -37,10 +60,38 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
+/// <summary>A submitted record a bulk write refused, and why.</summary>
+/// <param name="Index">Its zero-based position in the submitted batch.</param>
+/// <param name="Record">The record as submitted.</param>
+/// <param name="Reason">Why it cannot be stored, fit to show the client.</param>
+public sealed record BulkWriteRejection<TRecord>(int Index, TRecord Record, string Reason);
+
 /// <summary>Builds a <see cref="BulkWrite{TRecord}"/> from a collection expression.</summary>
 public static class BulkWrite
 {
     public static BulkWrite<TRecord> Create<TRecord>(ReadOnlySpan<TRecord> written) => new(written.ToArray(), 0);
+}
+
+/// <summary>
+/// What a write committed, carried on the exception a step after its commit threw, so the caller
+/// still accounts for it.
+/// </summary>
+/// <remarks>
+/// Carried on the exception rather than wrapping it, so a cancellation stays a cancellation.
+/// </remarks>
+public static class CommittedWrite
+{
+    private const string Key = "Nocturne.CommittedWrite";
+
+    public static void Attach<TResult>(Exception exception, TResult committed) where TResult : class =>
+        exception.Data[Key] = committed;
+
+    public static bool TryGet<TResult>(Exception exception, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TResult? committed)
+        where TResult : class
+    {
+        committed = exception.Data[Key] as TResult;
+        return committed is not null;
+    }
 }
 
 /// <summary>

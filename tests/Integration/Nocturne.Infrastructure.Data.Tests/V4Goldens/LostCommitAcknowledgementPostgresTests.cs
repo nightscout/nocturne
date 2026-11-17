@@ -62,8 +62,8 @@ public sealed class LostCommitAcknowledgementPostgresTests(V4GoldenFixture fx)
         await using var retrying = new NocturneDbContext(options) { TenantId = tenantId };
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repository = new BolusRepository(
-            new TestTenantDbContextFactory(retrying),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(retrying),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);

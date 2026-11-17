@@ -24,7 +24,7 @@ public static class AuthorizationConfiguration
     /// The fallback admits the anonymous public subject on public tenants (its trie carries the
     /// tenant's public permissions) and rejects anonymous callers on private tenants (empty trie).
     /// Endpoints opt out with <c>[AllowAnonymous]</c>; privileged endpoints tighten access with
-    /// <c>[RequireAdmin]</c> or another <c>[Require*]</c> attribute, all of which require an
+    /// <c>[RequireSuperuser]</c> or another <c>[Require*]</c> attribute, all of which require an
     /// authenticated caller and therefore do not admit the public subject.
     /// </remarks>
     public static IServiceCollection AddNocturneAuthorization(this IServiceCollection services)

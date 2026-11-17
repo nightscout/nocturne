@@ -34,11 +34,23 @@ public class SiteChangeImpactTests
             new DeviceEvent { Timestamp = change.AddDays(10), EventType = DeviceEventType.PodChange },
         };
 
-        var result = new StatisticsService().CalculateSiteChangeImpact(readings, events, 1, 1, 30);
+        var result = new StatisticsService(TimeProvider.System).CalculateSiteChangeImpact(readings, events, 1, 1, 30);
 
         result.SiteChangeCount.Should().Be(2);
         result.DataPoints.Select(p => p.MinutesFromChange).Should().Equal(-60, 0, 30);
         result.DataPoints.Select(p => p.Count).Should().Equal(2, 2, 2);
         result.DataPoints.Select(p => p.AverageGlucose).Should().Equal(110, 120, 130);
+    }
+
+    [Fact]
+    public void ServesTheConsensusEdgesTheChartDrawsItsTargetRangeBetween()
+    {
+        var result = new StatisticsService(TimeProvider.System).CalculateSiteChangeImpact([], []);
+
+        result.Thresholds.Should().BeEquivalentTo(new StatisticsService(TimeProvider.System).HourlyBandThresholds);
+        result.Thresholds.VeryLow.Should().Be(54);
+        result.Thresholds.TargetBottom.Should().Be(70);
+        result.Thresholds.TargetTop.Should().Be(180);
+        result.Thresholds.VeryHigh.Should().Be(250);
     }
 }

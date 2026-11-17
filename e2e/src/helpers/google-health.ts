@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { env } from "./env.ts";
-import { eventually } from "./http.ts";
+import { ApiClient, eventually } from "./http.ts";
 import type { Tenant } from "./tenant.ts";
 
 export const googleTypes = ["steps", "heart-rate", "weight", "sleep"];
@@ -12,11 +13,25 @@ export interface GoogleStatus {
   previewRequired: boolean;
 }
 
-export function googleOptions(tenant: Tenant) {
+/** The instance client configured through the admin API; every tenant connects through it. */
+export const googleClientId = "e2e.apps.googleusercontent.com";
+
+/** Where Google sends every tenant back: the apex, relayed to the tenant by the API. */
+export const googleRedirectUri = `https://nocturne.localhost:${env.webTlsPort}/api/v4/google-health/oauth/callback`;
+
+export async function configureGoogleHealth() {
+  const response = await new ApiClient().request("PUT", "/api/v4/admin/platform-settings/google-health", {
+    enabled: true,
+    fields: { clientId: googleClientId, clientSecret: "e2e-google-secret", redirectUri: googleRedirectUri },
+  }, {
+    "X-Instance-Key": createHash("sha256").update("e2e-instance-key-test-only-not-a-real-secret").digest("hex"),
+    "X-Instance-Service": "e2e-setup",
+  });
+  if (response.status !== 200) throw new Error(`Google Health admin setup failed: HTTP ${response.status}`);
+}
+
+export function googleOptions() {
   return {
-    clientId: `${tenant.slug}.apps.googleusercontent.com`,
-    clientSecret: "e2e-google-secret",
-    callbackUrl: `${env.tenantSecureWebUrl(tenant.slug)}/settings/connectors/google-health/callback`,
     dataTypes: googleTypes,
     historyDays: 2,
     importFrom: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10) + "T00:00:00Z",
@@ -24,10 +39,12 @@ export function googleOptions(tenant: Tenant) {
   };
 }
 
-export async function googleConsent(authorizationUrl: string): Promise<URL> {
+/** Consents as the fake Google account `account` names, as a tenant's owner would pick it. */
+export async function googleConsent(authorizationUrl: string, account: string): Promise<URL> {
   const url = new URL(authorizationUrl);
   if (url.origin !== "https://accounts.google.com" || url.pathname !== "/o/oauth2/v2/auth")
     throw new Error("Unexpected Google authorization destination");
+  url.searchParams.set("mock_account", account);
   const response = await fetch(`${env.mocksUrl}/googlehealth/authorize?${url.searchParams}`);
   if (!response.ok) throw new Error(`Mock consent failed: ${response.status}`);
   const body = await response.json() as { redirectUrl: string };

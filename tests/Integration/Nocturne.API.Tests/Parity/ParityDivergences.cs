@@ -8,8 +8,10 @@ namespace Nocturne.API.Tests.Integration.Parity;
 /// the status and body kind Nocturne answers with instead, so they stay tested.
 /// </summary>
 /// <remarks>
-/// Three kinds: Nightscout has no such route (A), Nightscout fails with a 500 (B), and Nocturne
-/// accepts or validates input Nightscout treats otherwise, which is out of scope for #1746 (C).
+/// Five kinds: Nightscout has no such route (A), Nightscout fails with a 500 (B), Nocturne
+/// accepts or validates input Nightscout treats otherwise, which is out of scope for #1746 (C),
+/// Nightscout answers a bug's output Nocturne does not reproduce (D), and the pinned Nightscout
+/// version answers differently from the current one Nocturne follows (E).
 /// A difference that is a Nocturne bug belongs in <c>tests/quarantine.txt</c>, not here.
 /// </remarks>
 public static class ParityDivergences
@@ -34,6 +36,12 @@ public static class ParityDivergences
 
     private const string UndefinedPropertyCrash =
         "(B) Nightscout 15.0.3 answers 500 (Cannot read properties of undefined) here.";
+
+    private const string ZeroCountPage =
+        "(E) Nightscout 15.0.3 answers [] for count=0; Nightscout 16 serves the route default page, as Nocturne does.";
+
+    private const string BasalNaN =
+        "(D) Nightscout 15.0.3 speaks \"Your current basal is NaN units per hour and you have 0 units of insulin on board\" in the full status; Nocturne omits the basal sentence and says \"no insulin on board\" for zero.";
 
     private const string V3Tolerant =
         "(C) Nightscout rejects the payload (missing app/date/body); Nocturne accepts it. Out of scope for #1746, behaviour unchanged; strict v3 validation to be decided separately.";
@@ -60,6 +68,8 @@ public static class ParityDivergences
 
     public static readonly IReadOnlyList<Divergence> All =
     [
+        new("V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape", "POST /api/v1/alexa", 200, JsonValueKind.Object, UndefinedPropertyCrash),
+        new("V1.AlexaParityTests.PostAlexa_IntentRequest_NSStatus_ReturnsSameShape", "POST /api/v1/alexa", 200, JsonValueKind.Object, BasalNaN),
         new("V1.CountParityTests.CountActivity_Empty_ReturnsSameShape", "GET /api/v1/count/activity/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_Empty_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_WithData_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),
@@ -79,6 +89,7 @@ public static class ParityDivergences
         new("V1.CountParityTests.CountTreatments_Empty_ReturnsSameShape", "GET /api/v1/count/treatments/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountTreatments_WithData_ReturnsSameShape", "GET /api/v1/count/treatments/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountTreatments_WithEventTypeFilter_ReturnsSameShape", "GET /api/v1/count/treatments/where", 200, JsonValueKind.Array, CountCrashes),
+        new("V1.EntriesParityTests.GetEntries_ZeroCount_ReturnsSameShape", "GET /api/v1/entries", 200, JsonValueKind.Array, ZeroCountPage),
         new("V1.FoodParityTests.DeleteFood_ByCategory_ReturnsSameShape", "DELETE /api/v1/food", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.IobParityTests.GetIobHourly_Empty_ReturnsSameShape", "GET /api/v1/iob/hourly", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.IobParityTests.GetIobHourly_With24Hours_ReturnsSameShape", "GET /api/v1/iob/hourly", 200, JsonValueKind.Object, NoNightscoutRoute),
@@ -100,7 +111,6 @@ public static class ParityDivergences
         new("V1.NotificationsParityTests.PostAdminNotify_Persistent_ReturnsSameShape", "POST /api/v1/adminnotifies", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.NotificationsParityTests.PostAdminNotify_Simple_ReturnsSameShape", "POST /api/v1/adminnotifies", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.NotificationsParityTests.PostAdminNotify_WithGroup_ReturnsSameShape", "POST /api/v1/adminnotifies", 200, JsonValueKind.Object, NoNightscoutRoute),
-        new("V1.NotificationsParityTests.PostPushoverCallback_Valid_ReturnsSameShape", "POST /api/v1/notifications/pushovercallback", 200, JsonValueKind.Object, UndefinedPropertyCrash),
         new("V1.ProfileParityTests.GetProfile_NonExistentId_ReturnsSameShape", "GET /api/v1/profile/nonexistent123", 200, JsonValueKind.Array, NoNightscoutRoute),
         new("V1.TimeQueryParityTests.GetSliceWithPrefix_ReturnsSameShape", "GET /api/v1/slice/entries/date/sgv/*", 200, JsonValueKind.Array, DateStringCrash),
         new("V1.TimeQueryParityTests.GetSliceWithRegex_ReturnsSameShape", "GET /api/v1/slice/entries/date/sgv/*", 200, JsonValueKind.Array, DateStringCrash),
@@ -111,6 +121,7 @@ public static class ParityDivergences
         new("V1.TimeQueryParityTests.GetSlice_InvalidStorage_ReturnsSameShape", "GET /api/v1/slice/nonexistent/date", 400, JsonValueKind.String, DateStringCrash),
         new("V1.TimeQueryParityTests.GetSlice_TreatmentsCreatedAt_ReturnsSameShape", "GET /api/v1/slice/treatments/created_at", 200, JsonValueKind.Array, DateStringCrash),
         new("V1.TimeQueryParityTests.GetSlice_WithCount_ReturnsSameShape", "GET /api/v1/slice/entries/date", 200, JsonValueKind.Array, DateStringCrash),
+        new("V1.TreatmentsParityTests.GetTreatments_ZeroCount_ReturnsSameShape", "GET /api/v1/treatments", 200, JsonValueKind.Array, ZeroCountPage),
         new("V2.DDataParityTests.GetDDataAt_FutureTimestamp_ReturnsSameShape", "GET /api/v2/ddata/at/*", 400, JsonValueKind.Object, DateStringCrash),
         new("V2.DDataParityTests.GetDDataAt_InvalidTimestamp_ReturnsSameShape", "GET /api/v2/ddata/at/invalid", 400, JsonValueKind.Object, DateStringCrash),
         new("V2.DDataParityTests.GetDDataAt_UnixTimestamp_ReturnsSameShape", "GET /api/v2/ddata/at/*", 200, JsonValueKind.Object, DateStringCrash),
@@ -146,11 +157,11 @@ public static class ParityDivergences
         new("V3.EntriesParityTests.Create_WithAllFields_ReturnsSameShape", "POST /api/v3/entries", 201, JsonValueKind.Object, V3Tolerant),
         new("V3.EntriesParityTests.Search_InvalidSkip_ReturnsSameShape", "GET /api/v3/entries", 200, JsonValueKind.Object, V3TolerantSkip),
         new("V3.EntriesParityTests.Update_NotFound_ReturnsSameShape", "PUT /api/v3/entries/nonexistent123456789012", 404, JsonValueKind.Object, V3Tolerant),
-        new("V3.ProfileParityTests.Create_Empty_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_MissingStore_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_Simple_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_WithMmol_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_WithMultipleTimePeriods_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
+        new("V3.ProfileParityTests.Create_Empty_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_MissingStore_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_Simple_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_WithMmol_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_WithMultipleTimePeriods_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
         new("V3.ProfileParityTests.Search_MultipleProfiles_ReturnsSameShape", "GET /api/v3/profile", 200, JsonValueKind.Object, V3RejectedSeed),
         new("V3.ProfileParityTests.Search_WithData_ReturnsSameShape", "GET /api/v3/profile", 200, JsonValueKind.Object, V3RejectedSeed),
         new("V3.ProfileParityTests.Search_WithLimit_ReturnsSameShape", "GET /api/v3/profile", 200, JsonValueKind.Object, V3RejectedSeed),

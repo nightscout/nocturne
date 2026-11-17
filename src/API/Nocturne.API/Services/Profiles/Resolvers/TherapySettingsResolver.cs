@@ -1,8 +1,9 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -17,12 +18,12 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
+    private readonly ProfileVersionCache _versions;
+    private readonly TimeProvider _time;
     private readonly ILogger<TherapySettingsResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
-    private const double DefaultDia = 3.0;
+    private bool? _hasData;
+
     private const double DefaultCarbsHr = 20.0;
 
     public TherapySettingsResolver(
@@ -30,98 +31,116 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         IPatientInsulinRepository insulinRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
+        ProfileVersionCache versions,
+        TimeProvider timeProvider,
         ILogger<TherapySettingsResolver> logger)
     {
         _repo = repo;
         _insulinRepo = insulinRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _tenantAccessor = tenantAccessor;
-        _cache = cache;
+        _versions = versions;
+        _time = timeProvider;
         _logger = logger;
     }
 
-    public async Task<double> GetDIAAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
-    {
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
+    public async Task<double> GetDIAAsync(long timeMills, string? specProfile = null, CancellationToken ct = default) =>
+        (await ResolveDiaAsync(timeMills, specProfile, ct)).Hours;
 
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+    public async Task<InsulinActionTime> GetActionTimeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+    {
+        var (source, hours, primaryBolus) = await ResolveDiaAsync(timeMills, specProfile, ct);
+        primaryBolus ??= await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
+        return new InsulinActionTime(source, hours, primaryBolus?.Name);
+    }
+
+    /// <summary>The primary bolus insulin is returned only when the chain reached it.</summary>
+    /// <remarks>
+    /// Schedules an activation was uploaded with come from an AID that manages the profile, so their
+    /// DIA stands as an externally managed profile's does.
+    /// </remarks>
+    private async Task<(InsulinActionTimeSource Source, double Hours, PatientInsulin? PrimaryBolus)> ResolveDiaAsync(
+        long timeMills, string? specProfile, CancellationToken ct)
+    {
+        if (specProfile is null
+            && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { } snapshot
+            && SnapshotDia(snapshot) is { } snapshotDia)
+            return (InsulinActionTimeSource.ExternalProfile, snapshotDia, null);
+
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
+
+        var timestamp = timeMills.ToUtcDateTime();
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
 
-        if (settings is null)
-            return DefaultDia;
+        // An AID that manages the profile owns the DIA, so it outranks a recorded insulin.
+        if (settings is { IsExternallyManaged: true, Dia: > 0 })
+            return (InsulinActionTimeSource.ExternalProfile, settings.Dia, null);
 
-        // Priority 1: ExternallyManaged profiles use TherapySettings.Dia directly
-        if (settings.IsExternallyManaged)
-            return settings.Dia > 0 ? settings.Dia : DefaultDia;
-
-        // Priority 2: PatientInsulin primary bolus DIA
+        // A recorded insulin applies before any therapy settings exist.
         var primaryBolus = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
-        if (primaryBolus is not null)
-            return primaryBolus.Dia > 0 ? primaryBolus.Dia : DefaultDia;
+        if (primaryBolus is { Dia: > 0 })
+            return (InsulinActionTimeSource.PrimaryInsulin, primaryBolus.Dia, primaryBolus);
 
-        // Priority 3: TherapySettings.Dia
-        return settings.Dia > 0 ? settings.Dia : DefaultDia;
+        return settings is { Dia: > 0 }
+            ? (InsulinActionTimeSource.Profile, settings.Dia, primaryBolus)
+            : (InsulinActionTimeSource.Default, TherapySnapshot.DefaultDia, primaryBolus);
     }
+
+    /// <summary>
+    /// The DIA an activation was uploaded with: its insulin's, else its own, or null when neither is
+    /// set. A zero or negative value is not set.
+    /// </summary>
+    internal static double? SnapshotDia(ProfileActivationSnapshot snapshot) =>
+        snapshot.Insulin?.Dia is > 0 and var insulinDia ? insulinDia
+        : snapshot.Dia is > 0 and var dia ? dia
+        : null;
 
     public async Task<double> GetCarbAbsorptionRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
+        if (specProfile is null
+            && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { CarbsHr: > 0 } snapshot)
+            return snapshot.CarbsHr!.Value;
 
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
+
+        var timestamp = timeMills.ToUtcDateTime();
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
 
         return settings?.CarbsHr > 0 ? settings.CarbsHr : DefaultCarbsHr;
     }
 
-    public async Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default)
+    public Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default) =>
+        GetTimezoneAtAsync(_time.GetUtcNow().ToUnixTimeMilliseconds(), specProfile, ct);
+
+    /// <remarks>The order is <see cref="ScheduleTimeHelper.TimezoneOf"/>'s.</remarks>
+    public async Task<string?> GetTimezoneAtAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
-        // PatientRecord is the canonical source — a patient lives in one timezone regardless of
-        // how many therapy profiles they have. The per-profile TherapySettings.Timezone field
-        // remains a legacy fallback because connector-imported profiles (Nightscout, Glooko)
-        // wrote into it before this move; backfill brings those rows forward on next migration,
-        // but until then we read the legacy value rather than silently UTCing.
         var patient = await _patientRecordRepo.GetAsync(ct);
         if (!string.IsNullOrEmpty(patient?.Timezone))
             return patient.Timezone;
 
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct)
-            ?? "Default";
-        var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
-        return settings?.Timezone;
+        var snapshot = specProfile is null ? await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) : null;
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
+        var settings = await GetCachedSettingsAsync(
+            profileName, timeMills.ToUtcDateTime(), ct);
+        return ScheduleTimeHelper.TimezoneOf(null, snapshot?.Timezone, settings?.Timezone);
     }
 
     public async Task<string?> GetUnitsAsync(string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile ?? "Default";
-        var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
+        var profileName = specProfile
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(_time.GetUtcNow().ToUnixTimeMilliseconds(), ct);
+        var settings = await GetCachedSettingsAsync(profileName, _time.GetUtcNow().UtcDateTime, ct);
         return settings?.Units;
     }
 
     public async Task<bool> HasDataAsync(CancellationToken ct = default)
     {
-        var count = await _repo.CountAsync(null, null, ct);
-        return count > 0;
+        // Scoped resolver: the memo lives for one request and never crosses tenants.
+        return _hasData ??= await _repo.CountAsync(null, null, ct) > 0;
     }
 
-    private async Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
-    {
-        var cacheKey = $"TherapySettings:{_tenantAccessor.TenantId}:{profileName}";
-
-        if (_cache.TryGetValue(cacheKey, out Core.Models.V4.TherapySettings? cached))
-            return cached;
-
-        var settings = await _repo.GetActiveAtAsync(profileName, timestamp, ct);
-        _cache.Set(cacheKey, settings, TimeSpan.FromSeconds(CacheTtlSeconds));
-        return settings;
-    }
+    private Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(
+        string profileName, DateTime timestamp, CancellationToken ct) =>
+        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

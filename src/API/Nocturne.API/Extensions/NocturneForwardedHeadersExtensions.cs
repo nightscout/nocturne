@@ -54,7 +54,7 @@ public static class NocturneForwardedHeadersExtensions
     /// value the caller sent. Anything that is not a web scheme falls back to https.
     /// </remarks>
     public static string PublicScheme(this HttpRequest request) =>
-        request.Scheme is "http" or "https" ? request.Scheme : "https";
+        request.Scheme == Uri.UriSchemeHttp ? Uri.UriSchemeHttp : Uri.UriSchemeHttps;
 
     public static IApplicationBuilder UseNocturneForwardedHeaders(
         this IApplicationBuilder app,

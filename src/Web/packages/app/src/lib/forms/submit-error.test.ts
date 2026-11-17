@@ -2,18 +2,20 @@ import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
-import { parseErrorBody } from "$lib/api/error-body";
+import { parseErrorBody } from "#lib/api/error-body.js";
 import {
   describeRemoteError,
   describeSubmitError,
   errorIssues,
   errorMessage,
-  GENERIC_SUBMIT_ERROR,
-  MISSING_ITEM_ERROR,
   PERMISSION_GATED_MUTATION,
-  RATE_LIMITED_ERROR,
 } from "./submit-error";
-import { remoteErrorMessage } from "$lib/api/remote-error";
+import {
+  genericSubmitError,
+  missingItemError,
+  rateLimitedError,
+} from "./submit-messages.svelte";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
 /**
  * What a 403 looks like by the time a page sees it: the thrown value put
@@ -26,7 +28,7 @@ import { remoteErrorMessage } from "$lib/api/remote-error";
 type ForbidArm = (
   err: unknown,
   error: typeof import("@sveltejs/kit").error,
-  parseErrorBody: typeof import("$lib/api/error-body").parseErrorBody
+  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody
 ) => never;
 
 function compileArm(source: string): ForbidArm {
@@ -95,9 +97,23 @@ describe("a thrown HttpError", () => {
   });
 });
 
+describe("a query's error", () => {
+  it("is read unwrapped, as SvelteKit 3 hands it over", () => {
+    const error = { status: 400, message: "Date range must not exceed 365 days.", issues: undefined };
+
+    expect(errorMessage(error)).toBe("Date range must not exceed 365 days.");
+  });
+
+  it("is not confused with an Error that happens to carry a status", () => {
+    const thrown = Object.assign(new Error("fetch failed"), { status: 500 });
+
+    expect(errorMessage(thrown)).toBeUndefined();
+  });
+});
+
 describe("errorIssues", () => {
   const issues = [
-    { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+    { scope: "condition", path: "root", reason: "list_empty", field: null },
   ];
 
   it("reads a well-formed issue set off the body", () => {
@@ -125,28 +141,28 @@ describe("describeSubmitError", () => {
 
   it("hides 5xx detail behind the generic message", () => {
     const err = { status: 500, body: { message: "NullReferenceException" } };
-    expect(describeSubmitError(err)).toBe(GENERIC_SUBMIT_ERROR);
+    expect(describeSubmitError(err)).toBe(genericSubmitError());
   });
 
   it("falls back for a plain thrown Error", () => {
     expect(describeSubmitError(new Error("fetch failed"))).toBe(
-      GENERIC_SUBMIT_ERROR
+      genericSubmitError()
     );
   });
 
   it("falls back when the 4xx body has no message", () => {
     expect(describeSubmitError({ status: 409, body: {} })).toBe(
-      GENERIC_SUBMIT_ERROR
+      genericSubmitError()
     );
     expect(describeSubmitError({ status: 409, body: { message: "  " } })).toBe(
-      GENERIC_SUBMIT_ERROR
+      genericSubmitError()
     );
   });
 
   it("reports a throttled attempt as throttled, not as the caller's fallback", () => {
     expect(
       describeSubmitError({ status: 429 }, "This invite link is invalid.")
-    ).toBe(RATE_LIMITED_ERROR);
+    ).toBe(rateLimitedError());
   });
 
   it("uses the caller's fallback", () => {
@@ -193,7 +209,7 @@ describe("describeSubmitError", () => {
   });
 
   it("shows a refusal the server worded on a status the operation never declared", async () => {
-    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
+    // The reason exists only as raw text on `response`; see `#lib/api/error-body.js`.
     const crossed = await crossThe403Arm(
       nswagApiException(
         403,
@@ -218,8 +234,8 @@ describe("describeSubmitError", () => {
   });
 
   it("tolerates null and non-objects", () => {
-    expect(describeSubmitError(null)).toBe(GENERIC_SUBMIT_ERROR);
-    expect(describeSubmitError("string throw")).toBe(GENERIC_SUBMIT_ERROR);
+    expect(describeSubmitError(null)).toBe(genericSubmitError());
+    expect(describeSubmitError("string throw")).toBe(genericSubmitError());
   });
 });
 
@@ -255,7 +271,7 @@ describe("the two halves of RemoteErrorPolicy", () => {
       WRITE_FALLBACK
     );
     expect(remoteErrorMessage({ status: 404 }, READ_FALLBACK)).toBe(
-      MISSING_ITEM_ERROR
+      missingItemError()
     );
   });
 
@@ -337,10 +353,10 @@ describe("the two halves of RemoteErrorPolicy", () => {
 
   it("agrees on a throttled attempt and on a 4xx the server worded", () => {
     expect(describeSubmitError({ status: 429 }, WRITE_FALLBACK)).toBe(
-      RATE_LIMITED_ERROR
+      rateLimitedError()
     );
     expect(remoteErrorMessage({ status: 429 }, READ_FALLBACK)).toBe(
-      RATE_LIMITED_ERROR
+      rateLimitedError()
     );
 
     const rejected = { status: 409, body: { message: "Already redeemed." } };
@@ -361,7 +377,7 @@ describe("a mutation whose fallback names the permission its page is gated on", 
 
   it("says the rule is gone rather than that the permission is missing", () => {
     expect(describe_({ status: 404, body: { message: "Not found" } })).toBe(
-      MISSING_ITEM_ERROR
+      missingItemError()
     );
   });
 
@@ -371,7 +387,7 @@ describe("a mutation whose fallback names the permission its page is gated on", 
       body: { message: "npgsql: connection reset" },
     });
 
-    expect(answer).toBe(GENERIC_SUBMIT_ERROR);
+    expect(answer).toBe(genericSubmitError());
     expect(answer).not.toBe(NEEDS_ALERTS);
   });
 
@@ -382,7 +398,7 @@ describe("a mutation whose fallback names the permission its page is gated on", 
   });
 
   it("does not blame the permission for a request that never got an answer", () => {
-    expect(describe_(new Error("fetch failed"))).toBe(GENERIC_SUBMIT_ERROR);
+    expect(describe_(new Error("fetch failed"))).toBe(genericSubmitError());
   });
 
   it("names the permission for the refusal the scope attribute produces", () => {
@@ -395,5 +411,58 @@ describe("a mutation whose fallback names the permission its page is gated on", 
     expect(describe_({ status: 403, body: { message: NEEDS_SCOPE } })).toBe(
       NEEDS_SCOPE
     );
+  });
+});
+
+describe("a problem code the caller has a sentence for", () => {
+  const KNOWN = { role_name_taken: "A role with this name already exists." };
+  const FALLBACK = "Failed to create role.";
+
+  it.each([400, 404, 409])("answers a %i with the sentence for its code", (status) => {
+    const err = { status, body: { message: "Server text", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(KNOWN.role_name_taken);
+  });
+
+  it("answers a query's own error the same way", () => {
+    const err = { status: 409, message: "Server text", code: "role_name_taken" };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(KNOWN.role_name_taken);
+  });
+
+  it("leaves the server's text for a code the caller does not know", () => {
+    const err = { status: 409, body: { message: "Server text", code: "other_code" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("leaves the server's text when the rejection has no code", () => {
+    const err = { status: 409, body: { message: "Server text" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("ignores a code when the caller passes no map", () => {
+    const err = { status: 409, body: { message: "Server text", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK)).toBe("Server text");
+  });
+
+  it("ignores a malformed code", () => {
+    const err = { status: 409, body: { message: "Server text", code: "Role Name Taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, { "Role Name Taken": "No." })).toBe("Server text");
+  });
+
+  it("does not mistake an inherited property for a known code", () => {
+    const err = { status: 409, body: { message: "Server text", code: "constructor" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("still answers a 429 as throttled", () => {
+    const err = { status: 429, body: { message: "Too many requests", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(rateLimitedError());
   });
 });

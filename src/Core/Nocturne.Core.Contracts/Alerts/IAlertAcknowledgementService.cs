@@ -15,8 +15,6 @@ public interface IAlertAcknowledgementService
     /// </summary>
     /// <param name="tenantId">The tenant whose alerts should be acknowledged.</param>
     /// <param name="acknowledgedBy">Identifier of the user or system performing the acknowledgement.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when all active instances have been acknowledged.</returns>
     Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct);
 
     /// <summary>
@@ -33,7 +31,6 @@ public interface IAlertAcknowledgementService
     /// everyone. <see cref="AlertAcknowledgementAuthority.System"/> always acknowledges for everyone.
     /// </remarks>
     /// <param name="tenantId">The tenant that owns the excursion (defence-in-depth check).</param>
-    /// <param name="excursionId">The excursion to acknowledge.</param>
     /// <param name="acknowledgedBy">
     /// Identifier of the user or system performing the acknowledgement. System
     /// callers use the <c>"system:&lt;reason&gt;"</c> convention so the audit
@@ -45,7 +42,6 @@ public interface IAlertAcknowledgementService
     /// auto-ack-on-trigger flow which immediately follows an <c>alert_dispatch</c> for the same
     /// excursion the FE has not yet rendered.
     /// </param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// Which outcome applied. An excursion someone already acknowledged reads as
     /// <see cref="AlertAcknowledgementOutcome.Acknowledged"/> whoever asks.
@@ -65,7 +61,6 @@ public interface IAlertAcknowledgementService
     /// </summary>
     /// <param name="tenantId">The tenant whose membership is consulted.</param>
     /// <param name="caller">The authority an acknowledgement would be made with.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<bool> AcknowledgesForEveryoneAsync(
         Guid tenantId, AlertAcknowledgementAuthority caller, CancellationToken ct);
 }

@@ -1,17 +1,18 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { env } from "$env/dynamic/private";
+import { INSTANCE_KEY } from "$app/env/private";
 import {
   REALTIME_ADMISSION_PATH,
+  readRealtimeGrant,
   signHandshakeTicket,
 } from "@nocturne/bridge/ticket";
-import type { RealtimeAdmission } from "$lib/api";
+import type { RealtimeAdmission } from "#lib/api/index.js";
 import {
   getApiBaseUrl,
   createServerHttpClient,
-} from "$lib/server/api-client-factory";
-import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+} from "#lib/server/api-client-factory.js";
+import { getEffectiveHost, getOriginalProto } from "#lib/server/request-host.js";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 
 /**
  * Mints a short-lived ticket that authorizes a Socket.IO handshake to the
@@ -23,8 +24,8 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
  * the connection's realtime admission and, only on a 2xx, signs a ticket the
  * bridge verifies locally. The admission is gated on the same glucose read as
  * the API's own feed, and says whether the credential may join the tenant-wide
- * room; the ticket carries that answer so the bridge needs no per-connection
- * API call.
+ * room and which category rooms; the ticket carries that answer so the bridge
+ * needs no per-connection API call.
  *
  * Always responds 200 with `{ token: string | null, retry?: boolean }`. A null
  * token means no ticket was minted; `retry: true` distinguishes a transient
@@ -34,7 +35,7 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
  * surfacing a connection error).
  */
 export const GET: RequestHandler = async (event) => {
-  const secret = env.INSTANCE_KEY;
+  const secret = INSTANCE_KEY;
   const apiBaseUrl = getApiBaseUrl();
   const effectiveHost = getEffectiveHost(event.request, event.cookies);
 
@@ -79,12 +80,14 @@ export const GET: RequestHandler = async (event) => {
     );
     if (probe.ok) {
       const admission: Partial<RealtimeAdmission> = await probe.json();
+      // Sign no ticket the bridge would refuse.
+      if (!admission.tenantId) return json({ token: null, retry: true });
       return json({
         token: signHandshakeTicket(
           secret,
           effectiveHost,
-          admission.tenantRelay === true,
-          admission.subjectId ?? undefined
+          admission.tenantId,
+          readRealtimeGrant(admission)
         ),
       });
     }

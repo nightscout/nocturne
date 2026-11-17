@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -28,6 +29,7 @@ public class ConnectorHealthErrorMessageTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
+    private readonly List<ConnectorConfigurationEntity> _saved = [];
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly ConnectorConfigurationService _service;
 
@@ -56,8 +58,14 @@ public class ConnectorHealthErrorMessageTests : IDisposable
         var encryptionService = new Mock<ISecretEncryptionService>();
         encryptionService.Setup(e => e.IsConfigured).Returns(true);
 
+        var contexts = new TestNocturneDbContextFactory(_dbContext)
+        {
+            Prepare = c => c.SavingChanges += (_, _) => _saved.AddRange(c.ConnectorConfigurations.Local),
+        };
         _service = new ConnectorConfigurationService(
-            _dbContext,
+            new ConnectorConfigurationRepository(contexts),
+            new SubjectRepository(contexts),
+            new OAuthGrantRepository(contexts),
             encryptionService.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),
@@ -104,9 +112,9 @@ public class ConnectorHealthErrorMessageTests : IDisposable
 
         await _service.UpdateHealthStateAsync(ConnectorName, lastErrorMessage: message, isHealthy: false);
 
-        // The tracked entity, not a re-read: SQLite substitutes a replacement character on the way
-        // out, which would hide the lone surrogate the driver has to encode.
-        var stored = _dbContext.ConnectorConfigurations.Local.Single().LastErrorMessage!;
+        // The entity the service's context saved, not a re-read: SQLite substitutes a replacement
+        // character on the way out, which would hide the lone surrogate the driver has to encode.
+        var stored = _saved.Last().LastErrorMessage!;
         stored.Length.Should().BeLessThanOrEqualTo(ConnectorConfigurationEntity.LastErrorMessageMaxLength);
         stored.Should().EndWith(TruncationMarker);
         stored.Should().NotContainAny("\uD83D", "\uDE00");

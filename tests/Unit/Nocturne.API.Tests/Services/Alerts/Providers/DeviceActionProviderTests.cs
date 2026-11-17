@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Realtime;
@@ -30,8 +31,8 @@ public class DeviceActionProviderTests
         Severity = AlertRuleSeverity.Critical,
     };
 
-    private static DeviceActionProvider CreateProvider(Mock<ISignalRBroadcastService> broadcast)
-        => new(broadcast.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DeviceActionProvider>.Instance);
+    private static DeviceActionProvider CreateProvider(Mock<ISignalRBroadcastService> broadcast, TimeProvider? time = null)
+        => new(broadcast.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DeviceActionProvider>.Instance, time ?? TimeProvider.System);
 
     [Fact]
     public async Task SendAsync_suppresses_local_engine_kind_without_broadcasting()
@@ -105,5 +106,31 @@ public class DeviceActionProviderTests
         broadcast.Verify(
             b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()),
             Times.Exactly(DeviceActionProvider.MaxNudgesPerWindow));
+    }
+
+    [Fact]
+    public async Task SendAsync_restores_the_nudge_budget_when_the_window_rolls_over()
+    {
+        var broadcast = new Mock<ISignalRBroadcastService>();
+        broadcast
+            .Setup(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()))
+            .Returns(Task.CompletedTask);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 3, 4, 5, 0, 0, TimeSpan.Zero));
+        var provider = CreateProvider(broadcast, time);
+        var payload = Payload(Guid.NewGuid());
+
+        async Task SpendBudgetAsync()
+        {
+            for (var i = 0; i < DeviceActionProvider.MaxNudgesPerWindow + 1; i++)
+                await provider.SendAsync(DeviceKinds.Companion, payload, "{\"capabilities\":[\"notify\"]}", default);
+        }
+
+        await SpendBudgetAsync();
+        time.Advance(TimeSpan.FromSeconds(60));
+        await SpendBudgetAsync();
+
+        broadcast.Verify(
+            b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()),
+            Times.Exactly(DeviceActionProvider.MaxNudgesPerWindow * 2));
     }
 }

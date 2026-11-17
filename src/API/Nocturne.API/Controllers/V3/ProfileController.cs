@@ -25,6 +25,12 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class ProfileController : BaseV3Controller<Profile>
 {
+    /// <summary>
+    /// The most profiles one history page holds. Nightscout's cap is <see cref="BaseV3Controller{T}.MaxLimit"/>
+    /// for every collection; the gap is tracked apart from this controller.
+    /// </summary>
+    private const int ProfileHistoryMaxLimit = 100;
+
     private readonly IProfileProjectionService _projectionService;
     private readonly IProfileWriteService _writeService;
 
@@ -67,15 +73,12 @@ public class ProfileController : BaseV3Controller<Profile>
             var profiles = await _projectionService.GetProfilesAsync(
                 count: parameters.Limit,
                 skip: parameters.Offset,
+                descending: parameters.Sort.Descending,
                 ct: cancellationToken
             );
 
             var profilesList = profiles.ToList();
 
-            // Get total count for pagination
-            var totalCount = await _projectionService.CountProfilesAsync(
-                ct: cancellationToken
-            ); // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(profilesList.Cast<object>());
 
             if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
@@ -90,7 +93,11 @@ public class ProfileController : BaseV3Controller<Profile>
 
             // CreateV3CollectionResponse returns the {status, result} envelope IActionResult;
             // wrapping it in Ok(...) again would serialize the ActionResult object itself.
-            return (ActionResult)CreateV3CollectionResponse(profilesList, parameters, totalCount);
+            return (ActionResult)CreateV3CollectionResponse(
+                profilesList.Select(p => ToV3Document(p, p.Id)).ToList(),
+                parameters,
+                lastModified
+            );
         }
         catch (ArgumentException ex)
         {
@@ -118,33 +125,22 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetProfileHistory(
+    public Task<ActionResult> GetProfileHistory(
         long lastModified,
         [FromQuery] int limit = 10,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 profile history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 100);
-
-        // Ascending order: AAPS activates the LAST element of the page.
-        var page = await _projectionService.GetProfilesModifiedSinceAsync(
+        =>
+        CreateV3HistoryResponseAsync(
+            "profile",
             lastModified,
             limit,
-            cancellationToken
+            (since, take) =>
+                _projectionService.GetProfilesModifiedSinceAsync(since, take, cancellationToken),
+            records => records.Select(p => ToV3Document(p, p.Id)).ToList(),
+            echoRequestCursorWhenEmpty: true,
+            maxLimit: ProfileHistoryMaxLimit
         );
-
-        // Echo the request cursor on an empty page so conditional clients always see
-        // a parseable cursor ETag.
-        SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
-
-        return CreateV3SuccessResponse(page.Records);
-    }
 
     /// <summary>
     /// Get a specific profile by ID with V3 format
@@ -181,8 +177,9 @@ public class ProfileController : BaseV3Controller<Profile>
             );
         }
 
-        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-        var result = ApplyFieldSelection(new[] { profile }, parameters.Fields).FirstOrDefault();
+        var parameters = ParseV3QueryParameters(readSort: false); // Apply field selection if specified
+        var result = ApplyFieldSelection(new[] { ToV3Document(profile, profile.Id) }, parameters.Fields)
+            .FirstOrDefault();
 
         _logger.LogDebug("Successfully returned profile with ID {Id}", id);
 
@@ -194,12 +191,12 @@ public class ProfileController : BaseV3Controller<Profile>
     /// </summary>
     /// <param name="profileData">Profile data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created profiles</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created profiles for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile")]
-    [ProducesResponseType(typeof(Profile[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -239,7 +236,13 @@ public class ProfileController : BaseV3Controller<Profile>
 
             _logger.LogDebug("Successfully created {Count} profiles", createdProfiles.Count());
 
-            return StatusCode(201, createdProfiles.ToArray());
+            if (profileData.ValueKind == JsonValueKind.Array)
+            {
+                return StatusCode(201, createdProfiles.ToArray());
+            }
+
+            var created = createdProfiles.First();
+            return V3Created(nameof(GetProfileById), created.Id);
         }
         catch (ArgumentException ex)
         {

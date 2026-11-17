@@ -1,20 +1,20 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Analytics;
 
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)
@@ -76,21 +76,16 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
         await SeedAsync(otherTenant, [timestamp], "vendor-a");
         await WithTenantScopeAsync(async services =>
         {
-            await using var context = await services.GetRequiredService<ITenantDbContextFactory>().CreateAsync();
+            await using var context = await services.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             var duplicateId = Guid.NewGuid();
             context.Notes.AddRange(
                 new NoteEntity { Id = duplicateId, Timestamp = timestamp, DataSource = "vendor-a" },
                 new NoteEntity { Id = Guid.NewGuid(), Timestamp = timestamp, DataSource = "vendor-a", DeletedAt = timestamp });
-            context.LinkedRecords.Add(new LinkedRecordEntity
-            {
-                Id = Guid.NewGuid(), CanonicalId = Guid.NewGuid(), RecordId = duplicateId,
-                RecordType = "note", IsPrimary = false, DataSource = "vendor-a",
-            });
             context.ApsSnapshots.Add(new ApsSnapshotEntity
             {
                 Id = Guid.NewGuid(), Timestamp = timestamp, AidAlgorithm = "Loop", DeletedAt = timestamp,
             });
-            await context.SaveChangesAsync();
+            await DuplicateGroups.LinkAsync(context, RecordType.Note, primary: null, duplicateId);
             return true;
         });
 
@@ -133,7 +128,7 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(tenant, "counts", "Counts", true, false));
-        await using var context = await scope.ServiceProvider.GetRequiredService<ITenantDbContextFactory>().CreateAsync();
+        await using var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         foreach (var timestamp in timestamps)
         {
             context.Notes.Add(new NoteEntity { Id = Guid.NewGuid(), Timestamp = timestamp, DataSource = source });
@@ -160,10 +155,7 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
             else if (clamped)
                 readContext.ClampMemberHistory();
 
-            var settings = new Mock<ITherapySettingsResolver>();
-            settings.Setup(resolver => resolver.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(timezone);
-            return await ActivatorUtilities.CreateInstance<DataOverviewService>(services, settings.Object)
+            return await ActivatorUtilities.CreateInstance<DataOverviewService>(services, DataOverviewClock.Resolving(timezone))
                 .GetDailySummaryAsync(year, sources);
         });
     }

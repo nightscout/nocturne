@@ -1,14 +1,18 @@
 <script lang="ts">
-  import { a1cLabel } from "$lib/utils/a1c-formatting";
-  import { time } from "$lib/utils/formatting";
-  import { getSettingsStore } from "$lib/stores/settings-store.svelte";
+  import { GlucoseProcessing } from "#lib/api/index.js";
+  import { a1cLabel } from "#lib/utils/a1c-formatting.js";
+  import { time } from "#lib/utils/formatting.js";
   import {
     getColorTheme,
     setColorTheme,
+    glucoseRangePalette,
+    setGlucoseRangePalette,
     type ColorTheme,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
   import {
     glucoseUnits,
+    energyUnit,
+    getEnergyUnit,
     a1cName,
     a1cUnits,
     timeFormat,
@@ -16,6 +20,8 @@
     setColorScheme,
     userPrefersMode,
     dashboardTopWidgets,
+    dashboardRail,
+    hiddenLegacyFallbacks,
     chartLineColorMode,
     chartLineColor,
     chartPointColorMode,
@@ -27,23 +33,31 @@
     regionFormat,
     regionFormatLabel,
     REGION_FORMATS,
+    type AreaMode,
     type ColorScheme,
     type RegionFormat,
-  } from "$lib/stores/appearance-store.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
-  import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
-  import LanguageSelector from "$lib/components/LanguageSelector.svelte";
-  import { updateLanguagePreference } from "$api/user-preferences.remote";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { ENERGY_UNITS } from "@nocturne/ui/energy";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import TitleFaviconSettings from "#lib/components/settings/TitleFaviconSettings.svelte";
+  import DashboardWidgetConfigurator from "#lib/components/settings/DashboardWidgetConfigurator.svelte";
+  import DashboardRailConfigurator from "#lib/components/settings/DashboardRailConfigurator.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import LanguageSelector from "#lib/components/LanguageSelector.svelte";
+  import CarbRatioFormatSelect from "#lib/components/settings/CarbRatioFormatSelect.svelte";
+  import { updateLanguagePreference } from "#lib/api/user-preferences.remote.js";
   import {
     getPreference,
     setPreference,
     getSourceDefaults,
     setSourceDefaults,
-  } from "$api/generated/glucoseProcessingSettings.generated.remote";
-  import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
-  import type { FeatureSettings } from "$lib/api/generated/nocturne-api-client";
-  import { getUiSettings, saveFeatureSettings } from "$api/ui-settings.remote";
+  } from "#lib/api/generated/glucoseProcessingSettings.generated.remote.js";
+  import GlucoseSourceDefaultsDialog from "#lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
+  import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUiSettings } from "#lib/api/ui-settings.remote.js";
+  import { patchFeatureSettings } from "#lib/api/generated/uiSettings.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { SETTINGS_LOAD_FAILED } from "#lib/api/ui-settings-messages.js";
   import { toast } from "svelte-sonner";
   import {
     Card,
@@ -51,21 +65,21 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Slider } from "$lib/components/ui/slider";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Slider } from "#lib/components/ui/slider/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
-  import { Label as FormLabel } from "$lib/components/ui/label";
+  } from "#lib/components/ui/select/index.js";
+  import { Label as FormLabel } from "#lib/components/ui/label/index.js";
   import Activity from "@lucide/svelte/icons/activity";
   import Palette from "@lucide/svelte/icons/palette";
   import Sun from "@lucide/svelte/icons/sun";
@@ -77,15 +91,18 @@
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Timer from "@lucide/svelte/icons/timer";
   import Eye from "@lucide/svelte/icons/eye";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import { browser } from "$app/environment";
+  import Paintbrush from "@lucide/svelte/icons/paintbrush";
+  import { illustrations } from "#lib/stores/illustrations.svelte.js";
+  import { PRESENTATIONS } from "water-ui";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
+  import { browser } from "$app/env";
   import { resolve } from "$app/paths";
-  import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
-  const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
 
   // Dashboard widgets - use persisted state for immediate localStorage persistence
@@ -161,24 +178,16 @@
   const focusHours = $derived(featureSettings?.display?.focusHours ?? 12);
   const trackerPillsEnabled = $derived(featureSettings?.trackerPills?.enabled ?? true);
 
-  /** Persists the whole features section, merging the patch over what's stored. */
+  /** Sends only the fields the control changed. The API merges them into the stored section. */
   async function saveFeatures(patch: Partial<FeatureSettings>) {
-    const current = featureSettings ?? {};
     try {
-      await saveFeatureSettings({
-        ...current,
-        display: { ...current.display, ...patch.display },
-        trackerPills: { ...current.trackerPills, ...patch.trackerPills },
-      });
-      // The dashboard still reads these through the shared settings store; reload
-      // it so the change it renders matches what was persisted.
-      await store.reload();
+      await patchFeatureSettings(patch);
     } catch (err) {
       toast.error(
         describeSubmitError(err, "Could not save. Check your connection and try again.")
       );
-      await uiSettingsQuery?.refresh();
     }
+    await uiSettingsQuery?.refresh();
   }
 </script>
 
@@ -189,8 +198,8 @@
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-      <Palette class="h-6 w-6 text-primary" />
+    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+      <Palette class="size-6 text-primary" />
     </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Appearance</h1>
@@ -198,13 +207,13 @@
     </div>
   </div>
 
-  {#if store.isLoading}
+  {#if uiSettingsQuery?.loading}
     <SettingsPageSkeleton cardCount={4} />
-  {:else if store.hasError}
+  {:else if uiSettingsQuery?.error}
     <Card variant="destructive">
       <CardContent class="flex items-center gap-3 py-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
-        <p class="font-medium">{store.error}</p>
+        <p class="font-medium">{remoteErrorMessage(uiSettingsQuery.error, SETTINGS_LOAD_FAILED)}</p>
       </CardContent>
     </Card>
   {:else}
@@ -213,7 +222,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Palette class="h-5 w-5" />
-          Color Theme
+          Color theme
         </CardTitle>
         <CardDescription>
           Choose a color theme and light/dark mode
@@ -244,7 +253,7 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: oklch(0.6 0.118 184.704)"
-                title="In Range"
+                title="In range"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -254,7 +263,7 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: oklch(0.577 0.245 27.325)"
-                title="Very Low"
+                title="Very low"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -324,17 +333,17 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #006493"
-                title="Primary Blue"
+                title="Primary blue"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #006A5F"
-                title="Teal Secondary"
+                title="Teal secondary"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #00FF00"
-                title="In Range"
+                title="In range"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -364,31 +373,80 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #000000"
-                title="Black Background"
+                title="Black background"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #4cff00"
-                title="Neon Green"
+                title="Neon green"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #808080"
-                title="Pill Grey"
+                title="Pill gray"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #bdbdbd"
-                title="Text Grey"
+                title="Text gray"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #0099ff"
-                title="Classic Blue"
+                title="Classic blue"
               ></div>
             </div>
           </RadioGroup.Card>
         </RadioGroup.Root>
+
+        <Separator />
+
+        <div class="space-y-2">
+          <Label>Glucose range colors</Label>
+          <RadioGroup.Root
+            class="grid @xl:grid-cols-2"
+            aria-label="Glucose range colors"
+            value={glucoseRangePalette.current}
+            onValueChange={(palette) => {
+              if (palette === "theme" || palette === "clarity") setGlucoseRangePalette(palette);
+            }}
+          >
+            <RadioGroup.Card value="theme">
+              <div class="font-semibold">Theme</div>
+              <p class="text-sm text-muted-foreground">
+                The range colors of the selected color theme
+              </p>
+            </RadioGroup.Card>
+            <RadioGroup.Card value="clarity">
+              <div class="font-semibold">Distinct</div>
+              <p class="text-sm text-muted-foreground">
+                Maroon, red, yellow and orange for the four out-of-range bands on every theme
+              </p>
+            </RadioGroup.Card>
+          </RadioGroup.Root>
+          <ul class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" aria-label="Range color preview">
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="very-high" />
+              Very high
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="high" />
+              High
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="in-range" />
+              In range
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="low" />
+              Low
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="very-low" />
+              Very low
+            </li>
+          </ul>
+        </div>
 
         <Separator />
 
@@ -492,12 +550,57 @@
       </CardContent>
     </Card>
 
+    <!-- Illustrations -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Paintbrush class="h-5 w-5" />
+          Illustrations
+        </CardTitle>
+        <CardDescription>
+          How the watercolour paintings are shown. This applies to this device
+          only.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <RadioGroup.Root
+          class="grid @xl:grid-cols-3"
+          aria-label="Illustrations"
+          value={illustrations.current}
+          onValueChange={(value) => {
+            const choice = PRESENTATIONS.find((option) => option === value);
+            if (choice) illustrations.current = choice;
+          }}
+        >
+          <RadioGroup.Card value="animated">
+            <div class="font-semibold">Animated</div>
+            <p class="text-sm text-muted-foreground">
+              Paint each illustration in as it appears. Follows your device's
+              reduced-motion setting.
+            </p>
+          </RadioGroup.Card>
+          <RadioGroup.Card value="still">
+            <div class="font-semibold">Still</div>
+            <p class="text-sm text-muted-foreground">
+              Show finished paintings without animation.
+            </p>
+          </RadioGroup.Card>
+          <RadioGroup.Card value="off">
+            <div class="font-semibold">Off</div>
+            <p class="text-sm text-muted-foreground">
+              Hide decorative paintings.
+            </p>
+          </RadioGroup.Card>
+        </RadioGroup.Root>
+      </CardContent>
+    </Card>
+
     <!-- Units & Formats -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Globe class="h-5 w-5" />
-          Units & Formats
+          Units & formats
         </CardTitle>
         <CardDescription>
           Configure measurement units and display formats. These preferences sync
@@ -527,6 +630,31 @@
               </SelectContent>
             </Select>
           </div>
+
+          <div class="space-y-2">
+            <Label for="energy-unit">Food energy units</Label>
+            <Select
+              type="single"
+              value={getEnergyUnit()}
+              onValueChange={(value) => {
+                const unit = ENERGY_UNITS.find((u) => u === value);
+                if (unit) energyUnit.current = unit;
+              }}
+            >
+              <SelectTrigger id="energy-unit">
+                <span>
+                  {getEnergyUnit() === "kJ" ? "Kilojoules (kJ)" : "Calories (kcal)"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kJ">Kilojoules (kJ)</SelectItem>
+                <SelectItem value="kcal">Calories (kcal)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <CarbRatioFormatSelect />
+          <div class="hidden @sm:block" aria-hidden="true"></div>
 
           <div class="space-y-2">
             <Label>Time format</Label>
@@ -628,11 +756,11 @@
             <p class="font-medium">{browserTimezone}</p>
           </div>
           <div class="space-y-1">
-            <Label size="sm" variant="muted">UTC Offset</Label>
+            <Label size="sm" variant="muted">UTC offset</Label>
             <p class="font-medium">{timezoneOffset}</p>
           </div>
           <div class="space-y-1">
-            <Label size="sm" variant="muted">Current Time</Label>
+            <Label size="sm" variant="muted">Current time</Label>
             <p class="font-medium font-mono">{currentTime}</p>
           </div>
         </div>
@@ -648,7 +776,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Eye class="h-5 w-5" />
-          Chart Options
+          Chart options
         </CardTitle>
         <CardDescription>Configure chart display preferences</CardDescription>
       </CardHeader>
@@ -705,8 +833,8 @@
                   </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="continuous">Continuous gradient</SelectItem>
+                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="single">Single color</SelectItem>
                 </SelectContent>
               </Select>
@@ -758,8 +886,8 @@
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="continuous">Continuous gradient</SelectItem>
+                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="single">Single color</SelectItem>
                   </SelectContent>
                 </Select>
@@ -786,24 +914,36 @@
               value={chartAreaMode.current}
               onValueChange={(value: string) => {
                 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the area fill options by the sibling SelectItems
-                chartAreaMode.current = value as "off" | "baseline" | "deviation";
+                chartAreaMode.current = value as AreaMode;
               }}
             >
               <SelectTrigger>
                 <span>
                   {chartAreaMode.current === "off"
                     ? "Off"
-                    : chartAreaMode.current === "baseline"
-                      ? "Baseline"
-                      : "Deviation"}
+                    : chartAreaMode.current === "full"
+                      ? "Full"
+                      : chartAreaMode.current === "baseline"
+                        ? "Fade (Trio style)"
+                        : "Outside target only"}
                 </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="off">Off</SelectItem>
-                <SelectItem value="baseline">Baseline</SelectItem>
-                <SelectItem value="deviation">Deviation</SelectItem>
+                <SelectItem value="full">Full</SelectItem>
+                <SelectItem value="baseline">Fade (Trio style)</SelectItem>
+                <SelectItem value="deviation">Outside target only</SelectItem>
               </SelectContent>
             </Select>
+            <p class="text-sm text-muted-foreground">
+              {chartAreaMode.current === "off"
+                ? "No fill under the glucose line."
+                : chartAreaMode.current === "full"
+                  ? "Fills from the glucose line to the bottom of the chart at one opacity."
+                  : chartAreaMode.current === "baseline"
+                    ? "Fills from the glucose line to the bottom of the chart, fading out toward the bottom."
+                    : "Fills only between the glucose line and the target range when it is out of range."}
+            </p>
           </div>
         </div>
 
@@ -847,9 +987,7 @@
 
     <!-- Dashboard Widgets -->
     <div {@attach coachmark({
-      key: "feature-intro.appearance-widgets",
-      title: "Widget order",
-      description: "Drag to reorder your dashboard widgets.",
+      ...coachFor("feature-intro.appearance-widgets"),
       completeOn: { event: "dragend" },
     })}>
       <DashboardWidgetConfigurator
@@ -859,117 +997,133 @@
       />
     </div>
 
+    <div {@attach coachmark({ ...coachFor("tracker-intro.rail") })}>
+      <DashboardRailConfigurator
+        value={dashboardRail.current}
+        trackerPillsEnabled={trackerPillsEnabled}
+        onchange={(preference) => dashboardRail.current = preference}
+        hiddenLegacyFallbacks={hiddenLegacyFallbacks.current}
+        onhiddenlegacyfallbackschange={(kinds) => hiddenLegacyFallbacks.current = kinds}
+      />
+    </div>
+
 
     {#if !tenantless}
-    <!-- Glucose Processing -->
-    <Card>
-      <CardHeader>
+      <!-- Glucose Processing -->
+      <Card>
+        <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Activity class="h-5 w-5" />
-          Glucose Processing
+          Glucose processing
         </CardTitle>
         <CardDescription>
           Choose how glucose values are displayed when both smoothed and unsmoothed readings are available
         </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 @sm:grid-cols-2">
-          <div class="space-y-2">
-            <Label>Display preference</Label>
-            <Select
-              type="single"
-              value={glucoseProcessingPreference ?? "default"}
-              onValueChange={async (value) => {
-                const newValue = value === "default" ? null : value;
-                glucoseProcessingPreference = newValue;
-                await setPreference({ preferredGlucoseProcessing: newValue });
-              }}
-            >
-              <SelectTrigger>
-                <span>
-                  {#if glucoseProcessingPreference === "Smoothed"}
-                    Smoothed
-                  {:else if glucoseProcessingPreference === "Unsmoothed"}
-                    Unsmoothed
-                  {:else}
-                    Default
-                  {/if}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default</SelectItem>
-                <SelectItem value="Smoothed">Smoothed</SelectItem>
-                <SelectItem value="Unsmoothed">Unsmoothed</SelectItem>
-              </SelectContent>
-            </Select>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2">
+              <Label>Display preference</Label>
+              <Select
+                type="single"
+                value={glucoseProcessingPreference ?? "default"}
+                onValueChange={async (value) => {
+                  const newValue = value === "default" ? null : value;
+                  glucoseProcessingPreference = newValue;
+                  await setPreference({ preferredGlucoseProcessing: newValue });
+                }}
+              >
+                <SelectTrigger>
+                  <span>
+                    {#if glucoseProcessingPreference === GlucoseProcessing.Smoothed}
+                      Smoothed
+                    {:else if glucoseProcessingPreference === GlucoseProcessing.Unsmoothed}
+                      Unsmoothed
+                    {:else}
+                      Default
+                    {/if}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value={GlucoseProcessing.Smoothed}>Smoothed</SelectItem>
+                  <SelectItem value={GlucoseProcessing.Unsmoothed}>Unsmoothed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
-        <p class="text-xs text-muted-foreground">
+          <p class="text-xs text-muted-foreground">
           This only affects values where both smoothed and unsmoothed readings are present.
           "Default" uses the value as reported by the data source.
-        </p>
+          </p>
 
-        <Separator />
+          <Separator />
 
-        <div class="flex items-center justify-between">
-          <div class="space-y-0.5">
-            <Label>Client upload source defaults</Label>
-            <p class="text-sm text-muted-foreground">
-              {#if sourceDefaults.length === 0}
-                No source rules configured. All uploads use the default processing.
-              {:else}
-                {sourceDefaults.length} rule{sourceDefaults.length === 1 ? '' : 's'} configured
-              {/if}
-            </p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="space-y-0.5">
+              <Label>Client upload source defaults</Label>
+              <p class="text-sm text-muted-foreground">
+                {#if sourceDefaults.length === 0}
+                  No source rules configured. All uploads use the default processing.
+                {:else}
+                  {sourceDefaults.length} rule{sourceDefaults.length === 1 ? '' : 's'} configured
+                {/if}
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => sourceDefaultsDialogOpen = true}
+            >Configure</Button>
           </div>
-          <Button variant="outline" size="sm" onclick={() => (sourceDefaultsDialogOpen = true)}>
-            Configure
-          </Button>
-        </div>
 
-        <GlucoseSourceDefaultsDialog
-          bind:open={sourceDefaultsDialogOpen}
-          rules={sourceDefaults}
-          onSave={async (rules) => {
-            sourceDefaults = rules;
-            sourceDefaultsDialogOpen = false;
-            await setSourceDefaults({ rules });
-          }}
-          onCancel={() => (sourceDefaultsDialogOpen = false)}
-        />
-      </CardContent>
-    </Card>
+          <GlucoseSourceDefaultsDialog
+            bind:open={sourceDefaultsDialogOpen}
+            rules={sourceDefaults}
+            onSave={async (rules) => {
+              sourceDefaults = rules;
+              sourceDefaultsDialogOpen = false;
+              await setSourceDefaults({ rules });
+            }}
+            onCancel={() => sourceDefaultsDialogOpen = false}
+          />
+        </CardContent>
+      </Card>
 
-    <!-- Tracker Pills -->
-    <Card>
-      <CardHeader>
+      <!-- Tracker Pills -->
+      <Card>
+        <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Timer class="h-5 w-5" />
-          Tracker Pills
+          Tracker pills
         </CardTitle>
         <CardDescription>
           Show active tracker ages on the dashboard
         </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-6">
-        <div class="flex items-center justify-between">
-          <div class="space-y-0.5">
-            <Label>Show tracker pills</Label>
+        </CardHeader>
+        <CardContent class="space-y-6">
+          <div class="flex items-center justify-between">
+            <div class="space-y-0.5">
+              <Label>Show tracker pills</Label>
             <p class="text-sm text-muted-foreground">
-              Display active tracker ages (sensor, pump site, etc.) on homepage
+              Display active tracker ages (such as sensor and pump site) on homepage
             </p>
-          </div>
-          <Switch
-            checked={trackerPillsEnabled}
+            <p class="text-sm text-muted-foreground">
+              When this is off, tracker pills do not show for any user.
+            </p>
+            </div>
+            <Switch
+              checked={trackerPillsEnabled}
             onCheckedChange={(checked: boolean) =>
               saveFeatures({ trackerPills: { enabled: checked } })}
-          />
-        </div>
+            />
+          </div>
 
         <p class="text-xs text-muted-foreground">
           Each tracker's dashboard visibility is configured in
-          <a href={resolve("/settings/trackers")} class="text-primary hover:underline">
-            Settings → Trackers
+          <a href={resolve("trackers")} class="text-primary hover:underline">
+            Trackers
           </a>
         </p>
       </CardContent>

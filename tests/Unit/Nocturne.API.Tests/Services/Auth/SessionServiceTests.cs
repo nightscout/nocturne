@@ -50,6 +50,7 @@ public class SessionServiceTests
                 It.IsAny<SubjectInfo>(),
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<IEnumerable<string>>(),
+                It.IsAny<string?>(),
                 It.IsAny<TimeSpan?>()))
             .Returns(TestAccessToken);
         _jwtService.Setup(j => j.GetAccessTokenLifetime())
@@ -63,8 +64,8 @@ public class SessionServiceTests
         _refreshTokenService.Setup(r => r.RotateRefreshTokenAsync(
                 TestRefreshToken, _context.IpAddress, _context.UserAgent))
             .ReturnsAsync(TestNewRefreshToken);
-        _refreshTokenService.Setup(r => r.ValidateRefreshTokenAsync(TestNewRefreshToken))
-            .ReturnsAsync(_subjectId);
+        _refreshTokenService.Setup(r => r.FindOwnerAsync(TestRefreshToken))
+            .ReturnsAsync(new RefreshTokenSession(_subjectId, _context.OidcSessionId!));
     }
 
     private SessionService CreateService() =>
@@ -176,6 +177,29 @@ public class SessionServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task IssueSessionAsync_AccessTokenNamesTheRefreshTokenFamily()
+    {
+        string? family = null;
+        _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
+                _subjectId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Callback<Guid, string?, string?, string?, string?>((_, sid, _, _, _) => family = sid)
+            .ReturnsAsync(TestRefreshToken);
+        string? claimed = null;
+        _jwtService.Setup(j => j.GenerateAccessToken(
+                It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+                It.IsAny<string?>(), It.IsAny<TimeSpan?>()))
+            .Callback<SubjectInfo, IEnumerable<string>, IEnumerable<string>, string?, TimeSpan?>(
+                (_, _, _, sid, _) => claimed = sid)
+            .Returns(TestAccessToken);
+
+        await CreateService().IssueSessionAsync(_subjectId, _context with { OidcSessionId = null });
+
+        family.Should().NotBeNullOrEmpty();
+        claimed.Should().Be(family);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task IssueSessionAsync_ExpiresInSeconds_MatchesJwtLifetime()
     {
         // Arrange
@@ -210,17 +234,26 @@ public class SessionServiceTests
         result!.AccessToken.Should().Be(TestAccessToken);
         result.RefreshToken.Should().Be(TestNewRefreshToken);
         result.ExpiresInSeconds.Should().Be(900);
+        result.SubjectId.Should().Be(_subjectId);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task RotateSessionAsync_InvalidToken_ReturnsNull()
+    public async Task RotateSessionAsync_NeverReadsTheRotatedToken()
+    {
+        var service = CreateService();
+
+        await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        _refreshTokenService.Verify(r => r.ValidateRefreshTokenAsync(It.IsAny<string>()), Times.Never);
+        _refreshTokenService.Verify(r => r.FindOwnerAsync(TestNewRefreshToken), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RotateSessionAsync_UnknownToken_ReturnsNullWithoutRotating()
     {
         // Arrange
-        _refreshTokenService.Setup(r => r.RotateRefreshTokenAsync(
-                "invalid-token", _context.IpAddress, _context.UserAgent))
-            .ReturnsAsync((string?)null);
-
         var service = CreateService();
 
         // Act
@@ -228,6 +261,79 @@ public class SessionServiceTests
 
         // Assert
         result.Should().BeNull();
+        _refreshTokenService.Verify(r => r.RotateRefreshTokenAsync(
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RotateSessionAsync_RotationRefused_ReturnsNull()
+    {
+        _refreshTokenService.Setup(r => r.RotateRefreshTokenAsync(
+                TestRefreshToken, _context.IpAddress, _context.UserAgent))
+            .ReturnsAsync((string?)null);
+        var service = CreateService();
+
+        var result = await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RotateSessionAsync_SubjectMissingOrInactive_RevokesThePresentedTokenWithoutRotating(bool exists)
+    {
+        _subjectService.Setup(s => s.GetSubjectByIdAsync(_subjectId))
+            .ReturnsAsync(exists ? new Subject { Id = _subjectId, Name = "Gone", IsActive = false } : null);
+        var service = CreateService();
+
+        var result = await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        result.Should().BeNull();
+        _refreshTokenService.Verify(r => r.RevokeRefreshTokenAsync(TestRefreshToken, It.IsAny<string>()), Times.Once);
+        _refreshTokenService.Verify(r => r.RotateRefreshTokenAsync(
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
+        _jwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+            It.IsAny<string?>(), It.IsAny<TimeSpan?>()), Times.Never);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("subject")]
+    [InlineData("roles")]
+    [InlineData("permissions")]
+    public async Task RotateSessionAsync_ReadFails_PresentedTokenStillRotatesOnRetry(string failingRead)
+    {
+        var outage = new TimeoutException("database unavailable");
+        switch (failingRead)
+        {
+            case "subject":
+                _subjectService.SetupSequence(s => s.GetSubjectByIdAsync(_subjectId))
+                    .ThrowsAsync(outage).ReturnsAsync(_subject);
+                break;
+            case "roles":
+                _subjectService.SetupSequence(s => s.GetSubjectRolesAsync(_subjectId))
+                    .ThrowsAsync(outage).ReturnsAsync(new List<string> { "admin" });
+                break;
+            case "permissions":
+                _subjectService.SetupSequence(s => s.GetSubjectPermissionsAsync(_subjectId))
+                    .ThrowsAsync(outage).ReturnsAsync(new List<string> { "api:read" });
+                break;
+        }
+        var service = CreateService();
+
+        var failed = () => service.RotateSessionAsync(TestRefreshToken, _context);
+        await failed.Should().ThrowAsync<TimeoutException>();
+
+        _refreshTokenService.Verify(r => r.RotateRefreshTokenAsync(
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
+
+        var retried = await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        retried!.RefreshToken.Should().Be(TestNewRefreshToken);
     }
 
     [Fact]
@@ -243,6 +349,21 @@ public class SessionServiceTests
         // Assert
         _subjectService.Verify(s => s.GetSubjectRolesAsync(_subjectId), Times.Once);
         _subjectService.Verify(s => s.GetSubjectPermissionsAsync(_subjectId), Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RotateSessionAsync_AccessTokenCarriesThePresentedTokensSession()
+    {
+        _refreshTokenService.Setup(r => r.FindOwnerAsync(TestRefreshToken))
+            .ReturnsAsync(new RefreshTokenSession(_subjectId, "family-a"));
+        var service = CreateService();
+
+        await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        _jwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+            "family-a", It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     #endregion

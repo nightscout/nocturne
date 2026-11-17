@@ -86,17 +86,17 @@ Output lands in `src/Web/packages/app/src/lib/api/generated/`. **Never edit gene
 import {
   getActiveAlerts,
   acknowledge,
-} from "$api/generated/alerts.generated.remote";
+} from "#lib/api/generated/alerts.generated.remote.js";
 
 // Hand-maintained wrappers — for orchestration or transformation
-import { getChartData } from "$api/chart-data.remote";
+import { getChartData } from "#lib/api/chart-data.remote.js";
 ```
 
 ### Query (read data)
 
 ```svelte
 <script lang="ts">
-  import { getAlertHistory } from "$api/generated/alerts.generated.remote";
+  import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
 
   // Reactive: re-runs when params change
   const alerts = $derived(getAlertHistory({ page: 1, pageSize: 20 }));
@@ -115,7 +115,7 @@ import { getChartData } from "$api/chart-data.remote";
 
 ```svelte
 <script lang="ts">
-  import { acknowledge } from "$api/generated/alerts.generated.remote";
+  import { acknowledge } from "#lib/api/generated/alerts.generated.remote.js";
 
   async function handleAcknowledge(id: string) {
     await acknowledge({ alertInstanceIds: [id] });
@@ -169,6 +169,18 @@ export const getMyCompositeData = query(
 );
 ```
 
+Three rules SvelteKit 3 enforces at runtime:
+
+- A `query` cannot read `event.url`, `event.params` or `event.route` (it throws). Take the value
+  as an argument, or read the host from `request` headers (`getOriginalHost` in
+  `#lib/server/request-host`).
+- Every control in a remote `form` takes its name from the form's fields:
+  `<input {...form.fields.notes.as("hidden", notes)} />`, or `name={form.fields.notes.as("text").name}`
+  on a component that binds its own value. A hand-written `name="notes"` rejects the submission.
+  An update form nests the record under `request` (`form.fields.request.notes`).
+- Awaiting a query answers with the value a live subscriber already holds. To fetch again (a
+  poll, a read after a write), use `fresh(query(args))` from `#lib/api/fresh-query`.
+
 ## What NOT to Do
 
 ### Never write +page.server.ts for data fetching
@@ -190,7 +202,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 // GOOD: Use the generated remote function directly in the component
-import { getData } from "$api/generated/someendpoint.generated.remote";
+import { getData } from "#lib/api/generated/someendpoint.generated.remote.js";
 ```
 
 ### Never use raw fetch
@@ -201,7 +213,7 @@ const res = await fetch("/api/v4/alerts/active");
 const data = await res.json();
 
 // GOOD
-import { getActiveAlerts } from "$api/generated/alerts.generated.remote";
+import { getActiveAlerts } from "#lib/api/generated/alerts.generated.remote.js";
 const data = await getActiveAlerts();
 ```
 
@@ -234,7 +246,7 @@ Need data from the API?
 | Mistake                                                       | Fix                                            |
 | ------------------------------------------------------------- | ---------------------------------------------- |
 | Writing `+page.server.ts` to load data                        | Use remote functions in the component          |
-| Using `fetch()` or `apiClient` directly in components         | Import from `$api/generated/` or `$api/`       |
+| Using `fetch()` or `apiClient` directly in components         | Import from `#lib/api/generated/` or `#lib/api/` |
 | Hand-writing a remote function that the codegen could produce | Add attribute to controller, regenerate        |
 | Editing files in `api/generated/`                             | These are overwritten on every build           |
 | Forgetting `Invalidates` on a mutation                        | Stale cache — add query names to the attribute |

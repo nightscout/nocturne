@@ -1,20 +1,25 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import ReportsFilterSidebar from "./ReportsFilterSidebar.svelte";
+  import ReportFilterExtensionProbe from "./ReportFilterExtensionProbe.test-harness.svelte";
+  import { createReportSlots } from "#lib/hooks/report-slots.svelte.js";
   import {
     setDateParamsContext,
     useDateParams,
-  } from "$lib/hooks/date-params.svelte";
+  } from "#lib/hooks/date-params.svelte.js";
 
   interface Props {
     customFrom?: string;
     customTo?: string;
+    /** Calls into a report's filters, when the harness adds one. */
+    extensionLog?: string[];
   }
 
-  let { customFrom, customTo }: Props = $props();
+  let { customFrom, customTo, extensionLog }: Props = $props();
 
   const params = useDateParams(14);
   setDateParamsContext(params);
+  createReportSlots();
 
   let open = $state(false);
 
@@ -27,4 +32,7 @@
   });
 </script>
 
+{#if extensionLog}
+  <ReportFilterExtensionProbe log={extensionLog} />
+{/if}
 <ReportsFilterSidebar bind:open />

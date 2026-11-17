@@ -1,10 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Profiles;
 
@@ -20,20 +24,20 @@ namespace Nocturne.API.Services.Profiles;
 /// Anything a read serves but no tenant owns gets no row at all, per
 /// <see cref="UISettingsSection.OmittedProperties"/>, so a client that sends it back cannot persist
 /// it.
-/// <c>ui:settings:complete</c>, written by earlier versions, is read-only: it is the fallback for a
-/// section that has no row of its own, which is how tenants whose settings predate this layout keep
-/// reading correctly.
 /// </remarks>
 /// <seealso cref="IUISettingsService"/>
 public class UISettingsService : IUISettingsService
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _time;
     private readonly ILogger<UISettingsService> _logger;
 
-    private const string SettingsKeyPrefix = "ui:settings:";
-    private const string LegacyAggregateKey = "ui:settings:complete";
+    private const string SettingsKeyPrefix = SettingsKeys.UiSettingsPrefix;
     private const string AlarmConfigurationKey = "ui:settings:notifications:alarms";
     private const string AlarmConfigurationNotes = "xDrip+-style alarm profiles configuration";
+
+    /// <summary>First key of the advisory lock that serialises writes of one settings row.</summary>
+    private const int SettingsRowLockClass = 0x5549_5350;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -41,9 +45,13 @@ public class UISettingsService : IUISettingsService
         WriteIndented = false,
     };
 
-    public UISettingsService(NocturneDbContext context, ILogger<UISettingsService> logger)
+    public UISettingsService(
+        INocturneDbContextFactory contexts,
+        TimeProvider timeProvider,
+        ILogger<UISettingsService> logger)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -52,18 +60,15 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
-            var stored = await ReadAllAsync(cancellationToken);
-            var legacy = Value(stored, LegacyAggregateKey);
-            var legacyAggregate = legacy == null ? null : JsonNode.Parse(legacy) as JsonObject;
+            var stored = await ReadAllAsync(db, cancellationToken);
             var settings = new UISettingsConfiguration();
 
             foreach (var section in UISettingsSections.All)
             {
-                var value =
-                    Deserialize(Value(stored, GetSectionKey(section.Name)), section.Type)
-                    ?? legacyAggregate?[section.Name]?.Deserialize(section.Type, JsonOptions);
+                var value = Deserialize(Value(stored, GetSectionKey(section.Name)), section.Type);
 
                 if (value != null)
                 {
@@ -71,10 +76,11 @@ public class UISettingsService : IUISettingsService
                 }
             }
 
-            settings.Notifications.AlarmConfiguration =
+            var notifications = settings.Notifications ??= new NotificationSettings();
+            notifications.AlarmConfiguration =
                 Deserialize(Value(stored, AlarmConfigurationKey), typeof(UserAlarmConfiguration))
                     as UserAlarmConfiguration
-                ?? settings.Notifications.AlarmConfiguration;
+                ?? notifications.AlarmConfiguration;
 
             settings.Features.Widgets = WidgetCatalog.MainSectionsOf(settings.Features.Widgets);
 
@@ -93,6 +99,7 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
             foreach (var section in UISettingsSections.All)
@@ -100,11 +107,11 @@ public class UISettingsService : IUISettingsService
                 var value = section.Get(settings);
                 if (value != null)
                 {
-                    await WriteSectionAsync(section.Name, value, cancellationToken);
+                    await WriteSectionAsync(db, section.Name, value, cancellationToken);
                 }
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("UI settings saved successfully");
 
             return settings;
@@ -149,35 +156,136 @@ public class UISettingsService : IUISettingsService
     }
 
     /// <inheritdoc />
-    public async Task<T> SaveSectionAsync<T>(
+    public async Task<T> PatchSectionAsync<T>(
         string sectionName,
-        T sectionSettings,
+        JsonElement patch,
         CancellationToken cancellationToken = default
     )
         where T : class
     {
-        if (UISettingsSections.Find(sectionName) == null && !IsAlarmConfigurationName(sectionName))
+        var section = PatchableSection<T>(sectionName, patch);
+        EnsureFits(section, patch);
+
+        var key = GetSectionKey(section.Name);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        try
+        {
+            var patched = await db.ExecuteInTransactionAsync<object>(
+                async token =>
+                {
+                    await LockRowAsync(db, key, token);
+                    if (section.Type == typeof(NotificationSettings))
+                    {
+                        await LockRowAsync(db, AlarmConfigurationKey, token);
+                    }
+
+                    var stored = await ReadValueAsync(db, key, token);
+                    var current = stored == null ? null : JsonNode.Parse(stored);
+                    if (section.Type == typeof(NotificationSettings))
+                    {
+                        current = WithAlarmConfiguration(
+                            current,
+                            await ReadValueAsync(db, AlarmConfigurationKey, token)
+                        );
+                    }
+
+                    var value = ApplyPatch(section, current, patch);
+
+                    await WriteSectionAsync(db, section.Name, value, token);
+                    await db.SaveChangesAsync(token);
+
+                    return value;
+                },
+                ct: cancellationToken
+            );
+
+            _logger.LogInformation("Settings section {Section} patched successfully", section.Name);
+            return (T)patched;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error patching settings section: {Section}", section.Name);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public T PreviewPatch<T>(string sectionName, T? current, JsonElement patch)
+        where T : class
+    {
+        var section = PatchableSection<T>(sectionName, patch);
+        EnsureFits(section, patch);
+
+        return (T)ApplyPatch(section, current == null ? null : JsonSerializer.SerializeToNode(current, JsonOptions), patch);
+    }
+
+    private static UISettingsSection PatchableSection<T>(string sectionName, JsonElement patch)
+    {
+        var section =
+            UISettingsSections.Find(sectionName)
+            ?? throw new ArgumentException(
+                $"Unknown UI settings section: {sectionName}",
+                nameof(sectionName)
+            );
+        if (section.Type != typeof(T))
         {
             throw new ArgumentException(
-                $"Unknown UI settings section: {sectionName}",
+                $"Section {section.Name} is a {section.Type.Name}, not a {typeof(T).Name}",
                 nameof(sectionName)
             );
         }
 
+        if (patch.ValueKind != JsonValueKind.Object)
+        {
+            throw new ArgumentException("A section patch is a JSON object", nameof(patch));
+        }
+
+        return section;
+    }
+
+    /// <summary>
+    /// Refuses a patch the section cannot hold, before any row is read, so a fault found later is
+    /// the stored row's and not the caller's. A patch that reads as the section's type over an
+    /// empty row reads as it over any row whose own properties read.
+    /// </summary>
+    /// <exception cref="ArgumentException">The patch names a key the section has no property for, or gives one a value of the wrong type.</exception>
+    private static void EnsureFits(UISettingsSection section, JsonElement patch)
+    {
+        JsonMergePatch.EnsureNamesOf(section.Type, patch, JsonOptions);
         try
         {
-            await WriteSectionAsync(sectionName, sectionSettings, cancellationToken);
-
-            await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Settings section {Section} saved successfully", sectionName);
-
-            return sectionSettings;
+            ApplyPatch(section, null, patch);
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
-            _logger.LogError(ex, "Error saving settings section: {Section}", sectionName);
-            throw;
+            throw new ArgumentException(ex.Message, nameof(patch), ex);
         }
+    }
+
+    /// <summary>
+    /// <paramref name="current"/> with <paramref name="patch"/> merged over it, as the section's own
+    /// type. Properties neither names take the type's defaults.
+    /// </summary>
+    /// <exception cref="JsonException">The merged section does not fit the section's type.</exception>
+    private static object ApplyPatch(UISettingsSection section, JsonNode? current, JsonElement patch)
+    {
+        return JsonMergePatch.Merge(current, patch).Deserialize(section.Type, JsonOptions)!;
+    }
+
+    /// <summary>
+    /// The notifications row with the alarm configuration its own row holds, which a patch of the
+    /// notifications section merges into.
+    /// </summary>
+    private static JsonNode? WithAlarmConfiguration(JsonNode? notifications, string? alarmRow)
+    {
+        if (alarmRow == null)
+        {
+            return notifications;
+        }
+
+        var node = notifications as JsonObject ?? new JsonObject();
+        node["alarmConfiguration"] = JsonNode.Parse(alarmRow);
+        return node;
     }
 
     /// <inheritdoc />
@@ -194,32 +302,14 @@ public class UISettingsService : IUISettingsService
     }
 
     /// <inheritdoc />
-    public async Task<NotificationSettings> SaveNotificationSettingsAsync(
-        NotificationSettings settings,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return await SaveSectionAsync(
-            UISettingsSections.Notifications,
-            settings,
-            cancellationToken
-        );
-    }
-
-    /// <inheritdoc />
     public async Task<UserAlarmConfiguration?> GetAlarmConfigurationAsync(
         CancellationToken cancellationToken = default
     )
     {
         try
         {
-            UserAlarmConfiguration? stored =
-                await ReadAlarmConfigurationAsync(cancellationToken)
-                ?? (await GetNotificationSettingsAsync(cancellationToken)).AlarmConfiguration;
-
-            // A row carrying an explicit JSON null binds over the property initialiser, so a read
-            // that succeeded can still land here with nothing. Null is reserved for a failed read.
-            return stored ?? new UserAlarmConfiguration();
+            await using var db = await _contexts.CreateAsync(cancellationToken);
+            return await ReadAlarmConfigurationAsync(db, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -234,28 +324,156 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
+        var saved = (await ChangeAlarmConfigurationAsync(_ => config, cancellationToken))!;
+        _logger.LogInformation(
+            "Alarm configuration saved with {ProfileCount} profiles",
+            saved.Profiles?.Count ?? 0
+        );
+
+        return saved;
+    }
+
+    /// <inheritdoc />
+    public async Task<UserAlarmConfiguration> AddOrUpdateAlarmProfileAsync(
+        AlarmProfileConfiguration profile,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // A blank id would match every other blank-id profile on the next upsert, so the
+        // list could never hold more than one of them.
+        if (string.IsNullOrWhiteSpace(profile.Id))
+        {
+            profile.Id = Guid.CreateVersion7().ToString();
+        }
+
+        return (await ChangeAlarmConfigurationAsync(
+            config =>
+            {
+                config.Profiles ??= [];
+
+                var existing = config.Profiles.FindIndex(p => p.Id == profile.Id);
+                if (existing >= 0)
+                {
+                    config.Profiles[existing] = profile;
+                }
+                else
+                {
+                    config.Profiles.Add(profile);
+                }
+
+                return config;
+            },
+            cancellationToken
+        ))!;
+    }
+
+    /// <inheritdoc />
+    public Task<UserAlarmConfiguration?> DeleteAlarmProfileAsync(
+        string profileId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return ChangeAlarmConfigurationAsync(
+            config =>
+            {
+                config.Profiles ??= [];
+                return config.Profiles.RemoveAll(p => p.Id == profileId) == 0 ? null : config;
+            },
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Reads the alarm configuration, applies <paramref name="change"/> and writes the result, with
+    /// the alarm row locked from the read to the commit, so concurrent changes and patches of the
+    /// notifications section apply one after another.
+    /// </summary>
+    /// <param name="change">The configuration to write, or null to write nothing.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>What <paramref name="change"/> returned.</returns>
+    private async Task<UserAlarmConfiguration?> ChangeAlarmConfigurationAsync(
+        Func<UserAlarmConfiguration, UserAlarmConfiguration?> change,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
-            await UpsertAsync(
-                AlarmConfigurationKey,
-                JsonSerializer.Serialize(config, JsonOptions),
-                AlarmConfigurationNotes,
-                cancellationToken
-            );
+            return await db.ExecuteInTransactionAsync(
+                async token =>
+                {
+                    await LockRowAsync(db, AlarmConfigurationKey, token);
 
-            await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation(
-                "Alarm configuration saved with {ProfileCount} profiles",
-                config.Profiles?.Count ?? 0
-            );
+                    var changed = change(await ReadAlarmConfigurationAsync(db, token));
+                    if (changed == null)
+                    {
+                        return null;
+                    }
 
-            return config;
+                    await UpsertAsync(
+                        db,
+                        AlarmConfigurationKey,
+                        JsonSerializer.Serialize(changed, JsonOptions),
+                        AlarmConfigurationNotes,
+                        token
+                    );
+                    await db.SaveChangesAsync(token);
+
+                    return changed;
+                },
+                ct: cancellationToken
+            );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving alarm configuration");
+            _logger.LogError(ex, "Error changing alarm configuration");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Serialises transactions on one settings row. An advisory lock, not a row lock, because a row
+    /// nobody has saved yet has nothing to lock.
+    /// </summary>
+    private static Task LockRowAsync(
+        NocturneDbContext db,
+        string key,
+        CancellationToken cancellationToken
+    )
+    {
+        return db.LockForTransactionAsync(
+            SettingsRowLockClass,
+            $"{db.TenantId}|{key}",
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// The alarm row, else the copy an earlier layout left in the notifications row, else an empty
+    /// configuration. A row carrying an explicit JSON null binds over the property initialiser, so
+    /// a read that succeeded can still find nothing; null is reserved for a failed read.
+    /// </summary>
+    private async Task<UserAlarmConfiguration> ReadAlarmConfigurationAsync(
+        NocturneDbContext db,
+        CancellationToken cancellationToken
+    )
+    {
+        var stored =
+            Deserialize(
+                await ReadValueAsync(db, AlarmConfigurationKey, cancellationToken),
+                typeof(UserAlarmConfiguration)
+            ) as UserAlarmConfiguration;
+
+        if (stored == null
+            && Deserialize(
+                await ReadValueAsync(db, GetSectionKey(UISettingsSections.Notifications), cancellationToken),
+                typeof(NotificationSettings)
+            ) is NotificationSettings notifications)
+        {
+            stored = notifications.AlarmConfiguration;
+        }
+
+        return stored ?? new UserAlarmConfiguration();
     }
 
     /// <summary>
@@ -275,20 +493,10 @@ public class UISettingsService : IUISettingsService
         return sectionName.ToLowerInvariant() is "alarms" or "alarmconfiguration";
     }
 
-    private async Task<UserAlarmConfiguration?> ReadAlarmConfigurationAsync(
-        CancellationToken cancellationToken
-    )
-    {
-        return await ReadAsync(
-            AlarmConfigurationKey,
-            typeof(UserAlarmConfiguration),
-            cancellationToken
-        ) as UserAlarmConfiguration;
-    }
-
     private async Task<object?> ReadAsync(string key, Type type, CancellationToken cancellationToken)
     {
-        return Deserialize(await ReadValueAsync(key, cancellationToken), type);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return Deserialize(await ReadValueAsync(db, key, cancellationToken), type);
     }
 
     private static object? Deserialize(string? value, Type type)
@@ -306,10 +514,11 @@ public class UISettingsService : IUISettingsService
     /// round trip per section.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, string>> ReadAllAsync(
+        NocturneDbContext db,
         CancellationToken cancellationToken
     )
     {
-        var rows = await _context
+        var rows = await db
             .Settings.Where(s => s.IsActive && s.Key.StartsWith(SettingsKeyPrefix))
             .Select(s => new { s.Key, s.Value })
             .ToListAsync(cancellationToken);
@@ -319,9 +528,9 @@ public class UISettingsService : IUISettingsService
             .ToDictionary(g => g.Key, g => g.First().Value!);
     }
 
-    private async Task<string?> ReadValueAsync(string key, CancellationToken cancellationToken)
+    private async Task<string?> ReadValueAsync(NocturneDbContext db, string key, CancellationToken cancellationToken)
     {
-        var entity = await _context.Settings.FirstOrDefaultAsync(
+        var entity = await db.Settings.FirstOrDefaultAsync(
             s => s.Key == key && s.IsActive,
             cancellationToken
         );
@@ -335,6 +544,7 @@ public class UISettingsService : IUISettingsService
     /// splits in two, so its alarm configuration is additionally staged to the row that owns it.
     /// </summary>
     private async Task WriteSectionAsync(
+        NocturneDbContext db,
         string sectionName,
         object sectionSettings,
         CancellationToken cancellationToken
@@ -343,6 +553,7 @@ public class UISettingsService : IUISettingsService
         if (sectionSettings is NotificationSettings notifications)
         {
             await UpsertAsync(
+                db,
                 AlarmConfigurationKey,
                 JsonSerializer.Serialize(notifications.AlarmConfiguration, JsonOptions),
                 AlarmConfigurationNotes,
@@ -351,6 +562,7 @@ public class UISettingsService : IUISettingsService
         }
 
         await UpsertAsync(
+            db,
             GetSectionKey(sectionName),
             SerializeForRow(sectionName, sectionSettings),
             $"UI settings section: {sectionName}",
@@ -382,22 +594,23 @@ public class UISettingsService : IUISettingsService
     }
 
     private async Task UpsertAsync(
+        NocturneDbContext db,
         string key,
         string value,
         string notes,
         CancellationToken cancellationToken
     )
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
 
-        var entity = await _context.Settings.FirstOrDefaultAsync(
+        var entity = await db.Settings.FirstOrDefaultAsync(
             s => s.Key == key,
             cancellationToken
         );
 
         if (entity == null)
         {
-            _context.Settings.Add(
+            db.Settings.Add(
                 new SettingsEntity
                 {
                     Id = Guid.CreateVersion7(),

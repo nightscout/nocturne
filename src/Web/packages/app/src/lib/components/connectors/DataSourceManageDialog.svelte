@@ -1,33 +1,40 @@
 <script lang="ts">
-  import type { DataSourceInfo } from "$lib/api/generated/nocturne-api-client";
-  import { deleteDataSourceData as deleteDataSourceDataRemote } from "$api/generated/services.generated.remote";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
-  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import type { ConnectionStream } from "#lib/api/generated/nocturne-api-client.js";
+  import { deleteDataSourceData as deleteDataSourceDataRemote } from "#lib/api/generated/services.generated.remote.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { describeSubmitError, errorStatus } from "$lib/forms";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { toast } from "svelte-sonner";
+  import { describeSubmitError, errorStatus } from "#lib/forms/index.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
-  import { getCategoryIcon } from "$lib/utils/connector-display";
-  import { formatNumber, lastSeen } from "$lib/utils/formatting";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { formatNumber } from "#lib/utils/formatting.js";
+  import ConnectionTime from "./ConnectionTime.svelte";
 
   interface Props {
     open: boolean;
-    selectedDataSource: DataSourceInfo | null;
+    /** The stream whose records the dialog deletes, by its `key`. */
+    source: ConnectionStream | null;
+    /** How many days the stream's record counts cover. */
+    windowDays: number | undefined;
+    /** Runs after Cancel closes the dialog, so its opener can show what it came from. */
+    onCancel?: () => void;
     onDeleteComplete?: () => Promise<void>;
   }
 
   let {
     open = $bindable(false),
-    selectedDataSource,
+    source,
+    windowDays,
+    onCancel,
     onDeleteComplete,
   }: Props = $props();
 
@@ -38,65 +45,60 @@
     )
   );
 
+  // The word the prompt shows is the word the input is compared with, in every language.
+  const confirmWord = "DELETE";
+
   let showDeleteConfirmDialog = $state(false);
   let isDeletingDataSource = $state(false);
   let deleteConfirmText = $state("");
-  let deleteResult = $state<{
-    success?: boolean;
-    totalDeleted?: number;
-    error?: string;
-    alreadyGone?: boolean;
-  } | null>(null);
+  let allowReimport = $state(false);
+  let deleteFailure = $state<{ error?: string; alreadyGone: boolean } | null>(
+    null
+  );
 
-  $effect(() => {
-    if (open) {
-      deleteResult = null;
-      deleteConfirmText = "";
-    }
-  });
+  const recordCounts = $derived(Object.entries(source?.recordCounts ?? {}));
 
-  function getStatusBadge(status: string | undefined): {
-    variant: "success" | "warning" | "secondary" | "outline";
-    text: string;
-  } {
-    switch (status) {
-      case "active":
-        return { variant: "success", text: "Active" };
-      case "stale":
-        return { variant: "warning", text: "Stale" };
-      case "inactive":
-        return { variant: "outline", text: "Inactive" };
-      default:
-        return { variant: "secondary", text: "Unknown" };
-    }
+  function startDelete() {
+    deleteFailure = null;
+    deleteConfirmText = "";
+    allowReimport = false;
+    showDeleteConfirmDialog = true;
+  }
+
+  function cancel() {
+    open = false;
+    onCancel?.();
   }
 
   async function deleteDataSource() {
-    if (!selectedDataSource) return;
+    if (!source?.key) return;
 
     isDeletingDataSource = true;
-    deleteResult = null;
+    deleteFailure = null;
     try {
-      const result = await deleteDataSourceDataRemote(selectedDataSource.id!);
-      deleteResult = {
-        success: result.success ?? false,
-        totalDeleted: result.totalDeleted,
-        error: result.error ?? undefined,
-      };
-      if (result.success) {
-        showDeleteConfirmDialog = false;
-        open = false;
-        if (onDeleteComplete) {
-          await onDeleteComplete();
-        }
+      const result = await deleteDataSourceDataRemote({
+        id: source.key,
+        allowReimport,
+      });
+      if (!result.success) {
+        deleteFailure = { error: result.error ?? undefined, alreadyGone: false };
+        return;
       }
+
+      toast.success(
+        result.totalDeleted === 1
+          ? `Deleted 1 record from ${source.name}`
+          : `Deleted ${formatNumber(result.totalDeleted)} records from ${source.name}`
+      );
+      showDeleteConfirmDialog = false;
+      open = false;
+      await onDeleteComplete?.();
     } catch (e) {
       // A rejected remote function throws SvelteKit's `HttpError` — a plain
       // `{ status, body }` object, not an `Error` — so the status is what
       // separates data that was already gone from a delete that failed.
       const alreadyGone = errorStatus(e) === 404;
-      deleteResult = {
-        success: false,
+      deleteFailure = {
         alreadyGone,
         error: describeSubmitError(
           e,
@@ -111,87 +113,66 @@
   }
 </script>
 
-<!-- Data Source Management Dialog -->
+{#snippet typeCounts()}
+  <ul class="space-y-1">
+    {#each recordCounts as [type, count] (type)}
+      <li class="flex justify-between gap-4">
+        <span>{getDataTypeLabel(type)}</span>
+        <span class="tabular-nums">{formatNumber(count)}</span>
+      </li>
+    {/each}
+  </ul>
+{/snippet}
+
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md">
-    {#if selectedDataSource}
-      {@const Icon = getCategoryIcon(selectedDataSource.category)}
+    {#if source}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
-          <Icon class="h-5 w-5" />
-          {selectedDataSource.name}
+          <AppLogo icon={source.icon} invertMode class="size-5 object-contain" />
+          {source.name}
         </Dialog.Title>
-        <Dialog.Description>
-          {selectedDataSource.description ?? selectedDataSource.deviceId}
-        </Dialog.Description>
+        {#if source.device ?? source.dataSource}
+          <Dialog.Description>
+            {source.device ?? source.dataSource}
+          </Dialog.Description>
+        {/if}
       </Dialog.Header>
 
-      <div class="space-y-4 py-4">
-        <div class="grid grid-cols-2 gap-4 text-sm">
+      <div class="space-y-4 text-sm">
+        <div class="grid grid-cols-2 gap-4">
           <div>
-            <span class="text-muted-foreground">Status</span>
-            <div class="mt-1">
-              <Badge
-                variant={getStatusBadge(selectedDataSource.status).variant}
-              >
-                {getStatusBadge(selectedDataSource.status).text}
-              </Badge>
-            </div>
-          </div>
-          <div>
-            <span class="text-muted-foreground">Last Record Received</span>
+            <span class="text-muted-foreground">Last record</span>
             <p class="mt-1 font-medium">
-              {lastSeen(selectedDataSource.lastSeen)}
+              <ConnectionTime at={source.lastRecordAt} fallback="Never" />
             </p>
           </div>
           <div>
-            <span class="text-muted-foreground">Records (24h)</span>
+            <span class="text-muted-foreground">Records in the last 24 hours</span>
             <p class="mt-1 font-medium">
-              {formatNumber(selectedDataSource.entriesLast24h)}
-            </p>
-          </div>
-          <div>
-            <span class="text-muted-foreground">
-              Records in the last 30 days
-            </span>
-            <p class="mt-1 font-medium">
-              {formatNumber(selectedDataSource.totalEntries)}
+              {formatNumber(source.recordsLast24Hours)}
             </p>
           </div>
         </div>
 
-        <Separator />
-
-        {#if canManage}
-          <div class="rounded-lg border border-warning/30 bg-warning/10 p-4">
-            <div class="flex items-start gap-3">
-              <AlertTriangle class="h-5 w-5 text-warning shrink-0 mt-0.5" />
-              <div>
-                <p class="text-sm font-medium text-warning">
-                  Delete All Data from This Source
-                </p>
-                <p class="text-sm text-warning mt-1">
-                  This will permanently delete all entries, treatments, and
-                  device status records from this data source.
-                </p>
-              </div>
-            </div>
-          </div>
-        {/if}
+        <div class="space-y-2">
+          <p class="text-muted-foreground">
+            Records in the last {windowDays} days
+          </p>
+          {#if recordCounts.length > 0}
+            {@render typeCounts()}
+          {:else}
+            <p class="font-medium">{formatNumber(source.totalRecords)}</p>
+          {/if}
+        </div>
       </div>
 
       <Dialog.Footer>
-        <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-        {#if canManage}
-          <Button
-            variant="outline"
-            onclick={() => {
-              showDeleteConfirmDialog = true;
-              deleteConfirmText = "";
-            }}
-          >
-            <Pencil class="h-4 w-4" />
-            Delete Data...
+        <Button variant="outline" onclick={cancel}>Cancel</Button>
+        {#if canManage && source.canDelete}
+          <Button variant="outline-destructive" onclick={startDelete}>
+            <Trash2 class="h-4 w-4" />
+            Delete data...
           </Button>
         {/if}
       </Dialog.Footer>
@@ -199,7 +180,6 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<!-- Delete Confirmation Dialog -->
 {#if canManage}
   <AlertDialog.Root bind:open={showDeleteConfirmDialog}>
     <AlertDialog.Content>
@@ -209,76 +189,71 @@
           class="flex items-center gap-2"
         >
           <AlertTriangle class="h-5 w-5" />
-          Permanently Delete Data
+          Permanently delete data
         </AlertDialog.Title>
         <AlertDialog.Description class="grid gap-4">
-          {#if selectedDataSource}
+          {#if source}
             <div
-              class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4"
+              class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4 text-sm text-destructive"
             >
-              <p class="text-sm font-semibold text-destructive">
-                THIS ACTION CANNOT BE UNDONE
+              <p class="font-semibold">You cannot undo this action.</p>
+              <p class="mt-2">
+                Nocturne deletes all records from
+                <strong>{source.name}</strong>.
               </p>
-              <p class="text-sm text-destructive mt-2">
-                You are about to permanently delete <strong>all data</strong>
-                from
-                <strong>{selectedDataSource.name}</strong>
-                . This includes:
-              </p>
-              <ul
-                class="text-sm text-destructive list-disc list-inside mt-2 space-y-1"
-              >
-                <li>All glucose records</li>
-                <li>All treatments entered by this device</li>
-                <li>All device status records</li>
-              </ul>
-              <p class="text-sm text-destructive mt-2">
-                This source sent {formatNumber(selectedDataSource.totalEntries)}
-                records in the last 30 days.
-              </p>
-            </div>
-
-            {#if deleteResult}
-              {#if deleteResult.success}
-                <div
-                  class="rounded-lg border border-success/30 bg-success/10 p-4"
-                >
-                  <div class="flex items-center gap-2 text-success">
-                    <CheckCircle class="h-5 w-5" />
-                    <span class="font-medium">Data deleted successfully</span>
-                  </div>
-                  <p class="text-sm text-success mt-1">
-                    Deleted {formatNumber(deleteResult.totalDeleted)} records
-                  </p>
-                </div>
-              {:else}
-                <div
-                  class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
-                >
-                  <div class="flex items-center gap-2 text-destructive">
-                    <AlertCircle class="h-5 w-5" />
-                    <span class="font-medium">
-                      {deleteResult.alreadyGone
-                        ? "Nothing left to delete"
-                        : "Failed to delete data"}
-                    </span>
-                  </div>
-                  <p class="text-sm text-destructive mt-1">
-                    {deleteResult.error}
-                  </p>
+              {#if recordCounts.length > 0}
+                <p class="mt-2">Records in the last {windowDays} days:</p>
+                <div class="mt-1">
+                  {@render typeCounts()}
                 </div>
               {/if}
+            </div>
+
+            {#if deleteFailure}
+              <div
+                class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
+              >
+                <div class="flex items-center gap-2 text-destructive">
+                  <AlertCircle class="h-5 w-5" />
+                  <span class="font-medium">
+                    {deleteFailure.alreadyGone
+                      ? "Nothing left to delete"
+                      : "Failed to delete data"}
+                  </span>
+                </div>
+                <p class="text-sm text-destructive mt-1">
+                  {deleteFailure.error}
+                </p>
+              </div>
             {:else}
+              <label class="mt-4 flex items-start gap-3 rounded-lg border p-4 cursor-pointer">
+                <Checkbox
+                  id="data-source-allow-reimport"
+                  class="mt-0.5"
+                  bind:checked={allowReimport}
+                />
+                <span class="space-y-1">
+                  <span class="block text-sm font-medium text-foreground">Allow re-import</span>
+                  <span class="block text-sm text-muted-foreground">
+                    {#if allowReimport}
+                      Records this source sends again are imported, including any of its records
+                      deleted earlier.
+                    {:else}
+                      Deleted records are never imported again, even if this source sends them.
+                    {/if}
+                  </span>
+                </span>
+              </label>
               <div class="space-y-2 mt-4">
                 <label for="confirm-delete" class="text-sm font-medium">
-                  Type <strong>DELETE</strong>
+                  Type <strong>{confirmWord}</strong>
                   to confirm:
                 </label>
                 <Input
                   id="confirm-delete"
                   type="text"
                   bind:value={deleteConfirmText}
-                  placeholder="Type DELETE"
+                  placeholder={confirmWord}
                 />
               </div>
             {/if}
@@ -289,21 +264,19 @@
         <AlertDialog.Cancel onclick={() => (showDeleteConfirmDialog = false)}>
           Cancel
         </AlertDialog.Cancel>
-        {#if !deleteResult?.success}
-          <Button
-            variant="destructive"
-            onclick={deleteDataSource}
-            disabled={isDeletingDataSource || deleteConfirmText !== "DELETE"}
-          >
-            {#if isDeletingDataSource}
-              <Loader2 class="h-4 w-4 animate-spin" />
-              Deleting...
-            {:else}
-              <Trash2 class="h-4 w-4" />
-              Delete All Data
-            {/if}
-          </Button>
-        {/if}
+        <Button
+          variant="destructive"
+          onclick={deleteDataSource}
+          disabled={isDeletingDataSource || deleteConfirmText !== confirmWord}
+        >
+          {#if isDeletingDataSource}
+            <Loader2 class="h-4 w-4 animate-spin" />
+            Deleting...
+          {:else}
+            <Trash2 class="h-4 w-4" />
+            {allowReimport ? "Delete and allow re-import" : "Delete all data"}
+          {/if}
+        </Button>
       </AlertDialog.Footer>
     </AlertDialog.Content>
   </AlertDialog.Root>

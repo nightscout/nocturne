@@ -2,6 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
+using Nocturne.API.Models.Responses;
+using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -46,7 +50,10 @@ public class PatientRecordController : ControllerBase
     private readonly ISensorGlucoseRepository _sensorGlucoseRepo;
     private readonly IDeviceReattributionService _reattribution;
     private readonly ISensorSessionInferenceRunner _sessionInference;
+    private readonly IDeviceTrackerProvisioner _trackerProvisioner;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantCache _tenantCache;
+    private readonly ITempBasalRateReresolver _tempBasalRates;
     private readonly ILogger<PatientRecordController> _logger;
 
     public PatientRecordController(
@@ -57,7 +64,10 @@ public class PatientRecordController : ControllerBase
         ISensorGlucoseRepository sensorGlucoseRepo,
         IDeviceReattributionService reattribution,
         ISensorSessionInferenceRunner sessionInference,
+        IDeviceTrackerProvisioner trackerProvisioner,
         ITenantAccessor tenantAccessor,
+        ITenantCache tenantCache,
+        ITempBasalRateReresolver tempBasalRates,
         ILogger<PatientRecordController> logger)
     {
         _recordRepo = recordRepo;
@@ -67,7 +77,10 @@ public class PatientRecordController : ControllerBase
         _sensorGlucoseRepo = sensorGlucoseRepo;
         _reattribution = reattribution;
         _sessionInference = sessionInference;
+        _trackerProvisioner = trackerProvisioner;
         _tenantAccessor = tenantAccessor;
+        _tenantCache = tenantCache;
+        _tempBasalRates = tempBasalRates;
         _logger = logger;
     }
 
@@ -80,6 +93,7 @@ public class PatientRecordController : ControllerBase
     /// Get or create the patient record
     /// </summary>
     [HttpGet]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> GetPatientRecord(CancellationToken cancellationToken = default)
@@ -93,13 +107,19 @@ public class PatientRecordController : ControllerBase
     /// </summary>
     [HttpPut]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteForm(Invalidates = ["GetPatientRecord"])]
+    [RemoteForm(Invalidates = ["GetPatientRecord", "TenantSettings_GetPatientRelationship"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
         [FromBody] PatientRecord model,
         CancellationToken cancellationToken = default)
     {
+        var storedTimezone = (await _recordRepo.GetAsync(cancellationToken))?.Timezone;
         var updated = await _recordRepo.UpdateAsync(model, WriteOrigin.Live, cancellationToken);
+        if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
+        {
+            await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
+            await _tempBasalRates.AfterProfilesChangedAsync(cancellationToken);
+        }
         return Ok(updated);
     }
 
@@ -111,6 +131,7 @@ public class PatientRecordController : ControllerBase
     /// Get all patient devices
     /// </summary>
     [HttpGet("devices")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<PatientDevice>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientDevice>>> GetDevices(CancellationToken cancellationToken = default)
@@ -124,6 +145,7 @@ public class PatientRecordController : ControllerBase
     /// candidate streams the user can register as devices from the settings UI.
     /// </summary>
     [HttpGet("devices/discovered-sources")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<DiscoveredSource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<DiscoveredSource>>> GetDiscoveredSources(CancellationToken cancellationToken = default)
@@ -150,6 +172,8 @@ public class PatientRecordController : ControllerBase
         await _reattribution.ReattributeForDeviceAsync(created, cancellationToken);
         if (created.DeviceCategory == DeviceCategory.CGM)
             await InferSensorSessionHistoryAsync(created, cancellationToken);
+        if (HttpContext.GetSubjectIdString() is { } userId)
+            await _trackerProvisioner.ProvisionAsync(created, userId, cancellationToken);
         return CreatedAtAction(nameof(GetDevices), created);
     }
 
@@ -267,6 +291,7 @@ public class PatientRecordController : ControllerBase
     /// Get all patient insulins
     /// </summary>
     [HttpGet("insulins")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<PatientInsulin>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientInsulin>>> GetInsulins(CancellationToken cancellationToken = default)

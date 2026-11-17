@@ -39,7 +39,10 @@ services:
     shm_size: 64mb
     ports:
       - "127.0.0.1:${E2E_POSTGRES_PORT:-1633}:5432"
-    mem_limit: 256m
+    # The tmpfs is charged to this limit as it fills: the database (about 51 MB after a full
+    # run) and up to max_wal_size of WAL, about 310 MB. With 32 MB of shared_buffers that
+    # leaves about 680 MB, room for some 30 backends of about 20 MB each.
+    mem_limit: 1g
     cpus: 1.0
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d nocturne -h 127.0.0.1"]
@@ -75,6 +78,8 @@ services:
       BASE_DOMAIN: *base-domain
       WEB_URL: http://web:5173
       DemoService__Enabled: "false"
+      # Specs read v3 history the moment they write; production keeps the default commit margin.
+      PostgreSql__HistoryCommitMarginMilliseconds: "0"
       NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
       NOCTURNE_GOOGLE_HEALTH_MOCK: "true"
       NOCTURNE_EVERSENSE_MOCK: "true"
@@ -82,20 +87,34 @@ services:
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"
       # 90% of the container limit (hex) instead of the default 75%: the heap peaks while the
-      # migrations run on a fresh database, then settles around 140 MB.
+      # migrations run on a fresh database, then settles around 140 MB. The peak grows with the
+      # migration count, and at 512 MB the onboarding migrations ran it out of memory.
       DOTNET_GCHeapHardLimitPercent: "0x5A"
       DOTNET_TieredPGO: "0"
+      # A crash (a native fault or an unhandled exception) writes a minidump and a JSON crash
+      # report with every thread's native and managed stack to e2e/crash-dumps, which CI uploads.
+      DOTNET_DbgEnableMiniDump: "1"
+      DOTNET_DbgMiniDumpType: "1"
+      DOTNET_DbgMiniDumpName: /crash-dumps/api.%p.dmp
+      DOTNET_EnableCrashReport: "1"
+      DOTNET_CreateDumpDiagnostics: "1"
       Logging__LogLevel__Default: Warning
       Logging__LogLevel__Nocturne: Information
       Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
     ports:
       - "127.0.0.1:${E2E_API_PORT:-1630}:8080"
+    volumes:
+      # Created by scripts/lib.ts `compose`, writable by the image's non-root user.
+      - ./crash-dumps:/crash-dumps
+    # createdump attaches to the crashing process with ptrace, which the host's Yama policy may refuse.
+    cap_add:
+      - SYS_PTRACE
     depends_on:
       postgres:
         condition: service_healthy
       mocks:
         condition: service_healthy
-    mem_limit: 512m
+    mem_limit: 640m
     cpus: 2.0
     healthcheck:
       # The aspnet base image carries no curl or wget; bash's /dev/tcp does the probe.

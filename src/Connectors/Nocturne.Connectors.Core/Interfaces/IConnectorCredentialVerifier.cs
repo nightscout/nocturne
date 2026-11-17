@@ -22,8 +22,18 @@ public interface IConnectorCredentialVerifier
     /// </summary>
     /// <param name="configuration">The non-secret configuration values, in the same shape the configuration PUT accepts.</param>
     /// <param name="secrets">The secret values keyed by camelCase property name, in the same shape the secrets PUT accepts.</param>
+    /// <param name="storedSecrets">
+    ///     The camelCase secret keys to take from the tenant's stored secrets instead of
+    ///     <paramref name="secrets"/>. When any are named, the stored configuration is verified and
+    ///     <paramref name="configuration"/> may only repeat it.
+    /// </param>
+    /// <exception cref="InvalidVerificationRequestException">
+    ///     A stored key is not a secret of the connector or is also submitted, or the submitted
+    ///     configuration differs from the stored one.
+    /// </exception>
     Task<ConnectorCredentialVerificationResult> VerifyAsync(
         JsonDocument? configuration,
         Dictionary<string, string> secrets,
+        IReadOnlyCollection<string> storedSecrets,
         CancellationToken ct = default);
 }

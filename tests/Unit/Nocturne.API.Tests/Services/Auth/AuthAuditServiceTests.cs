@@ -64,8 +64,8 @@ public class AuthAuditServiceTests : IDisposable
                 SubjectId = _adminSubjectId,
             });
 
+        Assert.Equal(_subjectId, row.TargetSubjectId);
         Assert.Equal(_adminSubjectId, row.ActorSubjectId);
-        Assert.NotEqual(row.SubjectId, row.ActorSubjectId);
         Assert.Null(row.ActorCredential);
     }
 
@@ -171,6 +171,7 @@ public class AuthAuditServiceTests : IDisposable
                 SubjectId = _subjectId,
             });
 
+        Assert.Equal(_subjectId, row.TargetSubjectId);
         Assert.Equal(_subjectId, row.ActorSubjectId);
         Assert.Null(row.ActorCredential);
     }
@@ -303,7 +304,7 @@ public class AuthAuditServiceTests : IDisposable
 
     private static AuthAuditService CreateService(NocturneDbContext dbContext) =>
         new(
-            dbContext,
+            dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = new DefaultHttpContext() },
             new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
@@ -358,7 +359,7 @@ public class AuthAuditServiceTests : IDisposable
         await using var dbContext = _db.CreateContext(pinnedTenantId ?? Guid.Empty);
 
         var service = new AuthAuditService(
-            dbContext,
+            dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = httpContext },
             auditContext,
             new Mock<ILogger<AuthAuditService>>().Object);

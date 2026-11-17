@@ -180,18 +180,6 @@ public class MemoryCacheServiceTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Everything this collection holds comes from <c>AddNocturneMemoryCache</c>, so a consumer
-    /// that is not the API host resolves the same way. The processing-status service takes
-    /// <see cref="TimeProvider"/>, which nothing here would otherwise register.
-    /// </summary>
-    [Fact]
-    [Trait("Category", "Cache")]
-    public void ProcessingStatusService_Should_ResolveWithoutAHostSuppliedClock()
-    {
-        Assert.NotNull(_serviceProvider.GetRequiredService<IProcessingStatusService>());
-    }
-
     public void Dispose()
     {
         _serviceProvider?.Dispose();

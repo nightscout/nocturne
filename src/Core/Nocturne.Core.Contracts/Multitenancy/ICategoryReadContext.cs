@@ -5,10 +5,10 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// Carries facts the <see cref="ITenantAccessor"/> does not: whether the request is an
 /// anonymous public share (known pre-auth, at tenant resolution), which read-scope categories
 /// and history window a share may see, and whether an authenticated member or credential is
-/// clamped to the last 24 hours (both known post-auth). The DbContext factory and the
-/// scoped-context registration read it to stamp the carrier properties the
-/// <c>TenantConnectionInterceptor</c> turns into the <c>app.is_share</c>,
-/// <c>app.visible_categories</c>, <c>app.share_full_history</c> and <c>app.history_clamped</c> GUCs.
+/// clamped to the last 24 hours (both known post-auth). Every DbContext of the scope reads it live
+/// when a connection opens, and the <c>TenantConnectionInterceptor</c> turns it into the
+/// <c>app.is_share</c>, <c>app.visible_categories</c>, <c>app.share_full_history</c> and
+/// <c>app.history_clamped</c> GUCs.
 /// </summary>
 public interface ICategoryReadContext
 {
@@ -37,14 +37,13 @@ public interface ICategoryReadContext
     /// without full history, or a member or credential clamped by
     /// <see cref="ClampMemberHistory"/>. A non-share whose clamp is never resolved is not
     /// clamped, so members, owners and background work read full history unless something
-    /// narrows them. The single predicate every tenant-keyed cache of such data checks, since
-    /// RLS narrows only database reads.
+    /// narrows them. Caches see it only through <see cref="IReaderCachePartition"/>.
     /// </summary>
     bool IsHistoryClamped { get; }
 
     /// <summary>
     /// Marks the request as an anonymous public share. Called by
-    /// <c>TenantResolutionMiddleware</c> before the scoped context is pinned.
+    /// <c>TenantResolutionMiddleware</c> as it resolves the share's tenant.
     /// </summary>
     void MarkShare();
 

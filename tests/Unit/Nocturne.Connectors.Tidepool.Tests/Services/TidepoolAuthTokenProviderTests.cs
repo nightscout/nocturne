@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -50,6 +51,48 @@ public class TidepoolAuthTokenProviderTests
             "a non-retryable 401 must fail fast, not burn three attempts with backoff");
         retryDelay.Verify(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never,
             "no backoff delay should be applied for a non-retryable error");
+    }
+
+    [Fact]
+    public async Task GetValidTokenAsync_SessionExpiresAnHourBeforeItsTwentyFourHourLifetimeEnds()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var provider = new TidepoolAuthTokenProvider(
+            new HttpClient(new LoginHandler()),
+            new ConnectorTokenCache(clock),
+            new ConnectorServerResolver<TidepoolConnectorConfiguration>(null, null, "api.tidepool.org"),
+            tenantAccessor.Object,
+            NullLogger<TidepoolAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            clock);
+
+        var token = await provider.GetValidTokenAsync(
+            new TidepoolConnectorConfiguration { Username = "someone@example.com", Password = "hunter2" },
+            CancellationToken.None);
+
+        token.Should().Be("session-token");
+        provider.TokenExpiresAt.Should().Be(clock.GetUtcNow().UtcDateTime.AddHours(23));
+        clock.Advance(TimeSpan.FromHours(23) - TimeSpan.FromSeconds(1));
+        provider.IsTokenExpired.Should().BeFalse();
+        clock.Advance(TimeSpan.FromSeconds(2));
+        provider.IsTokenExpired.Should().BeTrue();
+    }
+
+    private sealed class LoginHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"userid\":\"user-1\"}")
+            };
+            response.Headers.Add(TidepoolConstants.Headers.SessionToken, "session-token");
+            return Task.FromResult(response);
+        }
     }
 
     private sealed class CountingHandler(HttpStatusCode status, string body) : HttpMessageHandler

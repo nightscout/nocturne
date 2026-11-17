@@ -1,17 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { serializeCalloutToMarkdown, generateFrontmatter, toSvx } from './markdown.ts';
+import { parse } from 'yaml';
+import { generateFrontmatter, toSvx } from './markdown.ts';
 
-describe('serializeCalloutToMarkdown', () => {
-	it('serializes callout node to svx component syntax', () => {
-		const result = serializeCalloutToMarkdown('tip', 'Stay tuned for more content.');
-		expect(result).toBe('<Callout type="tip">\nStay tuned for more content.\n</Callout>');
-	});
-
-	it('defaults to info type', () => {
-		const result = serializeCalloutToMarkdown(undefined, 'A note.');
-		expect(result).toBe('<Callout type="info">\nA note.\n</Callout>');
-	});
-});
+function readBack(metadata: Record<string, unknown>): unknown {
+	const block = generateFrontmatter(metadata).replace(/^---\n/, '').replace(/\n---$/, '');
+	return parse(block);
+}
 
 describe('generateFrontmatter', () => {
 	it('generates YAML frontmatter from metadata', () => {
@@ -41,6 +35,41 @@ describe('generateFrontmatter', () => {
 		const meta = { title: 'Draft', draft: true };
 		const result = generateFrontmatter(meta);
 		expect(result).toContain('draft: true');
+	});
+
+	it('leaves values that need no quoting unquoted', () => {
+		const result = generateFrontmatter({ title: 'Test Post', date: '2026-04-13', tags: [] });
+		expect(result).toBe('---\ntitle: Test Post\ndate: 2026-04-13\ntags: []\n---');
+	});
+});
+
+describe('generateFrontmatter round trip', () => {
+	const hostile: Record<string, string> = {
+		newline: 'first line\nsecond: line',
+		colonSpace: 'Release: the big one',
+		hash: 'Issue #12 # not a comment',
+		doubleQuote: 'She said "hello"',
+		singleQuote: "It's a 'quoted' title",
+		backslash: 'C:\\path\\to',
+		leadingDash: '- not a list item',
+		fence: '---',
+		fenceInside: 'before\n---\nafter',
+		reserved: 'true',
+		numeric: '1.5',
+		empty: '',
+		trailingSpace: 'ends with space ',
+		lineSeparator: `a${String.fromCharCode(0x2028)}b`
+	};
+
+	for (const [name, value] of Object.entries(hostile)) {
+		it(`reads a ${name} value back unchanged`, () => {
+			expect(readBack({ title: value })).toEqual({ title: value });
+		});
+	}
+
+	it('reads array items back unchanged', () => {
+		const tags = ['plain', 'has, comma', 'say "hi"', '---'];
+		expect(readBack({ tags })).toEqual({ tags });
 	});
 });
 

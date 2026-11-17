@@ -1,5 +1,6 @@
 using Moq;
 using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -36,10 +37,7 @@ public class IobCalculatorParityTests
             .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultSensitivity);
 
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
+        var basalSegments = MockBasalSegments.Flat(DefaultBasalRate);
 
         _apsSnapshotRepo = new Mock<IApsSnapshotRepository>();
         _pumpSnapshotRepo = new Mock<IPumpSnapshotRepository>();
@@ -54,9 +52,10 @@ public class IobCalculatorParityTests
         _calculator = new IobCalculator(
             therapySettings.Object,
             sensitivityResolver.Object,
-            basalRateResolver.Object,
+            basalSegments.Object,
             _apsSnapshotRepo.Object,
-            _pumpSnapshotRepo.Object
+            _pumpSnapshotRepo.Object,
+            MockStateSpans.Empty().Object
         );
     }
 
@@ -72,10 +71,7 @@ public class IobCalculatorParityTests
             .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultSensitivity);
 
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
+        var basalSegments = MockBasalSegments.Flat(DefaultBasalRate);
 
         var apsRepo = new Mock<IApsSnapshotRepository>();
         apsRepo
@@ -86,7 +82,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
 
-        return new IobCalculator(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object, apsRepo.Object, pumpRepo.Object);
+        return new IobCalculator(therapySettings.Object, sensitivityResolver.Object, basalSegments.Object, apsRepo.Object, pumpRepo.Object, MockStateSpans.Empty().Object);
     }
 
     private static IobCalculator CreateCalculatorWithSensitivity(double sens)
@@ -101,10 +97,7 @@ public class IobCalculatorParityTests
             .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sens);
 
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
+        var basalSegments = MockBasalSegments.Flat(DefaultBasalRate);
 
         var apsRepo = new Mock<IApsSnapshotRepository>();
         apsRepo
@@ -115,7 +108,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
 
-        return new IobCalculator(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object, apsRepo.Object, pumpRepo.Object);
+        return new IobCalculator(therapySettings.Object, sensitivityResolver.Object, basalSegments.Object, apsRepo.Object, pumpRepo.Object, MockStateSpans.Empty().Object);
     }
 
     private static Bolus MakeBolus(long mills, double insulin, TreatmentInsulinContext? insulinContext = null)
@@ -237,7 +230,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.5, result.Iob);
         Assert.Equal("Loop", result.Source);
@@ -266,7 +259,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(0.5, result.Iob);
         Assert.Equal("OpenAPS", result.Source);
@@ -294,7 +287,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(0.8, result.Iob);
         Assert.Equal("OpenAPS", result.Source);
@@ -313,7 +306,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.True(result.Iob > 0);
         Assert.Equal("Care Portal", result.Source);
@@ -348,7 +341,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { pumpSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(0.87, result.Iob);
         Assert.Equal("Pump", result.Source);
@@ -376,7 +369,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { pumpSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.23, result.Iob);
         Assert.Equal("Pump", result.Source);
@@ -411,7 +404,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { pumpSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.5, result.Iob);
         Assert.Equal("Loop", result.Source);
@@ -430,7 +423,7 @@ public class IobCalculatorParityTests
             MakeBolus(time - 30 * 60 * 1000, 2.0),
         };
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.True(result.Iob > 0);
         Assert.Equal("Care Portal", result.Source);
@@ -457,7 +450,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.5, result.Iob);
         Assert.True(result.TreatmentIob.HasValue);
@@ -466,198 +459,48 @@ public class IobCalculatorParityTests
 
     #endregion
 
-    #region CalcTempBasal Parity (mirrors CalcTempBasalIob tests)
+    #region Temp basals as delivered
 
     [Fact]
-    public void CalcTempBasal_AboveScheduled_ShouldReturnPositiveIob()
+    public async Task CalculateTotal_RunningTemp_CountsUpToTheTimeAsked()
     {
         var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
+        var at = now.ToUnixTimeMilliseconds();
+
+        var running = await _calculator.CalculateTotalAsync([], [HighTemp(now.AddMinutes(-30), end: null)], at);
+        var endedNow = await _calculator.CalculateTotalAsync([], [HighTemp(now.AddMinutes(-30), now)], at);
+
+        Assert.True(running.BasalIob > 0);
+        Assert.Equal(endedNow.BasalIob, running.BasalIob);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_Cancel_EndsTheTempBeforeIt()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var at = now.ToUnixTimeMilliseconds();
+        var cancel = new TempBasal
         {
-            StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-            EndTimestamp = now.AddMinutes(-1).UtcDateTime,
-            Rate = 1.5,
-            ScheduledRate = 0.5,
+            StartTimestamp = now.AddMinutes(-20).UtcDateTime,
+            EndTimestamp = now.AddMinutes(-20).UtcDateTime,
+            Rate = 0, ScheduledRate = 0.5,
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
+        var cancelled = await _calculator.CalculateTotalAsync([], [HighTemp(now.AddMinutes(-30), now.AddMinutes(30)), cancel], at);
+        var endedAtTheCancel = await _calculator.CalculateTotalAsync([], [HighTemp(now.AddMinutes(-30), now.AddMinutes(-20))], at);
 
-        Assert.True(result.IobContrib > 0);
+        Assert.True(cancelled.BasalIob > 0);
+        Assert.Equal(endedAtTheCancel.BasalIob, cancelled.BasalIob);
     }
 
-    [Fact]
-    public void CalcTempBasal_AtScheduledRate_ShouldReturnZero()
+    private static TempBasal HighTemp(DateTimeOffset start, DateTimeOffset? end) => new()
     {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
-        {
-            StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-            EndTimestamp = now.AddMinutes(-1).UtcDateTime,
-            Rate = 1.0,
-            ScheduledRate = 1.0,
-            Origin = TempBasalOrigin.Algorithm,
-        };
-
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.IobContrib);
-    }
-
-    [Fact]
-    public void CalcTempBasal_BelowScheduled_ShouldReturnZero()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
-        {
-            StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-            EndTimestamp = now.AddMinutes(-1).UtcDateTime,
-            Rate = 0.3,
-            ScheduledRate = 1.0,
-            Origin = TempBasalOrigin.Algorithm,
-        };
-
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.IobContrib);
-    }
-
-    [Fact]
-    public void CalcTempBasal_Suspended_ShouldReturnZero()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
-        {
-            StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-            EndTimestamp = now.AddMinutes(-1).UtcDateTime,
-            Rate = 1.5,
-            ScheduledRate = 0.5,
-            Origin = TempBasalOrigin.Suspended,
-        };
-
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.IobContrib);
-    }
-
-    [Fact]
-    public void CalcTempBasal_NoEndTime_ShouldReturnZero()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
-        {
-            StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-            EndTimestamp = null,
-            Rate = 2.0,
-            ScheduledRate = 0.5,
-            Origin = TempBasalOrigin.Algorithm,
-        };
-
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.IobContrib);
-    }
-
-    [Fact]
-    public void CalcTempBasal_AfterDIA_ShouldReturnZero()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
-        {
-            StartTimestamp = now.AddHours(-4).UtcDateTime,
-            EndTimestamp = now.AddHours(-3.5).UtcDateTime,
-            Rate = 2.0,
-            ScheduledRate = 0.5,
-            Origin = TempBasalOrigin.Algorithm,
-        };
-
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.IobContrib);
-    }
-
-    [Fact]
-    public void CalcTempBasal_LinearDecay_ShouldDecreaseOverTime()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
-        {
-            StartTimestamp = now.AddMinutes(-60).UtcDateTime,
-            EndTimestamp = now.AddMinutes(-30).UtcDateTime,
-            Rate = 2.0,
-            ScheduledRate = 0.5,
-            Origin = TempBasalOrigin.Algorithm,
-        };
-
-        var earlier = _calculator.CalcTempBasal(tempBasal, now.AddMinutes(-30).ToUnixTimeMilliseconds());
-        var later = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
-
-        Assert.True(earlier.IobContrib > later.IobContrib);
-        Assert.True(later.IobContrib > 0);
-    }
-
-    #endregion
-
-    #region FromTempBasals Parity
-
-    [Fact]
-    public void FromTempBasals_MultipleTempBasals_ShouldAggregateBasalIob()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasals = new List<TempBasal>
-        {
-            new()
-            {
-                StartTimestamp = now.AddMinutes(-60).UtcDateTime,
-                EndTimestamp = now.AddMinutes(-30).UtcDateTime,
-                Rate = 2.0, ScheduledRate = 0.5,
-                Origin = TempBasalOrigin.Algorithm,
-            },
-            new()
-            {
-                StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-                EndTimestamp = now.AddMinutes(-5).UtcDateTime,
-                Rate = 1.8, ScheduledRate = 0.5,
-                Origin = TempBasalOrigin.Algorithm,
-            },
-        };
-
-        var result = _calculator.FromTempBasals(tempBasals, now.ToUnixTimeMilliseconds());
-
-        Assert.True(result.BasalIob.HasValue);
-        Assert.True(result.BasalIob!.Value > 0);
-    }
-
-    [Fact]
-    public void FromTempBasals_EmptyList_ShouldReturnZero()
-    {
-        var result = _calculator.FromTempBasals(new List<TempBasal>(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.Iob);
-        Assert.Null(result.BasalIob);
-    }
-
-    [Fact]
-    public void FromTempBasals_SetsBasalIobNotBolus()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var tempBasals = new List<TempBasal>
-        {
-            new()
-            {
-                StartTimestamp = now.AddMinutes(-30).UtcDateTime,
-                EndTimestamp = now.AddMinutes(-5).UtcDateTime,
-                Rate = 2.0, ScheduledRate = 0.5,
-                Origin = TempBasalOrigin.Algorithm,
-            },
-        };
-
-        var result = _calculator.FromTempBasals(tempBasals, now.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.Iob);
-        Assert.True(result.BasalIob.HasValue);
-        Assert.True(result.BasalIob!.Value > 0);
-    }
+        StartTimestamp = start.UtcDateTime,
+        EndTimestamp = end?.UtcDateTime,
+        Rate = 2.0, ScheduledRate = 0.5,
+        Origin = TempBasalOrigin.Algorithm,
+    };
 
     #endregion
 

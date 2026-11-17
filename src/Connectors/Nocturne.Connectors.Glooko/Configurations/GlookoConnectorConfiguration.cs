@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     ServiceNames.GlookoConnector,
     "GLOOKO",
     "ConnectSource.Glooko",
-    "glooko-connector",
+    DataSources.GlookoConnector,
     "glooko",
     ConnectorCategory.Sync,
     "Import data from Glooko platform",
@@ -35,7 +35,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Profiles,
         SyncDataType.Notes,
         SyncDataType.Activity
-    ]
+    ],
+    DocumentationUrl = UrlConstants.External.DocsGlooko
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration
 {
@@ -57,7 +58,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.Password, Required = true, Secret = true,
         VisibleWhen = ConnectorPropertyKey.Server,
-        VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
+        VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionDEFR, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public string Password { get; init; } = string.Empty;
 
     /// <summary>
@@ -76,7 +77,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.Server,
         DefaultValue = GlookoConstants.RegionUS,
-        AllowedValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS, GlookoConstants.RegionXT])]
+        AllowedValues = [GlookoConstants.RegionCA, GlookoConstants.RegionDEFR, GlookoConstants.RegionEU, GlookoConstants.RegionUS, GlookoConstants.RegionXT])]
     public string Server { get; init; } = GlookoConstants.RegionUS;
 
     /// <summary>
@@ -84,7 +85,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     ///     This provides a single API call instead of multiple v2 calls.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.UseV3Api, DefaultValue = "true",
-        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionDEFR, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public bool UseV3Api { get; set; } = true;
 
     /// <summary>
@@ -92,7 +93,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     ///     Only use this if you want Glooko to fill gaps in your primary CGM data.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.V3IncludeCgmBackfill, DefaultValue = "false",
-        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionDEFR, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public bool V3IncludeCgmBackfill { get; set; } = false;
 
     /// <summary>
@@ -105,7 +106,8 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     public bool AutoClockCorrection { get; set; } = false;
 
     /// <summary>
-    ///     How many days back a background sync reaches. Glooko receives pump data in batches, days
+    ///     How many days back a background sync reaches once per <see cref="GlookoConstants.LookbackReadInterval"/>;
+    ///     the runs between read <see cref="GlookoConstants.ShortWindow"/>. Glooko receives pump data in batches, days
     ///     after the fact, so the window is a fixed lookback rather than a resume point at the newest
     ///     stored record; anything that arrives later than this is picked up by the daily full walk
     ///     over <see cref="GlookoConstants.FullWalkMonths"/>. Ten days plus the one-day padding on
@@ -126,6 +128,6 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     ///     Experimental; off by default.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.UseSsv2Sync, DefaultValue = "false",
-        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionDEFR, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public bool UseSsv2Sync { get; set; } = false;
 }

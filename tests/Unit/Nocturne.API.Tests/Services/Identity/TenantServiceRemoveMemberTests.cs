@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -12,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Configuration;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -50,11 +52,17 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     }
 
     private TenantService Service() => new(
-        new Factory(_db.Options, _tenantId),
+        (new Factory(_db.Options, _tenantId)).AsNocturneFactory(),
+        new TenantRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
+        new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
+        new SubjectRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
@@ -214,12 +222,58 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         result.Ok.Should().BeTrue();
         var directory = new ChatIdentityDirectoryService(
-            new Factory(_db.Options, _tenantId), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         (await directory.GetCandidatesAsync("discord", "chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["someone-else"]);
     }
+
+    [Fact]
+    public async Task RemoveMemberAsync_revokesTheMembersGrantsAndTheirRefreshTokens()
+    {
+        var subjectId = await SeedMemberAsync();
+        var otherSubjectId = await SeedMemberAsync();
+        var grant = Grant(subjectId);
+        var otherGrant = Grant(otherSubjectId);
+        var refreshTokenId = Guid.CreateVersion7();
+
+        await using (var db = Context())
+        {
+            db.OAuthGrants.AddRange(grant, otherGrant);
+            db.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
+            {
+                Id = refreshTokenId,
+                TenantId = _tenantId,
+                GrantId = grant.Id,
+                TokenHash = "refresh-hash",
+                IssuedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Service().RemoveMemberAsync(_tenantId, subjectId);
+
+        result.Ok.Should().BeTrue();
+        await using var check = Context();
+        (await check.OAuthGrants.SingleAsync(g => g.Id == grant.Id)).RevokedAt.Should().NotBeNull(
+            "a grant left live would authenticate again the moment the subject is re-added");
+        (await check.OAuthRefreshTokens.SingleAsync(t => t.Id == refreshTokenId)).RevokedAt
+            .Should().NotBeNull();
+        (await check.OAuthGrants.SingleAsync(g => g.Id == otherGrant.Id)).RevokedAt.Should().BeNull();
+    }
+
+    private OAuthGrantEntity Grant(Guid subjectId) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = _tenantId,
+        SubjectId = subjectId,
+        GrantType = OAuthGrantTypes.Direct,
+        Scopes = [Scope.FullAccess],
+        Label = "uploader",
+        TokenHash = Guid.NewGuid().ToString("N"),
+    };
 
     private static ChatIdentityDirectoryEntry Link(
         string platformUserId, Guid tenantId, Guid subjectId, string label) => new()

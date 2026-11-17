@@ -122,8 +122,8 @@
     />
   {/if}
 
-  <!-- IOB area (grows up from bottom of IOB track) -->
-  {#if iobData.length > 0 && iobData.some((d) => d.value > 0.01) && showIob}
+  <!-- IOB area, drawn from zero: up for insulin on board, down for basal withheld -->
+  {#if iobData.length > 0 && iobData.some((d) => Math.abs(d.value) > 0.01) && showIob}
     <Area
       data={iobData}
       x={(d) => d.time}

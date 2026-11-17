@@ -24,7 +24,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
         var dbName = $"aps_snapshot_upsert_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new ApsSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
+        _repository = new ApsSnapshotRepository(new TestNocturneDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
     }
 
     public void Dispose()
@@ -168,7 +168,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
     {
         var broadcaster = new RecordingV4RecordBroadcaster<ApsSnapshot>();
         var repository = new ApsSnapshotRepository(
-            new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
+            new TestNocturneDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
 
         await repository.BulkCreateAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
         broadcaster.Created.Should().HaveCount(1);

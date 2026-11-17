@@ -30,9 +30,7 @@ public abstract class TenantUrlConnectorInstaller<TConfig, TService>(
     /// <inheritdoc />
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
-        var config = services.AddConnectorConfiguration<TConfig>(
-            configuration,
-            options.ConnectorName);
+        var config = services.AddConnectorConfiguration<TConfig>(configuration);
 
         InstallUnconditional(services, config);
 

@@ -1,43 +1,37 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
 /// Controller for managing user preferences.
 /// </summary>
-/// <seealso cref="NocturneDbContext"/>
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/user/preferences")]
 [Authorize]
 public class UserPreferencesController : ControllerBase
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly ISubjectRepository _subjects;
     private readonly ILogger<UserPreferencesController> _logger;
 
     // Supported language codes - must match supportedLocales.json
     private static readonly HashSet<string> SupportedLanguages = new(StringComparer.OrdinalIgnoreCase)
     {
-        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko"
+        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko", "cs"
     };
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="UserPreferencesController"/>.
-    /// </summary>
-    /// <param name="dbContext">Database context for subject entity access.</param>
-    /// <param name="logger">Logger instance.</param>
     public UserPreferencesController(
-        NocturneDbContext dbContext,
+        ISubjectRepository subjects,
         ILogger<UserPreferencesController> logger)
     {
-        _dbContext = dbContext;
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _logger = logger;
     }
 
@@ -57,9 +51,7 @@ public class UserPreferencesController : ControllerBase
             return Problem(detail: "Not authenticated", statusCode: 401, title: "Unauthorized");
         }
 
-        var subject = await _dbContext.Subjects
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == authContext.SubjectId.Value);
+        var subject = await _subjects.GetAsync(authContext.SubjectId.Value, HttpContext.RequestAborted);
 
         if (subject == null)
         {
@@ -108,40 +100,40 @@ public class UserPreferencesController : ControllerBase
             return Problem(detail: validationError, statusCode: 400, title: "Bad Request");
         }
 
-        var subject = await _dbContext.Subjects
-            .FirstOrDefaultAsync(s => s.Id == authContext.SubjectId.Value);
+        var subjectId = authContext.SubjectId.Value;
+        var stored = await _subjects.GetAsync(subjectId, HttpContext.RequestAborted);
 
-        if (subject == null)
+        if (stored == null)
         {
             return Problem(detail: "Subject not found", statusCode: 401, title: "Unauthorized");
         }
 
-        // Update preferences
-        if (request.PreferredLanguage != null)
-        {
-            subject.PreferredLanguage = request.PreferredLanguage;
-        }
-
         // Merge the partial display preferences over the stored blob so unset fields are preserved.
+        string? mergedPreferences = null;
         if (request.Preferences != null)
         {
-            var merged = UserDisplayPreferences.Deserialize(subject.Preferences);
+            var merged = UserDisplayPreferences.Deserialize(stored.Preferences);
             merged.MergeWith(request.Preferences);
-            subject.Preferences = merged.Serialize();
+            mergedPreferences = merged.Serialize();
         }
 
-        subject.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync();
+        await _subjects.UpdateAsync(
+            subjectId,
+            new SubjectEdit(PreferredLanguage: request.PreferredLanguage, Preferences: mergedPreferences),
+            HttpContext.RequestAborted);
+
+        var preferredLanguage = request.PreferredLanguage ?? stored.PreferredLanguage;
+        var preferences = mergedPreferences ?? stored.Preferences;
 
         _logger.LogInformation(
             "Updated preferences for subject {SubjectId}: PreferredLanguage={PreferredLanguage}",
-            subject.Id,
-            subject.PreferredLanguage);
+            subjectId,
+            preferredLanguage);
 
         return Ok(new UserPreferencesResponse
         {
-            PreferredLanguage = subject.PreferredLanguage,
-            Preferences = UserDisplayPreferences.Deserialize(subject.Preferences)
+            PreferredLanguage = preferredLanguage,
+            Preferences = UserDisplayPreferences.Deserialize(preferences)
         });
     }
 }

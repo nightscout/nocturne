@@ -20,6 +20,10 @@ public class SensorGlucoseMapperTests
             Direction = GlucoseDirection.Flat,
             TrendRate = 0.5,
             Noise = 1,
+            Filtered = 125_000,
+            Unfiltered = 131_000,
+            Delta = -2.5,
+            Rssi = 100,
             Device = "dexcom",
             App = "xdrip",
             UtcOffset = -300,
@@ -36,6 +40,10 @@ public class SensorGlucoseMapperTests
         entity.Direction.Should().Be("Flat");
         entity.TrendRate.Should().Be(0.5);
         entity.Noise.Should().Be(1);
+        entity.Filtered.Should().Be(125_000);
+        entity.Unfiltered.Should().Be(131_000);
+        entity.Delta.Should().Be(-2.5);
+        entity.Rssi.Should().Be(100);
         entity.Device.Should().Be("dexcom");
         entity.App.Should().Be("xdrip");
         entity.UtcOffset.Should().Be(-300);
@@ -95,6 +103,10 @@ public class SensorGlucoseMapperTests
             Direction = "Flat",
             TrendRate = 0.5,
             Noise = 1,
+            Filtered = 125_000,
+            Unfiltered = 131_000,
+            Delta = -2.5,
+            Rssi = 100,
             Device = "dexcom",
             App = "xdrip",
             UtcOffset = -300,
@@ -115,6 +127,10 @@ public class SensorGlucoseMapperTests
         model.Trend.Should().Be(GlucoseTrend.Flat);
         model.TrendRate.Should().Be(0.5);
         model.Noise.Should().Be(1);
+        model.Filtered.Should().Be(125_000);
+        model.Unfiltered.Should().Be(131_000);
+        model.Delta.Should().Be(-2.5);
+        model.Rssi.Should().Be(100);
         model.Device.Should().Be("dexcom");
         model.App.Should().Be("xdrip");
         model.UtcOffset.Should().Be(-300);
@@ -213,6 +229,8 @@ public class SensorGlucoseMapperTests
             Direction = GlucoseDirection.SingleUp,
             TrendRate = 2.0,
             Noise = 2,
+            Delta = 4,
+            Rssi = 80,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
             Device = "libre",
             App = "librelink",
@@ -230,6 +248,8 @@ public class SensorGlucoseMapperTests
         entity.Direction.Should().Be("SingleUp");
         entity.TrendRate.Should().Be(2.0);
         entity.Noise.Should().Be(2);
+        entity.Delta.Should().Be(4);
+        entity.Rssi.Should().Be(80);
         entity.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime);
         entity.Device.Should().Be("libre");
         entity.App.Should().Be("librelink");
@@ -273,6 +293,10 @@ public class SensorGlucoseMapperTests
             Direction = GlucoseDirection.FortyFiveDown,
             TrendRate = -0.8,
             Noise = 3,
+            Filtered = 1,
+            Unfiltered = 2,
+            Delta = 0,
+            Rssi = 55,
             Device = "dexcom",
             App = "xdrip",
             UtcOffset = -300,
@@ -292,6 +316,10 @@ public class SensorGlucoseMapperTests
         roundTripped.Trend.Should().Be(original.Trend);
         roundTripped.TrendRate.Should().Be(original.TrendRate);
         roundTripped.Noise.Should().Be(original.Noise);
+        roundTripped.Filtered.Should().Be(original.Filtered);
+        roundTripped.Unfiltered.Should().Be(original.Unfiltered);
+        roundTripped.Delta.Should().Be(original.Delta);
+        roundTripped.Rssi.Should().Be(original.Rssi);
         roundTripped.Device.Should().Be(original.Device);
         roundTripped.App.Should().Be(original.App);
         roundTripped.UtcOffset.Should().Be(original.UtcOffset);

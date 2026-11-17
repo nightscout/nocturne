@@ -2,8 +2,8 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import ZoomIndicator from "./ZoomIndicator.svelte";
-import { timeFormat } from "$lib/stores/appearance-store.svelte";
-import { time } from "$lib/utils/formatting";
+import { timeFormat } from "#lib/stores/appearance-store.svelte.js";
+import { time } from "#lib/utils/formatting.js";
 
 describe("ZoomIndicator", () => {
 	afterEach(() => {

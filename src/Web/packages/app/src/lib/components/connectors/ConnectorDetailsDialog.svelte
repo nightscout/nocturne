@@ -1,14 +1,25 @@
+<script module lang="ts">
+  import type {
+    AvailableConnector,
+    ConnectorStatusDto,
+  } from "#lib/api/generated/nocturne-api-client.js";
+
+  export type ConnectorStatusWithDescription = ConnectorStatusDto &
+    Pick<AvailableConnector, "description">;
+</script>
+
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
-  import { triggerConnectorSync } from "$api/generated/services.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { ConnectorState, ConnectorReachability } from "#lib/constants/connector-states.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { triggerConnectorSync } from "#lib/api/generated/services.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -24,11 +35,11 @@
     SyncDataType,
     type ConnectorCapabilities,
     type SyncResult,
-  } from "$lib/api/generated/nocturne-api-client";
-  import type { SyncRequestInput } from "$lib/api/generated/schemas";
-  import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
-  import { formatNumber, lastSeen } from "$lib/utils/formatting";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import type { SyncRequestInput } from "#lib/api/generated/schemas.js";
+  import { formatNumber } from "#lib/utils/formatting.js";
+  import ConnectionTime from "./ConnectionTime.svelte";
+  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
 
   interface Props {
     open: boolean;
@@ -125,7 +136,7 @@
       granularSyncResult = await requestSync(
         connectorId,
         supportsHistoricalSync ? selectedRange() : {},
-        "We couldn't start the sync. Please try again."
+        "We could not start the sync. Try again."
       );
       await notifyComplete();
     } finally {
@@ -143,7 +154,7 @@
       foodOnlySyncResult = await requestSync(
         connectorId,
         { ...selectedRange(), dataTypes: [SyncDataType.Food] },
-        "We couldn't download the food data. Please try again."
+        "We could not download the food data. Try again."
       );
       if (foodOnlySyncResult.success) await notifyComplete();
     } finally {
@@ -178,27 +189,27 @@
       <div class="space-y-4 py-4">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium">Status</span>
-          {#if selectedConnector.state === "Syncing"}
+          {#if selectedConnector.state === ConnectorState.Syncing}
             <Badge variant="info">
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
               Syncing...
             </Badge>
-          {:else if selectedConnector.state === "BackingOff"}
+          {:else if selectedConnector.state === ConnectorState.BackingOff}
             <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
-              Backing Off
+              Backing off
             </Badge>
           {:else if selectedConnector.isHealthy}
             <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
               Healthy
             </Badge>
-          {:else if selectedConnector.state === "Disabled"}
+          {:else if selectedConnector.state === ConnectorState.Disabled}
             <Badge variant="secondary">
               <WifiOff class="h-3 w-3 mr-1" />
               Disabled
             </Badge>
-          {:else if selectedConnector.status === "Unreachable" || selectedConnector.state === "Offline"}
+          {:else if selectedConnector.status === ConnectorReachability.Unreachable || selectedConnector.state === ConnectorState.Offline}
             <Badge variant="outline">
               <WifiOff class="h-3 w-3 mr-1" />
               Offline
@@ -238,13 +249,13 @@
           {/if}
         {/if}
 
-        {#if selectedConnector.state === "Disabled"}
+        {#if selectedConnector.state === ConnectorState.Disabled}
           <div
             class="rounded-lg border border-border bg-muted/50 p-4"
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
-              <span class="font-medium">Connector Disabled</span>
+              <span class="font-medium">Connector disabled</span>
             </div>
             <p class="text-sm text-muted-foreground mt-1">
               This connector is not currently enabled, but historical data from
@@ -252,13 +263,13 @@
               server configuration to resume syncing, or delete the data below.
             </p>
           </div>
-        {:else if selectedConnector.state === "Offline"}
+        {:else if selectedConnector.state === ConnectorState.Offline}
           <div
             class="rounded-lg border border-border bg-muted/50 p-4"
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
-              <span class="font-medium">Connector Not Running</span>
+              <span class="font-medium">Connector not running</span>
             </div>
             <p class="text-sm text-muted-foreground mt-1">
               This connector is not currently running, but data from previous
@@ -267,12 +278,18 @@
           </div>
         {/if}
 
-        {#if selectedConnector.status !== "Unreachable" || selectedConnector.totalEntries}
+        {#if selectedConnector.status !== ConnectorReachability.Unreachable || selectedConnector.totalEntries}
           <Separator />
 
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground">Total records</span>
+              <span class="text-sm text-muted-foreground">
+                {#if selectedConnector.totalEntriesWindowDays == null}
+                  Records in total
+                {:else}
+                  Records in the last {selectedConnector.totalEntriesWindowDays} days
+                {/if}
+              </span>
               <Tooltip.Root>
                 <Tooltip.Trigger variant="term">
                   <span class="font-mono font-medium">
@@ -347,7 +364,7 @@
                   Last record received
                 </span>
                 <span class="font-medium">
-                  {lastSeen(selectedConnector.lastEntryTime)}
+                  <ConnectionTime at={selectedConnector.lastEntryTime} fallback="Never" />
                 </span>
               </div>
             {/if}
@@ -357,7 +374,7 @@
                   Last successful sync
                 </span>
                 <span class="font-medium">
-                  {lastSeen(selectedConnector.lastSuccessfulSync)}
+                  <ConnectionTime at={selectedConnector.lastSuccessfulSync} fallback="Never" />
                 </span>
               </div>
             {/if}
@@ -367,18 +384,18 @@
                   Last sync attempt
                 </span>
                 <span class="font-medium text-destructive">
-                  {lastSeen(selectedConnector.lastSyncAttempt)}
+                  <ConnectionTime at={selectedConnector.lastSyncAttempt} fallback="Never" />
                 </span>
               </div>
             {/if}
           </div>
-        {:else if selectedConnector.status === "Unreachable"}
+        {:else if selectedConnector.status === ConnectorReachability.Unreachable}
           <div
             class="rounded-lg border border-border bg-muted/50 p-4"
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
-              <span class="font-medium">Connector Offline</span>
+              <span class="font-medium">Connector offline</span>
             </div>
             <p class="text-sm text-muted-foreground mt-1">
               This connector is not currently running or cannot be reached.
@@ -387,13 +404,19 @@
           </div>
         {/if}
 
-        {#if canManage && (selectedConnector.isHealthy || selectedConnector.state === "Configured") && selectedConnector.state !== "Offline" && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
+        {#if canManage && (selectedConnector.isHealthy || selectedConnector.state === ConnectorState.Configured) && selectedConnector.state !== ConnectorState.Offline && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
           <Separator />
 
-          <div class="space-y-3">
+          <div class="@container space-y-3">
             <div class="flex items-center gap-2">
               <Download class="h-4 w-4" />
-              <h4 class="font-medium text-sm">Manual Sync</h4>
+              <h4 class="font-medium text-sm">
+                {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
+                  Sync recent data
+                {:else}
+                  Sync a date range
+                {/if}
+              </h4>
             </div>
             {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
               <p class="text-xs text-muted-foreground">
@@ -403,7 +426,7 @@
               <p class="text-xs text-muted-foreground">
                 Select a date range to re-sync specific data.
               </p>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid gap-2 @sm:grid-cols-2">
                 <div class="space-y-1">
                   <label for="granular-sync-from" class="text-xs font-medium">
                     From
@@ -444,6 +467,7 @@
                 {/if}
                 <SkippedRecordsNote
                   deleted={granularSyncResult.itemsSkipped}
+                  refused={granularSyncResult.itemsRefused}
                   class="mt-1 text-muted-foreground"
                 />
               </div>
@@ -461,7 +485,11 @@
                 Syncing...
               {:else}
                 <RefreshCw class="h-3 w-3" />
-                Sync Now
+                {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
+                  Sync recent data
+                {:else}
+                  Sync a date range
+                {/if}
               {/if}
             </Button>
           </div>
@@ -472,7 +500,7 @@
             <div class="space-y-3">
               <div class="flex items-center gap-2">
                 <Database class="h-4 w-4" />
-                <h4 class="font-medium text-sm">Food Definitions</h4>
+                <h4 class="font-medium text-sm">Food definitions</h4>
               </div>
               <p class="text-xs text-muted-foreground">
                 Download food data from MyFitnessPal for the date range above,
@@ -498,6 +526,7 @@
                   {/if}
                   <SkippedRecordsNote
                     deleted={foodOnlySyncResult.itemsSkipped}
+                    refused={foodOnlySyncResult.itemsRefused}
                     class="mt-1 text-muted-foreground"
                   />
                 </div>
@@ -515,7 +544,7 @@
                   Downloading...
                 {:else}
                   <Download class="h-3 w-3" />
-                  Download Food Definitions
+                  Download food definitions
                 {/if}
               </Button>
             </div>

@@ -60,7 +60,7 @@ describe("ConnectorConfigForm", () => {
 			},
 		});
 
-		await expect.element(page.getByText("Sync Glucose")).toBeVisible();
+		await expect.element(page.getByText("Sync glucose")).toBeVisible();
 		const toggle = page.getByRole("switch");
 		await expect.element(toggle).toBeVisible();
 	});
@@ -179,5 +179,99 @@ describe("ConnectorConfigForm", () => {
 
 		await expect.element(page.getByText("Glucose Unit")).toBeVisible();
 		await expect.element(page.getByText("Lookback Days")).not.toBeInTheDocument();
+	});
+
+	it("marks every field type whose running value comes from the environment", async () => {
+		const envSchema = {
+			type: "object",
+			properties: {
+				syncGlucose: { type: "boolean", default: false },
+				region: { type: "string", enum: ["EU", "US"], default: "EU" },
+				pollingInterval: { type: "integer", default: 300 },
+				serverUrl: { type: "string", default: "" },
+			},
+			secrets: [],
+		};
+
+		render(ConnectorConfigForm, {
+			props: {
+				schema: envSchema,
+				configuration: {},
+				effectiveConfig: {
+					syncGlucose: true,
+					region: "US",
+					pollingInterval: 600,
+					serverUrl: "https://env.example",
+				},
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByText("From env").first()).toBeVisible();
+		expect(page.getByText("From env").elements()).toHaveLength(4);
+		await expect.element(page.getByRole("textbox").first()).toHaveValue("https://env.example");
+	});
+
+	it("does not mark a field whose environment value matches the default", async () => {
+		render(ConnectorConfigForm, {
+			props: {
+				schema: { type: "object", properties: { serverUrl: { type: "string", default: "https://same.example" } }, secrets: [] },
+				configuration: {},
+				effectiveConfig: { serverUrl: "https://same.example" },
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByRole("textbox").first()).toHaveValue("https://same.example");
+		expect(page.getByText("From env").elements()).toHaveLength(0);
+	});
+
+	it("offers a numeric choice by name and saves the number", async () => {
+		const onSave = vi.fn().mockResolvedValue(undefined);
+		render(ConnectorConfigForm, {
+			props: {
+				schema: {
+					type: "object",
+					properties: {
+						syncIntervalMinutes: { type: "integer", enum: [1, 5, 60, 240], default: 5 },
+					},
+					secrets: [],
+				},
+				configuration: { syncIntervalMinutes: 5 },
+				onSave,
+			},
+		});
+
+		await expect.element(page.getByRole("button", { name: "5 minutes" })).toBeVisible();
+		expect(page.getByRole("spinbutton").elements()).toHaveLength(0);
+
+		await page.getByRole("button", { name: "5 minutes" }).click();
+		await page.getByRole("option", { name: "4 hours" }).click();
+		await expect.element(page.getByRole("button", { name: "4 hours" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Save" }).click();
+		await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+		expect(onSave.mock.calls[0][0]).toEqual({ syncIntervalMinutes: 240 });
+	});
+
+	it("names the save and makes it the one large action when a label is given", async () => {
+		const onSave = vi.fn().mockResolvedValue(undefined);
+		render(ConnectorConfigForm, {
+			props: {
+				schema: testSchema,
+				configuration: { serverUrl: "https://example.com", pollingInterval: 300 },
+				saveLabel: "Start import",
+				onSave,
+			},
+		});
+
+		await page.getByRole("textbox").first().fill("https://other.example");
+
+		const start = page.getByRole("button", { name: "Start import" });
+		await expect.element(start).toHaveClass("h-14");
+		expect(page.getByRole("button", { name: "Save" }).elements()).toHaveLength(0);
+
+		await start.click();
+		await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
 	});
 });

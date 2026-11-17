@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Chat;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Attributes;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -20,11 +23,13 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Tags("Identity")]
 [Authorize]
 [Route("api/v4/chat-identity")]
+[DenyNoAccountViewer]
 public class LinkedPlatformsController(
     ChatIdentityDirectoryService directory,
     ITenantAccessor tenantAccessor) : ControllerBase
 {
     [HttpGet("linked-platforms")]
+    [RequireScope(Scope.AlertsRead, Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(LinkedPlatformsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<LinkedPlatformsResponse>> GetLinkedPlatforms(

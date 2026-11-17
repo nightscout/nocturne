@@ -11,6 +11,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
@@ -37,7 +38,10 @@ public class OverviewHubAuthorizeTests
 
     private static GlucoseReadTenant Tenant(Guid id) =>
         new(
-            new TenantEntity { Id = id, Slug = id.ToString("N")[..8], DisplayName = "T", IsActive = true },
+            new TenantRecord(Id: id, Slug: id.ToString("N")[..8], DisplayName: "T", IsActive: true, IsDemo: false, AllowAccessRequests: true, AllowPublicDocs: false,
+                OnboardingCompletedAt: null, SetupHubEnrolledAt: null, SetupStripDismissedRevision: null, PatientRelationship: null, HandedOverAt: null,
+                DefaultGlucoseUnits: null, LastReadingAt: null, ShareTokenHash: null, ShareTokenEncrypted: null, ShareTokenSetAt: null,
+                ShareLastAccessedAt: null, SysCreatedAt: DateTime.UtcNow, SysUpdatedAt: DateTime.UtcNow, DemoConfig: null),
             new HashSet<string> { Scope.GlucoseRead },
             MembershipLimitTo24Hours: false,
             new HashSet<string> { Scope.GlucoseRead });
@@ -78,6 +82,7 @@ public class OverviewHubAuthorizeTests
         callerContext.SetupGet(c => c.ConnectionId).Returns(ConnectionId);
         callerContext.SetupGet(c => c.Features).Returns(features);
         callerContext.SetupGet(c => c.ConnectionAborted).Returns(CancellationToken.None);
+        callerContext.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
 
         var groups = new Mock<IGroupManager>();
 
@@ -132,6 +137,32 @@ public class OverviewHubAuthorizeTests
                 It.Is<IReadOnlySet<string>>(s => s.SetEquals(grantedScopes)),
                 It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task Authorize_records_the_tenants_it_admitted_the_connection_to_for_re_checking()
+    {
+        var (hub, _, overview, _, _, _, httpContext) = CreateHub();
+        httpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = Subject,
+            AuthType = AuthType.SessionCookie,
+            SessionId = "laptop",
+        };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
+        overview
+            .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { Tenant(TenantA), Tenant(TenantB) });
+
+        await hub.Authorize(new OverviewAuthorizeRequest());
+
+        var grant = HubAuthorizationState.Overview(hub.Context);
+        grant.Should().NotBeNull();
+        grant!.SubjectId.Should().Be(Subject);
+        grant.AuthType.Should().Be(AuthType.SessionCookie);
+        grant.SessionId.Should().Be("laptop");
+        grant.TenantIds.Should().BeEquivalentTo(new[] { TenantA, TenantB });
     }
 
     [Fact]

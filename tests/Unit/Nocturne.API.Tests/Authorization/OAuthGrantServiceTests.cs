@@ -9,6 +9,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -64,8 +65,7 @@ public class OAuthGrantServiceTests : IDisposable
     private OAuthGrantService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthGrantService(
-            dbContext,
-            _db.ContextFactory,
+            _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
             _mockClientService.Object,
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),
@@ -81,14 +81,15 @@ public class OAuthGrantServiceTests : IDisposable
         return _db.CreateContext();
     }
 
-    private async Task SeedClientAsync(NocturneDbContext db, Guid? id = null, string? clientId = null)
+    private async Task SeedClientAsync(
+        NocturneDbContext db, Guid? id = null, string? clientId = null, bool isKnown = false)
     {
         db.OAuthClients.Add(new OAuthClientEntity
         {
             Id = id ?? _testClientEntityId,
             ClientId = clientId ?? TestClientId,
             DisplayName = "Test App",
-            IsKnown = false,
+            IsKnown = isKnown,
             RedirectUris = "[]",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -130,6 +131,48 @@ public class OAuthGrantServiceTests : IDisposable
         });
         await db.SaveChangesAsync();
         return id;
+    }
+
+    // ---------------------------------------------------------------
+    // ClientIdentity
+    // ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData(true, false, OAuthClientIdentity.Verified)]
+    [InlineData(true, true, OAuthClientIdentity.Unverified)]
+    [InlineData(false, false, OAuthClientIdentity.SelfRegistered)]
+    [InlineData(false, true, OAuthClientIdentity.SelfRegistered)]
+    public async Task OnlyAKnownClientNoDeviceCodeApprovedIsVerified(
+        bool isKnown, bool approvedByDeviceCode, OAuthClientIdentity identity)
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db, isKnown: isKnown);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var service = CreateService(db);
+
+        var created = await service.CreateOrUpdateGrantAsync(
+            _testClientEntityId, _ownerSubjectId, [Scope.GlucoseRead],
+            approvedByDeviceCode: approvedByDeviceCode);
+        var listed = await service.GetGrantsForSubjectAsync(_ownerSubjectId);
+
+        created.ClientIdentity.Should().Be(identity);
+        listed.Should().ContainSingle().Which.ClientIdentity.Should().Be(identity);
+    }
+
+    [Fact]
+    public async Task AGrantADeviceCodeApprovedStaysUnverifiedAfterALaterConsent()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db, isKnown: true);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var service = CreateService(db);
+
+        await service.CreateOrUpdateGrantAsync(
+            _testClientEntityId, _ownerSubjectId, [Scope.GlucoseRead], approvedByDeviceCode: true);
+        var consented = await service.CreateOrUpdateGrantAsync(
+            _testClientEntityId, _ownerSubjectId, [Scope.TreatmentsRead]);
+
+        consented.ClientIdentity.Should().Be(OAuthClientIdentity.Unverified);
     }
 
     // ---------------------------------------------------------------
@@ -244,6 +287,23 @@ public class OAuthGrantServiceTests : IDisposable
         Assert.NotNull(result);
         Assert.Contains("glucose.read", result.Scopes);
         Assert.Contains("treatments.readwrite", result.Scopes);
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_ToNoScopes_IsRefusedAndLeavesTheGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, scopes: new List<string> { "glucose.read" });
+
+        var service = CreateService(db);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => service.UpdateGrantAsync(grantId, _ownerSubjectId, scopes: []));
+
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        Assert.Equal(["glucose.read"], grant.Scopes);
     }
 
     [Fact]

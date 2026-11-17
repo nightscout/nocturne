@@ -67,6 +67,12 @@ public class OAuthRefreshTokenEntity : ITenantScoped
     public Guid? ReplacedById { get; set; }
 
     /// <summary>
+    /// How many times this token was redeemed after its rotation, inside the reuse grace window.
+    /// </summary>
+    [Column("grace_redemptions")]
+    public int GraceRedemptions { get; set; }
+
+    /// <summary>
     /// Whether this token has been revoked
     /// </summary>
     [NotMapped]

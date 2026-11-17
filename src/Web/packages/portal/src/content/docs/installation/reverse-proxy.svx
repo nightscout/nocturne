@@ -1,5 +1,13 @@
 ---
 title: Bring your own reverse proxy
+installSteps:
+  start-the-stack-without-caddy: "1"
+  dns-and-certificates: "2"
+  the-three-headers: "3"
+  nginx: nginx
+  traefik: traefik
+  caddy: caddy
+  next-steps: next-steps
 ---
 
 <script>
@@ -12,6 +20,11 @@ The Docker Compose bundle ships with Caddy, which obtains and renews TLS
 certificates for you. If you already run a reverse proxy (nginx, Traefik,
 HAProxy, your own Caddy, a homelab edge) you can terminate TLS there instead
 and forward plain HTTP to Nocturne's gateway.
+
+The [install script](/docs/installation/install-script) always starts the bundled
+Caddy. To use your own proxy, install with the
+[Docker Compose guide](/docs/installation/docker-compose) and select your own
+reverse proxy there.
 
 Nocturne needs three request headers from your proxy to work. Everything else on
 this page is ordinary reverse-proxy configuration; the headers are the part that

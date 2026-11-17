@@ -1,10 +1,11 @@
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { createAuthenticatedFetch } from "./auth-interceptor";
-import { initialReadsStash, takeInitialRead } from "$lib/stores/initial-reads";
+import { initialReadsStash, takeInitialRead } from "#lib/stores/initial-reads.js";
 import {
   ApsSnapshotClient,
   BGCheckClient,
   BolusClient,
+  ClockFaceAlertsClient,
   ClockFacesClient,
   CurrentTherapyStateClient,
   DeviceEventClient,
@@ -13,8 +14,8 @@ import {
   NutritionClient,
   ProfileClient,
   SensorGlucoseClient,
+  TrackerLegacyFallbacksClient,
   TrackersClient,
-  UISettingsClient,
 } from "./generated/nocturne-api-client";
 
 type Http = NonNullable<ConstructorParameters<typeof SensorGlucoseClient>[1]>;
@@ -40,6 +41,7 @@ function browserHttp(): Http {
 export const apsSnapshotClient = () => new ApsSnapshotClient("", browserHttp());
 export const bgCheckClient = () => new BGCheckClient("", browserHttp());
 export const bolusClient = () => new BolusClient("", browserHttp());
+export const clockFaceAlertsClient = () => new ClockFaceAlertsClient("", browserHttp());
 export const clockFacesClient = () => new ClockFacesClient("", browserHttp());
 export const currentTherapyStateClient = () => new CurrentTherapyStateClient("", browserHttp());
 export const deviceEventClient = () => new DeviceEventClient("", browserHttp());
@@ -48,8 +50,9 @@ export const notificationsClient = () => new NotificationsClient("", browserHttp
 export const nutritionClient = () => new NutritionClient("", browserHttp());
 export const profileClient = () => new ProfileClient("", browserHttp());
 export const sensorGlucoseClient = () => new SensorGlucoseClient("", browserHttp());
+export const trackerLegacyFallbacksClient = () =>
+  new TrackerLegacyFallbacksClient("", browserHttp());
 export const trackersClient = () => new TrackersClient("", browserHttp());
-export const uiSettingsClient = () => new UISettingsClient("", browserHttp());
 
 /** Drops the shared fetch so the next client is built on a fresh one. */
 export function resetBrowserClients(): void {

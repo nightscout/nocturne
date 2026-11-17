@@ -1,4 +1,4 @@
-import type { DailySummaryDay } from "$lib/api";
+import type { DailySummaryDay } from "#lib/api/index.js";
 
 /** One day cell of the year-overview heatmap, as the page derives it. */
 export interface YearCalendarDatum {
@@ -14,14 +14,6 @@ export interface YearCalendarDatum {
   timeInRangePercent: number | null;
   counts: Record<string, number>;
   dateString: string;
-}
-
-/** A week column label beneath the heatmap. */
-export interface YearWeekColumn {
-  x: number;
-  weekNumber: number;
-  from: string;
-  to: string;
 }
 
 export type { DailySummaryDay };

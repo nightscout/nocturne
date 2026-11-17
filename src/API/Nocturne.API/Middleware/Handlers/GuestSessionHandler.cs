@@ -16,7 +16,7 @@ namespace Nocturne.API.Middleware.Handlers;
 /// </summary>
 public class GuestSessionHandler : IAuthHandler
 {
-    private const string CookieName = "nocturne-guest-session";
+    internal const string CookieName = "nocturne-guest-session";
     private const string ProtectorPurpose = "GuestSession";
     private const string InvalidSessionError = "Guest session expired or revoked";
 
@@ -88,7 +88,7 @@ public class GuestSessionHandler : IAuthHandler
             using var scope = _scopeFactory.CreateScope();
 
             // Propagate tenant context into the child scope so RLS allows
-            // the oauth_grants query. Without this, the scoped DbContext has
+            // the oauth_grants query. Without this, a context created in the scope has
             // TenantId = Guid.Empty and RLS silently filters out the row.
             var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
             tenantAccessor.SetTenant(tenantCtx);

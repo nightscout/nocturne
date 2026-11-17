@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { UserDisplayPreferences } from "$lib/api";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
 
 // Node env (browser=false): DOM/cookie I/O is skipped, so we exercise the pure
 // hydration mapping — the crux of the cross-device fix (server prefs -> store).
-vi.mock("$app/environment", () => ({ browser: false, dev: false }));
+vi.mock("$app/env", () => ({ browser: false, dev: false }));
 vi.mock("$app/navigation", () => ({}));
 vi.mock("$app/state", () => ({}));
 vi.mock("mode-watcher", () => ({
@@ -16,8 +16,11 @@ const {
   glucoseUnits,
   a1cName,
   a1cUnits,
+  carbRatioFormat,
   timeFormat,
   colorTheme,
+  glucoseRangePalette,
+  calendarShowTirPercent,
   predictionMinutes,
   predictionEnabled,
   chartLineColor,
@@ -37,8 +40,10 @@ describe("appearance-store preference sync", () => {
       glucoseUnits: "mg/dl",
       a1cName: "HbA1c",
       a1cUnits: "percent",
+      carbRatioFormat: "1:x",
       timeFormat: "12",
       colorTheme: "nocturne",
+      glucoseRangePalette: "theme",
       prediction: { enabled: true, minutes: 30 },
       chart: { lineColor: "#22c55e", lookback: 12 },
     });
@@ -73,6 +78,35 @@ describe("appearance-store preference sync", () => {
     expect(glucoseChartLookback.current).toBe(6);
   });
 
+  it("applyPreferences hydrates the glucose range palette and collectPreferences returns it", () => {
+    applyPreferences({ glucoseRangePalette: "clarity" });
+
+    expect(glucoseRangePalette.current).toBe("clarity");
+    expect(collectPreferences().glucoseRangePalette).toBe("clarity");
+  });
+
+  it("an unset or unknown glucose range palette leaves the current choice alone", () => {
+    applyPreferences({ glucoseRangePalette: "clarity" });
+
+    applyPreferences({ glucoseRangePalette: undefined });
+    expect(glucoseRangePalette.current).toBe("clarity");
+
+    applyPreferences({ glucoseRangePalette: "rainbow" });
+    expect(glucoseRangePalette.current).toBe("clarity");
+  });
+
+  it("applyPreferences hydrates the calendar TIR percent flag, and a payload without it leaves it alone", () => {
+    applyPreferences({ calendarShowTirPercent: true });
+    expect(calendarShowTirPercent.current).toBe(true);
+    expect(collectPreferences().calendarShowTirPercent).toBe(true);
+
+    applyPreferences({ glucoseUnits: "mmol" });
+    expect(calendarShowTirPercent.current).toBe(true);
+
+    applyPreferences({ calendarShowTirPercent: false });
+    expect(calendarShowTirPercent.current).toBe(false);
+  });
+
   it("applyPreferences leaves unset fields untouched (partial payload)", () => {
     applyPreferences({ glucoseUnits: "mmol" });
 
@@ -90,6 +124,16 @@ describe("appearance-store preference sync", () => {
       a1cName: "A1c",
       a1cUnits: "mmol/mol",
     });
+  });
+
+  it("syncs the carb ratio format, keeps it across partial updates and ignores an unknown one", () => {
+    applyPreferences({ carbRatioFormat: "U/10g" });
+    applyPreferences({ glucoseUnits: "mmol" });
+    expect(carbRatioFormat.current).toBe("U/10g");
+    expect(collectPreferences().carbRatioFormat).toBe("U/10g");
+
+    applyPreferences({ carbRatioFormat: "U/g" });
+    expect(carbRatioFormat.current).toBe("U/10g");
   });
 
   it("applyPreferences ignores null/undefined input", () => {
@@ -118,11 +162,24 @@ describe("appearance-store preference sync", () => {
     expect(collected.chart?.showPoints).toBe(false);
   });
 
+  it("sends back an explicit energy unit but never the resolved one", () => {
+    applyPreferences({ energyUnit: "kJ", effectiveEnergyUnit: "kJ" });
+
+    const collected = collectPreferences();
+
+    expect(collected.energyUnit).toBe("kJ");
+    expect(collected).not.toHaveProperty("effectiveEnergyUnit");
+  });
+
   describe("hasStoredPreferences", () => {
     it("is false for null/empty payloads", () => {
       expect(hasStoredPreferences(null)).toBe(false);
       expect(hasStoredPreferences(undefined)).toBe(false);
       expect(hasStoredPreferences({})).toBe(false);
+    });
+
+    it("is false when the only value is the resolved energy unit", () => {
+      expect(hasStoredPreferences({ effectiveEnergyUnit: "kcal" })).toBe(false);
     });
 
     it("is true when any value is present", () => {

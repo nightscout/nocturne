@@ -71,6 +71,13 @@ public class SleepService : ISleepService
     }
 
     /// <inheritdoc />
+    public Task<SleepSession?> GetSessionBySourceRecordAsync(
+        SleepSource source,
+        string originalId,
+        CancellationToken cancellationToken) =>
+        _repository.GetSessionBySourceRecordAsync(source, originalId, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<SleepSession> UpsertSessionAsync(
         SleepSession session,
         CancellationToken cancellationToken)

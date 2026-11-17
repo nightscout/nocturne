@@ -1,0 +1,8 @@
+# An emdash joins two clauses. STE writes them as two sentences.
+extends: existence
+message: "No emdashes. Use a full stop, a comma, or a colon."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+nonword: true
+tokens:
+  - '—'

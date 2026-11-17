@@ -29,6 +29,7 @@ runs:
     - uses: actions/setup-node@v5
       with:
         node-version: "24"
+        check-latest: true
         cache: ${{ inputs.install != '' && 'pnpm' || '' }}
         cache-dependency-path: ${{ steps.lockfiles.outputs.paths }}
     - if: inputs.install != ''
@@ -37,6 +38,8 @@ runs:
         INSTALL: ${{ inputs.install }}
       run: |
         set -euo pipefail
+        # src/Web's workspace includes the water-ui submodule (src/Web/vendor/water-ui).
+        git submodule update --init --depth 1
         for dir in $INSTALL; do
           (cd "$dir" && pnpm install --frozen-lockfile)
         done

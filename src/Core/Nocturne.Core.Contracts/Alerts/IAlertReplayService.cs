@@ -72,7 +72,6 @@ public sealed class ReplayWindowTooLargeException : Exception
     /// <summary>The resolved window span the caller asked for.</summary>
     public TimeSpan Requested { get; }
 
-    /// <summary>The configured maximum span.</summary>
     public TimeSpan Maximum { get; }
 }
 
@@ -137,7 +136,7 @@ public record AlertReplayResult(
     /// <summary>
     /// Per-rule, per-leaf truth transition log captured during replay. Keyed by rule id;
     /// each <see cref="LeafTransitionLog"/> covers one leaf identified by the sequential
-    /// id assigned via <see cref="LeafIdentity.AssignLeafIds"/>. Only transitions are
+    /// pre-order leaf id (docs/alerts/engine-semantics.md §2.2). Only transitions are
     /// stored — the first tick emits a baseline point so the FE can render the starting
     /// state without scanning. Empty by default for backward compatibility.
     /// </summary>

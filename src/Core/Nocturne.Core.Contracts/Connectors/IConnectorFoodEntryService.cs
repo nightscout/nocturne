@@ -2,9 +2,6 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Connectors;
 
-/// <summary>
-/// Service interface for connector food entry imports.
-/// </summary>
 /// <seealso cref="IMealMatchingService"/>
 /// <seealso cref="IConnectorFoodEntryRepository"/>
 public interface IConnectorFoodEntryService
@@ -17,7 +14,6 @@ public interface IConnectorFoodEntryService
     /// attribute them to; the entries still import, without suggestions.
     /// </param>
     /// <param name="imports">The food entry imports to process</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task<IReadOnlyList<ConnectorFoodEntry>> ImportAsync(
         string? userId,
         IEnumerable<ConnectorFoodEntryImport> imports,
@@ -42,7 +38,6 @@ public interface IConnectorFoodEntryService
     /// <param name="from">Start of the window to reconcile, inclusive</param>
     /// <param name="to">End of the window to reconcile, inclusive</param>
     /// <param name="presentExternalEntryIds">Every external entry id the source still reports</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The number of entries marked deleted</returns>
     Task<int> MarkMissingAsDeletedAsync(
         string? userId,

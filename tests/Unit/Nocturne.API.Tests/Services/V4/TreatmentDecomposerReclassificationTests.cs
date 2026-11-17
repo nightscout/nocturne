@@ -1,0 +1,392 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Tests.Shared.Infrastructure;
+using Xunit;
+
+namespace Nocturne.API.Tests.Services.V4;
+
+/// <summary>
+/// A treatment re-uploaded under its id with a different classification loses the rows its earlier
+/// upload wrote to tables it no longer writes, and keeps every row it still writes.
+/// </summary>
+[Trait("Category", "Unit")]
+public class TreatmentDecomposerReclassificationTests : IDisposable
+{
+    private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private const long At = 1_780_000_000_000;
+
+    private readonly SqliteTestDatabase _db;
+    private readonly NocturneDbContext _context;
+    private readonly TestNocturneDbContextFactory _factory;
+    private readonly AuditContext _audit = new()
+    {
+        SubjectId = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
+        SubjectName = "owner@example.com",
+        AuthType = "SessionCookie",
+    };
+    private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
+    private readonly Mock<IStateSpanService> _stateSpans = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
+    private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly StatementRecorder _statements = new();
+
+    public TreatmentDecomposerReclassificationTests()
+    {
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _statements);
+        _context = _db.CreateContext();
+        _factory = new TestNocturneDbContextFactory(_context);
+
+        _stateSpans
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan span, CancellationToken _) =>
+            {
+                StoreSpan(span);
+                return span;
+            });
+    }
+
+    public void Dispose()
+    {
+        _context.Dispose();
+        _db.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    private void StoreSpan(StateSpan span)
+    {
+        var entity = _context.StateSpans.SingleOrDefault(s => s.LegacyId == span.OriginalId);
+        if (entity is null)
+        {
+            entity = StateSpanMapper.ToEntity(span);
+            entity.Id = Guid.CreateVersion7();
+            entity.TenantId = TenantId;
+            _context.StateSpans.Add(entity);
+        }
+        else
+        {
+            StateSpanMapper.UpdateEntity(entity, span);
+        }
+
+        _context.SaveChanges();
+        _context.Entry(entity).State = EntityState.Detached;
+    }
+
+    private TreatmentDecomposer Decomposer()
+    {
+        var foods = new Mock<ITreatmentFoodService>();
+        foods
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return new TreatmentDecomposer(
+            _factory, new DecomposedTreatmentKeys(_factory),
+            new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
+            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
+            new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
+            new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
+            new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),
+            new DeviceEventRepository(_factory, _dedup, _audit, NullLogger<DeviceEventRepository>.Instance),
+            new BolusCalculationRepository(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance),
+            _stateSpans.Object,
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
+            foods.Object,
+            new UnresolvedDevices(),
+            Mock.Of<IPatientDeviceStamper>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
+            Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
+            _audit,
+            NullLogger<TreatmentDecomposer>.Instance,
+            legacyReads: _legacyReads);
+    }
+
+    private Task DecomposeAsync(Treatment treatment) => Decomposer().DecomposeOneAsync(treatment, WriteOrigin.Live);
+
+    private static Treatment PlainNote() => new()
+    {
+        Id = "aaps-1", EventType = "Note", Mills = At, Notes = "Rhys (110%,1h)", EnteredBy = "openaps://AndroidAPS",
+    };
+
+    private static Treatment EffectiveSwitch() => new()
+    {
+        Id = "aaps-1",
+        EventType = "Note",
+        Mills = At,
+        Notes = "Rhys (110%,1h)",
+        EnteredBy = "openaps://AndroidAPS",
+        ProfileJson = """{"units":"mmol","dia":5,"basal":[{"time":"00:00","timeAsSeconds":0,"value":0.88}]}""",
+        OriginalProfileName = "Rhys",
+        OriginalCustomizedName = "Rhys (110%,1h)",
+        OriginalTimeshift = 3_600_000,
+        OriginalPercentage = 110,
+        OriginalDuration = 0,
+        OriginalEnd = At,
+    };
+
+    private static Treatment BolusWizard(double? carbs, string? notes = null) => new()
+    {
+        Id = "wizard-1",
+        EventType = "Bolus Wizard",
+        Mills = At,
+        Insulin = 4,
+        Carbs = carbs,
+        Notes = notes,
+        BolusCalculatorResult = """{"carbs":40,"totalInsulin":4}""",
+    };
+
+    private async Task<int> DeletedRowsAsync() =>
+        await _context.Boluses.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null)
+        + await _context.CarbIntakes.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null)
+        + await _context.Notes.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null)
+        + await _context.BolusCalculations.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null)
+        + await _context.StateSpans.IgnoreQueryFilters().CountAsync(e => e.DeletedAt != null);
+
+    [Fact]
+    public async Task A_note_reuploaded_as_an_effective_profile_switch_becomes_the_activation_alone()
+    {
+        await DecomposeAsync(PlainNote());
+        (await _context.Notes.CountAsync()).Should().Be(1);
+
+        await DecomposeAsync(EffectiveSwitch());
+
+        (await _context.Notes.CountAsync()).Should().Be(0, "the note it was first read as is no longer the treatment");
+        var activation = await _context.ProfileActivations.AsNoTracking().SingleAsync(a => a.LegacyId == "aaps-1");
+        activation.Phase.Should().Be(nameof(Nocturne.Core.Models.V4.ProfileActivationPhase.Effective));
+        activation.DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_drop_that_committed_is_reported_when_a_later_span_drop_fails()
+    {
+        await DecomposeAsync(PlainNote());
+        StoreSpan(new StateSpan
+        {
+            OriginalId = "aaps-1",
+            Category = StateSpanCategory.Override,
+            State = "Custom",
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
+        });
+        _statements.FailOn(s => s.StartsWith("UPDATE \"state_spans\"", StringComparison.Ordinal));
+        _legacyReads.Models.Clear();
+
+        var reupload = () => DecomposeAsync(
+            new Treatment { Id = "aaps-1", EventType = "Correction Bolus", Mills = At, Insulin = 1 });
+
+        await reupload.Should().ThrowAsync<InvalidOperationException>();
+        (await _context.Notes.CountAsync()).Should().Be(0, "the note's drop committed before the span drop failed");
+        _legacyReads.Models.Should().Contain(typeof(Nocturne.Core.Models.V4.Note));
+        _legacyReads.Models.Should().NotContain(typeof(StateSpan), "the span drop did not commit");
+    }
+
+    [Fact]
+    public async Task Reclassified_spans_are_dropped_with_their_copies_and_supersession_and_reported_without_audit_rows()
+    {
+        var copyOfFirst = SeedSpan("copy-of-first", "other-source");
+        var first = SeedSpan("span-1");
+        var second = SeedSpan("span-2");
+        var survivor = SeedSpan("unrelated");
+        var pointsAtFirst = SeedSpan("points-at-first", supersededBy: first.Id);
+        var canonical = Guid.CreateVersion7();
+        _context.LinkedRecords.AddRange(Link(canonical, first.Id, isPrimary: true), Link(canonical, copyOfFirst.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+        _legacyReads.Models.Clear();
+
+        await Decomposer().DecomposeBatchAsync(
+            [Reclassified("span-1"), Reclassified("span-2")], WriteOrigin.Live);
+
+        var spans = await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().ToDictionaryAsync(s => s.Id);
+        var deletedByUser = await _context.StateSpans.IgnoreQueryFilters()
+            .CountAsync(s => s.DeletedAt != null && EF.Property<bool>(s, "DeletedByUser"));
+        spans[first.Id].DeletedAt.Should().NotBeNull();
+        spans[second.Id].DeletedAt.Should().NotBeNull();
+        spans[copyOfFirst.Id].DeletedAt.Should().NotBeNull("every copy in a dropped span's duplicate group goes with it");
+        deletedByUser.Should().Be(0, "a reclassification is not the user deleting the span");
+        spans[survivor.Id].DeletedAt.Should().BeNull();
+        spans[pointsAtFirst.Id].DeletedAt.Should().BeNull();
+        spans[pointsAtFirst.Id].SupersededById.Should().BeNull("a live span no longer points at a deleted one");
+        (await _context.MutationAuditLog.CountAsync()).Should().Be(0, "the drop is system-attributed");
+        _legacyReads.Models.Should().Contain(typeof(StateSpan));
+    }
+
+    [Fact]
+    public async Task Dropping_the_spans_of_a_batch_costs_the_statements_of_dropping_one()
+    {
+        var one = await SpanDropStatementsAsync(1);
+        var many = await SpanDropStatementsAsync(30);
+
+        many.Should().Be(one, "the spans a batch reclassifies are dropped as one set");
+        one.Should().BeGreaterThan(0);
+    }
+
+    private async Task<int> SpanDropStatementsAsync(int count)
+    {
+        var ids = Enumerable.Range(0, count).Select(i => $"batch-{count}-{i}").ToList();
+        foreach (var id in ids)
+            SeedSpan(id);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+        _statements.Clear();
+
+        await Decomposer().DecomposeBatchAsync([.. ids.Select(Reclassified)], WriteOrigin.Live);
+        var statements = _statements.All.Count(s => s.Contains("\"state_spans\"") || s.Contains("\"linked_records\""));
+
+        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking()
+                .Where(s => ids.Contains(s.LegacyId!) && s.DeletedAt == null).CountAsync())
+            .Should().Be(0, "every reclassified span is dropped");
+        return statements;
+    }
+
+    private StateSpanEntity SeedSpan(string originalId, string source = "aaps", Guid? supersededBy = null)
+    {
+        var span = new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = originalId, Source = source,
+            Category = nameof(StateSpanCategory.Override), State = "Custom",
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
+            SupersededById = supersededBy,
+        };
+        _context.StateSpans.Add(span);
+        return span;
+    }
+
+    private static LinkedRecordEntity Link(Guid canonical, Guid recordId, bool isPrimary) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = TenantId, CanonicalId = canonical,
+        RecordType = RecordTypeKeys.Key(RecordType.StateSpan), RecordId = recordId,
+        SourceTimestamp = At, DataSource = "aaps", IsPrimary = isPrimary, SysCreatedAt = DateTime.UtcNow,
+    };
+
+    private static Treatment Reclassified(string id) =>
+        new() { Id = id, EventType = "Correction Bolus", Mills = At, Insulin = 1 };
+
+    [Fact]
+    public async Task The_removed_note_does_not_hold_off_a_later_upload_that_writes_it_again()
+    {
+        await DecomposeAsync(PlainNote());
+        await DecomposeAsync(EffectiveSwitch());
+
+        (await _context.GetBlockingLegacyIdsAsync<NoteEntity>(["aaps-1"])).Held.Should().BeEmpty(
+            "a reclassification is not the user deleting the note");
+    }
+
+    [Fact]
+    public async Task A_profile_switch_reuploaded_as_a_note_loses_its_activation()
+    {
+        await DecomposeAsync(new Treatment
+        {
+            Id = "ps-1", EventType = "Profile Switch", Mills = At, Profile = "Weekend", Duration = 0,
+            ProfileJson = """{"units":"mmol","dia":5,"basal":[{"time":"00:00","timeAsSeconds":0,"value":0.9}]}""",
+        });
+
+        await DecomposeAsync(new Treatment { Id = "ps-1", EventType = "Note", Mills = At, Notes = "Weekend" });
+
+        (await _context.ProfileActivations.CountAsync()).Should().Be(0);
+        (await _context.ProfileActivations.IgnoreQueryFilters().SingleAsync())
+            .Should().Match<ProfileActivationEntity>(a => a.LegacyId == "ps-1" && a.DeletedAt != null);
+        (await _context.GetBlockingLegacyIdsAsync<ProfileActivationEntity>(["ps-1"])).Held.Should().BeEmpty(
+            "a reclassification is not the user deleting the switch");
+        (await _context.Notes.SingleAsync()).Text.Should().Be("Weekend");
+    }
+
+    [Fact]
+    public async Task A_bolus_wizard_edited_to_drop_its_carbs_loses_only_the_carb_half()
+    {
+        await DecomposeAsync(BolusWizard(carbs: 40));
+        (await _context.CarbIntakes.CountAsync()).Should().Be(1);
+
+        await DecomposeAsync(BolusWizard(carbs: null));
+
+        (await _context.CarbIntakes.CountAsync()).Should().Be(0);
+        (await _context.Boluses.SingleAsync()).Insulin.Should().Be(4);
+        (await _context.BolusCalculations.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_reupload_of_the_same_kind_removes_nothing()
+    {
+        await DecomposeAsync(BolusWizard(carbs: 40, notes: "lunch"));
+        await DecomposeAsync(BolusWizard(carbs: 40, notes: "lunch"));
+
+        (await DeletedRowsAsync()).Should().Be(0);
+        (await _context.Boluses.CountAsync()).Should().Be(1);
+        (await _context.CarbIntakes.CountAsync()).Should().Be(1);
+        (await _context.BolusCalculations.CountAsync()).Should().Be(1);
+        (await _context.Notes.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_reupload_of_an_effective_profile_switch_removes_nothing()
+    {
+        await DecomposeAsync(EffectiveSwitch());
+        await DecomposeAsync(EffectiveSwitch());
+
+        (await DeletedRowsAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_meal_resent_as_one_half_drops_the_stored_twin()
+    {
+        // A meal stored before meals were decomposed by content: a 0 U bolus beside the carbs
+        _context.Boluses.Add(new BolusEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "meal-pre-fix",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime, Insulin = 0,
+            CorrelationId = Guid.CreateVersion7(),
+        });
+        _context.CarbIntakes.Add(new CarbIntakeEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "meal-pre-fix",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime, Carbs = 60,
+            CorrelationId = Guid.CreateVersion7(),
+        });
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await Decomposer().DecomposeOneAsync(
+            new Treatment { Id = "meal-pre-fix", EventType = "Meal Bolus", Mills = At, Carbs = 60 }, WriteOrigin.Live);
+
+        result.UpdatedRecords.OfType<Nocturne.Core.Models.V4.CarbIntake>().Should().ContainSingle().Which.Carbs.Should().Be(60);
+        result.CreatedRecords.Should().BeEmpty();
+        _context.ChangeTracker.Clear();
+        _context.Boluses.IgnoreQueryFilters().AsNoTracking().Where(b => b.LegacyId == "meal-pre-fix")
+            .Should().ContainSingle().Which.DeletedAt.Should().NotBeNull("the zero-unit twin is no longer part of the record");
+    }
+
+    [Fact]
+    public async Task A_meal_under_a_temp_basals_id_leaves_the_temp_basal()
+    {
+        _context.TempBasals.Add(new TempBasalEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "syn-temp-basal",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime, Rate = 1.25, Origin = "Algorithm",
+        });
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        await DecomposeAsync(
+            new Treatment { Id = "syn-temp-basal", EventType = "Meal Bolus", Mills = At, Insulin = 0.0014756944 });
+
+        (await _context.TempBasals.CountAsync()).Should().Be(1);
+    }
+}

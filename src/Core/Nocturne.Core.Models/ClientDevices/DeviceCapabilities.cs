@@ -15,7 +15,6 @@ public static class DeviceKinds
     /// <summary>The desktop Companion app.</summary>
     public const string Companion = "companion";
 
-    /// <summary>All recognised device kinds.</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string> { Prelude, Companion };
 
     /// <summary>Whether a kind string is a recognised device kind.</summary>
@@ -54,7 +53,6 @@ public static class DeviceCapabilities
     /// <summary>Show a native notification.</summary>
     public const string Notify = "notify";
 
-    /// <summary>Vibrate / haptics.</summary>
     public const string Vibrate = "vibrate";
 
     /// <summary>Pulse the camera torch.</summary>
@@ -94,7 +92,6 @@ public static class DeviceCapabilities
                 Kinds(DeviceKinds.Companion)),
         };
 
-    /// <summary>Whether a capability string is in the registry.</summary>
     public static bool IsKnown(string capability) => Registry.ContainsKey(capability);
 
     /// <summary>

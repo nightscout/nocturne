@@ -19,6 +19,10 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.Core.Contracts.Auth;
+
 namespace Nocturne.API.Tests.Middleware;
 
 /// <summary>
@@ -54,21 +58,17 @@ public class AuthenticationMiddlewarePlatformAdminTests
     /// </summary>
     private static async Task<DefaultHttpContext> RunAsync(AuthType authType)
     {
-        var memberService = new Mock<ITenantMemberService>();
-        memberService
-            .Setup(s => s.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
         var dbName = $"auth_platform_admin_{Guid.NewGuid()}";
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
-        services.AddSingleton(memberService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
         var provider = services.BuildServiceProvider();
 
         using (var seedScope = provider.CreateScope())
         {
-            var db = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             db.Subjects.Add(new SubjectEntity
             {
                 Id = SubjectId,
@@ -76,6 +76,10 @@ public class AuthenticationMiddlewarePlatformAdminTests
                 IsActive = true,
                 IsPlatformAdmin = true,
                 ApprovalStatus = "Approved",
+            });
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = SubjectId,
             });
             await db.SaveChangesAsync();
         }

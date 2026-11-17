@@ -1,5 +1,6 @@
 import { render } from "vitest-browser-svelte";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
+import { glucoseRangePalette } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./GlucoseTrackHarness.test.svelte";
 
 /**
@@ -78,6 +79,42 @@ describe("GlucoseTrack rendering contract", () => {
 		expect(stopsIn(grads[0]).length).toBe(10);
 	});
 
+	it("continuous mode stop offsets ascend, so the browser does not collapse them onto the first", async () => {
+		const { container } = render(Harness, {
+			lineColorMode: "continuous",
+			areaMode: "off",
+			showPoints: false,
+		});
+
+		const offsets = [...stopsIn(gradients(container)[0])].map((s) => Number(s.getAttribute("offset")));
+		for (let i = 1; i < offsets.length; i++) {
+			expect(offsets[i]).toBeGreaterThan(offsets[i - 1]);
+		}
+	});
+
+	it("pins the stroke gradient to the plot area rather than the whole SVG", async () => {
+		const { container } = render(Harness, {
+			lineColorMode: "threshold",
+			areaMode: "off",
+			showPoints: false,
+		});
+
+		const grad = gradients(container)[0];
+		expect(grad.getAttribute("y1")).toBe("0");
+		expect(grad.getAttribute("y2")).not.toContain("%");
+	});
+
+	it("full area mode renders a fill at one opacity throughout", async () => {
+		const { container } = render(Harness, {
+			lineColorMode: "single",
+			areaMode: "full",
+			showPoints: false,
+		});
+
+		const colors = [...stopsIn(gradients(container)[0])].map((s) => s.getAttribute("stop-color"));
+		expect(new Set(colors).size).toBe(1);
+	});
+
 	it("showPoints={false} suppresses point circles", async () => {
 		const { container } = render(Harness, {
 			lineColorMode: "single",
@@ -121,5 +158,51 @@ describe("GlucoseTrack rendering contract", () => {
 
 		const circles = container.querySelectorAll("circle");
 		expect(circles.length).toBeGreaterThanOrEqual(3);
+	});
+
+	describe("with the distinct range palette", () => {
+		afterEach(() => glucoseRangePalette.forget());
+
+		it("continuous mode strokes the range colours, not the oklch spectrum", async () => {
+			glucoseRangePalette.current = "clarity";
+			const { container } = render(Harness, {
+				lineColorMode: "continuous",
+				areaMode: "off",
+				showPoints: false,
+			});
+
+			const colors = [...stopsIn(gradients(container)[0])].map((s) => s.getAttribute("stop-color") ?? "");
+			expect(colors.some((c) => c.startsWith("oklch("))).toBe(false);
+			expect(colors.every((c) => c.includes("--glucose-"))).toBe(true);
+			expect(colors.length).toBeGreaterThan(5);
+			expect(colors.some((c) => c.startsWith("color-mix(in oklch"))).toBe(true);
+		});
+
+		it("continuous points are filled from the range colours", async () => {
+			glucoseRangePalette.current = "clarity";
+			const { container } = render(Harness, {
+				lineColorMode: "continuous",
+				areaMode: "off",
+				showPoints: true,
+			});
+
+			const fills = Array.from(container.querySelectorAll("circle")).map((c) => c.getAttribute("fill") ?? "");
+			expect(fills.length).toBeGreaterThanOrEqual(3);
+			for (const fill of fills) expect(fill).toContain("--glucose-");
+		});
+
+		it("the theme palette keeps the oklch spectrum", async () => {
+			const { container } = render(Harness, {
+				lineColorMode: "continuous",
+				areaMode: "off",
+				showPoints: true,
+			});
+
+			const colors = [...stopsIn(gradients(container)[0])].map((s) => s.getAttribute("stop-color") ?? "");
+			expect(colors.every((c) => c.startsWith("oklch("))).toBe(true);
+			for (const c of container.querySelectorAll("circle")) {
+				expect(c.getAttribute("fill")).toMatch(/^oklch\(/);
+			}
+		});
 	});
 });

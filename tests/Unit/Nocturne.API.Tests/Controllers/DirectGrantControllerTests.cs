@@ -17,6 +17,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -61,19 +62,21 @@ public class DirectGrantControllerTests : IDisposable
             SubjectId = _subjectId,
             Permissions = ["*"],
         };
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.FullAccess };
 
         var auditService = new AuthAuditService(
-            _dbContext,
+            _dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = httpContext },
             new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
         var directGrantService = new DirectGrantService(
+            _dbContext.AsFactory(),
             auditService,
             new GrantRevocationService(
                 new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
 
-        _controller = new DirectGrantController(_dbContext, directGrantService);
+        _controller = new DirectGrantController(new SubjectRepository(_dbContext.AsFactory()), directGrantService);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,
@@ -103,7 +106,7 @@ public class DirectGrantControllerTests : IDisposable
 
         var row = await _dbContext.AuthAuditLog.AsNoTracking().SingleAsync();
         Assert.Equal(AuthAuditEventType.TokenIssued, row.EventType);
-        Assert.Equal(_subjectId, row.SubjectId);
+        Assert.Equal(_subjectId, row.TargetSubjectId);
         Assert.Equal(_subjectId, row.ActorSubjectId);
         Assert.Null(row.ActorCredential);
         Assert.Equal(_testTenantId, row.TenantId);
@@ -142,7 +145,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
 
         // Verify the stored hash matches what we'd compute
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.NotNull(grant);
         var expectedHash = HashUtils.Sha256Hex(response.Token);
         Assert.Equal(expectedHash, grant!.TokenHash);
@@ -167,7 +170,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
         Assert.Equal(expiresAt, response.ExpiresAt);
 
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.Equal(expiresAt, grant!.ExpiresAt);
 
         var listResult = await _controller.List();
@@ -218,6 +221,39 @@ public class DirectGrantControllerTests : IDisposable
         Assert.True(grant.LimitTo24Hours);
     }
 
+    [Theory]
+    [InlineData("*")]
+    [InlineData("treatments.readwrite")]
+    [InlineData("health.read")]
+    public async Task Create_BeyondTheCallersOwnScopes_IsRefusedAndMintsNothing(string scope)
+    {
+        _controller.HttpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.GlucoseRead };
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Wider than its maker",
+            Scopes = [scope],
+        });
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, problem.StatusCode);
+        Assert.False(await _dbContext.OAuthGrants.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Create_WithinTheCallersOwnScopes_Succeeds()
+    {
+        _controller.HttpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.GlucoseRead };
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Follower",
+            Scopes = [Scope.GlucoseRead],
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
     [Fact]
     public async Task Create_NoExpiry_StoresOpenEndedGrant()
     {
@@ -233,7 +269,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
         Assert.Null(response.ExpiresAt);
 
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.Null(grant!.ExpiresAt);
     }
 
@@ -334,6 +370,32 @@ public class DirectGrantControllerTests : IDisposable
         Assert.Equal("Active", grants[0].Label);
     }
 
+    /// <summary>
+    /// A migrated device token can still hold a tenant-administration atom copied from its role. It
+    /// never authorized anything, so the list must not show it as if it did.
+    /// </summary>
+    [Fact]
+    public async Task List_OmitsStoredScopesAClientCannotHold()
+    {
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = _subjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = [Scope.MembersManage, Scope.GlucoseRead, Scope.TenantSettings],
+            Label = "Migrated",
+            TokenHash = "migratedhash",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.List();
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var grants = Assert.IsType<List<DirectGrantDto>>(okResult.Value);
+        Assert.Equal([Scope.GlucoseRead], Assert.Single(grants).Scopes);
+    }
+
     [Fact]
     public async Task List_DoesNotReturnTokenValue()
     {
@@ -379,7 +441,7 @@ public class DirectGrantControllerTests : IDisposable
 
         Assert.IsType<NoContentResult>(result);
 
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == grantId);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == grantId);
         Assert.NotNull(grant);
         Assert.NotNull(grant!.RevokedAt);
     }
@@ -506,7 +568,7 @@ public class DirectGrantControllerTests : IDisposable
         var result = await _controller.Revoke(siteToken);
 
         result.Should().BeOfType<NoContentResult>();
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == siteToken);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == siteToken);
         reloaded.RevokedAt.Should().NotBeNull();
     }
 
@@ -519,7 +581,7 @@ public class DirectGrantControllerTests : IDisposable
 
         await _controller.Revoke(siteToken);
 
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == siteToken);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == siteToken);
         reloaded.RevokedAt.Should().BeNull();
     }
 }

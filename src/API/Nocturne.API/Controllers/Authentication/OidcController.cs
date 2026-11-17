@@ -9,10 +9,10 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data.Entities;
 using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 
 namespace Nocturne.API.Controllers.Authentication;
@@ -146,7 +146,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Handle OIDC callback from provider.
-    /// Exchanges authorization code for tokens and creates session.
+    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page, and a missing <c>code</c> or <c>state</c> returns 400.
     /// </summary>
     /// <param name="code">Authorization code from provider.</param>
     /// <param name="state">State parameter for CSRF verification.</param>
@@ -205,7 +205,7 @@ public class OidcController : ControllerBase
         // Clear state cookie (single use)
         ClearStateCookie();
 
-        // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
+        // The callback runs on the tenant subdomain (ApexCallbackRelayMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
         var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
@@ -219,6 +219,21 @@ public class OidcController : ControllerBase
             Request.Headers.UserAgent,
             currentTenantId
         );
+
+        if (result.StepUpToken is { } stepUpToken)
+        {
+            Response.SetTotpStepUpCookie(stepUpToken, _options);
+            SetLastSignInCookie(result.ProviderId);
+
+            // Not a completed login, so not a successful one; the success row is written when the
+            // second factor lands.
+            await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: false,
+                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                detailsJson: JsonSerializer.Serialize(new { method = "oidc", secondFactorPending = true }));
+
+            return Redirect(
+                $"/auth/login?returnUrl={Uri.EscapeDataString(result.ReturnUrl ?? "/")}");
+        }
 
         if (!result.Success)
         {
@@ -242,7 +257,7 @@ public class OidcController : ControllerBase
                 result.ErrorDescription
             );
 
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectId: null, success: false,
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
                 ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: result.ErrorDescription,
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc" }));
@@ -255,10 +270,7 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc,
-            result.ProviderId?.ToString(),
-            _options);
+        SetLastSignInCookie(result.ProviderId);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
@@ -281,6 +293,7 @@ public class OidcController : ControllerBase
     /// endpoint so they can attach the external identity to their current account.
     /// </summary>
     [HttpGet("link")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -322,6 +335,7 @@ public class OidcController : ControllerBase
     /// Does NOT issue new session cookies.
     /// </summary>
     [HttpGet("link/callback")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -442,6 +456,7 @@ public class OidcController : ControllerBase
     /// <response code="404">Identity not found.</response>
     /// <response code="409">Cannot remove the last primary sign-in method.</response>
     [HttpDelete("link/identities/{identityId:guid}")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetLinkedIdentities", "Passkey_ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -473,7 +488,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Refresh the session tokens.
-    /// Uses the refresh token to get a new access token.
+    /// Uses the refresh token to get a new access token. The refresh token is read from the cookie or the <c>Refresh</c> Authorization header. A failed refresh returns 401 and leaves cookies unchanged.
     /// </summary>
     /// <returns>A new <see cref="OidcTokenResponse"/> with rotated tokens.</returns>
     /// <remarks>
@@ -529,7 +544,7 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Logout and revoke the session.
+    /// Logout and revoke the session. Clears all session cookies and revokes the refresh token if one is present. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
     /// </summary>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional).</param>
     /// <returns>A <see cref="LogoutResponse"/> indicating success and an optional provider logout URL.</returns>
@@ -604,6 +619,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Get current session information including authentication status, roles, and permissions.
+    /// An unauthenticated request returns 200 with <c>IsAuthenticated</c> false rather than 401.
     /// </summary>
     /// <returns>A <see cref="SessionInfo"/> describing the current session state.</returns>
     /// <remarks>
@@ -615,7 +631,8 @@ public class OidcController : ControllerBase
     [AllowAnonymous]
     [AllowDuringSetup]
     [ProducesResponseType(typeof(SessionInfo), StatusCodes.Status200OK)]
-    public async Task<ActionResult<SessionInfo>> GetSession()
+    public async Task<ActionResult<SessionInfo>> GetSession(
+        [FromServices] ITenantService tenants, CancellationToken ct = default)
     {
         var authContext = HttpContext.GetAuthContext();
         if (authContext == null || !authContext.IsAuthenticated)
@@ -651,6 +668,9 @@ public class OidcController : ControllerBase
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
                 Preferences = userInfo?.Preferences,
+                DefaultGlucoseUnits = authContext.TenantId is { } tenantId
+                    ? await tenants.GetDefaultGlucoseUnitsAsync(tenantId, ct)
+                    : null,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
@@ -678,6 +698,10 @@ public class OidcController : ControllerBase
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
+
+    private void SetLastSignInCookie(Guid? providerId) =>
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body
@@ -826,6 +850,14 @@ public class SessionInfo
     /// Used for server-side hydration so first paint matches the user's saved choices.
     /// </summary>
     public UserDisplayPreferences? Preferences { get; set; }
+
+    /// <summary>
+    /// The tenant's default glucose units ("mg/dl" or "mmol"), shown to a member who has chosen
+    /// none of their own. Kept apart from <see cref="Preferences"/> so an inherited default is
+    /// never taken for the member's own saved choice. Null outside a tenant or before the owner
+    /// chooses.
+    /// </summary>
+    public string? DefaultGlucoseUnits { get; set; }
 
     /// <summary>
     /// Whether this subject has platform-level admin access

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Link from "@lucide/svelte/icons/link";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -8,14 +9,15 @@
     getCompatibilityMetrics,
     getCompatibilityAnalyses,
   } from "./data.remote";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { formatElapsedMs } from "$lib/utils/duration";
-  import type { AnalysisListItemDto } from "$lib/api";
-  import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Select from "$lib/components/ui/select";
+  import { formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import { formatElapsedMs } from "#lib/utils/duration.js";
+  import type { AnalysisListItemDto } from "#lib/api/index.js";
+  import { getMatchTypeDisplay } from "#lib/utils/compatibility-match.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
 
   // Get filter params from URL
   const urlParams = $derived({
@@ -35,24 +37,14 @@
   const analyses = $derived(compatibilityQuery.current?.analyses ?? []);
   const metrics = $derived(
     compatibilityQuery.current?.metrics ?? {
-      totalRequests: 0,
-      compatibilityScore: 0,
-      criticalDifferences: 0,
-      averageNocturneResponseTime: 0,
-    }
-  );
-  const config = $derived(
-    compatibilityQuery.current?.config ?? {
-      nightscoutUrl: "",
-    }
-  );
-  const filters = $derived(
-    compatibilityQuery.current?.filters ?? {
-      requestPath: "",
-      requestMethod: "",
-      overallMatch: "",
-    }
-  );
+    totalRequests: 0,
+    compatibilityScore: 0,
+    criticalDifferences: 0,
+    averageNocturneResponseTime: 0
+  });
+
+  const config = $derived(compatibilityQuery.current?.config ?? { nightscoutUrl: "" });
+  const filters = $derived(compatibilityQuery.current?.filters ?? { requestPath: "", requestMethod: "", overallMatch: "" });
 
   // Mutable state
   let isPolling = $state(true);
@@ -73,8 +65,8 @@
   const matchOptions = [
     { value: "", label: "All" },
     { value: "0", label: "Perfect" },
-    { value: "1", label: "Minor Differences" },
-    { value: "2", label: "Major Differences" },
+    { value: "1", label: "Minor differences" },
+    { value: "2", label: "Major differences" },
     { value: "3", label: "Critical" },
   ];
   let showCompatible = $state(false); // Hide compatible by default
@@ -96,9 +88,9 @@
   async function pollData() {
     try {
       const filters = {
-        ...(filterPath && { requestPath: filterPath }),
-        ...(filterMethod && { requestMethod: filterMethod }),
-        ...(filterMatch && { overallMatch: parseInt(filterMatch) }),
+        ...filterPath && { requestPath: filterPath },
+        ...filterMethod && { requestMethod: filterMethod },
+        ...filterMatch && { overallMatch: parseInt(filterMatch) },
         count: 100,
         skip: 0,
       };
@@ -149,12 +141,12 @@
   function applyFilters() {
     const params = new URLSearchParams(
       Object.entries({
-        requestPath: filterPath,
-        requestMethod: filterMethod,
-        overallMatch: filterMatch,
-      }).filter(([, value]) => value)
-    );
-    goto(resolve(`/compatibility?${params.toString()}`));
+      requestPath: filterPath,
+      requestMethod: filterMethod,
+      overallMatch: filterMatch
+    }).filter(([, value]) => value));
+
+    goto(resolve(`compatibility?${params.toString()}`));
   }
 
   // Clear filters
@@ -162,7 +154,7 @@
     filterPath = "";
     filterMethod = "";
     filterMatch = "";
-    goto(resolve("/compatibility"));
+    goto(resolve('compatibility'));
   }
 
   // Filtered analyses based on showCompatible
@@ -178,11 +170,14 @@
 
 </script>
 
-<div class="@container container mx-auto p-6 space-y-6">
+<div class="@container container mx-auto p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex flex-col gap-3 @lg:flex-row @lg:justify-between @lg:items-center">
-    <h1 class="text-3xl font-bold">Compatibility Testing</h1>
-    <div class="flex gap-2 items-center">
+    <div class="flex items-center gap-3">
+      <Link class="size-6 text-primary" />
+      <h1 class="text-3xl font-bold">Compatibility testing</h1>
+    </div>
+    <div class="flex flex-wrap gap-2 items-center">
       <span class="text-sm text-muted-foreground">
         Last update: {formatDateTimeCompact(lastUpdate.toISOString())}
       </span>
@@ -190,7 +185,7 @@
         variant={isPolling ? "default" : "secondary"}
         onclick={togglePolling}
       >
-        {isPolling ? "Polling Active" : "Polling Paused"}
+        {isPolling ? "Polling active" : "Polling paused"}
       </Button>
     </div>
   </div>
@@ -201,13 +196,13 @@
     <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
       <div>
         <p class="text-sm text-muted-foreground">Nightscout URL</p>
-        <p class="font-mono text-sm">
+        <p class="font-mono text-sm break-all">
           {config.nightscoutUrl || "Not configured"}
         </p>
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Nocturne URL</p>
-        <p class="font-mono text-sm">{nocturneUrl || "Auto-detecting..."}</p>
+        <p class="font-mono text-sm break-all">{nocturneUrl || "Auto-detecting..."}</p>
       </div>
     </div>
   </div>
@@ -216,13 +211,13 @@
   <div class="grid grid-cols-1 @xl:grid-cols-2 @5xl:grid-cols-4 gap-4">
     <div class="bg-card rounded-lg shadow p-6">
       <h3 class="text-sm text-muted-foreground mb-2">
-        Total Requests
+        Total requests
       </h3>
       <p class="text-3xl font-bold">{activeMetrics.totalRequests || 0}</p>
     </div>
     <div class="bg-card rounded-lg shadow p-6">
       <h3 class="text-sm text-muted-foreground mb-2">
-        Compatibility Score
+        Compatibility score
       </h3>
       <p class="text-3xl font-bold">
         {(activeMetrics.compatibilityScore || 0).toFixed(1)}%
@@ -230,7 +225,7 @@
     </div>
     <div class="bg-card rounded-lg shadow p-6">
       <h3 class="text-sm text-muted-foreground mb-2">
-        Critical Issues
+        Critical issues
       </h3>
       <p class="text-3xl font-bold text-destructive">
         {activeMetrics.criticalDifferences || 0}
@@ -238,7 +233,7 @@
     </div>
     <div class="bg-card rounded-lg shadow p-6">
       <h3 class="text-sm text-muted-foreground mb-2">
-        Avg Response Time
+        Avg response time
       </h3>
       <p class="text-3xl font-bold">
         {formatElapsedMs(activeMetrics.averageNocturneResponseTime || 0)}
@@ -252,7 +247,7 @@
     <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-4 gap-4">
       <div>
         <label for="filterPath" class="block text-sm font-medium mb-1">
-          Request Path
+          Request path
         </label>
         <Input
           type="text"
@@ -280,7 +275,7 @@
       </div>
       <div>
         <label for="filterMatch" class="block text-sm font-medium mb-1">
-          Match Type
+          Match type
         </label>
         <Select.Root type="single" bind:value={filterMatch}>
           <Select.Trigger id="filterMatch" class="w-full">
@@ -302,7 +297,7 @@
       <label class="flex items-center gap-2">
         <Checkbox bind:checked={showCompatible} />
         <span class="text-sm">
-          Show compatible requests (Perfect & Minor Differences)
+          Show compatible requests (perfect & minor differences)
         </span>
       </label>
     </div>
@@ -312,7 +307,7 @@
   <div class="bg-card rounded-lg shadow overflow-hidden">
     <div class="px-6 py-4 border-b">
       <h2 class="text-xl font-semibold">
-        Recent Requests ({filteredAnalyses.length}{showCompatible
+        Recent requests ({filteredAnalyses.length}{showCompatible
           ? ""
           : " incompatible"})
       </h2>
@@ -354,7 +349,7 @@
             <th
               class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
-              Response Time
+              Response time
             </th>
           </tr>
         </thead>
@@ -363,24 +358,22 @@
             {@const matchType = getMatchTypeDisplay(analysis.overallMatch)}
             {@const compatible = isCompatible(analysis.overallMatch)}
             <tr
-              class="hover:bg-muted/50 cursor-pointer transition {compatible
-                ? 'opacity-60'
-                : ''}"
-              onclick={() => goto(resolve(`/compatibility/${analysis.id}`))}
+              class="hover:bg-muted/50 cursor-pointer transition {compatible ? 'opacity-60' : ''}"
+              onclick={() => goto(resolve(`compatibility/${analysis.id}`))}
             >
+              <td class="px-6 py-4 whitespace-nowrap text-sm">{formatDateTimeCompact(analysis.analysisTimestamp)}</td>
+
+              <td
+                class="px-6 py-4 whitespace-nowrap text-sm font-mono"
+              >{analysis.requestMethod}</td>
+
+              <td
+                class="px-6 py-4 text-sm font-mono truncate max-w-md"
+              >{analysis.requestPath}</td>
+
               <td class="px-6 py-4 whitespace-nowrap text-sm">
-                {formatDateTimeCompact(analysis.analysisTimestamp)}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-mono">
-                {analysis.requestMethod}
-              </td>
-              <td class="px-6 py-4 text-sm font-mono truncate max-w-md">
-                {analysis.requestPath}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span class="font-mono">
-                  {analysis.nightscoutStatusCode || "N/A"}
-                </span>
+                <span class="font-mono">{analysis.nightscoutStatusCode || "N/A"}</span>
+
                 {#if analysis.nightscoutStatusCode !== analysis.nocturneStatusCode}
                   <span class="text-destructive">≠</span>
                   <span class="font-mono">
@@ -423,16 +416,17 @@
                 </div>
               </td>
             </tr>
-          {:else}
-            <tr>
-              <td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
-                No analyses found. Make sure the compatibility proxy service is
-                running and receiving traffic.
-              </td>
-            </tr>
           {/each}
         </tbody>
       </table>
     </div>
+    {#if filteredAnalyses.length === 0}
+      <!-- Outside the scrolling table, so the text wraps to the card's width. -->
+      <EmptyState
+        art="linked-rings"
+        title="No analyses found"
+        body="Make sure the compatibility proxy service is running and receiving traffic."
+      />
+    {/if}
   </div>
 </div>

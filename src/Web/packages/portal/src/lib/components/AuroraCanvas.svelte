@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { auroraTime } from "$lib/utils/aurora-noise";
-    import { FLOW_H, FLOW_VMAX, FLOW_W, type FlowField } from "$lib/utils/aurora-flow";
+    import { auroraTime } from "#lib/utils/aurora-noise.js";
+    import { FLOW_H, FLOW_VMAX, FLOW_W, type FlowField } from "#lib/utils/aurora-flow.js";
 
     let {
         height = 880,

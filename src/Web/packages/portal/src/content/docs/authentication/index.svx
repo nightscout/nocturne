@@ -4,7 +4,7 @@ title: Authentication
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Authentication
@@ -125,4 +125,4 @@ code follows the passkey.
 | Passkeys | Always on. Nothing to configure. |
 | Social login | Add a provider; see [Google](/docs/authentication/google), [GitHub](/docs/authentication/github), or [generic OIDC](/docs/authentication/oidc). |
 | Authenticator app / recovery codes | Always available. Users set these up from their account settings. |
-| Request membership | On by default. Each instance owner can switch it off under **Settings > Sharing & Privacy**. |
+| Request membership | On by default. Each instance owner can switch it off under **Site settings > Sharing & Privacy**. |

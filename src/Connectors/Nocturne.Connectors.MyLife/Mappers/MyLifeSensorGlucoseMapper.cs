@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// </summary>
 internal sealed class MyLifeSensorGlucoseMapper
 {
-    internal static IEnumerable<SensorGlucose> Map(IEnumerable<MyLifeEvent> events)
+    internal static IEnumerable<SensorGlucose> Map(IEnumerable<MyLifeEvent> events, DateTime now)
     {
         var list = new List<SensorGlucose>();
         foreach (var ev in events)
@@ -28,7 +28,7 @@ internal sealed class MyLifeSensorGlucoseMapper
             if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var value))
                 continue;
 
-            var sensorGlucose = MyLifeFactory.CreateSensorGlucose(ev, value);
+            var sensorGlucose = MyLifeFactory.CreateSensorGlucose(ev, now, value);
             list.Add(sensorGlucose);
         }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render } from "svelte/server";
-import type { UserDisplayPreferences } from "$lib/api";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
 import Harness from "./appearance-ssr-harness.svelte";
 import {
   glucoseUnits,
@@ -10,6 +10,14 @@ import {
 } from "./appearance-store.svelte";
 
 const mmol: UserDisplayPreferences = { glucoseUnits: "mmol", timeFormat: "24" };
+
+/** Five minutes ago as the narrow relative-time format writes it in `locale`. */
+function narrowAgo(locale: string): string {
+  return new Intl.RelativeTimeFormat(locale, {
+    style: "narrow",
+    numeric: "auto",
+  }).format(-5, "minute");
+}
 
 async function ssr(
   layers: UserDisplayPreferences[],
@@ -24,8 +32,8 @@ describe("appearance-store SSR resolution", () => {
       ssr([{ a1cName: "A1c", a1cUnits: "mmol/mol" }]),
       ssr([]),
     ]);
-    expect(custom).toContain("A1c / eA1c: 53 mmol/mol");
-    expect(defaults).toContain("HbA1c / eHbA1c: 7.0%");
+    expect(custom).toContain("A1c / eA1c: 53.0 mmol/mol");
+    expect(defaults).toContain("HbA1c / eHbA1c: 7.00%");
   });
   it("renders the request's units, not the module default", async () => {
     const body = await ssr([mmol]);
@@ -64,6 +72,16 @@ describe("appearance-store SSR resolution", () => {
     expect(body).toContain(">24<");
   });
 
+  it("renders the energy unit the backend resolved for the request", async () => {
+    const [resolved, unresolved] = await Promise.all([
+      ssr([{ regionFormat: "en-AU", effectiveEnergyUnit: "kJ" }]),
+      ssr([]),
+    ]);
+
+    expect(resolved).toContain("energy:kJ");
+    expect(unresolved).toContain("energy:kcal");
+  });
+
   it("applies every preference layer's own fields, not just the first layer's", async () => {
     const body = await ssr([{ glucoseUnits: "mmol" }, { timeFormat: "24" }]);
 
@@ -77,7 +95,7 @@ describe("language SSR resolution", () => {
     const body = await ssr([], "de");
 
     expect(body).toContain("Do., 31. Dez.");
-    expect(body).toContain("vor 5 Min.");
+    expect(body).toContain(narrowAgo("de"));
     expect(body).not.toContain("Thu, Dec 31");
   });
 
@@ -85,7 +103,7 @@ describe("language SSR resolution", () => {
     const body = await ssr([]);
 
     expect(body).toContain("Thu, Dec 31");
-    expect(body).toContain("5 min. ago");
+    expect(body).toContain(narrowAgo("en"));
   });
 
   it("keeps concurrent requests isolated", async () => {
@@ -122,8 +140,8 @@ describe("resolveLanguage", () => {
 });
 
 it("keeps year color preferences scoped to the SSR request", async () => {
-  const first = await ssr([{ yearOverviewColors: { tdd: [10, 70] } }]);
-  const second = await ssr([{ yearOverviewColors: { tdd: [20, 60] } }]);
+  const first = await ssr([{ yearOverviewColors: { tddBand: [10, 70] } }]);
+  const second = await ssr([{ yearOverviewColors: { tddBand: [20, 60] } }]);
   expect(first).toContain('[10,70]');
   expect(second).toContain('[20,60]');
   expect(second).not.toContain('[10,70]');

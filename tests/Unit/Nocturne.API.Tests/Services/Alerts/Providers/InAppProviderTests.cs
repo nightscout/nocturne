@@ -12,6 +12,8 @@ namespace Nocturne.API.Tests.Services.Alerts.Providers;
 [Trait("Category", "Unit")]
 public class InAppProviderTests
 {
+    private const string Recipient = "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+
     private readonly Mock<IInAppNotificationService> _notification = new();
     private readonly InAppProvider _sut;
 
@@ -45,10 +47,10 @@ public class InAppProviderTests
     {
         var payload = MakePayload();
 
-        await _sut.SendAsync("user-123", payload, CancellationToken.None);
+        await _sut.SendAsync(Recipient, payload, CancellationToken.None);
 
         _notification.Verify(n => n.CreateNotificationAsync(
-            "user-123",
+            Recipient,
             InAppProvider.NotificationType,
             "Low glucose",
             NotificationCategory.Alert,
@@ -74,7 +76,7 @@ public class InAppProviderTests
     {
         var payload = MakePayload(severity);
 
-        await _sut.SendAsync("user-123", payload, CancellationToken.None);
+        await _sut.SendAsync(Recipient, payload, CancellationToken.None);
 
         _notification.Verify(n => n.CreateNotificationAsync(
             It.IsAny<string>(),
@@ -97,7 +99,7 @@ public class InAppProviderTests
     {
         var payload = MakePayload(glucose: null);
 
-        await _sut.SendAsync("user-123", payload, CancellationToken.None);
+        await _sut.SendAsync(Recipient, payload, CancellationToken.None);
 
         _notification.Verify(n => n.CreateNotificationAsync(
             It.IsAny<string>(),
@@ -116,10 +118,41 @@ public class InAppProviderTests
     }
 
     [Fact]
-    public async Task SendAsync_EmptyDestination_SkipsNotification()
+    public async Task SendAsync_ReportsTheRecipientReached()
     {
-        await _sut.SendAsync("", MakePayload(), CancellationToken.None);
+        (await _sut.SendAsync(Recipient, MakePayload(), CancellationToken.None)).Should().BeTrue();
+    }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("user-123")]
+    public async Task SendAsync_DestinationNamingNoSubject_CreatesNothingAndReportsNoRecipient(string destination)
+    {
+        var reached = await _sut.SendAsync(destination, MakePayload(), CancellationToken.None);
+
+        reached.Should().BeFalse();
         _notification.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task SendAsync_NotifiesTheSubjectInTheFormTheNotificationCentreReadsBy()
+    {
+        await _sut.SendAsync(Recipient.ToUpperInvariant(), MakePayload(), CancellationToken.None);
+
+        _notification.Verify(n => n.CreateNotificationAsync(
+            Recipient,
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<NotificationCategory?>(),
+            It.IsAny<NotificationUrgency?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
+            It.IsAny<List<NotificationActionDto>?>(),
+            It.IsAny<ResolutionConditions?>(),
+            It.IsAny<Dictionary<string, object>?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -16,8 +16,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// retry, and when the call fails, every entity first tracked during the call is detached and every
 /// entity tracked before it is put back to the state, original values and current values it had at
 /// the call. Each retry then starts from the caller's view and the work applies its edits once, and
-/// a call that fails leaves the context as the caller left it. The context may be the scope's, so
-/// its entities are restored rather than detached. Only scalar tracker state is restored: work must
+/// a call that fails leaves the context as the caller left it. The context may be a
+/// <see cref="DbUnitOfWork"/>'s, shared with writers that ran before the call, so its entities are
+/// restored rather than detached. Only scalar tracker state is restored: work must
 /// not change the collection or reference navigations of an entity tracked before the call.
 /// </remarks>
 public static class RetryingTransactionExtensions
@@ -149,7 +150,7 @@ public static class RetryingTransactionExtensions
         if (inserted.Count == 0)
             return false;
         var id = inserted[0].Id;
-        return await context.Set<TEntity>().IgnoreQueryFilters().AnyAsync(e => e.Id == id, ct);
+        return await context.Set<TEntity>().IncludingDeleted().AnyAsync(e => e.Id == id, ct);
     }
 
     /// <summary>
@@ -168,7 +169,7 @@ public static class RetryingTransactionExtensions
             return false;
         var id = updated[0].Id;
         var stamp = updated[0].SysUpdatedAt;
-        return await context.Set<TEntity>().IgnoreQueryFilters()
+        return await context.Set<TEntity>().IncludingDeleted()
             .AnyAsync(e => e.Id == id && e.SysUpdatedAt == stamp, ct);
     }
 

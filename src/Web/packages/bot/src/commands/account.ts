@@ -2,10 +2,11 @@ import type { Chat } from "chat";
 import { getUnscopedApi } from "../lib/request-context.js";
 import { requireLink } from "../lib/require-link.js";
 import { createLogger } from "../lib/logger.js";
+import { slashCommandHandle } from "../lib/platform-handle.js";
 
 const logger = createLogger();
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]?$/;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?$/;
 
 export function registerAccountCommands(bot: Chat, baseDomain: string) {
   bot.onSlashCommand("/connect", async (event) => {
@@ -26,6 +27,7 @@ export function registerAccountCommands(bot: Chat, baseDomain: string) {
       const { token } = await api.pendingLinks.create(
         platform,
         event.user.userId,
+        slashCommandHandle(event),
         slugArg,
         "connect-slash",
       );

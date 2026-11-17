@@ -1,3 +1,6 @@
+{{- if include "nocturne.removedToggleOn" .Values.web.autoscaling }}
+{{- fail "web.autoscaling has been removed: set web.replicaCount instead (see the chart README, \"Web replicas\")." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,9 +9,7 @@ metadata:
     {{- include "nocturne.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
 spec:
-  {{- if not .Values.web.autoscaling.enabled }}
   replicas: {{ .Values.web.replicaCount }}
-  {{- end }}
   selector:
     matchLabels: {{- include "nocturne.web.selectorLabels" . | nindent 6 }}
   template:
@@ -49,11 +50,29 @@ spec:
             - name: BASE_DOMAIN
               value: {{ .Values.baseDomain | quote }}
             {{- end }}
+            {{- with .Values.web.allowedFrameAncestors }}
+            - name: ALLOWED_FRAME_ANCESTORS
+              value: {{ . | quote }}
+            {{- end }}
             - name: INSTANCE_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "nocturne.instanceKeySecretName" . }}
                   key: {{ include "nocturne.instanceKeySecretKey" . }}
+            # The web image's entrypoint composes NOCTURNE_POSTGRES_URI from these
+            # nocturne_web role pieces. The chart can't render the password secret, so
+            # the URI is assembled at container start, not in the template.
+            - name: WEB_DB_HOST
+              value: {{ include "nocturne.db.host" . | quote }}
+            - name: WEB_DB_PORT
+              value: {{ include "nocturne.db.port" . | quote }}
+            - name: WEB_DB_NAME
+              value: {{ include "nocturne.db.database" . | quote }}
+            - name: WEB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "web") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "web") }}
             {{- include "nocturne.observability.web.env" . | nindent 12 }}
           # No documented HTTP health endpoint on the web container in v0; using TCP probe.
           livenessProbe:

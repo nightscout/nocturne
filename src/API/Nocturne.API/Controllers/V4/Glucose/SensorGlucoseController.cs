@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
@@ -33,6 +34,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [Route("api/v4/glucose/sensor")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
+[ClearsTenantCache(TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c)]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
@@ -69,6 +71,7 @@ public class SensorGlucoseController(
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null, [FromQuery] string? source = null,
+        [FromQuery] bool includeTotal = false,
         CancellationToken ct = default)
     {
         if (PrepareListQuery(from, to, sort, ref limit, ref offset, out var descending) is { } error)
@@ -78,10 +81,10 @@ public class SensorGlucoseController(
         if (Request.Query.TryGetValue("patientDeviceId", out var raw) && Guid.TryParse(raw, out var parsed))
             patientDeviceId = parsed;
 
-        var data = await Repository.GetAsync(from, to, device, source, limit, offset, descending,
-            nativeOnly: false, afterTimestamp: null, afterId: null, patientDeviceId: patientDeviceId, ct: ct);
-        var total = await Repository.CountAsync(from, to, ct);
-        return Ok(new PaginatedResponse<SensorGlucose> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
+        var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending,
+            afterTimestamp: null, afterId: null, patientDeviceId: patientDeviceId, ct: ct)).ToList();
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, ct));
+        return Ok(new PaginatedResponse<SensorGlucose> { Data = data, Pagination = pagination });
     }
 
     /// <inheritdoc/>
@@ -120,6 +123,7 @@ public class SensorGlucoseController(
         Filtered = request.Filtered,
         Unfiltered = request.Unfiltered,
         Delta = request.Delta,
+        Rssi = request.Rssi,
     };
 
     protected override SensorGlucose MapUpdateToModel(Guid id, UpsertSensorGlucoseRequest request, SensorGlucose existing) => new()
@@ -137,6 +141,7 @@ public class SensorGlucoseController(
         Filtered = request.Filtered,
         Unfiltered = request.Unfiltered,
         Delta = request.Delta,
+        Rssi = request.Rssi,
         SyncIdentifier = existing.SyncIdentifier,
         CorrelationId = existing.CorrelationId,
         LegacyId = existing.LegacyId,

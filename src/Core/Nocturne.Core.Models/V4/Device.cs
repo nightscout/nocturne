@@ -1,7 +1,7 @@
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
-/// Represents a physical device identified by category, type, and serial number,
+/// Physical device identified by category, type, and serial number,
 /// auto-discovered from uploaded data.
 /// </summary>
 /// <remarks>
@@ -51,9 +51,6 @@ public class Device
     /// </summary>
     public string Type { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Device serial number
-    /// </summary>
     public string Serial { get; set; } = string.Empty;
 
     /// <summary>
@@ -69,12 +66,12 @@ public class Device
     /// <summary>
     /// When this device was first seen in Unix milliseconds, computed from <see cref="FirstSeenTimestamp"/>.
     /// </summary>
-    public long FirstSeenMills => new DateTimeOffset(FirstSeenTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long FirstSeenMills => FirstSeenTimestamp.ToMills();
 
     /// <summary>
     /// When this device was last seen in Unix milliseconds, computed from <see cref="LastSeenTimestamp"/>.
     /// </summary>
-    public long LastSeenMills => new DateTimeOffset(LastSeenTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long LastSeenMills => LastSeenTimestamp.ToMills();
 
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns

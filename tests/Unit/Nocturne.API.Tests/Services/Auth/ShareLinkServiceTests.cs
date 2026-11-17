@@ -18,9 +18,11 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -31,6 +33,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     private readonly NocturneDbContext _db;
     private readonly ShareLinkService _service;
     private readonly string _dbName;
+    private readonly Guid _ownerSubjectId = Guid.CreateVersion7();
 
     /// <summary>
     /// The real AES-GCM service over a fixed instance key, so the reveal tests exercise an actual
@@ -52,6 +55,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         _dbName = dbName;
         _db = TestDbContextFactory.CreateInMemoryContext(dbName);
         TestDatabaseSeeder.Seed(_db);
+        _db.ActingAs(new TestAuditActor { SubjectId = _ownerSubjectId });
 
         // The seeder grants the Public subject the Clinician role; keep a Viewer role available too
         // so the legacy role-based link scenario can be exercised.
@@ -79,12 +83,14 @@ public sealed class ShareLinkServiceTests : IDisposable
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         return new ShareLinkService(
-            db,
+            db.AsFactory(),
+            new TenantRepository(db.AsFactory()),
+            new TenantMembershipRepository(db.AsFactory()),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<ShareTokenCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantRepository(factory.Object.AsNocturneFactory()), NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance),
             secrets,
             NullLogger<ShareLinkService>.Instance,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));
@@ -95,13 +101,13 @@ public sealed class ShareLinkServiceTests : IDisposable
     /// <summary>Loads the Public subject's membership with its role assignments.</summary>
     private Task<TenantMemberEntity> GetPublicMemberAsync() =>
         _db.TenantMembers.AsNoTracking().Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
 
     /// <summary>Strips the seeded role/scope grant so the Public subject mirrors a fresh tenant.</summary>
     private async Task ResetPublicMemberAccessAsync()
     {
         var member = await _db.TenantMembers.Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
         _db.TenantMemberRoles.RemoveRange(member.MemberRoles);
         member.MemberRoles.Clear();
         member.DirectPermissions = null;
@@ -165,6 +171,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _service.RotateAsync(TenantId);
 
         // What a link minted before the recoverable copy existed looks like.
+        _db.ChangeTracker.Clear();
         var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
         stored.ShareTokenEncrypted = null;
         await _db.SaveChangesAsync();
@@ -183,6 +190,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _service.RotateAsync(TenantId);
 
         // What a changed instance key leaves behind.
+        _db.ChangeTracker.Clear();
         var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
         stored.ShareTokenEncrypted = Convert.ToBase64String(new byte[48]);
         await _db.SaveChangesAsync();
@@ -198,6 +206,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     public async Task Get_cannot_tell_a_stale_ciphertext_from_a_good_one()
     {
         await _service.RotateAsync(TenantId);
+        _db.ChangeTracker.Clear();
         var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
         stored.ShareTokenEncrypted = Convert.ToBase64String(new byte[48]);
         await _db.SaveChangesAsync();
@@ -235,6 +244,98 @@ public sealed class ShareLinkServiceTests : IDisposable
         var member = await GetPublicMemberAsync();
         member.DirectPermissions.Should().BeEquivalentTo(Scope.DefaultPublicShareScopes);
         member.MemberRoles.Should().BeEmpty("rotation seeds direct permissions rather than a role");
+    }
+
+    /// <summary>The audit rows written against the Public subject, as event and the details' item.</summary>
+    private async Task<List<(string Event, string Details)>> PublicAuditAsync()
+    {
+        var subjectId = (await GetPublicMemberAsync()).SubjectId;
+        var rows = await _db.AuthAuditLog.AsNoTracking().Where(a => a.TargetSubjectId == subjectId).OrderBy(a => a.Id).ToListAsync();
+        rows.Should().OnlyContain(a => a.ActorSubjectId == _ownerSubjectId && a.TenantId == TenantId && a.Success);
+        return [.. rows.Select(a => (a.EventType, a.DetailsJson!))];
+    }
+
+    private static (string Event, string Details) Row(string eventType, string key, string item) =>
+        (eventType, $$"""{"{{key}}":"{{item}}","kind":"tenant"}""");
+
+    [Fact]
+    public async Task Rotate_audits_the_default_scopes_and_the_clamp_it_seeds_on_first_enable()
+    {
+        await ResetPublicMemberAccessAsync();
+        var publicMember = await _db.TenantMembers.OfPublicSubject().FirstAsync();
+        publicMember.LimitTo24Hours = false;
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        await _service.RotateAsync(TenantId);
+
+        var expected = Scope.DefaultPublicShareScopes
+            .Select(p => Row(AuthAuditEventType.RoleAssigned, "permission", p))
+            .Append(Row(AuthAuditEventType.HistoryLimitChanged, "history_limit", "24_hours"));
+        (await PublicAuditAsync()).Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task Rotate_again_audits_nothing_because_the_access_is_kept()
+    {
+        await ResetPublicMemberAccessAsync();
+        await _service.RotateAsync(TenantId);
+        var after = await PublicAuditAsync();
+
+        await _service.RotateAsync(TenantId);
+
+        (await PublicAuditAsync()).Should().BeEquivalentTo(after);
+    }
+
+    [Fact]
+    public async Task Disable_audits_each_role_and_permission_it_removes()
+    {
+        await _service.SetScopesAsync(TenantId, [Scope.GlucoseRead]);
+        await _service.RotateAsync(TenantId);
+        var before = (await PublicAuditAsync()).Count;
+
+        await _service.DisableAsync(TenantId);
+
+        (await PublicAuditAsync()).Skip(before).Should().Equal(
+            Row(AuthAuditEventType.RoleRemoved, "permission", Scope.GlucoseRead));
+    }
+
+    [Fact]
+    public async Task SetFullHistory_audits_each_change_of_the_clamp_and_nothing_when_it_does_not_move()
+    {
+        await _service.RotateAsync(TenantId);
+        var before = (await PublicAuditAsync()).Count;
+
+        await _service.SetFullHistoryAsync(TenantId, fullHistory: true);
+        await _service.SetFullHistoryAsync(TenantId, fullHistory: true);
+        await _service.SetFullHistoryAsync(TenantId, fullHistory: false);
+
+        (await PublicAuditAsync()).Skip(before).Should().Equal(
+            Row(AuthAuditEventType.HistoryLimitChanged, "history_limit", "full"),
+            Row(AuthAuditEventType.HistoryLimitChanged, "history_limit", "24_hours"));
+    }
+
+    [Fact]
+    public async Task SetScopes_audits_the_role_it_drops_and_the_permissions_it_swaps()
+    {
+        var clinician = await _db.TenantRoles.AsNoTracking().SingleAsync(r => r.Slug == RoleSeeds.Clinician);
+        await ResetPublicMemberAccessAsync();
+        var publicMemberId = (await GetPublicMemberAsync()).Id;
+        var member = await _db.TenantMembers.SingleAsync(m => m.Id == publicMemberId);
+        member.DirectPermissions = [Scope.GlucoseRead];
+        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = clinician.Id,
+        });
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        await _service.SetScopesAsync(TenantId, [Scope.TreatmentsRead]);
+
+        (await PublicAuditAsync()).Should().BeEquivalentTo([
+            Row(AuthAuditEventType.RoleRemoved, "role", RoleSeeds.Clinician),
+            Row(AuthAuditEventType.RoleRemoved, "permission", Scope.GlucoseRead),
+            Row(AuthAuditEventType.RoleAssigned, "permission", Scope.TreatmentsRead)]);
     }
 
     [Fact]
@@ -371,7 +472,7 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         // Remove the Public membership entirely, then disable.
         var publicMember = await _db.TenantMembers.Include(m => m.MemberRoles)
-            .FirstAsync(m => m.TenantId == TenantId && m.Subject!.Name == "Public");
+            .Where(m => m.TenantId == TenantId).OfPublicSubject().FirstAsync();
         _db.TenantMemberRoles.RemoveRange(publicMember.MemberRoles);
         _db.TenantMembers.Remove(publicMember);
         await _db.SaveChangesAsync();
@@ -417,7 +518,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedAppearance_is_the_owners_presentation_settings()
+    public async Task TenantAppearance_is_the_owners_presentation_settings()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
         {
@@ -429,7 +530,7 @@ public sealed class ShareLinkServiceTests : IDisposable
             Prediction = new PredictionPreferences { Enabled = true, Minutes = 45 },
         });
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol");
         appearance.TimeFormat.Should().Be("24");
@@ -441,26 +542,29 @@ public sealed class ShareLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedAppearance_withholds_what_the_owner_does_rather_than_how_it_looks()
+    public async Task TenantAppearance_withholds_what_the_owner_does_rather_than_how_it_looks()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
         {
             GlucoseUnits = "mmol",
             DashboardTopWidgets = [WidgetId.Tdd, WidgetId.Meals],
+            DashboardRail = new DashboardRailPreference { Order = [RailItemId.Trackers, RailItemId.Reservoir] },
             NightModeSchedule = true,
         });
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol");
         appearance.DashboardTopWidgets.Should().BeNull(
             "the widgets an owner pins describe what they track, not how it looks");
+        appearance.DashboardRail.Should().BeNull(
+            "the status pills an owner picks describe what they track, not how it looks");
         appearance.NightModeSchedule.Should().BeNull(
             "it tells a stranger holding the link roughly when the owner sleeps");
     }
 
     [Fact]
-    public async Task SharedAppearance_is_empty_when_the_tenant_has_no_owner_left()
+    public async Task TenantAppearance_is_empty_when_the_tenant_has_no_owner_left()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
 
@@ -468,36 +572,49 @@ public sealed class ShareLinkServiceTests : IDisposable
         _db.TenantMembers.Remove(owner);
         await _db.SaveChangesAsync();
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().BeNull("a removed member no longer speaks for the tenant");
     }
 
     [Fact]
-    public async Task SharedAppearance_ignores_another_tenants_owner()
+    public async Task TenantAppearance_ignores_another_tenants_owner()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
 
-        var appearance = await _service.GetSharedAppearanceAsync(Guid.NewGuid());
+        var appearance = await _service.GetTenantAppearanceAsync(Guid.NewGuid());
 
         appearance.GlucoseUnits.Should().BeNull();
     }
 
     [Fact]
-    public async Task SharedAppearance_settles_on_the_longest_standing_of_several_owners()
+    public async Task TenantAppearance_settles_on_the_longest_standing_of_several_owners()
     {
         var seededJoined = await BackdateTheSeededOwnerAsync();
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
         await AddOwnerAsync(
             new UserDisplayPreferences { GlucoseUnits = "mg/dl" }, seededJoined.AddYears(1));
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol", "a later co-owner does not restyle the link");
     }
 
     [Fact]
-    public async Task SharedAppearance_ignores_a_system_subject_holding_the_owner_role()
+    public async Task TenantAppearance_follows_join_time_rather_than_the_order_owners_were_written()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mg/dl" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mmol" }, seededJoined.AddYears(-1));
+
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "the co-owner written second joined first");
+    }
+
+    [Fact]
+    public async Task TenantAppearance_ignores_a_system_subject_holding_the_owner_role()
     {
         var seededJoined = await BackdateTheSeededOwnerAsync();
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
@@ -506,13 +623,13 @@ public sealed class ShareLinkServiceTests : IDisposable
             seededJoined.AddYears(-1),
             isSystemSubject: true);
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol", "no person is behind a system subject");
     }
 
     [Fact]
-    public async Task SharedAppearance_ignores_an_owner_whose_subject_is_deactivated()
+    public async Task TenantAppearance_ignores_an_owner_whose_subject_is_deactivated()
     {
         var seededJoined = await BackdateTheSeededOwnerAsync();
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
@@ -521,7 +638,7 @@ public sealed class ShareLinkServiceTests : IDisposable
             seededJoined.AddYears(-1),
             isActiveSubject: false);
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol", "a deactivated subject cannot sign in either");
     }

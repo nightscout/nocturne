@@ -5,7 +5,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Alerts;
@@ -17,13 +17,15 @@ namespace Nocturne.API.Services.Alerts;
 /// snapshot, the Home Assistant reconnect replay) read <see cref="AlertSnooze"/> directly.
 /// </remarks>
 internal sealed class AlertSnoozeService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     IAlertRepository repository,
+    IAlertRuleRepository ruleRepository,
     IAlertDeliveryService deliveryService,
     ISensorContextEnricher contextEnricher,
     ICanonicalGlucoseService canonicalGlucose,
     ISignalRBroadcastService broadcastService,
+    IEngineAlarmRelay alarmRelay,
     TimeProvider timeProvider,
     ILogger<AlertSnoozeService> logger)
     : IAlertSnoozeService
@@ -33,8 +35,7 @@ internal sealed class AlertSnoozeService(
         var tenantId = tenantAccessor.TenantId;
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
 
         var instance = await db.AlertInstances
             .Include(i => i.AlertExcursion)
@@ -58,7 +59,7 @@ internal sealed class AlertSnoozeService(
 
         // A chat-bot delivery still pending would otherwise be picked up by the bot's poll
         // mid-snooze; the resume dispatch creates fresh rows.
-        await repository.ExpirePendingDeliveriesAsync(tenantId, [instanceId], ct);
+        await repository.ExpirePendingDeliveriesAsync([instanceId], ct);
 
         try
         {
@@ -75,6 +76,8 @@ internal sealed class AlertSnoozeService(
             logger.LogWarning(ex, "Failed to broadcast alert_snoozed for instance {InstanceId}", instanceId);
         }
 
+        await alarmRelay.ClearIfQuietAsync([instance.AlertExcursionId], ct);
+
         logger.LogInformation(
             "Alert instance {InstanceId} snoozed until {SnoozedUntil} (count {Count})",
             instanceId, until, instance.SnoozeCount);
@@ -88,10 +91,8 @@ internal sealed class AlertSnoozeService(
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
         AlertInstanceEntity? instance;
-        await using (var db = await contextFactory.CreateDbContextAsync(ct))
+        await using (var db = await contextFactory.CreateAsync(ct))
         {
-            db.TenantId = tenantId;
-
             instance = await db.AlertInstances
                 .AsNoTracking()
                 .Include(i => i.AlertExcursion)
@@ -121,9 +122,9 @@ internal sealed class AlertSnoozeService(
             : null;
         var baseContext = new SensorContext
         {
-            LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
+            LatestValue = fresh?.Mgdl.ToDecimal(),
             LatestTimestamp = fresh?.Timestamp,
-            TrendRate = (decimal?)fresh?.TrendRate,
+            TrendRate = fresh?.TrendRate?.ToDecimal(),
             LastReadingAt = latest?.Timestamp,
         };
 
@@ -138,7 +139,7 @@ internal sealed class AlertSnoozeService(
         var context = baseContext;
         try
         {
-            context = await contextEnricher.EnrichAsync(baseContext, [rule], tenantId, ct);
+            context = await contextEnricher.EnrichAsync(baseContext, [rule], ct);
         }
         catch (Exception ex)
         {
@@ -155,8 +156,8 @@ internal sealed class AlertSnoozeService(
             return false;
         }
 
-        var channels = await repository.GetChannelsForRuleAsync(tenantId, rule.Id, ct);
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
+        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
+        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
         var payload = AlertPayloads.Build(

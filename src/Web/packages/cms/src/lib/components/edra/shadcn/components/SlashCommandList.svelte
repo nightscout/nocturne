@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Key } from '@nocturne/ui/keys';
 	import { Button } from '@nocturne/ui/ui/button';
 
 	interface Props {
@@ -37,7 +38,7 @@
 	};
 
 	function handleKeyDown(e: KeyboardEvent) {
-		if (e.key === 'ArrowDown' || ((e.ctrlKey || e.metaKey) && e.key === 'j') || e.key === 'Tab') {
+		if (e.key === Key.ArrowDown || ((e.ctrlKey || e.metaKey) && e.key === Key.J) || e.key === Key.Tab) {
 			e.preventDefault();
 			if (!suggestion.items.length) {
 				return false;
@@ -58,7 +59,7 @@
 			return true;
 		}
 
-		if (e.key === 'ArrowUp' || ((e.ctrlKey || e.metaKey) && e.key === 'k')) {
+		if (e.key === Key.ArrowUp || ((e.ctrlKey || e.metaKey) && e.key === Key.K)) {
 			e.preventDefault();
 			if (!suggestion.items.length) {
 				return false;
@@ -78,7 +79,7 @@
 			return true;
 		}
 
-		if (e.key === 'Enter') {
+		if (e.key === Key.Enter) {
 			e.preventDefault();
 			if (!suggestion.items.length || selectedGroupIndex === -1 || selectedCommandIndex === -1) {
 				return false;

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Attributes;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Devices;
 
@@ -30,6 +32,7 @@ public class ReservoirController(IReservoirEstimationService estimation) : Contr
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The estimate, or <c>found = false</c> when no snapshot carries a reservoir value.</returns>
     [HttpGet]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ReservoirEstimateResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ReservoirEstimateResponse>> GetEstimate(CancellationToken ct = default)

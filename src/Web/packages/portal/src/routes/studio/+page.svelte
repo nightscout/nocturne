@@ -4,7 +4,7 @@
   import { toSvx } from '@nocturne/cms/editor/markdown';
   import type { ContentTypeConfig, EditorCallbacks, ContentItem, ContentData } from '@nocturne/cms/editor/types';
   import type { ComponentDefinition } from '@nocturne/cms/editor/extensions/svelte-component';
-  import LanguageSelector from '$lib/components/LanguageSelector.svelte';
+  import LanguageSelector from '#lib/components/LanguageSelector.svelte';
   import { Button } from '@nocturne/ui/ui/button';
   import { Input } from '@nocturne/ui/ui/input';
   import { Textarea } from '@nocturne/ui/ui/textarea';
@@ -13,7 +13,7 @@
     {
       name: 'LanguageSelector',
       label: 'Language Selector',
-      importPath: '$lib/components/LanguageSelector.svelte',
+      importPath: '#lib/components/LanguageSelector.svelte',
       defaultProps: { compact: 'true' },
     },
   ];

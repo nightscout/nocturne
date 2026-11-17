@@ -8,11 +8,14 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -177,6 +180,58 @@ public class MemberScopeFilterPipelineTests
             .Should().BeNull("client devices are the member's own, granted to every role");
     }
 
+    private static readonly string[] AlarmSilencingActions =
+        ["NotificationsController.AckNotification", "AlertsController.SnoozeInstance"];
+
+    private static List<string> ReachedActions(IReadOnlySet<string> grantedScopes) =>
+        DiscoverGatedActions()
+            .Where(gated => RunAuthorizationFilters(gated, grantedScopes) is null)
+            .Select(gated => $"{gated.Controller}.{gated.Action}")
+            .ToList();
+
+    [Fact]
+    public void LegacyTokenHoldingOnlyNotificationsAck_ReachesOnlyTheAlarmSilencingActions()
+    {
+        // A subject-less legacy token keeps its own trie, so the HasPermissions policy sees
+        // "notifications:*:ack" and only these scope gates decide.
+        var grantedScopes = AuthenticationMiddleware.CredentialScopes(new AuthContext
+        {
+            IsAuthenticated = true,
+            Permissions = ["notifications:*:ack"],
+        });
+
+        ReachedActions(grantedScopes).Should().BeEquivalentTo(AlarmSilencingActions);
+    }
+
+    [Fact]
+    public async Task MemberCredentialHoldingOnlyAlertsAcknowledge_ReachesOnlyTheAlarmSilencingActions()
+    {
+        // The shape of an imported Nightscout token: a key scoped to alerts.acknowledge on the
+        // tenant's full-access device membership.
+        var httpContext = await ResolveForRoleAsync(RoleSeeds.Owner, AuthType.ApiKey, Scope.AlertsAcknowledge);
+
+        httpContext.GetGrantedScopes().Should().BeEquivalentTo([Scope.AlertsAcknowledge]);
+        httpContext.GetPermissionTrie()!.IsEmpty.Should().BeFalse("the HasPermissions policy refuses an empty trie");
+        ReachedActions(httpContext.GetGrantedScopes()).Should().BeEquivalentTo(AlarmSilencingActions);
+    }
+
+    [Fact]
+    public async Task CaretakerOnAnAcknowledgeCredential_SilencesAlarms()
+    {
+        var grantedScopes = await ResolveScopesForRoleAsync(
+            RoleSeeds.Caretaker, AuthType.ApiKey, Scope.AlertsAcknowledge);
+
+        ReachedActions(grantedScopes).Should().BeEquivalentTo(AlarmSilencingActions);
+    }
+
+    [Fact]
+    public async Task ViewerOnABrowserSession_CannotSilenceAlarms()
+    {
+        var grantedScopes = await ResolveScopesForRoleAsync(RoleSeeds.Viewer, AuthType.SessionCookie);
+
+        ReachedActions(grantedScopes).Should().NotContain(AlarmSilencingActions);
+    }
+
     [Fact]
     public async Task DeniedMemberOnABrowserSession_IsRefusedEveryScopeGatedAction()
     {
@@ -254,6 +309,10 @@ public class MemberScopeFilterPipelineTests
     /// the given credential type, and returns the scopes it publishes.
     /// </summary>
     private static async Task<IReadOnlySet<string>> ResolveScopesForRoleAsync(
+        string roleSlug, AuthType authType, params string[] credentialScopes) =>
+        (await ResolveForRoleAsync(roleSlug, authType, credentialScopes)).GetGrantedScopes();
+
+    private static async Task<HttpContext> ResolveForRoleAsync(
         string roleSlug, AuthType authType, params string[] credentialScopes)
     {
         using var db = TestDbContextFactory.CreateSqlite();
@@ -297,7 +356,7 @@ public class MemberScopeFilterPipelineTests
         }
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => db.CreateContext());
+        services.AddSingleton(db.ContextFactory.AsNocturneFactory());
         using var provider = services.BuildServiceProvider();
 
         var httpContext = new DefaultHttpContext { RequestServices = provider };
@@ -312,11 +371,14 @@ public class MemberScopeFilterPipelineTests
         // As AuthenticationMiddleware leaves it.
         httpContext.Items["GrantedScopes"] = Scope.Normalize(credentialScopes);
         httpContext.Items["PermissionTrie"] = new PermissionTrie();
+        (await RequestMembership.ReadAsync(
+                new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None))
+            .Membership.StoreOn(httpContext);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(httpContext);
 
-        return (IReadOnlySet<string>)httpContext.Items["GrantedScopes"]!;
+        return httpContext;
     }
 }

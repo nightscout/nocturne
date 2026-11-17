@@ -1,0 +1,58 @@
+---
+title: Step Count
+---
+
+# Step Count
+
+The Step Count report answers the question "how active am I, and what does my
+glucose do at the same time?". It shows your steps through each day, with your
+glucose on the same row.
+
+## What it shows
+
+### The key figures
+
+The strip at the top shows the **Total steps** in the period, the **Daily
+average**, and the length of the **Period** in days.
+
+### Step Count Actogram
+
+The actogram has one row for each day. The newest day is at the top.
+
+- **The label** at the start of the row gives the date and the steps for that
+  day.
+- **Each bar** is the number of steps in a short time. A taller bar means more
+  steps.
+- **The line and dots** are your glucose. Each dot is one reading, and its
+  colour shows the glucose range of that reading.
+
+Each row covers 48 hours: the day itself, and then the next day in a paler
+colour. This lets you follow an evening into the night without a break.
+
+Move the pointer over the row to see the steps and the glucose at that time.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The actogram shows 14 days at a time. To compare a day with the same day one
+week before:
+
+1. Find a day with a lot of steps. Look at the glucose line before and after
+   the steps.
+2. Select the down arrow under the rows. The rows move one week back.
+3. Find the same day of the week. Compare the steps and the glucose.
+4. To move one week forward again, select the up arrow above the rows.
+
+You can also use the keyboard. Select the actogram, and then press the up or
+down arrow key to move one day. Hold Shift to move one week, or Alt to move 30
+days.
+
+To change the period, select the date range at the top of the report, select a
+period, and then select **Apply Filters**.
+
+## Good to know
+
+- The figures at the top use only the period you chose. The actogram can also
+  show the days before the period, when you move back.
+- If you have no step data, connect a source that records steps.

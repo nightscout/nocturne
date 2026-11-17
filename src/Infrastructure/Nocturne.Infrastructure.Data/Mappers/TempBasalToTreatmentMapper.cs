@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -17,6 +18,8 @@ public static class TempBasalToTreatmentMapper
     public static Treatment ToTreatment(TempBasal tempBasal)
     {
         var rate = tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate;
+        // A Nightscout client takes absolute over percent, so a relative temp serves none
+        var relative = tempBasal.Percent is not null && tempBasal.Origin != TempBasalOrigin.Suspended;
         var durationMinutes = tempBasal.EndMills.HasValue
             ? (tempBasal.EndMills.Value - tempBasal.StartMills) / (1000.0 * 60.0)
             : 0;
@@ -29,14 +32,18 @@ public static class TempBasalToTreatmentMapper
             Id = MongoObjectId.IsObjectId(tempBasal.LegacyId)
                 ? tempBasal.LegacyId
                 : tempBasal.Id.ToString(),
+            LegacyId = tempBasal.LegacyId,
+            RecordId = tempBasal.Id,
             Mills = tempBasal.StartMills,
-            SrvCreated = new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvModified = new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            EventType = "Temp Basal",
+            SrvCreated = tempBasal.CreatedAt.ToMills(),
+            SrvModified = tempBasal.ModifiedAt.ToMills(),
+            EventType = TreatmentTypes.TempBasal,
             Duration = durationMinutes,
-            Absolute = rate,
-            Rate = rate,
-            Temp = "absolute",
+            Absolute = relative ? null : rate,
+            Rate = relative && tempBasal.RateFromSchedule ? null : rate,
+            DeliveredRate = rate,
+            Percent = tempBasal.Percent,
+            Temp = relative ? null : "absolute",
             EnteredBy = tempBasal.App,
             UtcOffset = tempBasal.UtcOffset,
             DataSource = tempBasal.DataSource,
@@ -45,10 +52,14 @@ public static class TempBasalToTreatmentMapper
             RawTimestamp = TreatmentUploadedTimestamp.Of(tempBasal.AdditionalProperties),
         };
 
-        // TreatmentDecomposer reads basalOrigin back when an edit re-decomposes;
+        TempBasalUploadedFields.Restore(treatment, tempBasal.AdditionalProperties);
+
+        // TreatmentDecomposer reads the origin and its evidence back when an edit re-decomposes;
         // the rest is for display
         treatment.AdditionalProperties ??= new Dictionary<string, object>();
-        treatment.AdditionalProperties["basalOrigin"] = tempBasal.Origin.ToString();
+        treatment.AdditionalProperties[TempBasalOriginProvenance.OriginField] = tempBasal.Origin.ToString();
+        treatment.AdditionalProperties[TempBasalOriginProvenance.EvidenceField] =
+            TempBasalOriginProvenance.EvidenceOf(tempBasal).ToString();
         if (tempBasal.ScheduledRate.HasValue)
             treatment.AdditionalProperties["scheduledRate"] = tempBasal.ScheduledRate.Value;
         if (!string.IsNullOrEmpty(tempBasal.Device))

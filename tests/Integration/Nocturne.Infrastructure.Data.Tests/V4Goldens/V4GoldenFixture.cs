@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// <see cref="SharedPostgres"/> (production role bootstrap, migrations and startup reconcilers) and stands up the production
 /// data-layer DI container via <see cref="ServiceCollectionExtensions.AddPostgreSqlInfrastructure"/>
 /// pointed at that database — so goldens exercise the real repositories AND the real
-/// <c>DeduplicationService</c> against real Postgres, not mocks. These goldens capture current
+/// the duplicate linker against real Postgres, not mocks. These goldens capture current
 /// behaviour and are held identical across the V4RepositoryBase refactor.
 /// </summary>
 public class V4GoldenFixture : IAsyncLifetime
@@ -28,11 +28,14 @@ public class V4GoldenFixture : IAsyncLifetime
 
     public string MigratorConnectionString { get; private set; } = string.Empty;
 
+    /// <summary>The runtime role's connection string, which the repositories under test use.</summary>
+    public string AppConnectionString { get; private set; } = string.Empty;
+
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateMigratedDatabaseAsync("v4_goldens");
         MigratorConnectionString = database.MigratorConnectionString;
-        var appConnectionString = database.AppConnectionString;
+        AppConnectionString = database.AppConnectionString;
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -43,7 +46,8 @@ public class V4GoldenFixture : IAsyncLifetime
         // own scope to a user without leaking that attribution into the next test.
         services.AddScoped<TestAuditContext>();
         services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        services.AddPostgreSqlInfrastructure(appConnectionString, configuration: null);
+        services.AddPostgreSqlInfrastructure(
+            AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
         // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
         // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();
@@ -52,6 +56,12 @@ public class V4GoldenFixture : IAsyncLifetime
         // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
         services.AddSingleton<EntryCapture>();
         services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
+        services.AddSingleton<CacheInvalidationCapture>();
+        services.AddSingleton<Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation>(
+            sp => sp.GetRequiredService<CacheInvalidationCapture>());
+        services.AddSingleton<GlucoseReadingCapture>();
+        services.AddScoped<IGlucoseReadingBroadcaster>(sp =>
+            new CapturingGlucoseReadingBroadcaster(sp.GetRequiredService<GlucoseReadingCapture>()));
         RegisterV4Repositories(services);
         _provider = services.BuildServiceProvider();
     }
@@ -61,6 +71,12 @@ public class V4GoldenFixture : IAsyncLifetime
 
     /// <summary>The shared legacy-Entry projection collector recording the glucose-family chokepoint's entries fan-out.</summary>
     public EntryCapture EntryCapture => _provider!.GetRequiredService<EntryCapture>();
+
+    /// <summary>The shared collector of the legacy read cache clears every V4 repo reports.</summary>
+    public CacheInvalidationCapture CacheInvalidations => _provider!.GetRequiredService<CacheInvalidationCapture>();
+
+    /// <summary>The shared collector of the sensor glucose chokepoint's <c>glucose_reading</c> relays.</summary>
+    public GlucoseReadingCapture GlucoseReadingCapture => _provider!.GetRequiredService<GlucoseReadingCapture>();
 
     /// <summary>
     /// Registers the V4 record repositories under test. In production these are registered by the API
@@ -114,14 +130,14 @@ public class V4GoldenFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Runs a read against a tenant-scoped context (via the production <c>ITenantDbContextFactory</c>)
+    /// Runs a read against a tenant-scoped context (via the production <c>INocturneDbContextFactory</c>)
     /// for snapshotting persisted state after a scenario.
     /// </summary>
     public async Task<T> QueryAsync<T>(Guid tenantId, Func<NocturneDbContext, Task<T>> query)
     {
         PinTenant(tenantId);
-        var factory = _provider!.GetRequiredService<ITenantDbContextFactory>();
-        await using var ctx = await factory.CreateAsync();
+        await using var scope = _provider!.CreateAsyncScope();
+        await using var ctx = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         return await query(ctx);
     }
 
@@ -130,7 +146,7 @@ public class V4GoldenFixture : IAsyncLifetime
 
     private async Task SeedTenantAsync(Guid tenantId)
     {
-        // Seed via a bare EF context on the migrator connection (no interceptors, no tenant carrier):
+        // Seed via a bare EF context on the migrator connection (no interceptors, no tenant):
         // TenantEntity is ISystemTimestamped, not ITenantScoped, so it is exempt from RLS.
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(MigratorConnectionString)

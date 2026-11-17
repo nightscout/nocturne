@@ -26,6 +26,11 @@ public class OAuthService : IOAuthService
     private readonly ICredentialStore _credentialStore;
     private readonly ILogger<OAuthService> _logger;
 
+    // Widget ticks and 401 retries refresh in parallel; each refresh token is single-use, so only
+    // one rotation may be in flight and the callers queued behind it reuse its result. Sign-out
+    // takes it too, so a refresh cannot store new tokens after the credentials are deleted.
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -57,8 +62,8 @@ public class OAuthService : IOAuthService
         {
             var scopeString = scopes != null ? string.Join(" ", scopes) : DefaultScopes;
 
-            // RFC 7591 Dynamic Client Registration: obtain this server's client_id.
-            // Idempotent per tenant on software_id, so reconnects reuse the same client.
+            // RFC 7591 Dynamic Client Registration issues a new client_id on every call; the
+            // stored credentials keep it for refresh.
             var clientId = await RegisterClientAsync(apiUrl, scopeString);
             if (string.IsNullOrEmpty(clientId))
             {
@@ -132,9 +137,7 @@ public class OAuthService : IOAuthService
 
     /// <summary>
     /// Registers this widget with the Nocturne server via RFC 7591 Dynamic Client
-    /// Registration and returns the server-assigned client_id. Registration is
-    /// idempotent per tenant on <see cref="SoftwareId"/>, so the same client_id is
-    /// returned on every reconnect.
+    /// Registration and returns the new client_id the server assigned.
     /// </summary>
     private async Task<string?> RegisterClientAsync(string apiUrl, string scopeString)
     {
@@ -287,6 +290,26 @@ public class OAuthService : IOAuthService
     /// <inheritdoc />
     public async Task<TokenRefreshResult> RefreshTokenAsync()
     {
+        var seen = (await _credentialStore.GetCredentialsAsync())?.RefreshToken;
+        await _refreshLock.WaitAsync();
+        try
+        {
+            var current = await _credentialStore.GetCredentialsAsync();
+            if (current is not null && !string.IsNullOrEmpty(seen) && current.RefreshToken != seen)
+            {
+                return new TokenRefreshResult { Success = true };
+            }
+
+            return await RefreshCoreAsync();
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    private async Task<TokenRefreshResult> RefreshCoreAsync()
+    {
         try
         {
             var credentials = await _credentialStore.GetCredentialsAsync();
@@ -388,6 +411,7 @@ public class OAuthService : IOAuthService
     /// <inheritdoc />
     public async Task SignOutAsync()
     {
+        await _refreshLock.WaitAsync();
         try
         {
             var credentials = await _credentialStore.GetCredentialsAsync();
@@ -424,6 +448,10 @@ public class OAuthService : IOAuthService
         {
             _logger.LogError(ex, "Error during sign out");
             throw;
+        }
+        finally
+        {
+            _refreshLock.Release();
         }
     }
 

@@ -24,6 +24,7 @@ public class ServicesControllerSyncWindowTests
     private ServicesController CreateController() =>
         new(
             Mock.Of<IDataSourceService>(),
+            Mock.Of<IConnectionService>(),
             Mock.Of<IConnectorHealthService>(),
             _syncService.Object,
             Mock.Of<ILogger<ServicesController>>(),

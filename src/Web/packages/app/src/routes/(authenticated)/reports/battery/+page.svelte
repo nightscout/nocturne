@@ -1,16 +1,15 @@
 <script lang="ts">
-  import { formatLocale, formatNumericDate } from "$lib/utils/formatting";
+  import { formatLocale, formatNumericDate } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
-  import Battery from "@lucide/svelte/icons/battery";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
@@ -21,11 +20,13 @@
   import Zap from "@lucide/svelte/icons/zap";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import type { BatteryStatistics, ChargeCycle, BatteryReading } from "$lib/api";
-  import { getBatteryReportData } from "$api/battery.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { formatMinutesDuration } from "$lib/utils/duration";
+  import type { BatteryStatistics, ChargeCycle, BatteryReading } from "#lib/api/index.js";
+  import { getBatteryReportData } from "#lib/api/battery.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { batteryArtwork } from "#lib/watercolour-icons.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days is good for battery analysis (typical charge cycle period)
@@ -36,18 +37,16 @@
   const batteryResource = contextResource(
     () => getBatteryReportData({
       device: selectedDevice,
-      from: reportsParams.dateRangeMillis.from,
-      to: reportsParams.dateRangeMillis.to,
+      from: reportsParams.fromDay,
+      to: reportsParams.toDay,
       cycleLimit: 50,
     }),
-    { errorTitle: "Error Loading Battery Report" }
+    { errorTitle: "Error loading battery report" }
   );
 
   const statistics = $derived<BatteryStatistics[]>(batteryResource.current?.statistics ?? []);
   const cycles = $derived<ChargeCycle[]>(batteryResource.current?.cycles ?? []);
   const readings = $derived<BatteryReading[]>(batteryResource.current?.readings ?? []);
-
-  const dateRange = $derived(reportsParams.dateRangeMillis);
 
   function fetchData() {
     batteryResource.refresh();
@@ -66,16 +65,20 @@
     });
   }
 
+  /** Icon for each `level` bucket the API serves (0, 25, 50, 75, 100). */
+  const LEVEL_ICONS: Record<number, typeof BatteryFull> = {
+    100: BatteryFull,
+    75: BatteryMedium,
+    50: BatteryMedium,
+    25: BatteryLow,
+  };
+
   function getBatteryIconComponent(
     level: number | undefined,
     isCharging: boolean | undefined
   ) {
     if (isCharging) return BatteryCharging;
-    if (!level) return BatteryWarning;
-    if (level >= 95) return BatteryFull;
-    if (level >= 50) return BatteryMedium;
-    if (level >= 25) return BatteryLow;
-    return BatteryWarning;
+    return LEVEL_ICONS[level ?? 0] ?? BatteryWarning;
   }
 
   function extractDeviceName(device: string | undefined): string {
@@ -96,14 +99,6 @@
   );
 </script>
 
-<svelte:head>
-  <title>Battery Report - Nocturne</title>
-  <meta
-    name="description"
-    content="Device battery statistics and charge cycle history"
-  />
-</svelte:head>
-
 {#if batteryResource.current}
 <div class="@container space-y-6">
   <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between print:hidden">
@@ -123,30 +118,23 @@
     </Button>
   </div>
 
-  <div class="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground print:hidden">
     <Calendar class="h-4 w-4" />
     <span>
-      {formatNumericDate(new Date(dateRange.from))} – {formatNumericDate(new Date(
-        dateRange.to
-      ))}
+      {formatNumericDate(reportsParams.startDate)} – {formatNumericDate(reportsParams.endDate)}
     </span>
     <span class="text-muted-foreground/50">•</span>
     <span>{readings.length} readings</span>
   </div>
 
   {#if statistics.length === 0}
-    <Card>
-      <CardContent class="pt-6">
-        <div class="text-center py-8">
-          <Battery class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
-          <h3 class="text-lg font-medium">No Battery Data Available</h3>
-          <p class="text-sm text-muted-foreground mt-2">
-            Battery data is collected from devices that report uploader status.
-            Make sure your CGM uploader app is sending device status data.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <EmptyState
+      art={batteryArtwork}
+      variant="card"
+      title="No battery data available"
+      headingLevel={3}
+      body="Battery data is collected from devices that report uploader status. Make sure your CGM uploader app is sending device status data."
+    />
   {:else}
     {#if allDevices.length > 1}
       <div class="flex gap-2 flex-wrap print:hidden">
@@ -155,7 +143,7 @@
           size="sm"
           onclick={() => (selectedDevice = null)}
         >
-          All Devices
+          All devices
         </Button>
         {#each allDevices as device (device)}
           <Button
@@ -177,7 +165,7 @@
         )}
         <Card>
           <CardHeader class="pb-2">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="flex items-center gap-2">
                 <span class="battery-status" data-status={stat?.status ?? ""}>
                   <StatIcon class="h-5 w-5" />
@@ -237,7 +225,7 @@
 
             <div class="space-y-2">
               <h4 class="text-sm font-medium text-muted-foreground">
-                Charge Patterns
+                Charge patterns
               </h4>
               <div class="grid grid-cols-2 gap-2 text-sm">
                 <div>
@@ -275,7 +263,7 @@
               <Separator />
               <div class="space-y-2">
                 <h4 class="text-sm font-medium text-muted-foreground">
-                  Time Distribution
+                  Time distribution
                 </h4>
                 <div class="space-y-1">
                   <div class="flex justify-between text-sm">
@@ -320,7 +308,7 @@
 
             {#if (stat?.warningEventCount ?? 0) > 0 || (stat?.urgentEventCount ?? 0) > 0}
               <Separator />
-              <div class="flex gap-4 text-sm">
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {#if (stat?.warningEventCount ?? 0) > 0}
                   <div class="flex items-center gap-1 text-warning print:text-foreground">
                     <AlertTriangle class="h-4 w-4" />
@@ -348,7 +336,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Clock class="h-5 w-5 text-muted-foreground" />
-            Recent Charge Cycles
+            Recent charge cycles
           </CardTitle>
           <CardDescription>
             History of battery charge and discharge periods
@@ -393,7 +381,7 @@
                     </div>
                     <div class="text-xs text-muted-foreground">charge time</div>
                   {:else}
-                    <Badge variant="secondary">In Progress</Badge>
+                    <Badge variant="secondary">In progress</Badge>
                   {/if}
                 </div>
               </li>

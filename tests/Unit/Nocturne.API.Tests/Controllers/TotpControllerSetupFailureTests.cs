@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -46,6 +47,7 @@ public class TotpControllerSetupFailureTests
             _tenantAccessor.Object,
             _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
+            Options.Create(new BaseDomainOptions()),
             NullLogger<TotpController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext }

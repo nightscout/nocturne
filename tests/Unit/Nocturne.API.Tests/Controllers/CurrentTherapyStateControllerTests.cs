@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -65,6 +66,37 @@ public class CurrentTherapyStateControllerTests
     }
 
     [Fact]
+    public async Task GetCurrentTherapyState_SurfacesTheLinkBatteryVoltageFromTheExtendedStatus()
+    {
+        var stored = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            """{"Version":"4.0.0","RileyLinkBatteryVoltage":2.93}""");
+        _pumpSnapshotRepository
+            .Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PumpSnapshot { Reservoir = 87.5, AdditionalProperties = stored });
+
+        var result = await _controller.GetCurrentTherapyState();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<CurrentTherapyStateResponse>(ok.Value);
+        response.LinkBatteryVoltage.Should().Be(2.93);
+    }
+
+    [Fact]
+    public async Task GetCurrentTherapyState_WithoutALinkVoltage_LeavesItNull()
+    {
+        var stored = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            """{"Version":"4.0.0","RileyLinkBatteryVoltage":"n/a"}""");
+        _pumpSnapshotRepository
+            .Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PumpSnapshot { Reservoir = 87.5, AdditionalProperties = stored });
+
+        var result = await _controller.GetCurrentTherapyState();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<CurrentTherapyStateResponse>(ok.Value).LinkBatteryVoltage.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetCurrentTherapyState_NoPumpSnapshot_LeavesPumpFieldsNull()
     {
         _pumpSnapshotRepository
@@ -78,6 +110,7 @@ public class CurrentTherapyStateControllerTests
         response.Reservoir.Should().BeNull();
         response.PumpBatteryPercent.Should().BeNull();
         response.PumpBatteryVoltage.Should().BeNull();
+        response.LinkBatteryVoltage.Should().BeNull();
     }
 
     [Fact]
@@ -87,11 +120,8 @@ public class CurrentTherapyStateControllerTests
             .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _targetRangeResolver
-            .Setup(r => r.GetLowBGTargetAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(80.0);
-        _targetRangeResolver
-            .Setup(r => r.GetHighBGTargetAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(160.0);
+            .Setup(r => r.GetBGTargetRangeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((80.0, 160.0));
 
         var result = await _controller.GetCurrentTherapyState();
 

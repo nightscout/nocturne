@@ -1,5 +1,12 @@
 import { createHash } from "crypto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The tests set process.env per case; the getter reads it at each access.
+vi.mock("$app/env/private", () => ({
+  get INSTANCE_KEY() {
+    return process.env.INSTANCE_KEY;
+  },
+}));
 import {
   INSTANCE_KEY_HEADER,
   INSTANCE_SERVICE_HEADER,

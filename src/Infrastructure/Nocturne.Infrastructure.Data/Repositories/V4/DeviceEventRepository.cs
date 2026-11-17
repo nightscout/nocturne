@@ -16,36 +16,35 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing device event records in the database. A DeduplicationService participant on
+/// Repository for managing device event records in the database. A deduplication participant on
 /// top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
-/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
-/// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
+/// the <c>GetAsync</c> overload that adds a patient device to the base read and the event-type query helpers.
 /// </summary>
 public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
-    private readonly IDeduplicationService _deduplicationService;
     private readonly IDeviceEventReactor? _reactor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceEventRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
+    /// <param name="linker">Links committed inserts into their duplicate groups.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
     /// <param name="reactor">Optional domain reaction to live creates and deletes — the tracker trigger.
     /// Null when the repository is constructed without DI, in which case writes simply run no reaction.</param>
+    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public DeviceEventRepository(
-        ITenantDbContextFactory contextFactory,
-        IDeduplicationService deduplicationService,
+        INocturneDbContextFactory contextFactory,
+        IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,
         IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
-        IDeviceEventReactor? reactor = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IDeviceEventReactor? reactor = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
     {
-        _deduplicationService = deduplicationService;
         _reactor = reactor;
     }
 
@@ -113,6 +112,16 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceEvents.IncludingDeleted().AsNoTracking()
+            .Where(e => ids.Contains(e.Id))
+            .ToListAsync(ct);
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceEvent>> GetUserDeletedAsync(
         DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default)
     {
@@ -134,22 +143,9 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <inheritdoc />
     protected override void ApplyUpdate(DeviceEventEntity target, DeviceEvent source) => DeviceEventMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc />
-    protected internal override RecordType? DedupRecordType => RecordType.DeviceEvent;
-
-    /// <summary>
-    /// Routes the base 7-arg form through the extended device-event query (non-primary LinkedRecords
-    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
-    /// </summary>
-    public override Task<IEnumerable<DeviceEvent>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
-
     /// <summary>
     /// Gets device event records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// Hides the non-primary copies of duplicate groups.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
     /// <param name="to">Optional end timestamp filter.</param>
@@ -158,7 +154,6 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="limit">The maximum number of records to return.</param>
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
-    /// <param name="nativeOnly">Whether to return only native records.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single registered patient device.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of device events.</returns>
@@ -170,76 +165,16 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         Guid? patientDeviceId = null,
         CancellationToken ct = default
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.DeviceEvents.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        if (nativeOnly)
-            query = query.Where(e => e.LegacyId == null);
-        if (patientDeviceId.HasValue)
-            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
-
-        query = ApplyReadVisibility(query, ctx);
-
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
-        return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets device event records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of device events.</returns>
-    public async Task<IEnumerable<DeviceEvent>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .DeviceEvents.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
+        var entities = await PagedRead(
+            ctx.DeviceEvents.AsNoTracking(), from, to, device, source, limit, offset, descending,
+            query => patientDeviceId.HasValue ? query.Where(e => e.PatientDeviceId == patientDeviceId.Value) : query)
             .ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
-    /// </summary>
-    protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<DeviceEventEntity> inserted, WriteOrigin origin, CancellationToken ct)
-    {
-        if (inserted.Count == 0)
-            return;
-
-        try
-        {
-            var dedupInputs = inserted.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.From(e)
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.DeviceEvent, dedupInputs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
-        }
     }
 
     /// <summary>
@@ -258,6 +193,29 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
             .Where(e => e.EventType == eventTypeString);
         if (asOf is { } cutoff)
             query = query.Where(e => e.Timestamp <= cutoff);
+
+        query = query.ExcludeDuplicates();
+
+        var entity = await query
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+
+        return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<DeviceEvent?> GetLatestOfAnyTypeAsync(
+        IReadOnlyCollection<DeviceEventType> eventTypes, DateTime? asOf, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
+        var query = ctx.DeviceEvents
+            .AsNoTracking()
+            .Where(e => eventTypeStrings.Contains(e.EventType));
+        if (asOf is { } cutoff)
+            query = query.Where(e => e.Timestamp <= cutoff);
+
+        query = query.ExcludeDuplicates();
 
         var entity = await query
             .OrderByDescending(e => e.Timestamp)
@@ -292,6 +250,20 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
             .FirstOrDefaultAsync(ct);
 
         return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountByEventTypesSinceAsync(
+        DeviceEventType[] eventTypes,
+        DateTime since,
+        CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
+        return await ctx.DeviceEvents
+            .AsNoTracking()
+            .Where(e => eventTypeStrings.Contains(e.EventType) && e.Timestamp >= since)
+            .CountAsync(ct);
     }
 
     /// <inheritdoc />

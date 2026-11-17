@@ -50,7 +50,6 @@ public class ClientDeviceDto
     /// <summary>The client-generated install identifier.</summary>
     public string InstallId { get; set; } = string.Empty;
 
-    /// <summary>Device kind.</summary>
     public string Kind { get; set; } = string.Empty;
 
     /// <summary>User-facing label.</summary>
@@ -108,6 +107,5 @@ public class DeviceCapabilityCatalog
     /// <summary>Targetable device kinds (e.g. <c>companion</c>, <c>prelude</c>).</summary>
     public List<string> Kinds { get; set; } = [];
 
-    /// <summary>The supported capabilities.</summary>
     public List<DeviceCapabilityInfo> Capabilities { get; set; } = [];
 }

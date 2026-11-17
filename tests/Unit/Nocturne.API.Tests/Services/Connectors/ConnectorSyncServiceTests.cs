@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Audit;
@@ -12,6 +13,8 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -20,12 +23,13 @@ public class ConnectorSyncServiceTests
 {
     private static ConnectorSyncService CreateService(
         IServiceProvider serviceProvider,
-        ITenantAccessor? tenantAccessor = null)
+        ITenantAccessor? tenantAccessor = null,
+        TimeProvider? timeProvider = null)
     {
         var ta = tenantAccessor ?? CreateTenantAccessor();
         var logger = NullLogger<ConnectorSyncService>.Instance;
         var progressReporter = Mock.Of<ISyncProgressReporter>();
-        return new ConnectorSyncService(serviceProvider, ta, logger, progressReporter, new TenantRunGuard());
+        return new ConnectorSyncService(serviceProvider, ta, logger, progressReporter, new TenantRunGuard(), timeProvider ?? TimeProvider.System);
     }
 
     private static ITenantAccessor CreateTenantAccessor(TenantContext? context = null)
@@ -51,14 +55,9 @@ public class ConnectorSyncServiceTests
         // the mutable scoped AuditContext to mark it system for the sync's duration.
         services.AddScoped<IAuditContext, AuditContext>();
 
-        // A real NocturneDbContext: the sync scope stamps its AuditContext property, which the
-        // mutation interceptor prefers over the ambient context. Sqlite rather than InMemory so
-        // the relational model builds; no connection is ever opened because nothing queries.
-        services.AddScoped(_ => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("DataSource=:memory:")
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options));
+        // The scope's read context, which every context created in it reads, over the scope's audit
+        // context as production's is.
+        services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
 
         foreach (var executor in executors)
         {
@@ -114,6 +113,51 @@ public class ConnectorSyncServiceTests
                 CancellationToken.None,
                 It.IsAny<ISyncProgressReporter?>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_ReturnsTheTimeTheExecutorTookOnTheServiceClock()
+    {
+        var clock = new FakeTimeProvider();
+        var executor = CreateMockExecutor("test", onSyncScope: _ => clock.Advance(TimeSpan.FromMilliseconds(1250)));
+        var sut = CreateService(BuildProvider(executor), timeProvider: clock);
+
+        var result = await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        result.DurationMs.Should().Be(1250);
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_WhenTheExecutorThrows_StillReturnsTheTimeSpent()
+    {
+        var clock = new FakeTimeProvider();
+        var executor = new Mock<IConnectorSyncExecutor>();
+        executor.Setup(x => x.ConnectorId).Returns("test");
+        executor.Setup(x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()))
+            .Returns(() =>
+            {
+                clock.Advance(TimeSpan.FromSeconds(3));
+                throw new InvalidOperationException("executor exploded");
+            });
+        var sut = CreateService(BuildProvider(executor.Object), timeProvider: clock);
+
+        var result = await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.DurationMs.Should().Be(3000);
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_WhenNoConnectorRuns_ReturnsNoDuration()
+    {
+        var result = await CreateService(BuildProvider())
+            .TriggerSyncAsync("nonexistent", new SyncRequest(), CancellationToken.None);
+
+        result.DurationMs.Should().BeNull();
     }
 
     /// <summary>
@@ -226,12 +270,12 @@ public class ConnectorSyncServiceTests
     [Fact]
     public async Task TriggerSyncAsync_SystemAttributesTheScopeInjectedDbContext()
     {
-        // Writes on the scope's directly-injected context are attributed by that context's own
-        // AuditContext, not the ambient one, so it needs stamping too.
+        // Writes on a context the scope creates are attributed by the scope's read context's
+        // AuditContext.
         IAuditContext? captured = null;
         var executor = CreateMockExecutor(
             "test",
-            onSyncScope: sp => captured = sp.GetRequiredService<NocturneDbContext>().AuditContext);
+            onSyncScope: sp => captured = sp.GetRequiredService<TenantReadContext>().AuditContext);
         var sut = CreateService(BuildProvider(executor));
 
         // Act

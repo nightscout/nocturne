@@ -32,6 +32,9 @@ export const COOKIE_RECOVERY_SESSION_NAME = ".Nocturne.RecoverySession";
 // carries the same Domain. A functional preference, not a credential: it outlives sign-out on
 // purpose, because a signed-out visitor is who it is for.
 export const COOKIE_LAST_SIGN_IN_NAME = "LastSignIn";
+// Step-up token the API hands across the OIDC callback redirect when the account also has an
+// authenticator. The login page spends it once to open the authenticator step.
+export const COOKIE_TOTP_STEP_UP_NAME = ".Nocturne.TotpStepUp";
 
 // OpenTelemetry service identity (build-time, not deployment config)
 export const OTEL_SERVICE_NAME = "nocturne-web";

@@ -12,7 +12,7 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Migration;
 
-[Collection("ApiIntegration")]
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<MigrationTestFixture>
 {
@@ -179,53 +179,27 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
             $"{status.CollectionProgress.Count} collections");
     }
 
+    /// <summary>
+    /// The fixture's 20 entries straddle 1746153849903: ten are dated at or after it. MongoDB mode
+    /// streams the whole collection, so the range is applied to each document and the total is
+    /// what the range holds.
+    /// </summary>
     [Fact]
-    public async Task JobStatus_DuringMigration_ShowsProgressAndCompletion()
+    public async Task MigrateEntries_WithAStartDate_ImportsOnlyTheEntriesFromThatDate()
     {
-        // Arrange
-        var request = new StartMigrationRequest
-        {
-            Mode = MigrationMode.MongoDb,
-            MongoConnectionString = _migration.MongoConnectionString,
-            MongoDatabaseName = MigrationTestFixture.DatabaseName,
-            Collections = ["entries", "treatments"]
-        };
+        var from = DateTimeOffset.FromUnixTimeMilliseconds(1746153849903).UtcDateTime;
 
-        // Act — start migration
-        var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
-        startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
-        var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
-        jobInfo.Should().NotBeNull();
+        var status = await RunMigrationToCompletionAsync(
+            MigrationMode.MongoDb, collections: ["entries"], startDate: from);
 
-        // Poll status — collect state transitions
-        var observedStates = new HashSet<MigrationJobState>();
-        MigrationJobStatus? finalStatus = null;
+        status.State.Should().Be(MigrationJobState.Completed);
+        var entries = status.CollectionProgress["entries"];
+        entries.DocumentsMigrated.Should().Be(10);
+        entries.TotalDocuments.Should().Be(10);
+        entries.DocumentsFailed.Should().Be(0);
 
-        for (var i = 0; i < 60; i++)
-        {
-            var statusResponse = await AuthenticatedClient.GetAsync(
-                $"/api/v4/migration/{jobInfo!.Id}/status");
-            statusResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-            var status = await statusResponse.Content
-                .ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
-            status.Should().NotBeNull();
-            observedStates.Add(status!.State);
-            finalStatus = status;
-
-            if (status.State is MigrationJobState.Completed or MigrationJobState.Failed)
-                break;
-
-            await Task.Delay(500);
-        }
-
-        // Assert
-        finalStatus.Should().NotBeNull();
-        finalStatus!.State.Should().Be(MigrationJobState.Completed);
-        observedStates.Should().Contain(MigrationJobState.Running,
-            "should have observed Running state during polling");
-
-        Log($"Observed states: {string.Join(" -> ", observedStates.Order())}");
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.SensorGlucose.CountAsync()).Should().Be(10);
     }
 
     #region Helpers
@@ -240,14 +214,16 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
 
     private async Task<MigrationJobStatus> RunMigrationToCompletionAsync(
         MigrationMode mode,
-        List<string>? collections = null)
+        List<string>? collections = null,
+        DateTime? startDate = null)
     {
         var request = new StartMigrationRequest
         {
             Mode = mode,
             MongoConnectionString = _migration.MongoConnectionString,
             MongoDatabaseName = MigrationTestFixture.DatabaseName,
-            Collections = collections ?? []
+            Collections = collections ?? [],
+            StartDate = startDate,
         };
 
         var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);

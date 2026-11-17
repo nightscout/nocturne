@@ -10,9 +10,6 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="IFoodRepository"/>
 public interface IUserFoodFavoriteRepository
 {
-    /// <summary>
-    /// Get favorite food entities for a user.
-    /// </summary>
     Task<IReadOnlyList<Food>> GetFavoriteFoodsAsync(
         string userId,
         CancellationToken cancellationToken = default);
@@ -25,17 +22,11 @@ public interface IUserFoodFavoriteRepository
         Guid foodId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Add a favorite entry for a user.
-    /// </summary>
     Task<UserFoodFavorite?> AddFavoriteAsync(
         string userId,
         Guid foodId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Remove a favorite entry for a user.
-    /// </summary>
     Task<bool> RemoveFavoriteAsync(
         string userId,
         Guid foodId,

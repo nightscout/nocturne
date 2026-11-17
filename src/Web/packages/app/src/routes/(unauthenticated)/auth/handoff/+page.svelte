@@ -3,10 +3,10 @@
   import { replaceState } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { exchangeLoginCode } from "$lib/api/generated";
-  import { DeadEndCard } from "$lib/components/shared";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
+  import { exchangeLoginCode } from "#lib/api/generated/index.js";
+  import { DeadEndCard } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { readHandoffExchange } from "./handoff-link";
@@ -39,7 +39,7 @@
 </svelte:head>
 
 {#if failed}
-  <DeadEndCard icon={AlertTriangle} title="This sign-in link didn't work">
+  <DeadEndCard icon={AlertTriangle} title="This sign-in link did not work">
     <p>This sign-in link has expired or was already used.</p>
     <p>You can still sign in the usual way.</p>
     <Button href="/auth/login">Sign in normally</Button>

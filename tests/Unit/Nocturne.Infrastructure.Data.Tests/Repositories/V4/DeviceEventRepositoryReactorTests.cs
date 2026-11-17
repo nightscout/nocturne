@@ -37,8 +37,8 @@ public class DeviceEventRepositoryReactorTests : IDisposable
         _context = _db.CreateContext();
 
         _repo = new DeviceEventRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(_context),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance,
             broadcaster: null,
@@ -106,8 +106,8 @@ public class DeviceEventRepositoryReactorTests : IDisposable
     public async Task ReactorFailure_DoesNotFailTheWrite()
     {
         var repo = new DeviceEventRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(_context),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance,
             broadcaster: null,
@@ -127,8 +127,8 @@ public class DeviceEventRepositoryReactorTests : IDisposable
     public async Task NoReactorWired_LeavesTheWritePathIntact()
     {
         var repo = new DeviceEventRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(_context),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance);
 
@@ -182,8 +182,8 @@ public class DeviceEventRepositoryReactorTests : IDisposable
     public async Task ReactorFailureOnDelete_DoesNotFailTheDelete()
     {
         var repo = new DeviceEventRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(_context),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance,
             broadcaster: null,

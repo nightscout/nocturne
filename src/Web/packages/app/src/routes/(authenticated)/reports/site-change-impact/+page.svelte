@@ -5,20 +5,20 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
-  import { formatShortDate } from "$lib/utils/formatting";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { formatShortDate } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Info from "@lucide/svelte/icons/info";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Clock from "@lucide/svelte/icons/clock";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
-  import { getSiteChangeImpact } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import SiteChangeImpactChart from "#lib/components/reports/SiteChangeImpactChart.svelte";
+  import { getSiteChangeImpact } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 30 days to capture multiple site changes for meaningful analysis
@@ -28,7 +28,7 @@
   // selected range so the header matches the window that was queried.
   const siteChangeResource = contextResource(
     () => getSiteChangeImpact(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Site Change Data", dateParams: reportsParams }
+    { errorTitle: "Error loading site change data", dateParams: reportsParams }
   );
 
   const isLoading = $derived(siteChangeResource.loading);
@@ -43,14 +43,6 @@
   }
 </script>
 
-<svelte:head>
-  <title>Site Change Impact - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Analyze how pump site changes affect your glucose control"
-  />
-</svelte:head>
-
 {#if siteChangeResource.current}
 <div class="@container space-y-8">
   <div class="space-y-4">
@@ -63,7 +55,7 @@
       <div class="flex items-center gap-2">
         <Button variant="outline" href="/reports">
           <ArrowLeft class="mr-2 h-4 w-4" />
-          Back to Reports
+          Back to reports
         </Button>
       </div>
     </div>
@@ -74,7 +66,7 @@
         !analysis?.siteChangeCount && "print:hidden",
       ]}
     >
-      <div class="flex items-center gap-2 text-sm print:hidden">
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm print:hidden">
         <Calendar class="h-4 w-4 text-muted-foreground" />
         <span class="font-medium">{formatDate(startDate)}</span>
         <span class="text-muted-foreground">to</span>
@@ -82,7 +74,7 @@
         <span class="text-muted-foreground">({dayCount} days)</span>
       </div>
       {#if analysis?.siteChangeCount}
-        <div class="flex items-center gap-4 text-sm">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <div class="flex items-center gap-2">
             <RefreshCw class="h-4 w-4 text-muted-foreground" />
             <span class="font-medium">{analysis.siteChangeCount}</span>
@@ -107,10 +99,10 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Clock class="h-5 w-5" />
-        Glucose Pattern Around Site Changes
+        Glucose pattern around site changes
       </CardTitle>
       <CardDescription>
-        Average glucose levels in the hours before and after each site change
+        Median glucose in the hours before and after each site change, with the 25th to 75th and 10th to 90th percentile bands
       </CardDescription>
     </CardHeader>
     <CardContent>
@@ -136,26 +128,26 @@
         class="flex items-center gap-2"
       >
         <HelpCircle class="h-5 w-5" />
-        Understanding This Report
+        Understanding this report
       </CardTitle>
     </CardHeader>
     <CardContent size="sm" class="space-y-4">
       <p>
         <strong>What this shows:</strong>
-        This report averages your glucose readings across all your site changes to
-        reveal patterns in how your glucose control changes as your infusion site
-        ages.
+        This report takes the median of your glucose readings across all your site
+        changes. The bands show the 25th to 75th and 10th to 90th percentiles.
+        Together, they show how your glucose control changes as your infusion site ages.
       </p>
 
       <div class="grid gap-4 @lg:grid-cols-2 print:grid-cols-2">
         <div>
-          <p class="font-medium">Before Site Change (Left)</p>
+          <p class="font-medium">Before site change (left)</p>
           <p class="text-info/80">
             Shows glucose patterns in the hours before you changed your site.
           </p>
         </div>
         <div>
-          <p class="font-medium">After Site Change (Right)</p>
+          <p class="font-medium">After site change (right)</p>
           <p class="text-info/80">
             Shows glucose patterns after the fresh site is inserted. Watch for
             improvements in control indicating better insulin absorption.
@@ -181,7 +173,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Info class="h-5 w-5" />
-          What the Averages Show
+          What the averages show
         </CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -11,6 +12,7 @@ namespace Nocturne.API.Tests.Services.Devices;
 public class DeviceAgeServiceTests
 {
     private readonly Mock<IDeviceEventRepository> _repositoryMock;
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 4, 12, 6, 0, 0, TimeSpan.Zero));
     private readonly DeviceAgeService _service;
 
     public DeviceAgeServiceTests()
@@ -18,6 +20,7 @@ public class DeviceAgeServiceTests
         _repositoryMock = new Mock<IDeviceEventRepository>();
         _service = new DeviceAgeService(
             _repositoryMock.Object,
+            _clock,
             NullLogger<DeviceAgeService>.Instance);
     }
 
@@ -26,7 +29,7 @@ public class DeviceAgeServiceTests
     public async Task GetCannulaAgeAsync_WithRecentSiteChange_ReturnsCorrectAge()
     {
         // Arrange
-        var eventTime = DateTime.UtcNow.AddHours(-26);
+        var eventTime = _clock.GetUtcNow().UtcDateTime.AddHours(-26);
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
@@ -81,7 +84,7 @@ public class DeviceAgeServiceTests
         result.Days.Should().Be(0);
         result.Hours.Should().Be(0);
         result.Display.Should().Be("n/a");
-        result.Level.Should().Be(0);
+        result.Level.Should().Be(DeviceAgeLevel.None);
     }
 
     [Fact]
@@ -89,8 +92,8 @@ public class DeviceAgeServiceTests
     public async Task GetSensorAgeAsync_WithSensorStartAndChange_ReturnsCorrectAge()
     {
         // Arrange
-        var sensorStartTime = DateTime.UtcNow.AddHours(-48);
-        var sensorChangeTime = DateTime.UtcNow.AddHours(-24);
+        var sensorStartTime = _clock.GetUtcNow().UtcDateTime.AddHours(-48);
+        var sensorChangeTime = _clock.GetUtcNow().UtcDateTime.AddHours(-24);
 
         var sensorStartEvent = new DeviceEvent
         {
@@ -137,7 +140,7 @@ public class DeviceAgeServiceTests
     public async Task GetInsulinAgeAsync_WithRecentInsulinChange_ReturnsCorrectAge()
     {
         // Arrange
-        var eventTime = DateTime.UtcNow.AddHours(-12);
+        var eventTime = _clock.GetUtcNow().UtcDateTime.AddHours(-12);
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
@@ -166,7 +169,7 @@ public class DeviceAgeServiceTests
         result.Days.Should().Be(0);
         result.Hours.Should().Be(12);
         result.Notes.Should().Be("New reservoir");
-        result.Level.Should().Be(0); // 12h is below default info threshold of 44h
+        result.Level.Should().Be(DeviceAgeLevel.None); // 12h is below default info threshold of 44h
     }
 
     [Fact]
@@ -174,7 +177,7 @@ public class DeviceAgeServiceTests
     public async Task GetBatteryAgeAsync_WithRecentBatteryChange_ReturnsCorrectAge()
     {
         // Arrange
-        var eventTime = DateTime.UtcNow.AddHours(-340);
+        var eventTime = _clock.GetUtcNow().UtcDateTime.AddHours(-340);
         var deviceEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
@@ -200,7 +203,73 @@ public class DeviceAgeServiceTests
         result.Age.Should().Be(340);
         result.Days.Should().Be(14);
         result.Hours.Should().Be(4);
-        result.Level.Should().Be(1); // 340h is above warn (336) but below urgent (360)
+        result.Level.Should().Be(DeviceAgeLevel.Warn); // 340h is above warn (336) but below urgent (360)
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetCannulaAgeAsync_AtInfoThreshold_ReturnsInfoLevel()
+    {
+        var deviceEvent = new DeviceEvent
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-45),
+            EventType = DeviceEventType.SiteChange
+        };
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(deviceEvent);
+
+        var result = await _service.GetCannulaAgeAsync(new DeviceAgePreferences());
+
+        result.Level.Should().Be(DeviceAgeLevel.Info);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSensorAgeAsync_NoEvents_ReturnsNoneLevelAndStartAsMin()
+    {
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeviceEvent?)null);
+
+        var result = await _service.GetSensorAgeAsync(new DeviceAgePreferences());
+
+        result.Min.Should().Be("Sensor Start");
+        result.SensorStart.Found.Should().BeFalse();
+        result.SensorStart.Level.Should().Be(DeviceAgeLevel.None);
+        result.SensorChange.Found.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSensorAgeAsync_StartAndChangeAtSameInstant_HidesStart()
+    {
+        var instant = _clock.GetUtcNow().UtcDateTime.AddHours(-10);
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorStart)),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceEvent { Id = Guid.NewGuid(), Timestamp = instant, EventType = DeviceEventType.SensorStart });
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorChange)),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceEvent { Id = Guid.NewGuid(), Timestamp = instant, EventType = DeviceEventType.SensorChange });
+
+        var result = await _service.GetSensorAgeAsync(new DeviceAgePreferences());
+
+        result.Min.Should().Be("Sensor Change");
+        result.SensorStart.Found.Should().BeFalse();
+        result.SensorChange.Found.Should().BeTrue();
     }
 
     [Fact]
@@ -212,14 +281,14 @@ public class DeviceAgeServiceTests
         var scopedEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
-            Timestamp = DateTime.UtcNow.AddHours(-30),
+            Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-30),
             EventType = DeviceEventType.SiteChange,
             PatientDeviceId = pumpId
         };
         var otherPumpEvent = new DeviceEvent
         {
             Id = Guid.NewGuid(),
-            Timestamp = DateTime.UtcNow.AddHours(-2),
+            Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-2),
             EventType = DeviceEventType.SiteChange,
             PatientDeviceId = Guid.NewGuid()
         };
@@ -260,7 +329,7 @@ public class DeviceAgeServiceTests
             .ReturnsAsync(new DeviceEvent
             {
                 Id = Guid.NewGuid(),
-                Timestamp = DateTime.UtcNow.AddHours(-2),
+                Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-2),
                 EventType = DeviceEventType.SensorChange,
                 PatientDeviceId = Guid.NewGuid()
             });
@@ -273,7 +342,7 @@ public class DeviceAgeServiceTests
             .ReturnsAsync(new DeviceEvent
             {
                 Id = Guid.NewGuid(),
-                Timestamp = DateTime.UtcNow.AddHours(-100),
+                Timestamp = _clock.GetUtcNow().UtcDateTime.AddHours(-100),
                 EventType = DeviceEventType.SensorStart,
                 PatientDeviceId = sensorId
             });

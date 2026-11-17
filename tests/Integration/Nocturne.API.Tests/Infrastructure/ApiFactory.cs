@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Hosting;
 
@@ -17,4 +18,8 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 public class ApiFactory : WebApplicationFactory<Nocturne.API.Program>
 {
     protected override IHostBuilder? CreateHostBuilder() => null;
+
+    /// <remarks>Suites read v3 history the moment they write, so history trails nothing.</remarks>
+    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+        builder.UseSetting("PostgreSql:HistoryCommitMarginMilliseconds", "0");
 }

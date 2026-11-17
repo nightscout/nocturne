@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
-  import { queryParam } from "sveltekit-search-params";
+  import { queryParameters } from "sveltekit-search-params";
 
-  import { RangeCalendar } from "$lib/components/ui/range-calendar";
-  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
-  import * as Popover from "$lib/components/ui/popover/index.js";
+  import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
+  import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
+  import { exceedsDaySpan, outsideDaySpan } from "#lib/utils/date-range.js";
+  import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
@@ -26,34 +28,37 @@
   }: Props = $props();
 
   // URL search params using sveltekit-search-params
-  const days = queryParam("days", {
-    encode: (value: number | undefined) => value?.toString() ?? "",
-    decode: (value: string | null) => {
-      if (!value) return undefined;
-      const parsed = parseInt(value);
-      return isNaN(parsed) ? undefined : parsed;
+  const params = queryParameters({
+    days: {
+      encode: (value: number | undefined) => value?.toString() ?? "",
+      decode: (value: string | null) => {
+        if (!value) return undefined;
+        const parsed = parseInt(value);
+        return isNaN(parsed) ? undefined : parsed;
+      },
+      defaultValue: undefined,
     },
-    defaultValue: undefined,
+    from: {
+      encode: (value: string | undefined) => value ?? "",
+      decode: (value: string | null) => value || undefined,
+      defaultValue: undefined,
+    },
+    to: {
+      encode: (value: string | undefined) => value ?? "",
+      decode: (value: string | null) => value || undefined,
+      defaultValue: undefined,
+    },
   });
 
-  const fromDate = queryParam("from", {
-    encode: (value: string | undefined) => value ?? "",
-    decode: (value: string | null) => value || undefined,
-    defaultValue: undefined,
-  });
-
-  const toDate = queryParam("to", {
-    encode: (value: string | undefined) => value ?? "",
-    decode: (value: string | null) => value || undefined,
-    defaultValue: undefined,
-  });
+  const limits = getV4ApiLimits();
+  const maxDays = $derived(limits.current?.maxDateSpanDays);
 
   let value = $state<DateRange | undefined>();
   let open = $state(false);
   let initialized = $state(false);
 
   // Derived state for selected days (for UI highlighting)
-  const selectedDays = $derived($days);
+  const selectedDays = $derived(params.days);
 
   // Initialize and sync state with URL parameters
   $effect(() => {
@@ -75,10 +80,10 @@
   }
 
   function updateComponentStateFromURL() {
-    if ($days) {
+    if (params.days) {
       // Handle days parameter (shorthand for X days ago to today)
       const endDate = today(getLocalTimeZone());
-      const startDate = endDate.subtract({ days: $days - 1 });
+      const startDate = endDate.subtract({ days: params.days - 1 });
 
       value = { start: startDate, end: endDate };
 
@@ -86,13 +91,13 @@
       onDateChange?.({
         from: startDate.toString(),
         to: endDate.toString(),
-        days: $days,
+        days: params.days,
       });
-    } else if ($fromDate && $toDate) {
+    } else if (params.from && params.to) {
       // Handle explicit date range
       try {
-        const startDate = parseDate($fromDate);
-        const endDate = parseDate($toDate);
+        const startDate = parseDate(params.from);
+        const endDate = parseDate(params.to);
 
         // Only update if the dates are actually different
         if (
@@ -130,9 +135,9 @@
     value = { start: startDate, end: endDate };
 
     // Update URL parameters using sveltekit-search-params
-    days.set(daysCount);
-    fromDate.set(startDate.toString());
-    toDate.set(endDate.toString());
+    params.days = daysCount;
+    params.from = startDate.toString();
+    params.to = endDate.toString();
 
     // Call the callback
     onDateChange?.({
@@ -142,12 +147,16 @@
     });
   }
 
+  const pendingStart = $derived(value?.start && !value.end ? value.start : undefined);
+  const isDateDisabled = $derived(outsideDaySpan(pendingStart, maxDays));
+
   function handleCalendarChange(newValue: DateRange | undefined) {
     if (newValue?.start && newValue?.end) {
+      if (exceedsDaySpan(newValue.start.toString(), newValue.end.toString(), maxDays)) return;
       // Clear days parameter when manually selecting dates
-      days.set(undefined);
-      fromDate.set(newValue.start.toString());
-      toDate.set(newValue.end.toString());
+      params.days = undefined;
+      params.from = newValue.start.toString();
+      params.to = newValue.end.toString();
 
       // Call the callback
       onDateChange?.({
@@ -185,6 +194,8 @@
         captionLayout="dropdown"
         locale={formatLocale()}
         onValueChange={handleCalendarChange}
+        {isDateDisabled}
+        {maxDays}
       />
     </Popover.Content>
   </Popover.Root>

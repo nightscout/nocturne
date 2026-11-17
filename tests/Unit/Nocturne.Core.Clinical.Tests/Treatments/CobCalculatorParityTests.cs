@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -48,9 +49,6 @@ public class CobCalculatorParityTests
 
         var therapySettings = new Mock<ITherapySettingsResolver>();
         therapySettings
-            .Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-        therapySettings
             .Setup(t => t.GetCarbAbsorptionRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultCarbAbsorptionRate);
         therapySettings
@@ -63,10 +61,7 @@ public class CobCalculatorParityTests
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
         // Real IobCalculator (not mocked) — COB calculation calls IOB internally for activity
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
+        var basalSegments = MockBasalSegments.Flat(DefaultBasalRate);
 
         var iobApsRepo = new Mock<IApsSnapshotRepository>();
         iobApsRepo
@@ -81,9 +76,10 @@ public class CobCalculatorParityTests
         var iobCalculator = new IobCalculator(
             therapySettings.Object,
             sensitivityResolver.Object,
-            basalRateResolver.Object,
+            basalSegments.Object,
             iobApsRepo.Object,
-            pumpRepo.Object
+            pumpRepo.Object,
+            MockStateSpans.Empty().Object
         );
 
         _calculator = new CobCalculator(
@@ -96,13 +92,12 @@ public class CobCalculatorParityTests
         );
     }
 
-    private static CarbIntake MakeCarbIntake(long mills, double carbs, int? absorptionTime = null)
+    private static CarbIntake MakeCarbIntake(long mills, double carbs)
     {
         return new CarbIntake
         {
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
             Carbs = carbs,
-            AbsorptionTime = absorptionTime,
         };
     }
 
@@ -125,9 +120,9 @@ public class CobCalculatorParityTests
         var before10Time = new DateTimeOffset(2015, 5, 29, 3, 45, 10, 670, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var after10Time = new DateTimeOffset(2015, 5, 29, 3, 45, 11, 670, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-        var after100 = await _calculator.CalculateTotalAsync(carbIntakes, time: after100Time);
-        var before10 = await _calculator.CalculateTotalAsync(carbIntakes, time: before10Time);
-        var after10 = await _calculator.CalculateTotalAsync(carbIntakes, time: after10Time);
+        var after100 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after100Time);
+        var before10 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, before10Time);
+        var after10 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after10Time);
 
         Assert.Equal(100.0, after100.Cob, 1);
         Assert.Equal(59.0, Math.Round(before10.Cob), 0);
@@ -154,66 +149,17 @@ public class CobCalculatorParityTests
         var later3Time = new DateTimeOffset(2015, 5, 29, 5, 50, 0, 174, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var later4Time = new DateTimeOffset(2015, 5, 29, 6, 50, 0, 174, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, time: rightAfterTime);
-        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, time: later1Time);
-        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, time: later2Time);
-        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, time: later3Time);
-        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, time: later4Time);
+        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, rightAfterTime);
+        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later1Time);
+        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later2Time);
+        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later3Time);
+        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later4Time);
 
         Assert.Equal(8.0, result1.Cob, 1);
         Assert.Equal(6.0, result2.Cob, 1);
         Assert.Equal(0.0, result3.Cob, 1);
         Assert.Equal(0.0, result4.Cob, 1);
         Assert.Equal(0.0, result5.Cob, 1);
-    }
-
-    #endregion
-
-    #region CobServiceTests Parity — CalcTreatment tests mapped to CalcCarbIntake
-
-    [Fact]
-    public void CalcCarbIntake_NoCarbs_ShouldReturnZero()
-    {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var carbIntake = MakeCarbIntake(now, 0);
-
-        var result = _calculator.CalcCarbIntake(carbIntake, now);
-
-        Assert.Equal(0.0, result.CobContrib);
-        Assert.Equal(0.0, result.ActivityContrib);
-    }
-
-    [Fact]
-    public void CalcCarbIntake_LinearAbsorption_ShouldDecreaseOverTime()
-    {
-        var startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var carbIntake = MakeCarbIntake(startTime, 60);
-
-        var rightAfter = _calculator.CalcCarbIntake(carbIntake, startTime + 1000);
-        var after30Min = _calculator.CalcCarbIntake(carbIntake, startTime + 30 * 60 * 1000);
-        var after60Min = _calculator.CalcCarbIntake(carbIntake, startTime + 60 * 60 * 1000);
-        var after120Min = _calculator.CalcCarbIntake(carbIntake, startTime + 120 * 60 * 1000);
-
-        Assert.True(rightAfter.CobContrib > after30Min.CobContrib);
-        Assert.True(after30Min.CobContrib > after60Min.CobContrib);
-        Assert.True(after60Min.CobContrib > after120Min.CobContrib);
-        Assert.True(after120Min.CobContrib >= 0);
-    }
-
-    [Fact]
-    public void CalcCarbIntake_WithCustomAbsorptionTime_ShouldUseCustomTime()
-    {
-        var startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var fastIntake = MakeCarbIntake(startTime, 30, absorptionTime: 60);
-        var slowIntake = MakeCarbIntake(startTime, 30, absorptionTime: 240);
-
-        var testTime = startTime + 90 * 60 * 1000;
-
-        var fastResult = _calculator.CalcCarbIntake(fastIntake, testTime);
-        var slowResult = _calculator.CalcCarbIntake(slowIntake, testTime);
-
-        Assert.True(slowResult.CobContrib > fastResult.CobContrib);
-        Assert.Equal(0.0, fastResult.CobContrib, 1);
     }
 
     #endregion
@@ -241,7 +187,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal(15.0, result.Cob);
         Assert.Equal("Loop", result.Source);
@@ -269,7 +215,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal(5.0, result.Cob);
         Assert.Equal("OpenAPS", result.Source);
@@ -282,7 +228,7 @@ public class CobCalculatorParityTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var carbIntakes = new List<CarbIntake> { MakeCarbIntake(time - 1, 20) };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal("Care Portal", result.Source);
         Assert.True(result.Cob > 0);
@@ -301,7 +247,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.True(result.Cob > 0);
         Assert.Equal("Care Portal", result.Source);
@@ -331,7 +277,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal("OpenAPS", result.Source);
         Assert.Equal(0.0, result.Cob);
@@ -362,9 +308,9 @@ public class CobCalculatorParityTests
         var before10 = ((DateTimeOffset)secondTime).ToUnixTimeMilliseconds();
         var after10 = ((DateTimeOffset)secondTime.AddSeconds(1)).ToUnixTimeMilliseconds();
 
-        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, time: after100);
-        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, time: before10);
-        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, time: after10);
+        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after100);
+        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, before10);
+        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after10);
 
         Assert.Equal(100, result1.Cob);
         Assert.Equal(59, Math.Round(result2.Cob));
@@ -390,11 +336,11 @@ public class CobCalculatorParityTests
         var later3 = ((DateTimeOffset)treatmentTime.AddMinutes(70)).ToUnixTimeMilliseconds();
         var later4 = ((DateTimeOffset)treatmentTime.AddMinutes(130)).ToUnixTimeMilliseconds();
 
-        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, time: rightAfter);
-        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, time: later1);
-        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, time: later2);
-        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, time: later3);
-        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, time: later4);
+        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, rightAfter);
+        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later1);
+        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later2);
+        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later3);
+        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later4);
 
         Assert.Equal(8, result1.Cob);
         Assert.Equal(6, result2.Cob);
@@ -415,7 +361,7 @@ public class CobCalculatorParityTests
             MakeCarbIntake(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), 0),
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.Equal(0, result.Cob);
     }
@@ -428,7 +374,7 @@ public class CobCalculatorParityTests
             MakeCarbIntake(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (30 * 60 * 1000), 30),
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.True(result.Cob > 0);
         Assert.True(result.Cob < 30);

@@ -13,7 +13,7 @@ namespace Nocturne.API.Services.Platform;
 /// is reported available regardless of heartbeat state. Bot-backed channels are degraded if the
 /// last heartbeat is older than 2 minutes (see <c>StalenessThreshold</c>).
 /// </remarks>
-public sealed class BotHealthService
+public sealed class BotHealthService(TimeProvider time)
 {
     private static readonly TimeSpan StalenessThreshold = TimeSpan.FromMinutes(2);
 
@@ -23,13 +23,12 @@ public sealed class BotHealthService
 
     /// <summary>Records a bot heartbeat with the set of currently active platforms.</summary>
     /// <param name="platforms">Array of platform identifiers (e.g. <c>"discord"</c>, <c>"telegram"</c>) reported by the bot.</param>
-    /// <param name="timestamp">Optional heartbeat timestamp; defaults to <see cref="DateTime.UtcNow"/> when not supplied.</param>
-    public void Record(string[] platforms, DateTime? timestamp = null)
+    public void Record(string[] platforms)
     {
         lock (_lock)
         {
             _lastPlatforms = platforms;
-            _lastHeartbeat = timestamp ?? DateTime.UtcNow;
+            _lastHeartbeat = time.GetUtcNow().UtcDateTime;
         }
     }
 
@@ -51,7 +50,7 @@ public sealed class BotHealthService
         var reportedPlatforms = platforms.ToHashSet();
 
         var isStale = heartbeat != DateTime.MinValue
-            && DateTime.UtcNow - heartbeat > StalenessThreshold;
+            && time.GetUtcNow().UtcDateTime - heartbeat > StalenessThreshold;
 
         return Enum.GetValues<ChannelType>()
             .Select(ct =>

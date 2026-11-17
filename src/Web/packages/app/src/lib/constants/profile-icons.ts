@@ -6,9 +6,9 @@
 
 export const PROFILE_ICONS = [
   { id: "user", name: "User", description: "Default person icon" },
-  { id: "user-circle", name: "User Circle", description: "Person in a circle" },
+  { id: "user-circle", name: "User circle", description: "Person in a circle" },
   { id: "heart", name: "Heart", description: "Heart shape" },
-  { id: "heart-pulse", name: "Heart Pulse", description: "Heart with pulse line" },
+  { id: "heart-pulse", name: "Heart pulse", description: "Heart with pulse line" },
   { id: "activity", name: "Activity", description: "Activity/vitals line" },
   { id: "syringe", name: "Syringe", description: "Medical syringe" },
   { id: "pill", name: "Pill", description: "Medicine pill" },
@@ -34,7 +34,7 @@ export const PROFILE_ICONS = [
   { id: "sparkles", name: "Sparkles", description: "Special" },
   { id: "clock", name: "Clock", description: "Time-based" },
   { id: "calendar", name: "Calendar", description: "Schedule-based" },
-  { id: "trending-up", name: "Trending Up", description: "Growth/improvement" },
+  { id: "trending-up", name: "Trending up", description: "Growth/improvement" },
 ] as const;
 
 export type ProfileIconId = typeof PROFILE_ICONS[number]["id"];

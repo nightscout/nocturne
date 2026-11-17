@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// - UPDATE: PUT /profile/{id}
 /// - DELETE: DELETE /profile/{id}
 /// </summary>
+[Collection(ParityShards.Two)]
 public class ProfileParityTests : ParityTestBase
 {
     public ProfileParityTests(ParityTestFixture fixture, ITestOutputHelper output)

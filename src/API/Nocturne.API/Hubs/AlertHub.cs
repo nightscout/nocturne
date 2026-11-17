@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Authorization;
 
@@ -34,7 +36,10 @@ public class AlertHub : TenantAwareHub
     /// Acknowledge ALL active excursions for the current tenant.
     /// This halts escalation but does not close excursions.
     /// </summary>
-    /// <param name="acknowledgedBy">Display name or identifier of the person acknowledging.</param>
+    /// <param name="acknowledgedBy">
+    /// Recorded only when the connection's principal names no one; see
+    /// <see cref="AcknowledgerExtensions.ResolveAcknowledger"/>.
+    /// </param>
     [HubScope(Scope.AlertsReadWrite)]
     public async Task Acknowledge(string acknowledgedBy)
     {
@@ -44,6 +49,9 @@ public class AlertHub : TenantAwareHub
         var tenantId = TenantContext?.TenantId
             ?? throw new Microsoft.AspNetCore.SignalR.HubException("No tenant context resolved.");
 
-        await ackService.AcknowledgeAllAsync(tenantId, acknowledgedBy, CancellationToken.None);
+        await ackService.AcknowledgeAllAsync(
+            tenantId,
+            (Context.User ?? new ClaimsPrincipal()).ResolveAcknowledger(acknowledgedBy),
+            CancellationToken.None);
     }
 }

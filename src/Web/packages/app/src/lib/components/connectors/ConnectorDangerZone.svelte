@@ -1,20 +1,21 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
-  import type { ConnectorDataSummary } from "$lib/api/generated/nocturne-api-client";
-  import { deleteConfiguration } from "$lib/api/generated/configurations.generated.remote";
-  import { deleteConnectorData } from "$lib/api/generated/services.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { formatNumber } from "#lib/utils/formatting.js";
+  import type { ConnectorDataSummary } from "#lib/api/generated/nocturne-api-client.js";
+  import { deleteConfiguration } from "#lib/api/generated/configurations.generated.remote.js";
+  import { deleteConnectorData } from "#lib/api/generated/services.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
-  import { DangerZoneDialog } from "$lib/components/ui/danger-zone-dialog";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { DangerZoneDialog } from "#lib/components/ui/danger-zone-dialog/index.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
@@ -59,7 +60,14 @@
     Notes: "notes",
     DeviceEvents: "device events",
     StateSpans: "state spans",
-    DeviceStatus: "device statuses",
+    DeviceStatus: "device status records",
+    TempBasals: "temp basals",
+    BasalInjections: "basal injections",
+    HeartRate: "heart rate readings",
+    Steps: "step counts",
+    BodyWeight: "body weights",
+    Sleep: "sleep sessions",
+    Profiles: "profile records",
   };
 
   function formatCountLabel(key: string): string {
@@ -73,6 +81,7 @@
   } | null>(null);
 
   let showDeleteDataDialog = $state(false);
+  let allowReimport = $state(false);
   let deleteDataResult = $state<{
     success?: boolean;
     deletedCounts?: { [key: string]: number };
@@ -103,7 +112,7 @@
 
   async function handleDeleteData() {
     try {
-      const result = await deleteConnectorData(connectorId);
+      const result = await deleteConnectorData({ id: connectorId, allowReimport });
       deleteDataResult = result;
 
       if (result.success && onDataDeleted) {
@@ -123,7 +132,7 @@
 
   <Card variant="destructive">
     <CardHeader>
-      <CardTitle variant="destructive">Danger Zone</CardTitle>
+      <CardTitle variant="destructive">Danger zone</CardTitle>
       <CardDescription>
         Irreversible actions that affect this connector
       </CardDescription>
@@ -134,10 +143,9 @@
           class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between"
         >
           <div>
-            <p class="font-medium">Delete Configuration</p>
+            <p class="font-medium">Delete configuration</p>
             <p class="text-sm text-muted-foreground">
-              Remove this connector's configuration. The connector will need to
-              be set up again to resume syncing.
+              Remove this connector's configuration. The connector will need to be configured again to resume syncing.
             </p>
           </div>
           <Button
@@ -149,7 +157,7 @@
             }}
           >
             <Trash2 class="mr-2 h-4 w-4" />
-            Delete Config
+            Delete config
           </Button>
         </div>
       {/if}
@@ -163,7 +171,7 @@
           class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between"
         >
           <div>
-            <p class="font-medium">Delete Synced Data</p>
+            <p class="font-medium">Delete synced data</p>
             <p class="text-sm text-muted-foreground">
               Permanently delete all data synced by this connector.
             </p>
@@ -187,11 +195,12 @@
             disabled={!hasData}
             onclick={() => {
               deleteDataResult = null;
+              allowReimport = false;
               showDeleteDataDialog = true;
             }}
           >
             <Trash2 class="mr-2 h-4 w-4" />
-            Delete Data
+            Delete data
           </Button>
         </div>
       {/if}
@@ -201,10 +210,10 @@
   <!-- Delete Configuration Dialog -->
   <DangerZoneDialog
     bind:open={showDeleteConfigDialog}
-    title="Delete {displayName} Configuration"
+    title="Delete {displayName} configuration"
     description="You are about to permanently delete all configuration and credentials for this connector. The connector will stop syncing data."
     confirmationPhrase="DELETE CONFIGURATION"
-    confirmButtonText="Delete Configuration"
+    confirmButtonText="Delete configuration"
     onConfirm={handleDeleteConfiguration}
   >
     {#snippet result()}
@@ -245,13 +254,33 @@
   <!-- Delete Data Dialog -->
   <DangerZoneDialog
     bind:open={showDeleteDataDialog}
-    title="Delete {displayName} Data"
+    title="Delete {displayName} data"
     description="You are about to permanently delete all data synchronized by this connector."
     confirmationPhrase="DELETE DATA"
-    confirmButtonText="Delete All Data"
+    confirmButtonText={allowReimport ? "Delete and allow re-import" : "Delete all data"}
     onConfirm={handleDeleteData}
   >
     {#snippet content()}
+      <label class="mt-4 flex items-start gap-3 rounded-lg border p-4 cursor-pointer">
+        <Checkbox
+          id="connector-allow-reimport"
+          class="mt-0.5"
+          bind:checked={allowReimport}
+          disabled={deleteDataResult !== null}
+        />
+        <span class="space-y-1">
+          <span class="block text-sm font-medium">Allow re-import</span>
+          <span class="block text-sm text-muted-foreground">
+            {#if allowReimport}
+              The connector stays enabled and imports this data again on its next sync, along with
+              any of its records deleted earlier.
+            {:else}
+              The connector is disabled, and deleted records are never imported again, even if
+              {displayName} still has them.
+            {/if}
+          </span>
+        </span>
+      </label>
       {#if dataSummary && (dataSummary.total ?? 0) > 0}
         <div class="mt-4 rounded-lg border bg-muted/50 p-4">
           <p class="text-sm font-medium mb-2">Data to be deleted:</p>

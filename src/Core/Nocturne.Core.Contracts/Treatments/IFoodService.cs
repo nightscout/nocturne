@@ -14,8 +14,6 @@ public interface IFoodService
     /// <param name="find">Optional text matched against name, category, and subcategory</param>
     /// <param name="count">Maximum number of records to return</param>
     /// <param name="skip">Number of records to skip for pagination</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of food records</returns>
     Task<IEnumerable<Food>> GetFoodAsync(
         string? find = null,
         int count = 100,
@@ -23,54 +21,52 @@ public interface IFoodService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a specific food record by ID
-    /// </summary>
-    /// <param name="id">Food ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Food record if found, null otherwise</returns>
     Task<Food?> GetFoodByIdAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Create new food records with WebSocket broadcasting
     /// </summary>
-    /// <param name="foods">Food records to create</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    /// <param name="mode">The write rules. V1 and V3 pass <see cref="FoodWriteMode.Legacy"/>.</param>
+    /// <remarks>A <see cref="FoodWriteMode.Native"/> batch skips a food whose name sanitizes to empty and creates the rest.</remarks>
     /// <returns>Created food records with assigned IDs</returns>
     Task<IEnumerable<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
+        FoodWriteMode mode,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>
+    /// Create one food record under the <see cref="FoodWriteMode.Native"/> rules.
+    /// </summary>
+    /// <exception cref="FoodNameRequiredException">The name sanitizes to empty.</exception>
+    Task<Food> CreateNativeFoodAsync(Food food, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Update an existing food record with WebSocket broadcasting
     /// </summary>
-    /// <param name="id">Food ID to update</param>
     /// <param name="food">Updated food data</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    /// <param name="mode">The write rules. V1 and V3 pass <see cref="FoodWriteMode.Legacy"/>.</param>
+    /// <exception cref="FoodNameRequiredException">A <see cref="FoodWriteMode.Native"/> write leaves the name empty.</exception>
     /// <returns>Updated food record if successful, null otherwise</returns>
     Task<Food?> UpdateFoodAsync(
         string id,
         Food food,
+        FoodWriteMode mode,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>
     /// Delete a food record with WebSocket broadcasting
     /// </summary>
-    /// <param name="id">Food ID to delete</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete multiple food records with optional filtering
+    /// Delete the food records a legacy <c>find</c> selects, with WebSocket broadcasting
     /// </summary>
-    /// <param name="find">Optional MongoDB query filter</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Number of records deleted</returns>
-    Task<long> DeleteMultipleFoodAsync(
-        string? find = null,
-        CancellationToken cancellationToken = default
-    );
+    /// <param name="find">The find, in either wire form. It must carry a condition.</param>
+    /// <exception cref="ArgumentException">The find has no condition, or names a field or operator the food collection cannot filter on.</exception>
+    /// <returns>Number of food records deleted</returns>
+    Task<long> BulkDeleteFoodAsync(string? find, CancellationToken cancellationToken = default);
 }

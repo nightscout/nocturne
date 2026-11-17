@@ -1,5 +1,5 @@
-using System.Linq.Expressions;
 using System.Text.Json;
+using Fido2NetLib;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,12 +10,15 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Identity;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.Authentication;
@@ -31,7 +34,7 @@ namespace Nocturne.API.Controllers.Authentication;
 ///   <item><description><b>Discoverable login</b> (no username): <c>POST /login/discoverable/options</c> → <c>POST /login/complete</c></description></item>
 ///   <item><description><b>Non-discoverable login</b> (with username): <c>POST /login/options</c> → <c>POST /login/complete</c></description></item>
 ///   <item><description><b>Recovery:</b> <c>POST /recovery/verify</c> issues a 10-minute restricted token allowing passkey management only.</description></item>
-///   <item><description><b>Recovery mode:</b> <c>POST /recovery-mode/options</c> → <c>POST /recovery-mode/complete</c> (only for a member that has no passkey and no linked provider).</description></item>
+///   <item><description><b>Recovery mode:</b> <c>POST /recovery-mode/redeem</c> spends an administrator-issued code for the same restricted session, for a member with no sign-in method left.</description></item>
 ///   <item><description><b>Initial setup:</b> handled by the setup controller under <c>/api/v4/setup/</c>, not here.</description></item>
 ///   <item><description><b>Invite acceptance:</b> <c>POST /invite/options</c> → <c>POST /invite/complete</c> using a pre-issued invite token.</description></item>
 /// </list>
@@ -76,13 +79,6 @@ public class PasskeyController : ControllerBase
     /// </summary>
     private const string RecoverySessionPermission = "passkey:manage";
 
-    /// <summary>
-    /// Shown for every recovery-mode refusal so the response never distinguishes an unknown
-    /// username from an account that still has a working sign-in method.
-    /// </summary>
-    private const string RecoveryModeUnavailable =
-        "That username can't have a passkey registered this way. Sign in with a recovery code instead.";
-
     private readonly IPasskeyService _passkeyService;
     private readonly ITotpService _totpService;
     private readonly IRecoveryCodeService _recoveryCodeService;
@@ -93,14 +89,29 @@ public class PasskeyController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantService _tenantService;
     private readonly ITenantMemberService _tenantMemberService;
-    private readonly NocturneDbContext _dbContext;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly ISubjectRepository _subjects;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
 
-    /// <summary>
-    /// Creates a new instance of PasskeyController
-    /// </summary>
+    /// <param name="passkeyService">Generates each ceremony's options, verifies its response, and lists a subject's passkeys.</param>
+    /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
+    /// <param name="recoveryCodeService">Generates, counts, verifies and voids recovery codes.</param>
+    /// <param name="jwtService">Issues and validates the recovery session's token.</param>
+    /// <param name="sessionService">Issues the session a completed login or invite acceptance signs in with.</param>
+    /// <param name="subjectService">Counts a subject's sign-in factors and removes a passkey under the last-factor check.</param>
+    /// <param name="auditService">Records the login and recovery outcomes in the auth audit log.</param>
+    /// <param name="tenantAccessor">For the id of the request's tenant.</param>
+    /// <param name="tenantService">Stored, and read by no action.</param>
+    /// <param name="tenantMemberService">For the tenants a subject without credentials is a member of.</param>
+    /// <param name="subjects">Reads, creates and updates the subjects the ceremonies enrol or sign in.</param>
+    /// <param name="tenants">Reads the request's tenant and marks its onboarding complete.</param>
+    /// <param name="members">For the owners an access request is announced to.</param>
+    /// <param name="dbContextFactory">For the login codes the ceremonies read beside the subjects.</param>
+    /// <param name="oidcOptions">For the cookie settings the session and recovery cookies are written with.</param>
+    /// <param name="logger">Logs failed ceremonies and invite enrolments.</param>
     public PasskeyController(
         IPasskeyService passkeyService,
         ITotpService totpService,
@@ -112,8 +123,10 @@ public class PasskeyController : ControllerBase
         ITenantAccessor tenantAccessor,
         ITenantService tenantService,
         ITenantMemberService tenantMemberService,
-        NocturneDbContext dbContext,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        ISubjectRepository subjects,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
+        INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
         ILogger<PasskeyController> logger)
     {
@@ -127,20 +140,23 @@ public class PasskeyController : ControllerBase
         _tenantAccessor = tenantAccessor;
         _tenantService = tenantService;
         _tenantMemberService = tenantMemberService;
-        _dbContext = dbContext;
+        _subjects = subjects;
+        _tenants = tenants;
+        _members = members;
         _dbContextFactory = dbContextFactory;
         _oidcOptions = oidcOptions.Value;
         _logger = logger;
     }
 
     /// <summary>
-    /// Generate registration options for a new passkey credential on the caller's own account.
+    /// Generate registration options for a new passkey credential on the caller's own account. The account comes from the caller's credentials; the request cannot name another.
     /// </summary>
     /// <remarks>
     /// The subject comes from the caller's credentials, never from the request: a caller-supplied
     /// subject id would let anyone enrol their own authenticator onto another account.
     /// </remarks>
     [HttpPost("register/options")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [AllowAnonymous]
     [EnableRateLimiting("passkey-register")]
@@ -236,24 +252,42 @@ public class PasskeyController : ControllerBase
     };
 
     /// <summary>
-    /// Complete passkey registration with attestation response
+    /// Sets the short-lived cookie that lets <paramref name="subject"/> enrol one passkey, read
+    /// back by <see cref="TryReadRecoverySessionSubject"/>.
+    /// </summary>
+    private void StartRecoverySession(SubjectRecord subject)
+    {
+        var recoveryToken = _jwtService.GenerateAccessToken(
+            new SubjectInfo { Id = subject.Id, Name = subject.Name, Email = subject.Email },
+            permissions: [RecoverySessionPermission],
+            roles: [],
+            scopes: [RecoverySessionScope],
+            lifetime: RecoverySessionLifetime);
+
+        var cookieOptions = RecoveryCookieOptions();
+        cookieOptions.MaxAge = RecoverySessionLifetime;
+        Response.Cookies.Append(RecoveryCookieName, recoveryToken, cookieOptions);
+    }
+
+    /// <summary>
+    /// Complete passkey registration with attestation response. The challenge must have been issued for the caller's own account.
     /// </summary>
     /// <remarks>
     /// The challenge must have been issued for the subject the caller's credentials resolve to,
     /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it.
     /// <para>
-    /// Declares no invalidation, like the other enrolment a recovery session reaches
-    /// (<see cref="RecoveryModeComplete"/>): the generated command would refresh
-    /// <see cref="ListCredentials"/>, which needs a session, and its 401 would surface as a
-    /// failure on an enrolment that in fact succeeded. Callers holding a session refresh their
-    /// own list.
+    /// Invalidates <see cref="ListCredentials"/> so a caller holding a session sees the new passkey
+    /// in the response. A recovery session reaches this endpoint too and cannot read that list; the
+    /// generated command settles a refresh that fails and logs it, so the 401 does not fail an
+    /// enrolment that succeeded, and a query is returned only to a client that asked for it.
     /// </para>
     /// </remarks>
     [HttpPost("register/complete")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [AllowAnonymous]
     [EnableRateLimiting("passkey-register")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -273,165 +307,102 @@ public class PasskeyController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
 
+        PasskeyCredentialResult result;
         try
         {
-            var result = await _passkeyService.CompleteRegistrationAsync(
+            result = await _passkeyService.CompleteRegistrationAsync(
                 request.AttestationResponseJson, request.ChallengeToken, tenantId,
                 expectedSubjectId: subjectId.Value, request.Label);
-
-            // One spent recovery code buys one enrolment: the credential it authorized now exists,
-            // so the session that authorized it is over even though its token has time left.
-            Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
-
-            return Ok(new PasskeyRegisterCompleteResponse
-            {
-                CredentialId = result.CredentialId,
-                SubjectId = result.SubjectId,
-            });
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Passkey registration completion failed");
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
         }
-    }
 
-    /// <summary>
-    /// Generate passkey registration options for an account that has no sign-in method left,
-    /// while the tenant is in recovery mode.
-    /// </summary>
-    /// <remarks>
-    /// Unauthenticated by necessity — the target account cannot sign in. The server resolves the
-    /// subject from the username and refuses unless that subject has zero primary auth factors,
-    /// so this can only restore access to an account that is already locked out, never take over
-    /// an account that still has a passkey or a linked provider.
-    /// </remarks>
-    [HttpPost("recovery-mode/options")]
-    [AllowAnonymous]
-    [EnableRateLimiting("passkey-register")]
-    [RemoteCommand]
-    [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PasskeyOptionsResponse>> RecoveryModeOptions(
-        [FromBody] PasskeyLoginOptionsRequest request)
-    {
-        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
-            return refusal;
+        // One spent recovery code buys one enrolment: the credential it authorized now exists,
+        // so the session that authorized it is over even though its token has time left.
+        Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
 
-        var subject = await ResolveRecoveryModeSubjectAsync(request.Username);
-        if (subject == null)
+        // The passkey exists whatever happens here, so a failure is logged rather than reported:
+        // a code left outstanding is refused at redemption anyway, since the member can sign in.
+        try
         {
-            return Problem(detail: RecoveryModeUnavailable, statusCode: 400, title: "Bad Request");
+            await using var db = await _dbContextFactory.CreateAsync();
+            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not void outstanding recovery codes for {SubjectId}", subjectId.Value);
         }
 
-        var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subject.Id, subject.Username ?? subject.Name);
-
-        return Ok(new PasskeyOptionsResponse
+        return Ok(new PasskeyRegisterCompleteResponse
         {
-            Options = result.OptionsJson,
-            ChallengeToken = result.ChallengeToken,
+            CredentialId = result.CredentialId,
+            SubjectId = result.SubjectId,
         });
     }
 
     /// <summary>
-    /// Complete recovery-mode passkey registration. Re-checks the recovery-mode conditions so a
-    /// challenge issued while the tenant was in recovery mode cannot be redeemed afterwards.
-    /// </summary>
-    [HttpPost("recovery-mode/complete")]
-    [AllowAnonymous]
-    [EnableRateLimiting("passkey-register")]
-    [RemoteCommand]
-    [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PasskeyRegisterCompleteResponse>> RecoveryModeComplete(
-        [FromBody] RecoveryModeCompleteRequest request)
-    {
-        if (string.IsNullOrEmpty(request.ChallengeToken))
-        {
-            return Problem(detail: "Challenge token not found or expired", statusCode: 400, title: "Bad Request");
-        }
-
-        var subject = await ResolveRecoveryModeSubjectAsync(request.Username);
-        if (subject == null)
-        {
-            return Problem(detail: RecoveryModeUnavailable, statusCode: 400, title: "Bad Request");
-        }
-
-        try
-        {
-            var result = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, _tenantAccessor.TenantId,
-                expectedSubjectId: subject.Id, request.Label);
-
-            return Ok(new PasskeyRegisterCompleteResponse
-            {
-                CredentialId = result.CredentialId,
-                SubjectId = result.SubjectId,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Recovery-mode passkey registration failed");
-            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
-        }
-    }
-
-    /// <summary>
-    /// Returns the subject named by <paramref name="username"/> when the tenant is in recovery
-    /// mode and that subject has no primary auth factor, otherwise <see langword="null"/>.
+    /// Spends a recovery code an administrator issued for a member and starts the same restricted
+    /// session <see cref="RecoveryVerify"/> does: one passkey enrolment through
+    /// <see cref="RegisterOptions"/>, nothing else. A code is single-use. Unknown, spent, expired and other-tenant codes all fail alike.
     /// </summary>
     /// <remarks>
-    /// The subject lookup stays on the request-scoped context, deliberately, unlike the two
-    /// preconditions above it. A recovery ceremony enrols a credential, so on a share host — where
-    /// the scoped context is marked as a share and membership is denied — it must resolve nobody
-    /// and fail closed. Pinning it would make the ceremony reachable there.
+    /// The code is the whole proof. It is single-use, bound to one subject on one tenant, minted
+    /// for <see cref="Nocturne.Infrastructure.Data.Entities.LoginCodePurpose.Recovery"/>, and only someone with authority over that
+    /// member can mint it: a member administrator
+    /// (<see cref="V4.Identity.MemberRecoveryController.IssueRecoveryCode"/>) or the operator
+    /// (<see cref="V4.PlatformAdmin.TenantController.IssueRecoveryCode"/>), which is how a tenant
+    /// whose only owner is locked out gets back in. The code is a bearer link that outlives the
+    /// moment it was minted, so the member must still be one its issuer may recover
+    /// (<see cref="MemberRecoveryEligibility.AllowsRedemption"/>). Unknown, spent, expired,
+    /// other-tenant, login and no-longer-applicable codes fail alike.
     /// </remarks>
-    private async Task<SubjectEntity?> ResolveRecoveryModeSubjectAsync(string? username)
+    [HttpPost("recovery-mode/redeem")]
+    [AllowAnonymous]
+    [EnableRateLimiting("login-handoff")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(RecoveryModeRedeemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<RecoveryModeRedeemResponse>> RecoveryModeRedeem(
+        [FromBody] RecoveryModeRedeemRequest request,
+        [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] MemberRecoveryEligibility eligibility)
     {
-        if (string.IsNullOrWhiteSpace(username))
+        if (string.IsNullOrWhiteSpace(request.Code))
         {
-            return null;
+            return Problem(detail: "A recovery code is required", statusCode: 400, title: "Bad Request");
         }
 
-        var tenantId = _tenantAccessor.TenantId;
+        await using var db = await _dbContextFactory.CreateAsync();
+        var redeemed = await loginCodeService.RedeemAsync(
+            db, request.Code.Trim(), LoginCodeService.RecoveryPurposes,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            HttpContext.RequestAborted);
 
-        // Recovery mode only exists once the tenant has at least one working sign-in method:
-        // before that the tenant is in first-run setup, which has its own owner-creation flow.
-        if (!await TenantHasCredentialsAsync(tenantId) || !await HasOrphanedSubjectAsync(tenantId))
+        var subject = redeemed is not null
+            && MemberRecoveryEligibility.AllowsRedemption(
+                await eligibility.CheckAsync(db, _tenantAccessor.TenantId, redeemed.SubjectId, HttpContext.RequestAborted),
+                redeemed.Purpose)
+            ? await _subjects.GetAsync(redeemed.SubjectId, HttpContext.RequestAborted)
+            : null;
+        if (subject is null)
         {
-            return null;
+            return Problem(
+                detail: "This recovery code has expired or was already used.",
+                statusCode: 400,
+                title: "Bad Request");
         }
 
-        var subject = await _dbContext.TenantMembers
-            .Where(tm => tm.TenantId == tenantId)
-            .Select(tm => tm.Subject!)
-            .FirstOrDefaultAsync(s =>
-                s.Username == username && s.IsActive && !s.IsSystemSubject);
+        // Whoever held the member's own recovery codes, the member's way back in is now this
+        // enrolment, so codes they may have lost stop working.
+        await _recoveryCodeService.InvalidateAllAsync(subject.Id);
+        StartRecoverySession(subject);
 
-        if (subject == null)
-        {
-            return null;
-        }
-
-        // Fail closed: an account that still has a passkey or a linked provider is not locked
-        // out and must never be enrollable without a session.
-        return await _subjectService.CountPrimaryAuthFactorsAsync(subject.Id) == 0 ? subject : null;
+        return Ok(new RecoveryModeRedeemResponse { Username = subject.Username ?? subject.Name });
     }
-
-    /// <summary>
-    /// Names the subject an invite acceptance enrols. The options and complete steps share it, so
-    /// the subject the options step reuses or creates is the one the complete step re-resolves.
-    /// </summary>
-    private static Expression<Func<SubjectEntity, bool>> InviteEnrolmentMatch(string username) =>
-        s => s.Username == username && s.IsActive && s.ApprovalStatus != "Pending";
-
-    /// <summary>
-    /// Names the subject an anonymous access request enrols. Shared by the options and complete
-    /// steps for the same reason as <see cref="InviteEnrolmentMatch"/>.
-    /// </summary>
-    private static Expression<Func<SubjectEntity, bool>> AccessRequestEnrolmentMatch(string displayName) =>
-        s => s.Name == displayName && !s.IsActive && s.ApprovalStatus == "Pending";
 
     /// <summary>
     /// Returns the id of the most recently created subject matching <paramref name="match"/> that is
@@ -440,8 +411,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The invite and access-request options steps create the subject, so the complete step has to
-    /// re-resolve it: the enrolling subject must not be taken from the challenge token, and the
-    /// invite token is not a key for it because one invite can be accepted by several people.
+    /// re-resolve it (<see cref="EnrolmentMatch"/>).
     /// <para>
     /// A subject holding membership anywhere is somebody's account, not an anonymous enrolment.
     /// Subjects are global and passkeys are stored against the subject, so scoping the membership
@@ -450,29 +420,20 @@ public class PasskeyController : ControllerBase
     /// </para>
     /// <para>
     /// Hence the two steps. The candidate list comes from tables that are not tenant-scoped, so one
-    /// query answers it. The membership check cannot join to them in the same statement: a single
-    /// anti-join spans every candidate at once, and the reach that makes it cross-tenant is granted
-    /// one subject at a time (<c>app.current_subject_id</c>), so no one pin can cover the statement.
-    /// It is asked per candidate instead, through <see cref="ITenantMemberService"/>, whose
-    /// enumeration carries that subject's own reach.
+    /// query answers it. The membership check is asked per candidate through
+    /// <see cref="ITenantMemberService"/>, whose enumeration is pinned to that subject
+    /// (<c>app.current_subject_id</c>) and so reads only that subject's memberships.
     /// </para>
     /// The preconditions mean only a half-finished enrolment can match, never an account that can
     /// already sign in or that belongs to a tenant — so with several candidates (duplicates left by
     /// an older build of the options step) every one of them is an empty shell and the newest, which
-    /// the caller's ceremony was minted against, wins. Ids are UUID v7, which sort in creation order.
-    /// Walking the candidates newest-first and taking the first with no membership is the same
-    /// answer as the newest candidate satisfying all four conditions at once.
+    /// the caller's ceremony was minted against, wins. Walking the candidates newest-first and
+    /// taking the first with no membership is the same answer as the newest candidate satisfying
+    /// all four conditions at once.
     /// </remarks>
-    private async Task<Guid?> FindEnrollingSubjectIdAsync(Expression<Func<SubjectEntity, bool>> match)
+    private async Task<Guid?> FindEnrollingSubjectIdAsync(EnrolmentMatch match)
     {
-        var candidateIds = await _dbContext.Subjects
-            .Where(match)
-            .Where(s => !s.IsSystemSubject
-                && !_dbContext.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !_dbContext.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id))
-            .OrderByDescending(s => s.Id)
-            .Select(s => s.Id)
-            .ToListAsync();
+        var candidateIds = await _subjects.FindCredentiallessSubjectIdsAsync(match, HttpContext.RequestAborted);
 
         foreach (var candidateId in candidateIds)
         {
@@ -574,12 +535,15 @@ public class PasskeyController : ControllerBase
                     ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                     userAgent: Request.Headers.UserAgent.ToString(),
                     detailsJson: JsonSerializer.Serialize(new { method = "passkey", secondFactorPending = true }));
+                Response.SetLastSignInCookie(
+                    SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
                 return Ok(new PasskeyLoginCompleteResponse
                 {
                     Success = true,
                     TotpRequired = true,
-                    StepUpToken = await _totpService.CreateStepUpTokenAsync(assertionResult.SubjectId),
+                    StepUpToken = await _totpService.CreateStepUpTokenAsync(
+                        assertionResult.SubjectId, tenantId, admittedByInvite: false),
                 });
             }
 
@@ -610,7 +574,7 @@ public class PasskeyController : ControllerBase
         {
             _logger.LogWarning(ex, "Passkey login completion failed");
 
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectId: null, success: false,
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 errorMessage: ex.Message,
@@ -640,48 +604,28 @@ public class PasskeyController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         // Look up subject by username within the current tenant
-        var subjectEntity = await _dbContext.TenantMembers
-            .AsNoTracking()
-            .Where(tm => tm.TenantId == tenantId)
-            .Select(tm => tm.Subject)
-            .FirstOrDefaultAsync(s => s != null && s.Username == request.Username);
+        var subject = await _subjects.FindMemberByUsernameAsync(
+            tenantId, request.Username, activeOnly: false, HttpContext.RequestAborted);
 
         // Unknown usernames go through the same verification; see IRecoveryCodeService.VerifyAndConsumeAsync.
-        var verified = await _recoveryCodeService.VerifyAndConsumeAsync(subjectEntity?.Id, request.Code);
+        var verified = await _recoveryCodeService.VerifyAndConsumeAsync(subject?.Id, request.Code);
         if (!verified)
         {
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectEntity?.Id, success: false,
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subject?.Id, success: false,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { method = "recovery_code" }));
             return Problem(detail: "Invalid username or recovery code", statusCode: 400, title: "Bad Request");
         }
 
-        var subjectId = subjectEntity!.Id;
+        var subjectId = subject!.Id;
 
         await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: true,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
             userAgent: Request.Headers.UserAgent.ToString(),
             detailsJson: JsonSerializer.Serialize(new { method = "recovery_code" }));
 
-        // Issue a restricted recovery session (short-lived)
-        var subjectInfo = new SubjectInfo
-        {
-            Id = subjectId,
-            Name = subjectEntity.Name,
-            Email = subjectEntity.Email,
-        };
-
-        var recoveryToken = _jwtService.GenerateAccessToken(
-            subjectInfo,
-            permissions: [RecoverySessionPermission],
-            roles: [],
-            scopes: [RecoverySessionScope],
-            lifetime: RecoverySessionLifetime);
-
-        var cookieOptions = RecoveryCookieOptions();
-        cookieOptions.MaxAge = RecoverySessionLifetime;
-        Response.Cookies.Append(RecoveryCookieName, recoveryToken, cookieOptions);
+        StartRecoverySession(subject);
 
         return Ok(new RecoveryVerifyResponse
         {
@@ -728,6 +672,7 @@ public class PasskeyController : ControllerBase
     /// Remove a passkey credential. Cannot remove the last credential if user has no OIDC link.
     /// </summary>
     [HttpDelete("credentials/{id:guid}")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -753,6 +698,7 @@ public class PasskeyController : ControllerBase
     /// Regenerate recovery codes for the authenticated user. Invalidates all existing codes.
     /// </summary>
     [HttpPost("recovery/regenerate")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetRecoveryStatus", "ListCredentials"])]
     [ProducesResponseType(typeof(RecoveryRegenerateResponse), StatusCodes.Status200OK)]
@@ -812,13 +758,15 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(AuthStatusResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuthStatus()
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
 
-        var hasCredentials = await TenantHasCredentialsAsync(tenantId);
+        // System-pinned reads: this action is anonymous and reachable on a share host.
+        var hasCredentials = await _subjects.TenantHasCredentialedMemberAsync(tenantId, HttpContext.RequestAborted);
         var setupRequired = !hasCredentials;
-        var recoveryMode = hasCredentials && await HasOrphanedSubjectAsync(tenantId);
+        var recoveryMode = hasCredentials && await _subjects.HasOrphanedMemberAsync(tenantId, HttpContext.RequestAborted);
 
-        var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         return Ok(new AuthStatusResponse
         {
@@ -830,43 +778,7 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Whether any member of the tenant has a passkey or a linked provider, i.e. whether the
-    /// tenant is past first-run setup.
-    /// </summary>
-    /// <remarks>
-    /// On a tenant-pinned context of its own, not the request-scoped one, for the same reason as
-    /// <c>TenantSetupMiddleware</c>: <see cref="GetAuthStatus"/> is anonymous and reachable on a
-    /// share host, where the scoped context is marked as a share. Membership is not share-visible
-    /// data, so once tenant_members is behind Row Level Security a share is denied every row of it
-    /// — and this would report a configured tenant as needing first-run setup.
-    /// </remarks>
-    private async Task<bool> TenantHasCredentialsAsync(Guid tenantId)
-    {
-        await using var db = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId, HttpContext.RequestAborted);
-
-        return await db.TenantMembers
-            .Where(m => m.TenantId == tenantId)
-            .AnyAsync(m =>
-                db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                db.WorkingOidcIdentities().Any(o => o.SubjectId == m.SubjectId));
-    }
-
-    /// <summary>
-    /// Whether the tenant has an active, non-system member with no passkey and no linked
-    /// provider — an account that cannot sign in at all.
-    /// </summary>
-    /// <remarks>
-    /// Pinned for the same reason as <see cref="TenantHasCredentialsAsync"/>.
-    /// </remarks>
-    private async Task<bool> HasOrphanedSubjectAsync(Guid tenantId)
-    {
-        await using var db = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId, HttpContext.RequestAborted);
-
-        return await db.OrphanedSubjectsOf(tenantId).AnyAsync();
-    }
-
-    /// <summary>
-    /// Mark the current tenant's onboarding as complete.
+    /// Mark the current tenant's onboarding core as complete, enrolling it in the setup hub.
     /// </summary>
     [HttpPost("onboarding/complete")]
     [Authorize]
@@ -875,14 +787,15 @@ public class PasskeyController : ControllerBase
     public async Task<IActionResult> CompleteOnboarding()
     {
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
         if (tenant == null)
             return NotFound();
 
         if (tenant.OnboardingCompletedAt == null)
         {
-            tenant.OnboardingCompletedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            var now = DateTime.UtcNow;
+            await _tenants.UpdateAsync(
+                tenantId, new TenantEdit(OnboardingCompletedAt: now, SetupHubEnrolledAt: now), HttpContext.RequestAborted);
         }
 
         return NoContent();
@@ -906,12 +819,12 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptions(
         [FromBody] AccessRequestOptionsRequest request)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _dbContext.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         if (tenant == null || !tenant.AllowAccessRequests)
             return NotFound();
@@ -925,14 +838,11 @@ public class PasskeyController : ControllerBase
         // Cancelling the OS prompt leaves the subject this step created behind. Resume that one
         // rather than adding another under the same name: it holds no credential, so there is
         // nothing to take over, and the complete step resolves the requestor by display name.
-        var subjectId = await FindEnrollingSubjectIdAsync(AccessRequestEnrolmentMatch(displayName));
+        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.AccessRequest(displayName));
 
         if (subjectId == null)
         {
-            var existingPending = await _dbContext.Subjects
-                .AnyAsync(s => s.ApprovalStatus == "Pending" && s.Name == displayName);
-
-            if (existingPending)
+            if ((await _subjects.ListPendingAccessRequestsAsync(HttpContext.RequestAborted)).Any(s => s.Name == displayName))
                 return Conflict(new ProblemDetails
                 {
                     Detail = "A pending access request with this name already exists",
@@ -940,27 +850,19 @@ public class PasskeyController : ControllerBase
                     Title = "Conflict",
                 });
 
-            var subject = new SubjectEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Name = displayName,
-                Username = username,
-                IsActive = false,
-                IsSystemSubject = false,
-                ApprovalStatus = "Pending",
-                AccessRequestMessage = request.Message?.Trim(),
-            };
-
-            _dbContext.Subjects.Add(subject);
-            subjectId = subject.Id;
+            subjectId = await _subjects.CreateAsync(
+                new NewSubject(
+                    displayName,
+                    Username: username,
+                    IsActive: false,
+                    ApprovalStatus: "Pending",
+                    AccessRequestMessage: request.Message?.Trim()),
+                HttpContext.RequestAborted);
         }
         else
         {
-            var subject = await _dbContext.Subjects.FirstAsync(s => s.Id == subjectId.Value);
-            subject.AccessRequestMessage = request.Message?.Trim();
+            await _subjects.SetAccessRequestMessageAsync(subjectId.Value, request.Message?.Trim(), HttpContext.RequestAborted);
         }
-
-        await _dbContext.SaveChangesAsync();
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
             subjectId.Value, username);
@@ -996,8 +898,7 @@ public class PasskeyController : ControllerBase
         [FromServices] IInAppNotificationService notificationService)
     {
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _dbContext.Tenants
-            .FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         if (tenant == null || !tenant.AllowAccessRequests)
             return NotFound();
@@ -1005,7 +906,7 @@ public class PasskeyController : ControllerBase
         var displayName = request.DisplayName?.Trim();
         var enrollingSubjectId = string.IsNullOrEmpty(displayName)
             ? null
-            : await FindEnrollingSubjectIdAsync(AccessRequestEnrolmentMatch(displayName));
+            : await FindEnrollingSubjectIdAsync(new EnrolmentMatch.AccessRequest(displayName));
 
         if (enrollingSubjectId == null)
             return Problem(detail: "Start the access request again", statusCode: 400, title: "Bad Request");
@@ -1016,21 +917,10 @@ public class PasskeyController : ControllerBase
                 request.AttestationResponseJson, request.ChallengeToken, tenant.Id,
                 expectedSubjectId: enrollingSubjectId.Value);
 
-            var message = await _dbContext.Subjects
-                .Where(s => s.Id == credResult.SubjectId)
-                .Select(s => s.AccessRequestMessage)
-                .FirstOrDefaultAsync();
+            var message = (await _subjects.GetAsync(credResult.SubjectId, HttpContext.RequestAborted))?.AccessRequestMessage;
 
-            // Pinned, not the request-scoped context: "Request access" is rendered on the login
-            // page of a share host too, where the scoped context is marked as a share and
-            // membership is denied. Resolved there, this would find no owners and the request would
-            // be filed with nobody notified.
-            await using var ownerCtx = await _dbContextFactory.CreateTenantPinnedContextAsync(
-                tenant.Id, HttpContext.RequestAborted);
-            var ownerIds = await ownerCtx.TenantMembers
-                .OwnersOf(tenant.Id)
-                .Select(tm => tm.SubjectId)
-                .ToListAsync();
+            // System-pinned in the repository: "Request access" is rendered on a share host's login page too.
+            var ownerIds = await _members.GetOwnerSubjectIdsForAccessRequestAsync(tenant.Id, HttpContext.RequestAborted);
 
             foreach (var ownerId in ownerIds)
             {
@@ -1104,29 +994,17 @@ public class PasskeyController : ControllerBase
         // rather than adding a second under the same username: the complete step resolves the
         // enrolling subject by username, and it holds no credential, so there is nothing to take
         // over.
-        var subjectId = await FindEnrollingSubjectIdAsync(InviteEnrolmentMatch(username));
+        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
 
         if (subjectId == null)
         {
-            var subject = new SubjectEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Name = displayName,
-                Username = username,
-                IsActive = true,
-                IsSystemSubject = false,
-            };
-
-            _dbContext.Subjects.Add(subject);
-            subjectId = subject.Id;
+            subjectId = await _subjects.CreateAsync(
+                new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
         }
         else
         {
-            var subject = await _dbContext.Subjects.FirstAsync(s => s.Id == subjectId.Value);
-            subject.Name = displayName;
+            await _subjects.UpdateAsync(subjectId.Value, new SubjectEdit(Name: displayName), HttpContext.RequestAborted);
         }
-
-        await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation(
             "Invite: enrolling subject {SubjectId} ({Username}) for invite acceptance",
@@ -1172,7 +1050,7 @@ public class PasskeyController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         var username = request.Username.Trim().ToLowerInvariant();
-        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(InviteEnrolmentMatch(username));
+        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
 
         if (enrollingSubjectId == null)
             return Problem(detail: "Start again from your invite link", statusCode: 400, title: "Bad Request");
@@ -1223,6 +1101,181 @@ public class PasskeyController : ControllerBase
         }
     }
 
+
+    /// <summary>
+    /// Generate passkey registration options for someone without an account who holds a tenant
+    /// creation invite. Checks the link, the subdomain and the username before creating the
+    /// subject the ceremony enrols; nothing is claimed until the complete step.
+    /// </summary>
+    [HttpPost("tenant-invite/options")]
+    [AllowAnonymous]
+    [DenyDemoSubject]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> TenantInviteOptions(
+        [FromBody] TenantInviteOptionsRequest request,
+        [FromServices] ITenantCreationInviteService tenantInvites)
+    {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName) || string.IsNullOrWhiteSpace(request.SiteName))
+            return Problem(detail: "Your name and the site name are required", statusCode: 400, title: "Bad Request");
+
+        var username = UsernameRules.Normalize(request.Username ?? "");
+        if (UsernameRules.Refusal(username) is { } usernameRefusal)
+            return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
+
+        var info = await tenantInvites.GetInfoAsync(request.Token, HttpContext.RequestAborted);
+        if (info.Refusal is { } inviteRefusal)
+            return this.ToResult(inviteRefusal);
+
+        var slugCheck = await _tenantService.ValidateSlugAsync(request.Slug, HttpContext.RequestAborted);
+        if (!slugCheck.IsValid)
+            return Problem(detail: slugCheck.Message, statusCode: 400, title: "Bad Request");
+
+        var displayName = request.DisplayName.Trim();
+
+        // As for member invites: a cancelled OS prompt leaves this subject behind, and the retry
+        // reuses it rather than adding a second under the same username.
+        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
+        if (subjectId == null)
+        {
+            subjectId = await _subjects.CreateAsync(
+                new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
+        }
+        else
+        {
+            await _subjects.UpdateAsync(subjectId.Value, new SubjectEdit(Name: displayName), HttpContext.RequestAborted);
+        }
+
+        var result = await _passkeyService.GenerateRegistrationOptionsAsync(subjectId.Value, username);
+
+        return Ok(new PasskeyOptionsResponse
+        {
+            Options = result.OptionsJson,
+            ChallengeToken = result.ChallengeToken,
+        });
+    }
+
+    /// <summary>
+    /// Complete passkey registration for a tenant creation invite: takes one use of the link,
+    /// verifies the attestation, creates the tenant with the new subject as its owner, and signs
+    /// them in.
+    /// </summary>
+    /// <remarks>
+    /// The use is taken before the ceremony and given back if it fails, so two people on a
+    /// single-use link cannot both finish. A tenant that cannot be created after the passkey is
+    /// stored leaves an account with no tenant, so the response still signs it in and names the
+    /// refusal: the page then redeems the link again for the signed-in account through
+    /// <c>TenantCreationInviteController.Redeem</c>. Passkey sign-in needs a tenant, so this
+    /// session is that account's way in.
+    /// </remarks>
+    [HttpPost("tenant-invite/complete")]
+    [AllowAnonymous]
+    [DenyDemoSubject]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(TenantInviteRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> TenantInviteComplete(
+        [FromBody] TenantInviteCompleteRequest request,
+        [FromServices] ITenantCreationInviteService tenantInvites)
+    {
+        if (string.IsNullOrEmpty(request.ChallengeToken) || string.IsNullOrWhiteSpace(request.Username))
+            return Problem(detail: "Username and challenge token are required", statusCode: 400, title: "Bad Request");
+
+        var username = UsernameRules.Normalize(request.Username);
+        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
+        if (enrollingSubjectId == null)
+            return Problem(detail: "Start again from your invite link", statusCode: 400, title: "Bad Request");
+
+        var slugCheck = await _tenantService.ValidateSlugAsync(request.Slug, HttpContext.RequestAborted);
+        if (!slugCheck.IsValid)
+            return Problem(detail: slugCheck.Message, statusCode: 400, title: "Bad Request");
+
+        var claim = await tenantInvites.ClaimAsync(request.Token, HttpContext.RequestAborted);
+        if (claim.Refusal is { } claimRefusal)
+            return this.ToResult(claimRefusal);
+
+        PasskeyCredentialResult? credResult = null;
+        try
+        {
+            credResult = await _passkeyService.CompleteRegistrationAsync(
+                request.AttestationResponseJson, request.ChallengeToken, Guid.Empty,
+                expectedSubjectId: enrollingSubjectId.Value);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Tenant invite passkey registration failed");
+        }
+        catch (Fido2VerificationException ex)
+        {
+            _logger.LogWarning(ex, "Tenant invite passkey attestation was refused");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Tenant invite passkey attestation could not be read");
+        }
+        finally
+        {
+            if (credResult is null)
+                await tenantInvites.ReleaseAsync(claim.Value);
+        }
+
+        if (credResult is null)
+            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
+
+        // The passkey is stored, so from here the account exists whatever happens to the tenant:
+        // a failure is reported beside the session rather than in place of it.
+        TenantInviteOutcome<TenantCreationInviteRedeemed> created;
+        try
+        {
+            created = await tenantInvites.CreateTenantAsync(
+                claim.Value, request.Slug, request.SiteName, credResult.SubjectId, username, CancellationToken.None);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Tenant invite: the passkey was stored but the tenant could not be created");
+            created = TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                TenantInviteRefusalCode.InvalidRequest, "We could not make your site.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Tenant invite: the passkey was stored but the tenant could not be created");
+            created = TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
+                TenantInviteRefusalCode.InvalidRequest, "We could not make your site.");
+        }
+
+        var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
+
+        var session = await _sessionService.IssueSessionAsync(
+            credResult.SubjectId,
+            new SessionContext(
+                DeviceDescription: "Invite Passkey",
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent: Request.Headers.UserAgent.ToString()));
+
+        Response.SetSessionCookies(session, _oidcOptions);
+
+        // The account exists and is signed in either way, so a refused tenant is reported beside
+        // the session rather than in place of it: the page shows the recovery codes, then lets the
+        // new owner pick another subdomain on the signed-in path.
+        return Ok(new TenantInviteRegistrationResponse
+        {
+            Success = true,
+            RecoveryCodes = recoveryCodes,
+            AccessToken = session.AccessToken,
+            RefreshToken = session.RefreshToken,
+            ExpiresIn = session.ExpiresInSeconds,
+            Tenant = created.Value,
+            TenantRefusal = created.Refusal?.Message,
+        });
+    }
 }
 
 #region Request/Response DTOs
@@ -1250,15 +1303,20 @@ public class PasskeyRegisterOptionsRequest
 }
 
 /// <summary>
-/// Request to complete a recovery-mode passkey registration. The username is re-checked against
-/// the recovery-mode conditions rather than trusted.
+/// A recovery code an administrator issued for a member with no sign-in method left.
 /// </summary>
-public class RecoveryModeCompleteRequest
+public class RecoveryModeRedeemRequest
 {
+    public string Code { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// A spent recovery-mode code. The account it names can now enrol one passkey.
+/// </summary>
+public class RecoveryModeRedeemResponse
+{
+    /// <summary>The account the code was issued for, for labelling the new passkey.</summary>
     public string Username { get; set; } = string.Empty;
-    public string AttestationResponseJson { get; set; } = string.Empty;
-    public string ChallengeToken { get; set; } = string.Empty;
-    public string? Label { get; set; }
 }
 
 /// <summary>
@@ -1438,4 +1496,39 @@ public class InviteCompleteRequest
     public string ChallengeToken { get; set; } = string.Empty;
 }
 
+public class TenantInviteOptionsRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string SiteName { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Request to complete a tenant creation invite. The username is re-resolved against the subject
+/// the options step created rather than trusted.
+/// </summary>
+public class TenantInviteCompleteRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string SiteName { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string AttestationResponseJson { get; set; } = string.Empty;
+    public string ChallengeToken { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// A completed tenant creation invite registration: the new account's session, and the tenant it
+/// owns or why that tenant could not be created.
+/// </summary>
+public class TenantInviteRegistrationResponse : PasskeyRegistrationResponse
+{
+    public TenantCreationInviteRedeemed? Tenant { get; set; }
+
+    public string? TenantRefusal { get; set; }
+}
+
 #endregion
+

@@ -1,36 +1,31 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Services.Identity;
 
 /// <inheritdoc cref="ITenantOwnerResolver"/>
-public class TenantOwnerResolver : ITenantOwnerResolver
+/// <remarks>
+/// The callers are background services (metadata publishing, compression-low detection,
+/// share-link notifications) with no ambient tenant, so the repository's tenant pin is what
+/// gives the read its reach.
+/// </remarks>
+public class TenantOwnerResolver(ITenantMembershipRepository members) : ITenantOwnerResolver
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
-
-    public TenantOwnerResolver(IDbContextFactory<NocturneDbContext> contextFactory)
-    {
-        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
-    }
-
     /// <inheritdoc />
     public async Task<string?> GetOwnerSubjectIdAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default)
     {
-        // Pinned to the tenant asked about: the callers are background services
-        // (metadata publishing, compression-low detection, share-link notifications) with no
-        // ambient tenant, so the context carries no pin of its own.
-        await using var context = await _contextFactory.CreateTenantPinnedContextAsync(
-            tenantId, cancellationToken);
+        var owners = await members.GetOwnerSubjectIdsAsync(tenantId, cancellationToken);
+        return owners.Count == 0 ? null : owners[0].ToString();
+    }
 
-        var ownerSubjectId = await context.TenantMembers.AsNoTracking()
-            .OwnersOf(tenantId)
-            .Select(tm => tm.SubjectId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return ownerSubjectId == Guid.Empty ? null : ownerSubjectId.ToString();
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetOwnerSubjectIdsAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var owners = await members.GetOwnerSubjectIdsAsync(tenantId, cancellationToken);
+        return owners.Distinct().Select(id => id.ToString()).ToList();
     }
 }

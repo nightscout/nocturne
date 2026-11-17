@@ -1,14 +1,15 @@
 <script lang="ts">
+    import { Artwork } from "water-ui";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import Play from "@lucide/svelte/icons/play";
-    import { DEMO_ENABLED } from "$lib/config";
-    import AuroraCanvas from "$lib/components/AuroraCanvas.svelte";
-    import AuroraPool from "$lib/components/AuroraPool.svelte";
-    import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
-    import { getCommunityData } from "$lib/data/portal";
-    import { DATA_SOURCES } from "$lib/data/connectors";
-    import { FlowField } from "$lib/utils/aurora-flow";
+    import { DEMO_ENABLED } from "#lib/config.js";
+    import AuroraCanvas from "#lib/components/AuroraCanvas.svelte";
+    import AuroraPool from "#lib/components/AuroraPool.svelte";
+    import FeaturePillars from "#lib/components/features/FeaturePillars.svelte";
+    import { getCommunityData } from "#lib/data/portal.js";
+    import { DATA_SOURCES } from "#lib/data/connectors.js";
+    import { FlowField } from "#lib/utils/aurora-flow.js";
 
     let textBlockEl: HTMLElement | null = $state(null);
     const flow = new FlowField();
@@ -142,10 +143,10 @@
 
 <section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border grid gap-10 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-16">
     <div class="flex flex-col gap-6">
-        <h2 class="text-section font-bold text-foreground m-0 text-balance">Two files and a domain name. That's the install.</h2>
+        <h2 class="text-section font-bold text-foreground m-0 text-balance">One script and a domain name. That's the install.</h2>
         <p class="text-lead text-muted-foreground m-0">
-            Download the compose file and its environment template, fill in your
-            domain and passwords, and start it. Caddy fetches the certificate.
+            Run the install script on a Linux server. It installs Docker, makes the
+            keys and passwords, and starts Nocturne. Caddy fetches the certificate.
         </p>
         <div class="flex flex-wrap gap-3">
             <Button href="/docs/installation" size="lg">
@@ -155,15 +156,20 @@
                 Read the docs
             </Button>
         </div>
+        <Artwork
+            artwork="key"
+            palette="ember"
+            motion="auto"
+            autoplay="once"
+            class="hidden size-[200px] shrink-0 lg:block xl:size-[240px]"
+        />
     </div>
 
     <pre
         class="m-0 p-6 bg-sunken border border-border rounded-lg font-mono text-sm leading-loose text-foreground/85 whitespace-pre overflow-x-auto self-start"
-><span class="text-muted-foreground">$</span> mkdir nocturne &amp;&amp; cd nocturne
-<span class="text-muted-foreground">$</span> curl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml
-<span class="text-muted-foreground">$</span> curl -L -o .env https://github.com/nightscout/nocturne/releases/latest/download/default.env.example
-<span class="text-muted-foreground">$</span> nano .env   <span class="text-muted-foreground"># BASE_DOMAIN, INSTANCE_KEY, four database passwords</span>
-<span class="text-muted-foreground">$</span> docker compose up -d</pre>
+><span class="text-muted-foreground">$</span> curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/install.sh -o install.sh
+<span class="text-muted-foreground">$</span> sudo BASE_DOMAIN=nocturne.example.com bash install.sh
+<span class="text-muted-foreground"># Docker, keys, passwords, certificates: the script does them</span></pre>
 </section>
 
 {#if communityData}

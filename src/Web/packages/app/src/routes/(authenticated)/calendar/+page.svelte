@@ -2,27 +2,30 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import * as Card from "$lib/components/ui/card";
-  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
-  import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
-  import { Button } from "$lib/components/ui/button";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "$lib/utils/formatting";
+  import { startQueries } from "#lib/utils/start-queries.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { getPunchCardData } from "#lib/api/generated/statistics.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { getActiveInstances, getDefinitions, getInstanceHistory } from "#lib/api/generated/trackers.generated.remote.js";
+  import type { TrackerInstanceDto, TrackerDefinitionDto } from "#lib/api/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { calendarShowTirPercent, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "#lib/utils/formatting.js";
   import {
     leadingBlankDays,
     weekdayLabels,
-  } from "$lib/components/calendar/calendar-date";
-  import CalendarSkeleton from "$lib/components/calendar/CalendarSkeleton.svelte";
-  import { TrackerCompletionDialog } from "$lib/components/trackers";
-  import CalendarHeader from "$lib/components/calendar/CalendarHeader.svelte";
-  import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
-  import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
+  } from "#lib/components/calendar/calendar-date.js";
+  import CalendarSkeleton from "#lib/components/calendar/CalendarSkeleton.svelte";
+  import { TrackerCompletionDialog } from "#lib/components/trackers/index.js";
+  import CalendarHeader from "#lib/components/calendar/CalendarHeader.svelte";
+  import CalendarMonthSummary from "#lib/components/calendar/CalendarMonthSummary.svelte";
+  import CalendarDayCell from "#lib/components/calendar/CalendarDayCell.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import { coachmark } from "@nocturne/coach";
-  import { groupBy, indexBy } from "$lib/utils/collections";
-  import { toDayString } from "$lib/utils/date-range";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { groupBy, indexBy } from "#lib/utils/collections.js";
+  import { toDayString } from "#lib/utils/date-range.js";
 
   // Infer DayStats type from the query result
   type PunchCardMonth = NonNullable<
@@ -51,16 +54,16 @@
   const today = new Date();
   let viewDate = $state(
     (() => {
-      const yearParam = page.url.searchParams.get("year");
-      const monthParam = page.url.searchParams.get("month");
-      if (yearParam && monthParam) {
-        const year = parseInt(yearParam);
-        const month = parseInt(monthParam) - 1; // URL uses 1-indexed month
-        if (!isNaN(year) && !isNaN(month) && month >= 0 && month <= 11) {
-          return new Date(year, month, 1);
-        }
+    const yearParam = page.url.searchParams.get("year");
+    const monthParam = page.url.searchParams.get("month");
+    if (yearParam && monthParam) {
+      const year = parseInt(yearParam);
+      const month = parseInt(monthParam) - 1; // URL uses 1-indexed month
+      if (!isNaN(year) && !isNaN(month) && month >= 0 && month <= 11) {
+        return new Date(year, month, 1);
       }
-      return today;
+    }
+    return today;
     })()
   );
   const currentMonth = $derived(viewDate.getMonth());
@@ -83,6 +86,9 @@
   const trackersQuery = getActiveInstances();
   const historyQuery = getInstanceHistory({ limit: 100 });
   const definitionsQuery = getDefinitions({});
+  // Only the first month's query needs starting with the others; the template reads every later one.
+  // svelte-ignore state_referenced_locally
+  startQueries(punchCardQuery, trackersQuery, historyQuery, definitionsQuery);
 
   // Tracker event types
   type TrackerEventType = "start" | "due" | "completed";
@@ -94,7 +100,7 @@
 
   // Navigation functions
   function updateUrl(date: Date) {
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     const today = new Date();
     const isCurrentMonth =
       today.getMonth() === date.getMonth() &&
@@ -108,7 +114,7 @@
       url.searchParams.set("month", String(date.getMonth() + 1)); // 1-indexed
     }
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its month params changed, already resolved
-    goto(url.toString(), { invalidateAll: true });
+    goto(url.toString(), { refreshAll: true });
   }
 
   function previousMonth() {
@@ -128,9 +134,8 @@
 
   const isCurrentMonth = $derived.by(() => {
     const today = new Date();
-    return (
-      today.getMonth() === currentMonth && today.getFullYear() === currentYear
-    );
+
+    return today.getMonth() === currentMonth && today.getFullYear() === currentYear;
   });
 
   const units = $derived(glucoseUnits.current);
@@ -181,11 +186,8 @@
     let currentDay = 1;
 
     for (let week = 0; week < 6; week++) {
-      const weekDays: (
-        | DayStats
-        | null
-        | { empty: true; dayNumber?: number }
-      )[] = [];
+      const weekDays: (DayStats | null | { empty: true; dayNumber?: number })[] = [];
+
       for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
         if (week === 0 && dayOfWeek < startDayOfWeek) {
           weekDays.push(null);
@@ -209,40 +211,14 @@
   });
 
   function handleDayClick(day: DayStats) {
-    goto(resolve(`/reports/day-in-review?date=${day.date}`));
+    goto(resolve(`reports/day-in-review?date=${day.date}`));
   }
 
-  const monthSummary = $derived.by(() => {
-    const currentData = punchCardQuery.current;
-    const monthData = currentData?.months?.find(
+  const monthSummary = $derived(
+    punchCardQuery.current?.months?.find(
       (m) => m.year === currentYear && m.month === currentMonth
-    );
-    const summary = monthData?.summary;
-    const days = monthData?.days ?? [];
-
-    // Each per-day average divides by the days that carry that kind of data.
-    // Dividing both by the days with CGM readings overstated TDD and carbs by the
-    // whole sensor-outage share of the month — a month with 10 outage days but
-    // complete pump data read about 50% high.
-    const withCarbs = days.filter((d) => (d.totalCarbs ?? 0) > 0);
-    const withInsulin = days.filter((d) => (d.totalInsulin ?? 0) > 0);
-    const sum = (
-      entries: typeof days,
-      read: (day: (typeof days)[number]) => number | undefined
-    ) => entries.reduce((total, day) => total + (read(day) ?? 0), 0);
-
-    return {
-      totalReadings: summary?.totalReadings ?? 0,
-      inRangePercent: summary?.inRangePercent ?? 0,
-      avgGlucose: summary?.avgGlucose ?? 0,
-      avgDailyCarbs:
-        withCarbs.length > 0 ? sum(withCarbs, (d) => d.totalCarbs) / withCarbs.length : 0,
-      tdd:
-        withInsulin.length > 0
-          ? sum(withInsulin, (d) => d.totalInsulin) / withInsulin.length
-          : 0,
-    };
-  });
+    )?.summary
+  );
 
   function getDefinition(
     instance: TrackerInstanceDto,
@@ -338,7 +314,7 @@
     completingDefinition = null;
     completingDefaultDate = null;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- reloads the current page's URL, already resolved
-    goto(page.url.toString(), { invalidateAll: true });
+    goto(page.url.toString(), { refreshAll: true });
   }
 </script>
 
@@ -349,14 +325,14 @@
     <Card.Root variant="destructive" class="max-w-md">
       <Card.Content class="py-8">
         <div class="text-center">
-          <p class="font-medium text-destructive">
-            Failed to load calendar data
-          </p>
+          <h1 class="font-medium text-destructive">
+            Could not load the calendar
+          </h1>
           <p class="text-sm text-muted-foreground mt-1">
             {remoteErrorMessage(punchCardError, "An error occurred")}
           </p>
           <Button class="mt-4" onclick={() => window.location.reload()}>
-            Try Again
+            Try again
           </Button>
         </div>
       </Card.Content>
@@ -366,7 +342,7 @@
   <div class="@container flex flex-col h-full">
     <div class="hidden print:block border-b pb-3 mb-4">
       <h1 class="text-xl font-bold">
-        Month-to-Month Report — {MONTH_NAMES[currentMonth]}
+        Month-to-month report: {MONTH_NAMES[currentMonth]}
         {currentYear}
       </h1>
       <p class="text-sm text-muted-foreground">
@@ -377,27 +353,26 @@
     <div
       class="sticky top-(--app-sticky-top,0px) z-10 transition-all duration-300 print:hidden"
       {@attach coachmark({
-        key: "feature-intro.calendar-views",
-        title: "View modes",
-        description:
-          "Switch between Time in Range and Profile views to see different patterns.",
+        ...coachFor("feature-intro.calendar-views"),
         completeOn: { event: "click" },
       })}
     >
       <CalendarHeader
-        {viewDate}
+        viewDate={viewDate}
         bind:viewMode
-        {isCurrentMonth}
-        {MONTH_NAMES}
-        {previousMonth}
-        {nextMonth}
-        {goToToday}
-        {setViewMode}
+        isCurrentMonth={isCurrentMonth}
+        MONTH_NAMES={MONTH_NAMES}
+        previousMonth={previousMonth}
+        nextMonth={nextMonth}
+        goToToday={goToToday}
+        setViewMode={setViewMode}
+        showTirPercent={calendarShowTirPercent.current}
+        setShowTirPercent={(show) => calendarShowTirPercent.current = show}
       />
     </div>
 
     {#if trackersLoading}
-      <div class="flex-1 p-3 sm:p-4">
+      <div class="flex-1 p-3 @md:p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex items-center justify-center">
             <div class="text-muted-foreground">Loading data...</div>
@@ -405,14 +380,21 @@
         </Card.Root>
       </div>
     {:else}
-      <div class="flex-1 p-3 sm:p-4">
+      <div class="flex-1 p-3 @md:p-4">
         <Card.Root class="h-full">
-          <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
+          <Card.Content class="p-2 @md:p-4 h-full flex flex-col">
             {#if trackersError}
               <!-- Trackers overlay the calendar; losing them must not take the glucose
                    calendar with them, which is served by a separate query. -->
               <p class="text-sm text-muted-foreground pb-2">
                 Tracker data is unavailable, so site and sensor changes are not shown.
+              </p>
+            {/if}
+            {#if punchCardQuery.current?.timeZoneUnavailableReason}
+              <p class="text-sm text-muted-foreground">
+                <TimeZoneNote reason={punchCardQuery.current.timeZoneUnavailableReason}>
+                  This report cannot show each day's time in range, glucose and insulin.
+                </TimeZoneNote>
               </p>
             {/if}
             <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
@@ -429,40 +411,42 @@
               <div
                 class="flex-1 grid grid-rows-6 gap-1 min-w-[28rem] @md:min-w-0"
                 {@attach coachmark({
-                  key: "feature-intro.calendar-trackers",
-                  title: "Tracker events",
-                  description:
-                    "Tracker events appear on your calendar \u2014 colored by urgency.",
+                  ...coachFor("feature-intro.calendar-trackers"),
                 })}
               >
                 {#each calendarGrid as week, idx (idx)}
                   <div class="grid grid-cols-7 gap-1">
                     {#each week as day, i (i)}
                       <CalendarDayCell
-                      {day}
-                      {viewMode}
-                      {currentYear}
-                      {currentMonth}
-                      {trackerEvents}
-                      {definitions}
-                      bind:openPopoverId
-                      {units}
-                      {unitLabel}
-                      {handleDayClick}
-                      {getDefinition}
-                      {getTrackerLevel}
-                      {getTrackerTone}
-                      {formatTrackerStartTime}
-                      {formatTrackerAge}
-                      {openCompletionDialog}
-                    />
-                  {/each}
-                </div>
-              {/each}
+                        day={day}
+                        viewMode={viewMode}
+                        showTirPercent={calendarShowTirPercent.current}
+                        currentYear={currentYear}
+                        currentMonth={currentMonth}
+                        trackerEvents={trackerEvents}
+                        definitions={definitions}
+                        bind:openPopoverId
+                        units={units}
+                        unitLabel={unitLabel}
+                        handleDayClick={handleDayClick}
+                        getDefinition={getDefinition}
+                        getTrackerLevel={getTrackerLevel}
+                        getTrackerTone={getTrackerTone}
+                        formatTrackerStartTime={formatTrackerStartTime}
+                        formatTrackerAge={formatTrackerAge}
+                        openCompletionDialog={openCompletionDialog}
+                      />
+                    {/each}
+                  </div>
+                {/each}
               </div>
             </div>
 
-            <CalendarMonthSummary {monthSummary} {units} {unitLabel} />
+            <CalendarMonthSummary
+              monthSummary={monthSummary}
+              units={units}
+              unitLabel={unitLabel}
+            />
           </Card.Content>
         </Card.Root>
       </div>
@@ -476,7 +460,6 @@
   instanceName={completingInstance?.definitionName ?? "tracker"}
   category={completingDefinition?.category}
   definitionId={completingInstance?.definitionId}
-  completionEventType={completingDefinition?.completionEventType}
   defaultCompletedAt={completingDefaultDate ?? undefined}
   onClose={handleCompletionDialogClose}
   onComplete={handleCompletionComplete}

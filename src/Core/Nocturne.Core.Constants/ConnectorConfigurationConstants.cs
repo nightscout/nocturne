@@ -505,11 +505,6 @@ public static class ConnectorTimeouts
         public static readonly TimeSpan ThirdRetry = TimeSpan.FromSeconds(30);
 
         /// <summary>
-        /// Delay applied when the upstream API returns HTTP 429 (Too Many Requests).
-        /// </summary>
-        public static readonly TimeSpan RateLimitDelay = TimeSpan.FromSeconds(1);
-
-        /// <summary>
         /// Delay applied after an authentication failure before re-authenticating.
         /// </summary>
         /// <seealso cref="ConnectorHttpStatus.AuthenticationStatusCodes"/>
@@ -581,7 +576,6 @@ public static class ConnectorTimeouts
     /// <summary>
     /// WebSocket reconnection and shutdown timing constants.
     /// </summary>
-    /// <seealso cref="WebSocketEvents"/>
     public static class WebSocket
     {
         /// <summary>

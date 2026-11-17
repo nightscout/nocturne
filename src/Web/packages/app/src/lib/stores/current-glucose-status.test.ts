@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
+import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
 import { currentGlucoseStatus } from "./current-glucose-status.svelte";
 
 const summary = vi.hoisted(() => ({
@@ -8,7 +8,7 @@ const summary = vi.hoisted(() => ({
     | undefined,
 }));
 
-vi.mock("$api/generated/summaries.generated.remote", () => ({
+vi.mock("#lib/api/generated/summaries.generated.remote.js", () => ({
   getSummary: () => summary,
 }));
 

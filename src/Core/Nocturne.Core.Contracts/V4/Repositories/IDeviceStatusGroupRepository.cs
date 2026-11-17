@@ -17,10 +17,11 @@ public interface IDeviceStatusGroupRepository
 {
     /// <summary>
     /// A page of statuses whose anchor falls in the inclusive window and, when given, has
-    /// <paramref name="device"/>, newest first.
+    /// <paramref name="device"/>, newest first or, when <paramref name="descending"/> is
+    /// <c>false</c>, oldest first with <paramref name="offset"/> counted from the oldest.
     /// </summary>
     Task<IReadOnlyList<DeviceStatusGroup>> GetAsync(
-        DateTime? from, DateTime? to, string? device, int limit, int offset, CancellationToken ct = default);
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default);
 
     /// <summary>The number of statuses <see cref="GetAsync"/> pages through.</summary>
     Task<long> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);

@@ -47,21 +47,21 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         _contextA = _db.CreateContext(TenantA);
         _contextB = _db.CreateContext(TenantB);
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var audit = new Mock<IAuditContext>().Object;
 
         _tempBasalsA = new TempBasalRepository(
-            new TestTenantDbContextFactory(_contextA), dedup, audit, NullLogger<TempBasalRepository>.Instance);
+            new TestNocturneDbContextFactory(_contextA), dedup, audit, NullLogger<TempBasalRepository>.Instance);
         _tempBasalsB = new TempBasalRepository(
-            new TestTenantDbContextFactory(_contextB), dedup, audit, NullLogger<TempBasalRepository>.Instance);
+            new TestNocturneDbContextFactory(_contextB), dedup, audit, NullLogger<TempBasalRepository>.Instance);
         _devicesA = new PatientDeviceRepository(
-            new TestTenantDbContextFactory(_contextA), NullLogger<PatientDeviceRepository>.Instance);
+            new TestNocturneDbContextFactory(_contextA), NullLogger<PatientDeviceRepository>.Instance);
         _devicesB = new PatientDeviceRepository(
-            new TestTenantDbContextFactory(_contextB), NullLogger<PatientDeviceRepository>.Instance);
+            new TestNocturneDbContextFactory(_contextB), NullLogger<PatientDeviceRepository>.Instance);
         _basalInjectionsA = new BasalInjectionRepository(
-            new TestTenantDbContextFactory(_contextA), audit, NullLogger<BasalInjectionRepository>.Instance);
+            new TestNocturneDbContextFactory(_contextA), audit, NullLogger<BasalInjectionRepository>.Instance);
         _basalInjectionsB = new BasalInjectionRepository(
-            new TestTenantDbContextFactory(_contextB), audit, NullLogger<BasalInjectionRepository>.Instance);
+            new TestNocturneDbContextFactory(_contextB), audit, NullLogger<BasalInjectionRepository>.Instance);
     }
 
     public void Dispose()

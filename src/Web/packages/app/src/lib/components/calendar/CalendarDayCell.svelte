@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { cn } from "$lib/utils";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import * as Popover from "$lib/components/ui/popover";
-  import { TrackerCategoryIcon } from "$lib/components/icons";
-  import DayStackedBar from "$lib/components/calendar/DayStackedBar.svelte";
-  import DayGlucoseProfile from "$lib/components/calendar/DayGlucoseProfile.svelte";
-  import TrackerPopoverContent from "$lib/components/calendar/TrackerPopoverContent.svelte";
-  import { TrackerCategory } from "$api";
-  import type { TrackerInstanceDto, TrackerDefinitionDto, PunchCardDay } from "$api";
+  import { cn } from "#lib/utils/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { TrackerCategoryIcon } from "#lib/components/icons/index.js";
+  import DayStackedBar from "#lib/components/calendar/DayStackedBar.svelte";
+  import DayGlucoseProfile from "#lib/components/calendar/DayGlucoseProfile.svelte";
+  import TrackerPopoverContent from "#lib/components/calendar/TrackerPopoverContent.svelte";
+  import { TrackerCategory } from "#lib/api/index.js";
+  import type { TrackerInstanceDto, TrackerDefinitionDto, PunchCardDay } from "#lib/api/index.js";
 
   /** A calendar grid slot: a day with data, a numbered day without, or padding. */
   type CalendarSlot = PunchCardDay | null | { empty: true; dayNumber?: number };
@@ -17,14 +17,15 @@
     eventType: "start" | "due" | "completed";
     date: string;
   }
-  import { formatGlucoseValue, formatLocale } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
-  import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
+  import { formatGlucoseValue, formatLocale } from "#lib/utils/formatting.js";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
+  import { formatCalendarDate, getCalendarDayNumber } from "#lib/components/calendar/calendar-date.js";
 
 
   let {
     day,
     viewMode,
+    showTirPercent,
     currentYear,
     currentMonth,
     trackerEvents,
@@ -42,6 +43,7 @@
   }: {
     day: CalendarSlot;
     viewMode: "tir" | "profile";
+    showTirPercent: boolean;
     currentYear: number;
     currentMonth: number;
     trackerEvents: Map<string, CalendarTrackerEvent[]>;
@@ -95,11 +97,16 @@
     return {
       source: day,
       date: day.date,
-      timestamp: day.timestamp,
+      day:
+        day.timestamp !== undefined && day.endTimestamp !== undefined
+          ? { startMills: day.timestamp, endMills: day.endTimestamp }
+          : undefined,
       totalReadings: day.totalReadings ?? 0,
+      veryLowPercent: day.veryLowPercent ?? 0,
       lowPercent: day.lowPercent ?? 0,
       inRangePercent: day.inRangePercent ?? 0,
       highPercent: day.highPercent ?? 0,
+      veryHighPercent: day.veryHighPercent ?? 0,
       totalCarbs: day.totalCarbs ?? 0,
       totalBolus: day.totalBolus ?? 0,
       totalBasal: day.totalBasal ?? 0,
@@ -172,17 +179,27 @@
               class="absolute inset-0 p-2 pt-6"
             >
               <DayStackedBar
+                veryLowPercent={stats.veryLowPercent}
                 lowPercent={stats.lowPercent}
                 inRangePercent={stats.inRangePercent}
                 highPercent={stats.highPercent}
+                veryHighPercent={stats.veryHighPercent}
                 onclick={() => handleDayClick(stats.source)}
               />
+              {#if showTirPercent}
+                <span
+                  data-testid="tir-percent"
+                  class="pointer-events-none absolute inset-x-0 top-1/2 mx-auto w-fit -translate-y-1/2 rounded bg-background/80 px-1 text-xs font-semibold text-foreground tabular-nums"
+                >
+                  {Math.round(stats.inRangePercent)}%
+                </span>
+              {/if}
             </div>
           {:else}
             <div {...props} class="absolute inset-0">
               <DayGlucoseProfile
                 entries={stats.entries}
-                dayStartMills={stats.timestamp}
+                day={stats.day}
                 onclick={() => handleDayClick(stats.source)}
               />
             </div>
@@ -203,8 +220,18 @@
           </div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-glucose-very-high"></span>
+              <span class="text-muted-foreground">Very high:</span>
+            </div>
+            <span class="font-medium">{stats.veryHighPercent.toFixed(1)}%</span>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-glucose-high"></span>
+              <span class="text-muted-foreground">High:</span>
+            </div>
+            <span class="font-medium">{stats.highPercent.toFixed(1)}%</span>
+            <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-in-range"></span>
-              <span class="text-muted-foreground">In Range:</span>
+              <span class="text-muted-foreground">In range:</span>
             </div>
             <span class="font-medium">{stats.inRangePercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
@@ -213,10 +240,10 @@
             </div>
             <span class="font-medium">{stats.lowPercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-glucose-high"></span>
-              <span class="text-muted-foreground">High:</span>
+              <span class="w-2 h-2 rounded-full bg-glucose-very-low"></span>
+              <span class="text-muted-foreground">Very low:</span>
             </div>
-            <span class="font-medium">{stats.highPercent.toFixed(1)}%</span>
+            <span class="font-medium">{stats.veryLowPercent.toFixed(1)}%</span>
           </div>
           <div class="border-t pt-1.5 mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <span class="text-muted-foreground">Carbs:</span>
@@ -225,13 +252,13 @@
             <span class="font-medium">{stats.totalBolus.toFixed(1)}U</span>
             <span class="text-muted-foreground">Basal:</span>
             <span class="font-medium">{stats.totalBasal.toFixed(1)}U</span>
-            <span class="text-muted-foreground">Avg Glucose:</span>
+            <span class="text-muted-foreground">Avg glucose:</span>
             <span class="font-medium">
               {formatGlucoseValue(stats.averageGlucose, units)} {unitLabel}
             </span>
           </div>
           <div class="text-xs text-muted-foreground italic pt-1">
-            Click to view full day report
+            Select to view full day report
           </div>
         </div>
       </Tooltip.Content>

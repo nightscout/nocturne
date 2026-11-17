@@ -14,6 +14,7 @@ namespace Nocturne.API.Services.Compatibility;
 public class DiscrepancyMaintenanceService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly TimeProvider _time;
     private readonly ILogger<DiscrepancyMaintenanceService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromHours(6); // Run every 6 hours
     private readonly int _retentionDays = 30; // Keep data for 30 days by default
@@ -22,13 +23,16 @@ public class DiscrepancyMaintenanceService : BackgroundService
     /// Initializes a new instance of the DiscrepancyMaintenanceService class
     /// </summary>
     /// <param name="serviceProvider">Service provider for creating scoped services</param>
+    /// <param name="timeProvider">Clock the retention cutoff and metrics window are measured from</param>
     /// <param name="logger">Logger instance for this service</param>
     public DiscrepancyMaintenanceService(
         IServiceProvider serviceProvider,
+        TimeProvider timeProvider,
         ILogger<DiscrepancyMaintenanceService> logger
     )
     {
         _serviceProvider = serviceProvider;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -72,7 +76,7 @@ public class DiscrepancyMaintenanceService : BackgroundService
         try
         {
             // Clean up old data
-            var cutoffDate = DateTimeOffset.UtcNow.AddDays(-_retentionDays);
+            var cutoffDate = _time.GetUtcNow().AddDays(-_retentionDays);
             var deletedCount = await repository.DeleteOldAnalysesAsync(
                 cutoffDate,
                 cancellationToken
@@ -88,7 +92,7 @@ public class DiscrepancyMaintenanceService : BackgroundService
             }
 
             // Get current metrics for alerting
-            var last24Hours = DateTimeOffset.UtcNow.AddHours(-24);
+            var last24Hours = _time.GetUtcNow().AddHours(-24);
             var metrics = await repository.GetCompatibilityMetricsAsync(
                 last24Hours,
                 null,

@@ -1,4 +1,4 @@
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 
@@ -21,7 +21,6 @@ public interface IChartDataService
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
     /// <param name="intervalMinutes">Interval for IOB/COB series sampling (1-60)</param>
     /// <param name="includeHealthSeries">Whether to load the heart-rate and step series; when false both are empty</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Fully populated dashboard chart data DTO</returns>
     Task<DashboardChartData> GetDashboardChartDataAsync(
         long startTime,
@@ -37,9 +36,21 @@ public interface IChartDataService
     /// </summary>
     /// <param name="startTime">Start of the time range in Unix milliseconds</param>
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Basal delivery points covering the requested window</returns>
     Task<List<BasalPoint>> GetBasalSeriesAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Build the basal delivery spans overlapping a time range, as the dashboard chart draws them,
+    /// without running the full IOB/COB compute pipeline.
+    /// </summary>
+    /// <param name="startTime">Start of the time range in Unix milliseconds</param>
+    /// <param name="endTime">End of the time range in Unix milliseconds</param>
+    /// <returns>Unclipped delivery spans: one that began before the range is returned whole</returns>
+    Task<List<BasalDeliverySpanDto>> GetBasalDeliverySpansAsync(
         long startTime,
         long endTime,
         CancellationToken cancellationToken = default

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SocketIOClient;
 using SocketIOClient.Common;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Xt;
 
@@ -38,13 +39,13 @@ public class GlookoXtSocketDataClient(ILogger<GlookoXtSocketDataClient> logger) 
             timeout.CancelAfter(GlookoXtConstants.RequestTimeout);
             await socket.ConnectAsync(timeout.Token);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
         {
             socket.Dispose();
             throw new GlookoXtAuthenticationException(
                 "Glooko XT did not accept the connection within the time allowed.");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, ct))
         {
             socket.Dispose();
             throw new GlookoXtAuthenticationException(
@@ -200,7 +201,7 @@ public class GlookoXtSocketDataClient(ILogger<GlookoXtSocketDataClient> logger) 
 
                 return await ack.Task;
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
             {
                 throw new TimeoutException(
                     $"Glooko XT did not answer {eventName} within {GlookoXtConstants.RequestTimeout.TotalSeconds:0} seconds.");

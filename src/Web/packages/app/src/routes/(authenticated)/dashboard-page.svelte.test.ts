@@ -2,36 +2,49 @@ import { render } from "vitest-browser-svelte";
 import type { ComponentProps } from "svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import {
   WidgetId,
   WidgetPlacement,
   type FeatureSettings,
   type WidgetConfig,
-} from "$lib/api/generated/nocturne-api-client";
-import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
-import { transformChartData } from "$lib/utils/chart-data-transform";
+} from "#lib/api/generated/nocturne-api-client.js";
+import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
 
 // The dashboard's own sections are stood down to markers, one testid each: what
 // is under test is which of them the page renders, not what any of them shows.
-vi.mock("$lib/components/dashboard", async () => ({
+vi.mock("#lib/components/dashboard/index.js", async () => ({
   CurrentBGDisplay: (
-    await import("$lib/test-stubs/CurrentBgDisplay.test-stub.svelte")
+    await import("#lib/test-stubs/CurrentBgDisplay.test-stub.svelte")
   ).default,
   GlucoseChartCard: (
-    await import("$lib/test-stubs/GlucoseChartCard.test-stub.svelte")
+    await import("#lib/test-stubs/GlucoseChartCard.test-stub.svelte")
   ).default,
   RecentEntriesCard: (
-    await import("$lib/test-stubs/RecentEntriesCard.test-stub.svelte")
+    await import("#lib/test-stubs/RecentEntriesCard.test-stub.svelte")
   ).default,
   RecentTreatmentsCard: (
-    await import("$lib/test-stubs/RecentTreatmentsCard.test-stub.svelte")
+    await import("#lib/test-stubs/RecentTreatmentsCard.test-stub.svelte")
   ).default,
-  WidgetGrid: (await import("$lib/test-stubs/WidgetGrid.test-stub.svelte"))
+  WidgetGrid: (await import("#lib/test-stubs/WidgetGrid.test-stub.svelte"))
     .default,
 }));
 
-vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
+const uiSettings = vi.hoisted(() => ({
+  features: {} as FeatureSettings,
+  predictionEnabled: undefined as boolean | undefined,
+}));
+
+vi.mock("#lib/api/ui-settings.remote.js", () => ({
+  getUiSettings: () =>
+    remoteQuery(() => ({
+      features: uiSettings.features,
+      algorithm: { prediction: { enabled: uiSettings.predictionEnabled } },
+    })),
+}));
+
+vi.mock("#lib/api/generated/connectorStatus.generated.remote.js", () => ({
   getStatus: () => remoteQuery(() => []),
 }));
 
@@ -54,8 +67,11 @@ function mainSection(id: WidgetId, enabled: boolean): WidgetConfig {
 const pageData: HarnessProps["data"] = {
   tenantless: false,
   isAuthenticated: true,
+  hasAccount: true,
   isShareHost: false,
   canViewRealtimeData: false,
+  showBackupSignInPrompt: false,
+  tenantTargets: [],
   isDemo: false,
   isGuestSession: false,
   isPlatformAdmin: false,
@@ -69,9 +85,12 @@ const pageData: HarnessProps["data"] = {
   effectivePermissions: [],
   limitTo24Hours: false,
   refusedAsDemoSubject: false,
+  onboardingComplete: true,
+  pillRows: { desktop: 1, mobile: 1 },
   displayPreferences: [],
   displayLanguage: "en",
   serverPreferences: null,
+  tenantPreferences: null,
   user: {
     subjectId: "subject-1",
     name: "Test User",
@@ -81,6 +100,9 @@ const pageData: HarnessProps["data"] = {
   initialChartData: transformChartData({
     glucoseData: [{ time: Date.now(), sgv: 120 }],
   }),
+  plotSnapshot: null,
+  initialUiSettings: null,
+  initialPredictionsAvailable: null,
   initialWindowStart: Date.now() - 6 * 60 * 60 * 1000,
   streamed: { historicalChartData: Promise.resolve(null) },
 };
@@ -96,16 +118,22 @@ function renderDashboard(
     data = pageData,
     withRealtimeStore = false,
     currentReadingLoaded = false,
-  }: { data?: HarnessProps["data"]; withRealtimeStore?: boolean; currentReadingLoaded?: boolean } = {}
+  }: {
+    data?: HarnessProps["data"];
+    withRealtimeStore?: boolean;
+    currentReadingLoaded?: boolean;
+  } = {}
 ) {
+  uiSettings.features = settings;
   render(DashboardPageHarness, {
-    props: { features: settings, data, withRealtimeStore, currentReadingLoaded },
+    props: { data, withRealtimeStore, currentReadingLoaded },
   });
 }
 
 describe("dashboard page", () => {
   beforeEach(() => {
     dashboardTopWidgets.hydrate(PINNED);
+    uiSettings.predictionEnabled = undefined;
   });
 
   it("keeps the user's top widgets when the tenant turns the Statistics section off", async () => {
@@ -160,7 +188,9 @@ describe("dashboard page", () => {
       withRealtimeStore: true,
     });
 
-    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "true");
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-defer-drawing", "true");
   });
 
   it("draws the chart's plot once the current reading has landed, ahead of the rest of the starting data", async () => {
@@ -170,12 +200,33 @@ describe("dashboard page", () => {
       currentReadingLoaded: true,
     });
 
-    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-defer-drawing", "false");
   });
 
   it("draws the chart's plot straight away for a viewer without realtime data", async () => {
     renderDashboard(features(), { withRealtimeStore: true });
 
-    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-defer-drawing", "false");
+  });
+
+  it("shows predictions on the chart by default", async () => {
+    renderDashboard(features());
+
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-show-predictions", "true");
+  });
+
+  it("hides predictions on the chart when the algorithm settings turn them off", async () => {
+    uiSettings.predictionEnabled = false;
+    renderDashboard(features());
+
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-show-predictions", "false");
   });
 });

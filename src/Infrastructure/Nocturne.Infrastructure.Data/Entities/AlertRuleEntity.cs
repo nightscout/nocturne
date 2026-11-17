@@ -114,6 +114,30 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string? ManagedBy { get; set; }
 
     /// <summary>
+    /// Which of the setup hub's starter rules this is, or null for any other rule. Unlike
+    /// <see cref="ManagedBy"/> it leaves the rule wholly the user's.
+    /// </summary>
+    [Column("starter_kind")]
+    [MaxLength(16)]
+    public StarterAlertKind? StarterKind { get; set; }
+
+    /// <summary>
+    /// Why the rule needs its owner to look at it, one of <see cref="AlertRuleReviewReasons"/>:
+    /// a data repair changed or disabled it. Null otherwise; an edit clears it.
+    /// </summary>
+    [Column("review_reason")]
+    [MaxLength(64)]
+    public string? ReviewReason { get; set; }
+
+    /// <summary>
+    /// The rule's condition, auto-resolve, severity and enablement as they were before a data
+    /// repair changed them (JSON object), so a wrong conversion can be undone by hand. Null for a
+    /// rule no repair touched. Kept after an edit.
+    /// </summary>
+    [Column("pre_repair", TypeName = "jsonb")]
+    public string? PreRepair { get; set; }
+
+    /// <summary>
     /// Order in which the rule should be processed or displayed
     /// </summary>
     [Column("sort_order")]

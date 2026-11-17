@@ -16,7 +16,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// Reflection guard asserting that every MVC controller action carries an explicit authorization
 /// decision. An action passes when it (or its controller) has an <see cref="IAuthorizeData"/>
 /// attribute (<c>[Authorize]</c> and friends), a Nocturne authorization filter
-/// (<c>[RequireAdmin]</c>, <c>[RequireScope]</c>, <c>[RequireInstanceKeyAuth]</c>, …), or an
+/// (<c>[RequireSuperuser]</c>, <c>[RequireScope]</c>, <c>[RequireInstanceKeyAuth]</c>, …), or an
 /// explicit <c>[AllowAnonymous]</c>.
 /// </summary>
 /// <remarks>
@@ -57,11 +57,11 @@ public class ControllerAuthorizationCoverageTests
             // the share subject is unauthenticated, so [Authorize] would 401 every public share.
             ["Nocturne.API.Controllers.V4.Identity.MyPermissionsController"] = "returns the caller's own grant; fallback rejects an empty trie",
 
-            // The appearance the share renders with, for the anonymous share subject [Authorize]
-            // would 401. It answers only when the request arrived over a share token, and only
+            // The appearance a share or guest renders with, for the anonymous share subject [Authorize]
+            // would 401. It answers only a share token or a guest session, and only
             // with presentation fields — no identity, and nothing the viewer's own page does not
             // already display.
-            ["Nocturne.API.Controllers.V4.Identity.ShareAppearanceController"] = "presentation-only, share-host-only; fallback rejects an empty trie",
+            ["Nocturne.API.Controllers.V4.Identity.TenantAppearanceController"] = "presentation-only, share and guest only; fallback rejects an empty trie",
 
             // ── V3 status and lastModified ──────────────────────────────────────────────────
             // A share host reaches these with its public scopes and no authenticated user, so
@@ -79,11 +79,14 @@ public class ControllerAuthorizationCoverageTests
             // ── V4 tracker reads ─────────────────────────────────────────────────────────────
             // GET definitions/instances lean on the fallback policy: a bare unauthenticated request
             // on a tenant subdomain has an empty trie and is rejected, so a private tenant exposes
-            // no tracker anonymously. The actions still filter by owner/visibility in
-            // CanViewTracker. Tracker tables are not in ShareDataCategories, so a public-share
-            // subject (admitted by the fallback) reads nothing via the share RLS policy. The write
+            // no tracker anonymously. A public share or guest link (admitted by the fallback)
+            // reads an empty list: the actions refuse it in ReadsNoTrackers, and the share RLS
+            // policy hides the tracker tables, which are not in ShareDataCategories. The write
             // actions carry [Authorize] + [RequireDeclaredWriteScope] and are gated explicitly.
             ["Nocturne.API.Controllers.V4.Monitoring.TrackersController"] = "tracker reads gated by fallback trie (rejects bare anonymous); not share-governed",
+            // The legacy-age fallbacks read as the tracker reads above, empty for a share or guest
+            // link (TrackerReadAccess) and for a caller without devices.read.
+            ["Nocturne.API.Controllers.V4.Monitoring.TrackerLegacyFallbacksController"] = "tracker reads gated by fallback trie (rejects bare anonymous); not share-governed",
 
             // ── Legacy Nightscout v1 surfaces (authorize via OAuth scope in the fallback trie) ──
             // v1 endpoints authenticate via the api-secret / token trie and are gated by the

@@ -1,6 +1,8 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
@@ -8,13 +10,14 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
 /// <summary>
 /// Behaviour of the cross-tenant fan-out engine <see cref="ConnectorCursorResetService"/>:
 /// <list type="bullet">
-///   <item>it switches the tenant context to the <em>target</em> tenant (not the caller's);</item>
+///   <item>it runs only in a scope opened on the <em>target</em> tenant, and leaves the scope there;</item>
 ///   <item>it fans out across <em>every</em> connector that tenant has configured;</item>
 ///   <item>each per-connector sync forces a full re-pull (<see cref="SyncRequest.To"/> is set);</item>
 ///   <item>it reports incremental progress via <see cref="IConnectorResetProgress"/>.</item>
@@ -73,13 +76,12 @@ public class ConnectorCursorResetServiceTests
             .Callback<string, SyncRequest, CancellationToken>((id, r, _) => captured.Add((id, r)))
             .ReturnsAsync(new SyncResult { Success = true });
 
-        TenantContext? setContext = null;
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(a => a.SetTenant(It.IsAny<TenantContext>()))
-            .Callback<TenantContext>(c => setContext = c);
+        var tenantAccessor = ScopeOn(_targetTenantId);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
 
         var service = new ConnectorCursorResetService(
-            db, syncService.Object, tenantAccessor.Object,
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, tenantAccessor.Object,
+            time,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -92,15 +94,41 @@ public class ConnectorCursorResetServiceTests
         // Fans out across BOTH configured connectors.
         captured.Select(c => c.ConnectorId).Should().BeEquivalentTo(["nightscout", "dexcom"]);
 
-        // Every request forces a full re-pull (To set), passing through the requested filters.
-        captured.Should().OnlyContain(c => c.Request.To != null);
+        // Every request forces a full re-pull (To is now), passing through the requested filters.
+        captured.Should().OnlyContain(c => c.Request.To == time.GetUtcNow().UtcDateTime);
         captured.Should().OnlyContain(c => c.Request.From == from);
         captured.Should().OnlyContain(c => c.Request.DataTypes.Contains(SyncDataType.Boluses));
 
-        // The tenant context is switched to the TARGET tenant on the admin's behalf.
-        setContext.Should().NotBeNull();
-        setContext!.TenantId.Should().Be(_targetTenantId);
-        setContext.Slug.Should().Be("erik");
+        // The scope was opened on the target tenant by the caller; the engine leaves it there.
+        tenantAccessor.Verify(a => a.SetTenant(It.IsAny<TenantContext>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResetTenantCursors_InAScopeOnAnotherTenant_Throws_AndDoesNotSync()
+    {
+        var db = CreateDb();
+        var syncService = new Mock<IConnectorSyncService>();
+        var service = new ConnectorCursorResetService(
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, ScopeOn(Guid.CreateVersion7()).Object,
+            TimeProvider.System,
+            Mock.Of<ILogger<ConnectorCursorResetService>>());
+
+        var act = () => service.ResetTenantCursorsAsync(
+            _targetTenantId, from: null, dataTypes: null, progress: null, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        syncService.Verify(
+            s => s.TriggerSyncAsync(It.IsAny<string>(), It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private static Mock<ITenantAccessor> ScopeOn(Guid tenantId)
+    {
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.SetupGet(a => a.Context).Returns(new TenantContext(tenantId, "erik", "Erik", true, false));
+        accessor.SetupGet(a => a.TenantId).Returns(tenantId);
+        accessor.SetupGet(a => a.IsResolved).Returns(true);
+        return accessor;
     }
 
     [Fact]
@@ -109,7 +137,8 @@ public class ConnectorCursorResetServiceTests
         var db = CreateDb();
         var syncService = new Mock<IConnectorSyncService>();
         var service = new ConnectorCursorResetService(
-            db, syncService.Object, Mock.Of<ITenantAccessor>(),
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, Mock.Of<ITenantAccessor>(),
+            TimeProvider.System,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var result = await service.ResetTenantCursorsAsync(
@@ -134,7 +163,8 @@ public class ConnectorCursorResetServiceTests
             .ThrowsAsync(new InvalidOperationException("nope"));
 
         var service = new ConnectorCursorResetService(
-            db, syncService.Object, Mock.Of<ITenantAccessor>(),
+            new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), syncService.Object, ScopeOn(_targetTenantId).Object,
+            TimeProvider.System,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var progress = new RecordingProgress();

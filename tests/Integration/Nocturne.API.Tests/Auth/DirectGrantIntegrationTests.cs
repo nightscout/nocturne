@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Covers token creation, authentication via noc_ tokens, scope enforcement, revocation, and
 /// verification that the list endpoint never leaks plaintext tokens.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class DirectGrantIntegrationTests : ApiIntegrationTestBase
 {
@@ -42,6 +43,7 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "DirectGrant Test User");
+        _accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
 
         Log($"Seeded tenant {_tenantId}, subject {_subjectId}");
     }

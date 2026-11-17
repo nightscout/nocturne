@@ -40,6 +40,7 @@ public class OidcAuthServiceLinkTests
             _httpFactory.Object,
             _tenantMemberService.Object,
             new Mock<IMemberInviteService>().Object,
+            new Mock<ITotpService>().Object,
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

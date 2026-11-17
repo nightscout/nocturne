@@ -312,6 +312,10 @@ static int64_t NowMsEpoch() {
 // side of a rounding boundary a reading falls on.
 constexpr double kMgdlPerMmol = 18.0182;
 
+// No mg/dL target is this low (33.3 mmol/L is 600 mg/dL, the top of the meter range), so a range
+// bound at or below it in mg/dL mode is an mmol/L value left over from the defaults.
+constexpr double kMmolRangeCeiling = 33.3;
+
 // Convert a canonical mg/dL value to the configured display unit. mmol/L is
 // rounded to 1 dp; mg/dL to a whole number.
 static double ToDisplayUnit(double mgdl) {
@@ -1256,6 +1260,11 @@ void LoadSettings() {
     };
     g_settings.rangeLow = getDouble(L"rangeLow", kDefaultRangeLow);
     g_settings.rangeHigh = getDouble(L"rangeHigh", kDefaultRangeHigh);
+    if (g_settings.unit == L"mg/dL") {
+        for (double* bound : {&g_settings.rangeLow, &g_settings.rangeHigh}) {
+            if (*bound <= kMmolRangeCeiling) *bound = std::round(*bound * kMgdlPerMmol);
+        }
+    }
 
     auto color = [](PCWSTR key, COLORREF def) {
         PCWSTR s = Wh_GetStringSetting(key);

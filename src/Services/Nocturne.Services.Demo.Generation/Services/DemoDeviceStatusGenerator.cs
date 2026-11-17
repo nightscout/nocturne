@@ -30,12 +30,40 @@ public static class DemoDeviceStatusGenerator
     private const int PredictionPoints = 42;
 
     /// <summary>
+    /// The loop cycle of one simulation step; null when the loop could not cycle (a site change, a
+    /// sensor warm-up, the phone out of range).
+    /// </summary>
+    public static DeviceStatus? ForStep(DemoTimeStep step, DemoClock clock, double targetGlucose, double baseBasalRate)
+    {
+        if (step.Loop is not (DemoLoopState.Closed or DemoLoopState.Manual))
+            return null;
+
+        return Create(
+            step.Utc,
+            clock,
+            step.Entry.GlucoseMgdl(),
+            step.Iob,
+            step.Cob,
+            step.TempBasalRate,
+            step.TempBasalDuration,
+            step.EffectiveIsf,
+            step.EffectiveCarbRatio,
+            targetGlucose,
+            DemoTherapyProfile.ScheduledRateAt(step.Time, baseBasalRate),
+            step.Scenario,
+            step.RequestedBasalRate,
+            step.MaxSafeBasalRate,
+            enacted: step.Loop == DemoLoopState.Closed);
+    }
+
+    /// <summary>
     /// Builds the device status for one simulation step (historical) or one
-    /// realtime tick. <paramref name="localTime"/> is the step's local time;
-    /// the emitted mills convert via its Kind.
+    /// realtime tick. <paramref name="time"/> is the step's instant, or a
+    /// wall-clock time in the clock's zone; see <see cref="DemoClock.ToUtc"/>.
     /// </summary>
     public static DeviceStatus Create(
-        DateTime localTime,
+        DateTime time,
+        DemoClock clock,
         double glucose,
         double iob,
         double cob,
@@ -45,10 +73,15 @@ public static class DemoDeviceStatusGenerator
         double effectiveCarbRatio,
         double targetGlucose,
         double scheduledBasalRate,
-        DayScenario scenario)
+        DayScenario scenario,
+        double? requestedBasalRate = null,
+        double? maxSafeBasalRate = null,
+        bool enacted = true)
     {
-        var mills = new DateTimeOffset(localTime).ToUnixTimeMilliseconds();
-        var isoTime = new DateTimeOffset(localTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var utc = clock.ToUtc(time);
+        var localTime = clock.ToLocal(utc);
+        var mills = utc.ToMills();
+        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         var rng = DayScenarios.RngFor(localTime.Date, $"devicestatus:{localTime.Hour}:{localTime.Minute}");
 
         var eventualBg = EstimateEventualBg(glucose, iob, cob, effectiveIsf, effectiveCarbRatio, targetGlucose);
@@ -58,22 +91,22 @@ public static class DemoDeviceStatusGenerator
         // Basal IOB is the temp-basal component; the demo's simulator tracks a
         // single pool, so split it with a plausible ratio rather than pretending
         // to more precision than the simulation has.
-        var bolusIob = Math.Round(iob * 0.85, 3);
-        var basalIob = Math.Round(iob - bolusIob, 3);
+        var bolusIob = ScaledRounding.Round(iob * 0.85, 3);
+        var basalIob = ScaledRounding.Round(iob - bolusIob, 3);
 
-        var insulinReq = Math.Round((glucose - targetGlucose) / effectiveIsf - iob * 0.5, 2);
+        var insulinReq = ScaledRounding.Round((glucose - targetGlucose) / effectiveIsf - iob * 0.5, 2);
         var reason = BuildReason(glucose, eventualBg, iob, cob, effectiveIsf, targetGlucose,
-            sensitivityRatio, tempBasalRate, tempBasalDuration, insulinReq);
+            sensitivityRatio, tempBasalRate, tempBasalDuration, insulinReq, requestedBasalRate, maxSafeBasalRate);
 
         var suggested = new OpenApsSuggested
         {
             Timestamp = isoTime,
             DeliverAt = isoTime,
-            Bg = Math.Round(glucose, 0),
-            EventualBG = Math.Round(eventualBg, 0),
+            Bg = ScaledRounding.Round(glucose, 0),
+            EventualBG = ScaledRounding.Round(eventualBg, 0),
             TargetBG = targetGlucose,
-            IOB = Math.Round(iob, 3),
-            COB = Math.Round(cob, 1),
+            IOB = ScaledRounding.Round(iob, 3),
+            COB = ScaledRounding.Round(cob, 1),
             InsulinReq = insulinReq,
             SensitivityRatio = sensitivityRatio,
             Rate = tempBasalRate,
@@ -82,43 +115,46 @@ public static class DemoDeviceStatusGenerator
             PredBGs = predictions,
         };
 
-        var enacted = new OpenApsEnacted
-        {
-            Timestamp = isoTime,
-            DeliverAt = isoTime,
-            Bg = suggested.Bg,
-            EventualBG = suggested.EventualBG,
-            TargetBG = suggested.TargetBG,
-            IOB = suggested.IOB,
-            COB = suggested.COB,
-            InsulinReq = suggested.InsulinReq,
-            SensitivityRatio = suggested.SensitivityRatio,
-            Rate = tempBasalRate ?? scheduledBasalRate,
-            Duration = tempBasalDuration ?? 0,
-            Reason = reason,
-            PredBGs = predictions,
-            Received = true,
-        };
+        // oref enacts only a change: a cycle that sets no temp has no enacted block.
+        var enactedTemp = !enacted || tempBasalRate is null
+            ? null
+            : new OpenApsEnacted
+            {
+                Timestamp = isoTime,
+                DeliverAt = isoTime,
+                Bg = suggested.Bg,
+                EventualBG = suggested.EventualBG,
+                TargetBG = suggested.TargetBG,
+                IOB = suggested.IOB,
+                COB = suggested.COB,
+                InsulinReq = suggested.InsulinReq,
+                SensitivityRatio = suggested.SensitivityRatio,
+                Rate = tempBasalRate,
+                Duration = tempBasalDuration ?? 0,
+                Reason = reason,
+                PredBGs = predictions,
+                Received = true,
+            };
 
         return new DeviceStatus
         {
             Device = DeviceName,
             Mills = mills,
-            CreatedAt = new DateTimeOffset(localTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            UtcOffset = (int)TimeZoneInfo.Local.GetUtcOffset(localTime).TotalMinutes,
+            CreatedAt = isoTime,
+            UtcOffset = (int)clock.Zone.GetUtcOffset(utc).TotalMinutes,
             OpenAps = new OpenApsStatus
             {
                 Suggested = suggested,
-                Enacted = enacted,
+                Enacted = enactedTemp,
                 Version = AidVersion,
                 Iob = new OpenApsIobData
                 {
-                    Iob = Math.Round(iob, 3),
+                    Iob = ScaledRounding.Round(iob, 3),
                     BolusIob = bolusIob,
                     BasalIob = basalIob,
                     Timestamp = isoTime,
                 },
-                Cob = Math.Round(cob, 1),
+                Cob = ScaledRounding.Round(cob, 1),
             },
             Pump = new PumpStatus
             {
@@ -148,15 +184,15 @@ public static class DemoDeviceStatusGenerator
     /// </summary>
     public static double ReservoirAt(DateTime localTime)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, "Insulin Change");
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.InsulinChange);
         var used = AssumedDailyInsulinUnits * sinceChange.TotalDays;
-        return Math.Round(Math.Max(8, ReservoirCapacityUnits - used), 1);
+        return ScaledRounding.Round(Math.Max(8, ReservoirCapacityUnits - used), 1);
     }
 
     /// <summary>Pump battery percent, resetting on Pump Battery Change days.</summary>
     public static int PumpBatteryAt(DateTime localTime)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, "Pump Battery Change");
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.PumpBatteryChange);
         var drained = PumpBatteryDrainPerDayPercent * sinceChange.TotalDays;
         return (int)Math.Clamp(100 - drained, 4, 100);
     }
@@ -243,7 +279,7 @@ public static class DemoDeviceStatusGenerator
             // 1 - e^-kt approach with ~85% completion at the end of the curve.
             var progress = 1 - Math.Exp(-2.0 * i / points);
             var value = from + (to - from) * progress + (rng.NextDouble() - 0.5) * 2;
-            curve.Add(Math.Round(Math.Clamp(value, 39, 400), 0));
+            curve.Add(ScaledRounding.Round(Math.Clamp(value, 39, 400), 0));
         }
 
         return curve;
@@ -252,14 +288,17 @@ public static class DemoDeviceStatusGenerator
     private static string BuildReason(
         double glucose, double eventualBg, double iob, double cob, double effectiveIsf,
         double targetGlucose, double sensitivityRatio, double? tempBasalRate, int? tempBasalDuration,
-        double insulinReq)
+        double insulinReq, double? requestedBasalRate, double? maxSafeBasalRate)
     {
+        var cap = requestedBasalRate is { } requested && maxSafeBasalRate is { } max && requested > max
+            ? $"adj. req. rate: {requested:0.0#} to maxSafeBasal: {max:0.0#}, "
+            : "";
         var action = tempBasalRate is { } rate && tempBasalDuration is { } duration
             ? $"setting {duration}m temp basal of {rate:0.0#}U/h."
             : "temp basal within range, no action.";
 
         return $"Autosens ratio: {sensitivityRatio:0.0#}, ISF: {effectiveIsf:0}, COB: {cob:0.#}, "
             + $"IOB: {iob:0.0##}, Target: {targetGlucose:0}, "
-            + $"Eventual BG {eventualBg:0} vs BG {glucose:0}, insulinReq {insulinReq:0.0#}; {action}";
+            + $"Eventual BG {eventualBg:0} vs BG {glucose:0}, insulinReq {insulinReq:0.0#}; {cap}{action}";
     }
 }

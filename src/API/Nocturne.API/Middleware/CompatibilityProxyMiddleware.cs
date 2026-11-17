@@ -2,8 +2,12 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Compatibility;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Middleware;
 
@@ -14,8 +18,7 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Runs after all authentication and authorization middleware, immediately before endpoint
-/// execution. Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
+/// Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
 /// </para>
 /// <para>
 /// Uses <see cref="IRequestCloningService"/> to snapshot the request before the pipeline
@@ -78,7 +81,7 @@ public class CompatibilityProxyMiddleware
         var clonedRequest = await cloningService.CloneRequestAsync(context.Request);
 
         // Capture the path before the background task (HttpContext will be disposed)
-        // Sanitize to prevent log forging (strip newlines from user-controlled value)
+        // The path is compared and stored as well as logged, so it keeps its full length; line breaks are stripped.
         var path = context.RequestServices.GetRequiredService<IRequestPathRedactor>()
             .Redact(context.Request.Path.ToString())
             .Replace("\r", "").Replace("\n", "");
@@ -109,20 +112,29 @@ public class CompatibilityProxyMiddleware
         {
             _logger.LogDebug(
                 "Skipping compatibility comparison for {Path}: response size {Size} exceeds {Max} byte limit",
-                path, responseBytes.Length, MaxResponseSizeBytes);
+                LogText.Sanitize(path), responseBytes.Length, MaxResponseSizeBytes);
             return;
         }
 
         // Resolve the scope factory BEFORE the background task starts.
         // Do NOT capture HttpContext in the closure — it is disposed after the request completes.
         var scopeFactory = context.RequestServices.GetRequiredService<IServiceScopeFactory>();
+        var tenant = context.GetTenantContext();
+        if (tenant is null)
+        {
+            _logger.LogDebug(
+                "Skipping compatibility comparison for {Path}: the request resolved no tenant to store it under",
+                LogText.Sanitize(path));
+            return;
+        }
+
         var nocturneResponseTimeMs = stopwatch.ElapsedMilliseconds;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
+                await using var scope = TenantJobScope.Open(scopeFactory, tenant, "compatibility-proxy");
                 var forwardingService = scope.ServiceProvider.GetRequiredService<IRequestForwardingService>();
                 var comparisonService = scope.ServiceProvider.GetRequiredService<IResponseComparisonService>();
                 var persistenceService = scope.ServiceProvider.GetRequiredService<IDiscrepancyPersistenceService>();
@@ -164,7 +176,7 @@ public class CompatibilityProxyMiddleware
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Background compatibility comparison failed for {Path}", path);
+                _logger.LogWarning(ex, "Background compatibility comparison failed for {Path}", LogText.Sanitize(path));
             }
         });
     }

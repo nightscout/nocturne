@@ -1,12 +1,12 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { BG_UNITS, DEFAULT_PROFILE_ICON } from "$lib/constants/profile-icons";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { BG_UNITS, DEFAULT_PROFILE_ICON } from "#lib/constants/profile-icons.js";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import Plus from "@lucide/svelte/icons/plus";
 
   interface Props {
@@ -104,7 +104,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Plus class="h-5 w-5" />
-        Create New Profile
+        Create new profile
       </Dialog.Title>
       <Dialog.Description>
         Create a new therapy profile with your insulin settings.
@@ -120,7 +120,7 @@
     >
       <!-- Profile Name -->
       <div class="space-y-2">
-        <Label for="profile-name">Profile Name *</Label>
+        <Label for="profile-name">Profile name *</Label>
         <Input
           id="profile-name"
           bind:value={formState.defaultProfile}
@@ -134,13 +134,13 @@
 
       <!-- Icon Selection -->
       <div class="space-y-2">
-        <Label>Profile Icon</Label>
+        <Label>Profile icon</Label>
         <ProfileIconPicker bind:selectedIcon={formState.icon} />
       </div>
 
       <!-- Units -->
       <div class="space-y-2">
-        <Label for="units">Blood Glucose Units</Label>
+        <Label for="units">Blood glucose units</Label>
         <Select.Root type="single" bind:value={formState.units}>
           <Select.Trigger class="w-full">
             {BG_UNITS.find((u) => u.value === formState.units)?.label ??
@@ -213,7 +213,7 @@
           {#if isLoading}
             Creating...
           {:else}
-            Create Profile
+            Create profile
           {/if}
         </Button>
       </Dialog.Footer>

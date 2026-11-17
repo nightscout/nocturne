@@ -56,13 +56,11 @@ public sealed class CgmComparisonResult
     /// <summary>Registered device compared as A.</summary>
     public Guid DeviceAId { get; set; }
 
-    /// <summary>Display name of device A.</summary>
     public string DeviceAName { get; set; } = string.Empty;
 
     /// <summary>Registered device compared as B, the reference for relative measures.</summary>
     public Guid DeviceBId { get; set; }
 
-    /// <summary>Display name of device B.</summary>
     public string DeviceBName { get; set; } = string.Empty;
 
     /// <summary>Inclusive UTC start of the compared window.</summary>

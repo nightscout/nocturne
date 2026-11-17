@@ -30,7 +30,7 @@ public class BasalInjectionRepositoryTests : IDisposable
         _context.TenantId = TestTenantId;
 
         _repo = new BasalInjectionRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new Mock<IAuditContext>().Object,
             NullLogger<BasalInjectionRepository>.Instance);
     }

@@ -21,9 +21,6 @@ public class OrefService
     /// </summary>
     public static bool IsAvailable() => OrefInterop.IsAvailable();
 
-    /// <summary>
-    /// Get the oref library version.
-    /// </summary>
     public static string GetVersion() => OrefInterop.GetVersion();
 
     /// <summary>
@@ -31,9 +28,6 @@ public class OrefService
     /// </summary>
     public static string HealthCheck() => OrefInterop.HealthCheck();
 
-    /// <summary>
-    /// Calculate glucose status from recent readings.
-    /// </summary>
     /// <param name="readings">Recent glucose readings (most recent first)</param>
     /// <returns>Glucose status with delta calculations.</returns>
     public static GlucoseStatus? CalculateGlucoseStatus(IEnumerable<GlucoseReading> readings)
@@ -174,9 +168,6 @@ public class OrefService
     }
 }
 
-/// <summary>
-/// Glucose prediction results.
-/// </summary>
 public class GlucosePredictions
 {
     /// <summary>Current blood glucose (mg/dL)</summary>
@@ -206,6 +197,5 @@ public class GlucosePredictions
     /// <summary>Zero-temp prediction (mg/dL)</summary>
     public List<double>? PredBgsZt { get; set; }
 
-    /// <summary>Sensitivity ratio used</summary>
     public double? SensitivityRatio { get; set; }
 }

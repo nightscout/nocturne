@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a detected compression low suggestion pending user review.
+/// Detected compression low suggestion pending user review.
 /// A compression low is an artefactual CGM glucose drop caused by physical compression of the sensor site
 /// (typically during sleep). Accepted suggestions create a <see cref="StateSpan"/> data exclusion record.
 /// </summary>
@@ -37,8 +37,11 @@ public class CompressionLowSuggestion
     public double Confidence { get; set; }
 
     /// <summary>
-    /// Current status of the suggestion
+    /// Band of <see cref="Confidence"/>, from <see cref="CompressionLowConfidence.BandOf"/>
     /// </summary>
+    [JsonPropertyName("confidenceBand")]
+    public CompressionLowConfidenceBand ConfidenceBand => CompressionLowConfidence.BandOf(Confidence);
+
     [JsonPropertyName("status")]
     public CompressionLowStatus Status { get; set; }
 
@@ -83,6 +86,9 @@ public class CompressionLowSuggestion
     /// </summary>
     [JsonPropertyName("recoveryMinutes")]
     public int? RecoveryMinutes { get; set; }
+
+    [JsonIgnore]
+    public string? DataSource { get; set; }
 }
 
 /// <summary>
@@ -91,9 +97,6 @@ public class CompressionLowSuggestion
 /// </summary>
 public class CompressionLowSuggestionWithEntries
 {
-    /// <summary>
-    /// The compression low suggestion
-    /// </summary>
     [JsonPropertyName("suggestion")]
     public CompressionLowSuggestion Suggestion { get; set; } = new();
 

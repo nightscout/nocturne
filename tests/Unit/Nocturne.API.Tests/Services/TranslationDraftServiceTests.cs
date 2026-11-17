@@ -35,7 +35,7 @@ public class TranslationDraftServiceTests
         };
 
         var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
-        _service = new TranslationDraftService(_dbContext, httpContextAccessor, _contributionService.Object);
+        _service = new TranslationDraftService(_dbContext.AsFactory(), httpContextAccessor, _contributionService.Object);
     }
 
     private static TranslationEntryDto Entry(string msgId, string? translation, string? context = null) => new()

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TherapySettings
 /// </summary>
 [Table("therapy_settings")]
-public class TherapySettingsEntity : V4TimeSeriesEntityBase
+public class TherapySettingsEntity : V4TimeSeriesEntityBase, IProfileScopedEntity
 {
     /// <summary>
     /// Profile name this therapy settings record belongs to
@@ -98,10 +98,22 @@ public class TherapySettingsEntity : V4TimeSeriesEntityBase
     public string? LoopSettingsJson { get; set; }
 
     /// <summary>
+    /// APNs environment of the uploading Loop build; null when the upload did not say
+    /// </summary>
+    [Column("is_apns_production")]
+    public bool? IsApnsProduction { get; set; }
+
+    /// <summary>
     /// Whether this is the default/active profile
     /// </summary>
     [Column("is_default")]
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// The <c>defaultProfile</c> of the legacy profile document this row came from
+    /// </summary>
+    [Column("document_default_profile")]
+    public string? DocumentDefaultProfile { get; set; }
 
     /// <summary>
     /// User or system that created/modified this settings record

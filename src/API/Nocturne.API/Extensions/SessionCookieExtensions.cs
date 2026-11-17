@@ -1,5 +1,6 @@
 using System.Net;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using ConfigSameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
@@ -23,6 +24,13 @@ public static class SessionCookieExtensions
     /// <see cref="SetLastSignInCookie"/>; the web app only reads it.
     /// </summary>
     public const string LastSignInCookieName = "LastSignIn";
+
+    /// <summary>
+    /// The HttpOnly cookie that carries a TOTP step-up token from the OIDC callback, a browser
+    /// redirect, to the web app's login page, which reads it once to open the authenticator step.
+    /// Written by <see cref="SetTotpStepUpCookie"/>; the web app deletes it on read.
+    /// </summary>
+    public const string TotpStepUpCookieName = ".Nocturne.TotpStepUp";
 
     /// <summary>
     /// The sign-in methods <see cref="LastSignInCookieName"/> can name. The web app's
@@ -188,6 +196,25 @@ public static class SessionCookieExtensions
                 IsEssential = true,
                 Expires = DateTimeOffset.UtcNow.Add(LastSignInLifetime),
             });
+    }
+
+    /// <summary>
+    /// Hand a step-up token to the login page across a redirect. Host-only: the token is redeemed
+    /// on the host the callback ran on, so no other host needs it. Path is fixed at the root
+    /// because the web app, which deletes it, cannot read <see cref="CookieSettings.Path"/>.
+    /// </summary>
+    public static void SetTotpStepUpCookie(
+        this HttpResponse response, string stepUpToken, OidcOptions options)
+    {
+        response.Cookies.Append(TotpStepUpCookieName, stepUpToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = options.Cookie.Secure,
+            SameSite = MapSameSiteMode(options.Cookie.SameSite),
+            Path = "/",
+            IsEssential = true,
+            MaxAge = TotpService.StepUpExpiry,
+        });
     }
 
     /// <summary>

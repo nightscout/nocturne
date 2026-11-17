@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Extensions;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Docs;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 
@@ -224,6 +226,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">The consent form data including the approved scopes and PKCE code challenge.</param>
     /// <returns>Redirect to the client's <c>redirect_uri</c> with an authorization code, or an error redirect if the user denied access.</returns>
     [HttpPost("authorize")]
+    [RequireInteractiveSession]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> ApproveConsent([FromForm] ConsentApprovalRequest request)
@@ -280,26 +283,16 @@ public class OAuthController : ControllerBase
             });
         }
 
-        // A user cannot delegate more than they hold. Without this cap, approving a consent
-        // screen that asked for "*" issued a token with full access regardless of the
-        // approver's own permissions on the tenant — turning any authenticated member into a
-        // superuser by way of their own browser. The ceiling is the caller's resolved scopes on
-        // this tenant, which MemberScopeMiddleware has already narrowed to their membership.
-        var approverScopes = HttpContext.GetGrantedScopes();
-        if (!Scope.Satisfies(approverScopes, Scope.FullAccess))
+        // The ceiling is the approver's resolved scopes on this tenant, which MemberScopeMiddleware
+        // has already narrowed to their membership.
+        normalizedScopes = Scope.CapAt(normalizedScopes, HttpContext.GetGrantedScopes());
+        if (normalizedScopes.Count == 0)
         {
-            normalizedScopes = normalizedScopes
-                .Where(scope => Scope.Satisfies(approverScopes, scope))
-                .ToHashSet();
-
-            if (normalizedScopes.Count == 0)
+            return BadRequest(new OAuthError
             {
-                return BadRequest(new OAuthError
-                {
-                    Error = "invalid_scope",
-                    ErrorDescription = "None of the requested scopes are available to this account.",
-                });
-            }
+                Error = "invalid_scope",
+                ErrorDescription = "None of the requested scopes are available to this account.",
+            });
         }
 
         // Generate authorization code
@@ -551,6 +544,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">Contains the <c>user_code</c> and the user's approval decision.</param>
     /// <returns><c>200 OK</c> with <c>approved: true/false</c>, or <c>400</c> if the code is invalid or already processed.</returns>
     [HttpPost("device-approve")]
+    [RequireInteractiveSession]
     [RemoteCommand]
     [EnableRateLimiting("oauth-device-approve")]
     [Consumes("application/x-www-form-urlencoded")]
@@ -576,7 +570,8 @@ public class OAuthController : ControllerBase
 
         var success = request.Approved
             ? await _deviceCodeService.ApproveDeviceCodeAsync(
-                request.UserCode, subjectId, HttpContext.IsCallerHistoryClamped())
+                request.UserCode, subjectId, HttpContext.GetGrantedScopes(),
+                HttpContext.IsCallerHistoryClamped())
             : await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
 
         if (!success)
@@ -593,7 +588,7 @@ public class OAuthController : ControllerBase
 
     /// <summary>
     /// Token revocation endpoint (RFC 7009). Per the specification, always returns <c>200 OK</c>
-    /// regardless of whether the token was found or already revoked.
+    /// regardless of whether the token was found or already revoked. Requires no authentication.
     /// </summary>
     /// <remarks>
     /// Anonymous, unlike the introspection endpoint below: the response carries nothing about the
@@ -619,12 +614,14 @@ public class OAuthController : ControllerBase
     /// Get client info for the consent page.
     /// </summary>
     /// <param name="client_id">The client identifier to look up.</param>
-    /// <returns>An <see cref="OAuthClientInfoResponse"/> with the client's display name and whether it is a known first-party client.</returns>
+    /// <param name="scope">The space-delimited scopes the client is requesting.</param>
+    /// <returns>An <see cref="OAuthClientInfoResponse"/> with the client's display name, whether it is a known first-party client, and what the requested scopes allow it to delete (null when no scope is sent).</returns>
     [HttpGet("client-info")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(OAuthClientInfoResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthClientInfoResponse>> GetClientInfo(
-        [FromQuery] string client_id
+        [FromQuery] string client_id,
+        [FromQuery] string? scope = null
     )
     {
         var client = await _clientService.GetClientAsync(client_id);
@@ -644,6 +641,9 @@ public class OAuthController : ControllerBase
             IsKnown = client.IsKnown,
             Homepage = client.ClientUri,
             LogoUri = client.LogoUri,
+            DeletionAccess = string.IsNullOrWhiteSpace(scope)
+                ? null
+                : Scope.DeletionAccess(scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)),
         });
     }
 
@@ -773,6 +773,7 @@ public class OAuthController : ControllerBase
     /// </summary>
     /// <returns>An <see cref="OAuthGrantListResponse"/> containing all non-revoked grants across authorization-code and device-code flows.</returns>
     [HttpGet("grants")]
+    [RequireInteractiveSession]
     [ProducesResponseType(typeof(OAuthGrantListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthGrantListResponse>> GetGrants()
     {
@@ -793,6 +794,7 @@ public class OAuthController : ControllerBase
     /// <param name="grantId">The ID of the grant to revoke.</param>
     /// <returns><c>204 No Content</c> on success, or <c>404 Not Found</c> if the grant does not exist or belongs to another user.</returns>
     [HttpDelete("grants/{grantId}")]
+    [RequireInteractiveSession]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteGrant(Guid grantId)
@@ -822,6 +824,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">Partial update request containing the new label and/or scopes.</param>
     /// <returns>The updated <see cref="OAuthGrantDto"/>, or <c>404</c> / <c>400</c> if the grant is not found or the scopes are invalid.</returns>
     [HttpPatch("grants/{grantId}")]
+    [RequireInteractiveSession]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(OAuthGrantDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
@@ -834,6 +837,15 @@ public class OAuthController : ControllerBase
         if (!TryGetSubject(out var subjectId, out var subjectError))
         {
             return subjectError;
+        }
+
+        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = violation.Description,
+            });
         }
 
         try
@@ -872,6 +884,7 @@ public class OAuthController : ControllerBase
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
     /// Per RFC 7662, an authenticated caller always gets 200 OK; invalid tokens get <c>active=false</c>.
+    /// A request with no identity is refused. A token issued to another subject reads as inactive.
     /// </summary>
     /// <remarks>
     /// RFC 7662 section 2.1 requires the endpoint to authenticate its caller. Every client here is
@@ -949,7 +962,7 @@ public class OAuthController : ControllerBase
                     Exp = claims.ExpiresAt.ToUnixTimeSeconds(),
                     Iat = claims.IssuedAt.ToUnixTimeSeconds(),
                     Jti = claims.JwtId,
-                    TokenType = "access_token",
+                    TokenType = "Bearer",
                 });
             }
         }
@@ -961,8 +974,8 @@ public class OAuthController : ControllerBase
     /// <summary>
     /// RFC 7591 Dynamic Client Registration. Allows third-party native apps
     /// (Trio, xDrip+, Loop, AAPS) to obtain a tenant-scoped <c>client_id</c> without
-    /// any out-of-band registration step. Idempotent on <c>(tenant, software_id)</c>:
-    /// re-registering with the same <c>software_id</c> returns the existing <c>client_id</c>.
+    /// any out-of-band registration step. Every call issues a new client; see
+    /// <see cref="OAuthClientService.RegisterClientAsync"/>.
     /// </summary>
     /// <param name="request">The client registration metadata including redirect URIs, scopes, and optional software ID.</param>
     /// <param name="redirectUriValidator">Injected validator that enforces RFC 8252 redirect URI policies.</param>
@@ -984,6 +997,15 @@ public class OAuthController : ControllerBase
             {
                 Error = "invalid_client_metadata",
                 ErrorDescription = "Request body is required.",
+            });
+        }
+
+        if (request.SoftwareId == ScalarAuthProvider.ScalarSoftwareId)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_client_metadata",
+                ErrorDescription = "This software_id is reserved.",
             });
         }
 
@@ -1051,8 +1073,8 @@ public class OAuthController : ControllerBase
         GrantType = info.GrantType,
         ClientId = info.ClientId,
         ClientDisplayName = info.ClientDisplayName,
-        IsKnownClient = info.IsKnownClient,
-        Scopes = info.Scopes,
+        ClientIdentity = info.ClientIdentity,
+        Scopes = Scope.ForDisplay(info.Scopes, info.GrantType),
         Label = info.Label,
         CreatedAt = info.CreatedAt,
         LastUsedAt = info.LastUsedAt,

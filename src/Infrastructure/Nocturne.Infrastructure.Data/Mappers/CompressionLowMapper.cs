@@ -26,7 +26,8 @@ public static class CompressionLowMapper
             StateSpanId = entity.StateSpanId,
             LowestGlucose = entity.LowestGlucose,
             DropRate = entity.DropRate,
-            RecoveryMinutes = entity.RecoveryMinutes
+            RecoveryMinutes = entity.RecoveryMinutes,
+            DataSource = entity.DataSource
         };
     }
 
@@ -48,7 +49,8 @@ public static class CompressionLowMapper
             StateSpanId = model.StateSpanId,
             LowestGlucose = model.LowestGlucose,
             DropRate = model.DropRate,
-            RecoveryMinutes = model.RecoveryMinutes
+            RecoveryMinutes = model.RecoveryMinutes,
+            DataSource = model.DataSource
         };
     }
 
@@ -63,5 +65,6 @@ public static class CompressionLowMapper
         entity.Status = model.Status.ToString();
         entity.ReviewedAt = model.ReviewedAt;
         entity.StateSpanId = model.StateSpanId;
+        entity.DataSource = model.DataSource;
     }
 }

@@ -292,6 +292,7 @@ public class ServerCommand : AsyncCommand<ServerCommand.Settings>
             TimeoutSeconds = config.ApiTimeoutSeconds,
         };
         services.AddSingleton(apiOptions);
+        services.AddSingleton(TimeProvider.System);
 
         // Register HTTP client for API calls
         services.AddHttpClient<IApiService, ApiService>(client =>

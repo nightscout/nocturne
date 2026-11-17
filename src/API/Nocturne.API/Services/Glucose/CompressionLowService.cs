@@ -1,20 +1,22 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Services.Glucose;
 
 /// <summary>
 /// Domain service for compression low suggestion management. Provides retrieval, review, and
 /// dismissal of <see cref="CompressionLowSuggestion"/> records detected by
-/// <see cref="BackgroundServices.CompressionLowDetectionService"/>, including enrichment of
+/// <see cref="CompressionLowDetectionService"/>, including enrichment of
 /// suggestions with surrounding CGM entries for user review.
 /// </summary>
 /// <seealso cref="ICompressionLowService"/>
@@ -25,10 +27,11 @@ public class CompressionLowService : ICompressionLowService
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
     private readonly IInAppNotificationService _notificationService;
-    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly ICompressionLowNightWindowResolver _nightWindowResolver;
     private readonly IUISettingsService _uiSettingsService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly TimeProvider _time;
     private readonly ILogger<CompressionLowService> _logger;
 
     public CompressionLowService(
@@ -37,10 +40,11 @@ public class CompressionLowService : ICompressionLowService
         IEntryService entryService,
         ITreatmentService treatmentService,
         IInAppNotificationService notificationService,
-        ITherapySettingsResolver therapySettingsResolver,
+        ICompressionLowNightWindowResolver nightWindowResolver,
         IUISettingsService uiSettingsService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
+        TimeProvider timeProvider,
         ILogger<CompressionLowService> logger)
     {
         _repository = repository;
@@ -48,10 +52,11 @@ public class CompressionLowService : ICompressionLowService
         _entryService = entryService;
         _treatmentService = treatmentService;
         _notificationService = notificationService;
-        _therapySettingsResolver = therapySettingsResolver;
+        _nightWindowResolver = nightWindowResolver;
         _uiSettingsService = uiSettingsService;
         _tenantOwnerResolver = tenantOwnerResolver;
         _tenantAccessor = tenantAccessor;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -76,30 +81,20 @@ public class CompressionLowService : ICompressionLowService
         // <see cref="SettingsUnavailableException"/>.
         var settings = await _uiSettingsService.GetSettingsAsync(cancellationToken)
             ?? throw new SettingsUnavailableException("UI settings");
-        var sleepSchedule = settings.DataQuality.SleepSchedule;
 
-        // Get user's timezone: prefer UI settings, fall back to profile, then UTC
-        var userTimeZone = ResolveTimeZone(sleepSchedule.Timezone)
-            ?? await GetUserTimeZoneFromProfileAsync(suggestion.NightOf, cancellationToken)
-            ?? TimeZoneInfo.Utc;
-
-        // Get overnight window for entries in user's local time
-        var (windowStart, windowEnd) = TimeZoneHelper.GetOvernightWindow(
-            suggestion.NightOf,
-            userTimeZone,
-            sleepSchedule.BedtimeHour,
-            sleepSchedule.WakeTimeHour);
+        var window = await _nightWindowResolver.ResolveAsync(
+            suggestion.NightOf, settings.DataQuality.SleepSchedule, cancellationToken);
 
         // Get entries for the window
         var entries = await _entryService.GetEntriesAsync(
-            find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
+            find: $"{{\"mills\":{{\"$gte\":{window.WindowStart},\"$lte\":{window.WindowEnd}}}}}",
             count: 1000,
             skip: 0,
             cancellationToken: cancellationToken);
 
         // Get treatments for the window (boluses, temp basals, etc.)
         var treatments = await _treatmentService.GetTreatmentsAsync(
-            find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
+            find: $"{{\"mills\":{{\"$gte\":{window.WindowStart},\"$lte\":{window.WindowEnd}}}}}",
             cancellationToken: cancellationToken);
 
         return new CompressionLowSuggestionWithEntries
@@ -114,7 +109,8 @@ public class CompressionLowService : ICompressionLowService
         Guid id,
         long startMills,
         long endMills,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool demoSeed = false)
     {
         var suggestion = await _repository.GetByIdAsync(id, cancellationToken);
         if (suggestion == null)
@@ -128,8 +124,8 @@ public class CompressionLowService : ICompressionLowService
         {
             Category = StateSpanCategory.DataExclusion,
             State = "CompressionLow",
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
-            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime,
+            StartTimestamp = startMills.ToUtcDateTime(),
+            EndTimestamp = endMills.ToUtcDateTime(),
             Source = "compression-low-detection",
             Metadata = new Dictionary<string, object>
             {
@@ -138,12 +134,14 @@ public class CompressionLowService : ICompressionLowService
                 ["SuggestionId"] = suggestion.Id.ToString()
             }
         };
+        if (demoSeed)
+            stateSpan.Metadata["DemoSeed"] = true;
 
         var createdSpan = await _stateSpanService.UpsertStateSpanAsync(stateSpan, cancellationToken);
 
         // Update suggestion
         suggestion.Status = CompressionLowStatus.Accepted;
-        suggestion.ReviewedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        suggestion.ReviewedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
         suggestion.StateSpanId = Guid.TryParse(createdSpan.Id, out var spanId) ? spanId : null;
 
         await _repository.UpdateAsync(suggestion, cancellationToken);
@@ -170,7 +168,7 @@ public class CompressionLowService : ICompressionLowService
             throw new InvalidOperationException($"Suggestion {id} is not pending");
 
         suggestion.Status = CompressionLowStatus.Dismissed;
-        suggestion.ReviewedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        suggestion.ReviewedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
         await _repository.UpdateAsync(suggestion, cancellationToken);
 
@@ -180,37 +178,90 @@ public class CompressionLowService : ICompressionLowService
         _logger.LogInformation("Dismissed compression low suggestion {SuggestionId}", id);
     }
 
-    public async Task DeleteSuggestionAsync(
+    private async Task DeleteSuggestionAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
         var suggestion = await _repository.GetByIdAsync(id, cancellationToken);
         if (suggestion == null)
-            throw new InvalidOperationException($"Suggestion {id} not found");
+            return;
 
         // If accepted, delete the associated state span
         if (suggestion.Status == CompressionLowStatus.Accepted && suggestion.StateSpanId.HasValue)
         {
-            try
-            {
-                await _stateSpanService.DeleteStateSpanAsync(
-                    suggestion.StateSpanId.Value.ToString(),
-                    cancellationToken);
-                _logger.LogInformation(
-                    "Deleted StateSpan {StateSpanId} for suggestion {SuggestionId}",
-                    suggestion.StateSpanId, id);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "Failed to delete StateSpan {StateSpanId} for suggestion {SuggestionId}",
-                    suggestion.StateSpanId, id);
-            }
+            await _stateSpanService.DeleteStateSpanAsync(
+                suggestion.StateSpanId.Value.ToString(),
+                cancellationToken);
+            _logger.LogInformation(
+                "Deleted StateSpan {StateSpanId} for suggestion {SuggestionId}",
+                suggestion.StateSpanId, id);
         }
 
         await _repository.DeleteAsync(id, cancellationToken);
 
         _logger.LogInformation("Deleted compression low suggestion {SuggestionId}", id);
+    }
+
+    public async Task ApplyBatchAsync(
+        CompressionLowBatchAction action,
+        IReadOnlyCollection<CompressionLowBatchItem> items,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(action))
+            throw new InvalidOperationException($"Unknown batch action {(int)action}");
+
+        var due = new List<(CompressionLowBatchItem Item, CompressionLowSuggestion Suggestion)>();
+        foreach (var item in items.DistinctBy(i => i.Id))
+        {
+            var suggestion = await _repository.GetByIdAsync(item.Id, cancellationToken);
+            if (suggestion == null)
+            {
+                if (action != CompressionLowBatchAction.Delete)
+                    throw new InvalidOperationException($"Suggestion {item.Id} not found");
+                continue;
+            }
+
+            if (NeedsApplying(action, suggestion))
+                due.Add((item, suggestion));
+        }
+
+        foreach (var (item, suggestion) in due)
+        {
+            switch (action)
+            {
+                case CompressionLowBatchAction.Accept:
+                    await AcceptSuggestionAsync(
+                        item.Id,
+                        item.StartMills ?? suggestion.StartMills,
+                        item.EndMills ?? suggestion.EndMills,
+                        cancellationToken);
+                    break;
+                case CompressionLowBatchAction.Dismiss:
+                    await DismissSuggestionAsync(item.Id, cancellationToken);
+                    break;
+                case CompressionLowBatchAction.Delete:
+                    await DeleteSuggestionAsync(item.Id, cancellationToken);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(action), action, null);
+            }
+        }
+    }
+
+    private static bool NeedsApplying(CompressionLowBatchAction action, CompressionLowSuggestion suggestion)
+    {
+        var applied = action switch
+        {
+            CompressionLowBatchAction.Accept => CompressionLowStatus.Accepted,
+            CompressionLowBatchAction.Dismiss => CompressionLowStatus.Dismissed,
+            CompressionLowBatchAction.Delete => (CompressionLowStatus?)null,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
+        };
+        if (suggestion.Status == applied)
+            return false;
+        if (applied != null && suggestion.Status != CompressionLowStatus.Pending)
+            throw new InvalidOperationException($"Suggestion {suggestion.Id} is not pending");
+        return true;
     }
 
     private async Task TryArchiveNotificationAsync(
@@ -241,37 +292,20 @@ public class CompressionLowService : ICompressionLowService
                 reason: NotificationArchiveReason.Completed,
                 cancellationToken: cancellationToken);
         }
-        catch (Exception ex)
+        catch (DbUpdateException ex)
         {
-            _logger.LogWarning(ex, "Failed to archive compression low notification for {NightOf}", nightOf);
+            LogArchiveFailure(ex, nightOf);
+        }
+        catch (DbException ex)
+        {
+            LogArchiveFailure(ex, nightOf);
+        }
+        catch (RetryLimitExceededException ex)
+        {
+            LogArchiveFailure(ex, nightOf);
         }
     }
 
-    private static TimeZoneInfo? ResolveTimeZone(string? timezoneId)
-    {
-        if (string.IsNullOrEmpty(timezoneId))
-            return null;
-
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
-        if (tz == TimeZoneInfo.Utc && !timezoneId.Equals("UTC", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        return tz;
-    }
-
-    private async Task<TimeZoneInfo?> GetUserTimeZoneFromProfileAsync(
-        DateOnly nightOf,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var timezoneId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-            return ResolveTimeZone(timezoneId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get user timezone from profile for night {NightOf}", nightOf);
-            return null;
-        }
-    }
+    private void LogArchiveFailure(Exception ex, DateOnly nightOf) =>
+        _logger.LogWarning(ex, "Failed to archive compression low notification for {NightOf}", nightOf);
 }

@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// Registering a CGM gives it a sensor session history: the readings it already explains are
 /// attributed to it, and the warm-up gap in them becomes an inferred sensor start.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class SensorSessionInferenceIntegrationTests : ApiIntegrationTestBase
 {

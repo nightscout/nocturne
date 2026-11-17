@@ -1,5 +1,7 @@
 import { getContext, setContext, untrack } from "svelte";
 import type {
+  CoachGates,
+  CoachLabels,
   CoachMarkAdapter,
   DismissOptions,
   MarkRegistration,
@@ -7,9 +9,15 @@ import type {
   MarkStatus,
   SequenceConfig,
 } from "./types.js";
-import { selectActiveMark, isSequenceDone, sequenceProgress, type SelectionResult } from "./sequencing.js";
+import {
+  selectActiveMark,
+  isForAudience,
+  isPrerequisiteMet,
+  sequenceProgress,
+  type SelectionResult,
+} from "./sequencing.js";
 
-const COACH_CONTEXT_KEY = Symbol("coach-mark-context");
+const COACH_CONTEXT_KEY = "nocturne:coach:mark-context";
 const DISABLED_STORAGE_KEY = "nocturne:coach-marks-disabled";
 
 function readDisabledFlag(): boolean {
@@ -60,9 +68,12 @@ const nowIso = () => new Date().toISOString();
 
 export class CoachMarkContext {
   private adapter: CoachMarkAdapter;
+  labels: CoachLabels;
   private sequences: SequenceConfig;
   private settleDelay: number;
   private seenDwellMs: number;
+  private gates: () => CoachGates;
+  private audience: () => string | undefined;
   private _keyToSequence: ReadonlyMap<string, string>;
 
   private _states = $state<MarkStates>(noMarkStates());
@@ -72,6 +83,11 @@ export class CoachMarkContext {
   private _initialized = $state(false);
 
   private _forcedSequence = $state<string | null>(null);
+  /**
+   * The steps a replay has still to show, in order. A replay walks every step whatever its status
+   * and skips one whose target is not on the page, where a forced start waits for it to mount.
+   */
+  private _replayQueue: string[] | null = null;
   private _quietUntilNavigation = $state(false);
   private _disabled = $state(false);
 
@@ -80,14 +96,20 @@ export class CoachMarkContext {
 
   constructor(
     adapter: CoachMarkAdapter,
+    labels: CoachLabels,
     sequences: SequenceConfig = {},
     settleDelay = 500,
     seenDwellMs = 2000,
+    gates: () => CoachGates = () => ({}),
+    audience: () => string | undefined = () => undefined,
   ) {
     this.adapter = adapter;
+    this.labels = $state.raw(labels);
     this.sequences = sequences;
     this.settleDelay = settleDelay;
     this.seenDwellMs = seenDwellMs;
+    this.gates = gates;
+    this.audience = audience;
 
     this._keyToSequence = indexSequences(sequences);
     // Read here rather than in initialize: marks register before the provider mounts, and a
@@ -121,6 +143,7 @@ export class CoachMarkContext {
     if (value) {
       this._activeSelection = null;
       this._forcedSequence = null;
+      this._replayQueue = null;
       if (this._settleTimer) {
         clearTimeout(this._settleTimer);
         this._settleTimer = null;
@@ -176,15 +199,15 @@ export class CoachMarkContext {
   }
 
   dismiss(key: string, options?: DismissOptions): void {
-    if (this._forcedSequence) {
+    const runSteps = this._forcedSequence
+      ? (this._replayQueue ?? this.sequences[this._forcedSequence]?.steps)
+      : undefined;
+    if (runSteps?.includes(key)) {
       // Dismissing any step in a forced sequence dismisses ALL remaining unseen/seen steps
-      const seq = this.sequences[this._forcedSequence];
-      if (seq) {
-        for (const stepKey of seq.steps) {
-          const status = this.getStatus(stepKey);
-          if (status === "unseen" || status === "seen") {
-            this.updateStatus(stepKey, "dismissed");
-          }
+      for (const stepKey of runSteps) {
+        const status = this.getStatus(stepKey);
+        if (status === "unseen" || status === "seen") {
+          this.updateStatus(stepKey, "dismissed");
         }
       }
       this._activeSelection = null;
@@ -212,16 +235,18 @@ export class CoachMarkContext {
     }
 
     this._activeSelection = null;
-    if (options?.quiet) {
+    if (options?.quiet || (seqName && this.sequences[seqName]?.quietOnDismiss)) {
       this._quietUntilNavigation = true;
-    } else {
-      this.scheduleSelection();
     }
+    // A mark outside the forced run, raised from its dot, leaves the run going.
+    if (this._forcedSequence) this.selectNow();
+    else this.scheduleSelection();
   }
 
   complete(key: string): void {
     const wasActive = this._activeSelection?.key === key;
     this.updateStatus(key, "completed");
+    if (wasActive && this._replayQueue?.[0] === key) this._replayQueue.shift();
 
     // `completedWhen` and `completeOn` complete marks in the background; one that is not the
     // mark on screen must not replace it.
@@ -233,20 +258,31 @@ export class CoachMarkContext {
     // honoured here as well as in scheduleSelection.
     if (this._disabled || !this._initialized) return;
 
+    // Select the next mark immediately rather than via scheduleSelection so that
+    // _activeSelection goes from the old key → new key in the same synchronous
+    // execution. Svelte batches the two writes and the overlay never unmounts
+    // between consecutive coachmarks (no flash). The settle delay is only needed
+    // during initial registration when marks may still be mounting.
+    this.selectNow();
+  }
+
+  /**
+   * The forced run's next mounted step; failing that, an organic mark, unless a forced run that is
+   * not start-only holds the floor or the marks are quiet.
+   */
+  private selectNow(): void {
     if (this._forcedSequence) {
       this.activateNextForcedStep();
-    } else if (!this._quietUntilNavigation) {
-      // Select the next mark immediately rather than via scheduleSelection so that
-      // _activeSelection goes from the old key → new key in the same synchronous
-      // execution. Svelte batches the two writes and the overlay never unmounts
-      // between consecutive coachmarks (no flash). The settle delay is only needed
-      // during initial registration when marks may still be mounting.
-      this._activeSelection = selectActiveMark(
-        this._states,
-        this._registrations,
-        this.sequences,
-      );
+      if (this._activeSelection || !this.isStartOnlyRun()) return;
     }
+    if (this._quietUntilNavigation) return;
+    this._activeSelection = selectActiveMark(
+      this._states,
+      this._registrations,
+      this.sequences,
+      this.gates(),
+      this.audience(),
+    );
   }
 
   markSeen(key: string): void {
@@ -270,11 +306,27 @@ export class CoachMarkContext {
     if (!seqName) return true; // standalone marks are always eligible
 
     const seq = this.sequences[seqName];
-    if (seq.prerequisite && !isSequenceDone(seq.prerequisite, this.sequences, this._states)) {
+    if (!isForAudience(seq, this.audience())) return false;
+    if (seq.startOnly) return this._forcedSequence === seqName;
+    if (
+      seq.prerequisite &&
+      !isPrerequisiteMet(seq.prerequisite, this.sequences, this._states, this.gates())
+    ) {
       return false;
     }
 
     return true;
+  }
+
+  /** Whether the sequence exists and is written for the reader on this page. */
+  isSequenceForReader(name: string): boolean {
+    const seq = this.sequences[name];
+    return seq !== undefined && isForAudience(seq, this.audience());
+  }
+
+  inSameSequence(a: string, b: string): boolean {
+    const seqName = this._keyToSequence.get(a);
+    return seqName !== undefined && seqName === this._keyToSequence.get(b);
   }
 
   getSequenceProgress(seqName: string): { completed: number; total: number } {
@@ -294,14 +346,37 @@ export class CoachMarkContext {
   /** Force-activate a named sequence, overriding quiet mode if set. */
   startSequence(name: string): void {
     if (this._disabled) return;
-    const seq = this.sequences[name];
-    if (!seq) {
+    if (!this.sequences[name]) {
       console.warn(`[coach] Sequence "${name}" not found.`);
       return;
     }
+    if (!this.isSequenceForReader(name)) return;
 
     this._forcedSequence = name;
+    this._replayQueue = null;
     // Intentionally overrides quiet mode — a new forced sequence always wins
+    this._quietUntilNavigation = false;
+    this._activeSelection = null;
+    this.activateNextForcedStep();
+  }
+
+  /**
+   * Shows sequences again, one after the other, from their first steps, finished steps included,
+   * for a reader who asks to see them. Only the steps whose targets are on the page are shown.
+   * Only the first sequence's `completesKeys` apply.
+   */
+  replaySequence(...names: string[]): void {
+    if (this._disabled || names.length === 0) return;
+    const missing = names.find((name) => !this.sequences[name]);
+    if (missing !== undefined) {
+      console.warn(`[coach] Sequence "${missing}" not found.`);
+      return;
+    }
+    if (!names.every((name) => this.isSequenceForReader(name))) return;
+
+    if (this._activeSelection) this.markSeen(this._activeSelection.key);
+    this._forcedSequence = names[0];
+    this._replayQueue = names.flatMap((name) => this.sequences[name].steps);
     this._quietUntilNavigation = false;
     this._activeSelection = null;
     this.activateNextForcedStep();
@@ -309,7 +384,10 @@ export class CoachMarkContext {
 
   clearQuiet(): void {
     this._quietUntilNavigation = false;
-    this._forcedSequence = null;
+    if (!this.isStartOnlyRun()) {
+      this._forcedSequence = null;
+      this._replayQueue = null;
+    }
     this.scheduleSelection();
   }
 
@@ -320,6 +398,7 @@ export class CoachMarkContext {
     this._states = noMarkStates();
     this._activeSelection = null;
     this._forcedSequence = null;
+    this._replayQueue = null;
     this._quietUntilNavigation = false;
     this.scheduleSelection();
   }
@@ -334,8 +413,17 @@ export class CoachMarkContext {
     if (!active || this._registrations.some((r) => r.key === active.key)) return;
 
     this._activeSelection = null;
-    if (this._forcedSequence) this.activateNextForcedStep();
+    if (this._forcedSequence) this.selectNow();
     else this.scheduleSelection();
+  }
+
+  /** A started run of a `startOnly` sequence, which navigation does not end; a replay of one does end. */
+  private isStartOnlyRun(): boolean {
+    return (
+      this._forcedSequence !== null &&
+      this._replayQueue === null &&
+      this.sequences[this._forcedSequence]?.startOnly === true
+    );
   }
 
   private activateNextForcedStep(): void {
@@ -344,29 +432,41 @@ export class CoachMarkContext {
     const seq = this.sequences[this._forcedSequence];
     if (!seq) return;
 
+    if (this._replayQueue) {
+      while (this._replayQueue.length > 0) {
+        const [first] = this.getMountedSteps(this._replayQueue[0]);
+        if (first) {
+          this._activeSelection = { key: first.key, step: first.step };
+          return;
+        }
+        this._replayQueue.shift();
+      }
+      this.onForcedSequenceComplete();
+      return;
+    }
+
+    // A step whose element is not on the page is passed over, not waited on: some are mounted
+    // only conditionally (a chart hidden behind an empty state), and waiting on one strands the
+    // rest of the tour. It stays unseen, and register() raises it if it mounts later.
+    let awaitingMount = false;
     for (const stepKey of seq.steps) {
       const status = this.getStatus(stepKey);
       if (status === "completed" || status === "dismissed") continue;
 
-      // Found the first unseen/seen step
-      if (!this._registrations.some((r) => r.key === stepKey)) {
-        // Not mounted yet — wait for lazy registration to trigger
-        return;
-      }
-
-      // Mounted and eligible: activate it
       const stepRegistrations = this._registrations
         .filter((r) => r.key === stepKey)
         .sort((a, b) => a.step - b.step);
 
-      if (stepRegistrations.length > 0) {
-        this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
-        return;
+      if (stepRegistrations.length === 0) {
+        awaitingMount = true;
+        continue;
       }
+
+      this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
+      return;
     }
 
-    // All steps done
-    this.onForcedSequenceComplete();
+    if (!awaitingMount) this.onForcedSequenceComplete();
   }
 
   private onForcedSequenceComplete(): void {
@@ -386,6 +486,7 @@ export class CoachMarkContext {
 
     this._quietUntilNavigation = true;
     this._forcedSequence = null;
+    this._replayQueue = null;
     this._activeSelection = null;
   }
 
@@ -417,29 +518,27 @@ export class CoachMarkContext {
     if (!this._initialized) return;
     if (this._disabled) return;
     if (this._quietUntilNavigation) return;
-    if (this._forcedSequence) return;
+    if (this._forcedSequence && !this.isStartOnlyRun()) return;
     if (this._settleTimer) clearTimeout(this._settleTimer);
     this._settleTimer = setTimeout(() => {
       // Any of the guards above can have changed while the timer ran.
-      if (this._activeSelection || this._disabled || this._quietUntilNavigation || this._forcedSequence) {
-        return;
-      }
-      this._activeSelection = selectActiveMark(
-        this._states,
-        this._registrations,
-        this.sequences,
-      );
+      if (this._activeSelection || this._disabled || this._quietUntilNavigation) return;
+      if (this._forcedSequence && !this.isStartOnlyRun()) return;
+      this.selectNow();
     }, this.settleDelay);
   }
 }
 
 export function createCoachMarkContext(
   adapter: CoachMarkAdapter,
+  labels: CoachLabels,
   sequences: SequenceConfig = {},
   settleDelay = 500,
   seenDwellMs = 2000,
+  gates: () => CoachGates = () => ({}),
+  audience: () => string | undefined = () => undefined,
 ): CoachMarkContext {
-  const ctx = new CoachMarkContext(adapter, sequences, settleDelay, seenDwellMs);
+  const ctx = new CoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, gates, audience);
   setContext(COACH_CONTEXT_KEY, ctx);
   return ctx;
 }

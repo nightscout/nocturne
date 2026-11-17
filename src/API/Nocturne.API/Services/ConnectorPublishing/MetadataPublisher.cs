@@ -1,11 +1,7 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
@@ -40,8 +36,10 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly IStepCountService _stepCountService;
     private readonly IHeartRateService _heartRateService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly NocturneDbContext _db;
+    private readonly IActivityDedupRepository _activityDedup;
+    private readonly IConnectorConfigurationRepository _configurations;
+    private readonly IProfileActivationRepository _profileActivations;
+    private readonly ProfileActivationWriter _profileActivationWriter;
 
     public MetadataPublisher(
         IProfileWriteService profileWriteService,
@@ -56,12 +54,17 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         IHeartRateService heartRateService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
-        NocturneDbContext db,
+        IActivityDedupRepository activityDedup,
+        IConnectorConfigurationRepository configurations,
+        IProfileActivationRepository profileActivations,
+        ProfileActivationWriter profileActivationWriter,
         IAuditContext auditContext,
         PublishSkipTally skips,
         ILogger<MetadataPublisher> logger)
-        : base(auditContext, skips, logger)
+        : base(auditContext, skips, tenantAccessor, logger)
     {
+        _profileActivations = profileActivations ?? throw new ArgumentNullException(nameof(profileActivations));
+        _profileActivationWriter = profileActivationWriter ?? throw new ArgumentNullException(nameof(profileActivationWriter));
         _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
         _foodService = foodService ?? throw new ArgumentNullException(nameof(foodService));
         _connectorFoodEntryService = connectorFoodEntryService ?? throw new ArgumentNullException(nameof(connectorFoodEntryService));
@@ -73,8 +76,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         _stepCountService = stepCountService ?? throw new ArgumentNullException(nameof(stepCountService));
         _heartRateService = heartRateService ?? throw new ArgumentNullException(nameof(heartRateService));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
-        _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
-        _db = db ?? throw new ArgumentNullException(nameof(db));
+        _activityDedup = activityDedup ?? throw new ArgumentNullException(nameof(activityDedup));
+        _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
     }
 
     /// <summary>
@@ -85,7 +88,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken)
     {
-        if (!_tenantAccessor.IsResolved)
+        if (!TenantAccessor.IsResolved)
         {
             Logger.LogWarning(
                 "No tenant resolved while publishing for {Source}; cannot attribute its notifications",
@@ -94,13 +97,13 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         }
 
         var subjectId = await _tenantOwnerResolver.GetOwnerSubjectIdAsync(
-            _tenantAccessor.TenantId, cancellationToken);
+            TenantAccessor.TenantId, cancellationToken);
 
         if (subjectId == null)
         {
             Logger.LogWarning(
                 "Tenant {TenantId} has no owner; {Source} food entries will import without match suggestions",
-                _tenantAccessor.TenantId,
+                TenantAccessor.TenantId,
                 source);
         }
 
@@ -112,15 +115,16 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var profileList = profiles.ToList();
         try
         {
-            await _profileWriteService.CreateProfilesAsync(profiles, cancellationToken);
+            await _profileWriteService.CreateProfilesAsync(profileList, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish profiles for {Source}", source);
+            LogPublishFailure(ex, profileList, source);
             return false;
         }
     }
@@ -130,15 +134,16 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var foodList = foods.ToList();
         try
         {
-            await _foodService.CreateFoodAsync(foods, cancellationToken);
+            await _foodService.CreateFoodAsync(foodList, FoodWriteMode.Native, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish food for {Source}", source);
+            LogPublishFailure(ex, foodList, source);
             return false;
         }
     }
@@ -148,18 +153,19 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var entryList = entries.ToList();
         try
         {
             var subject = await ResolveNotificationSubjectAsync(source, cancellationToken);
             using (PushSystemAudit())
             {
-                return await _connectorFoodEntryService.ImportAsync(subject, entries, cancellationToken);
+                return await _connectorFoodEntryService.ImportAsync(subject, entryList, cancellationToken);
             }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish connector food entries for {Source}", source);
+            LogPublishFailure(ex, entryList, source);
             return null;
         }
     }
@@ -200,11 +206,11 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken)
     {
+        var activityList = activities.ToList();
         try
         {
             // Stamp the publishing connector so every decomposed destination (state spans, heart
             // rates, step counts) resolves to this connector's watermark.
-            var activityList = activities.ToList();
             foreach (var activity in activityList)
                 activity.DataSource = source;
 
@@ -214,38 +220,42 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish activities for {Source}", source);
+            LogPublishFailure(ex, activityList, source);
             return null;
         }
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// An activity is stored as a state span, heart rate, step count or sleep session, each carrying
-    /// the activity's id as its <c>OriginalId</c>.
-    /// </remarks>
+    /// <remarks>Held ids are read as <see cref="IActivityDedupRepository"/> describes.</remarks>
     public Task<int?> PublishRecentActivityAsync(
         IEnumerable<Activity> activities,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            activities, a => a.Id,
+            activities,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
-            ids => _db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
-                ids, s => s.Source == ActivityStateSpanMapper.SleepSessionSource, cancellationToken));
+            ids => _activityDedup.GetHeldIdsAsync(ids, cancellationToken));
 
+    /// <remarks>
+    /// A Profile span, as an instance before profile activations replays it, is published as the
+    /// effective activation it records (<see cref="PublishProfileActivationsAsync"/>).
+    /// </remarks>
     public async Task<bool> PublishStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var spans = stateSpans.ToList();
+        var profileSpans = spans.Where(s => s.Category == StateSpanCategory.Profile).ToList();
+        if (profileSpans.Count > 0
+            && !await PublishProfileActivationsAsync(
+                profileSpans.Select(ConnectorProfileActivations.FromSpan), source, origin, cancellationToken))
+            return false;
+
         try
         {
-            foreach (var span in stateSpans)
+            foreach (var span in spans.Where(s => s.Category != StateSpanCategory.Profile))
             {
                 // Source is the connector writing the row here, not one carried in the payload:
                 // NocturneRemote replays another instance's spans verbatim, and honouring their
@@ -265,7 +275,49 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish state spans for {Source}", source);
+            LogPublishFailure(ex, spans, source);
+            return false;
+        }
+    }
+
+    /// <remarks>
+    /// Each activation is written oldest first and settled against its neighbours, so one published
+    /// after an earlier sync's still-open activation ends it. One the user deleted stays deleted.
+    /// </remarks>
+    public async Task<bool> PublishProfileActivationsAsync(
+        IEnumerable<ProfileActivation> activations,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        var activationList = activations.OrderBy(a => a.StartTimestamp).ToList();
+        try
+        {
+            foreach (var activation in activationList)
+            {
+                activation.DataSource = source;
+                activation.Phase = ProfileActivationPhase.Effective;
+                activation.Origin = ProfileActivationOrigin.Connector;
+                var stored = string.IsNullOrEmpty(activation.SyncIdentifier)
+                    ? null
+                    : await _profileActivations.FindBySyncIdentifierAsync(source, activation.SyncIdentifier, cancellationToken);
+
+                await _profileActivationWriter.WriteAsync(activation, stored, async settled =>
+                {
+                    try
+                    {
+                        return (await _profileActivations.UpsertAsync(settled, origin, cancellationToken)).Record;
+                    }
+                    catch (RecreationBlockedException)
+                    {
+                        return null;
+                    }
+                }, cancellationToken);
+            }
+            return true;
+        }
+        catch (DbUpdateException ex)
+        {
+            LogPublishFailure(ex, activationList, source);
             return false;
         }
     }
@@ -275,15 +327,16 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var systemEventList = systemEvents.ToList();
         try
         {
-            await _systemEventRepository.BulkUpsertAsync(systemEvents, cancellationToken);
+            await _systemEventRepository.BulkUpsertAsync(systemEventList, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish system events for {Source}", source);
+            LogPublishFailure(ex, systemEventList, source);
             return false;
         }
     }
@@ -299,26 +352,12 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken = default)
     {
+        var list = records.ToList();
         try
         {
-            var list = records.ToList();
             if (list.Count == 0) return true;
 
-            var toCreate = new List<BodyWeight>();
-            foreach (var record in list)
-            {
-                // Upsert on the connector's deterministic Id so re-syncs update the same row.
-                var existing = record.Id != null
-                    ? await _bodyWeightService.GetBodyWeightByIdAsync(record.Id, cancellationToken)
-                    : null;
-                if (existing != null)
-                    await _bodyWeightService.UpdateBodyWeightAsync(record.Id!, record, cancellationToken);
-                else
-                    toCreate.Add(record);
-            }
-
-            if (toCreate.Count > 0)
-                await _bodyWeightService.CreateBodyWeightsAsync(toCreate, cancellationToken);
+            await _bodyWeightService.CreateBodyWeightsAsync(list, cancellationToken);
 
             Logger.LogDebug("Published {Count} BodyWeight records for {Source}", list.Count, source);
             return true;
@@ -326,7 +365,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish BodyWeight records for {Source}", source);
+            LogPublishFailure(ex, list, source);
             return false;
         }
     }
@@ -336,25 +375,12 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken = default)
     {
+        var list = records.ToList();
         try
         {
-            var list = records.ToList();
             if (list.Count == 0) return true;
 
-            var toCreate = new List<StepCount>();
-            foreach (var record in list)
-            {
-                var existing = record.Id != null
-                    ? await _stepCountService.GetStepCountByIdAsync(record.Id, cancellationToken)
-                    : null;
-                if (existing != null)
-                    await _stepCountService.UpdateStepCountAsync(record.Id!, record, cancellationToken);
-                else
-                    toCreate.Add(record);
-            }
-
-            if (toCreate.Count > 0)
-                await _stepCountService.CreateStepCountsAsync(toCreate, cancellationToken);
+            await _stepCountService.CreateStepCountsAsync(list, cancellationToken);
 
             Logger.LogDebug("Published {Count} StepCount records for {Source}", list.Count, source);
             return true;
@@ -362,7 +388,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish StepCount records for {Source}", source);
+            LogPublishFailure(ex, list, source);
             return false;
         }
     }
@@ -372,25 +398,12 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken = default)
     {
+        var list = records.ToList();
         try
         {
-            var list = records.ToList();
             if (list.Count == 0) return true;
 
-            var toCreate = new List<HeartRate>();
-            foreach (var record in list)
-            {
-                var existing = record.Id != null
-                    ? await _heartRateService.GetHeartRateByIdAsync(record.Id, cancellationToken)
-                    : null;
-                if (existing != null)
-                    await _heartRateService.UpdateHeartRateAsync(record.Id!, record, cancellationToken);
-                else
-                    toCreate.Add(record);
-            }
-
-            if (toCreate.Count > 0)
-                await _heartRateService.CreateHeartRatesAsync(toCreate, cancellationToken);
+            await _heartRateService.CreateHeartRatesAsync(list, cancellationToken);
 
             Logger.LogDebug("Published {Count} HeartRate records for {Source}", list.Count, source);
             return true;
@@ -398,7 +411,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish HeartRate records for {Source}", source);
+            LogPublishFailure(ex, list, source);
             return false;
         }
     }
@@ -416,113 +429,27 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         => _stateSpanService.GetLatestNonActivityTimestampAsync(source, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<DateTime?> GetBackfillLowWaterMarkAsync(
+    public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
         string source,
-        string collection,
         CancellationToken cancellationToken = default)
-    {
-        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
-        if (config?.BackfillLowWaterMarks is null)
-            return null;
-
-        var marks = JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks);
-        return marks is not null && marks.TryGetValue(collection, out var mark)
-            ? DateTime.SpecifyKind(mark, DateTimeKind.Utc)
-            : null;
-    }
+        => _configurations.GetBackfillLowWaterMarksAsync(source, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
-    /// The update is a single jsonb-path statement on PostgreSQL so concurrent writers to
-    /// DIFFERENT collections on the same row (a manual sync or cursor-reset job racing the
-    /// background sync) can't clobber each other's keys — a read-modify-write of the whole map
-    /// could drop a mark, and a dropped mark is stranded history, the exact failure marks exist
-    /// to prevent. Same-key races stay last-writer-wins: any surviving mark is a valid resume
-    /// point because the resume crawl is unbounded below it.
+    /// Same-key races (a manual sync or cursor-reset job racing the background sync) stay
+    /// last-writer-wins per key; keys a write does not name keep their values; see
+    /// <see cref="Infrastructure.Data.Repositories.ConnectorConfigurationRepository"/>.
     /// </remarks>
-    public async Task SetBackfillLowWaterMarkAsync(
+    public async Task SetBackfillLowWaterMarksAsync(
         string source,
-        string collection,
-        DateTime? lowWaterMark,
+        IReadOnlyDictionary<string, DateTime?> changes,
         CancellationToken cancellationToken = default)
     {
-        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
-        if (config is null)
+        if (!await _configurations.SetBackfillLowWaterMarksAsync(source, changes, cancellationToken))
         {
             Logger.LogWarning(
                 "No connector configuration found for {Source}; cannot persist backfill low-water mark",
                 source);
-            return;
         }
-
-        if (_db.Database.IsNpgsql())
-        {
-            if (lowWaterMark is null)
-            {
-                await _db.Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE connector_configurations
-                     SET backfill_low_water_marks =
-                         NULLIF(coalesce(backfill_low_water_marks, jsonb_build_object()) - {collection}, jsonb_build_object())
-                     WHERE id = {config.Id}
-                     """,
-                    cancellationToken);
-            }
-            else
-            {
-                // Serialized as an ISO-8601 UTC string ("...Z"), matching what
-                // System.Text.Json writes so Get round-trips without a timezone shift.
-                var value = lowWaterMark.Value.ToString("O");
-                await _db.Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE connector_configurations
-                     SET backfill_low_water_marks =
-                         jsonb_set(coalesce(backfill_low_water_marks, jsonb_build_object()), ARRAY[{collection}], to_jsonb({value}::text))
-                     WHERE id = {config.Id}
-                     """,
-                    cancellationToken);
-            }
-            return;
-        }
-
-        // Non-relational providers (tests): plain read-modify-write on the tracked entity.
-        var marks = config.BackfillLowWaterMarks is null
-            ? []
-            : JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks) ?? new Dictionary<string, DateTime>();
-
-        if (lowWaterMark is null)
-            marks.Remove(collection);
-        else
-            marks[collection] = lowWaterMark.Value;
-
-        config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
-        await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Resolves the connector configuration row for a connector data source. Sources follow the
-    /// <c>{connector-name}-connector</c> convention (<c>nightscout-connector</c>) while
-    /// configuration rows carry the bare connector name, so the suffix is stripped for the
-    /// lookup, with an exact match as fallback. Reads without tracking — marks are written via
-    /// jsonb-path updates, and a stale tracked snapshot must never flow back into the row.
-    /// </summary>
-    private async Task<ConnectorConfigurationEntity?> FindConnectorConfigurationAsync(
-        string source,
-        CancellationToken cancellationToken)
-    {
-        const string suffix = "-connector";
-        var canonicalSource = ConnectorNames.Canonical(source);
-        var canonicalName = canonicalSource.EndsWith(suffix, StringComparison.Ordinal)
-            ? canonicalSource[..^suffix.Length]
-            : canonicalSource;
-
-        var query = _db.Database.IsNpgsql()
-            ? _db.ConnectorConfigurations.AsNoTracking()
-            : _db.ConnectorConfigurations;
-
-        return await query
-            .FirstOrDefaultAsync(
-                c => c.ConnectorName == canonicalName || c.ConnectorName == canonicalSource,
-                cancellationToken);
     }
 }

@@ -26,8 +26,8 @@ public class TempBasalRepositorySyncUpsertTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
         _repository = new TempBasalRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
+            new TestNocturneDbContextFactory(_context),
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<TempBasalRepository>.Instance);
     }

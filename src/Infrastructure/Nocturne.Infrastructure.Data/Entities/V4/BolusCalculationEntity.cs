@@ -8,8 +8,18 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BolusCalculation
 /// </summary>
 [Table("bolus_calculations")]
-public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerprinted
+public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <inheritdoc />
     [AuditIgnored]
     [Column("upstream_fingerprint")]
@@ -26,6 +36,7 @@ public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerpri
     /// </summary>
     [Column("blood_glucose_input_source")]
     [MaxLength(256)]
+    [FitToColumn]
     public string? BloodGlucoseInputSource { get; set; }
 
     /// <summary>

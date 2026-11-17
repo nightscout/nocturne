@@ -120,6 +120,28 @@ public class ConnectedAppsControllerTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task List_omits_stored_scopes_a_client_cannot_hold()
+    {
+        _grantService
+            .Setup(s => s.GetGrantsForSubjectAsync(_callerSubjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new OAuthGrantInfo
+                {
+                    Id = Guid.CreateVersion7(),
+                    SubjectId = _callerSubjectId,
+                    GrantType = OAuthGrantTypes.App,
+                    Scopes = [Scope.RolesManage, Scope.TreatmentsRead, Scope.AuditRead],
+                },
+            ]);
+
+        var result = await CreateController().List(CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var apps = ok.Value.Should().BeAssignableTo<List<ConnectedAppDto>>().Subject;
+        apps.Single().Scopes.Should().Equal(Scope.TreatmentsRead);
+    }
+
     private void GrantFor(Guid grantId, OAuthGrantInfo? grant) => _grantService
         .Setup(s => s.GetGrantForSubjectAsync(
             grantId, _callerSubjectId, It.IsAny<CancellationToken>()))

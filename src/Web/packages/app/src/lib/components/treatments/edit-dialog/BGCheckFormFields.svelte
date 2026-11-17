@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { GlucoseType, GlucoseUnit } from "$lib/api";
-  import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { GlucoseType, GlucoseUnit } from "#lib/api/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Droplet from "@lucide/svelte/icons/droplet";
 
   interface Props {
@@ -34,7 +34,7 @@
 
 <div class="grid grid-cols-2 gap-4">
   <div class="space-y-2">
-    <Label>Glucose Type</Label>
+    <Label>Glucose type</Label>
     <Select.Root
       type="single"
       value={form.glucoseType ?? ""}
@@ -62,15 +62,15 @@
       }}
     >
       <Select.Trigger>
-        {form.units === "MgDl"
+        {form.units === GlucoseUnit.MgDl
           ? "mg/dL"
-          : form.units === "Mmol"
+          : form.units === GlucoseUnit.Mmol
             ? "mmol/L"
             : "Select..."}
       </Select.Trigger>
       <Select.Content>
-        <Select.Item value="MgDl">mg/dL</Select.Item>
-        <Select.Item value="Mmol">mmol/L</Select.Item>
+        <Select.Item value={GlucoseUnit.MgDl}>mg/dL</Select.Item>
+        <Select.Item value={GlucoseUnit.Mmol}>mmol/L</Select.Item>
       </Select.Content>
     </Select.Root>
   </div>

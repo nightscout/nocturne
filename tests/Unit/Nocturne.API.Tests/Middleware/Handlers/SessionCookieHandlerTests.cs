@@ -37,7 +37,7 @@ public class SessionCookieHandlerTests
             Audience = "nocturne-api",
             AccessTokenLifetimeMinutes = 15,
         });
-        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance);
+        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance, TimeProvider.System);
 
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
@@ -64,6 +64,22 @@ public class SessionCookieHandlerTests
         result.Succeeded.Should().BeTrue();
         result.AuthContext!.AuthType.Should().Be(AuthType.SessionCookie);
         result.AuthContext.SubjectId.Should().Be(_subjectId);
+    }
+
+    [Fact]
+    public async Task SessionToken_CarriesItsSessionIdIntoTheAuthContext()
+    {
+        var token = _jwt.GenerateAccessToken(
+            new SubjectInfo { Id = _subjectId, Name = "Member" },
+            permissions: ["api:read"],
+            roles: ["reader"],
+            sessionId: "laptop");
+
+        var result = await _handler.AuthenticateAsync(BuildContext(token));
+
+        result.Succeeded.Should().BeTrue();
+        result.AuthContext!.SessionId.Should().Be("laptop");
+        SessionCookieHandler.IsGrantShaped(_jwt.ValidateAccessToken(token).Claims!).Should().BeFalse();
     }
 
     [Fact]
@@ -117,7 +133,7 @@ public class SessionCookieHandlerTests
 
     /// <summary>
     /// The claims the session overload of <see cref="IJwtService.GenerateAccessToken"/> can emit
-    /// (sub, name, email, roles, permission, jti, iat, exp). A session JWT carrying only these is
+    /// (sub, name, email, roles, permission, sid, jti, iat, exp). A session JWT carrying only these is
     /// the shape the handler accepts.
     /// </summary>
     private static readonly HashSet<string> SessionShapeClaims =
@@ -127,6 +143,7 @@ public class SessionCookieHandlerTests
         nameof(JwtClaims.Email),
         nameof(JwtClaims.Roles),
         nameof(JwtClaims.Permissions),
+        nameof(JwtClaims.SessionId),
         nameof(JwtClaims.JwtId),
         nameof(JwtClaims.IssuedAt),
         nameof(JwtClaims.ExpiresAt),

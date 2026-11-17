@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -12,7 +10,8 @@ public sealed record PublicAccessInfo(
     Guid SubjectId,
     Guid MemberId,
     bool LimitTo24Hours,
-    HashSet<string> EffectivePermissions
+    HashSet<string> EffectivePermissions,
+    IReadOnlyList<string> DirectPermissions
 );
 
 /// <summary>
@@ -27,7 +26,7 @@ public sealed record PublicAccessInfo(
 public sealed class PublicAccessCacheService
 {
     private readonly IMemoryCache _cache;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly ITenantMembershipRepository _members;
     private readonly ILogger<PublicAccessCacheService> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
@@ -36,15 +35,15 @@ public sealed class PublicAccessCacheService
     /// Initialises a new <see cref="PublicAccessCacheService"/>.
     /// </summary>
     /// <param name="cache">In-memory cache for storing resolved permission sets.</param>
-    /// <param name="dbContextFactory">Factory for creating a <see cref="NocturneDbContext"/> for DB lookups.</param>
+    /// <param name="members">The memberships the Public subject's grant is read from.</param>
     /// <param name="logger">Logger instance.</param>
     public PublicAccessCacheService(
         IMemoryCache cache,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        ITenantMembershipRepository members,
         ILogger<PublicAccessCacheService> logger)
     {
         _cache = cache;
-        _dbContextFactory = dbContextFactory;
+        _members = members;
         _logger = logger;
     }
 
@@ -86,19 +85,10 @@ public sealed class PublicAccessCacheService
 
     private async Task<PublicAccessInfo?> ResolvePublicAccessAsync(Guid tenantId)
     {
-        // Pinned to the tenant being resolved: this service is a singleton on the
-        // anonymous-share request path and has no ambient tenant to inherit.
-        await using var dbContext = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId);
-
-        var membership = await dbContext.TenantMembers
-            .AsNoTracking()
-            .Include(tm => tm.MemberRoles)
-                .ThenInclude(mr => mr.TenantRole)
-            .Include(tm => tm.Subject)
-            .Where(tm => tm.TenantId == tenantId
-                         && tm.Subject!.IsSystemSubject
-                         && tm.Subject.Name == "Public")
-            .FirstOrDefaultAsync();
+        // A singleton's repository is the root one, so this reads as no reader whatever request
+        // first misses the cache: the Public subject's grants decide what a share may see, and a
+        // share could not read them.
+        var membership = await _members.FindPublicMemberAsync(tenantId, CancellationToken.None);
 
         if (membership == null)
         {
@@ -106,7 +96,7 @@ public sealed class PublicAccessCacheService
             return null;
         }
 
-        if (membership.MemberRoles.Count == 0 && (membership.DirectPermissions == null || membership.DirectPermissions.Count == 0))
+        if (membership.Roles.Count == 0 && (membership.DirectPermissions == null || membership.DirectPermissions.Count == 0))
         {
             _logger.LogDebug("Public subject membership for tenant {TenantId} has no roles or direct permissions", tenantId);
             return null;
@@ -128,7 +118,8 @@ public sealed class PublicAccessCacheService
             SubjectId: membership.SubjectId,
             MemberId: membership.Id,
             LimitTo24Hours: membership.LimitTo24Hours,
-            EffectivePermissions: effectivePermissions
+            EffectivePermissions: effectivePermissions,
+            DirectPermissions: membership.DirectPermissions ?? []
         );
     }
 }

@@ -10,6 +10,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// V2 Summary API provides aggregated data:
 /// - GET /api/v2/summary - Get summary data for time window
 /// </summary>
+[Collection(ParityShards.Two)]
 public class SummaryParityTests : ParityTestBase
 {
     public SummaryParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -23,7 +24,7 @@ public class SummaryParityTests : ParityTestBase
             "serverTimeEpoch",
             "lastUpdated",
             "now"
-        );
+        ).WithReloadLagTolerance();
     }
 
     #region Helper Methods
@@ -51,6 +52,7 @@ public class SummaryParityTests : ParityTestBase
     [Fact]
     public async Task GetSummary_Empty_ReturnsSameShape()
     {
+        await WaitForNightscoutEmptyAsync();
         await AssertGetParityAsync("/api/v2/summary");
     }
 
@@ -60,6 +62,7 @@ public class SummaryParityTests : ParityTestBase
         // Seed data within the default 6-hour window
         await SeedEntrySequenceAsync(count: 10);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary", sgvs: 10);
         await AssertGetParityAsync("/api/v2/summary");
     }
 
@@ -68,6 +71,7 @@ public class SummaryParityTests : ParityTestBase
     {
         await SeedEntrySequenceAsync(count: 10);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary?hours=12", sgvs: 10);
         await AssertGetParityAsync("/api/v2/summary?hours=12");
     }
 
@@ -76,6 +80,7 @@ public class SummaryParityTests : ParityTestBase
     {
         await SeedEntrySequenceAsync(count: 5);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary?hours=1", sgvs: 5);
         await AssertGetParityAsync("/api/v2/summary?hours=1");
     }
 
@@ -84,6 +89,7 @@ public class SummaryParityTests : ParityTestBase
     {
         await SeedEntrySequenceAsync(count: 20);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary?hours=24", sgvs: 20);
         await AssertGetParityAsync("/api/v2/summary?hours=24");
     }
 
@@ -108,6 +114,7 @@ public class SummaryParityTests : ParityTestBase
         };
         await SeedTreatmentsAsync(treatments);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary", sgvs: 10, treatments: 2);
         await AssertGetParityAsync("/api/v2/summary");
     }
 
@@ -117,6 +124,7 @@ public class SummaryParityTests : ParityTestBase
         await SeedEntrySequenceAsync(count: 10);
         await SeedProfileForTestAsync();
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary", sgvs: 10);
         await AssertGetParityAsync("/api/v2/summary");
     }
 
@@ -135,6 +143,7 @@ public class SummaryParityTests : ParityTestBase
         };
         await SeedDeviceStatusAsync(deviceStatuses);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary", sgvs: 10);
         await AssertGetParityAsync("/api/v2/summary");
     }
 
@@ -173,6 +182,7 @@ public class SummaryParityTests : ParityTestBase
 
         await SeedProfileForTestAsync();
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary?hours=24", sgvs: 20, treatments: 2);
         await AssertGetParityAsync("/api/v2/summary?hours=24");
     }
 
@@ -203,6 +213,7 @@ public class SummaryParityTests : ParityTestBase
     {
         await SeedEntrySequenceAsync(count: 5);
 
+        await WaitForNightscoutReloadAsync("/api/v2/summary?hours=10000", sgvs: 5);
         await AssertGetParityAsync("/api/v2/summary?hours=10000");
     }
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -38,6 +39,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [Route("api/v4/observations/device-events")]
 [RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class DeviceEventController(
     IDeviceEventRepository repo,
     IPatientDeviceRepository patientDevices,
@@ -70,6 +72,7 @@ public class DeviceEventController(
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null, [FromQuery] string? source = null,
+        [FromQuery] bool includeTotal = false,
         CancellationToken ct = default)
     {
         if (PrepareListQuery(from, to, sort, ref limit, ref offset, out var descending) is { } error)
@@ -79,10 +82,10 @@ public class DeviceEventController(
         if (Request.Query.TryGetValue("patientDeviceId", out var raw) && Guid.TryParse(raw, out var parsed))
             patientDeviceId = parsed;
 
-        var data = await Repository.GetAsync(from, to, device, source, limit, offset, descending,
-            nativeOnly: false, patientDeviceId: patientDeviceId, ct: ct);
-        var total = await Repository.CountAsync(from, to, ct);
-        return Ok(new PaginatedResponse<DeviceEvent> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
+        var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending,
+            patientDeviceId: patientDeviceId, ct: ct)).ToList();
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, ct));
+        return Ok(new PaginatedResponse<DeviceEvent> { Data = data, Pagination = pagination });
     }
 
     /// <inheritdoc/>

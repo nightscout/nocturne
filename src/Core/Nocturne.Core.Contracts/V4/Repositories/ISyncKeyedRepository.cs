@@ -20,7 +20,6 @@ public interface ISyncKeyedRepository<T> where T : class, IV4Record
     /// </remarks>
     /// <param name="dataSource">The connector or uploader that minted the key.</param>
     /// <param name="syncIdentifier">The key's per-source identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<bool> IsRecreationBlockedAsync(
         string dataSource, string syncIdentifier, CancellationToken ct = default);
 
@@ -30,6 +29,16 @@ public interface ISyncKeyedRepository<T> where T : class, IV4Record
     /// </summary>
     /// <exception cref="RecreationBlockedException">The key is held by a row the user deleted.</exception>
     Task<SyncUpsert<T>> UpsertAsync(T model, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// The stored timestamps of the live rows a create of <paramref name="records"/> would update in
+    /// place, matched on (DataSource, SyncIdentifier). The create moves each such row to its
+    /// record's timestamp.
+    /// </summary>
+    /// <param name="records">The records about to be created.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<DateTime>> GetUpsertTargetTimestampsAsync(
+        IReadOnlyCollection<T> records, CancellationToken ct = default);
 }
 
 /// <summary>

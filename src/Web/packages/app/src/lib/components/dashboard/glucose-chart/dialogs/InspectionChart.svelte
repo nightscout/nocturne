@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { PredictionData } from "$api/predictions.remote";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
   import GlucoseResponseChart from "./GlucoseResponseChart.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     glucoseData: { time: Date; sgv: number; color: string }[];
     centerTime: Date;
     predictionData: PredictionData | null;
@@ -22,6 +24,7 @@
     beforeMs,
     afterMs,
     label,
+    glucoseUnits,
   }: Props = $props();
 
   // Predictions can reach past afterMs, so the window stretches to cover them.
@@ -42,7 +45,7 @@
 
 {#if windowedGlucoseData.length > 0}
   <div class="py-2">
-    <p class="text-xs text-muted-foreground mb-1">Glucose Response</p>
+    <p class="text-xs text-muted-foreground mb-1">Glucose response</p>
     <GlucoseResponseChart
       glucoseData={windowedGlucoseData}
       {centerTime}
@@ -50,6 +53,7 @@
       {highThreshold}
       {lowThreshold}
       {label}
+      {glucoseUnits}
     />
   </div>
 {/if}

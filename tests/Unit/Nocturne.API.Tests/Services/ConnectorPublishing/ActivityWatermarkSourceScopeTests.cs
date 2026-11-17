@@ -1,3 +1,8 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories.Health;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.ProfileActivations;
+using Nocturne.API.Services.Caching;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +30,9 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
@@ -33,12 +40,27 @@ namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 /// <summary>
 /// Two connectors publish activity into the same tenant, and each must resolve its catch-up window
 /// from its own newest record. Runs the real publish and read paths (decomposer, state spans, heart
-/// rates, step counts) over an in-memory database rather than mocks, so a filter that never matches
-/// because nothing stamped the source fails here.
+/// rates, step counts) over PostgreSQL rather than mocks, so a filter that never matches because
+/// nothing stamped the source fails here.
 /// </summary>
-[Trait("Category", "Unit")]
-public class ActivityWatermarkSourceScopeTests : IDisposable
+[Trait("Category", "Integration")]
+public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests.Databases databases)
+    : IAsyncLifetime, IClassFixture<ActivityWatermarkSourceScopeTests.Databases>
 {
+    /// <summary>
+    /// One migrated database for the class. Every test publishes the same client ids under its own
+    /// tenant (<c>NocturneDbContext.ScopeKeyToTenant</c>).
+    /// </summary>
+    public sealed class Databases : IAsyncLifetime
+    {
+        public TestDatabase Database { get; private set; } = null!;
+
+        public async Task InitializeAsync() =>
+            Database = await SharedPostgres.CreateMigratedDatabaseAsync("activity_watermark");
+
+        public Task DisposeAsync() => Task.CompletedTask;
+    }
+
     private const string SourceA = "nightscout-connector";
     private const string SourceB = "glooko-connector";
     private const string SourceMirror = "nocturne-remote-connector";
@@ -47,18 +69,34 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
     private static readonly DateTime MidJune = new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime LateJune = new(2026, 6, 28, 8, 0, 0, DateTimeKind.Utc);
 
-    private readonly NocturneDbContext _context;
-    private readonly StateSpanService _stateSpanService;
-    private readonly MetadataPublisher _publisher;
+    private NocturneDbContext _context = null!;
+    private StateSpanService _stateSpanService = null!;
+    private MetadataPublisher _publisher = null!;
 
-    public ActivityWatermarkSourceScopeTests()
+    public async Task InitializeAsync()
     {
+        var database = databases.Database;
+        var tenant = Guid.NewGuid();
+        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
+                VALUES (@id, @slug, 'activity-watermark-test', true, now(), now())
+                """;
+            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
+            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"watermark-{tenant:N}"));
+            await cmd.ExecuteNonQueryAsync();
+        }
+
         _context = new NocturneDbContext(
             new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseInMemoryDatabase($"activity-watermark-{Guid.NewGuid():N}")
+                .UseNpgsql(database.AppConnectionString)
+                .AddInterceptors(new TenantConnectionInterceptor())
                 .Options)
         {
-            TenantId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            TenantId = tenant,
         };
 
         var processing = new Mock<IDocumentProcessingService>();
@@ -73,8 +111,8 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             .Returns((IEnumerable<StepCount> docs) => docs);
 
         var stateSpanRepository = new StateSpanRepository(
-            _context,
-            Mock.Of<IDeduplicationService>(),
+            _context.AsFactory(),
+            Mock.Of<IDuplicateLinker>(),
             Mock.Of<IAuditContext>(),
             NullLogger<StateSpanRepository>.Instance);
 
@@ -82,21 +120,20 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             stateSpanRepository, NullLogger<StateSpanService>.Instance);
 
         var heartRateService = new HeartRateService(
-            _context, processing.Object, Mock.Of<ISignalRBroadcastService>(),
-            NullLogger<HeartRateService>.Instance);
+            new HeartRateRepository(_context.AsFactory(), TimeProvider.System), processing.Object, Mock.Of<ISignalRBroadcastService>());
 
         var stepCountService = new StepCountService(
-            _context, processing.Object, Mock.Of<ISignalRBroadcastService>(),
-            NullLogger<StepCountService>.Instance);
+            new StepCountRepository(_context.AsFactory(), TimeProvider.System), processing.Object, Mock.Of<ISignalRBroadcastService>());
 
+        var sleepService = Mock.Of<ISleepService>();
         var activityService = new ActivityService(
             _stateSpanService,
-            Mock.Of<ISleepService>(),
+            sleepService,
             processing.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IDataEventSink<Activity>>(),
             new ActivityDecomposer(
-                _context, stateSpanRepository, NullLogger<ActivityDecomposer>.Instance),
+                new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), stateSpanRepository, sleepService, NullLogger<ActivityDecomposer>.Instance),
             heartRateService,
             stepCountService,
             NullLogger<ActivityService>.Instance);
@@ -114,17 +151,16 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
-            _context,
+            new ActivityDedupRepository(_context.AsFactory()),
+            new ConnectorConfigurationRepository(_context.AsFactory()),
+            Mock.Of<IProfileActivationRepository>(),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);
     }
 
-    public void Dispose()
-    {
-        _context.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public async Task DisposeAsync() => await _context.DisposeAsync();
 
     private static Activity Exercise(DateTime at) => new()
     {

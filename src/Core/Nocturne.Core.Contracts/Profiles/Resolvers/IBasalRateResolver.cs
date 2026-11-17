@@ -13,9 +13,21 @@ public interface IBasalRateResolver
     Task<double> GetBasalRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Pre-fetches all profile data for [fromMs, toMs] in a fixed number of DB queries
+    /// The scheduled rate in force at each of <paramref name="timesMills"/>, in order, as
+    /// <see cref="GetBasalRateAsync"/> resolves it, or null where that would answer its default because
+    /// no schedule is in force: one read of the activations spanning them, and the schedules of the
+    /// profiles they select.
+    /// </summary>
+    Task<IReadOnlyList<double?>> FindBasalRatesAsync(IReadOnlyList<long> timesMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pre-fetches all profile data for [fromMs, toMs) in a fixed number of DB queries
     /// and returns a synchronous delegate that resolves any timestamp in that range without
     /// further DB access. Use this instead of calling GetBasalRateAsync in a loop.
     /// </summary>
+    /// <remarks>
+    /// A profile change at or after <paramref name="toMs"/> is not seen: a time there reads the
+    /// range's last stretch. A caller resolving <paramref name="toMs"/> itself passes <c>toMs + 1</c>.
+    /// </remarks>
     Task<Func<long, double>> BuildResolverAsync(long fromMs, long toMs, CancellationToken ct = default);
 }

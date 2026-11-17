@@ -1,7 +1,15 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using Moq;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Services.ChartData;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -17,6 +25,11 @@ public class ChartDataServiceTests
 {
     // Common test timestamp: 2023-11-15T00:00:00Z in millis
     private const long TestMills = 1700000000000L;
+
+    private static IStateSpanRepository NoOverrides() =>
+        Mock.Of<IStateSpanRepository>(r => r.GetByCategories(
+            It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())
+            == Task.FromResult(new Dictionary<StateSpanCategory, List<StateSpan>>()));
 
     #region BuildGlucoseData Tests
 
@@ -315,18 +328,18 @@ public class ChartDataServiceTests
                 },
             };
 
-            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, TimeZoneInfo.Utc);
 
             result.Should().HaveCount(1);
             result[0].Carbs.Should().Be(30.0);
-            result[0].Label.Should().NotBeNullOrEmpty();
+            result[0].MealPeriod.Should().NotBeNull();
             result[0].Time.Should().Be(TestMills);
             result[0].TreatmentId.Should().Be("treat-1");
             result[0].IsOffset.Should().BeFalse();
         }
 
         [Fact]
-        public void WithoutFoodType_UsesMealName()
+        public void WithoutFoodType_CarriesMealPeriod()
         {
             // 12:00 UTC = Lunch time
             var noonUtcMills = DateTimeOffset
@@ -342,10 +355,32 @@ public class ChartDataServiceTests
                 },
             };
 
-            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, TimeZoneInfo.Utc);
 
             result.Should().HaveCount(1);
-            result[0].Label.Should().Be("Lunch");
+            result[0].MealPeriod.Should().Be(MealPeriod.Lunch);
+            result[0].Label.Should().BeNull();
+        }
+
+        [Fact]
+        public void WithoutAZone_LeavesTheMealPeriodOut()
+        {
+            var noonUtcMills = DateTimeOffset
+                .Parse("2023-11-15T12:00:00Z")
+                .ToUnixTimeMilliseconds();
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Carbs = 20.0,
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(noonUtcMills).UtcDateTime,
+                },
+            };
+
+            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+
+            result.Should().ContainSingle().Which.MealPeriod.Should().BeNull();
         }
 
         [Fact]
@@ -666,80 +701,52 @@ public class ChartDataServiceTests
 
     #endregion
 
-    #region GetMealNameForTime Tests
+    #region GetMealPeriod Tests
 
-    public class GetMealNameForTimeTests
+    public class GetMealPeriodTests
     {
+        private static long MillsAtUtcHour(int hourUtc) =>
+            new DateTimeOffset(2023, 11, 15, hourUtc, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
         [Theory]
-        [InlineData(5, "Breakfast")]
-        [InlineData(10, "Breakfast")]
-        [InlineData(11, "Lunch")]
-        [InlineData(14, "Lunch")]
-        [InlineData(15, "Snack")]
-        [InlineData(16, "Snack")]
-        [InlineData(17, "Dinner")]
-        [InlineData(20, "Dinner")]
-        [InlineData(21, "Late Night")]
-        [InlineData(23, "Late Night")]
-        [InlineData(0, "Late Night")]
-        [InlineData(4, "Late Night")]
-        public void UtcTimeBuckets(int hourUtc, string expected)
+        [InlineData(5, MealPeriod.Breakfast)]
+        [InlineData(10, MealPeriod.Breakfast)]
+        [InlineData(11, MealPeriod.Lunch)]
+        [InlineData(14, MealPeriod.Lunch)]
+        [InlineData(15, MealPeriod.Snack)]
+        [InlineData(16, MealPeriod.Snack)]
+        [InlineData(17, MealPeriod.Dinner)]
+        [InlineData(20, MealPeriod.Dinner)]
+        [InlineData(21, MealPeriod.LateNight)]
+        [InlineData(23, MealPeriod.LateNight)]
+        [InlineData(0, MealPeriod.LateNight)]
+        [InlineData(4, MealPeriod.LateNight)]
+        public void UtcZoneBuckets(int hourUtc, MealPeriod expected)
         {
-            // Build a mills value for 2023-11-15 at the specified UTC hour
-            var dto = new DateTimeOffset(2023, 11, 15, hourUtc, 30, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
-
-            var result = ChartDataService.GetMealNameForTime(mills, null);
-
-            result.Should().Be(expected);
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(hourUtc), TimeZoneInfo.Utc)
+                .Should().Be(expected);
         }
 
         [Fact]
-        public void NullTimezone_FallsBackToUtc()
+        public void NoZone_GivesNoPeriod()
         {
-            // 12:00 UTC = Lunch
-            var dto = new DateTimeOffset(2023, 11, 15, 12, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
-
-            var result = ChartDataService.GetMealNameForTime(mills, null);
-
-            result.Should().Be("Lunch");
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(12), null).Should().BeNull();
         }
 
         [Fact]
-        public void TimezoneConversion_NewYork()
+        public void ZoneConversion_NewYork_LateNight()
         {
-            // 6:00 UTC in America/New_York (UTC-5 in November) = 1:00 AM local = "Late Night"
-            var dto = new DateTimeOffset(2023, 11, 15, 6, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
+            var zone = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");
 
-            var result = ChartDataService.GetMealNameForTime(mills, "America/New_York");
-
-            result.Should().Be("Late Night");
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(6), zone).Should().Be(MealPeriod.LateNight);
         }
 
         [Fact]
-        public void TimezoneConversion_NewYork_Breakfast()
+        public void ZoneConversion_NewYork_Breakfast()
         {
-            // 12:00 UTC in America/New_York (UTC-5) = 7:00 AM local = "Breakfast"
-            var dto = new DateTimeOffset(2023, 11, 15, 12, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
+            var zone = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");
 
-            var result = ChartDataService.GetMealNameForTime(mills, "America/New_York");
-
-            result.Should().Be("Breakfast");
-        }
-
-        [Fact]
-        public void InvalidTimezone_FallsBackToUtc()
-        {
-            // 12:00 UTC = Lunch (falls back to UTC on invalid tz)
-            var dto = new DateTimeOffset(2023, 11, 15, 12, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
-
-            var result = ChartDataService.GetMealNameForTime(mills, "Invalid/Timezone");
-
-            result.Should().Be("Lunch");
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(12), zone).Should().Be(MealPeriod.Breakfast);
         }
     }
 
@@ -871,7 +878,7 @@ public class ChartDataServiceTests
             var definition = new TrackerDefinitionEntity
             {
                 Id = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 Name = "CGM Sensor",
                 Category = TrackerCategory.Sensor,
                 Icon = "activity",
@@ -888,7 +895,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = startedAtDateTime, // expires at startTime + 24h
                 Definition = definition,
             };
@@ -913,7 +920,7 @@ public class ChartDataServiceTests
             var definition = new TrackerDefinitionEntity
             {
                 Id = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 Name = "Doctor Appointment",
                 Category = TrackerCategory.Appointment,
                 Icon = "calendar",
@@ -931,7 +938,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow.AddDays(-7),
                 ScheduledAt = scheduledTime,
                 Definition = definition,
@@ -974,7 +981,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = scheduledTime,
                 Definition = new TrackerDefinitionEntity
@@ -1020,7 +1027,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 Definition = definition,
             };
@@ -1054,7 +1061,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = DateTimeOffset
                     .FromUnixTimeMilliseconds(TestMills + (18L * 60 * 60 * 1000))
@@ -1065,7 +1072,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = DateTimeOffset
                     .FromUnixTimeMilliseconds(TestMills + (6L * 60 * 60 * 1000))
@@ -1455,4 +1462,498 @@ public class ChartDataServiceTests
 
     #endregion
 
+    #region LastPumpSyncMills Tests
+
+    public class LastPumpSyncMillsTests
+    {
+        private const long Minute = 60 * 1000;
+        private const long Now = TestMills + 10 * 60 * Minute;
+
+        private static TempBasal Basal(long startMills, long? endMills) =>
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
+                EndTimestamp = endMills.HasValue
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(endMills.Value).UtcDateTime
+                    : null,
+                Rate = 1.0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+
+        private static PumpSnapshot Pump(long uploadedMills, string? clock) =>
+            new()
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(uploadedMills).UtcDateTime,
+                Clock = clock,
+            };
+
+        private static string Iso(long mills) =>
+            DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+
+        [Fact]
+        public void APumpOnItsScheduledBasalDatesFromItsLastStatusNotItsLastTempBasal()
+        {
+            var lastTemp = Basal(Now - 120 * Minute, Now - 90 * Minute);
+            var status = Pump(Now - 2 * Minute, Iso(Now - 3 * Minute));
+
+            ChartDataService.LastPumpSyncMills([lastTemp], status).Should().Be(Now - 3 * Minute);
+        }
+
+        [Fact]
+        public void APumpClockWithAnOffsetIsReadAsTheInstantItNames()
+        {
+            var status = Pump(Now, "2023-11-14T22:13:20+10:00");
+
+            ChartDataService.LastPumpSyncMills([], status)
+                .Should().Be(DateTimeOffset.Parse("2023-11-14T12:13:20Z").ToUnixTimeMilliseconds());
+        }
+
+        [Fact]
+        public void AStatusWithoutAPumpClockDatesFromItsUpload()
+        {
+            ChartDataService.LastPumpSyncMills([], Pump(Now - Minute, null)).Should().Be(Now - Minute);
+        }
+
+        [Fact]
+        public void APumpThatStoppedReportingDatesFromItsLastClock()
+        {
+            var running = Basal(Now - 200 * Minute, Now - 170 * Minute);
+            var status = Pump(Now - 2 * Minute, Iso(Now - 180 * Minute));
+
+            ChartDataService.LastPumpSyncMills([running], status).Should().Be(Now - 170 * Minute);
+        }
+
+        [Fact]
+        public void WithoutPumpStatusTheNewestTempBasalEndDatesIt()
+        {
+            var earlier = Basal(Now - 60 * Minute, Now - 30 * Minute);
+            var open = Basal(Now - 20 * Minute, null);
+
+            ChartDataService.LastPumpSyncMills([earlier, open], null).Should().Be(Now - 20 * Minute);
+        }
+
+        [Fact]
+        public void NothingToDateItFrom_IsNull()
+        {
+            ChartDataService.LastPumpSyncMills([], null).Should().BeNull();
+        }
+    }
+
+    #endregion
+
+    #region SelectDisplayTempBasals Tests
+
+    public class SelectDisplayTempBasalsTests
+    {
+        private const long Start = TestMills;
+        private const long End = TestMills + 6 * 60 * 60 * 1000;
+        private const long Minute = 60 * 1000;
+
+        private static TempBasal Basal(long startMills, long? endMills) =>
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
+                EndTimestamp = endMills.HasValue
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(endMills.Value).UtcDateTime
+                    : null,
+                Rate = 1.0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+
+        [Fact]
+        public void StartedBeforeWindowAndEndedInside_IsSelected()
+        {
+            var running = Basal(Start - 20 * Minute, Start + 10 * Minute);
+
+            Spans(ChartDataService.SelectDisplayTempBasals([running], Start, End, End)).Should().Equal(Span(running));
+        }
+
+        [Fact]
+        public void EndedBeforeWindow_IsNotSelected()
+        {
+            var ended = Basal(Start - 60 * Minute, Start - 10 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([ended], Start, End, End).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void StartedAfterWindow_IsNotSelected()
+        {
+            var later = Basal(End + Minute, End + 30 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([later], Start, End, End).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void OpenEndedBeforeWindow_RunsUntilTheNextRow()
+        {
+            var running = Basal(Start - 3 * 60 * Minute, null);
+            var later = Basal(Start + 30 * Minute, Start + 60 * Minute);
+
+            Spans(ChartDataService.SelectDisplayTempBasals([running, later], Start, End, End))
+                .Should().Equal((Start - 3 * 60 * Minute, Start + 30 * Minute), Span(later));
+        }
+
+        [Fact]
+        public void DurationZeroCancelBeforeWindow_IsNotSelected()
+        {
+            var cancel = Cancel(Start - 4 * 60 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([cancel], Start, End, End).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void EndingExactlyAtWindowStart_IsNotSelected()
+        {
+            var touching = Basal(Start - 30 * Minute, Start);
+            var overlapping = Basal(Start - 30 * Minute, Start + Minute);
+
+            Spans(ChartDataService.SelectDisplayTempBasals([touching, overlapping], Start, End, End)).Should().Equal(Span(overlapping));
+        }
+
+        [Fact]
+        public void OpenEndedInsideWindow_RunsToTheWindowEnd()
+        {
+            var open = Basal(Start + 30 * Minute, null);
+
+            Spans(ChartDataService.SelectDisplayTempBasals([open], Start, End, End))
+                .Should().Equal((Start + 30 * Minute, End));
+        }
+
+        [Fact]
+        public void OpenEndedInsideAWindowEndingAfterNow_RunsToNow()
+        {
+            var now = Start + 90 * Minute;
+            var open = Basal(Start + 30 * Minute, null);
+
+            Spans(ChartDataService.SelectDisplayTempBasals([open], Start, End, now))
+                .Should().Equal((Start + 30 * Minute, now));
+        }
+
+        [Fact]
+        public void CancelledJustBeforeWindow_IsNotDrawnIntoIt()
+        {
+            var cancelled = Basal(Start - 10 * Minute, Start + 20 * Minute);
+            cancelled.Rate = 2.0;
+            var cancel = Cancel(Start - 3 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([cancelled, cancel], Start, End, End)
+                .Should().NotContain(tb => tb.Rate == 2.0);
+        }
+
+        [Fact]
+        public void AV1Cancel_EndsTheTempAndDrawsNoDeliveryOfItsOwn()
+        {
+            var temp = Basal(Start, Start + 30 * Minute);
+            temp.Rate = 2.0;
+            var cancel = Nocturne.API.Services.V4.TreatmentDecomposer.MapToTempBasal(
+                new Treatment { EventType = "Temp Basal", Mills = Start + 10 * Minute, Duration = 0, Absolute = 0 },
+                correlationId: null);
+
+            var spans = ChartDataService.MapBasalDeliverySpans(
+                ChartDataService.SelectDisplayTempBasals([temp, cancel], Start, End, End));
+
+            spans.Select(s => (s.StartMills, s.EndMills, s.Rate)).Should().Equal((Start, Start + 10 * Minute, 2.0));
+        }
+
+        [Fact]
+        public void MirrorOverlappingTheLoop_ShowsTheLoopWhereItRuns()
+        {
+            var loop = Basal(Start, Start + 30 * Minute);
+            loop.Device = "openaps://Trio";
+            var mirror = Basal(Start + 10 * Minute, Start + 40 * Minute);
+            mirror.Device = "tidepool";
+
+            ChartDataService.SelectDisplayTempBasals([mirror, loop], Start, End, End)
+                .Select(tb => (tb.Device, tb.StartMills, tb.EndMills!.Value))
+                .Should().Equal(
+                    ("openaps://Trio", Start, Start + 30 * Minute),
+                    ("tidepool", Start + 30 * Minute, Start + 40 * Minute));
+        }
+
+        private static TempBasal Cancel(long mills)
+        {
+            var cancel = Basal(mills, mills);
+            cancel.Rate = 0;
+            return cancel;
+        }
+
+        private static IEnumerable<(long, long)> Spans(IEnumerable<TempBasal> selected) =>
+            selected.Select(tb => (tb.StartMills, tb.EndMills!.Value));
+
+        private static (long, long) Span(TempBasal tb) => (tb.StartMills, tb.EndMills!.Value);
+    }
+
+    #endregion
+
+    #region GetBasalSeriesAsync Tests
+
+    public class GetBasalSeriesAsyncTests
+    {
+        private const long Start = TestMills;
+        private const long End = TestMills + 60 * 60 * 1000;
+        private const long Minute = 60 * 1000;
+
+        [Fact]
+        public async Task ReadsFromBufferAndDrawsRunningRowClippedToWindowStart()
+        {
+            var running = new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start - 20 * Minute).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 10 * Minute).UtcDateTime,
+                Rate = 0.4,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+            var cancel = new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start - 120 * Minute).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start - 120 * Minute).UtcDateTime,
+                Rate = 0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+            var repository = new Mock<ITempBasalRepository>();
+            DateTime? requestedFrom = null;
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
+                    (from, _, _, _, _, _, _, _) => requestedFrom = from)
+                .ReturnsAsync([cancel, running]);
+
+            var series = await Service(repository.Object, TimeProvider.System).GetBasalSeriesAsync(Start, End);
+
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - 32 * 60 * Minute).UtcDateTime);
+            series.Should().ContainSingle();
+            series[0].Timestamp.Should().Be(Start);
+            series[0].Rate.Should().BeApproximately(0.4, 0.001);
+        }
+
+        [Fact]
+        public async Task WindowEndingAfterNow_StopsARunningTempAtNow()
+        {
+            var now = Start + 30 * Minute;
+            var running = new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 10 * Minute).UtcDateTime,
+                Rate = 2.0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+            var repository = new Mock<ITempBasalRepository>();
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([running]);
+
+            var basalRate = new Mock<IBasalRateResolver>();
+            basalRate
+                .Setup(r => r.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(0.8);
+            var segments = new Mock<IBasalSegmentService>();
+            segments
+                .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .Returns(AsyncEnumerable.Empty<BasalSegment>());
+
+            var series = await Service(
+                    repository.Object,
+                    new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(now)),
+                    hasTherapySettings: true,
+                    basalRate.Object,
+                    segments.Object)
+                .GetBasalSeriesAsync(Start, End);
+
+            series.Select(p => (p.Timestamp, p.Rate)).Should().Equal(
+                (Start, 0.8),
+                (Start + 10 * Minute, 2.0),
+                (now, 0.8));
+        }
+
+        [Fact]
+        public async Task ReadsTheOverridesOverTheWindow_AndScalesTheScheduleByThem()
+        {
+            var repository = new Mock<ITempBasalRepository>();
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            var segments = new Mock<IBasalSegmentService>();
+            segments
+                .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .Returns(new[] { new BasalSegment(Start, End, 1.0, 1.0, "Default") }.ToAsyncEnumerable());
+            var stateSpans = new Mock<IStateSpanRepository>();
+            stateSpans
+                .Setup(r => r.GetByCategories(
+                    It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Dictionary<StateSpanCategory, List<StateSpan>>
+                {
+                    [StateSpanCategory.Override] =
+                    [
+                        new StateSpan
+                        {
+                            Category = StateSpanCategory.Override,
+                            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 10 * Minute).UtcDateTime,
+                            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 30 * Minute).UtcDateTime,
+                            Metadata = new Dictionary<string, object> { ["insulinNeedsScaleFactor"] = 0.5 },
+                        },
+                    ],
+                });
+            using var cts = new CancellationTokenSource();
+
+            var series = await Service(
+                    repository.Object, TimeProvider.System, hasTherapySettings: true,
+                    segments: segments.Object, stateSpans: stateSpans.Object)
+                .GetBasalSeriesAsync(Start, End, cts.Token);
+
+            series.Select(p => (p.Timestamp, p.Rate)).Should().Equal(
+                (Start, 1.0), (Start + 10 * Minute, 0.5), (Start + 30 * Minute, 1.0));
+            stateSpans.Verify(
+                r => r.GetByCategories(
+                    It.Is<IEnumerable<StateSpanCategory>>(c => c.SequenceEqual(new[] { StateSpanCategory.Override })),
+                    DateTimeOffset.FromUnixTimeMilliseconds(Start).UtcDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(End).UtcDateTime,
+                    cts.Token),
+                Times.Once);
+        }
+
+        private static ChartDataService Service(
+            ITempBasalRepository repository,
+            TimeProvider timeProvider,
+            bool hasTherapySettings = false,
+            IBasalRateResolver? basalRate = null,
+            IBasalSegmentService? segments = null,
+            IStateSpanRepository? stateSpans = null)
+        {
+            var settings = new Mock<ITherapySettingsResolver>();
+            settings.Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(hasTherapySettings);
+            return new ChartDataService(
+                [],
+                Mock.Of<IChartDataAssembler>(),
+                new BasalSeriesBuilder(
+                    settings.Object, segments ?? Mock.Of<IBasalSegmentService>(), NullLogger<BasalSeriesBuilder>.Instance),
+                repository,
+                stateSpans ?? NoOverrides(),
+                settings.Object,
+                basalRate ?? Mock.Of<IBasalRateResolver>(),
+                timeProvider,
+                NullLogger<ChartDataService>.Instance);
+        }
+    }
+
+    #endregion
+
+    #region GetBasalDeliverySpansAsync Tests
+
+    public class GetBasalDeliverySpansAsyncTests
+    {
+        private const long Start = TestMills;
+        private const long End = TestMills + 60 * 60 * 1000;
+        private const long Minute = 60 * 1000;
+
+        private static TempBasal Span(long startMills, long endMills, TempBasalOrigin origin, double rate) => new()
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime,
+            Rate = rate,
+            Origin = origin,
+        };
+
+        [Fact]
+        public async Task ReadsFromBufferAndReturnsEveryOriginWithSuspendedAtZero()
+        {
+            var rows = new[]
+            {
+                Span(Start - 20 * Minute, Start + 10 * Minute, TempBasalOrigin.Manual, 0.4),
+                Span(Start + 10 * Minute, Start + 20 * Minute, TempBasalOrigin.Suspended, 0.9),
+                Span(Start + 20 * Minute, Start + 30 * Minute, TempBasalOrigin.Inferred, 1.1),
+                Span(Start - 5 * 60 * Minute, Start - 4 * 60 * Minute, TempBasalOrigin.Algorithm, 2.0),
+            };
+            var repository = new Mock<ITempBasalRepository>();
+            DateTime? requestedFrom = null;
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
+                    (from, _, _, _, _, _, _, _) => requestedFrom = from)
+                .ReturnsAsync(rows);
+
+            var service = new ChartDataService(
+                [],
+                Mock.Of<IChartDataAssembler>(),
+                new BasalSeriesBuilder(Mock.Of<ITherapySettingsResolver>(), Mock.Of<IBasalSegmentService>(), NullLogger<BasalSeriesBuilder>.Instance),
+                repository.Object,
+                NoOverrides(),
+                Mock.Of<ITherapySettingsResolver>(),
+                Mock.Of<IBasalRateResolver>(),
+                new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(End)),
+                NullLogger<ChartDataService>.Instance);
+
+            var spans = await service.GetBasalDeliverySpansAsync(Start, End);
+
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - 32 * 60 * Minute).UtcDateTime);
+            spans.Select(s => (s.Origin, s.Rate)).Should().Equal(
+                (BasalDeliveryOrigin.Manual, 0.4),
+                (BasalDeliveryOrigin.Suspended, 0.0),
+                (BasalDeliveryOrigin.Inferred, 1.1));
+            spans[0].StartMills.Should().Be(Start - 20 * Minute);
+        }
+    }
+
+    #endregion
+
+    public class MapTempBasalSpansTests
+    {
+        [Theory]
+        [InlineData(TempBasalOrigin.Manual, 1)]
+        [InlineData(TempBasalOrigin.Algorithm, 0)]
+        public void Only_a_manual_temp_draws_a_temp_basal_band(TempBasalOrigin origin, int bands)
+        {
+            var tempBasal = new TempBasal
+            {
+                Id = Guid.CreateVersion7(),
+                StartTimestamp = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc),
+                EndTimestamp = new DateTime(2026, 8, 1, 12, 30, 0, DateTimeKind.Utc),
+                Rate = 1.2,
+                Origin = origin,
+            };
+
+            ChartDataService.MapTempBasalSpans([tempBasal]).Should().HaveCount(bands);
+        }
+
+        [Fact]
+        public void A_split_records_later_piece_has_the_same_id_in_every_window_that_holds_it()
+        {
+            const long Start = TestMills;
+            const long Minute = 60 * 1000;
+            var manual = new TempBasal
+            {
+                Id = Guid.CreateVersion7(),
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 60 * Minute).UtcDateTime,
+                Rate = 1.2,
+                Origin = TempBasalOrigin.Manual,
+                Device = "pump",
+            };
+            var loop = new TempBasal
+            {
+                Id = Guid.CreateVersion7(),
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 10 * Minute).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 20 * Minute).UtcDateTime,
+                Rate = 0.5,
+                Origin = TempBasalOrigin.Algorithm,
+                Device = "openaps://Trio",
+            };
+            var records = new List<TempBasal> { manual, loop };
+
+            var wide = ChartDataService.MapTempBasalSpans(
+                ChartDataService.SelectDisplayTempBasals(records, Start - Minute, Start + 90 * Minute, Start + 90 * Minute));
+            var late = ChartDataService.MapTempBasalSpans(
+                ChartDataService.SelectDisplayTempBasals(records, Start + 30 * Minute, Start + 90 * Minute, Start + 90 * Minute));
+
+            wide.Select(s => s.Id).Should().Equal(manual.Id.ToString(), $"{manual.Id}:{Start + 20 * Minute}");
+            late.Select(s => s.Id).Should().Equal($"{manual.Id}:{Start + 20 * Minute}");
+        }
+    }
 }

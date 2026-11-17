@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Twiist.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Twiist.Mappers;
@@ -41,11 +42,9 @@ public class TwiistGlucoseMapper(ILogger logger)
     /// Maps decoded glucose blob records to SensorGlucose V4 models.
     /// </summary>
     public IEnumerable<SensorGlucose> MapGlucoseRecords(
-        IReadOnlyList<GlucoseRecord> records, string? lastTrend = null)
+        IReadOnlyList<GlucoseRecord> records, DateTime now, string? lastTrend = null)
     {
         if (records.Count == 0) return [];
-
-        var now = DateTime.UtcNow;
 
         return records
             .Where(r => r.Mgdl > 0)
@@ -60,7 +59,7 @@ public class TwiistGlucoseMapper(ILogger logger)
     {
         try
         {
-            var epochMs = new DateTimeOffset(record.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var epochMs = record.Timestamp.ToMills();
 
             return new SensorGlucose
             {

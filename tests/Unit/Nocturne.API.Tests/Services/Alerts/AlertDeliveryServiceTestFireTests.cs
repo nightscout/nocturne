@@ -12,6 +12,7 @@ using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -32,18 +33,22 @@ public class AlertDeliveryServiceTestFireTests
             TestDbContextFactory.CreateInMemoryContext(dbName);
     }
 
-    private static (AlertDeliveryService service, IDbContextFactory<NocturneDbContext> factory) CreateService()
+    private static (AlertDeliveryService service, IDbContextFactory<NocturneDbContext> factory) CreateService(
+        IEngineAlarmRelay? alarmRelay = null)
     {
         var factory = new SharedInMemoryFactory($"test_fire_{Guid.NewGuid()}");
         var tenantAccessor = Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant);
         // Empty provider: every channel provider resolves to null, so dispatch is a no-op.
         var serviceProvider = new ServiceCollection().BuildServiceProvider();
         var service = new AlertDeliveryService(
-            factory,
+            factory.AsNocturneFactory(),
+            new TenantMembershipRepository(factory.AsNocturneFactory()),
             tenantAccessor,
             Mock.Of<ISignalRBroadcastService>(),
+            alarmRelay ?? Mock.Of<IEngineAlarmRelay>(),
             serviceProvider,
-            NullLogger<AlertDeliveryService>.Instance);
+            NullLogger<AlertDeliveryService>.Instance,
+            TimeProvider.System);
         return (service, factory);
     }
 
@@ -101,5 +106,19 @@ public class AlertDeliveryServiceTestFireTests
         await using var db = await factory.CreateDbContextAsync();
         var excursion = db.AlertExcursions.IgnoreQueryFilters().Single();
         excursion.EndedAt.Should().Be(excursion.StartedAt);
+    }
+
+    [Fact]
+    public async Task A_test_fire_never_alarms()
+    {
+        var alarmRelay = new Mock<IEngineAlarmRelay>(MockBehavior.Strict);
+        var (service, _) = CreateService(alarmRelay.Object);
+        IReadOnlyList<AlertRuleChannelSnapshot> channels = [Channel(ChannelType.InApp, Guid.NewGuid().ToString())];
+
+        await service.TestFireAsync(Guid.NewGuid(), channels, Payload(), CancellationToken.None);
+        await service.TestFireAsync(Guid.NewGuid(), [], Payload(), CancellationToken.None);
+        await service.TestFireDryRunAsync(channels, Payload(), CancellationToken.None);
+
+        alarmRelay.VerifyNoOtherCalls();
     }
 }

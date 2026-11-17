@@ -5,10 +5,10 @@ import { page } from "$app/state";
 
 // The dialogs each open a remote command on mount; the card under test only owns whether they
 // are reachable, so they are stubbed down to nothing renderable.
-vi.mock("$lib/components/connectors/DeduplicationDialog.svelte", () => ({
+vi.mock("#lib/components/connectors/DeduplicationDialog.svelte", () => ({
   default: () => {},
 }));
-vi.mock("$lib/components/connectors/DemoDataSection.svelte", () => ({
+vi.mock("#lib/components/connectors/DemoDataSection.svelte", () => ({
   default: () => {},
 }));
 
@@ -20,7 +20,7 @@ describe("DataMaintenanceCard", () => {
   });
 
   it("offers nothing to someone the API would refuse", async () => {
-    // Both tools are RequireAdmin server-side. An ordinary member opens Data Quality to set a
+    // Both tools are RequireSuperuser server-side. An ordinary member opens Data Quality to set a
     // sleep schedule, so a Remove Demo Data button that could only 403 is worse than none.
     page.data = {
       effectivePermissions: ["glucose.read"],
@@ -31,7 +31,7 @@ describe("DataMaintenanceCard", () => {
     expect(
       document.querySelector('[data-testid="deduplicate-records"]')
     ).toBeNull();
-    expect(document.body.textContent).not.toContain("Remove Demo Data");
+    expect(document.body.textContent).not.toContain("Remove demo data");
   });
 
   it("offers both tools to an owner holding the wildcard scope", async () => {
@@ -41,11 +41,11 @@ describe("DataMaintenanceCard", () => {
     await expect
       .element(browser.getByTestId("deduplicate-records"))
       .toBeVisible();
-    expect(document.body.textContent).toContain("Remove Demo Data");
+    expect(document.body.textContent).toContain("Remove demo data");
   });
 
   it("offers only demo data deletion to a member holding tenant.settings", async () => {
-    // Deduplication is RequireAdmin; deleting demo data is tenant.settings. A tenant
+    // Deduplication is RequireSuperuser; deleting demo data is tenant.settings. A tenant
     // administrator holds the second and not the first.
     page.data = {
       effectivePermissions: ["tenant.settings"],
@@ -56,25 +56,6 @@ describe("DataMaintenanceCard", () => {
     expect(
       document.querySelector('[data-testid="deduplicate-records"]')
     ).toBeNull();
-    expect(document.body.textContent).toContain("Remove Demo Data");
-  });
-
-  it("keeps connector cursors to platform admins, not tenant admins", async () => {
-    // Resetting a cursor re-syncs a connector for the whole instance, so it answers to
-    // isPlatformAdmin rather than to any tenant permission.
-    page.data = {
-      effectivePermissions: ["tenant.settings"],
-      isPlatformAdmin: false,
-    };
-    render(DataMaintenanceCard);
-
-    expect(document.body.textContent).not.toContain("Reset Connector Cursors");
-  });
-
-  it("offers connector cursors to a platform admin", async () => {
-    page.data = { effectivePermissions: ["*"], isPlatformAdmin: true };
-    render(DataMaintenanceCard);
-
-    expect(document.body.textContent).toContain("Reset Connector Cursors");
+    expect(document.body.textContent).toContain("Remove demo data");
   });
 });

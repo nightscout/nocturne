@@ -37,7 +37,8 @@ public class AuthorizationController : ControllerBase
     }
 
     /// <summary>
-    /// Generate JWT token from access token
+    /// Generate JWT token from access token.
+    /// Needs no other credential: the access token in the URL is validated, and a missing or invalid one returns 401. Accepts legacy subject access tokens and <c>noc_</c> direct-grant tokens; the JWT carries the grant's scopes.
     /// </summary>
     /// <param name="accessToken">Access token to exchange for JWT</param>
     /// <returns>JWT token response</returns>
@@ -129,7 +130,7 @@ public class AuthorizationController : ControllerBase
     /// </summary>
     /// <returns>List of all subjects</returns>
     [HttpGet("subjects")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/subjects")]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<Subject>), 200)]
@@ -152,7 +153,7 @@ public class AuthorizationController : ControllerBase
     /// <param name="subject">Subject to create</param>
     /// <returns>Created subject</returns>
     [HttpPost("subjects")]
-    [RequireAdmin]
+    [RequireSuperuser]
     // A subject minted here carries a plaintext access token and any global role named in
     // the body, and its own is_demo_subject is false — so without this the shared demo
     // account could launder itself into an unflagged credential that [DenyDemoSubject]
@@ -201,7 +202,7 @@ public class AuthorizationController : ControllerBase
     /// <param name="subject">Subject to update</param>
     /// <returns>Updated subject</returns>
     [HttpPut("subjects")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/subjects")]
     [RemoteForm(Invalidates = ["GetAllSubjects"])]
     [ProducesResponseType(typeof(Subject), 200)]
@@ -250,7 +251,7 @@ public class AuthorizationController : ControllerBase
     /// <param name="id">Subject ID to delete</param>
     /// <returns>Success response</returns>
     [HttpDelete("subjects/{id}")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/subjects/:id")]
     [RemoteCommand(Invalidates = ["GetAllSubjects"])]
     [ProducesResponseType(204)]
@@ -280,7 +281,7 @@ public class AuthorizationController : ControllerBase
     /// </summary>
     /// <returns>List of all roles</returns>
     [HttpGet("roles")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<Role>), 200)]
@@ -303,7 +304,7 @@ public class AuthorizationController : ControllerBase
     /// <param name="role">Role to create</param>
     /// <returns>Created role</returns>
     [HttpPost("roles")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 201)]
@@ -339,7 +340,7 @@ public class AuthorizationController : ControllerBase
     /// <param name="role">Role to update</param>
     /// <returns>Updated role</returns>
     [HttpPut("roles")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 200)]
@@ -380,7 +381,7 @@ public class AuthorizationController : ControllerBase
     /// <param name="id">Role ID to delete</param>
     /// <returns>Success response</returns>
     [HttpDelete("roles/{id}")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [NightscoutEndpoint("/api/v2/authorization/roles/:id")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(204)]

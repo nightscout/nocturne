@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models;
@@ -20,7 +21,6 @@ namespace Nocturne.API.Tests.Integration.Parity;
 /// - Ignores field order (JSON comparison is unordered)
 /// - Handles dynamic fields (IDs, timestamps) appropriately
 /// </summary>
-[Collection("Parity")]
 [Trait("Category", "Parity")]
 [Parity]
 public abstract class ParityTestBase : IAsyncLifetime
@@ -66,15 +66,11 @@ public abstract class ParityTestBase : IAsyncLifetime
 
     public virtual async Task InitializeAsync()
     {
-        // Clean up at the start of each test to ensure a clean slate
-        // This handles leftover data from previous test runs or parallel test execution
         await Fixture.CleanupDataAsync();
     }
 
-    public virtual async Task DisposeAsync()
-    {
-        await Fixture.CleanupDataAsync();
-    }
+    // The next test's setup clears what this one leaves.
+    public virtual Task DisposeAsync() => Task.CompletedTask;
 
     #region Data Seeding Helpers
 
@@ -91,14 +87,18 @@ public abstract class ParityTestBase : IAsyncLifetime
             var nsEntry = new Dictionary<string, object?>
             {
                 ["type"] = entry.Type ?? "sgv",
-                ["sgv"] = entry.Sgv,
-                ["direction"] = entry.Direction,
                 ["device"] = entry.Device,
                 ["date"] = entry.Mills,
                 ["dateString"] = entry.DateString,
             };
 
             // Only include optional fields if they have values
+            if (entry.Sgv.HasValue) nsEntry["sgv"] = entry.Sgv.Value;
+            if (entry.Direction is not null) nsEntry["direction"] = entry.Direction;
+            if (entry.Mbg.HasValue) nsEntry["mbg"] = entry.Mbg.Value;
+            if (entry.Slope.HasValue) nsEntry["slope"] = entry.Slope.Value;
+            if (entry.Intercept.HasValue) nsEntry["intercept"] = entry.Intercept.Value;
+            if (entry.Scale.HasValue) nsEntry["scale"] = entry.Scale.Value;
             if (entry.Noise.HasValue) nsEntry["noise"] = entry.Noise.Value;
             if (entry.Filtered.HasValue) nsEntry["filtered"] = entry.Filtered.Value;
             if (entry.Unfiltered.HasValue) nsEntry["unfiltered"] = entry.Unfiltered.Value;
@@ -148,23 +148,26 @@ public abstract class ParityTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Seeds device status to both systems
+    /// Seeds device status to both systems, the same body to each. A status needs content
+    /// (here an uploader battery): Nocturne stores a devicestatus by what it reports, so a bare
+    /// <c>{device, created_at}</c> is accepted and stores nothing.
     /// </summary>
     protected async Task SeedDeviceStatusAsync(params DeviceStatus[] statuses)
     {
         foreach (var status in statuses)
         {
-            var nsStatus = new
+            var body = new Dictionary<string, object?>
             {
-                device = status.Device,
-                created_at = status.CreatedAt,
-                uploaderBattery = status.Uploader?.Battery
+                ["device"] = status.Device,
+                ["created_at"] = status.CreatedAt,
             };
+            if (status.Uploader?.Battery is { } battery)
+                body["uploader"] = new Dictionary<string, object?> { ["battery"] = battery };
 
-            var nsResponse = await NightscoutClient.PostAsJsonAsync("/api/v1/devicestatus", nsStatus);
+            var nsResponse = await NightscoutClient.PostAsJsonAsync("/api/v1/devicestatus", body);
             nsResponse.EnsureSuccessStatusCode();
 
-            var nocResponse = await NocturneClient.PostAsJsonAsync("/api/v1/devicestatus", status);
+            var nocResponse = await NocturneClient.PostAsJsonAsync("/api/v1/devicestatus", body);
             nocResponse.EnsureSuccessStatusCode();
         }
     }
@@ -176,6 +179,116 @@ public abstract class ParityTestBase : IAsyncLifetime
     {
         var entries = TestDataFactory.CreateEntrySequence(count, intervalMinutes);
         await SeedEntriesAsync(entries);
+    }
+
+    /// <summary>
+    /// Waits until the summary Nightscout serves at <paramref name="path"/> lists the seeded
+    /// <paramref name="sgvs"/> and <paramref name="treatments"/>, after the reload
+    /// <see cref="WaitForNightscoutBodyAsync"/> waits for. Returns on timeout and leaves the
+    /// assertion to report the difference.
+    /// </summary>
+    protected Task WaitForNightscoutReloadAsync(
+        string path,
+        int sgvs,
+        int treatments = 0,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        WaitForNightscoutBodyAsync(
+            path,
+            body => body?["sgvs"]?.AsArray().Count == sgvs
+                && body?["treatments"]?["treatments"]?.AsArray().Count == treatments,
+            timeout,
+            cancellationToken);
+
+    /// <summary>
+    /// Waits as <see cref="WaitForNightscoutBodyAsync"/> does until Nightscout's in-memory data
+    /// (<c>/api/v2/ddata/at</c>) holds no entries, treatments, device statuses or profiles, for a
+    /// test that compares that data without writing first. Returns on timeout and leaves the
+    /// assertion to report the difference.
+    /// </summary>
+    protected Task WaitForNightscoutEmptyAsync(CancellationToken cancellationToken = default) =>
+        WaitForNightscoutBodyAsync(
+            "/api/v2/ddata/at",
+            body => body is JsonObject
+                && new[] { "sgvs", "mbgs", "treatments", "devicestatus", "profiles", "sitechangeTreatments" }
+                    .All(key => body[key] is JsonArray { Count: 0 }),
+            cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Waits until Nightscout has finished a reload of its in-memory data that started after this
+    /// call, and <paramref name="ready"/> accepts the body it then serves at <paramref name="path"/>.
+    /// A test that writes calls it once, after its last write. Returns on timeout and leaves the
+    /// assertion to report the difference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nightscout serves summary, properties and <c>ddata</c> reads from memory it reloads from
+    /// Mongo 5 seconds after the last write (a fixed debounce, <c>UPDATE_THROTTLE</c> in its
+    /// <c>lib/server/bootevent.js</c>), so until then the previous test's data is still served and
+    /// can satisfy <paramref name="ready"/>. A reload that started after this call reads every write
+    /// before it, the cleanup's included, so one wait after the writes covers both.
+    /// </para>
+    /// <para>
+    /// The reload stamps <c>lastUpdated</c> (on <c>/api/v2/ddata/at</c>) when it starts, clears
+    /// entries, treatments and device statuses, and fills each collection as its Mongo query
+    /// answers; sgvs, profiles and the derived treatment lists hold the previous values until then,
+    /// and the properties and the summary's profile change only after the last one. Nothing it
+    /// serves marks the end, so a read counts only from <see cref="ReloadSettleTime"/> after the
+    /// stamp, by Nightscout's own clock, and only if no later reload has started by the time the read
+    /// has been answered.
+    /// </para>
+    /// </remarks>
+    protected async Task WaitForNightscoutBodyAsync(
+        string path,
+        Func<JsonNode?, bool> ready,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(20));
+        var since = await NightscoutClockAsync(cancellationToken);
+
+        while (true)
+        {
+            var poll = TimeSpan.FromMilliseconds(250);
+            if (await NightscoutReloadStartAsync(cancellationToken) is { } started && started >= since)
+            {
+                var settling = started + (long)ReloadSettleTime.TotalMilliseconds - await NightscoutClockAsync(cancellationToken);
+                if (settling > 0)
+                {
+                    poll = TimeSpan.FromMilliseconds(settling);
+                }
+                else if (ready(await GetNightscoutJsonAsync(path, cancellationToken))
+                    && await NightscoutReloadStartAsync(cancellationToken) == started)
+                {
+                    return;
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline)
+                return;
+
+            await Task.Delay(poll, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// How long after a reload starts <see cref="WaitForNightscoutBodyAsync"/> takes it to have
+    /// finished. Nightscout's log shows the reloads of these tests finishing 5 to 20 ms after they
+    /// start.
+    /// </summary>
+    private static readonly TimeSpan ReloadSettleTime = TimeSpan.FromSeconds(1);
+
+    private async Task<long> NightscoutClockAsync(CancellationToken cancellationToken) =>
+        (await GetNightscoutJsonAsync("/api/v1/status.json", cancellationToken))?["serverTimeEpoch"]?.GetValue<long>()
+        ?? throw new InvalidOperationException("Nightscout's status has no serverTimeEpoch.");
+
+    private async Task<long?> NightscoutReloadStartAsync(CancellationToken cancellationToken) =>
+        (await GetNightscoutJsonAsync("/api/v2/ddata/at", cancellationToken))?["lastUpdated"]?.GetValue<long>();
+
+    private async Task<JsonNode?> GetNightscoutJsonAsync(string path, CancellationToken cancellationToken)
+    {
+        using var response = await NightscoutClient.GetAsync(path, cancellationToken);
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
     }
 
     #endregion

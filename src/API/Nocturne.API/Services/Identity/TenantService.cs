@@ -1,29 +1,31 @@
 using Nocturne.API.Multitenancy;
 using System.Net.Http.Json;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Services.Docs;
-using Nocturne.Connectors.Core.Utilities;
+using Nocturne.API.Services.SetupHub;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
 /// <summary>
-/// Service for creating, resolving, updating, and deleting tenants.
-/// Manages <see cref="TenantEntity"/> lifecycle including slug validation, API secret hashing,
-/// <see cref="ITenantRoleService"/> default role seeding, and per-tenant <see cref="IMemoryCache"/> caching.
+/// Creates, resolves, updates and deletes tenants, and holds the rules of their membership:
+/// slug validation, default role seeding, the Public membership every tenant carries, and the
+/// last-owner protection on removal.
 /// </summary>
 /// <remarks>
-/// Slugs must match a <c>[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]</c> pattern and cannot be reserved words.
+/// Slugs must match a <c>[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]</c> pattern and cannot be reserved words.
 /// Tenant lookups by slug are cached with a short TTL to reduce database round-trips on every request.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
@@ -31,11 +33,16 @@ namespace Nocturne.API.Services.Identity;
 /// <seealso cref="AuthorizationSeedService"/>
 public partial class TenantService : ITenantService
 {
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
+    private readonly ISubjectRepository _subjects;
     private readonly IMemoryCache _cache;
     private readonly OperatorConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantRoleService _roleService;
+    private readonly GrantRevocationService _grantRevocation;
+    private readonly TimeProvider _time;
     private readonly ILogger<TenantService> _logger;
 
     private static readonly HashSet<string> ReservedSlugs =
@@ -63,276 +70,259 @@ public partial class TenantService : ITenantService
         "nightscout", "cgm", "patient", "clinic", "provider",
     ];
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]$")]
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")]
     private static partial Regex SlugPattern();
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="TenantService"/>.
-    /// </summary>
-    /// <param name="factory">Factory for creating short-lived <see cref="NocturneDbContext"/> instances.</param>
+    /// <param name="factory">For the units of work that provision a tenant or remove a member in one transaction.</param>
+    /// <param name="tenants">Reads and writes tenant records.</param>
+    /// <param name="members">Reads and writes memberships and looks up the roles they carry.</param>
+    /// <param name="subjects">Finds the Public system subject a new tenant's public membership is for.</param>
     /// <param name="cache">In-memory cache for caching resolved tenant contexts by slug.</param>
     /// <param name="config">Operator configuration (self-service creation, webhooks, etc.).</param>
     /// <param name="httpClientFactory">HTTP client factory for external tenant validation calls if needed.</param>
     /// <param name="roleService">Role service for seeding default roles on new tenant creation.</param>
-    /// <param name="logger">The logger instance.</param>
+    /// <param name="grantRevocation">Revokes a removed member's grants and evicts their sessions.</param>
+    /// <param name="timeProvider">Clock for the handover, passkey and OIDC identity timestamps.</param>
+    /// <param name="logger">Logs a tenant left without its public membership.</param>
     public TenantService(
-        IDbContextFactory<NocturneDbContext> factory,
+        INocturneDbContextFactory factory,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
+        ISubjectRepository subjects,
         IMemoryCache cache,
         IOptions<OperatorConfiguration> config,
         IHttpClientFactory httpClientFactory,
         ITenantRoleService roleService,
+        GrantRevocationService grantRevocation,
+        TimeProvider timeProvider,
         ILogger<TenantService> logger)
     {
         _factory = factory;
+        _tenants = tenants;
+        _members = members;
+        _subjects = subjects;
         _cache = cache;
         _config = config.Value;
         _httpClientFactory = httpClientFactory;
         _roleService = roleService;
+        _grantRevocation = grantRevocation;
+        _time = timeProvider;
         _logger = logger;
     }
 
     public async Task<TenantCreatedDto> CreateAsync(
         string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        var created = await CreateWithoutOwnerAsync(slug, displayName, ct);
 
-        var tenant = new TenantEntity
+        var ownerRoleId = await _members.FindRoleIdBySlugAsync(created.Id, RoleSeeds.Owner, ct)
+            ?? throw new InvalidOperationException($"Tenant {created.Id} has no owner role after seeding.");
+        if (!await AddMemberAsync(created.Id, creatorSubjectId, [ownerRoleId], ct: ct))
+            throw new InvalidOperationException($"Subject {creatorSubjectId} is already a member of the new tenant {created.Id}.");
+
+        return created;
+    }
+
+    public async Task<TenantCreatedDto> CreateWithOwnerAsync(
+        string slug, string displayName, Guid ownerSubjectId, string? ownerUsername = null, CancellationToken ct = default)
+    {
+        await using var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct);
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var tenantId = await unit.CommitAsync(async token =>
         {
-            Slug = slug.ToLowerInvariant(),
-            DisplayName = displayName,
-            IsActive = true,
-        };
+            var id = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
 
-        context.Tenants.Add(tenant);
-        await context.SaveChangesAsync(ct);
+            var ownerRoleId = await members.FindRoleIdBySlugAsync(id, RoleSeeds.Owner, token)
+                ?? throw new InvalidOperationException($"Tenant {id} has no owner role after seeding.");
+            await members.AddMemberAsync(
+                new NewTenantMember(
+                    id, ownerSubjectId, [ownerRoleId], Username: ownerUsername, MadeBy: MembershipMadeBy.Member),
+                token);
+            await unit.Context.SaveChangesAsync(token);
 
-        // Set the RLS tenant context so subsequent writes to tenant-scoped
-        // tables (roles, members, OAuth clients) are permitted. The factory-
-        // created context has no TenantId, so the connection interceptor
-        // won't set the GUC automatically.
-        await context.PinTenantAsync(tenant.Id, ct);
+            return id;
+        }, ct: ct);
 
-        // Seed default roles for this tenant
-        await _roleService.SeedRolesForTenantAsync(tenant.Id, ct);
-
-        // Create Public subject membership (no roles = private by default)
-        await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
-
-        // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-        await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
-
-        // Assign creator as owner
-        var ownerRole = await context.TenantRoles
-            .FirstAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", ct);
-        await AddMemberAsync(tenant.Id, creatorSubjectId, [ownerRole.Id], ct: ct);
-
-        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
-        return ToCreatedDto(tenant);
+        var tenant = (await _tenants.GetAsync(tenantId, ct))!;
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
+        return new TenantCreatedDto(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.SysCreatedAt);
     }
 
     public async Task<TenantCreatedDto> CreateWithoutOwnerAsync(
         string slug, string displayName, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        var id = await _tenants.CreateAsync(new NewTenant(slug.ToLowerInvariant(), displayName), ct);
+        var tenant = (await _tenants.GetAsync(id, ct))!;
 
-        var tenant = new TenantEntity
-        {
-            Slug = slug.ToLowerInvariant(),
-            DisplayName = displayName,
-            IsActive = true,
-        };
-
-        context.Tenants.Add(tenant);
-        await context.SaveChangesAsync(ct);
-
-        // Set the RLS tenant context so subsequent writes to tenant-scoped
-        // tables (roles, members, OAuth clients) are permitted.
-        await context.PinTenantAsync(tenant.Id, ct);
-
-        // Seed default roles for this tenant (but don't assign an owner)
         await _roleService.SeedRolesForTenantAsync(tenant.Id, ct);
+        await CreatePublicSubjectMembershipAsync(_members, tenant.Id, ct);
 
-        // Create Public subject membership (no roles = private by default)
-        await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
-
-        // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-        await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
-
-        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
-        return ToCreatedDto(tenant);
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
+        return new TenantCreatedDto(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.SysCreatedAt);
     }
 
     /// <summary>
-    /// Re-seeds roles, public membership, and OAuth clients for an existing
+    /// Re-seeds roles and public membership for an existing
     /// tenant after its data has been purged. Used by the dev-only reset flow.
     /// </summary>
     public async Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        await context.PinTenantAsync(tenantId, ct);
-
         await _roleService.SeedRolesForTenantAsync(tenantId, ct);
-        await CreatePublicSubjectMembershipAsync(context, tenantId, ct);
-        await SeedKnownOAuthClientsAsync(context, tenantId, ct);
+        await CreatePublicSubjectMembershipAsync(_members, tenantId, ct);
     }
 
-    public async Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default)
-    {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        return await context.Tenants.AsNoTracking()
-            .Select(t => new TenantDto(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt))
-            .ToListAsync(ct);
-    }
+    public async Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default) =>
+        (await _tenants.ListAsync(activeOnly: false, ct)).Select(ToDto).ToList();
 
     public async Task<TenantDetailDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        // Pinned to the tenant asked about — the member list this returns is an authorization
-        // primitive (TenantController.IsCallerTenantOwnerAsync reads it), so it must not depend
-        // on whatever tenant the caller's context happened to carry.
-        await using var context = await _factory.CreateTenantPinnedContextAsync(id, ct);
-        var tenant = await context.Tenants.AsNoTracking()
-            .Include(t => t.Members)
-                .ThenInclude(m => m.Subject)
-            .Include(t => t.Members)
-                .ThenInclude(m => m.MemberRoles)
-                    .ThenInclude(mr => mr.TenantRole)
-            .FirstOrDefaultAsync(t => t.Id == id, ct);
-
+        var tenant = await _tenants.GetAsync(id, ct);
         if (tenant == null) return null;
+
+        // The member list this returns is an authorization primitive
+        // (TenantController.IsCallerTenantOwnerAsync reads it), so the repository pins the read to
+        // the tenant asked about rather than whatever tenant the caller's context carries.
+        var members = await _members.ListMembersAsync(id, ct);
 
         return new TenantDetailDto(
             tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.SysCreatedAt,
-            tenant.Members
+            members
                 .Select(m => new TenantMemberDto(
                     m.Id,
                     m.SubjectId,
-                    m.Subject?.Name,
-                    m.Subject != null && m.Subject.IsSystemSubject,
-                    m.MemberRoles.Select(mr => new TenantMemberRoleDto(
-                        mr.TenantRoleId, mr.TenantRole.Name, mr.TenantRole.Slug)).ToList(),
-                    m.DirectPermissions,
+                    m.SubjectName,
+                    m.IsSystemSubject,
+                    m.Roles.Select(r => new TenantMemberRoleDto(r.RoleId, r.Name, r.Slug, [.. r.Permissions])).ToList(),
+                    m.DirectPermissions?.ToList(),
                     m.Label,
                     m.LimitTo24Hours,
                     m.LastUsedAt,
                     m.SysCreatedAt,
-                    m.Subject != null && m.Subject.IsPlatformAdmin))
+                    m.IsPlatformAdmin))
                 .ToList());
     }
 
     public async Task<TenantDto> UpdateAsync(
         Guid id, string displayName, bool isActive, bool? allowAccessRequests = null, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var tenant = await context.Tenants.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+        var tenant = await RequireAsync(id, ct);
+        await _tenants.UpdateAsync(id, new TenantEdit(DisplayName: displayName, IsActive: isActive, AllowAccessRequests: allowAccessRequests), ct);
 
-        tenant.DisplayName = displayName;
-        tenant.IsActive = isActive;
-        if (allowAccessRequests.HasValue)
-            tenant.AllowAccessRequests = allowAccessRequests.Value;
-        await context.SaveChangesAsync(ct);
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
 
-        // Invalidate cached tenant context
-        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
-
-        return ToDto(tenant);
+        return ToDto((await _tenants.GetAsync(id, ct))!);
     }
 
-    public async Task<TenantSettingsDto> GetSettingsAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var settings = await context.Tenants
-            .AsNoTracking()
-            .Where(t => t.Id == id)
-            .Select(t => new TenantSettingsDto(t.AllowPublicDocs))
-            .FirstOrDefaultAsync(ct);
-
-        return settings ?? throw new KeyNotFoundException($"Tenant {id} not found");
-    }
+    public async Task<TenantSettingsDto> GetSettingsAsync(Guid id, CancellationToken ct = default) =>
+        ToSettingsDto(await RequireAsync(id, ct));
 
     public async Task<TenantSettingsDto> SetAllowPublicDocsAsync(
         Guid id, bool allowPublicDocs, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var tenant = await context.Tenants.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+        var tenant = await RequireAsync(id, ct);
+        await _tenants.UpdateAsync(id, new TenantEdit(AllowPublicDocs: allowPublicDocs), ct);
 
-        tenant.AllowPublicDocs = allowPublicDocs;
-        await context.SaveChangesAsync(ct);
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
 
-        // The documentation paths resolve the tenant through a cache of their own, which holds
-        // the opt-in.
-        ScalarAuthProvider.EvictTenant(_cache, tenant.Slug);
+        return ToSettingsDto(tenant with { AllowPublicDocs = allowPublicDocs });
+    }
 
-        return new TenantSettingsDto(tenant.AllowPublicDocs);
+    public async Task<TenantSettingsDto> SetDisplayNameAsync(
+        Guid id, string displayName, CancellationToken ct = default)
+    {
+        var tenant = await RequireAsync(id, ct);
+        await _tenants.UpdateAsync(id, new TenantEdit(DisplayName: displayName), ct);
+
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
+
+        return ToSettingsDto(tenant with { DisplayName = displayName });
+    }
+
+    public async Task<SlugValidationResult> ChangeSlugAsync(
+        Guid id, string newSlug, CancellationToken ct = default)
+    {
+        var tenant = await RequireAsync(id, ct);
+        var normalized = newSlug.ToLowerInvariant().Trim();
+
+        if (normalized == tenant.Slug)
+            return new SlugValidationResult(false, "This is already the tenant's subdomain");
+
+        var validation = await ValidateSlugAsync(normalized, ct);
+        if (!validation.IsValid)
+            return validation;
+
+        try
+        {
+            await _tenants.UpdateAsync(id, new TenantEdit(Slug: normalized), ct);
+        }
+        catch (DbUpdateException)
+        {
+            if (!await _tenants.SlugExistsAsync(normalized, CancellationToken.None))
+                throw;
+
+            return new SlugValidationResult(false, "This name is already taken");
+        }
+
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
+        TenantCacheEviction.Evict(_cache, normalized);
+
+        _logger.LogInformation(
+            "Tenant {TenantId} moved from subdomain {OldSlug} to {NewSlug}", id, tenant.Slug, normalized);
+
+        return new SlugValidationResult(true);
+    }
+
+    public async Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default) =>
+        (await RequireAsync(id, ct)).PatientRelationship;
+
+    public async Task SetPatientRelationshipAsync(
+        Guid id, PatientRelationship relationship, Guid? callerId, CancellationToken ct = default)
+    {
+        var tenant = await RequireAsync(id, ct);
+
+        DateTime? handedOverAt = null;
+        if (tenant.PatientRelationship == PatientRelationship.Helper
+            && relationship != PatientRelationship.Helper
+            && tenant.HandedOverAt is null
+            && callerId is { } caller
+            && await Handover.HelperAsync(_members, id, ct) is { } helper
+            && helper.SubjectId != caller)
+            handedOverAt = _time.GetUtcNow().UtcDateTime;
+
+        await _tenants.UpdateAsync(id, new TenantEdit(PatientRelationship: relationship, HandedOverAt: handedOverAt), ct);
+    }
+
+    public async Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default) =>
+        (await _tenants.GetAsync(id, ct))?.DefaultGlucoseUnits;
+
+    public async Task SetDefaultGlucoseUnitsAsync(Guid id, string units, CancellationToken ct = default)
+    {
+        await RequireAsync(id, ct);
+        await _tenants.UpdateAsync(id, new TenantEdit(DefaultGlucoseUnits: units), ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var tenant = await context.Tenants.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+        var tenant = await RequireAsync(id, ct);
+        await _tenants.DeleteAsync(id, ct);
 
-        context.Tenants.Remove(tenant);
-        await context.SaveChangesAsync(ct);
-
-        // Invalidate cached tenant context
-        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
+        TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
     }
 
-    public async Task AddMemberAsync(
+    public Task<bool> AddMemberAsync(
         Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null,
-        string? label = null, bool limitTo24Hours = false, CancellationToken ct = default)
-    {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
-
-        // Check if already a member
-        var exists = await context.TenantMembers
-            .AnyAsync(tm => tm.TenantId == tenantId && tm.SubjectId == subjectId, ct);
-
-        if (exists)
-            return;
-
-        var member = new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            SubjectId = subjectId,
-            DirectPermissions = directPermissions,
-            Label = label,
-            LimitTo24Hours = limitTo24Hours,
-        };
-
-        context.TenantMembers.Add(member);
-
-        // Create role assignments
-        foreach (var roleId in roleIds)
-        {
-            context.TenantMemberRoles.Add(new TenantMemberRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantMemberId = member.Id,
-                TenantRoleId = roleId,
-            });
-        }
-
-        try
-        {
-            await context.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException)
-        {
-            // Race condition: another request already inserted. This is fine.
-        }
-    }
+        string? label = null, bool limitTo24Hours = false, CancellationToken ct = default) =>
+        _members.AddMemberAsync(
+            new NewTenantMember(tenantId, subjectId, roleIds, directPermissions, label, LimitTo24Hours: limitTo24Hours), ct);
 
     public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
-        var member = await context.TenantMembers
-            .Include(tm => tm.Subject)
-            .FirstOrDefaultAsync(tm => tm.TenantId == tenantId && tm.SubjectId == subjectId, ct);
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
+        var context = unit.Context;
+        var members = new TenantMembershipRepository(unit);
+        var member = await members.FindMemberAsync(tenantId, subjectId, ct);
 
         // Already absent is the caller's desired end state, not a refusal.
         if (member == null)
@@ -340,59 +330,66 @@ public partial class TenantService : ITenantService
 
         // The Public subject serves the anonymous share viewer; its membership is the share's
         // storage, managed through the public access card rather than the member list.
-        if (member.Subject?.IsSystemSubject == true)
+        if (member.IsSystemSubject)
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
-        if (await context.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+        var (outcome, grants) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
+            async token =>
+            {
+                var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, token);
+                if (removal != OwnerGuardedChange.Changed)
+                    return (removal, []);
+
+                // Chat identity directory rows are global and carry no membership join, so a link left
+                // behind here would keep answering bot commands for this tenant. It goes in the same
+                // SaveChanges as the membership so the two cannot come apart, and is scoped to this
+                // tenant: the same subject's links to tenants they still belong to must survive.
+                var chatLinks = await context.ChatIdentityDirectory
+                    .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
+                    .ToListAsync(token);
+
+                // Grants carry no membership join either; left live, every one would work again the
+                // moment the subject is re-added. They are staged on the unit with the removal, so one
+                // commit lands both.
+                var active = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(subjectId, token);
+
+                context.ChatIdentityDirectory.RemoveRange(chatLinks);
+                await _grantRevocation.StageAsync(unit, active, token);
+                await context.SaveChangesAsync(token);
+                return (removal, active);
+            },
+            ct: ct);
+
+        if (outcome == OwnerGuardedChange.LastOwner)
             return new MemberRemovalResult(false, TenantOwnerFilter.LastOwnerRefusal);
 
-        // Chat identity directory rows are global and carry no membership join, so a link left
-        // behind here would keep answering bot commands for this tenant. It goes in the same
-        // SaveChanges as the membership so the two cannot come apart, and is scoped to this
-        // tenant: the same subject's links to tenants they still belong to must survive.
-        var chatLinks = await context.ChatIdentityDirectory
-            .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
-            .ToListAsync(ct);
-
-        context.TenantMembers.Remove(member);
-        context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await context.SaveChangesAsync(ct);
-
+        _grantRevocation.EvictSessions(grants);
         return new MemberRemovalResult(true);
     }
 
     public async Task<List<TenantDto>> GetTenantsForSubjectAsync(
-        Guid subjectId, CancellationToken ct = default)
-    {
-        // Genuinely cross-tenant: the answer is the set of tenants this person belongs to, which
-        // no single tenant pin can express. The subject pin gives reach over their own rows only.
-        await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
-        return await context.TenantMembers.AsNoTracking()
-            .Where(tm => tm.SubjectId == subjectId)
-            .OrderByDescending(tm => tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
-            .ThenBy(tm => tm.SysCreatedAt)
-            .ThenBy(tm => tm.Tenant!.Slug)
-            .Select(tm => new TenantDto(
-                tm.Tenant!.Id, tm.Tenant.Slug, tm.Tenant.DisplayName,
-                tm.Tenant.IsActive, tm.Tenant.SysCreatedAt))
-            .ToListAsync(ct);
-    }
+        Guid subjectId, CancellationToken ct = default) =>
+        (await _members.ListTenantsOfSubjectAsync(subjectId, activeOnly: false, ct)).Select(ToDto).ToList();
 
-    public async Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default)
+    public async Task<List<TenantDto>> GetReachableTenantsForSubjectAsync(
+        Guid subjectId, CancellationToken ct = default) =>
+        (await _members.ListTenantsOfSubjectAsync(subjectId, activeOnly: true, ct)).Select(ToDto).ToList();
+
+    public Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default) =>
+        ValidateSlugAsync(slug, allowReserved: false, ct);
+
+    public async Task<SlugValidationResult> ValidateSlugAsync(
+        string slug, bool allowReserved, CancellationToken ct = default)
     {
         var normalized = slug.ToLowerInvariant().Trim();
 
         if (!SlugPattern().IsMatch(normalized))
-            return new SlugValidationResult(false, "Slug must be 3-64 characters, alphanumeric and hyphens only, no leading/trailing hyphens");
+            return new SlugValidationResult(false, "Slug must be 3-63 characters, alphanumeric and hyphens only, no leading/trailing hyphens");
 
-        if (ReservedSlugs.Contains(normalized))
+        if (!allowReserved && ReservedSlugs.Contains(normalized))
             return new SlugValidationResult(false, "This name is reserved");
 
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var exists = await context.Tenants.AsNoTracking()
-            .AnyAsync(t => t.Slug == normalized, ct);
-
-        if (exists)
+        if (await _tenants.SlugExistsAsync(normalized, ct))
             return new SlugValidationResult(false, "This name is already taken");
 
         if (!string.IsNullOrEmpty(_config.SlugValidationWebhookUrl))
@@ -426,200 +423,159 @@ public partial class TenantService : ITenantService
         ProvisionCredentialData? credential, ProvisionOidcIdentityData? oidcIdentity,
         CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var provisioned = await context.ExecuteInTransactionAsync(async token =>
+        // One unit: the owner, its credential and its membership land with the tenant or not at all.
+        await using var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct);
+        var context = unit.Context;
+        var tenants = new TenantRepository(unit);
+        var members = new TenantMembershipRepository(unit);
+        var providers = new OidcProviderRepository(unit);
+        var subjects = new SubjectRepository(unit);
+        var passkeys = new PasskeyCredentialRepository(unit);
+        var provisioned = await unit.CommitAsync(async token =>
         {
-            // 1. Create tenant
-            var tenant = new TenantEntity
+            var tenantId = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
+
+            // Resolve the owner subject. An OIDC account maps to one subject reused across
+            // tenants, so an already-linked identity names the owner even when the checkout email
+            // differs. Nothing else does: the owner email is never matched to an existing subject,
+            // since a subject's email proves nothing about who holds the new credential.
+            var normalizedIssuer = oidcIdentity?.Issuer.TrimEnd('/');
+            var existingIdentity = oidcIdentity is null
+                ? null
+                : await subjects.FindByOidcIdentityAsync(oidcIdentity.OidcSubjectId, normalizedIssuer!, token);
+
+            Guid ownerSubjectId;
+            if (existingIdentity is null)
             {
-                Slug = slug.ToLowerInvariant(),
-                DisplayName = displayName,
-                IsActive = true,
-            };
-
-            context.Tenants.Add(tenant);
-            await context.SaveChangesAsync(token);
-
-            // Set RLS tenant context for the remainder of this transaction.
-            // The connection is already open, so the TenantConnectionInterceptor
-            // won't fire again — we must set the GUC manually.
-            await context.PinTenantAsync(tenant.Id, token);
-
-            // Seed default roles for this tenant (inline to share transaction context)
-            foreach (var (roleSlug, permissions) in RoleSeeds.Permissions)
-            {
-                var name = RoleSeeds.DisplayNames[roleSlug];
-                context.TenantRoles.Add(new TenantRoleEntity
+                ownerSubjectId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
+                if (await subjects.GetAsync(ownerSubjectId, token) is not null)
                 {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenant.Id,
-                    Name = name,
-                    Slug = roleSlug,
-                    Description = null,
-                    Permissions = new List<string>(permissions),
-                    IsSystem = true,
-                });
-            }
-            await context.SaveChangesAsync(token);
+                    throw new ProvisionConflictException(
+                        $"Subject {ownerSubjectId} already exists; a provisioned owner is always a new subject.");
+                }
 
-            // Create Public subject membership (no roles = private by default)
-            var publicSubject = await context.Subjects
-                .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public", token);
-
-            if (publicSubject != null)
-            {
-                context.TenantMembers.Add(new TenantMemberEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenant.Id,
-                    SubjectId = publicSubject.Id,
-                    LimitTo24Hours = true,
-                    Label = "Public Access",
-                });
+                await subjects.CreateAsync(
+                    new NewSubject(
+                        ownerUsername,
+                        Username: ownerUsername.ToLowerInvariant(),
+                        Email: ownerEmail,
+                        Id: ownerSubjectId),
+                    token);
                 await context.SaveChangesAsync(token);
             }
             else
             {
-                _logger.LogWarning("Public system subject not found — skipping public access membership for tenant {TenantId}", tenant.Id);
+                ownerSubjectId = existingIdentity.Subject.Id;
             }
 
-            // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-            await SeedKnownOAuthClientsAsync(context, tenant.Id, token);
-
-            // 2. Resolve the owner subject.
-            // An OAuth account maps to a single subject reused across tenants, so if
-            // this OIDC identity is already linked (a prior signup with the same
-            // account), that subject IS the owner — even when the checkout email
-            // differs from the OAuth email (e.g. a differing Apple Pay email).
-            // Resolving by email first would create a fresh, credential-less owner
-            // and leave the tenant inaccessible. Fall back to an existing subject
-            // with the owner email, then to a new subject.
-            var normalizedIssuer = oidcIdentity?.Issuer.TrimEnd('/');
-            var existingIdentity = oidcIdentity is null
-                ? null
-                : await context.SubjectOidcIdentities.FirstOrDefaultAsync(x =>
-                    x.OidcSubjectId == oidcIdentity.OidcSubjectId
-                    && x.Issuer == normalizedIssuer, token);
-
-            var identitySubject = existingIdentity is null
-                ? null
-                : await context.Subjects.FirstOrDefaultAsync(s => s.Id == existingIdentity.SubjectId, token);
-            var emailSubject = await context.Subjects.FirstOrDefaultAsync(s => s.Email == ownerEmail, token);
-            var subject = ChooseOwnerSubject(identitySubject, emailSubject);
-            if (subject is null)
-            {
-                subject = new SubjectEntity
-                {
-                    Id = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7(),
-                    Name = ownerUsername,
-                    Username = ownerUsername.ToLowerInvariant(),
-                    Email = ownerEmail,
-                    IsActive = true,
-                    ApprovalStatus = "Approved",
-                };
-                context.Subjects.Add(subject);
-                await context.SaveChangesAsync(token);
-            }
-
-            // 3. Create credential (passkey or OIDC identity)
             if (credential is not null)
             {
-                context.PasskeyCredentials.Add(new PasskeyCredentialEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    SubjectId = subject.Id,
-                    CredentialId = Convert.FromBase64String(credential.CredentialId),
-                    PublicKey = Convert.FromBase64String(credential.PublicKey),
-                    SignCount = credential.SignCount,
-                    Transports = credential.Transports,
-                    AaGuid = credential.AaGuid,
-                });
+                await passkeys.CreateAsync(
+                    new NewPasskeyCredential(
+                        ownerSubjectId,
+                        Convert.FromBase64String(credential.CredentialId),
+                        Convert.FromBase64String(credential.PublicKey),
+                        credential.SignCount,
+                        credential.Transports,
+                        Label: null,
+                        credential.AaGuid,
+                        _time.GetUtcNow().UtcDateTime),
+                    token);
             }
             else if (oidcIdentity is not null)
             {
                 if (existingIdentity is null)
                 {
-                    // Ensure the OIDC provider row exists (config-managed providers
-                    // use deterministic GUIDs but may not have DB rows yet).
-                    var provider = await context.OidcProviders
-                        .FirstOrDefaultAsync(p => p.IssuerUrl == normalizedIssuer, token);
-
-                    if (provider == null)
+                    // A config-managed provider has a deterministic id but may have no row yet;
+                    // the identity's foreign key needs one. Its client id is populated by the
+                    // config sync on the next startup.
+                    var providerId = (await providers.FindByIssuerAsync(normalizedIssuer!, token))?.Id;
+                    if (providerId is null)
                     {
-                        provider = new OidcProviderEntity
-                        {
-                            Id = OidcProviderService.CreateDeterministicGuid(normalizedIssuer!),
-                            Name = oidcIdentity.Provider,
-                            IssuerUrl = normalizedIssuer!,
-                            ClientId = string.Empty, // Populated by config on next startup
-                            IsEnabled = true,
-                        };
-                        context.OidcProviders.Add(provider);
+                        providerId = await providers.CreateAsync(
+                            new NewOidcProvider(
+                                oidcIdentity.Provider,
+                                ProviderType: "oidc",
+                                normalizedIssuer!,
+                                ClientId: string.Empty,
+                                Id: OidcProviderService.CreateDeterministicGuid(normalizedIssuer!)),
+                            token);
                         await context.SaveChangesAsync(token);
                     }
 
-                    context.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        SubjectId = subject.Id,
-                        ProviderId = provider.Id,
-                        OidcSubjectId = oidcIdentity.OidcSubjectId,
-                        Issuer = normalizedIssuer!,
-                        Email = oidcIdentity.Email,
-                        LinkedAt = DateTime.UtcNow,
-                    });
+                    await subjects.AddOidcIdentityAsync(
+                        new NewSubjectOidcIdentity(
+                            ownerSubjectId,
+                            providerId.Value,
+                            oidcIdentity.OidcSubjectId,
+                            normalizedIssuer!,
+                            oidcIdentity.Email,
+                            _time.GetUtcNow().UtcDateTime),
+                        token);
                 }
                 else
                 {
-                    // Identity already links to the owner subject resolved above;
-                    // just record the reuse.
-                    existingIdentity.LastUsedAt = DateTime.UtcNow;
+                    // The identity already links to the owner subject resolved above; record the reuse.
+                    await subjects.TouchOidcIdentityAsync(
+                        existingIdentity.Identity.Id, _time.GetUtcNow().UtcDateTime, email: null, token);
                 }
             }
             await context.SaveChangesAsync(token);
 
-            // 4. Add subject as tenant owner (inline to share transaction context)
-            var ownerRole = await context.TenantRoles
-                .FirstAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", token);
-            var member = new TenantMemberEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenant.Id,
-                SubjectId = subject.Id,
-            };
-            context.TenantMembers.Add(member);
-            context.TenantMemberRoles.Add(new TenantMemberRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantMemberId = member.Id,
-                TenantRoleId = ownerRole.Id,
-            });
+            var ownerRoleId = await members.FindRoleIdBySlugAsync(tenantId, RoleSeeds.Owner, token)
+                ?? throw new InvalidOperationException($"Tenant {tenantId} has no owner role after seeding.");
+            await members.AddMemberAsync(new NewTenantMember(tenantId, ownerSubjectId, [ownerRoleId]), token);
             await context.SaveChangesAsync(token);
 
-            return new ProvisionResult(tenant.Id, subject.Id, tenant.Slug);
+            return new ProvisionResult(tenantId, ownerSubjectId, slug.ToLowerInvariant());
         }, ct: ct);
 
-        TenantResolutionMiddleware.EvictTenant(_cache, provisioned.Slug);
+        TenantCacheEviction.Evict(_cache, provisioned.Slug);
         return provisioned;
     }
 
-    private async Task CreatePublicSubjectMembershipAsync(
-        NocturneDbContext context, Guid tenantId, CancellationToken ct = default)
+    /// <summary>
+    /// Creates the tenant row, its seeded roles and its Public membership on
+    /// <paramref name="unit"/>, inside the caller's transaction, and returns the tenant's id.
+    /// </summary>
+    private async Task<Guid> CreateSeededTenantAsync(
+        DbUnitOfWork unit, TenantRepository tenants, TenantMembershipRepository members,
+        string slug, string displayName, CancellationToken token)
     {
-        var publicSubject = await context.Subjects
-            .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public", ct);
+        var context = unit.Context;
+        var tenantId = await tenants.CreateAsync(new NewTenant(slug.ToLowerInvariant(), displayName), token);
+        await context.SaveChangesAsync(token);
+
+        // The tenant's id exists only once the row is saved, and the connection is already
+        // open, so the TenantConnectionInterceptor will not fire again: the GUC is set here
+        // for the tenant-scoped writes that follow.
+        await context.PinTenantAsync(tenantId, token);
+
+        await members.SeedRolesAsync(tenantId, token);
+        await context.SaveChangesAsync(token);
+
+        await CreatePublicSubjectMembershipAsync(members, tenantId, token);
+        await context.SaveChangesAsync(token);
+
+        return tenantId;
+    }
+
+    /// <summary>
+    /// The Public membership every tenant carries, with no roles, so the tenant is private until
+    /// its owner opens a share.
+    /// </summary>
+    private async Task CreatePublicSubjectMembershipAsync(
+        ITenantMembershipRepository members, Guid tenantId, CancellationToken ct)
+    {
+        var publicSubject = await _subjects.FindSystemSubjectAsync(PublicSubjectFilter.PublicSubjectName, ct);
 
         if (publicSubject != null)
         {
-            context.TenantMembers.Add(new TenantMemberEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                SubjectId = publicSubject.Id,
-                LimitTo24Hours = true,
-                Label = "Public Access",
-            });
-            await context.SaveChangesAsync(ct);
+            await members.AddMemberAsync(
+                new NewTenantMember(
+                    tenantId, publicSubject.Id, [], Label: "Public Access", LimitTo24Hours: true,
+                    MadeBy: MembershipMadeBy.System),
+                ct);
         }
         else
         {
@@ -627,64 +583,12 @@ public partial class TenantService : ITenantService
         }
     }
 
+    private async Task<TenantRecord> RequireAsync(Guid id, CancellationToken ct) =>
+        await _tenants.GetAsync(id, ct) ?? throw new KeyNotFoundException($"Tenant {id} not found");
 
-    /// <summary>
-    /// Chooses the owner subject for a provision from the candidates already resolved
-    /// from the database. An OAuth account maps to a single subject reused across
-    /// tenants, so a subject that already owns the incoming OIDC identity wins over one
-    /// merely matching the owner email — the two can differ (e.g. the checkout uses an
-    /// Apple Pay email while the OAuth account uses another). Preferring the email match
-    /// here would make the tenant owner a fresh, credential-less subject and lock the
-    /// user out of their own instance. Returns null when neither exists, i.e. the caller
-    /// must create a new subject.
-    /// </summary>
-    public static SubjectEntity? ChooseOwnerSubject(
-        SubjectEntity? existingOidcIdentitySubject,
-        SubjectEntity? existingEmailSubject)
-        => existingOidcIdentitySubject ?? existingEmailSubject;
-
-    private static TenantDto ToDto(TenantEntity t) =>
+    private static TenantDto ToDto(TenantRecord t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
 
-    private static TenantCreatedDto ToCreatedDto(TenantEntity t) =>
-        new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
-
-    /// <summary>
-    /// Seed the bundled known-app directory into a tenant's oauth_clients.
-    /// Idempotent: existing rows for the same software_id are left untouched.
-    /// </summary>
-    private static async Task SeedKnownOAuthClientsAsync(
-        NocturneDbContext context, Guid tenantId, CancellationToken ct)
-    {
-        var existingSoftwareIds = await context.OAuthClients
-            .IgnoreQueryFilters()
-            .Where(c => c.TenantId == tenantId && c.SoftwareId != null)
-            .Select(c => c.SoftwareId!)
-            .ToListAsync(ct);
-        var existingSet = new HashSet<string>(existingSoftwareIds, StringComparer.Ordinal);
-
-        var added = 0;
-        foreach (var entry in KnownOAuthClients.Entries.Where(e => !existingSet.Contains(e.SoftwareId)))
-        {
-            context.OAuthClients.Add(new OAuthClientEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                ClientId = Guid.CreateVersion7().ToString(),
-                SoftwareId = entry.SoftwareId,
-                ClientName = entry.DisplayName,
-                ClientUri = entry.Homepage,
-                LogoUri = entry.LogoUri,
-                DisplayName = entry.DisplayName,
-                IsKnown = true,
-                RedirectUris = JsonSerializer.Serialize(entry.RedirectUris),
-            });
-            added++;
-        }
-
-        if (added > 0)
-        {
-            await context.SaveChangesAsync(ct);
-        }
-    }
+    private static TenantSettingsDto ToSettingsDto(TenantRecord t) =>
+        new(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt);
 }

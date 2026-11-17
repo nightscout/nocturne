@@ -69,7 +69,7 @@ public class GlookoXtConnectController(
     /// and records the email on the connector configuration so the sync has an account to name.
     /// </summary>
     [HttpPost("complete")]
-    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RemoteCommand(Invalidates = ["Configuration_GetConfiguration", "Configuration_GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(GlookoXtConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]

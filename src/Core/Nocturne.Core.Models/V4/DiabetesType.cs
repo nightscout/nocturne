@@ -21,7 +21,6 @@ public enum DiabetesType
     /// <summary>Maturity-Onset Diabetes of the Young.</summary>
     MODY,
 
-    /// <summary>Gestational diabetes.</summary>
     Gestational,
 
     /// <summary>Other type; see <see cref="PatientRecord.DiabetesTypeOther"/> for details.</summary>

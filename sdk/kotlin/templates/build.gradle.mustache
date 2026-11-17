@@ -1,0 +1,257 @@
+group '{{groupId}}'
+version '{{artifactVersion}}'
+{{^omitGradleWrapper}}
+
+wrapper {
+    gradleVersion = '8.14.3'
+    distributionUrl = "https://services.gradle.org/distributions/gradle-$gradleVersion-all.zip"
+}
+{{/omitGradleWrapper}}
+
+buildscript {
+    ext.kotlin_version = '2.2.20'
+    {{#jvm-ktor}}
+    ext.ktor_version = '3.2.3'
+    {{/jvm-ktor}}
+    {{#jvm-retrofit2}}
+    ext.retrofitVersion = '3.0.0'
+    {{/jvm-retrofit2}}
+    {{#useRxJava3}}
+    ext.rxJava3Version = '3.1.11'
+    {{/useRxJava3}}
+    {{#jvm-vertx}}
+    ext.vertx_version = "5.0.4"
+    {{/jvm-vertx}}
+    {{#jvm-spring}}
+    {{#useSpringBoot3}}
+    ext.spring_boot_version = "3.5.5"
+    {{/useSpringBoot3}}
+    {{^useSpringBoot3}}
+    ext.spring_boot_version = "2.7.18"
+    {{/useSpringBoot3}}
+    {{/jvm-spring}}
+    ext.spotless_version = "7.2.1"
+
+    repositories {
+        maven { url "https://repo1.maven.org/maven2" }
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        {{#kotlinx_serialization}}
+        classpath "org.jetbrains.kotlin:kotlin-serialization:$kotlin_version"
+        {{/kotlinx_serialization}}
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:$spotless_version"
+        {{#moshiCodeGen}}
+        classpath "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.2.20-2.0.3"
+        {{/moshiCodeGen}}
+    }
+}
+
+apply plugin: 'kotlin'
+{{#moshiCodeGen}}
+apply plugin: 'com.google.devtools.ksp'
+{{/moshiCodeGen}}
+{{#parcelizeModels}}
+apply plugin: 'kotlin-parcelize'
+{{/parcelizeModels}}
+{{#kotlinx_serialization}}
+apply plugin: 'kotlinx-serialization'
+{{/kotlinx_serialization}}
+{{#idea}}
+apply plugin: 'idea'
+{{/idea}}
+apply plugin: 'maven-publish'
+apply plugin: 'com.diffplug.spotless'
+{{^useSettingsGradle}}
+
+repositories {
+    maven { url "https://repo1.maven.org/maven2" }
+}
+{{/useSettingsGradle}}
+
+// Use spotless plugin to automatically format code, remove unused import, etc
+// To apply changes directly to the file, run `gradlew spotlessApply`
+// Ref: https://github.com/diffplug/spotless/tree/main/plugin-gradle
+spotless {
+    // comment out below to run spotless as part of the `check` task
+    enforceCheck false
+
+    format 'misc', {
+        // define the files (e.g. '*.gradle', '*.md') to apply `misc` to
+        target '.gitignore'
+
+        // define the steps to apply to those files
+        trimTrailingWhitespace()
+        indentWithSpaces() // Takes an integer argument if you don't like 4
+        endWithNewline()
+    }
+    kotlin {
+        ktfmt()
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+{{#idea}}
+
+idea {
+    module {
+        sourceDirs += file('src/main/kotlin')
+        testSourceDirs += file('src/test/kotlin')
+    }
+}
+{{/idea}}
+{{#explicitApi}}
+
+kotlin {
+    explicitApi()
+}
+{{/explicitApi}}
+{{#jvm-spring-webclient}}
+{{#useSpringBoot3}}
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+}
+{{/useSpringBoot3}}
+{{/jvm-spring-webclient}}
+{{#jvm-spring-restclient}}
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+}
+{{/jvm-spring-restclient}}
+{{#kotlinx-datetime}}
+
+kotlin {
+    sourceSets {
+        all {
+            languageSettings {
+                optIn("kotlin.time.ExperimentalTime")
+            }
+        }
+    }
+}
+{{/kotlinx-datetime}}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    {{^doNotUseRxAndCoroutines}}
+    {{#useCoroutines}}
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
+    {{/useCoroutines}}
+    {{/doNotUseRxAndCoroutines}}
+    {{#moshi}}
+    {{^moshiCodeGen}}
+    implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+    implementation "com.squareup.moshi:moshi-kotlin:1.15.2"
+    implementation "com.squareup.moshi:moshi-adapters:1.15.2"
+    {{/moshiCodeGen}}
+    {{#moshiCodeGen}}
+    implementation "com.squareup.moshi:moshi:1.15.2"
+    implementation "com.squareup.moshi:moshi-adapters:1.15.2"
+    ksp "com.squareup.moshi:moshi-kotlin-codegen:1.15.2"
+    {{/moshiCodeGen}}
+    {{/moshi}}
+    {{#gson}}
+    implementation "com.google.code.gson:gson:2.13.2"
+    {{/gson}}
+    {{#jackson}}
+    implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+    implementation "com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.0"
+    {{/jackson}}
+    {{#kotlinx_serialization}}
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
+    {{/kotlinx_serialization}}
+    {{#jvm-ktor}}
+    implementation "io.ktor:ktor-client-core:$ktor_version"
+    implementation "io.ktor:ktor-client-content-negotiation:$ktor_version"
+    {{#gson}}
+    implementation "io.ktor:ktor-serialization-gson:$ktor_version"
+    implementation "io.ktor:ktor-client-gson:$ktor_version"
+    {{/gson}}
+    {{#jackson}}
+    implementation "io.ktor:ktor-client-jackson:$ktor_version"
+    implementation "io.ktor:ktor-serialization-jackson:$ktor_version"
+    {{/jackson}}
+    {{/jvm-ktor}}
+    {{#jvm-okhttp4}}
+    implementation "com.squareup.okhttp3:okhttp:5.1.0"
+    {{/jvm-okhttp4}}
+    {{#jvm-spring-webclient}}
+    implementation "org.springframework.boot:spring-boot-starter-webflux:$spring_boot_version"
+    implementation "io.projectreactor:reactor-core:3.7.11"
+    {{/jvm-spring-webclient}}
+    {{#jvm-spring-restclient}}
+    implementation "org.springframework.boot:spring-boot-starter-web:$spring_boot_version"
+    {{/jvm-spring-restclient}}
+    {{#threetenbp}}
+    implementation "org.threeten:threetenbp:1.7.2"
+    {{/threetenbp}}
+    {{#kotlinx-datetime}}
+    implementation "org.jetbrains.kotlinx:kotlinx-datetime:0.7.1"
+    {{/kotlinx-datetime}}
+    {{#jvm-retrofit2}}
+    implementation "com.squareup.okhttp3:logging-interceptor:5.1.0"
+    {{#useRxJava3}}
+    implementation "io.reactivex.rxjava3:rxjava:$rxJava3Version"
+    implementation "com.squareup.retrofit2:adapter-rxjava3:$retrofitVersion"
+    {{/useRxJava3}}
+    implementation "com.squareup.retrofit2:retrofit:$retrofitVersion"
+    {{#gson}}
+    implementation "com.squareup.retrofit2:converter-gson:$retrofitVersion"
+    {{/gson}}
+    {{#moshi}}
+    implementation "com.squareup.retrofit2:converter-moshi:$retrofitVersion"
+    {{/moshi}}
+    {{#kotlinx_serialization}}
+    implementation "com.squareup.retrofit2:converter-kotlinx-serialization:$retrofitVersion"
+    {{/kotlinx_serialization}}
+    {{#jackson}}
+    implementation "com.squareup.retrofit2:converter-jackson:$retrofitVersion"
+    {{/jackson}}
+    implementation "com.squareup.retrofit2:converter-scalars:$retrofitVersion"
+    {{/jvm-retrofit2}}
+    {{#jvm-vertx}}
+    implementation "io.vertx:vertx-web-client:$vertx_version"
+    implementation "io.vertx:vertx-core:$vertx_version"
+    implementation "io.vertx:vertx-lang-kotlin:$vertx_version"
+    implementation "io.vertx:vertx-uri-template:$vertx_version"
+    {{#useCoroutines}}
+    implementation "io.vertx:vertx-lang-kotlin-coroutines:$vertx_version"
+    {{/useCoroutines}}
+    {{/jvm-vertx}}
+    testImplementation "io.kotlintest:kotlintest-runner-junit5:3.4.2"
+    {{#jvm-spring}}
+    testImplementation "org.springframework.boot:spring-boot-test:$spring_boot_version"
+    {{/jvm-spring}}
+}
+{{#kotlinx_serialization}}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        freeCompilerArgs += "-Xopt-in=kotlinx.serialization.ExperimentalSerializationApi"
+    }
+}
+{{/kotlinx_serialization}}
+
+java {
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = '{{groupId}}'
+            artifactId = '{{artifactId}}'
+            version = '{{artifactVersion}}'
+            from components.java
+        }
+    }
+}

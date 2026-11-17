@@ -34,17 +34,17 @@ public class CompositeDataEventSink<T>(
     }
 
     /// <inheritdoc />
-    public async Task BeforeDeleteAsync(string id, CancellationToken ct = default)
-    {
-        foreach (var sink in _sinks)
-            await InvokeAsync(sink, s => s.BeforeDeleteAsync(id, ct));
-    }
-
-    /// <inheritdoc />
     public async Task OnDeletedAsync(T? item, CancellationToken ct = default)
     {
         foreach (var sink in _sinks)
             await InvokeAsync(sink, s => s.OnDeletedAsync(item, ct));
+    }
+
+    /// <inheritdoc />
+    public async Task OnWrittenAsync(IReadOnlyList<T> items, CancellationToken ct = default)
+    {
+        foreach (var sink in _sinks)
+            await InvokeAsync(sink, s => s.OnWrittenAsync(items, ct));
     }
 
     /// <inheritdoc />

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Controllers.V4.PlatformAdmin;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -12,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.Admin;
 
@@ -66,7 +68,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         _loginCodeService = new LoginCodeService(
             jwtService.Object,
             new AuthAuditService(
-                _auditContext,
+                _auditContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object));
@@ -149,7 +151,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         var row = await _auditContext.AuthAuditLog.AsNoTracking()
             .SingleAsync(a => a.EventType == AuthAuditEventType.LoginCodeIssued);
         row.Success.Should().BeTrue();
-        row.SubjectId.Should().Be(_memberSubjectId);
+        row.TargetSubjectId.Should().Be(_memberSubjectId);
         row.ActorSubjectId.Should().BeNull();
         row.ActorCredential.Should().Be($"{AuthType.InstanceKey}:0123456789abcdef");
         row.TenantId.Should().Be(_tenantId);
@@ -187,6 +189,68 @@ public class TenantControllerLoginCodeTests : IDisposable
         remaining.Should().HaveCount(1);
     }
 
+    [Fact]
+    public async Task IssueRecoveryCode_MintsALongerLivedCodeThatOnlyRecoveryRedeems()
+    {
+        var result = await IssueRecoveryCodeAsync();
+        var issued = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<LoginCode>().Subject;
+
+        issued.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), TimeSpan.FromMinutes(1));
+        var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
+        stored.Purpose.Should().Be(LoginCodePurpose.OperatorRecovery);
+
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, [LoginCodePurpose.Login], null, null))
+            .Should().BeNull("a recovery code is not a sign-in");
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, null, null))
+            .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.OperatorRecovery));
+    }
+
+    [Fact]
+    public async Task IssueRecoveryCode_ReplacesTheMembersOutstandingRecoveryCode()
+    {
+        var first = (await IssueRecoveryCodeAsync()).Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<LoginCode>().Subject;
+
+        await IssueRecoveryCodeAsync();
+
+        (await _loginCodeService.RedeemAsync(_tenantContext, first.Code, LoginCodeService.RecoveryPurposes, null, null))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task IssueRecoveryCode_ForAMemberWhoCanStillSignIn_IsRefused()
+    {
+        _tenantContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = _memberSubjectId, CredentialId = [3], PublicKey = [1],
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _tenantContext.SaveChangesAsync();
+
+        var result = await IssueRecoveryCodeAsync();
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        (await _tenantContext.LoginCodes.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_login_code_does_not_redeem_as_a_recovery_code()
+    {
+        var issued = await IssueAsync(_memberSubjectId);
+
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, null, null))
+            .Should().BeNull();
+        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
+    }
+
+    private Task<IActionResult> IssueRecoveryCodeAsync()
+    {
+        var contexts = _db.ContextFactory.AsNocturneFactory();
+        return _controller.IssueRecoveryCode(
+            _tenantId, _memberSubjectId, contexts, _loginCodeService,
+            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts))), CancellationToken.None);
+    }
+
     private TenantDetailDto TenantDetail(bool isActive) => new(
         _tenantId, "acme", "Acme", isActive, DateTime.UtcNow,
         [
@@ -197,7 +261,7 @@ public class TenantControllerLoginCodeTests : IDisposable
 
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>
         await _controller.IssueLoginCode(
-            tenantId, subjectId, _db.ContextFactory, _loginCodeService, CancellationToken.None);
+            tenantId, subjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService, CancellationToken.None);
 
     private async Task<LoginCode> IssueAsync(Guid subjectId)
     {

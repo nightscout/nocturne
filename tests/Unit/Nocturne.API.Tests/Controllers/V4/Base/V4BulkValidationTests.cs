@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -22,11 +23,13 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Base;
@@ -42,7 +45,7 @@ public class V4BulkValidationTests
 
     private readonly Mock<IApsSnapshotRepository> _aps = new();
 
-    private ApsSnapshotController ApsController() => WithContext(new ApsSnapshotController(_aps.Object));
+    private ApsSnapshotController ApsController() => WithContext(new ApsSnapshotController(_aps.Object, Mock.Of<ILoopClosedLoopStamper>()));
 
     private static TController WithContext<TController>(TController controller)
         where TController : ControllerBase
@@ -517,14 +520,13 @@ public class V4BulkValidationTests
     private static UploaderSnapshotController UploaderController() =>
         WithContext(new UploaderSnapshotController(Mock.Of<IUploaderSnapshotRepository>()));
 
-    // The database context is only reached past the preamble, which is all these tests exercise.
     private static NutritionController CarbIntakes() =>
         WithContext(new NutritionController(
             Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBolusRepository>(),
             Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IDemoModeService>(),
-            context: null!));
+            Mock.Of<IFoodRepository>(),
+            Mock.Of<IMealReadService>()));
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));

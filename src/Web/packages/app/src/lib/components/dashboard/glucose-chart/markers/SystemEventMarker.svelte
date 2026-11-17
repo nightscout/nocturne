@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { SystemEventIcon } from "$lib/components/icons";
-  import { SystemEventType } from "$lib/api";
+  import { SystemEventIcon } from "#lib/components/icons/index.js";
+  import { SystemEventType } from "#lib/api/index.js";
 
   interface Props {
     xPos: number;

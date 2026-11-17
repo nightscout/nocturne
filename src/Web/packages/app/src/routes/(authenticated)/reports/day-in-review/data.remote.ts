@@ -5,10 +5,10 @@
 import { z } from 'zod';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getAll as getApsSnapshots } from '$api/generated/apsSnapshots.generated.remote';
-import { getInsulinDeliveryStatistics } from '$api/generated/statistics.generated.remote';
-import { getPatientTimeZone } from '$api/report-range';
-import { getLocalDayBoundariesUtc } from '$lib/utils/timezone';
+import { getAll as getApsSnapshots } from '#lib/api/generated/apsSnapshots.generated.remote.js';
+import { getInsulinDeliveryStatistics } from '#lib/api/generated/statistics.generated.remote.js';
+import { getPatientTimeZone } from '#lib/api/report-range.js';
+import { getLocalDayBoundariesUtc } from '#lib/utils/timezone.js';
 
 /**
  * Get day-in-review data for a specific date
@@ -42,7 +42,7 @@ export const getDayInReviewData = query(
 				apiClient.bolus.getAll(dayStart, dayEnd, 1000),
 				apiClient.nutrition.getCarbIntakes(dayStart, dayEnd, 1000),
 				getApsSnapshots({ from: dayStart, to: dayEnd, limit: 1000, sort: 'timestamp_asc' }),
-				getInsulinDeliveryStatistics({ startDate: dayStart, endDate: dayEnd }),
+				getInsulinDeliveryStatistics({ startDate: dayStart, endDate: dayEnd, includeBoluses: true }),
 			]);
 
 		const entries = entriesResponse.data ?? [];
@@ -79,6 +79,8 @@ export const getDayInReviewData = query(
 			treatmentSummary,
 			insulinDelivery,
 			apsSnapshots,
+			/** The zone the day's boundaries were taken in; UTC when the patient has none, as they were. */
+			timeZone: timezone ?? 'UTC',
 			dateRange: {
 				from: dayStart,
 				to: dayEnd,

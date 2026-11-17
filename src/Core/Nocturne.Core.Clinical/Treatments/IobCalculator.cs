@@ -1,119 +1,104 @@
-using System.Globalization;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Clinical.Treatments;
 
 /// <summary>
 /// V4-native IOB calculator operating on <see cref="Bolus"/> and <see cref="TempBasal"/> records.
-/// Implements the two-phase exponential decay curve, accepting V4 domain types directly.
+/// A record's own <see cref="TreatmentInsulinContext"/> overrides the profile DIA and chooses its
+/// insulin curve (<see cref="CalcInsulin"/>).
 /// </summary>
-/// <remarks>
-/// Per-bolus <see cref="TreatmentInsulinContext"/> overrides profile-level DIA and peak values
-/// when available, enabling accurate multi-insulin IOB calculations without data loss.
-/// </remarks>
 /// <seealso cref="IIobCalculator"/>
 public class IobCalculator(
     ITherapySettingsResolver therapySettings,
     ISensitivityResolver sensitivity,
-    IBasalRateResolver basalRate,
+    IBasalSegmentService basalSegments,
     IApsSnapshotRepository apsSnapshotRepo,
-    IPumpSnapshotRepository pumpSnapshotRepo
+    IPumpSnapshotRepository pumpSnapshotRepo,
+    IStateSpanRepository stateSpans
 ) : IIobCalculator
 {
     // Constants from legacy implementation (identical to IobService)
-    private const double DEFAULT_DIA = 3.0;
     private const double SCALE_FACTOR_BASE = 3.0;
-    private const double PEAK_MINUTES = 75.0;
     private const double MAX_IOB_MINUTES = 180.0;
+    private const long NET_BASAL_CHUNK_MS = 5 * 60 * 1000;
+
+    // oref0's custom peak limits, 50-120 minutes rapid-acting and 35-100 ultra-rapid, joined because a
+    // record's Curve is not reliable: AAPS records are all stamped rapid-acting.
+    private const int MIN_RECORD_PEAK_MINUTES = 35;
+    private const int MAX_RECORD_PEAK_MINUTES = 120;
+
+    // oref0's minimum DIA for the exponential curves, also used by AAPS and Trio. The curve needs a peak
+    // under half the DIA, so some floor is required.
+    private const double MIN_EXPONENTIAL_DIA_HOURS = 5.0;
+
+    // COB asks for the total at several instants over the same temps and cutoff, so the schedule
+    // they read is the same and is read once.
+    private (long From, long To, ScheduledBasal Scheduled)? _scheduled;
 
     /// <inheritdoc />
     public async Task<IobResult> CalculateTotalAsync(
         List<Bolus> boluses,
-        List<TempBasal>? tempBasals = null,
-        long? time = null,
+        List<TempBasal>? tempBasals,
+        long time,
+        long? deliveredUntil = null,
+        bool live = false,
         CancellationToken ct = default
     )
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // A reported IOB of zero (or negative, after a long low temp) is a real device value.
+        var deviceResult = await GetDeviceIobAsync(time, live, ct);
 
-        // Get IOB from device snapshots (APS, pump) - prioritized source. Null means no recent
-        // snapshot carried an IOB at all; a reported IOB of zero (or negative, after a long
-        // low-temp) is a real device value and is kept.
-        var deviceResult = await GetLatestDeviceIobAsync(currentTime, ct);
+        var bolusResult = boluses?.Any() == true ? FromBoluses(boluses, time) : null;
 
-        // Calculate IOB from boluses
-        var bolusResult =
-            boluses?.Any() == true
-                ? FromBoluses(boluses, currentTime)
-                : new IobResult();
-
-        // Calculate basal IOB from V4 TempBasal records
-        var tempBasalResult =
-            tempBasals?.Any() == true
-                ? FromTempBasals(tempBasals, currentTime)
-                : new IobResult();
-
-        // Merge TempBasal basal IOB into the bolus result
-        if (tempBasalResult.BasalIob.HasValue)
+        if (deviceResult is not null)
         {
-            bolusResult.BasalIob = (bolusResult.BasalIob ?? 0) + tempBasalResult.BasalIob.Value;
-            bolusResult.Activity = (bolusResult.Activity ?? 0) + (tempBasalResult.Activity ?? 0);
-        }
-
-        IobResult result;
-        if (deviceResult is null)
-        {
-            result = bolusResult;
-        }
-        else
-        {
-            result = deviceResult;
-            // Add bolus IOB as separate property for device status sources
-            if (bolusResult.Iob > 0)
+            // Nightscout reports the IOB its treatments give beside a device's own.
+            if (bolusResult?.Iob > 0)
             {
-                result.TreatmentIob = RoundToThreeDecimals(bolusResult.Iob);
+                deviceResult.TreatmentIob = bolusResult.Iob;
             }
 
-            // A device that reports basal IOB has already accounted for its own temp basals;
-            // adding the locally-computed value on top would count that insulin twice. Only
-            // substitute the local estimate when the device reported no basal IOB of its own.
-            if (!result.BasalIob.HasValue && bolusResult.BasalIob.HasValue)
-            {
-                result.BasalIob = RoundToThreeDecimals(bolusResult.BasalIob.Value);
-            }
+            return deviceResult;
         }
 
-        // Apply final rounding to IOB
-        if (result.Iob > 0)
-        {
-            result.Iob = RoundToThreeDecimals(result.Iob);
-        }
-
-        return AddDisplay(result);
+        return await LocalTotalAsync(bolusResult, tempBasals, time, deliveredUntil, ct);
     }
 
     /// <inheritdoc />
-    public IobContribution CalcBolus(Bolus bolus, long? time = null)
+    public Task<IobResult> CalculateFromTreatmentsAsync(
+        List<Bolus> boluses, List<TempBasal>? tempBasals, long time, CancellationToken ct = default) =>
+        LocalTotalAsync(boluses?.Any() == true ? FromBoluses(boluses, time) : null, tempBasals, time, null, ct);
+
+    private async Task<IobResult> LocalTotalAsync(
+        IobResult? bolusResult, List<TempBasal>? tempBasals, long time, long? deliveredUntil, CancellationToken ct)
+    {
+        var basalResult = tempBasals?.Any() == true
+            ? await FromTempBasalsAsync(tempBasals, time, Math.Min(deliveredUntil ?? time, time), ct)
+            : null;
+
+        return Total(bolusResult, basalResult);
+    }
+
+    /// <inheritdoc />
+    public IobContribution CalcBolus(Bolus bolus, long currentTime)
     {
         if (bolus.Insulin <= 0)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        // Per-bolus insulin context takes priority over profile DIA/peak
         var dia = bolus.InsulinContext?.Dia
             ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
-        var peak = bolus.InsulinContext?.Peak
-            ?? PEAK_MINUTES;
         var sens = sensitivity.GetSensitivityAsync(currentTime, null).GetAwaiter().GetResult();
 
-        return CalcBolusCore(bolus, dia, peak, sens, currentTime);
+        return CalcInsulin(bolus.Insulin, bolus.Mills, bolus.InsulinContext, dia, sens, currentTime);
     }
 
     /// <inheritdoc />
@@ -124,33 +109,61 @@ public class IobCalculator(
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        // Same precedence as the async path: per-bolus insulin context wins, else the snapshot.
-        var dia = bolus.InsulinContext?.Dia ?? snapshot.Dia;
-        var peak = bolus.InsulinContext?.Peak ?? snapshot.PeakMinutes;
-        var sens = snapshot.SensitivityAt(time);
-
-        return CalcBolusCore(bolus, dia, peak, sens, time);
+        return CalcInsulin(bolus.Insulin, bolus.Mills, bolus.InsulinContext, snapshot.Dia, snapshot.SensitivityAt(time), time);
     }
 
-    private static IobContribution CalcBolusCore(Bolus bolus, double dia, double peak, double sens, long currentTime)
+    /// <summary>
+    /// The DIA the curve of insulin carrying <paramref name="context"/> runs for: the record's own,
+    /// raised to <see cref="MIN_EXPONENTIAL_DIA_HOURS"/> on the exponential curve, else the profile's.
+    /// </summary>
+    internal static double CurveDia(TreatmentInsulinContext? context, double profileDia) =>
+        context is { Peak: > 0 } ? Math.Max(context.Dia, MIN_EXPONENTIAL_DIA_HOURS) : context?.Dia ?? profileDia;
+
+    /// <summary>
+    /// What remains of <paramref name="units"/> delivered at <paramref name="deliveredMills"/>, and
+    /// how fast it is acting, in sensitivity units per minute. Insulin whose record has its own peak
+    /// follows <see cref="ExponentialInsulinCurve"/>, as AAPS and Trio do; other insulin follows the
+    /// iob.js curve (<see cref="CalcLegacyInsulin"/>). Negative units give negative IOB and activity.
+    /// </summary>
+    private static IobContribution CalcInsulin(
+        double units, long deliveredMills, TreatmentInsulinContext? context, double profileDia, double sens, long currentTime)
     {
-        // Exact legacy algorithm constants
+        var dia = CurveDia(context, profileDia);
+        if (context is not { Peak: > 0 })
+            return CalcLegacyInsulin(units, deliveredMills, dia, sens, currentTime);
+
+        var minutes = (currentTime - deliveredMills) / 60_000.0;
+        var peak = Math.Clamp(context.Peak, MIN_RECORD_PEAK_MINUTES, MAX_RECORD_PEAK_MINUTES);
+        return new IobContribution
+        {
+            IobContrib = units * ExponentialInsulinCurve.IobFraction(minutes, peak, dia * 60),
+            ActivityContrib = sens * units * ExponentialInsulinCurve.ActivityFraction(minutes, peak, dia * 60),
+        };
+    }
+
+    /// <summary>
+    /// The iob.js curve: two fitted polynomials meeting at a fixed 75-minute peak, on a time scaled
+    /// by <c>3 / DIA</c> so that it ends at DIA.
+    /// </summary>
+    private static IobContribution CalcLegacyInsulin(
+        double units, long deliveredMills, double dia, double sens, long currentTime)
+    {
+        const double peak = TherapySnapshot.DefaultPeakMinutes;
         var scaleFactor = SCALE_FACTOR_BASE / dia;
 
-        var bolusTime = bolus.Mills;
-        var minAgo = (scaleFactor * (currentTime - bolusTime)) / 1000.0 / 60.0;
+        var minAgo = (scaleFactor * (currentTime - deliveredMills)) / 1000.0 / 60.0;
 
         // Before peak (0-75 minutes): curved rise
         if (minAgo < peak)
         {
             var x1 = minAgo / 5.0 + 1.0;
-            var iobContrib = bolus.Insulin * (1.0 - 0.001852 * x1 * x1 + 0.001852 * x1);
+            var iobContrib = units * Math.Max(0.0, 1.0 - 0.001852 * x1 * x1 + 0.001852 * x1);
             var activityContrib =
-                sens * bolus.Insulin * (2.0 / dia / 60.0 / peak) * minAgo;
+                sens * units * (2.0 / dia / 60.0 / peak) * minAgo;
 
             return new IobContribution
             {
-                IobContrib = Math.Max(0.0, iobContrib),
+                IobContrib = iobContrib,
                 ActivityContrib = activityContrib,
             };
         }
@@ -160,15 +173,15 @@ public class IobCalculator(
         {
             var x2 = (minAgo - peak) / 5.0;
             var iobContrib =
-                bolus.Insulin * (0.001323 * x2 * x2 - 0.054233 * x2 + 0.55556);
+                units * Math.Max(0.0, 0.001323 * x2 * x2 - 0.054233 * x2 + 0.55556);
             var activityContrib =
                 sens
-                * bolus.Insulin
+                * units
                 * (2.0 / dia / 60.0 - ((minAgo - peak) * 2.0) / dia / 60.0 / (60.0 * 3.0 - peak));
 
             return new IobContribution
             {
-                IobContrib = Math.Max(0.0, iobContrib),
+                IobContrib = iobContrib,
                 ActivityContrib = activityContrib,
             };
         }
@@ -178,10 +191,8 @@ public class IobCalculator(
     }
 
     /// <inheritdoc />
-    public IobResult FromBoluses(List<Bolus> boluses, long? time = null)
+    public IobResult FromBoluses(List<Bolus> boluses, long currentTime)
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
         // Every bolus reads DIA and sensitivity at currentTime, so each is resolved once for the
         // batch rather than per bolus: a resolver call is several database round-trips, and an
         // automated-bolus history holds dozens of boluses inside one DIA window. Lazy, so a batch
@@ -193,10 +204,11 @@ public class IobCalculator(
 
         return FromBolusesCore(boluses, currentTime, bolus => bolus.Insulin <= 0
             ? new IobContribution { IobContrib = 0, ActivityContrib = 0 }
-            : CalcBolusCore(
-                bolus,
+            : CalcInsulin(
+                bolus.Insulin,
+                bolus.Mills,
+                bolus.InsulinContext,
                 bolus.InsulinContext?.Dia ?? profileDia.Value,
-                bolus.InsulinContext?.Peak ?? PEAK_MINUTES,
                 sens.Value,
                 currentTime));
     }
@@ -215,6 +227,7 @@ public class IobCalculator(
             return new IobResult
             {
                 Iob = 0.0,
+                BolusIob = 0.0,
                 Activity = 0.0,
                 Source = "Care Portal",
             };
@@ -237,9 +250,11 @@ public class IobCalculator(
             }
         }
 
+        var bolusIob = RoundToThreeDecimals(totalIob);
         return new IobResult
         {
-            Iob = RoundToThreeDecimals(totalIob),
+            Iob = bolusIob,
+            BolusIob = bolusIob,
             Activity = totalActivity,
             LastBolus = lastBolus,
             Source = "Care Portal",
@@ -247,229 +262,194 @@ public class IobCalculator(
     }
 
     /// <inheritdoc />
-    public IobContribution CalcTempBasal(TempBasal tempBasal, long? time = null)
+    public IobResult FromTempBasals(
+        List<TempBasal> pieces,
+        TherapySnapshot snapshot,
+        Func<TempBasal, long, double> scheduledUnder,
+        long time,
+        long deliveredUntil)
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        if (!tempBasal.EndMills.HasValue)
-        {
-            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
-        }
-
-        var dia = tempBasal.InsulinContext?.Dia
-            ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
-
-        var scheduledBasalRate = tempBasal.ScheduledRate
-            ?? basalRate.GetBasalRateAsync(tempBasal.StartMills, null).GetAwaiter().GetResult();
-
-        return CalcTempBasalCore(tempBasal, dia, scheduledBasalRate, currentTime);
+        return FromTempBasalsCore(
+            pieces,
+            time,
+            Math.Min(deliveredUntil, time),
+            snapshot.Dia,
+            snapshot.SensitivityAt(time),
+            scheduledUnder);
     }
 
-    /// <inheritdoc />
-    public IobContribution CalcTempBasal(TempBasal tempBasal, TherapySnapshot snapshot, long time)
+    private async Task<IobResult> FromTempBasalsAsync(
+        List<TempBasal> tempBasals, long time, long cutoff, CancellationToken ct)
     {
-        if (!tempBasal.EndMills.HasValue)
+        var pieces = StatisticsService.ClipOverlappingTempBasals(tempBasals, cutoff);
+        if (pieces.Count == 0 || pieces[0].StartMills >= cutoff)
         {
-            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
+            return FromTempBasalsCore([], time, cutoff, 0, 0, (_, _) => 0);
         }
 
-        var dia = tempBasal.InsulinContext?.Dia ?? snapshot.Dia;
-        var scheduledBasalRate = tempBasal.ScheduledRate ?? snapshot.BasalRateAt(tempBasal.StartMills);
+        var scheduled = await ScheduledAsync(pieces[0].StartMills, cutoff, ct);
+        var dia = await therapySettings.GetDIAAsync(time, null, ct);
+        var sens = await sensitivity.GetSensitivityAsync(time, null, ct);
 
-        return CalcTempBasalCore(tempBasal, dia, scheduledBasalRate, time);
+        return FromTempBasalsCore(pieces, time, cutoff, dia, sens, scheduled.Under);
     }
 
-    private static IobContribution CalcTempBasalCore(
-        TempBasal tempBasal, double dia, double scheduledBasalRate, long currentTime)
+    private async Task<ScheduledBasal> ScheduledAsync(long from, long to, CancellationToken ct)
     {
-        var treatmentStart = tempBasal.StartMills;
-        var treatmentEnd = tempBasal.EndMills!.Value;
+        if (_scheduled is { } held && held.From == from && held.To == to)
+            return held.Scheduled;
 
-        if (currentTime <= treatmentStart)
-        {
-            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
-        }
-
-        var effectiveEnd = Math.Min(currentTime, treatmentEnd);
-        var durationActual = (effectiveEnd - treatmentStart) / 1000.0 / 60.0;
-
-        var rate = tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate;
-        var excessInsulin = Math.Max(0, (rate - scheduledBasalRate) * (durationActual / 60.0));
-
-        if (excessInsulin <= 0)
-        {
-            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
-        }
-
-        var minAgo = (currentTime - treatmentStart) / 1000.0 / 60.0;
-        var diaMinutes = dia * 60.0;
-
-        if (minAgo < diaMinutes)
-        {
-            var decayFactor = Math.Max(0, 1.0 - (minAgo / diaMinutes));
-            var basalIob = excessInsulin * decayFactor;
-
-            return new IobContribution
-            {
-                IobContrib = RoundToThreeDecimals(basalIob),
-                ActivityContrib = 0,
-            };
-        }
-
-        return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
+        var profile = new List<BasalSegment>();
+        await foreach (var segment in basalSegments.GetSegmentsAsync(from, to + 1, ct))
+            profile.Add(segment);
+        var scheduled = new ScheduledBasal(profile, await ScheduledBasal.OverridesAsync(stateSpans, from, to, ct));
+        _scheduled = (from, to, scheduled);
+        return scheduled;
     }
 
-    /// <inheritdoc />
-    public IobResult FromTempBasals(List<TempBasal> tempBasals, long? time = null)
-    {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        // DIA is read at currentTime for every temp basal; resolved once, as in FromBoluses.
-        var profileDia = new Lazy<double>(
-            () => therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult());
-
-        return FromTempBasalsCore(tempBasals, currentTime, tb => tb.EndMills.HasValue
-            ? CalcTempBasalCore(
-                tb,
-                tb.InsulinContext?.Dia ?? profileDia.Value,
-                tb.ScheduledRate
-                    ?? basalRate.GetBasalRateAsync(tb.StartMills, null).GetAwaiter().GetResult(),
-                currentTime)
-            : new IobContribution { IobContrib = 0, ActivityContrib = 0 });
-    }
-
-    /// <inheritdoc />
-    public IobResult FromTempBasals(List<TempBasal> tempBasals, TherapySnapshot snapshot, long time)
-    {
-        return FromTempBasalsCore(tempBasals, time, tb => CalcTempBasal(tb, snapshot, time));
-    }
-
+    /// <param name="pieces">As <see cref="StatisticsService.ClipOverlappingTempBasals"/> returns them: ordered by start, each with an end.</param>
     private static IobResult FromTempBasalsCore(
-        List<TempBasal> tempBasals, long currentTime, Func<TempBasal, IobContribution> calc)
+        List<TempBasal> pieces,
+        long time,
+        long cutoff,
+        double profileDia,
+        double sens,
+        Func<TempBasal, long, double> scheduledUnder)
     {
-        if (tempBasals?.Any() != true)
+        double? basalIob = null;
+        var activity = 0.0;
+
+        foreach (var piece in pieces)
         {
-            return new IobResult
-            {
-                Iob = 0.0,
-                Activity = 0.0,
-                Source = "Care Portal",
-            };
+            if (piece.StartMills >= cutoff)
+                break;
+
+            var contribution = CalcNetBasal(
+                piece,
+                Math.Min(piece.EndMills!.Value, cutoff),
+                profileDia,
+                sens,
+                scheduledUnder,
+                time);
+
+            basalIob = (basalIob ?? 0) + contribution.IobContrib;
+            activity += contribution.ActivityContrib;
         }
 
-        var totalBasalIob = 0.0;
-        var totalActivity = 0.0;
-
-        foreach (var tempBasal in tempBasals.Where(tb => tb.StartMills <= currentTime))
-        {
-            var contribution = calc(tempBasal);
-            totalBasalIob += contribution.IobContrib;
-            totalActivity += contribution.ActivityContrib;
-        }
-
+        var rounded = basalIob is { } sum ? RoundToThreeDecimals(sum) : (double?)null;
         return new IobResult
         {
-            Iob = 0.0, // Basal IOB does not contribute to bolus IOB
-            BasalIob = totalBasalIob > 0 ? RoundToThreeDecimals(totalBasalIob) : null,
-            Activity = totalActivity,
+            Iob = rounded ?? 0.0,
+            BasalIob = rounded,
+            Activity = activity,
             Source = "Care Portal",
         };
     }
 
     /// <summary>
-    /// Query <see cref="IApsSnapshotRepository"/> and <see cref="IPumpSnapshotRepository"/>
-    /// for the most recent device-reported IOB within the staleness window. Returns <c>null</c>
-    /// when no recent snapshot carries an IOB value — a reported zero is a real value, not an
-    /// absence, so "device said 0" and "device said nothing" are distinct results.
+    /// Net basal insulin on board from one delivered temp basal piece, on the model oref0, Loop,
+    /// AAPS and Trio share. The piece's rate less the scheduled rate under it
+    /// (<see cref="ScheduledBasal.Under"/>) is delivered in <see cref="NET_BASAL_CHUNK_MS"/> chunks
+    /// from its start, the last one partial, and each chunk decays from its own start on the same
+    /// insulin curve as a bolus (<see cref="CalcInsulin"/>).
+    /// A temp below the schedule, or a suspend, withholds insulin, so its chunks are negative and so
+    /// are the IOB and activity they give. Delivery stops at <paramref name="deliveryEnd"/>, the
+    /// caller's cutoff at the latest; the curve is read at <paramref name="time"/>, which can be
+    /// later.
     /// </summary>
-    internal async Task<IobResult?> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
+    private static IobContribution CalcNetBasal(
+        TempBasal piece,
+        long deliveryEnd,
+        double profileDia,
+        double sens,
+        Func<TempBasal, long, double> scheduledUnder,
+        long time)
     {
-        var futureMills = time + DeviceReportedValues.FutureSkewToleranceMs;
-        var recentMills = time - DeviceReportedValues.RecencyThresholdMs;
+        // A percent temp's Rate was resolved against the schedule at its start, so one that crosses a
+        // schedule boundary keeps that rate after it.
+        if ((piece.Origin == TempBasalOrigin.Suspended ? 0 : piece.Rate) is not { } rate)
+            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
 
-        var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
-        var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
+        var iob = 0.0;
+        var activity = 0.0;
 
-        // Try APS snapshot first (highest priority: Loop, OpenAPS, AAPS, Trio)
-        var apsSnapshots = await apsSnapshotRepo.GetAsync(
-            from: recentTime,
-            to: futureTime,
-            device: null,
-            source: null,
-            limit: 1,
-            offset: 0,
-            descending: true,
-            ct: ct
-        );
+        // Chunks delivered a full DIA ago have left the curve, so the walk starts at the first that has not.
+        var firstChunkStart = piece.StartMills;
+        var expiredFor = time - CurveDia(piece.InsulinContext, profileDia) * 3_600_000.0 - piece.StartMills;
+        if (expiredFor >= 0)
+            firstChunkStart += ((long)Math.Floor(expiredFor / NET_BASAL_CHUNK_MS) + 1) * NET_BASAL_CHUNK_MS;
 
-        var apsSnapshot = apsSnapshots.FirstOrDefault();
-        if (apsSnapshot is { Iob: not null } or { BasalIob: not null })
+        for (var chunkStart = firstChunkStart; chunkStart < deliveryEnd; chunkStart += NET_BASAL_CHUNK_MS)
         {
-            var source = apsSnapshot!.AidAlgorithm switch
-            {
-                AidAlgorithm.Loop => "Loop",
-                _ => "OpenAPS",
-            };
+            var chunkEnd = Math.Min(chunkStart + NET_BASAL_CHUNK_MS, deliveryEnd);
 
-            return new IobResult
-            {
-                Iob = apsSnapshot.Iob ?? 0.0,
-                BasalIob = apsSnapshot.BasalIob,
-                Source = source,
-                Device = apsSnapshot.Device,
-                Mills = new DateTimeOffset(apsSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            };
+            var units = (rate - scheduledUnder(piece, chunkStart)) * (chunkEnd - chunkStart) / 3_600_000.0;
+
+            var contribution = CalcInsulin(units, chunkStart, piece.InsulinContext, profileDia, sens, time);
+            iob += contribution.IobContrib;
+            activity += contribution.ActivityContrib;
         }
 
-        // Fall back to pump snapshot
-        var pumpSnapshots = await pumpSnapshotRepo.GetAsync(
-            from: recentTime,
-            to: futureTime,
-            device: null,
-            source: null,
-            limit: 1,
-            offset: 0,
-            descending: true,
-            ct: ct
-        );
+        return new IobContribution { IobContrib = iob, ActivityContrib = activity };
+    }
 
-        var pumpSnapshot = pumpSnapshots.FirstOrDefault();
-        if (pumpSnapshot is { Iob: not null } or { BolusIob: not null })
+    /// <summary>
+    /// The local total, whose bolus and net basal parts, each rounded as reported, add up to its
+    /// <see cref="IobResult.Iob"/>.
+    /// </summary>
+    private static IobResult Total(IobResult? bolus, IobResult? basal)
+    {
+        var bolusIob = bolus?.BolusIob ?? 0.0;
+        var basalIob = basal?.BasalIob;
+        return new IobResult
         {
-            return new IobResult
-            {
-                Iob = pumpSnapshot!.Iob ?? pumpSnapshot.BolusIob ?? 0.0,
-                Source = "Pump",
-                Device = pumpSnapshot.Device,
-                Mills = new DateTimeOffset(pumpSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            };
-        }
+            Iob = RoundToThreeDecimals(bolusIob + (basalIob ?? 0.0)),
+            BolusIob = bolusIob,
+            BasalIob = basalIob,
+            Activity = (bolus?.Activity ?? 0.0) + (basal?.Activity ?? 0.0),
+            LastBolus = bolus?.LastBolus,
+            Source = "Care Portal",
+        };
+    }
 
-        return null;
+    /// <summary>
+    /// The device IOB that holds at <paramref name="time"/> by <see cref="DeviceReadings.At"/>, read
+    /// from the newest APS and pump snapshot in its window; null where the calculation holds.
+    /// </summary>
+    internal async Task<IobResult?> GetDeviceIobAsync(long time, bool live, CancellationToken ct = default)
+    {
+        var (from, to) = DeviceReportedValues.Window(time, live);
+        var fromTime = from.ToUtcDateTime();
+        var toTime = to.ToUtcDateTime();
+
+        var aps = (await apsSnapshotRepo.GetAsync(
+            from: fromTime, to: toTime, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
+            .Select(s => new DeviceReading(
+                s.Timestamp.ToMills(), DeviceSource.Aps, s.Iob, s.Cob, s.BolusIob, s.BasalIob,
+                s.AidAlgorithm == AidAlgorithm.Loop ? "Loop" : "OpenAPS", s.Device));
+        var pump = (await pumpSnapshotRepo.GetAsync(
+            from: fromTime, to: toTime, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
+            .Select(s => DeviceReading.FromPump(new PumpIobPoint(s.Timestamp, s.Iob, s.BolusIob)) with { Device = s.Device });
+
+        if (new DeviceReadings(aps, pump).At(time, live).Iob is not { } reading)
+            return null;
+
+        return new IobResult
+        {
+            Iob = RoundToThreeDecimals(reading.Iob!.Value),
+            BolusIob = reading.BolusIob,
+            BasalIob = reading.BasalIob,
+            Source = reading.Name,
+            Device = reading.Device,
+            Mills = reading.Mills,
+            ReportedByDevice = true,
+        };
     }
 
     #region Helper Methods
 
-    private static IobResult AddDisplay(IobResult iob)
-    {
-        if (iob.Iob <= 0)
-        {
-            return iob;
-        }
-
-        // Invariant: these strings go out over the API, so they must not pick up the
-        // server's decimal separator.
-        var display = iob.Iob.ToString("F2", CultureInfo.InvariantCulture);
-        iob.Display = display;
-        iob.DisplayLine = $"IOB: {display}U";
-
-        return iob;
-    }
-
-    private static double RoundToThreeDecimals(double num)
-    {
-        return Math.Round(num + double.Epsilon, 3);
-    }
+    /// <summary>Nightscout's <c>roundToThreeDecimals</c>, which rounds a midpoint up; Nightscout's IOB is never negative.</summary>
+    private static double RoundToThreeDecimals(double num) => ScaledRounding.Round(num, 3, MidpointRounding.AwayFromZero);
 
     #endregion
 }

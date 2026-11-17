@@ -28,6 +28,7 @@ public static class EntryProjection
         entry.Filtered = sg.Filtered;
         entry.Unfiltered = sg.Unfiltered;
         entry.Delta = sg.Delta;
+        entry.Rssi = sg.Rssi;
         return entry;
     }
 
@@ -68,7 +69,7 @@ public static class EntryProjection
         string? dataSource,
         int? utcOffset)
     {
-        var mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var mills = timestamp.ToMills();
         return new Entry
         {
             Id = legacyId ?? id.ToString(),
@@ -79,8 +80,8 @@ public static class EntryProjection
             DataSource = dataSource,
             UtcOffset = utcOffset,
             IsValid = true,
-            SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvModified = modifiedAt.ToMills(),
+            SrvCreated = createdAt.ToMills(),
         };
     }
 }

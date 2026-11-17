@@ -8,8 +8,13 @@ using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
@@ -127,6 +132,21 @@ public class AlexaControllerTests
             { "default public share", [.. Scope.DefaultPublicShareScopes] },
         };
 
+    [Fact]
+    public async Task HandleAlexaRequest_ServiceAnswersNothing_RespondsWithAnEmptyJsonString()
+    {
+        var request = ValidRequest();
+        GrantLegacy("api:*:read");
+        _mockAlexaService
+            .Setup(x => x.ProcessRequestAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AlexaResponse?)null);
+
+        var result = await _controller.HandleAlexaRequest(request, CancellationToken.None);
+
+        var json = Assert.IsType<JsonResult>(result.Result);
+        Assert.Equal(string.Empty, json.Value);
+    }
+
     [Theory]
     [MemberData(nameof(CredentialsThatReadGlucose))]
     public async Task HandleAlexaRequest_CredentialThatReadsGlucose_ReturnsOk(
@@ -182,7 +202,15 @@ public class AlexaControllerTests
     [InlineData("HelpIntent")]
     public async Task OpenSessionResponse_KeepsShouldEndSessionFalseOnTheNightscoutWire(string kind)
     {
-        var service = new AlexaService(Mock.Of<IEntryStore>(), Mock.Of<ILogger<AlexaService>>());
+        var service = new AlexaService(
+            Mock.Of<IEntryService>(),
+            Mock.Of<IPropertiesService>(),
+            Mock.Of<IDDataService>(),
+            new HttpContextAccessor(),
+            Mock.Of<ITenantGlucoseUnits>(),
+            TimeProvider.System,
+            Mock.Of<ILogger<AlexaService>>()
+        );
         var response = kind == "LaunchRequest"
             ? await service.HandleLaunchRequestAsync("en")
             : await service.HandleIntentRequestAsync(
@@ -302,16 +330,7 @@ public class AlexaControllerTests
             .Setup(x => x.ProcessRequestAsync(request, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Something went wrong"));
 
-        _mockAlexaService
-            .Setup(x =>
-                x.BuildSpeechletResponse(
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<bool>()
-                )
-            )
-            .Returns(errorResponse);
+        _mockAlexaService.Setup(x => x.BuildErrorResponse()).Returns(errorResponse);
 
         // Act
         var result = await _controller.HandleAlexaRequest(request, CancellationToken.None);
@@ -319,9 +338,6 @@ public class AlexaControllerTests
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<AlexaResponse>(okResult.Value);
-        Assert.Contains(
-            "having trouble",
-            response.Response.OutputSpeech?.Text ?? string.Empty
-        );
+        Assert.Same(errorResponse, response);
     }
 }

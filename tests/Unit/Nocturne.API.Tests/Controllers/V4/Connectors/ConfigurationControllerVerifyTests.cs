@@ -8,6 +8,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Controllers.V4.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Xunit;
 
@@ -24,8 +25,9 @@ public class ConfigurationControllerVerifyTests
 
     private ConfigurationController BuildController()
     {
-        // Verification runs the same schema gate the configuration PUT runs, so the schema read is
-        // the one configuration-service call it is allowed to make.
+        // Verification runs the same gate the configuration PUT runs, so the key and schema reads
+        // are the only configuration-service calls it is allowed to make.
+        SetUpBoundKeys("email");
         _configService
             .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse("""{"properties":{"email":{"type":"string"}}}"""));
@@ -33,6 +35,11 @@ public class ConfigurationControllerVerifyTests
         return new ConfigurationController(
             _configService.Object, NullLogger<ConfigurationController>.Instance);
     }
+
+    private void SetUpBoundKeys(params string[] keys) =>
+        _configService
+            .Setup(s => s.GetBoundKeysAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(keys.ToDictionary(key => key, _ => typeof(string)));
 
     private static VerifyConnectorCredentialsRequest BuildRequest() => new()
     {
@@ -61,7 +68,8 @@ public class ConfigurationControllerVerifyTests
         var verifier = new Mock<IConnectorCredentialVerifier>();
         verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
         verifier.Setup(v => v.VerifyAsync(
-                It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ConnectorCredentialVerificationResult.Verified());
 
         var controller = BuildController();
@@ -74,7 +82,8 @@ public class ConfigurationControllerVerifyTests
         Assert.True(outcome.Supported);
         Assert.True(outcome.Success);
         verifier.Verify(v => v.VerifyAsync(
-            It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -83,7 +92,8 @@ public class ConfigurationControllerVerifyTests
         var verifier = new Mock<IConnectorCredentialVerifier>();
         verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
         verifier.Setup(v => v.VerifyAsync(
-                It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ConnectorCredentialVerificationResult.Verified());
 
         var controller = BuildController();
@@ -95,6 +105,8 @@ public class ConfigurationControllerVerifyTests
         // the configuration or the secrets could not pass unseen.
         _configService.Verify(
             s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _configService.Verify(
+            s => s.GetBoundKeysAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _configService.VerifyNoOtherCalls();
     }
 
@@ -110,6 +122,7 @@ public class ConfigurationControllerVerifyTests
         verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
 
         _configService.Reset();
+        SetUpBoundKeys("maxRetryAttempts");
         _configService
             .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse(
@@ -132,8 +145,71 @@ public class ConfigurationControllerVerifyTests
         verifier.Verify(v => v.VerifyAsync(
                 It.IsAny<JsonDocument?>(),
                 It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task VerifyCredentials_UnknownKey_IsRefusedBeforeReachingTheVerifier()
+    {
+        var verifier = new Mock<IConnectorCredentialVerifier>(MockBehavior.Strict);
+        verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
+        var controller = BuildController();
+
+        var request = new VerifyConnectorCredentialsRequest
+        {
+            Configuration = JsonDocument.Parse("""{"email":"user@example.com","isActive":true}"""),
+            Secrets = new Dictionary<string, string> { ["password"] = "secret" },
+        };
+
+        var result = await controller.VerifyCredentials(
+            "glooko", request, [verifier.Object], CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("isActive", JsonSerializer.Serialize(badRequest.Value));
+        verifier.Verify(v => v.VerifyAsync(
+                It.IsAny<JsonDocument?>(),
+                It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task VerifyCredentials_PassesTheNamedStoredSecretsToTheVerifier()
+    {
+        var verifier = new Mock<IConnectorCredentialVerifier>();
+        verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
+        verifier.Setup(v => v.VerifyAsync(
+                null, It.Is<Dictionary<string, string>>(d => d.Count == 0),
+                It.Is<IReadOnlyCollection<string>>(c => c.SequenceEqual(new[] { "password" })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ConnectorCredentialVerificationResult.Verified());
+
+        var result = await BuildController().VerifyCredentials(
+            "glooko", new VerifyConnectorCredentialsRequest { StoredSecrets = ["password"] },
+            [verifier.Object], CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True(Assert.IsType<ConnectorCredentialVerificationResult>(okResult.Value).Success);
+    }
+
+    [Fact]
+    public async Task VerifyCredentials_RequestTheVerifierCannotRun_IsABadRequest()
+    {
+        var verifier = new Mock<IConnectorCredentialVerifier>();
+        verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
+        verifier.Setup(v => v.VerifyAsync(
+                It.IsAny<JsonDocument?>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidVerificationRequestException("refused"));
+
+        var result = await BuildController().VerifyCredentials(
+            "glooko", new VerifyConnectorCredentialsRequest { StoredSecrets = ["password"] },
+            [verifier.Object], CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
     [Fact]

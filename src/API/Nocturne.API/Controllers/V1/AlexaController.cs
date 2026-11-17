@@ -20,7 +20,8 @@ namespace Nocturne.API.Controllers.V1;
 public class AlexaController : ControllerBase
 {
     /// <summary>
-    /// What the intents read: only the latest glucose entry. Widen this when an intent reads more.
+    /// What every request needs to be served at all. Answers that read more check their own scopes in
+    /// <see cref="IAlexaService"/>, so a credential limited to glucose still gets glucose answers.
     /// </summary>
     private static readonly string[] RequiredReadScopes = [Scope.GlucoseRead];
 
@@ -91,7 +92,7 @@ public class AlexaController : ControllerBase
                 request.Request.Type
             );
 
-            return Ok(response);
+            return response == null ? new JsonResult(string.Empty) : Ok(response);
         }
         catch (ArgumentException ex)
         {
@@ -108,14 +109,7 @@ public class AlexaController : ControllerBase
             _logger.LogError(ex, "Error processing Alexa request");
 
             // Return a valid Alexa error response instead of HTTP error to maintain skill functionality
-            var errorResponse = _alexaService.BuildSpeechletResponse(
-                "Error",
-                "Sorry, I'm having trouble right now. Please try again later.",
-                string.Empty,
-                true
-            );
-
-            return Ok(errorResponse);
+            return Ok(_alexaService.BuildErrorResponse());
         }
     }
 }

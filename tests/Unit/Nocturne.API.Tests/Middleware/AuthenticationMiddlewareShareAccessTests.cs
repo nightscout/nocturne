@@ -22,6 +22,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -49,7 +50,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         _publicAccess = new PublicAccessCacheService(
-            new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance);
+            new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance);
     }
 
     private AuthenticationMiddleware Build(params IAuthHandler[] handlers) =>
@@ -72,7 +73,8 @@ public sealed class AuthenticationMiddlewareShareAccessTests
     {
         var jwt = new JwtService(
             Options.Create(new JwtOptions { SecretKey = new string('k', 48) }),
-            NullLogger<JwtService>.Instance);
+            NullLogger<JwtService>.Instance,
+            TimeProvider.System);
 
         var token = jwt.GenerateAccessToken(
             new SubjectInfo { Id = TestDatabaseSeeder.TestSubjectId, Name = "owner" },
@@ -85,7 +87,8 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IJwtService>(jwt);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var handler = new SessionCookieHandler(
@@ -94,14 +97,14 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         return (handler, scopeFactory, token);
     }
 
-    private static DefaultHttpContext ContextFor(bool shareAccess)
+    private DefaultHttpContext ContextFor(bool shareAccess)
     {
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         // The seeded subject is a member of the seeded tenant; the middleware's membership check
         // is orthogonal to the share gate under test, so it is satisfied rather than exercised.
-        services.AddSingleton(Mock.Of<ITenantMemberService>(m =>
-            m.IsMemberAsync(TestDatabaseSeeder.TestSubjectId, TestDatabaseSeeder.TenantId) == Task.FromResult(true)));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         var ctx = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         ctx.Items["TenantContext"] =
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);

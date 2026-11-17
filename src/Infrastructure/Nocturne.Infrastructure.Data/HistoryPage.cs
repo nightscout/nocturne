@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -21,6 +22,8 @@ namespace Nocturne.Infrastructure.Data;
 /// page may therefore exceed <c>limit</c>, with no cap;</item>
 /// <item>log a warning when it does, naming the table, the millisecond and the row count.</item>
 /// </list>
+/// Rows at or after the <see cref="HistoryHorizon"/> are left for a later page. The horizon falls on
+/// a millisecond boundary, so the extension never crosses it.
 /// A single millisecond can only hold up to <see cref="NocturneDbContext.SystemTimestampGroupSize"/>
 /// rows of one type, because the write path spreads a bulk save across successive milliseconds, and
 /// controllers clamp <c>limit</c> to the same size, so the extension adds at most one page.
@@ -30,6 +33,7 @@ namespace Nocturne.Infrastructure.Data;
 public static class HistoryPage
 {
     public static async Task<List<T>> GetAsync<T>(
+        DbContext context,
         IQueryable<T> source,
         Expression<Func<T, DateTime>> stamp,
         Expression<Func<T, Guid>> id,
@@ -39,9 +43,10 @@ public static class HistoryPage
         string table,
         CancellationToken ct)
     {
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var from = (cursorMills + 1).ToUtcDateTime();
+        var horizon = await HistoryHorizon.GetAsync(context, logger, ct);
         var page = await source
-            .Where(InRange(stamp, from, null))
+            .Where(InRange(stamp, from, horizon))
             .OrderBy(stamp)
             .ThenBy(id)
             .Take(limit)
@@ -52,7 +57,7 @@ public static class HistoryPage
 
         var idOf = id.Compile();
         var seen = page.Select(idOf).ToHashSet();
-        var lastMills = ToMilliseconds(stamp.Compile()(page[^1]));
+        var lastMills = stamp.Compile()(page[^1]).ToMills();
 
         foreach (var row in await GetMillisecondAsync(source, stamp, id, lastMills, ct))
         {
@@ -84,7 +89,7 @@ public static class HistoryPage
         long millisecond,
         CancellationToken ct)
     {
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(millisecond).UtcDateTime;
+        var from = millisecond.ToUtcDateTime();
         return source
             .Where(InRange(stamp, from, from.AddMilliseconds(1)))
             .OrderBy(stamp)
@@ -99,9 +104,6 @@ public static class HistoryPage
     /// </summary>
     public static IQueryable<T> IncludingDeleted<T>(this IQueryable<T> source) where T : class =>
         source.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]);
-
-    public static long ToMilliseconds(DateTime stamp) =>
-        new DateTimeOffset(stamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private static Expression<Func<T, bool>> InRange<T>(
         Expression<Func<T, DateTime>> stamp,

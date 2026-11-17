@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -61,11 +62,11 @@ public class ActivityControllerScopeTests
     }
 
     [Fact]
-    public async Task CreateActivities_AllowsARecordThatNeedsNoCategoryScope()
+    public async Task CreateActivities_AllowsARecordThatNeedsOnlyTreatmentsScope()
     {
-        // A plain activity has no dedicated destination table, so the decomposer returns null and
-        // the guard must not invent a requirement.
-        var (controller, service) = Build(requiredScope: null, grantedScopes: []);
+        var (controller, service) = Build(
+            requiredScope: Scope.TreatmentsReadWrite,
+            grantedScopes: [Scope.TreatmentsReadWrite]);
         service.Setup(s => s.CreateActivitiesAsync(It.IsAny<List<Activity>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
@@ -126,7 +127,7 @@ public class ActivityControllerScopeTests
                 It.Is<IReadOnlySet<string>>(asked =>
                     asked.SetEquals(new[] { Scope.HeartRateRead })),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -152,8 +153,8 @@ public class ActivityControllerScopeTests
     public async Task GetActivity_HidesARecordWhoseCategoryScopeIsMissing()
     {
         var (controller, service) = BuildRead(grantedScopes: [Scope.HeartRateRead]);
-        service.Setup(s => s.GetActivityByIdAsync("sleep", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ActivityWithId("sleep"));
+        service.Setup(s => s.GetStoredActivitiesAsync("sleep", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([ActivityWithId("sleep")]);
 
         var result = await controller.GetActivity("sleep");
 
@@ -164,8 +165,8 @@ public class ActivityControllerScopeTests
     public async Task GetActivity_ReturnsARecordWhoseCategoryScopeIsHeld()
     {
         var (controller, service) = BuildRead(grantedScopes: [Scope.SleepRead]);
-        service.Setup(s => s.GetActivityByIdAsync("sleep", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ActivityWithId("sleep"));
+        service.Setup(s => s.GetStoredActivitiesAsync("sleep", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([ActivityWithId("sleep")]);
 
         var result = await controller.GetActivity("sleep");
 
@@ -191,9 +192,12 @@ public class ActivityControllerScopeTests
         attribute!.Scopes.Should().BeEquivalentTo(ActivityReadScopeGuard.AdmissionScopes);
     }
 
-    private static void Denied(object? result) =>
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    private static void Denied(object? result)
+    {
+        var denied = result.Should().BeOfType<ObjectResult>().Subject;
+        denied.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        denied.Value.Should().BeOfType<ProblemDetails>();
+    }
 
     private static PaginatedResponse<Activity> Payload(
         ActionResult<PaginatedResponse<Activity>> result) =>
@@ -202,7 +206,7 @@ public class ActivityControllerScopeTests
 
     private static void StubPage(Mock<IActivityService> service, IEnumerable<Activity> page) =>
         service.Setup(s => s.GetActivitiesAsync(
-                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(page);
 
     /// <summary>
@@ -212,8 +216,8 @@ public class ActivityControllerScopeTests
     /// </summary>
     private static void StubCounts(Mock<IActivityService> service) =>
         service.Setup(s => s.CountActivitiesByCategoryAsync(
-                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlySet<string> asked, string? _, CancellationToken _) =>
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlySet<string> asked, string? _, DateTime? _, DateTime? _, CancellationToken _) =>
                 (IReadOnlyDictionary<string, long>)CategoryCounts
                     .Where(c => asked.Contains(c.Key))
                     .ToDictionary(c => c.Key, c => c.Value));
@@ -243,10 +247,10 @@ public class ActivityControllerScopeTests
 
     private static (ActivityController Controller, Mock<IActivityService> Service) BuildRead(
         string[] grantedScopes) =>
-        Build(requiredScope: null, grantedScopes, a => CategoryScopes[a.Id!]);
+        Build(requiredScope: Scope.TreatmentsReadWrite, grantedScopes, a => CategoryScopes[a.Id!]);
 
     private static (ActivityController Controller, Mock<IActivityService> Service) Build(
-        string? requiredScope,
+        string requiredScope,
         string[] grantedScopes,
         Func<Activity, string>? requiredReadScope = null)
     {

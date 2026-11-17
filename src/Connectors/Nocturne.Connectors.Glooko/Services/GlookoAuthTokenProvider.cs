@@ -26,11 +26,12 @@ public class GlookoAuthTokenProvider(
     IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<GlookoAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<GlookoConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider? timeProvider = null)
+    : AuthTokenProviderBase<GlookoConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>Why the last XT token request answered null, worded for the tenant's sync card.</summary>
     public string? XtSignInFailure { get; private set; }
@@ -60,7 +61,6 @@ public class GlookoAuthTokenProvider(
                 metadata = sessionMetadata;
                 return (cookie, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Glooko authentication",
             cancellationToken);
@@ -69,7 +69,7 @@ public class GlookoAuthTokenProvider(
             return (null, DateTime.MinValue, null);
 
         _logger.LogInformation("Glooko authentication successful");
-        return (sessionCookie, DateTime.UtcNow.Add(GlookoConstants.SessionLifetime), metadata);
+        return (sessionCookie, _timeProvider.GetUtcNow().UtcDateTime.Add(GlookoConstants.SessionLifetime), metadata);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public class GlookoAuthTokenProvider(
         }
 
         var expiry = GlookoXtJwt.TryGetExpiry(token);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         if (expiry is not null && expiry <= now.AddMinutes(GlookoXtConstants.TokenLifetimeBufferMinutes))
         {
             XtSignInFailure = "The Glooko XT sign-in has expired. Open the connector settings and sign in again with a new emailed code.";

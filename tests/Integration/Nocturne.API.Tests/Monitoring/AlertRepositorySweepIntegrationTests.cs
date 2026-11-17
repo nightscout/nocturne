@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -15,15 +16,14 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <summary>
 /// Exercises <see cref="AlertRepository"/> against the real PostgreSQL instance under Row-Level
 /// Security (the runtime <c>nocturne_app</c> role is <c>NOBYPASSRLS</c>). This is the half the
-/// InMemory unit tests cannot cover: the cross-tenant sweep methods must iterate active tenants
-/// — a single query cannot see across tenants because the fail-closed RLS policy
-/// (<c>tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid</c>) admits
-/// no "see all" value — and the per-tenant methods must pin the tenant so RLS returns its rows.
+/// InMemory unit tests cannot cover: a method without a tenant must read the scope's tenant and
+/// nothing of another's, and one that takes a tenant must read that tenant from a scope that has none.
 ///
 /// The repository is constructed over a context factory wired with the same
 /// <see cref="TenantConnectionInterceptor"/> the app uses, so <c>context.TenantId</c> drives the
 /// <c>app.current_tenant_id</c> session variable exactly as in production.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
 {
@@ -33,7 +33,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         : base(fixture, output) { }
 
     [Fact]
-    public async Task SweepAndPerTenantReads_AreCorrectlyTenantScoped_UnderRls()
+    public async Task PerTenantReads_AreCorrectlyTenantScoped_UnderRls()
     {
         // Two fresh tenants (unique slugs so re-runs against a persisted container don't collide).
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -56,22 +56,87 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         await SeedRuleAsync(factory, tenantA, "High A", AlertConditionType.Threshold);
         await SeedRuleAsync(factory, tenantB, "Signal loss B", AlertConditionType.SignalLoss);
 
-        var repo = new AlertRepository(factory);
+        var noTenant = new AlertRepository(factory.AsNocturneFactory());
 
-        // Cross-tenant sweep: must surface rules for BOTH tenants.
-        var all = await repo.GetAllEnabledRulesAsync(CancellationToken.None);
-        var sweepTenants = all.Select(r => r.TenantId).ToHashSet();
-        sweepTenants.Should().Contain(tenantA);
-        sweepTenants.Should().Contain(tenantB);
-
-        // Per-tenant read: tenant A sees only its own rules, never tenant B's.
-        var rulesA = await repo.GetEnabledRulesAsync(tenantA, CancellationToken.None);
+        var rulesA = await new AlertRepository(factory.AsNocturneFactory(tenantA))
+            .GetEnabledRulesAsync(CancellationToken.None);
         rulesA.Select(r => r.Name).Should().BeEquivalentTo(["Signal loss A", "High A"]);
         rulesA.Should().OnlyContain(r => r.TenantId == tenantA);
 
-        var rulesB = await repo.GetEnabledRulesAsync(tenantB, CancellationToken.None);
+        var rulesB = await new AlertRepository(factory.AsNocturneFactory(tenantB))
+            .GetEnabledRulesAsync(CancellationToken.None);
         rulesB.Select(r => r.Name).Should().BeEquivalentTo(["Signal loss B"]);
         rulesB.Should().OnlyContain(r => r.TenantId == tenantB);
+
+        (await noTenant.GetEnabledRulesAsync(CancellationToken.None))
+            .Should().BeEmpty("a scope with no tenant reads no tenant's rules");
+    }
+
+    [Fact]
+    public async Task A_rule_whose_condition_type_or_severity_no_member_has_is_skipped_and_logged_not_the_tenants_other_rules()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var stale = await AuthTestHelpers.SeedTenantAsync(Fixture, $"stale-{suffix}", "Stale");
+        var other = await AuthTestHelpers.SeedTenantAsync(Fixture, $"other-{suffix}", "Other");
+
+        await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(dataSource)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options;
+        var factory = new InterceptingContextFactory(options);
+
+        await SeedRuleAsync(factory, stale, "Readable", AlertConditionType.Threshold);
+        await SeedRuleAsync(factory, other, "Other tenant", AlertConditionType.Threshold);
+        var legacyType = await SeedRawRuleAsync(dataSource, stale, "threshold_low", "warning");
+        var legacySeverity = await SeedRawRuleAsync(dataSource, stale, "threshold", "normal");
+
+        var logger = new ListLogger<AlertRepository>();
+        var repo = new AlertRepository(factory.AsNocturneFactory(), logger);
+
+        var rules = await new AlertRepository(factory.AsNocturneFactory(stale), logger)
+            .GetEnabledRulesAsync(CancellationToken.None);
+        rules.Select(r => r.Name).Should().Equal("Readable");
+
+        var read = await repo.ReadEnabledRulesAsync(stale, CancellationToken.None);
+        read.Rules.Select(r => r.Name).Should().Equal("Readable");
+        read.UnreadableRuleIds.Should().BeEquivalentTo([legacyType, legacySeverity]);
+
+        logger.Errors.Should().Contain(m => m.Contains(legacyType.ToString()) && m.Contains("threshold_low"));
+        logger.Errors.Should().Contain(m => m.Contains(legacySeverity.ToString()) && m.Contains("normal"));
+    }
+
+    private static async Task<Guid> SeedRawRuleAsync(
+        NpgsqlDataSource dataSource, Guid tenantId, string conditionType, string severity)
+    {
+        var id = Guid.CreateVersion7();
+        await using var cmd = dataSource.CreateCommand($"""
+            SELECT set_config('app.current_tenant_id', '{tenantId}', false);
+            INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
+                                     severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
+                                     sort_order, created_at, updated_at)
+            VALUES ('{id}', '{tenantId}', 'Stale', '{conditionType}', '{"{}"}', false,
+                    '{severity}', '{"{}"}', true, false, 'undirected', 1, now(), now());
+            """);
+        await cmd.ExecuteNonQueryAsync();
+        return id;
+    }
+
+    private sealed class ListLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<string> Errors { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= Microsoft.Extensions.Logging.LogLevel.Error)
+                Errors.Add(formatter(state, exception));
+        }
     }
 
     private static async Task SeedRuleAsync(

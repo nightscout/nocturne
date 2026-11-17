@@ -2,7 +2,7 @@
     import { resolve } from "$app/paths";
     import Github from "@nocturne/app/components/icons/GithubIcon.svelte";
     import LanguageSelector from "./LanguageSelector.svelte";
-    import { track } from "$lib/analytics";
+    import { track } from "#lib/analytics.js";
 </script>
 
 <footer class="border-t border-border/40 bg-muted/30">
@@ -81,7 +81,7 @@
                     </li>
                     <li>
                         <a
-                            href={resolve("/docs/configuration")}
+                            href={resolve("docs/configuration")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Configuration

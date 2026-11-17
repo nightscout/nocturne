@@ -20,19 +20,14 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 5 of 6 custom middleware):
-/// <see cref="JsonExtensionMiddleware"/>,
-/// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
-/// <see cref="TenantSetupMiddleware"/>, <b>AuthenticationMiddleware</b>,
-/// <see cref="MemberScopeMiddleware"/>.
-/// </para>
-/// <para>
 /// Populates <c>HttpContext.Items[AuthContextKeys.AuthContext]</c> with an <see cref="AuthContext"/>,
 /// <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c> with a <see cref="PermissionTrie"/>,
 /// and <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> with normalized OAuth scopes.
-/// Depends on <see cref="Multitenancy.TenantResolutionMiddleware"/> having resolved a
-/// <see cref="TenantContext"/> first. For unauthenticated requests with a resolved tenant,
-/// delegates to <see cref="PublicAccessCacheService"/> for public/read-only access.
+/// Must run after <see cref="Multitenancy.TenantResolutionMiddleware"/>, which resolves the
+/// <see cref="TenantContext"/> it authenticates against, and after <c>UseRouting</c>, which supplies the
+/// endpoint carrying <see cref="InviteTokenAuthorizedAttribute"/> and the route value holding the invite token. For
+/// unauthenticated requests with a resolved tenant, delegates to
+/// <see cref="PublicAccessCacheService"/> for public/read-only access.
 /// </para>
 /// </remarks>
 /// <seealso cref="IAuthHandler"/>
@@ -109,24 +104,9 @@ public class AuthenticationMiddleware
             }
             context.SetPermissionTrie(permissionTrie);
 
-            // Resolve OAuth scopes from either explicit scopes (OAuth tokens) or
-            // translated from legacy permissions (api-secret, access tokens, etc.)
-            IReadOnlySet<string> grantedScopes;
-            if (authContext.IsAuthenticated && authContext.Scopes.Count > 0)
-            {
-                // OAuth token path: scopes came directly from the token claims
-                grantedScopes = Scope.Normalize(authContext.Scopes);
-            }
-            else if (authContext.IsAuthenticated && authContext.Permissions.Count > 0)
-            {
-                // Legacy path: translate Shiro-style permissions to scopes
-                grantedScopes = ScopeTranslator.FromPermissions(authContext.Permissions);
-            }
-            else
-            {
-                grantedScopes = new HashSet<string>();
-            }
-            context.SetGrantedScopes(grantedScopes);
+            context.SetGrantedScopes(authContext.IsAuthenticated
+                ? CredentialScopes(authContext)
+                : new HashSet<string>());
 
             // Also set the legacy AuthenticationContext for backward compatibility
             context.SetLegacyAuthContext(MapToLegacyContext(authContext));
@@ -134,18 +114,28 @@ public class AuthenticationMiddleware
             // Load platform admin flag from subject before building claims,
             // so [Authorize(Roles = "platform_admin")] works correctly. Only for a credential that
             // speaks for the subject rather than for something they delegated; see
-            // <see cref="PlatformAdminCredentials"/>.
-            if (authContext is { IsAuthenticated: true, SubjectId: not null }
+            // <see cref="PlatformAdminCredentials"/>. A request held to a membership reads the flag in
+            // the same statement as the membership.
+            if (authContext is { IsAuthenticated: true, SubjectId: { } subjectId }
+                && HeldToMembership(authContext) is { } tenantId)
+            {
+                var carriesPlatformAdmin = PlatformAdminCredentials.Carries(authContext.AuthType);
+                if (carriesPlatformAdmin || RequestMembership.Of(context, subjectId, tenantId) is null)
+                {
+                    var (membership, isPlatformAdmin) = await RequestMembership.ReadAsync(
+                        context.RequestServices.GetRequiredService<Nocturne.Core.Contracts.Multitenancy.ITenantMembershipRepository>(),
+                        subjectId, tenantId, context.RequestAborted);
+                    membership.StoreOn(context);
+                    authContext.IsPlatformAdmin = carriesPlatformAdmin && isPlatformAdmin;
+                }
+            }
+            else if (authContext is { IsAuthenticated: true, SubjectId: not null }
                 && PlatformAdminCredentials.Carries(authContext.AuthType))
             {
                 using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<Nocturne.Infrastructure.Data.NocturneDbContext>();
-                var isPlatformAdmin = await db.Subjects
-                    .Where(s => s.Id == authContext.SubjectId.Value)
-                    .OrderBy(s => s.Id)
-                    .Select(s => s.IsPlatformAdmin)
-                    .FirstOrDefaultAsync();
-                authContext.IsPlatformAdmin = isPlatformAdmin;
+                authContext.IsPlatformAdmin = await scope.ServiceProvider
+                    .GetRequiredService<Nocturne.Core.Contracts.Auth.ISubjectRepository>()
+                    .IsPlatformAdminAsync(authContext.SubjectId.Value, context.RequestAborted);
             }
 
             // Set HttpContext.User for [Authorize] attribute to work
@@ -197,7 +187,7 @@ public class AuthenticationMiddleware
                 SetUnauthenticated(context);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CredentialFailure.Is(ex))
         {
             _logger.LogError(ex, "Error during authentication");
             SetUnauthenticated(context);
@@ -205,32 +195,20 @@ public class AuthenticationMiddleware
 
         // Verify authenticated subject is a member of the resolved tenant
         var resolvedAuth = context.GetAuthContext();
-        if (resolvedAuth is { IsAuthenticated: true, SubjectId: not null, TenantId: not null })
+        if (resolvedAuth is { IsAuthenticated: true, SubjectId: { } memberSubjectId }
+            && HeldToMembership(resolvedAuth) is { } memberTenantId
+            && RequestMembership.Of(context, memberSubjectId, memberTenantId)?.Membership is null)
         {
-            // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved
-            // tenant), and for PlatformAccess grants (PlatformAccessCookieHandler already proved the
-            // grant is platform-access-marked and pinned to this tenant).
-            if (resolvedAuth.AuthType is not (AuthType.ApiKey or AuthType.InstanceKey or AuthType.PlatformAccess))
+            // An invite-token-authorized endpoint is how a non-member joins, so reducing
+            // the request to anonymous there leaves the accept path reachable only by
+            // people who are already members. Identity only, and only when the route's
+            // token is a live invite of this tenant.
+            if (!await TryKeepIdentityForInviteAsync(context, resolvedAuth))
             {
-                var tenantMemberService = context.RequestServices.GetRequiredService<ITenantMemberService>();
-                var isMember = await tenantMemberService.IsMemberAsync(
-                    resolvedAuth.SubjectId!.Value,
-                    resolvedAuth.TenantId!.Value);
-
-                if (!isMember)
-                {
-                    // An invite-token-authorized endpoint is how a non-member joins, so reducing
-                    // the request to anonymous there leaves the accept path reachable only by
-                    // people who are already members. Identity only, and only when the route's
-                    // token is a live invite of this tenant.
-                    if (!await TryKeepIdentityForInviteAsync(context, resolvedAuth))
-                    {
-                        _logger.LogWarning(
-                            "Subject {SubjectId} is not a member of tenant {TenantId}",
-                            resolvedAuth.SubjectId, resolvedAuth.TenantId);
-                        SetUnauthenticated(context);
-                    }
-                }
+                _logger.LogWarning(
+                    "Subject {SubjectId} is not a member of tenant {TenantId}",
+                    resolvedAuth.SubjectId, resolvedAuth.TenantId);
+                SetUnauthenticated(context);
             }
         }
 
@@ -267,7 +245,8 @@ public class AuthenticationMiddleware
                     .Union(ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions))
                     .ToHashSet();
                 var publicScopes = Scope.PublicShareScopes
-                    .Where(scope => Scope.Satisfies(resolvedGrants, scope))
+                    .Where(scope => Scope.Satisfies(resolvedGrants, scope)
+                                    && Scope.SharesWithPublic(scope, publicAccess.DirectPermissions))
                     .ToHashSet();
                 context.SetGrantedScopes((IReadOnlySet<string>)publicScopes);
 
@@ -300,6 +279,30 @@ public class AuthenticationMiddleware
 
         await _next(context);
     }
+
+    /// <summary>
+    /// The tenant whose membership <paramref name="authContext"/> is held to, or null when it is held
+    /// to none.
+    /// </summary>
+    /// <remarks>
+    /// InstanceKey is infrastructure auth with no membership behind it, and a PlatformAccess grant was
+    /// already proven platform-access-marked and pinned to this tenant by
+    /// <see cref="PlatformAccessCookieHandler"/>. An api-secret is another presentation of a direct
+    /// grant, so it is held to its subject's membership exactly as the bearer form is.
+    /// </remarks>
+    private static Guid? HeldToMembership(AuthContext authContext) =>
+        authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess
+            ? null
+            : authContext.TenantId;
+
+    /// <summary>
+    /// The scopes a credential carries of its own, before <see cref="MemberScopeMiddleware"/>
+    /// intersects them with a membership: its OAuth scopes, else its legacy permissions translated.
+    /// </summary>
+    internal static IReadOnlySet<string> CredentialScopes(AuthContext authContext) =>
+        authContext.Scopes.Count > 0
+            ? Scope.Normalize(authContext.Scopes)
+            : ScopeTranslator.FromPermissions(authContext.Permissions);
 
     /// <summary>
     /// Run through the <see cref="IAuthHandler"/> chain to authenticate the request.
@@ -343,7 +346,7 @@ public class AuthenticationMiddleware
 
                 // Handler skipped - try next handler
             }
-            catch (Exception ex)
+            catch (Exception ex) when (CredentialFailure.Is(ex))
             {
                 _logger.LogWarning(ex, "Handler {Handler} threw an exception", handler.Name);
                 // Continue to next handler

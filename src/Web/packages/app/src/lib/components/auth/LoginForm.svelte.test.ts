@@ -21,7 +21,7 @@ interface StubProvider {
 let providers: StubProvider[] = [];
 let providersLoading = false;
 
-vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
+vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", async () => ({
   getOidcProviders: () => ({
     get loading() {
       return providersLoading;
@@ -34,19 +34,16 @@ vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
   signInWithAuthenticator: {
     pending: 0,
     enhance: () => ({}),
-    fields: { code: { issues: () => [] } },
+    fields: (await import("#lib/test-stubs/remote-resource.js")).remoteFormFields(),
   },
   signInWithRecoveryCode: {
     pending: 0,
     enhance: () => ({}),
-    fields: {
-      username: { issues: () => [] },
-      code: { issues: () => [] },
-    },
+    fields: (await import("#lib/test-stubs/remote-resource.js")).remoteFormFields(),
   },
 }));
 
-vi.mock("$lib/api/generated/passkeys.generated.remote", () => ({
+vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   discoverableLoginOptions: vi.fn(),
   loginOptions: vi.fn(),
   loginComplete: vi.fn(),
@@ -175,5 +172,41 @@ describe("LoginForm ordering by last-used method", () => {
     expect(order[0]).toBe("Sign in with GitHub Last used");
     // Nothing tenant-scoped is offered here, so the badge has to survive on its own.
     expect(order).not.toContain("Sign in with passkey");
+  });
+});
+
+/**
+ * An identity-provider sign-in for an account with an authenticator lands back on the login page
+ * with a step-up token, and the form must open on the code entry rather than the sign-in buttons.
+ */
+describe("LoginForm after an identity provider asks for the authenticator code", () => {
+  beforeEach(() => {
+    providersLoading = false;
+    providers = [{ id: "provider-1", name: "Example SSO" }];
+    setLastSignIn(null);
+  });
+
+  it.each([false, true])("opens on the code entry (tenantless: %s)", async (tenantless) => {
+    render(LoginForm, { props: { tenantless, pendingStepUpToken: "step-up-token" } });
+
+    await expect.element(page.getByText("Authenticator code")).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: /^Sign in with/ }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText(/checked against one\s+tenant/))
+      .not.toBeInTheDocument();
+    expect(
+      document.querySelector<HTMLInputElement>('input[name="stepUpToken"]')?.value
+    ).toBe("step-up-token");
+  });
+
+  it("opens on the sign-in buttons without a token", async () => {
+    render(LoginForm, { props: {} });
+
+    await expect
+      .element(page.getByRole("button", { name: "Sign in with Example SSO" }))
+      .toBeVisible();
+    await expect.element(page.getByText("Authenticator code")).not.toBeInTheDocument();
   });
 });

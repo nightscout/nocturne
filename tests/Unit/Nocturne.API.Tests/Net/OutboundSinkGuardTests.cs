@@ -14,7 +14,10 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Net;
 
@@ -92,7 +95,8 @@ public class OutboundSinkGuardTests
             NullLogger<MigrationJobService>.Instance,
             provider,
             EmptyConfiguration(),
-            new Nocturne.API.Services.TenantRunGuard());
+            new Nocturne.API.Services.TenantRunGuard(),
+            TimeProvider.System);
 
         await migration.TestConnectionAsync(new TestMigrationConnectionRequest
         {
@@ -109,7 +113,7 @@ public class OutboundSinkGuardTests
     {
         var factory = new RecordingClientFactory();
         var controller = new OidcProviderAdminController(
-            Mock.Of<IOidcProviderService>(), dbContext: null!, factory);
+            Mock.Of<IOidcProviderService>(), Mock.Of<ISubjectRepository>(), factory);
 
         await controller.TestUnsaved(new TestProviderRequest("https://someones-idp.example"));
 

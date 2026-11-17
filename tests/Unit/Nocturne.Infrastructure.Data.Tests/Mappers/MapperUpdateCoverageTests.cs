@@ -61,14 +61,15 @@ public class MapperUpdateCoverageTests
             CreatedAt = "2026-06-10T08:00:00.000Z",
             Mills = 1_780_000_000_000,
             UtcOffset = 600,
-            SrvCreated = new DateTimeOffset(2026, 6, 10, 8, 0, 0, TimeSpan.Zero),
-            SrvModified = new DateTimeOffset(2026, 6, 11, 8, 0, 0, TimeSpan.Zero),
+            SrvCreated = new DateTimeOffset(2026, 6, 10, 8, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvModified = new DateTimeOffset(2026, 6, 11, 8, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             App = "nocturne",
             Device = "phone",
             EnteredBy = "tester",
             Version = 3,
             IsActive = false,
             Notes = "a note",
+            AdditionalProperties = new() { ["runningConfig"] = System.Text.Json.JsonDocument.Parse("{\"pump\":\"Dana-i\"}").RootElement },
         };
 
         var updated = new SettingsEntity();
@@ -79,7 +80,6 @@ public class MapperUpdateCoverageTests
             .Excluding(e => e.TenantId)
             .Excluding(e => e.OriginalId)
             .Excluding(e => e.SysCreatedAt)
-            .Excluding(e => e.SysUpdatedAt)
-            .Excluding(e => e.AdditionalPropertiesJson));
+            .Excluding(e => e.SysUpdatedAt));
     }
 }

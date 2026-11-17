@@ -16,6 +16,7 @@ namespace Nocturne.API.Services.Devices;
 /// <seealso cref="IApnsClientFactory"/>
 public class LoopService : ILoopService, IDisposable
 {
+    private readonly TimeProvider _time;
     private readonly ILogger<LoopService> _logger;
     private readonly LoopConfiguration _configuration;
     private readonly IApnsClientFactory _apnsClientFactory;
@@ -24,9 +25,11 @@ public class LoopService : ILoopService, IDisposable
     public LoopService(
         ILogger<LoopService> logger,
         IOptions<LoopConfiguration> configuration,
-        IApnsClientFactory apnsClientFactory
+        IApnsClientFactory apnsClientFactory,
+        TimeProvider timeProvider
     )
     {
+        _time = timeProvider;
         _logger = logger;
         _configuration = configuration.Value;
         _apnsClientFactory = apnsClientFactory;
@@ -54,6 +57,7 @@ public class LoopService : ILoopService, IDisposable
         LoopNotificationData data,
         LoopProfileSettings? loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken = default
     )
     {
@@ -88,6 +92,7 @@ public class LoopService : ILoopService, IDisposable
                 data,
                 loopSettings!, // Validation ensures this is not null
                 remoteAddress,
+                isApnsProduction,
                 cancellationToken
             );
 
@@ -198,6 +203,7 @@ public class LoopService : ILoopService, IDisposable
         LoopNotificationData data,
         LoopProfileSettings loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken
     )
     {
@@ -220,9 +226,12 @@ public class LoopService : ILoopService, IDisposable
         var push = new ApplePush(ApplePushType.Alert)
             .AddAlert(alert)
             .AddToken(loopSettings.DeviceToken!)
-            .AddContentAvailable();
+            .AddContentAvailable()
+            .AddCustomProperty("interruption-level", "time-sensitive", addToApsDict: true);
 
-        if (string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase))
+        var production = isApnsProduction
+            ?? !string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase);
+        if (!production)
         {
             push.SendToDevelopmentServer();
         }
@@ -253,7 +262,7 @@ public class LoopService : ILoopService, IDisposable
                     {
                         Success = true,
                         Message = "Loop notification sent successfully",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                         Data = new
                         {
                             eventType = data.EventType,
@@ -432,7 +441,7 @@ public class LoopService : ILoopService, IDisposable
         }
 
         // Add timestamps (matches legacy logic exactly)
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         payload["sent-at"] = now.ToString("O"); // ISO 8601 format
 
         var expiration = now.AddMinutes(5); // Expire after 5 minutes
@@ -474,7 +483,7 @@ public class LoopService : ILoopService, IDisposable
         {
             Success = false,
             Message = message,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
         };
     }
 

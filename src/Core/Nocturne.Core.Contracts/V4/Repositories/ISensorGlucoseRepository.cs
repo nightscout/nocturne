@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.Projections;
@@ -10,8 +11,6 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <remarks>
 /// This is the V4 native store for CGM data. Legacy V1/V2/V3 SGV entries are projected into this
 /// repository so that statistics and chart services have a single source of truth.
-/// The <paramref name="nativeOnly"/> flag restricts results to records inserted through the V4 API,
-/// excluding projected legacy entries.
 /// </remarks>
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="IBGCheckRepository"/>
@@ -31,12 +30,11 @@ public interface ISensorGlucoseRepository
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 entries.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to a single registered <see cref="PatientDevice"/>'s
-    /// attributed readings. Bypasses canonical stream selection at the caller — a filtered read returns that device raw.
+    /// attributed readings, read with <see cref="GlucoseStreams.All"/> so the device's own series is whole.
     /// Placed after <paramref name="ct"/> so it is additive: existing positional callers (which end at the token) are
     /// unaffected.</param>
+    /// <param name="streams">Which concurrent streams to return.</param>
     Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -45,42 +43,69 @@ public interface ISensorGlucoseRepository
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
         CancellationToken ct = default,
-        Guid? patientDeviceId = null
+        Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All
     );
 
     /// <summary>
-    /// Partial readings for statistics and canonical selection only; these must not be returned
-    /// as raw records or projected into legacy entries. Includes the per-reading UTC offset.
+    /// Partial readings for statistics only; these must not be returned as raw records or projected
+    /// into legacy entries. Includes the per-reading UTC offset.
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null);
-
-    // Explicit base-interface bridge — delegates to the extended overload
-    Task<IEnumerable<SensorGlucose>> IV4Repository<SensorGlucose>.GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
+        CancellationToken ct = default, Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All);
 
     /// <summary>
-    /// Partial readings for canonical selection and <see cref="EntryProjection.FromSensorGlucose"/>
-    /// only; omitted V4 fields must not leak into raw record responses.
+    /// Partial readings for <see cref="EntryProjection.FromSensorGlucose"/> only; omitted V4 fields
+    /// must not leak into raw record responses.
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null);
+        CancellationToken ct = default, Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All);
+
+    /// <summary>
+    /// <see cref="GetForEntriesAsync"/> ordered by the reading's value, then by time in the same
+    /// direction, so a page is the lowest or highest readings rather than the oldest or newest.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
+        DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
+        CancellationToken ct = default, GlucoseStreams streams = GlucoseStreams.All);
+
+    /// <summary>
+    /// The visible readings in [<paramref name="from"/>, <paramref name="to"/>] of every stream, counted
+    /// per registered device, a null device counting the unattributed ones.
+    /// </summary>
+    Task<IReadOnlyList<(Guid? PatientDeviceId, int Count)>> CountByPatientDeviceAsync(
+        DateTime from, DateTime to, Guid? patientDeviceId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="ILegacyKeyedRepository{TRecord}.GetModifiedSinceAsync"/> over the canonical stream: a
+    /// live reading another stream's reading outranks in its bucket is left out, a deleted one is not.
+    /// </summary>
+    Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> GetCanonicalModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recomputes which stream every bucket of the tenant's history shows, writing only readings whose
+    /// stored decision is out of date.
+    /// </summary>
+    /// <returns>The number of readings whose decision changed.</returns>
+    Task<int> RecomputeStreamsAsync(CancellationToken ct = default);
+
+    /// <summary>The <c>job_ledger</c> name of the per-tenant job that runs <see cref="RecomputeStreamsAsync"/>.</summary>
+    const string RecomputeStreamsJob = "glucose-stream-recompute";
 
     /// <summary>Retrieve all <see cref="SensorGlucose"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<SensorGlucose>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
@@ -91,7 +116,7 @@ public interface ISensorGlucoseRepository
     /// the device in <paramref name="from"/>..<paramref name="to"/>, or <c>null</c>.
     /// </summary>
     /// <remarks>
-    /// Unlike <see cref="GetAsync(DateTime?, DateTime?, string?, string?, int, int, bool, bool, DateTime?, Guid?, CancellationToken, Guid?)"/>,
+    /// Unlike <see cref="GetAsync(DateTime?, DateTime?, string?, string?, int, int, bool, DateTime?, Guid?, CancellationToken, Guid?)"/>,
     /// this deliberately includes rows hidden from reads as non-primary cross-connector duplicates.
     /// A hidden copy still means "already stored" — when a second source re-uploads readings whose
     /// copies have all been linked non-primary, a visibility-filtered check finds nothing and the
@@ -100,7 +125,6 @@ public interface ISensorGlucoseRepository
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="from">Inclusive start of the time range.</param>
     /// <param name="to">Exclusive end of the time range.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<SensorGlucose?> FindStoredDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct = default);
 
@@ -122,7 +146,6 @@ public interface ISensorGlucoseRepository
     /// <param name="to">Exclusive end of the time range.</param>
     /// <param name="limit">Maximum rows to return. A caller that needs to know whether the range
     /// held more than it can use should ask for one row more than that.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<SensorGlucose>> FindStoredDuplicateCandidatesAsync(
         IReadOnlyCollection<string>? devices, DateTime from, DateTime to, int limit,
         CancellationToken ct = default);
@@ -132,7 +155,6 @@ public interface ISensorGlucoseRepository
     /// </summary>
     /// <remarks>Used by connectors to determine the last sync time and avoid re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The latest reading timestamp, or <c>null</c> if no records exist.</returns>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
@@ -140,7 +162,6 @@ public interface ISensorGlucoseRepository
     /// Retrieve the timestamp of the oldest stored <see cref="SensorGlucose"/> reading, optionally scoped to a data source.
     /// </summary>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The oldest reading timestamp, or <c>null</c> if no records exist.</returns>
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
@@ -148,9 +169,8 @@ public interface ISensorGlucoseRepository
     /// Delete all <see cref="SensorGlucose"/> records matching the given data source.
     /// </summary>
     /// <param name="source">Data source identifier (e.g., connector name).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default);
+    Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Lists distinct <c>(DataSource, Device)</c> combinations among unattributed readings
@@ -159,14 +179,10 @@ public interface ISensorGlucoseRepository
     /// </summary>
     Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default);
 
-    /// <summary>
-    /// Delete all records within the given time range.
-    /// </summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+    Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Every live reading attributed to <paramref name="patientDeviceId"/> in [<paramref name="from"/>,

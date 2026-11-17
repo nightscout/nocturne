@@ -34,6 +34,17 @@ public static class StateSpanMetadataExtensions
     /// </summary>
     public const string UtcOffsetKey = "utcOffset";
 
+    /// <summary>Metadata key naming the profile a <see cref="StateSpanCategory.Profile"/> span switched to.</summary>
+    public const string ProfileNameKey = "profileName";
+
+    /// <summary>
+    /// Metadata key for the <c>duration</c> in minutes an override, temporary target or profile switch
+    /// was uploaded with, served verbatim as Nightscout does: an open-ended Loop override is uploaded
+    /// with no duration and must be served with none, since NightscoutKit reads any numeric duration
+    /// as a finite override.
+    /// </summary>
+    public const string UploadedDurationKey = "duration";
+
     /// <summary>
     /// Reads <paramref name="key"/> as a <see cref="decimal"/>; returns <see langword="null"/>
     /// if missing, non-finite, or unparseable. Numeric strings are parsed with
@@ -66,17 +77,30 @@ public static class StateSpanMetadataExtensions
     /// <summary>
     /// Whether two <see cref="StateSpanCategory.Override"/> spans are Loop's two records of one
     /// override, a "Temporary Override" treatment and a devicestatus snapshot, so neither ends the
-    /// other: by name when either has one, else by scale factor. Two records of one collection never
-    /// match, nor does a record without <see cref="CollectionKey"/>.
+    /// other: <see cref="IsSamePresetAs"/>. Two records of one collection never match, nor does a
+    /// record without <see cref="CollectionKey"/>.
     /// </summary>
     public static bool IsSameOverrideAs(
+        this IDictionary<string, object>? metadata, IDictionary<string, object>? other) =>
+        metadata is not null && other is not null
+        && AreTreatmentAndDeviceStatus(metadata, other)
+        && metadata.IsSamePresetAs(other);
+
+    /// <summary>
+    /// Whether two override, temporary target or profile spans name one preset: by name when either
+    /// has one, else by scale factor. Missing metadata reads as an unnamed preset at 100%.
+    /// </summary>
+    public static bool IsSamePresetAs(
         this IDictionary<string, object>? metadata, IDictionary<string, object>? other)
     {
-        if (metadata is null || other is null || !AreTreatmentAndDeviceStatus(metadata, other))
-            return false;
+        if (metadata is null && other is null)
+            return true;
 
-        var names = OverrideNames(metadata);
-        var otherNames = OverrideNames(other);
+        metadata ??= new Dictionary<string, object>();
+        other ??= new Dictionary<string, object>();
+
+        var names = PresetNames(metadata);
+        var otherNames = PresetNames(other);
         if (names.Count == 0 && otherNames.Count == 0)
             return metadata.OverrideScaleFactor() == other.OverrideScaleFactor();
 
@@ -94,10 +118,15 @@ public static class StateSpanMetadataExtensions
         (metadata.TryReadString(CollectionKey), other.TryReadString(CollectionKey)) is
             (TreatmentsCollection, DeviceStatusCollection) or (DeviceStatusCollection, TreatmentsCollection);
 
-    private static HashSet<string> OverrideNames(IDictionary<string, object> metadata)
+    private static HashSet<string> PresetNames(IDictionary<string, object> metadata)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        if (metadata.ContainsKey("name"))
+        if (metadata.ContainsKey(ProfileNameKey))
+        {
+            if (metadata.TryReadString(ProfileNameKey) is { Length: > 0 } profileName)
+                names.Add(profileName);
+        }
+        else if (metadata.ContainsKey("name"))
         {
             if (metadata.TryReadString("name") is { Length: > 0 } name)
                 names.Add(name);
@@ -118,8 +147,8 @@ public static class StateSpanMetadataExtensions
     private static decimal? CoerceDecimal(object v) => v switch
     {
         decimal d => d,
-        double dbl when double.IsFinite(dbl) => (decimal)dbl,
-        float f when float.IsFinite(f) => (decimal)f,
+        double dbl when double.IsFinite(dbl) => dbl.ToDecimal(),
+        float f when float.IsFinite(f) => f.ToDecimal(),
         int i => i,
         long l => l,
         string s when decimal.TryParse(s, CultureInfo.InvariantCulture, out var p) => p,

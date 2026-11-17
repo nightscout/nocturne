@@ -17,8 +17,10 @@ internal static class ControllerActionReflection
 {
     public static Assembly ApiAssembly => typeof(AuthorizationConfiguration).Assembly;
 
-    public static IEnumerable<Type> GetControllers() =>
-        ApiAssembly.GetTypes()
+    public static IEnumerable<Type> GetControllers() => GetControllers(ApiAssembly.GetTypes());
+
+    public static IEnumerable<Type> GetControllers(IEnumerable<Type> types) =>
+        types
             .Where(t => typeof(ControllerBase).IsAssignableFrom(t)
                         && t is { IsClass: true, IsAbstract: false, IsPublic: true }
                         && t.GetCustomAttribute<NonControllerAttribute>() is null);
@@ -80,7 +82,7 @@ internal static class ControllerActionReflection
 
     private static bool HasGate(IEnumerable<object> attributes) =>
         attributes.Any(a => a is IAuthorizeData
-                            or RequirePermissionAttribute // covers [RequireAdmin]
+                            or RequirePermissionAttribute // covers [RequireSuperuser]
                             or RequireScopeAttribute
                             or RequireInstanceKeyAuthAttribute
                             or RequireAuthenticationAttribute);

@@ -1,11 +1,15 @@
 <script lang="ts">
-	import type { Food } from '$api';
+	import { Key } from '@nocturne/ui/keys';
+	import type { Food } from '#lib/api/index.js';
 	import Star from '@lucide/svelte/icons/star';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CarbPill from './CarbPill.svelte';
 	import GiChip from './GiChip.svelte';
-	import { giFromInt } from './types';
-	import { Toggle } from '$lib/components/ui/toggle';
+	import { giFromInt } from '#lib/components/food/index.js';
+	import { Toggle } from '#lib/components/ui/toggle/index.js';
+	import { FOOD_COLUMNS } from './food-columns';
+	import { energyToDisplayUnits } from '@nocturne/ui/energy';
+	import { getEnergyUnit } from '#lib/stores/appearance-store.svelte.js';
 
 	interface Props {
 		food: Food;
@@ -16,16 +20,17 @@
 	}
 
 	const { food, expanded, favorite, ontoggle, onfavorite }: Props = $props();
+	const energyUnit = $derived(getEnergyUnit());
 </script>
 
 <div
 	data-testid="food-row"
-	class="food-row grid grid-cols-[24px_1fr_72px_24px] sm:grid-cols-[24px_1fr_110px_130px_90px_70px_24px]"
+	class="food-row grid {FOOD_COLUMNS}"
 	class:expanded
 	role="button"
 	tabindex="0"
 	onclick={ontoggle}
-	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ontoggle(); } }}
+	onkeydown={(e) => { if (e.key === Key.Enter || e.key === Key.Space) { e.preventDefault(); ontoggle(); } }}
 >
 	<span class="star-cell">
 		<Toggle
@@ -61,16 +66,16 @@
 		<CarbPill value={food.carbs ?? 0} />
 	</span>
 
-	<span class="portion-cell max-sm:hidden">
+	<span class="portion-cell @max-2xl:hidden">
 		per {food.portion ?? 0} {food.unit ?? 'g'}
 	</span>
 
-	<span class="gi-cell max-sm:hidden!">
+	<span class="gi-cell @max-2xl:hidden!">
 		<GiChip level={giFromInt(food.gi)} />
 	</span>
 
-	<span class="energy-cell max-sm:hidden">
-		{food.energy ?? 0} kcal
+	<span class="energy-cell @max-2xl:hidden">
+		{energyToDisplayUnits(food.energy ?? 0, energyUnit)} {energyUnit}
 	</span>
 
 	<span class="chevron-cell">

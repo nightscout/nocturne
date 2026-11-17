@@ -23,7 +23,7 @@ public class CalibrationRepositoryBulkCreateTests : IDisposable
         var dbName = $"calibration_bulk_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new CalibrationRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<CalibrationRepository>.Instance);
+        _repository = new CalibrationRepository(new TestNocturneDbContextFactory(_context), new SystemAuditContext(), NullLogger<CalibrationRepository>.Instance);
     }
 
     public void Dispose()

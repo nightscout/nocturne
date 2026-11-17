@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
 using Nocturne.Core.Models.Authorization;
@@ -45,8 +46,8 @@ public class AuthorizationGoldenTests : GoldenFileTestBase
     private async Task SeedDirectGrant(string label, List<string> scopes)
     {
         using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
 
         // The facade reads the device subject's grants, which is who it issues to.
         var deviceSubjectId = await db.DeviceSubjectOf(db.TenantId);

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
@@ -47,7 +48,6 @@ public static class AuthTestHelpers
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
 
-        // Insert subject
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -59,7 +59,6 @@ public static class AuthTestHelpers
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Insert passkey credential
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -73,7 +72,6 @@ public static class AuthTestHelpers
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Insert tenant member
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -86,7 +84,6 @@ public static class AuthTestHelpers
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Grant admin role
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -99,9 +96,8 @@ public static class AuthTestHelpers
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // The credential. Without it the returned token matches nothing, and a caller sending it
-        // alongside an api-secret would silently authenticate as the api-secret's principal
-        // instead, which is indistinguishable from success until a test asks who it is talking to.
+        // Without the grant the returned token matches nothing, and a caller sending it alongside an
+        // api-secret would silently authenticate as the api-secret's principal instead.
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -122,6 +118,31 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
+    /// <see cref="SeedAuthenticatedSubjectAsync"/> with the 24-hour history clamp set on the
+    /// subject's grant, so the returned token reads only the last day.
+    /// </summary>
+    public static async Task<(Guid SubjectId, string AccessToken)> SeedHistoryClampedSubjectAsync(
+        NpgsqlConnection conn,
+        Guid tenantId,
+        string name)
+    {
+        var seeded = await SeedAuthenticatedSubjectAsync(conn, tenantId, name);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenant, true);
+            UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
+            """;
+        cmd.Parameters.AddWithValue("tenant", tenantId.ToString());
+        cmd.Parameters.AddWithValue("subject", seeded.SubjectId);
+        var clamped = await cmd.ExecuteNonQueryAsync();
+        if (clamped != 1)
+            throw new InvalidOperationException($"Clamping subject {seeded.SubjectId} updated {clamped} grants, expected 1.");
+
+        return seeded;
+    }
+
+    /// <summary>
     /// Seeds the full-access direct grant that the <c>api-secret</c> header used across these tests
     /// authenticates against, and returns its id.
     /// </summary>
@@ -129,7 +150,7 @@ public static class AuthTestHelpers
     /// <c>ApiKeyHandler</c> matches a non-<c>noc_</c> header value against <c>legacy_secret_hash</c>
     /// verbatim, and <c>CleanupDatabaseAsync</c> truncates <c>oauth_grants</c> before every test, so
     /// without this row the header matches nothing. A request that also carries a bearer token is
-    /// unaffected either way — <c>ApiKeyHandler</c> runs last — but a SignalR hub connection carries
+    /// unaffected either way, since <c>ApiKeyHandler</c> runs last, but a SignalR hub connection carries
     /// the header alone, so it is this row that decides whether the connection has a credential.
     /// </remarks>
     /// <param name="conn">Open connection to the test database.</param>
@@ -144,7 +165,6 @@ public static class AuthTestHelpers
     {
         var grantId = Guid.CreateVersion7();
 
-        // Set RLS context
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
@@ -182,7 +202,6 @@ public static class AuthTestHelpers
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
 
-        // Insert subject
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -194,7 +213,6 @@ public static class AuthTestHelpers
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Insert tenant member
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -207,7 +225,6 @@ public static class AuthTestHelpers
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Grant admin role
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -271,14 +288,12 @@ public static class AuthTestHelpers
     {
         var (codeVerifier, codeChallenge) = GeneratePkceChallenge();
 
-        // POST consent to authorize endpoint - use a handler that doesn't follow redirects
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var noRedirectClient = new HttpClient(handler)
         {
             BaseAddress = authenticatedClient.BaseAddress
         };
 
-        // Copy auth headers from the authenticated client
         foreach (var header in authenticatedClient.DefaultRequestHeaders)
         {
             noRedirectClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
@@ -295,7 +310,6 @@ public static class AuthTestHelpers
 
         var authorizeResponse = await noRedirectClient.PostAsync("/api/oauth/authorize", consentForm);
 
-        // Extract authorization code from redirect Location header
         var location = authorizeResponse.Headers.Location
                        ?? throw new InvalidOperationException(
                            $"Authorize response did not contain a Location header. Status: {authorizeResponse.StatusCode}");
@@ -304,7 +318,6 @@ public static class AuthTestHelpers
         var code = query["code"]
                    ?? throw new InvalidOperationException("Authorization redirect did not contain a code parameter.");
 
-        // Exchange code for tokens
         var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
@@ -347,7 +360,6 @@ public static class AuthTestHelpers
         var code = GenerateGuestCode();
         var codeHash = HashUtils.Sha256Hex(code.ToUpperInvariant());
 
-        // Resolve tenant for the data owner
         Guid tenantId;
         await using (var cmd = conn.CreateCommand())
         {
@@ -361,7 +373,6 @@ public static class AuthTestHelpers
             tenantId = (Guid)result;
         }
 
-        // Set RLS tenant context for the insert
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
@@ -436,6 +447,20 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
+    /// Issues <paramref name="subjectId"/> a session as a sign-in would, and returns its access
+    /// token. Sent as a Bearer it is the person's own sign-in, which managing credentials and sign-in
+    /// factors requires; the token <see cref="SeedAuthenticatedSubjectAsync"/> returns is a direct
+    /// grant and is refused there.
+    /// </summary>
+    public static async Task<string> IssueSessionTokenAsync(ApiIntegrationTestFixture fixture, Guid subjectId)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var session = await scope.ServiceProvider.GetRequiredService<ISessionService>()
+            .IssueSessionAsync(subjectId, new SessionContext(DeviceDescription: "integration-test"));
+        return session.AccessToken;
+    }
+
+    /// <summary>
     /// Creates an HttpClient with a Bearer authorization header for the given access token.
     /// </summary>
     public static HttpClient CreateBearerClient(
@@ -462,8 +487,8 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
-    /// Creates a tenant the way the product does, with its roles, its Public subject membership and
-    /// its bundled OAuth clients, and returns its id.
+    /// Creates a tenant the way the product does, with its roles and its Public subject membership,
+    /// and returns its id.
     /// </summary>
     public static async Task<Guid> SeedTenantAsync(
         ApiIntegrationTestFixture fixture,
@@ -585,8 +610,8 @@ public static class AuthTestHelpers
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
             AlertRuleId = rule.Id,
-            ChannelType = ChannelType.WebPush,
-            Destination = "default",
+            ChannelType = ChannelType.InApp,
+            Destination = Guid.CreateVersion7().ToString(),
         });
         await db.SaveChangesAsync();
         return rule.Id;

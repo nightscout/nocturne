@@ -16,9 +16,6 @@ namespace Nocturne.Core.Models.V4;
 [JsonSchemaFlatten]
 public class Note : V4RecordBase
 {
-    /// <summary>
-    /// Note text content
-    /// </summary>
     public string Text { get; set; } = string.Empty;
 
     /// <summary>
@@ -26,9 +23,6 @@ public class Note : V4RecordBase
     /// </summary>
     public string? EventType { get; set; }
 
-    /// <summary>
-    /// Whether this note is an announcement
-    /// </summary>
     public bool IsAnnouncement { get; set; }
 
     /// <summary>

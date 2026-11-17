@@ -11,7 +11,6 @@ public interface ILabHbA1cResultRepository
     /// <summary>Gets every non-deleted lab result for the current tenant, ordered by date.</summary>
     Task<IReadOnlyList<LabHbA1cResult>> GetAllAsync(CancellationToken ct = default);
 
-    /// <summary>Creates a new lab result.</summary>
     Task<LabHbA1cResult> CreateAsync(LabHbA1cResult result, CancellationToken ct = default);
 
     /// <summary>Soft-deletes a lab result. Returns false when no matching row exists.</summary>

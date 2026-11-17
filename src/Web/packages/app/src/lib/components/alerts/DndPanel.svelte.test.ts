@@ -3,28 +3,32 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { TenantAlertSettingsResponse } from "$api-clients";
+import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 // The panel reads DND state through the generated remote functions; `update`
 // is swapped per test so a rejection can stand in for the server's 403.
-const settings: TenantAlertSettingsResponse = {
+const idle: TenantAlertSettingsResponse = {
   dndManualActive: false,
   dndScheduleEnabled: false,
+  dndScheduleActiveNow: false,
 };
+let settings: TenantAlertSettingsResponse = idle;
 
 let updateImpl: () => Promise<TenantAlertSettingsResponse>;
 
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
-  get: () => ({ run: () => Promise.resolve(settings) }),
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
+  get: () => createQueryResource(() => Promise.resolve(settings)),
   update: () => updateImpl(),
 }));
 
 import DndPanel from "./DndPanel.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
-const dndToggle = () => page.getByRole("button", { name: /Do Not Disturb/i });
+const dndToggle = () => page.getByRole("button", { name: /Do not disturb/i });
 
 describe("DndPanel", () => {
   beforeEach(() => {
+    settings = idle;
     updateImpl = () => Promise.resolve(settings);
     pageState.data = {};
   });
@@ -53,6 +57,25 @@ describe("DndPanel", () => {
     render(DndPanel, {});
 
     await expect.element(dndToggle()).toBeVisible();
+  });
+
+  it("says the schedule is on now while its window is in effect", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    settings = { ...idle, dndScheduleEnabled: true, dndScheduleActiveNow: true };
+
+    render(DndPanel, {});
+
+    await expect.element(page.getByText("Scheduled, on now")).toBeVisible();
+  });
+
+  it("says only Scheduled while the window is configured but not in effect", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    settings = { ...idle, dndScheduleEnabled: true };
+
+    render(DndPanel, {});
+
+    await expect.element(page.getByText("Scheduled", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Scheduled, on now")).not.toBeInTheDocument();
   });
 
   it("surfaces the server's reason when the update is rejected", async () => {

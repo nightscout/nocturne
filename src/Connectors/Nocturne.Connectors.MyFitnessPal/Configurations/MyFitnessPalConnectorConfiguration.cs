@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.MyFitnessPal.Configurations;
     ServiceNames.MyFitnessPalConnector,
     "MYFITNESSPAL",
     "ConnectSource.MyFitnessPal",
-    "myfitnesspal-connector",
+    DataSources.MyFitnessPalConnector,
     "myfitnesspal",
     ConnectorCategory.Nutrition,
     "Sync food diary entries from MyFitnessPal for meal matching",
@@ -60,11 +60,4 @@ public class MyFitnessPalConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.LastFullWalkAt, Hidden = true)]
     public string? LastFullWalkAt { get; set; }
-
-    protected override void ValidateSourceSpecificConfiguration()
-    {
-        if (string.IsNullOrWhiteSpace(Password) && string.IsNullOrWhiteSpace(RefreshToken))
-            throw new ArgumentException(
-                "At least one of Password or RefreshToken must be provided.");
-    }
 }

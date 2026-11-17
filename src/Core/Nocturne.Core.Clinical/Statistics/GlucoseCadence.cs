@@ -4,6 +4,14 @@ using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Clinical.Statistics;
 
+/// <summary>Which side of a range a reading is on.</summary>
+internal enum RangeSide
+{
+    Below,
+    Within,
+    Above,
+}
+
 /// <summary>
 /// How much time each glucose reading stands for, read off the spacing of the readings
 /// themselves.
@@ -69,6 +77,23 @@ internal static class GlucoseCadence
         GlycemicThresholds thresholds)
     {
         var zones = GlucoseStatistics.ExcludingZones(thresholds);
+        return Instants(sortedEntries, reading => (ExcludingZone)zones.Classify(reading.Mgdl) switch
+        {
+            ExcludingZone.VeryLow or ExcludingZone.Low => RangeSide.Below,
+            ExcludingZone.VeryHigh or ExcludingZone.High => RangeSide.Above,
+            _ => RangeSide.Within,
+        });
+    }
+
+    /// <summary>
+    /// <see cref="Instants(IList{SensorGlucose}, GlycemicThresholds)"/> where
+    /// <paramref name="sideOf"/> says which side of the range a reading is on, for a range that is
+    /// not one set of thresholds, such as a schedule that moves through the day.
+    /// </summary>
+    internal static List<SensorGlucose> Instants(
+        IList<SensorGlucose> sortedEntries,
+        Func<SensorGlucose, RangeSide> sideOf)
+    {
         var instants = new List<SensorGlucose>(sortedEntries.Count);
         for (var first = 0; first < sortedEntries.Count;)
         {
@@ -88,13 +113,13 @@ internal static class GlucoseCadence
                 if (highest is null || reading.Mgdl > highest.Mgdl)
                     highest = reading;
 
-                switch ((ExcludingZone)zones.Classify(reading.Mgdl))
+                switch (sideOf(reading))
                 {
-                    case ExcludingZone.VeryLow or ExcludingZone.Low:
+                    case RangeSide.Below:
                         if (lowestBelow is null || reading.Mgdl < lowestBelow.Mgdl)
                             lowestBelow = reading;
                         break;
-                    case ExcludingZone.VeryHigh or ExcludingZone.High:
+                    case RangeSide.Above:
                         if (highestAbove is null || reading.Mgdl > highestAbove.Mgdl)
                             highestAbove = reading;
                         break;
@@ -121,13 +146,22 @@ internal static class GlucoseCadence
     }
 
     /// <summary>
+    /// <paramref name="minutes"/> as a percentage of <paramref name="coveredMinutes"/>, the sum of
+    /// <see cref="ReadingMinutes"/>; zero when nothing is covered.
+    /// </summary>
+    internal static double PercentOfCovered(double minutes, double coveredMinutes) =>
+        coveredMinutes > 0 ? minutes / coveredMinutes * 100 : 0;
+
+    /// <summary>
     /// The cadence the series reports about itself: the median of its intervals, which a sensor
-    /// outage or a warmup cannot drag the way it would a mean. Intervals of no elapsed time are
-    /// excluded, and a series with none left falls back to <see cref="DefaultCadenceMinutes"/>.
+    /// outage or a warmup cannot drag the way it would a mean. Intervals shorter than
+    /// <see cref="MinCadenceEvidenceMinutes"/> are excluded, and a series with none left falls back
+    /// to <see cref="DefaultCadenceMinutes"/>.
     /// </summary>
     internal static double SeriesCadenceMinutes(IEnumerable<double> intervals)
     {
-        var elapsed = GlucoseStatistics.Ascending(intervals.Where(interval => interval > 0));
+        var elapsed = GlucoseStatistics.Ascending(
+            intervals.Where(interval => interval >= MinCadenceEvidenceMinutes));
         return elapsed.Length == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
     }
 

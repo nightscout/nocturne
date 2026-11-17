@@ -12,7 +12,10 @@ namespace Nocturne.Core.Models.Alerts;
 [JsonConverter(typeof(JsonStringEnumConverter<ChannelType>))]
 public enum ChannelType
 {
-    /// <summary>Browser push notification via the Web Push API.</summary>
+    /// <summary>
+    /// Browser push notification. No browser receives it, so it is not offered and its
+    /// deliveries are recorded failed; see <see cref="ChannelDestinations"/>.
+    /// </summary>
     [EnumMember(Value = "web_push"), JsonStringEnumMemberName("web_push")]
     WebPush,
 

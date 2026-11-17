@@ -3,8 +3,8 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse } from "$api-clients";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { AlertRuleResponse, TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
@@ -30,21 +30,23 @@ const alertHistory = { items: [], totalCount: 0 };
 // it stands in for the server's refusal.
 let toggleImpl: () => Promise<unknown>;
 
-vi.mock("$api/generated/alertRules.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   deleteRule: remoteCommand(() => undefined),
   toggleRule: remoteCommand(() => toggleImpl()),
   testFire: remoteCommand(() => undefined),
 }));
 
-vi.mock("$api/generated/alerts.generated.remote", () => ({
+vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({
   getActiveAlerts: () => remoteQuery(() => activeAlerts),
   getAlertHistory: () => remoteQuery(() => alertHistory),
   acknowledge: remoteCommand(() => undefined),
 }));
 
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
-  get: () => remoteQuery(() => null),
+let dndSettings: TenantAlertSettingsResponse | null = null;
+
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
+  get: () => remoteQuery(() => dndSettings),
   update: remoteCommand(() => undefined),
 }));
 
@@ -60,8 +62,49 @@ const rowActions = () => page.getByRole("button", { name: "Row actions" });
 describe("alerts page", () => {
   beforeEach(() => {
     toggleImpl = () => Promise.resolve();
+    dndSettings = null;
     toastError.mockClear();
     pageState.data = {};
+  });
+
+  it("shows the Do not disturb notice for a schedule in effect, without a way to turn it off", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    dndSettings = {
+      dndManualActive: false,
+      dndScheduleEnabled: true,
+      dndScheduleActiveNow: true,
+    };
+
+    render(AlertsPage, {});
+
+    await expect.element(page.getByText(/Do not disturb is on/)).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Disable" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("offers to turn off a manual mute from the Do not disturb notice", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    dndSettings = { dndManualActive: true, dndScheduleEnabled: false };
+
+    render(AlertsPage, {});
+
+    await expect.element(page.getByText(/Do not disturb is on/)).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Disable" }))
+      .toBeVisible();
+  });
+
+  it("shows no Do not disturb notice for a schedule that is not in effect", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    dndSettings = { dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false };
+
+    render(AlertsPage, {});
+
+    await expect.element(ruleName()).toBeVisible();
+    await expect
+      .element(page.getByText(/Do not disturb is on/))
+      .not.toBeInTheDocument();
   });
 
   it("hides the write controls from a member without alerts.readwrite", async () => {

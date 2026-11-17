@@ -1,28 +1,31 @@
 <script lang="ts">
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { Key } from "@nocturne/ui/keys";
+  import { useModifierKey } from "@nocturne/ui/modifier-key";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { useToastSubmission } from "#lib/forms/index.js";
   import X from "@lucide/svelte/icons/x";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { StateHistory } from "runed";
   import {
     clockGlucoseSourceOf,
     getRealtimeStore,
-  } from "$lib/stores/realtime-store.svelte";
-  import { getDefinitions } from "$api/generated/trackers.generated.remote";
-  import { getByIdForEdit as getClockFaceById } from "$api/clockfaces.remote";
+  } from "#lib/stores/realtime-store.svelte.js";
+  import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
+  import { getByIdForEdit as getClockFaceById } from "#lib/api/clockfaces.remote.js";
   import {
     getStarter as getStarterClockFace,
     update as updateClockFace,
-  } from "$api/generated/clockFaces.generated.remote";
-  import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
-  import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  } from "#lib/api/generated/clockFaces.generated.remote.js";
+  import { faceUnits } from "#lib/components/clock/element-value.js";
+  import GlucoseChartCard from "#lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
+  import type { ClockElement, TrackerDefinitionDto } from "#lib/api/index.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   // Clock builder imports
   import {
@@ -37,7 +40,7 @@
     createInternalRow,
     clockBackgroundStyle,
     isTrackerBelowThreshold,
-  } from "$lib/clock-builder";
+  } from "#lib/clock-builder/index.js";
 
   import {
     AddElementMenu,
@@ -46,12 +49,14 @@
     DisplaySettings,
     DropZone,
     ElementInspector,
-  } from "$lib/components/clock-builder";
+  } from "#lib/components/clock-builder/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // State
   let config = $state<InternalConfig>({ rows: [], settings: {} });
-  let clockName = $state("My Clock Face");
+  let clockName = $state("My clock face");
   const save = useToastSubmission("Failed to save clock face");
+  const modifierKey = useModifierKey();
   let loading = $state(true);
   let selectedElementId = $state<string | null>(null);
   let addMenuOpen = $state<"top" | "bottom" | null>(null);
@@ -102,16 +107,12 @@
       return;
     }
 
-    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-    const modifier = isMac ? e.metaKey : e.ctrlKey;
+    const modifierHeld = modifierKey.isMac ? e.metaKey : e.ctrlKey;
 
-    if (modifier && e.key === "z" && !e.shiftKey) {
+    if (modifierHeld && e.key === Key.Z && !e.shiftKey) {
       e.preventDefault();
       if (history.canUndo) history.undo();
-    } else if (
-      (modifier && e.key === "z" && e.shiftKey) ||
-      (modifier && e.key === "y")
-    ) {
+    } else if (modifierHeld && e.key === Key.Z && e.shiftKey || modifierHeld && e.key === Key.Y) {
       e.preventDefault();
       if (history.canRedo) history.redo();
     }
@@ -120,11 +121,11 @@
   // Computed styles
   const hasBackgroundImage = $derived(!!config.settings?.backgroundImage);
   const previewBgStyle = $derived(
-    clockBackgroundStyle(config.settings, currentBG, "#0a0a0a")
+    clockBackgroundStyle(config.settings, currentBG, "#0a0a0a", glucose.thresholds)
   );
   const overlayOpacity = $derived(
     hasBackgroundImage
-      ? (100 - (config.settings?.backgroundOpacity ?? 100)) / 100
+    ? (100 - (config.settings?.backgroundOpacity ?? 100)) / 100
       : 0
   );
 
@@ -213,7 +214,7 @@
     const element = row.elements.find((e) => e._id === elementId);
     if (!element) return;
 
-    const custom = { ...(element.style?.custom || {}), [key]: value };
+    const custom = { ...element.style?.custom || {}, [key]: value };
     updateStyle(rowIndex, elementId, { custom });
   }
 
@@ -222,7 +223,7 @@
     const element = row.elements.find((e) => e._id === elementId);
     if (!element) return;
 
-    const custom = { ...(element.style?.custom || {}) };
+    const custom = { ...element.style?.custom || {} };
     delete custom[key];
     updateStyle(rowIndex, elementId, {
       custom: Object.keys(custom).length > 0 ? custom : undefined,
@@ -332,12 +333,12 @@
 
   async function resetToDefault() {
     try {
-      config = initializeInternalConfig(await getStarterClockFace().run());
+      config = initializeInternalConfig(await fresh(getStarterClockFace()));
     } catch (err) {
       toast.error(remoteErrorMessage(err, "Failed to reset clock face"));
       return;
     }
-    clockName = "My Clock Face";
+    clockName = "My clock face";
     selectedElementId = null;
     history.clear();
   }
@@ -345,7 +346,7 @@
   // Load clock face from route param on mount
   $effect(() => {
     if (!browser || !clockFaceId) return;
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     const id = clockFaceId;
     queueMicrotask(() => loadClockFace(id));
   });
@@ -353,8 +354,8 @@
   async function loadClockFace(id: string) {
     loading = true;
     try {
-      const clockFace = await getClockFaceById(id).run();
-      clockName = clockFace.name ?? "My Clock Face";
+      const clockFace = await fresh(getClockFaceById(id));
+      clockName = clockFace.name ?? "My clock face";
       if (clockFace.config) {
         config = initializeInternalConfig(clockFace.config);
       }
@@ -362,7 +363,7 @@
     } catch (err) {
       console.error("Failed to load clock face:", err);
       toast.error(remoteErrorMessage(err, "Failed to load clock face"));
-      goto(resolve("/clock"));
+      goto(resolve('clock'));
     } finally {
       loading = false;
     }
@@ -393,17 +394,15 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<svelte:head>
-  <title>Clock Builder - Nocturne</title>
-</svelte:head>
+<svelte:window onkeydown={handleKeydown}></svelte:window>
+<svelte:head><title>Clock builder - Nocturne</title></svelte:head>
 
 {#snippet chartElementPreview(element: InternalElement)}
   <GlucoseChartCard
     heightClass="h-full"
     defaultFocusHours={element.hours || 3}
     showPredictions={element.chartConfig?.showPredictions ?? false}
+    glucoseUnits={faceUnits(config.settings)}
   />
 {/snippet}
 
@@ -443,7 +442,7 @@
         : belowThreshold
           ? 'border border-dashed border-transparent hover:border-white/40'
           : 'hover:ring-1 hover:ring-white/30'}"
-      onclick={() => (selectedElementId = element._id)}
+      onclick={() => selectedElementId = element._id}
     >
       {#if element.type === "chart"}
         <div
@@ -455,11 +454,11 @@
         </div>
       {:else}
         <ClockElementPreview
-          {element}
+          element={element}
           settings={config.settings}
-          {glucose}
+          glucose={glucose}
           now={currentTime}
-          {trackerDefinitions}
+          trackerDefinitions={trackerDefinitions}
         />
       {/if}
     </button>
@@ -497,14 +496,15 @@
     <Loader2 class="size-12 animate-spin text-muted-foreground" />
   </div>
 {:else}
-  <div class="flex min-h-dvh flex-col bg-background text-foreground">
+  <div class="@container flex min-h-dvh flex-col bg-background text-foreground">
     <!-- Header -->
     <ClockBuilderHeader
-      {clockName}
+      clockName={clockName}
       saving={save.busy}
+      saved={save.saved}
       canUndo={history.canUndo}
       canRedo={history.canRedo}
-      onNameChange={(name) => (clockName = name)}
+      onNameChange={(name) => clockName = name}
       onUndo={() => history.undo()}
       onRedo={() => history.redo()}
       onCopyLink={copyLink}
@@ -513,18 +513,18 @@
     >
       <DisplaySettings
         settings={config.settings}
-        {hasBackgroundImage}
+        hasBackgroundImage={hasBackgroundImage}
         open={settingsOpen}
-        onOpenChange={(open) => (settingsOpen = open)}
-        onSettingsChange={(settings) => (config.settings = settings)}
+        onOpenChange={(open) => settingsOpen = open}
+        onSettingsChange={(settings) => config.settings = settings}
         onReset={resetToDefault}
       />
     </ClockBuilderHeader>
 
     <!-- Main content -->
-    <div class="flex min-w-0 flex-1 overflow-hidden">
+    <div class="flex min-w-0 flex-1 overflow-hidden @max-2xl:flex-col">
       <!-- Preview Canvas -->
-      <div class="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div class="relative flex min-w-0 flex-1 flex-col overflow-hidden @max-2xl:min-h-96">
         <div
           class="absolute inset-4 flex flex-col items-center justify-center overflow-auto rounded-xl border-2 border-dashed border-muted-foreground/30"
           style={previewBgStyle}
@@ -550,14 +550,10 @@
               <!-- eslint-disable-next-line no-restricted-syntax -- element selector on the clock canvas -->
               <button
                 type="button"
-                class="rounded bg-black/50 px-2 py-1 text-xs text-white/70 transition-all hover:bg-black/70 hover:text-white {selectedElementId ===
-                backgroundChart._id
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() => (selectedElementId = backgroundChart._id)}
-              >
-                Background Chart
-              </button>
+                class="rounded bg-black/50 px-2 py-1 text-xs text-white/70 transition-all hover:bg-black/70 hover:text-white {selectedElementId === backgroundChart._id ? 'ring-2 ring-primary' : ''}"
+                onclick={() => selectedElementId = backgroundChart._id}
+              >Background chart</button>
+
               {#if selectedElementId === backgroundChart._id}
                 {@render removeButton(bgChartRowIndex, backgroundChart._id)}
               {/if}
@@ -582,7 +578,7 @@
               <AddElementMenu
                 position="top"
                 open={addMenuOpen === "top"}
-                onOpenChange={(open) => (addMenuOpen = open ? "top" : null)}
+                onOpenChange={(open) => addMenuOpen = open ? "top" : null}
                 onAddElement={addElement}
               />
             {/if}
@@ -607,7 +603,7 @@
               <AddElementMenu
                 position="bottom"
                 open={addMenuOpen === "bottom"}
-                onOpenChange={(open) => (addMenuOpen = open ? "bottom" : null)}
+                onOpenChange={(open) => addMenuOpen = open ? "bottom" : null}
                 onAddElement={addElement}
               />
             {/if}
@@ -619,9 +615,9 @@
       {#if selectedElement}
         {@const { element, rowIndex } = selectedElement}
         <ElementInspector
-          {element}
-          {trackerDefinitions}
-          onClose={() => (selectedElementId = null)}
+          element={element}
+          trackerDefinitions={trackerDefinitions}
+          onClose={() => selectedElementId = null}
           onRemove={() => removeElement(rowIndex, element._id)}
           onUpdateElement={(updates) =>
             updateElement(rowIndex, element._id, updates)}

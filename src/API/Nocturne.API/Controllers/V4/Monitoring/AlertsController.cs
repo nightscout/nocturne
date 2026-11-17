@@ -1,11 +1,13 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
@@ -19,22 +21,32 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// Controller for active alert state, history, and acknowledgement.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Acknowledging, snoozing and recording a delivery outcome all silence or close an excursion, so
-/// every write action here requires <see cref="Scope.AlertsReadWrite"/>; the class-level
-/// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
-/// which holds <c>alerts.read</c>. <see cref="AcknowledgeExcursion"/> additionally accepts
+/// every write action here requires <see cref="Scope.AlertsReadWrite"/>, as does
+/// <see cref="GetPendingDeliveries"/>, which returns other recipients' destinations and payloads
+/// to the delivery adapters; a guest-link session, which may hold <c>alerts.read</c>, reaches none
+/// of them. <see cref="AcknowledgeExcursion"/> additionally accepts
 /// <see cref="Scope.DeviceNotify"/>, because for a caller without <c>alerts.readwrite</c> it mutes
 /// the excursion for that caller alone. See the note on that action.
+/// </para>
+/// <para>
+/// The one alert controller without a class <c>[Authorize]</c>: a public share link is an
+/// unauthenticated principal that may hold <c>alerts.read</c> to show the alarm that is firing and
+/// record that it saw it, and <c>[Authorize]</c> would answer it 401. The actions a share never
+/// reaches carry <c>[Authorize]</c> themselves, so they keep the authenticated default policy rather
+/// than the permission-trie fallback. The other alert controllers keep <c>[Authorize]</c> and
+/// <see cref="DenyNoAccountViewerAttribute"/>: they serve configuration.
+/// </para>
 /// </remarks>
 /// <seealso cref="IAlertAcknowledgementService"/>
 /// <seealso cref="IAlertDeliveryService"/>
 [ApiController]
 [Tags("Monitoring")]
-[Authorize]
 [Route("api/v4/alerts")]
 public class AlertsController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IAlertSnoozeService _snoozeService;
@@ -51,7 +63,7 @@ public class AlertsController : ControllerBase
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertsController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAlertAcknowledgementService acknowledgementService,
         IAlertDeliveryService deliveryService,
         IAlertSnoozeService snoozeService,
@@ -70,6 +82,7 @@ public class AlertsController : ControllerBase
     /// List active (unresolved) excursions for the current tenant.
     /// </summary>
     [HttpGet("active")]
+    [RequireScope(Scope.AlertsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<ActiveExcursionResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<ActiveExcursionResponse>>> GetActiveAlerts(CancellationToken ct)
@@ -93,6 +106,9 @@ public class AlertsController : ControllerBase
                 .ToHashSetAsync(ct)
             : new HashSet<Guid>();
 
+        var namesAcknowledger = NamesMembers();
+        var receipts = await AlertReceiptService.ReadAsync(
+            db, excursions.Select(e => e.Id).ToList(), ReceiptsVisibleOnlyFor(), ct);
         var now = DateTime.UtcNow;
         var result = excursions.Select(e => new ActiveExcursionResponse
         {
@@ -103,8 +119,9 @@ public class AlertsController : ControllerBase
             Severity = e.AlertRule?.Severity ?? AlertRuleSeverity.Warning,
             StartedAt = e.StartedAt,
             AcknowledgedAt = e.AcknowledgedAt,
-            AcknowledgedBy = e.AcknowledgedBy,
+            AcknowledgedBy = namesAcknowledger ? e.AcknowledgedBy : null,
             MutedByCaller = mutedByCaller.Contains(e.Id),
+            Receipts = AlertReceiptResponse.From(receipts[e.Id]),
             HysteresisStartedAt = e.HysteresisStartedAt,
             SnoozedUntil = e.Instances
                 .Where(i => i.ResolvedAt == null)
@@ -129,7 +146,8 @@ public class AlertsController : ControllerBase
 
     /// <summary>
     /// Get paginated history of resolved excursions. Test fires are excluded
-    /// by default; pass <paramref name="includeTest"/> = true to include them.
+    /// by default; pass <paramref name="includeTest"/> = true to include them. An oversized
+    /// <c>pageSize</c> or <c>page</c> is clamped to the largest allowed value rather than rejected.
     /// </summary>
     /// <remarks>
     /// <paramref name="pageSize"/> is capped at <see cref="V4ReadLimits.MaxOrdinalPageSize"/> and
@@ -137,6 +155,8 @@ public class AlertsController : ControllerBase
     /// <see cref="V4ReadLimits.MaxPageSize"/>; both are clamped rather than rejected.
     /// </remarks>
     [HttpGet("history")]
+    [DenyNoAccountViewer]
+    [RequireScope(Scope.AlertsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(AlertHistoryResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AlertHistoryResponse>> GetAlertHistory(
@@ -190,6 +210,9 @@ public class AlertsController : ControllerBase
             })
             .ToListAsync(ct);
 
+        var namesAcknowledger = NamesMembers();
+        var receipts = await AlertReceiptService.ReadAsync(
+            db, items.Select(e => e.Id).ToList(), ReceiptsVisibleOnlyFor(), ct);
         var result = new AlertHistoryResponse
         {
             Page = page,
@@ -206,8 +229,9 @@ public class AlertsController : ControllerBase
                 StartedAt = e.StartedAt,
                 EndedAt = e.EndedAt,
                 AcknowledgedAt = e.AcknowledgedAt,
-                AcknowledgedBy = e.AcknowledgedBy,
+                AcknowledgedBy = namesAcknowledger ? e.AcknowledgedBy : null,
                 IsTest = e.IsTest,
+                Receipts = AlertReceiptResponse.From(receipts[e.Id]),
             }).ToList(),
         };
 
@@ -215,46 +239,81 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Who to record as having acknowledged an alert.
+    /// Whether the caller may see which member acknowledged an alert. A share or a guest link may see
+    /// that an alert was acknowledged, not by whom.
+    /// </summary>
+    private bool NamesMembers() => !DenyNoAccountViewerAttribute.Refuses(HttpContext);
+
+    /// <summary>
+    /// The actor whose receipts alone the caller may see: a share or guest link sees its own and no
+    /// one else's, a member sees all of them (null).
+    /// </summary>
+    private AlertReceiptActor? ReceiptsVisibleOnlyFor() =>
+        NamesMembers()
+            ? null
+            : AlertReceiptActor.Of(HttpContext) ?? new AlertReceiptActor(AlertReceiptActorKind.PublicLink, Guid.Empty);
+
+    /// <summary>
+    /// Record that the caller saw an alarm that is firing. It changes nothing about the alert: it
+    /// is not an acknowledgement and mutes nothing, for the caller or anyone else, and recording it
+    /// again keeps the first. Members with an account see who recorded one, and when. It is the one
+    /// write a public share link may make, when the link shares alerts; who recorded it comes from
+    /// the credential, not the request.
     /// </summary>
     /// <remarks>
-    /// Taken from the authenticated principal, not from the request. The web app
-    /// used to send a fixed "web_user", which made "who silenced the 3am low?"
-    /// unanswerable on a tenant with more than one caregiver — and any caller
-    /// could have claimed to be anyone. The request field is honoured only for
-    /// callers with no name claim at all (a machine token), where it is the only
-    /// information available.
+    /// The one write a public share link may make. <see cref="RequireScopeAttribute"/> admits an
+    /// unauthenticated caller to a read requirement, and the share principal holds
+    /// <see cref="Scope.AlertsRead"/> only when its owner shared alerts. Who recorded it comes from
+    /// the credential (<see cref="AlertReceiptActor.Of"/>), never from the request.
     /// </remarks>
-    private string ResolveAcknowledger(AcknowledgeRequest request)
+    [HttpPost("excursions/{excursionId:guid}/seen")]
+    [RequireScope(Scope.AlertsRead)]
+    [EnableRateLimiting(ServiceRegistrationExtensions.NoAccountAlertsRateLimitPolicy)]
+    [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> MarkSeen(
+        Guid excursionId, [FromServices] AlertReceiptService receipts, CancellationToken ct)
     {
-        var name = User.FindFirstValue(ClaimTypes.Name);
-        if (!string.IsNullOrWhiteSpace(name))
-            return name;
+        if (AlertReceiptActor.Of(HttpContext) is not { } actor)
+            return Forbid();
 
-        var subjectId = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub");
-        if (!string.IsNullOrWhiteSpace(subjectId))
-            return subjectId;
-
-        return string.IsNullOrWhiteSpace(request.AcknowledgedBy)
-            ? "unknown"
-            : request.AcknowledgedBy;
+        return await receipts.RecordAsync(excursionId, actor, ct) ? NoContent() : NotFound();
     }
 
     /// <inheritdoc cref="IAlertAcknowledgementService.AcknowledgeAllAsync"/>
     [HttpPost("acknowledge")]
+    [Authorize]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> Acknowledge(
-        [FromBody] AcknowledgeRequest request, CancellationToken ct)
+        [FromBody] AcknowledgeRequest request,
+        [FromServices] AlertReceiptService receipts, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
 
+        List<Guid> open;
+        await using (var db = await _contextFactory.CreateAsync(ct))
+        {
+            open = await db.AlertExcursions.AsNoTracking()
+                .Where(e => e.EndedAt == null)
+                .Select(e => e.Id)
+                .ToListAsync(ct);
+        }
+
         await _acknowledgementService.AcknowledgeAllAsync(
             tenantId,
-            ResolveAcknowledger(request),
+            User.ResolveAcknowledger(request.AcknowledgedBy),
             ct);
+
+        // As for one excursion: acknowledging every alarm is also seeing each of them.
+        if (AlertReceiptActor.Of(HttpContext) is { Kind: AlertReceiptActorKind.Member } member)
+        {
+            foreach (var excursionId in open)
+                await receipts.RecordAsync(excursionId, member, ct);
+        }
 
         return NoContent();
     }
@@ -262,7 +321,9 @@ public class AlertsController : ControllerBase
     /// <summary>
     /// Acknowledge a single alert excursion. A caller with <c>alerts.readwrite</c> acknowledges it
     /// for everyone; anyone else mutes it for themselves. The response says which applied.
-    /// Returns 404 when the excursion does not exist for the current tenant.
+    /// Returns 404 when the excursion does not exist for the current tenant. Also accepts
+    /// <c>device.notify</c>, which a registered client device and every member holding a permission
+    /// has, but not a guest link.
     /// </summary>
     /// <remarks>
     /// Accepts <see cref="Scope.DeviceNotify"/> as well as <see cref="Scope.AlertsReadWrite"/>:
@@ -274,12 +335,14 @@ public class AlertsController : ControllerBase
     /// <see cref="Scope.AllowedGuestScopes"/>.
     /// </remarks>
     [HttpPost("excursions/{excursionId:guid}/acknowledge")]
+    [Authorize]
     [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(typeof(AcknowledgeExcursionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AcknowledgeExcursionResponse>> AcknowledgeExcursion(
-        Guid excursionId, [FromBody] AcknowledgeRequest request, CancellationToken ct)
+        Guid excursionId, [FromBody] AcknowledgeRequest request,
+        [FromServices] AlertReceiptService receipts, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
 
@@ -297,10 +360,14 @@ public class AlertsController : ControllerBase
         var outcome = await _acknowledgementService.AcknowledgeExcursionAsync(
             tenantId,
             excursionId,
-            ResolveAcknowledger(request),
+            User.ResolveAcknowledger(request.AcknowledgedBy),
             HttpContext.GetAlertAcknowledgementAuthority(),
             broadcast: true,
             ct);
+
+        // Acknowledging is also seeing it, so the receipts list everyone who did either.
+        if (AlertReceiptActor.Of(HttpContext) is { Kind: AlertReceiptActorKind.Member } member)
+            await receipts.RecordAsync(excursionId, member, ct);
 
         return Ok(new AcknowledgeExcursionResponse { Outcome = outcome });
     }
@@ -311,11 +378,18 @@ public class AlertsController : ControllerBase
     /// and re-notifies when the snooze lapses if it is still firing. Snoozing again replaces the
     /// window. Returns 409 when the instance is already resolved or has used the rule's
     /// <c>snooze.maxCount</c> (<see cref="Nocturne.API.Services.Alerts.SmartSnoozeConfig"/>), a count
-    /// shared with the sweep's smart-snooze extensions.
+    /// shared with the sweep's smart-snooze extensions. Also accepts <c>alerts.acknowledge</c>, which
+    /// a Nightscout token holding <c>notifications:*:ack</c> carries.
     /// </summary>
+    /// <remarks>
+    /// Accepts <see cref="Scope.AlertsAcknowledge"/> as well as <see cref="Scope.AlertsReadWrite"/>:
+    /// a snooze silences the alert for everyone and changes nothing else, which is all a Nightscout
+    /// token holding <c>notifications:*:ack</c> may do.
+    /// </remarks>
     /// <seealso cref="AlertSnooze"/>
     [HttpPost("instances/{instanceId:guid}/snooze")]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [Authorize]
+    [RequireScope(Scope.AlertsReadWrite, Scope.AlertsAcknowledge)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -337,6 +411,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkDeliveredAsync"/>
     [HttpPost("deliveries/{deliveryId:guid}/delivered")]
+    [Authorize]
     [RequireScope(Scope.AlertsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> MarkDelivered(
@@ -349,6 +424,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkFailedAsync"/>
     [HttpPost("deliveries/{deliveryId:guid}/failed")]
+    [Authorize]
     [RequireScope(Scope.AlertsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> MarkFailed(
@@ -363,6 +439,8 @@ public class AlertsController : ControllerBase
     /// Used by bot/adapter services to poll for work.
     /// </summary>
     [HttpGet("deliveries/pending")]
+    [Authorize]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<PendingDeliveryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<PendingDeliveryResponse>>> GetPendingDeliveries(
@@ -423,6 +501,33 @@ public class ActiveExcursionResponse
     public DateTime? SnoozedUntil { get; set; }
 
     public List<ActiveInstanceResponse> ActiveInstances { get; set; } = [];
+
+    /// <summary>
+    /// Who has recorded seeing it, oldest first: every viewer for a caller with an account, only its
+    /// own for a share or guest link.
+    /// </summary>
+    public List<AlertReceiptResponse> Receipts { get; set; } = [];
+}
+
+/// <summary>One viewer's record that they saw an alarm.</summary>
+public class AlertReceiptResponse
+{
+    public AlertReceiptActorKind ActorKind { get; set; }
+
+    /// <summary>
+    /// The member's name, the guest link's label or the clock face's name; null for the public link.
+    /// </summary>
+    public string? ActorLabel { get; set; }
+
+    public DateTime SeenAt { get; set; }
+
+    internal static List<AlertReceiptResponse> From(IEnumerable<AlertReceipt> receipts) =>
+        receipts.Select(r => new AlertReceiptResponse
+        {
+            ActorKind = r.ActorKind,
+            ActorLabel = r.ActorLabel,
+            SeenAt = r.SeenAt,
+        }).ToList();
 }
 
 public class ActiveInstanceResponse
@@ -471,6 +576,9 @@ public class HistoryExcursionResponse
 
     /// <summary>True when every instance of this excursion was a test fire.</summary>
     public bool IsTest { get; set; }
+
+    /// <inheritdoc cref="ActiveExcursionResponse.Receipts"/>
+    public List<AlertReceiptResponse> Receipts { get; set; } = [];
 }
 
 public class AcknowledgeRequest

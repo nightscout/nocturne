@@ -93,7 +93,7 @@ public class MigrationFailureReportingTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
-        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard());
+        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(), TimeProvider.System);
 
     private static TestMigrationConnectionRequest TestRequest() => new()
     {
@@ -369,6 +369,23 @@ public class MigrationFailureReportingTests
         // The connection failed once; saying so once is the point of abandoning the rest.
         Regex.Matches(status.ErrorMessage!, Regex.Escape(UnreachableMessage)).Should().ContainSingle();
         status.CollectionProgress["profile"].FailureReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_source_with_no_profile_endpoint_skips_the_profile_step()
+    {
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
+            _ => Json(HttpStatusCode.NotFound),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries", "profile");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["profile"].FailureReason.Should().BeNull();
+        status.CollectionProgress["profile"].SkippedReason.Should().Be("Skipped: this Nightscout has no profile to hand over.");
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Nocturne.API.Authorization;
 using Nocturne.API.Helpers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Configuration;
@@ -13,15 +14,22 @@ namespace Nocturne.API.Services.Auth;
 /// <summary>
 /// JWT service implementation for access token generation, refresh token management,
 /// and token validation. Uses HMAC-SHA256 signing with a symmetric key derived from
-/// <see cref="JwtOptions.SecretKey"/> (minimum 32 characters enforced at construction).
+/// <see cref="JwtOptions.SecretKey"/> (at least <see cref="InstanceKeyDigest.MinimumLength"/> characters).
 /// </summary>
 /// <seealso cref="IJwtService"/>
 /// <seealso cref="OAuthTokenService"/>
 /// <seealso cref="RefreshTokenService"/>
 public class JwtService : IJwtService
 {
+    /// <summary>
+    /// How far before its not-before time or after its expiry a token is still accepted, to absorb
+    /// clock drift between hosts.
+    /// </summary>
+    public static readonly TimeSpan ClockSkew = TimeSpan.FromSeconds(30);
+
     private readonly JwtOptions _options;
     private readonly ILogger<JwtService> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly SymmetricSecurityKey _signingKey;
     private readonly JwtSecurityTokenHandler _tokenHandler;
     private readonly TokenValidationParameters _validationParameters;
@@ -31,17 +39,19 @@ public class JwtService : IJwtService
     /// </summary>
     /// <param name="options">JWT configuration options including secret key, issuer, audience, and token lifetimes.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="timeProvider">The clock tokens are issued and validated against.</param>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="JwtOptions.SecretKey"/> is null, empty, or shorter than 32 characters.
+    /// Thrown when <see cref="JwtOptions.SecretKey"/> is null, empty, or shorter than <see cref="InstanceKeyDigest.MinimumLength"/>.
     /// </exception>
-    public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger)
+    public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger, TimeProvider timeProvider)
     {
         _options = options.Value;
         _logger = logger;
+        _timeProvider = timeProvider;
 
-        if (string.IsNullOrEmpty(_options.SecretKey) || _options.SecretKey.Length < 32)
+        if (string.IsNullOrEmpty(_options.SecretKey) || _options.SecretKey.Length < InstanceKeyDigest.MinimumLength)
         {
-            throw new InvalidOperationException("JWT secret key must be at least 32 characters.");
+            throw new InvalidOperationException($"JWT secret key must be at least {InstanceKeyDigest.MinimumLength} characters.");
         }
 
         _signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));
@@ -54,10 +64,61 @@ public class JwtService : IJwtService
             ValidateAudience = true,
             ValidAudience = _options.Audience,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30),
+            ClockSkew = ClockSkew,
+            LifetimeValidator = ValidateLifetime,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = _signingKey,
         };
+    }
+
+    /// <summary>
+    /// <see cref="Microsoft.IdentityModel.Tokens.Validators.ValidateLifetime(DateTime?, DateTime?, SecurityToken, TokenValidationParameters)"/>
+    /// on the injected clock: the same comparisons and the same exceptions, which
+    /// <see cref="ValidateAccessToken"/> maps to <see cref="JwtValidationError"/>. The handler's own
+    /// check reads the system clock and exposes no public way to replace it.
+    /// </summary>
+    private bool ValidateLifetime(
+        DateTime? notBefore,
+        DateTime? expires,
+        SecurityToken securityToken,
+        TokenValidationParameters parameters)
+    {
+        if (!parameters.ValidateLifetime)
+            return true;
+
+        if (expires is null)
+        {
+            if (parameters.RequireExpirationTime)
+                throw new SecurityTokenNoExpirationException("The token has no expiration time.");
+        }
+        else if (notBefore > expires)
+        {
+            throw new SecurityTokenInvalidLifetimeException("The token's NotBefore is after its Expires.")
+            {
+                NotBefore = notBefore,
+                Expires = expires,
+            };
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (notBefore > now + parameters.ClockSkew)
+        {
+            throw new SecurityTokenNotYetValidException("The token is not yet valid.")
+            {
+                NotBefore = notBefore.Value,
+            };
+        }
+
+        if (expires < now - parameters.ClockSkew)
+        {
+            throw new SecurityTokenExpiredException("The token has expired.")
+            {
+                Expires = expires.Value,
+            };
+        }
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -65,10 +126,11 @@ public class JwtService : IJwtService
         SubjectInfo subject,
         IEnumerable<string> permissions,
         IEnumerable<string> roles,
+        string? sessionId = null,
         TimeSpan? lifetime = null
     )
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var expires = now.Add(
             lifetime ?? TimeSpan.FromMinutes(_options.AccessTokenLifetimeMinutes)
         );
@@ -97,6 +159,11 @@ public class JwtService : IJwtService
             claims.Add(new Claim(JwtRegisteredClaimNames.Email, subject.Email));
         }
 
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Sid, sessionId));
+        }
+
         // Add roles
         foreach (var role in roles)
         {
@@ -109,20 +176,7 @@ public class JwtService : IJwtService
             claims.Add(new Claim("permission", permission));
         }
 
-        var tokenDescriptor = new SecurityTokenDescriptor
-        {
-            Subject = new ClaimsIdentity(claims),
-            Expires = expires.UtcDateTime,
-            Issuer = _options.Issuer,
-            Audience = _options.Audience,
-            SigningCredentials = new SigningCredentials(
-                _signingKey,
-                SecurityAlgorithms.HmacSha256Signature
-            ),
-        };
-
-        var token = _tokenHandler.CreateToken(tokenDescriptor);
-        return _tokenHandler.WriteToken(token);
+        return WriteToken(claims, now, expires);
     }
 
     /// <inheritdoc />
@@ -139,7 +193,7 @@ public class JwtService : IJwtService
         Guid? grantId = null
     )
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var expires = now.Add(
             lifetime ?? TimeSpan.FromMinutes(_options.AccessTokenLifetimeMinutes)
         );
@@ -219,9 +273,17 @@ public class JwtService : IJwtService
             claims.Add(new Claim("permission", permission));
         }
 
+        return WriteToken(claims, now, expires);
+    }
+
+    private string WriteToken(List<Claim> claims, DateTimeOffset now, DateTimeOffset expires)
+    {
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
+            // Stated so the handler does not default them from the system clock.
+            IssuedAt = now.UtcDateTime,
+            NotBefore = now.UtcDateTime,
             Expires = expires.UtcDateTime,
             Issuer = _options.Issuer,
             Audience = _options.Audience,
@@ -309,6 +371,8 @@ public class JwtService : IJwtService
                 PlatformAccess = platformAccess,
                 GrantId = grantId,
                 LimitTo24Hours = limitTo24Hours,
+                // Read off the raw token: the inbound claim map renames sid to ClaimTypes.Sid.
+                SessionId = jwtToken.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sid)?.Value,
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),
                 ExpiresAt = new DateTimeOffset(jwtToken.ValidTo, TimeSpan.Zero),

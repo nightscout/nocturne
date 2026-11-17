@@ -36,8 +36,11 @@ const OWNER_ONLY = [
   "Meals",
   "Tools",
   "Alerts",
-  "Dev Tools",
-  "Settings",
+  "Trackers",
+  "Community",
+  "Legacy",
+  "My settings",
+  "Site settings",
 ];
 
 function titles(viewer: NavViewer): string[] {
@@ -77,13 +80,37 @@ describe("buildAppNavigation", () => {
     ]);
   });
 
+  it("groups the timeline with the profile and patient record pages for a member", () => {
+    const nav = buildAppNavigation(MEMBER);
+    const therapy = nav.find((item) => item.id === "time-spans");
+
+    expect(therapy?.title).toBe("Therapy");
+    expect(therapy?.children?.map((c) => c.href)).toEqual([
+      "/time-spans",
+      "/settings/profile",
+      "/settings/patient",
+    ]);
+
+    const site = nav.find((item) => item.id === "site-settings");
+    expect(site?.children?.map((c) => c.href)).not.toContain("/settings/profile");
+    expect(site?.children?.map((c) => c.href)).not.toContain("/settings/patient");
+  });
+
+  it("gives a member who cannot read therapy settings the timeline alone", () => {
+    const therapy = buildAppNavigation({ ...MEMBER, grantedScopes: ["glucose.read"] }).find(
+      (item) => item.id === "time-spans"
+    );
+
+    expect(therapy?.href).toBe("/time-spans");
+    expect(therapy?.children).toBeUndefined();
+  });
+
   it("keeps the guest link's read-only navigation", () => {
     expect(titles(GUEST)).toEqual([
       "Dashboard",
       "Calendar",
-      "Time Spans",
+      "Therapy timeline",
       "Reports",
-      "Clock",
     ]);
   });
 
@@ -93,11 +120,82 @@ describe("buildAppNavigation", () => {
     );
   });
 
+  it("offers Alerts to a member holding alerts.read or alerts.readwrite", () => {
+    for (const scope of ["alerts.read", "alerts.readwrite"]) {
+      expect(titles({ ...MEMBER, grantedScopes: [scope] })).toContain("Alerts");
+    }
+  });
+
+  it("withholds Alerts from a member holding neither alerts scope", () => {
+    const viewer = titles({
+      ...MEMBER,
+      grantedScopes: ["glucose.read", "reports.read"],
+    });
+
+    expect(viewer).not.toContain("Alerts");
+    expect(viewer).not.toContain("Trackers");
+    expect(viewer).toContain("My settings");
+  });
+
+  it("withholds Reports from a member without reports.read", () => {
+    const withoutReports = titles({ ...MEMBER, grantedScopes: ["glucose.read", "alerts.read"] });
+
+    expect(withoutReports).not.toContain("Reports");
+    expect(withoutReports).toContain("Dashboard");
+    expect(titles({ ...MEMBER, grantedScopes: ["reports.read"] })).toContain("Reports");
+  });
+
+  it("offers the platform group only to a platform admin", () => {
+    expect(titles(MEMBER)).not.toContain("Platform");
+    expect(titles({ ...MEMBER, isPlatformAdmin: true })).toContain("Platform");
+  });
+
+  it("narrows the site group to the pages a member can use", () => {
+    const site = buildAppNavigation({ ...MEMBER, grantedScopes: ["glucose.read", "reports.read"] })
+      .find((item) => item.id === "site-settings");
+
+    expect(site?.children?.map((child) => child.href)).toEqual(["/settings/connectors"]);
+  });
+
+  it("keeps only Account and Appearance on a tenantless host", () => {
+    const settings = buildAppNavigation({ ...MEMBER, isPlatformAdmin: true, tenantless: true })
+      .filter((item) => item.children?.some((child) => child.href.startsWith("/settings")));
+
+    expect(settings.map((item) => item.id)).toEqual(["settings"]);
+    expect(settings[0]!.children!.map((child) => child.href)).toEqual([
+      "/settings/account",
+      "/settings/appearance",
+    ]);
+  });
+
   it("offers the tenant switcher only to a member holding more than one", () => {
     expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("Tenants");
     expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
       "Tenants"
     );
+  });
+});
+
+describe("trackers, community and legacy", () => {
+  function hrefs(id: NavItem["id"]): (string | undefined)[] | undefined {
+    const item = buildAppNavigation(MEMBER).find((entry) => entry.id === id);
+    return item?.children ? item.children.map((child) => child.href) : [item?.href];
+  }
+
+  it("puts the notification inbox beside trackers", () => {
+    expect(hrefs("trackers")).toEqual(["/trackers", "/notifications"]);
+  });
+
+  it("offers the community page as its own entry", () => {
+    expect(hrefs("community")).toEqual(["/community"]);
+  });
+
+  it("files the Nightscout move and the compatibility pages under Legacy", () => {
+    expect(hrefs("legacy")).toEqual([
+      "/settings/migration",
+      "/compatibility",
+      "/compatibility/test",
+    ]);
   });
 });
 
@@ -124,7 +222,6 @@ describe("readOnlyNav", () => {
       "calendar",
       "time-spans",
       "reports",
-      "clock",
     ]);
   });
 

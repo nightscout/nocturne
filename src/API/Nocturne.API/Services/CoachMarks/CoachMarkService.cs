@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.CoachMarks;
 using Nocturne.Core.Models.CoachMarks;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.CoachMarks;
 
@@ -14,26 +15,30 @@ namespace Nocturne.API.Services.CoachMarks;
 /// <seealso cref="ICoachMarkService"/>
 public class CoachMarkService : ICoachMarkService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly TimeProvider _time;
     private readonly ILogger<CoachMarkService> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="CoachMarkService"/>.
     /// </summary>
-    /// <param name="dbContext">The database context for coach mark state persistence.</param>
+    /// <param name="contexts">Opens the context each call reads and writes coach mark states through.</param>
     /// <param name="httpContextAccessor">Accessor for the current HTTP context and authenticated subject.</param>
+    /// <param name="timeProvider">Clock that stamps seen and completed times.</param>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
     public CoachMarkService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IHttpContextAccessor httpContextAccessor,
+        TimeProvider timeProvider,
         ILogger<CoachMarkService> logger
     )
     {
-        _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _httpContextAccessor =
             httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+        _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -44,13 +49,14 @@ public class CoachMarkService : ICoachMarkService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
             var subjectId = SubjectId;
 
             _logger.LogDebug("Getting all coach mark states for subject {SubjectId}", subjectId);
 
-            var entities = await _dbContext
+            var entities = await db
                 .CoachMarkStates.Where(e => e.SubjectId == subjectId)
                 .ToListAsync(cancellationToken);
 
@@ -64,12 +70,28 @@ public class CoachMarkService : ICoachMarkService
     }
 
     /// <inheritdoc />
+    public async Task<CoachMarkState?> GetAsync(
+        string markKey,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var subjectId = SubjectId;
+        var entity = await db.CoachMarkStates.FirstOrDefaultAsync(
+            e => e.SubjectId == subjectId && e.MarkKey == markKey,
+            cancellationToken
+        );
+        return entity is null ? null : CoachMarkStateMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
     public async Task<CoachMarkState> UpsertAsync(
         string markKey,
         string status,
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
             var subjectId = SubjectId;
@@ -81,7 +103,7 @@ public class CoachMarkService : ICoachMarkService
                 subjectId
             );
 
-            var entity = await _dbContext
+            var entity = await db
                 .CoachMarkStates.FirstOrDefaultAsync(
                     e => e.SubjectId == subjectId && e.MarkKey == markKey,
                     cancellationToken
@@ -97,7 +119,7 @@ public class CoachMarkService : ICoachMarkService
                     Status = status,
                 };
 
-                _dbContext.CoachMarkStates.Add(entity);
+                db.CoachMarkStates.Add(entity);
             }
             else
             {
@@ -107,16 +129,16 @@ public class CoachMarkService : ICoachMarkService
             // Set SeenAt on first transition to "seen" (or any later state)
             if (entity.SeenAt is null && status is "seen" or "completed" or "dismissed")
             {
-                entity.SeenAt = DateTime.UtcNow;
+                entity.SeenAt = _time.GetUtcNow().UtcDateTime;
             }
 
             // Set CompletedAt on first transition to "completed" or "dismissed"
             if (entity.CompletedAt is null && status is "completed" or "dismissed")
             {
-                entity.CompletedAt = DateTime.UtcNow;
+                entity.CompletedAt = _time.GetUtcNow().UtcDateTime;
             }
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
 
             return CoachMarkStateMapper.ToDomainModel(entity);
         }
@@ -134,11 +156,12 @@ public class CoachMarkService : ICoachMarkService
     /// <inheritdoc />
     public async Task DeleteAllAsync(CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var subjectId = SubjectId;
 
         _logger.LogDebug("Deleting all coach mark states for subject {SubjectId}", subjectId);
 
-        await _dbContext.CoachMarkStates
+        await db.CoachMarkStates
             .Where(e => e.SubjectId == subjectId)
             .ExecuteDeleteAsync(cancellationToken);
     }

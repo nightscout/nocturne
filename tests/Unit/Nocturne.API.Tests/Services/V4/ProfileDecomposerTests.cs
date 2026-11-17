@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -18,14 +19,14 @@ public class ProfileDecomposerTests
     /// byte-identical re-upserts diff to empty and are skipped.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_PreservesCallerAuditAttribution()
+    public async Task DecomposeBatchAsync_PreservesCallerAuditAttribution()
     {
         var auditContext = new AuditContext { AuthType = "ApiKey", SubjectName = "someone" };
         var attributionDuringUpsert = new List<(bool IsSystem, string? AuthType)>();
         var repos = new Repositories(onUpsert: () =>
             attributionDuringUpsert.Add((auditContext.IsSystem, auditContext.AuthType)));
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(5);
         attributionDuringUpsert.Should().HaveCount(5).And.AllSatisfy(a =>
@@ -35,16 +36,165 @@ public class ProfileDecomposerTests
         });
     }
 
+    [Fact]
+    public async Task UnchangedResend_ReresolvesNoTempBasalsAndRestampsNoLoopSnapshots()
+    {
+        var repos = new Repositories(outcome: UpsertOutcome.Unchanged);
+
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
+
+        result.UnchangedRecords.Should().HaveCount(5);
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        repos.TempBasalRates.Verify(r => r.AfterSchedulesWrittenAsync(
+            It.Is<IReadOnlyCollection<(string, DateTime)>>(v => v.Count == 0), It.IsAny<CancellationToken>()));
+        repos.ClosedLoop.Verify(r => r.AfterLoopSettingsWrittenAsync(
+            It.Is<IReadOnlyCollection<DateTime>>(s => s.Count == 0), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task ChangedResend_ReresolvesTempBasalsAndRestampsLoopSnapshots()
+    {
+        var repos = new Repositories(outcome: UpsertOutcome.Updated);
+        var profile = BuildProfile();
+
+        var result = await repos.Decomposer.DecomposeBatchAsync([profile], WriteOrigin.Live);
+
+        result.UpdatedRecords.Should().HaveCount(5);
+        var start = ProfileDecomposer.VersionStart(profile);
+        repos.TempBasalRates.Verify(r => r.AfterSchedulesWrittenAsync(
+            It.Is<IReadOnlyCollection<(string ProfileName, DateTime Start)>>(v =>
+                v.Count == 2 && v.All(x => x.ProfileName == "Default" && x.Start == start)),
+            It.IsAny<CancellationToken>()));
+        repos.ClosedLoop.Verify(r => r.AfterLoopSettingsWrittenAsync(
+            It.Is<IReadOnlyCollection<DateTime>>(s => s.SequenceEqual(new[] { start })), It.IsAny<CancellationToken>()));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void MapToTherapySettings_CarriesTheDocumentsApnsEnvironmentToEveryStore(bool? isApnsProduction)
+    {
+        var profile = BuildProfile(stores: ["Default", "Weekday"]);
+        profile.IsAPNSProduction = isApnsProduction;
+
+        var rows = profile.Store
+            .Select(s => ProfileDecomposer.MapToTherapySettings(profile, s.Value, s.Key, "profile1:" + s.Key, false, null))
+            .ToList();
+
+        rows.Should().HaveCount(2).And.AllSatisfy(r => r.IsAPNSProduction.Should().Be(isApnsProduction));
+    }
+
+    /// <summary>
+    /// Every version of a document starts at its <c>startDate</c>, else its <c>mills</c>, else its
+    /// <c>created_at</c>, else the epoch, in the shapes clients upload: Nightscout's profile editor
+    /// and AAPS send no <c>mills</c>, Loop sends it as a string of its <c>startDate</c>, Trio
+    /// truncated to the second, and an editor moving a document it read echoes the old <c>mills</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("""
+        "startDate": "2025-10-01T06:00:00.000Z", "created_at": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-01T06:00:00.000Z")]
+    [InlineData("""
+        "date": 1760000000000, "created_at": "2025-10-09T08:53:20.000Z", "startDate": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-09T08:53:20.000Z")]
+    [InlineData("""
+        "mills": "1760000000000", "startDate": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-09T08:53:20.000Z")]
+    [InlineData("""
+        "mills": 1760000000000, "startDate": "2025-10-09T08:53:20.123Z"
+        """, "2025-10-09T08:53:20.123Z")]
+    [InlineData("""
+        "mills": 1759276800000, "startDate": "2025-10-05T00:00:00.000Z", "created_at": "2025-10-01T00:00:00.000Z"
+        """, "2025-10-05T00:00:00.000Z")]
+    [InlineData("""
+        "startDate": "2025-10-01T06:00:00", "created_at": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-01T06:00:00.000Z")]
+    [InlineData("""
+        "startDate": "", "mills": 1760000000000, "created_at": "2025-10-02T00:00:00.000Z"
+        """, "2025-10-09T08:53:20.000Z")]
+    [InlineData("""
+        "created_at": "2025-10-02T00:00:00.000Z"
+        """, "2025-10-02T00:00:00.000Z")]
+    [InlineData("""
+        "enteredBy": "editor"
+        """, "1970-01-01T00:00:00.000Z")]
+    public async Task DecomposeBatchAsync_StartsEveryVersionAtTheDocumentsTime(string header, string expected)
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeBatchAsync([Upload("doc", header)], WriteOrigin.Live);
+
+        var start = DateTimeOffset.Parse(expected).UtcDateTime;
+        repos.Written.Should().HaveCount(5).And.AllSatisfy(r => r.Timestamp.Should().Be(start));
+    }
+
+    /// <summary>
+    /// Nightscout's newest document is the newest by <c>startDate</c>, so a batch of documents without
+    /// <c>mills</c> claims the default with the one that starts last, whatever their ids.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_WithoutMills_ClaimsTheDefaultWithTheDocumentThatStartsLast()
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeBatchAsync(
+        [
+            Upload("a-later", """ "startDate": "2025-10-05T00:00:00.000Z" """),
+            Upload("b-earlier", """ "startDate": "2025-10-01T00:00:00.000Z" """),
+        ], WriteOrigin.Live);
+
+        WrittenDefaults(repos).Should().ContainSingle().Which.LegacyId.Should().Be("a-later:Default");
+    }
+
+    /// <summary>
+    /// A document without <c>mills</c> that starts after every stored one is the newest, and claims.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_WithoutMills_ClaimsTheDefault_WhenItStartsAfterEveryStoredDocument()
+    {
+        var repos = new Repositories(storedSettings:
+        [
+            new TherapySettings
+            {
+                LegacyId = "stored:Default", ProfileName = "Default", IsDefault = true,
+                Timestamp = new DateTime(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+            },
+        ]);
+
+        await repos.Decomposer.DecomposeBatchAsync([
+            Upload("new", """ "startDate": "2025-10-05T00:00:00.000Z" """)], WriteOrigin.Live);
+
+        WrittenDefaults(repos).Should().ContainSingle().Which.LegacyId.Should().Be("new:Default");
+    }
+
+    /// <summary>A one-store document as a client posts it, with <paramref name="header"/>'s time fields.</summary>
+    private static Profile Upload(string id, string header) =>
+        System.Text.Json.JsonSerializer.Deserialize<Profile>($$"""
+            {
+              "_id": "{{id}}", "defaultProfile": "Default", "units": "mg/dl", {{header}},
+              "store": { "Default": {
+                "dia": 4, "timezone": "UTC",
+                "basal": [{ "time": "00:00", "value": 1.0 }],
+                "carbratio": [{ "time": "00:00", "value": 10 }],
+                "sens": [{ "time": "00:00", "value": 50 }],
+                "target_low": [{ "time": "00:00", "value": 80 }],
+                "target_high": [{ "time": "00:00", "value": 120 }]
+              } }
+            }
+            """)!;
+
     /// <summary>
     /// Only the therapy settings row may keep its stored correlation id; the four schedules are
     /// stamped from what it reads back, so preserving on them would let a fork survive.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_PreservesTheStoredCorrelationIdOnTheAnchorOnly()
+    public async Task DecomposeBatchAsync_PreservesTheStoredCorrelationIdOnTheAnchorOnly()
     {
         var repos = new Repositories();
 
-        await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         repos.PreserveFlags.Should().HaveCount(5);
         repos.PreserveFlags[typeof(TherapySettings)].Should().BeTrue();
@@ -59,12 +209,12 @@ public class ProfileDecomposerTests
     /// schedule rather than failing.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_StampsTheSchedulesWithTheAnchorsStoredCorrelationId()
+    public async Task DecomposeBatchAsync_StampsTheSchedulesWithTheAnchorsStoredCorrelationId()
     {
         var anchor = Guid.CreateVersion7();
         var repos = new Repositories(anchorCorrelationId: anchor);
 
-        await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         repos.Written.Where(r => r is not TherapySettings).Should().HaveCount(4).And.AllSatisfy(
             r => r.CorrelationId.Should().Be(anchor, "a sibling must land on the therapy settings row's id"));
@@ -74,11 +224,11 @@ public class ProfileDecomposerTests
     /// A stored id of null must not leave the anchor on a fresh id while the siblings keep theirs.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_StampsTheWholeGroupWithTheMintedId_WhenTheAnchorStoresNone()
+    public async Task DecomposeBatchAsync_StampsTheWholeGroupWithTheMintedId_WhenTheAnchorStoresNone()
     {
         var repos = new Repositories(anchorCorrelationId: null);
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile()], WriteOrigin.Live);
 
         var ids = repos.Written.Select(r => r.CorrelationId).ToList();
         ids.Should().HaveCount(5);
@@ -91,11 +241,11 @@ public class ProfileDecomposerTests
     /// would fork the group off the settings row they belong to.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_WritesNoSchedules_ForAStoreWhoseAnchorWasRefused()
+    public async Task DecomposeBatchAsync_WritesNoSchedules_ForAStoreWhoseAnchorWasRefused()
     {
         var repos = new Repositories(refusedLegacyIds: ["profile1:Weekend"]);
 
-        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(stores: ["Default", "Weekend"]), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeBatchAsync([BuildProfile(stores: ["Default", "Weekend"])], WriteOrigin.Live);
 
         repos.Written.Select(r => r.LegacyId).Should().OnlyContain(id => id == "profile1:Default");
         repos.Written.Should().HaveCount(5);
@@ -125,6 +275,28 @@ public class ProfileDecomposerTests
             .Should().BeEquivalentTo(["profile1:Default", "profile1:Weekend", "profile2:Default"]);
         result.CreatedRecords.Should().HaveCount(15);
     }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_SkipsAProfileSwitchSnapshotStore_AndKeepsAStoreThatOnlyContainsTheMarker()
+    {
+        var repos = new Repositories();
+        var profile = BuildProfile(id: "remote1", stores: ["Default", "Weekend@@@@@1672567200000", "Night@@@@@Mode"]);
+
+        await repos.Decomposer.DecomposeBatchAsync([profile], WriteOrigin.Live);
+
+        repos.Written.Select(r => r.LegacyId).Distinct()
+            .Should().BeEquivalentTo(["remote1:Default", "remote1:Night@@@@@Mode"]);
+    }
+
+    [Theory]
+    [InlineData("Weekend@@@@@1672567200000", true)]
+    [InlineData("Rhys (110%,1h)@@@@@1777636800000", true)]
+    [InlineData("Night@@@@@Mode", false)]
+    [InlineData("Night@@@@@12a", false)]
+    [InlineData("Night@@@@1672567200000", false)]
+    [InlineData("Default", false)]
+    public void IsProfileSwitchStoreName_MatchesOnlyTheSyntheticShape(string storeName, bool expected) =>
+        ProfileDecomposer.IsProfileSwitchStoreName(storeName).Should().Be(expected);
 
     /// <summary>
     /// Two profiles created together must not share a correlation id, while the stores of one profile
@@ -178,15 +350,36 @@ public class ProfileDecomposerTests
     /// naming no store it holds leaves no default, rather than a case-insensitive near miss.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_MatchesTheDefaultStoreExactly()
+    public async Task DecomposeBatchAsync_MatchesTheDefaultStoreExactly()
     {
         var repos = new Repositories();
 
-        await repos.Decomposer.DecomposeAsync(
-            BuildProfile(stores: ["default"], defaultProfile: "Default"), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([
+            BuildProfile(stores: ["default"], defaultProfile: "Default")], WriteOrigin.Live);
 
         WrittenDefaults(repos).Should().BeEmpty();
         repos.SetDefaultCalls.Should().Equal([(Guid?)null]);
+    }
+
+    /// <summary>
+    /// A document sent twice in one batch is written as its last version, so that version's
+    /// <c>defaultProfile</c> is the one it claims.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_ADocumentSentTwice_ClaimsTheLastVersionsDefault()
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeBatchAsync([
+            BuildProfile(stores: ["Default", "Night"], defaultProfile: "Default"),
+            BuildProfile(stores: ["Default", "Night"], defaultProfile: "Night")], WriteOrigin.Live);
+
+        repos.Written.OfType<TherapySettings>()
+            .GroupBy(t => t.LegacyId)
+            .Select(versions => versions.Last())
+            .Where(t => t.IsDefault)
+            .Select(t => t.LegacyId)
+            .Should().Equal(["profile1:Night"], "the bulk upsert keeps each legacy id's last record");
     }
 
     /// <summary>
@@ -194,7 +387,7 @@ public class ProfileDecomposerTests
     /// flag a stored row of its own already carries.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_ForAnOlderDocument_KeepsTheStoredFlags()
+    public async Task DecomposeBatchAsync_ForAnOlderDocument_KeepsTheStoredFlags()
     {
         var repos = new Repositories(storedSettings:
         [
@@ -210,50 +403,38 @@ public class ProfileDecomposerTests
             },
         ]);
 
-        await repos.Decomposer.DecomposeAsync(
-            BuildProfile(id: "older", stores: ["Default", "Weekend"], mills: 1700000000000), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([
+            BuildProfile(id: "older", stores: ["Default", "Weekend"], mills: 1700000000000)], WriteOrigin.Live);
 
         WrittenDefaults(repos).Select(t => t.LegacyId).Should().Equal(["older:Weekend"]);
         repos.SetDefaultCalls.Should().BeEmpty();
     }
 
     /// <summary>
-    /// A profile switch carrying its profile inline (AAPS sends one on every switch) is not a
-    /// profile document: it must not take the default from the document before it, and its newer
-    /// snapshot must not stop that document from settling the default when it is re-synced.
+    /// Migration <c>RepairRawMmolProfiles</c> converts the schedules written before the decomposer
+    /// converted mmol stores; the write path must not store them raw again (#2355).
     /// </summary>
-    [Fact]
-    public async Task ProfileSwitchSnapshot_LeavesTheDocumentsDefault()
+    [Theory]
+    [InlineData("mmol", "mg/dL")]
+    [InlineData(null, "mmol")]
+    [InlineData("mmol/L", "mmol")]
+    public async Task DecomposeBatchAsync_StoresAMmolStoresTargetsAndIsfInMgdl(string? storeUnits, string documentUnits)
     {
-        const string switchStore = "Day@@@@@1700000900000";
-        var repos = new Repositories(storedSettings:
-        [
-            new TherapySettings
-            {
-                LegacyId = "doc:Default", ProfileName = "Default", IsDefault = true,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
-            },
-            new TherapySettings
-            {
-                LegacyId = $"switch:{switchStore}", ProfileName = switchStore,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000900000).UtcDateTime,
-            },
-        ]);
+        var repos = new Repositories();
+        var profile = BuildProfile();
+        profile.Units = documentUnits;
+        var store = profile.Store["Default"];
+        store.Units = storeUnits;
+        store.Sens = [new TimeValue { Time = "00:00", Value = 3.5 }];
+        store.TargetLow = [new TimeValue { Time = "00:00", Value = 5.0 }];
+        store.TargetHigh = [new TimeValue { Time = "00:00", Value = 5.5 }];
 
-        await repos.Decomposer.DecomposeProfileSwitchAsync(
-            BuildProfile(id: "switch", stores: [switchStore], mills: 1700000900000, defaultProfile: switchStore),
-            WriteOrigin.Live);
+        await repos.Decomposer.DecomposeBatchAsync([profile], WriteOrigin.Live);
 
-        repos.Written.OfType<TherapySettings>().Should().ContainSingle()
-            .Which.IsDefault.Should().BeFalse();
-        repos.SetDefaultCalls.Should().BeEmpty();
-
-        await repos.Decomposer.DecomposeAsync(
-            BuildProfile(id: "doc", stores: ["Default"], mills: 1700000000000), WriteOrigin.Live);
-
-        var flagged = WrittenDefaults(repos).Should().ContainSingle().Subject;
-        flagged.LegacyId.Should().Be("doc:Default");
-        repos.SetDefaultCalls.Should().Equal([flagged.Id]);
+        repos.Written.OfType<SensitivitySchedule>().Single().Entries.Single().Value.Should().Be(63);
+        var target = repos.Written.OfType<TargetRangeSchedule>().Single().Entries.Single();
+        target.Low.Should().Be(90);
+        target.High.Should().Be(99);
     }
 
     [Fact]
@@ -269,7 +450,7 @@ public class ProfileDecomposerTests
     }
 
     /// <summary>
-    /// Five mocked repositories whose bulk upsert answers every record as created, under the
+    /// Five mocked repositories whose bulk upsert answers every record with <c>outcome</c>, under the
     /// correlation id it was handed — except the therapy settings anchor, which answers with
     /// <paramref name="anchorCorrelationId"/> as its stored id when one is given, and drops any
     /// record whose legacy id is in <paramref name="refusedLegacyIds"/>.
@@ -281,13 +462,18 @@ public class ProfileDecomposerTests
         public Dictionary<Type, bool> PreserveFlags { get; } = [];
         public List<int> Calls { get; } = [];
         public List<Guid?> SetDefaultCalls { get; } = [];
+        public Mock<ITempBasalRateReresolver> TempBasalRates { get; } = new();
+        public Mock<ILoopClosedLoopStamper> ClosedLoop { get; } = new();
+        private readonly UpsertOutcome _outcome;
 
         public Repositories(
             Guid? anchorCorrelationId = null,
             IReadOnlyCollection<string>? refusedLegacyIds = null,
             Action? onUpsert = null,
-            IReadOnlyList<TherapySettings>? storedSettings = null)
+            IReadOnlyList<TherapySettings>? storedSettings = null,
+            UpsertOutcome outcome = UpsertOutcome.Created)
         {
+            _outcome = outcome;
             var refused = refusedLegacyIds ?? [];
             var stored = storedSettings ?? [];
 
@@ -296,7 +482,6 @@ public class ProfileDecomposerTests
             therapyMock
                 .Setup(x => x.GetNewestDocumentRowAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(stored
-                    .Where(s => !s.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
                     .OrderByDescending(s => s.Timestamp)
                     .FirstOrDefault());
             therapyMock
@@ -313,6 +498,9 @@ public class ProfileDecomposerTests
                 Mock<ICarbRatioScheduleRepository, CarbRatioSchedule>(null, [], onUpsert),
                 Mock<ISensitivityScheduleRepository, SensitivitySchedule>(null, [], onUpsert),
                 Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
+                TempBasalRates.Object,
+                ClosedLoop.Object,
+                new AuditContext(),
                 NullLogger<ProfileDecomposer>.Instance);
         }
 
@@ -345,7 +533,7 @@ public class ProfileDecomposerTests
                         if (record.Id == Guid.Empty)
                             record.Id = Guid.CreateVersion7();
                         Written.Add(record);
-                        outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, Created: true);
+                        outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, _outcome);
                     }
                     return new LegacyUpsertBatch<TRecord>(outcomes, skippedDeleted);
                 });
@@ -430,5 +618,133 @@ public class ProfileDecomposerTests
 
         result.Should().ContainSingle();
         result[0].Value.Should().Be(50);
+    }
+
+    [Theory]
+    [InlineData("mmol", 63, 3.5)]
+    [InlineData("mmol/L", 58, 3.2)]
+    [InlineData("MMOL", 99, 5.5)]
+    [InlineData("mmol", 90, 5.0)]
+    public void FromMgdl_ConvertsMmolProfilesBackToOneDecimal(string units, double mgdl, double expected)
+    {
+        ProfileDecomposer.FromMgdl(mgdl, units).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("mg/dl")]
+    [InlineData("mg/dL")]
+    [InlineData(null)]
+    public void FromMgdl_LeavesMgdlProfilesUnchanged(string? units)
+    {
+        ProfileDecomposer.FromMgdl(99, units).Should().Be(99);
+    }
+
+    [Theory]
+    [InlineData(2.8)]
+    [InlineData(3.5)]
+    [InlineData(5.5)]
+    [InlineData(8.0)]
+    public void FromMgdl_RoundTripsWhatTheWriteSideStored(double mmol)
+    {
+        var stored = ProfileDecomposer.ConvertSensitivityValues(
+            [new TimeValue { Time = "00:00", Value = mmol }], "mmol")[0].Value;
+
+        ProfileDecomposer.FromMgdl(stored, "mmol").Should().Be(mmol);
+    }
+
+    private static List<TimeValue> At(params double[] values) =>
+        values.Select((v, i) => new TimeValue { Time = $"{i * 6:00}:00", Value = v }).ToList();
+
+    [Theory]
+    [InlineData("mmol", 90, 99, 108, 126)]
+    [InlineData("mmol/L", 1622, 1784, 1946, 2270)]
+    public void MmolTargetsThatConvertAboveAnyRealTarget_AreStoredWithTheExtraConversionUndone(
+        string units, double low1, double high1, double low2, double high2)
+    {
+        var targets = ProfileDecomposer.MergeTargets(At(low1, low2), At(high1, high2), units);
+
+        targets.Select(t => (t.Low, t.High)).Should().Equal((90.0, 99.0), (108.0, 126.0));
+    }
+
+    [Fact]
+    public void RealMmolTargets_AreConvertedOnce()
+    {
+        var target = ProfileDecomposer.MergeTargets(At(5.0), At(5.5), "mmol").Single();
+
+        (target.Low, target.High).Should().Be((90.0, 99.0));
+    }
+
+    [Fact]
+    public void MgdlTargets_AreStoredAsUploaded_HoweverLarge()
+    {
+        var target = ProfileDecomposer.MergeTargets(At(1622), At(1784), "mg/dl").Single();
+
+        (target.Low, target.High).Should().Be((1622.0, 1784.0));
+    }
+
+    [Theory]
+    [InlineData(90, 99, 1)]
+    [InlineData(5.0, 5.5, 0)]
+    public void UndoingAStoresTargets_IsLoggedAsAWarningNamingTheStore(double low, double high, int warnings)
+    {
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        var profile = new Nocturne.Core.Models.Profile { Id = "doc", Mills = 0, Units = "mmol" };
+        var data = new Nocturne.Core.Models.ProfileData { Units = "mmol", TargetLow = At(low), TargetHigh = At(high) };
+
+        ProfileDecomposer.MapToTargetRangeSchedule(profile, data, "AAPS", "doc:AAPS", null, logger.Object);
+
+        logger.Verify(
+            l => l.Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state!.ToString()!.Contains("AAPS") && state!.ToString()!.Contains("doc:AAPS")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(warnings));
+    }
+
+    [Theory]
+    [InlineData(23, 414)]
+    [InlineData(25, 450)]
+    [InlineData(63, 1135)]
+    public void AMmolIsf_IsConvertedAsUploaded(double mmol, double mgdl)
+    {
+        ProfileDecomposer.ConvertSensitivityValues(At(mmol), "mmol").Single().Value.Should().Be(mgdl);
+    }
+
+    /// <remarks>
+    /// Targets stop at 22.2 mmol/L, the highest one conversion keeps at or under 400 mg/dL; above it
+    /// <see cref="ProfileDecomposer.MergeTargets(List{TimeValue}, List{TimeValue}, string?)"/> reads
+    /// the values as mg/dL.
+    /// </remarks>
+    [Fact]
+    public void EveryOneDecimalMmolValue_SurvivesRepeatedReadAndReupload()
+    {
+        var drifted = new List<double>();
+        for (var tenths = 1; tenths <= 500; tenths++)
+        {
+            var uploaded = tenths / 10.0;
+            var value = uploaded;
+            for (var cycle = 0; cycle < 3; cycle++)
+            {
+                var sens = ProfileDecomposer.ConvertSensitivityValues(
+                    [new TimeValue { Time = "00:00", Value = value }], "mmol")[0].Value;
+                if (uploaded <= 22.2)
+                {
+                    var target = ProfileDecomposer.MergeTargets(
+                        [new TimeValue { Time = "00:00", Value = value }],
+                        [new TimeValue { Time = "00:00", Value = value }],
+                        "mmol/L")[0];
+                    sens.Should().Be(target.Low).And.Be(target.High);
+                }
+
+                value = ProfileDecomposer.FromMgdl(sens, "mmol");
+            }
+
+            if (value != uploaded)
+                drifted.Add(uploaded);
+        }
+
+        drifted.Should().BeEmpty();
     }
 }

@@ -1,9 +1,8 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -14,7 +13,7 @@ namespace Nocturne.API.Services.Connectors;
 /// <seealso cref="IMyFitnessPalMatchingSettingsService"/>
 public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettingsService
 {
-    private const string SettingsKey = "connectors:myfitnesspal:matching-settings";
+    private const string SettingsKey = SettingsKeys.ConnectorsPrefix + "myfitnesspal:matching-settings";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -22,15 +21,18 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
         WriteIndented = false,
     };
 
-    private readonly NocturneDbContext _context;
+    private readonly ISettingsRepository _settings;
+    private readonly TimeProvider _time;
     private readonly ILogger<MyFitnessPalMatchingSettingsService> _logger;
 
     public MyFitnessPalMatchingSettingsService(
-        NocturneDbContext context,
+        ISettingsRepository settings,
+        TimeProvider timeProvider,
         ILogger<MyFitnessPalMatchingSettingsService> logger
     )
     {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -40,15 +42,12 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
     {
         try
         {
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == SettingsKey && s.IsActive,
-                cancellationToken
-            );
+            var value = await _settings.GetConnectorSettingAsync(SettingsKey, cancellationToken);
 
-            if (entity?.Value != null)
+            if (value != null)
             {
                 var settings = JsonSerializer.Deserialize<MyFitnessPalMatchingSettings>(
-                    entity.Value,
+                    value,
                     JsonOptions
                 );
 
@@ -74,38 +73,13 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
     {
         try
         {
-            var jsonValue = JsonSerializer.Serialize(settings, JsonOptions);
-            var now = DateTimeOffset.UtcNow;
-
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == SettingsKey,
+            await _settings.SetConnectorSettingAsync(
+                SettingsKey,
+                JsonSerializer.Serialize(settings, JsonOptions),
+                "MyFitnessPal matching settings",
+                _time.GetUtcNow(),
                 cancellationToken
             );
-
-            if (entity == null)
-            {
-                entity = new SettingsEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    Key = SettingsKey,
-                    Value = jsonValue,
-                    Mills = now.ToUnixTimeMilliseconds(),
-                    SrvCreated = now,
-                    SrvModified = now,
-                    IsActive = true,
-                    Notes = "MyFitnessPal matching settings",
-                    App = "nocturne-api",
-                };
-                _context.Settings.Add(entity);
-            }
-            else
-            {
-                entity.Value = jsonValue;
-                entity.SrvModified = now;
-                entity.Mills = now.ToUnixTimeMilliseconds();
-            }
-
-            await _context.SaveChangesAsync(cancellationToken);
             return settings;
         }
         catch (Exception ex)

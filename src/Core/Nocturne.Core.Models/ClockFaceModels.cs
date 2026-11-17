@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Models;
@@ -28,20 +29,11 @@ public class ClockFace
     /// </summary>
     public ClockFaceConfig Config { get; set; } = new();
 
-    /// <summary>
-    /// When this clock face was created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When this clock face was last updated
-    /// </summary>
     public DateTime? UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// Configuration for a clock face layout
-/// </summary>
 public class ClockFaceConfig
 {
     /// <summary>
@@ -50,9 +42,6 @@ public class ClockFaceConfig
     [JsonPropertyName("rows")]
     public List<ClockRow> Rows { get; set; } = [];
 
-    /// <summary>
-    /// Global settings for the clock face
-    /// </summary>
     [JsonPropertyName("settings")]
     public ClockSettings Settings { get; set; } = new();
 
@@ -102,14 +91,8 @@ public class ClockFaceConfig
     }
 }
 
-/// <summary>
-/// A row of elements in the clock face
-/// </summary>
 public class ClockRow
 {
-    /// <summary>
-    /// Elements in this row
-    /// </summary>
     [JsonPropertyName("elements")]
     public List<ClockElement> Elements { get; set; } = [];
 }
@@ -191,22 +174,13 @@ public class ClockElement
     [JsonPropertyName("text")]
     public string? Text { get; set; }
 
-    /// <summary>
-    /// Styling configuration for the element
-    /// </summary>
     [JsonPropertyName("style")]
     public ClockElementStyle? Style { get; set; }
 
-    /// <summary>
-    /// Chart configuration (for chart element)
-    /// </summary>
     [JsonPropertyName("chartConfig")]
     public ClockChartConfig? ChartConfig { get; set; }
 }
 
-/// <summary>
-/// Styling configuration for clock elements
-/// </summary>
 public class ClockElementStyle
 {
     /// <summary>
@@ -241,20 +215,11 @@ public class ClockElementStyle
     public Dictionary<string, string>? Custom { get; set; }
 }
 
-/// <summary>
-/// Configuration for an embedded chart element
-/// </summary>
 public class ClockChartConfig
 {
-    /// <summary>
-    /// Show IOB track
-    /// </summary>
     [JsonPropertyName("showIob")]
     public bool ShowIob { get; set; }
 
-    /// <summary>
-    /// Show COB track
-    /// </summary>
     [JsonPropertyName("showCob")]
     public bool ShowCob { get; set; }
 
@@ -264,15 +229,9 @@ public class ClockChartConfig
     [JsonPropertyName("showBasal")]
     public bool ShowBasal { get; set; }
 
-    /// <summary>
-    /// Show bolus markers
-    /// </summary>
     [JsonPropertyName("showBolus")]
     public bool ShowBolus { get; set; } = true;
 
-    /// <summary>
-    /// Show carb markers
-    /// </summary>
     [JsonPropertyName("showCarbs")]
     public bool ShowCarbs { get; set; } = true;
 
@@ -282,9 +241,6 @@ public class ClockChartConfig
     [JsonPropertyName("showDeviceEvents")]
     public bool ShowDeviceEvents { get; set; }
 
-    /// <summary>
-    /// Show alarm markers
-    /// </summary>
     [JsonPropertyName("showAlarms")]
     public bool ShowAlarms { get; set; }
 
@@ -294,9 +250,6 @@ public class ClockChartConfig
     [JsonPropertyName("showTrackers")]
     public bool ShowTrackers { get; set; }
 
-    /// <summary>
-    /// Show prediction lines
-    /// </summary>
     [JsonPropertyName("showPredictions")]
     public bool ShowPredictions { get; set; }
 
@@ -306,9 +259,6 @@ public class ClockChartConfig
     [JsonPropertyName("lockToggles")]
     public bool LockToggles { get; set; } = true;
 
-    /// <summary>
-    /// Show legend controls
-    /// </summary>
     [JsonPropertyName("showLegend")]
     public bool ShowLegend { get; set; }
 
@@ -372,17 +322,30 @@ public class ClockSettings
     public string TimeFormat { get; set; } = "12";
 
     /// <summary>
+    /// Whether the face shows an alarm that is firing. Off by default: the clock link is a
+    /// glucose-only capability until its owner turns this on.
+    /// </summary>
+    [JsonPropertyName("showAlerts")]
+    public bool ShowAlerts { get; set; }
+
+    /// <summary>
+    /// Whether whoever is at the clock can record that they saw a firing alarm. The receipt names
+    /// the face, not a person: anyone holding the clock link can press it. Needs
+    /// <see cref="ShowAlerts"/>.
+    /// </summary>
+    [JsonPropertyName("allowMarkSeen")]
+    public bool AllowMarkSeen { get; set; }
+
+    /// <summary>
     /// Validates against the <see cref="UserDisplayPreferences"/> vocabulary. A face saved before
     /// these settings existed deserialises to the defaults, so only an explicit value can fail.
     /// </summary>
     public string? Validate() =>
         UserDisplayPreferences.Check("settings.glucoseUnits", GlucoseUnits ?? "null", UserDisplayPreferences.AllowedGlucoseUnits)
-        ?? UserDisplayPreferences.Check("settings.timeFormat", TimeFormat ?? "null", UserDisplayPreferences.AllowedTimeFormats);
+        ?? UserDisplayPreferences.Check("settings.timeFormat", TimeFormat ?? "null", UserDisplayPreferences.AllowedTimeFormats)
+        ?? (AllowMarkSeen && !ShowAlerts ? "settings.allowMarkSeen: requires showAlerts" : null);
 }
 
-/// <summary>
-/// DTO for creating a new clock face
-/// </summary>
 public class CreateClockFaceRequest
 {
     /// <summary>
@@ -397,9 +360,6 @@ public class CreateClockFaceRequest
     public ClockFaceConfig? Config { get; set; }
 }
 
-/// <summary>
-/// DTO for updating a clock face
-/// </summary>
 public class UpdateClockFaceRequest
 {
     /// <summary>
@@ -407,20 +367,11 @@ public class UpdateClockFaceRequest
     /// </summary>
     public string? Name { get; set; }
 
-    /// <summary>
-    /// Clock face configuration (optional)
-    /// </summary>
     public ClockFaceConfig? Config { get; set; }
 }
 
-/// <summary>
-/// DTO for clock face list item
-/// </summary>
 public class ClockFaceListItem
 {
-    /// <summary>
-    /// Clock face ID
-    /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -428,14 +379,8 @@ public class ClockFaceListItem
     /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// When created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When last updated
-    /// </summary>
     public DateTime? UpdatedAt { get; set; }
 }
 
@@ -444,14 +389,8 @@ public class ClockFaceListItem
 /// </summary>
 public class ClockFacePublicDto
 {
-    /// <summary>
-    /// Clock face ID
-    /// </summary>
     public Guid Id { get; set; }
 
-    /// <summary>
-    /// Clock face configuration
-    /// </summary>
     public ClockFaceConfig Config { get; set; } = new();
 }
 
@@ -476,4 +415,32 @@ public class ClockGlucoseDto
 
     /// <summary>Origin data source identifier (used to surface demo data), or null.</summary>
     public string? DataSource { get; set; }
+}
+
+/// <summary>
+/// An alarm that is firing, as a clock face with <see cref="ClockSettings.ShowAlerts"/> shows it:
+/// what fired and since when, and nothing of who acknowledged it or how it is delivered.
+/// </summary>
+public class ClockAlertDto
+{
+    /// <summary>The excursion that is firing.</summary>
+    public Guid Id { get; set; }
+
+    /// <summary>The name of the rule that fired.</summary>
+    public string RuleName { get; set; } = string.Empty;
+
+    public AlertRuleSeverity Severity { get; set; }
+
+    public AlertConditionType ConditionType { get; set; }
+
+    public DateTime StartedAt { get; set; }
+
+    /// <summary>Whether someone has acknowledged it for everyone.</summary>
+    public bool Acknowledged { get; set; }
+
+    /// <summary>Whether this clock face has recorded that it was seen.</summary>
+    public bool SeenHere { get; set; }
+
+    /// <summary>When the latest snooze on it lapses, or null when it is not snoozed.</summary>
+    public DateTime? SnoozedUntil { get; set; }
 }

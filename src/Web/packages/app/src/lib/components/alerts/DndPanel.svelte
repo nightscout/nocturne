@@ -1,24 +1,31 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
+  import { formatLocale } from "#lib/utils/formatting.js";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     get as getDnd,
     update as updateDnd,
-  } from "$api/generated/tenantAlertSettings.generated.remote";
-  import type { TenantAlertSettingsResponse } from "$api-clients";
-  import { describeSubmitError } from "$lib/forms";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
+  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { describeSubmitError } from "#lib/forms/index.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Item } from "$lib/components/ui/item";
-  import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
+  import {
+    isDndInEffect,
+    isDndManualActive,
+    isDndScheduleActiveNow,
+    isDndScheduleConfigured,
+  } from "./dnd";
+  import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     /** Called after navigating away (e.g. to close a parent popover). */
@@ -27,8 +34,9 @@
 
   const { onNavigate }: Props = $props();
 
-  // Manual DND is tenant-wide — it suppresses delivery of every non-critical
-  // alert for every member — so the server gates it on alerts.readwrite.
+  // Manual DND is tenant-wide: it silences every rule that is neither critical
+  // nor allowed through DND, for every member. The server gates it on
+  // alerts.readwrite.
   const canSetDnd = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );
@@ -39,12 +47,18 @@
   let expanded = $state(false);
   let errorMessage = $state<string | null>(null);
 
+  let reads = 0;
+
   async function load(): Promise<void> {
+    const read = ++reads;
     try {
-      settings = await getDnd().run();
+      const fetched = await fresh(getDnd());
+      if (read === reads) settings = fetched;
     } catch (err) {
-      settings = null;
-      errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
+      if (read === reads) {
+        settings = null;
+        errorMessage = remoteErrorMessage(err, "Could not load Do not disturb.");
+      }
     } finally {
       loading = false;
     }
@@ -65,34 +79,38 @@
         dndScheduleStart: settings?.dndScheduleStart,
         dndScheduleEnd: settings?.dndScheduleEnd,
       });
+      reads++;
       settings = r;
       expanded = false;
     } catch (e) {
       errorMessage = describeSubmitError(
         e,
-        "Couldn't change Do Not Disturb. Please try again.",
+        "Could not change Do not disturb. Try again.",
       );
     } finally {
       saving = false;
     }
   }
 
-  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
   onMount(() => {
-    if (canSetDnd) queueMicrotask(load);
+    if (canSetDnd) void load();
+  });
+  refreshOnReturn(() => {
+    if (canSetDnd && !loading && !saving) void load();
   });
 
-  // Only the manual mute is knowable as "on now"; a configured schedule reads as
-  // "Scheduled" without muting the bell. See lib/components/alerts/dnd.ts.
-  let isActive = $derived(isDndActiveNow(settings));
+  let isActive = $derived(isDndManualActive(settings));
+  let inEffect = $derived(isDndInEffect(settings));
   let label = $derived(
     settings?.dndManualActive
       ? settings.dndManualUntil
         ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString(formatLocale(), { hour: "numeric", minute: "2-digit" })}`
         : "On"
-      : isDndScheduleConfigured(settings)
-        ? "Scheduled"
-        : "Off",
+      : isDndScheduleActiveNow(settings)
+        ? "Scheduled, on now"
+        : isDndScheduleConfigured(settings)
+          ? "Scheduled"
+          : "Off",
   );
 </script>
 
@@ -102,12 +120,12 @@
       <DropdownMenu.Trigger>
         {#snippet child({ props }: { props: Record<string, unknown> })}
           <Item {...props} variant="ghost" size="sm">
-            {#if isActive}
+            {#if inEffect}
               <BellOff class="h-4 w-4 text-status-info" />
             {:else}
               <Bell class="h-4 w-4" />
             {/if}
-            <span class="flex-1 truncate text-sm {isActive ? 'text-status-info' : ''}">Do Not Disturb</span>
+            <span class="flex-1 truncate text-sm {inEffect ? 'text-status-info' : ''}">Do not disturb</span>
             {#if saving}
               <Loader2 class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             {:else}
@@ -122,8 +140,7 @@
         {:else if isActive}
           <DropdownMenu.Item disabled={saving} onSelect={() => setActive(false)}>
             <Bell class="h-3.5 w-3.5" />
-            Turn off
-          </DropdownMenu.Item>
+            Disable </DropdownMenu.Item>
         {:else}
           <div class="px-2 pt-1 pb-1 text-2xs uppercase tracking-wider text-muted-foreground">
             Mute alerts for
@@ -141,7 +158,7 @@
         <DropdownMenu.Item
           onSelect={() => {
             onNavigate?.();
-            goto(resolve("/alerts/dnd"));
+            goto(resolve('alerts/dnd'));
           }}
         >
           <SettingsIcon class="h-3.5 w-3.5" /> Configure…

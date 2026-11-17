@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseErrorBody } from "./error-body";
+import { parseCode, parseErrorBody } from "./error-body";
 
 /**
  * An `ApiException` as NSwag throws it for a status the operation declares no
@@ -76,7 +76,7 @@ describe("parseErrorBody", () => {
 
   it("recovers the structured issues beside the validation map", () => {
     const issues = [
-      { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+      { scope: "condition", path: "root", reason: "list_empty", field: null },
     ];
     const body = parseErrorBody(
       apiException(JSON.stringify({ detail: "Rejected.", issues }), 400)
@@ -88,7 +88,7 @@ describe("parseErrorBody", () => {
   it("drops an issues entry that is not a validation issue", () => {
     const body = parseErrorBody(
       apiException(
-        JSON.stringify({ issues: [{ reason: "conditions_empty" }, "boom"] }),
+        JSON.stringify({ issues: [{ reason: "list_empty" }, "boom"] }),
         400
       )
     );
@@ -98,7 +98,7 @@ describe("parseErrorBody", () => {
 
   it("drops issues the far end sent as the wrong type", () => {
     const body = parseErrorBody(
-      apiException(JSON.stringify({ issues: "conditions_empty" }), 400)
+      apiException(JSON.stringify({ issues: "list_empty" }), 400)
     );
 
     expect(body?.issues).toBeUndefined();
@@ -142,5 +142,24 @@ describe("parseErrorBody", () => {
     expect(parseErrorBody(new Error("network down"))).toBeUndefined();
     expect(parseErrorBody(undefined)).toBeUndefined();
     expect(parseErrorBody(null)).toBeUndefined();
+  });
+});
+
+describe("parseCode", () => {
+  it("keeps a lower snake_case code", () => {
+    expect(parseCode("role_name_taken")).toBe("role_name_taken");
+    expect(parseCode("http_429")).toBe("http_429");
+  });
+
+  it.each(["", "Role_Name", "role-name", "role name", "role_name" + String.fromCharCode(10), 3, null, undefined, {}])(
+    "drops %j",
+    (value) => {
+      expect(parseCode(value)).toBeUndefined();
+    }
+  );
+
+  it("reads the code off an unparsed body and drops a malformed one", () => {
+    expect(parseErrorBody(apiException(JSON.stringify({ code: "not_linked" }), 404))?.code).toBe("not_linked");
+    expect(parseErrorBody(apiException(JSON.stringify({ code: "Not Linked" }), 404))?.code).toBeUndefined();
   });
 });

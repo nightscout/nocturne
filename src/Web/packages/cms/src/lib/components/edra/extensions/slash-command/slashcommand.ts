@@ -5,6 +5,7 @@ import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@
 import type { Component } from 'svelte';
 import SvelteRenderer from '../../svelte-renderer.ts';
 import { getGroups } from './groups.ts';
+import { Key } from '@nocturne/ui/keys';
 
 const extensionName = 'slashCommand';
 
@@ -202,7 +203,7 @@ export default (menuList: Component<any, any, ''>): Extension =>
 							},
 
 							onKeyDown(props: SuggestionKeyDownProps) {
-								if (props.event.key === 'Escape') {
+								if (props.event.key === Key.Escape) {
 									if (popup.element) {
 										popup.element.style.visibility = 'hidden';
 										popup.element.style.pointerEvents = 'none';
@@ -217,7 +218,7 @@ export default (menuList: Component<any, any, ''>): Extension =>
 									popup.isVisible = true;
 								}
 
-								if (props.event.key === 'Enter') return true;
+								if (props.event.key === Key.Enter) return true;
 
 								// return component.ref?.onKeyDown(props);
 								return false;

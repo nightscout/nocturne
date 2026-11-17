@@ -1,11 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { parseDate } from "@internationalized/date";
 import {
   dayCount,
   endOfDay,
+  exceedsDaySpan,
   isDayString,
   isTimeZone,
+  outsideDaySpan,
   resolveDayRange,
   startOfDay,
+  timeOnDay,
   toDayString,
 } from "./date-range";
 
@@ -122,18 +126,15 @@ describe("resolveDayRange", () => {
   });
 
   it("ends a relative window on today in the given timezone", () => {
-    // Both zones' "today" must be the calendar date each zone is actually on.
-    const sydney = resolveDayRange({ days: 1 }, 14, SYDNEY);
-    const denver = resolveDayRange({ days: 1 }, 14, DENVER);
-    const todayIn = (timeZone: string) =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
-    expect(sydney.to).toBe(todayIn(SYDNEY));
-    expect(denver.to).toBe(todayIn(DENVER));
+    // 20:00 UTC: already the next morning in Sydney, still the afternoon in Denver.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-07-25T20:00:00Z"));
+      expect(resolveDayRange({ days: 1 }, 14, SYDNEY).to).toBe("2026-07-26");
+      expect(resolveDayRange({ days: 1 }, 14, DENVER).to).toBe("2026-07-25");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ignores a half-specified explicit range", () => {
@@ -198,5 +199,46 @@ describe("toDayString", () => {
 
   it("zero-pads month and day", () => {
     expect(toDayString(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+});
+
+describe("timeOnDay", () => {
+  it("reads the wall-clock time in the given zone, not the viewer's", () => {
+    expect(timeOnDay("2026-10-13", "08:00", "Australia/Sydney")?.toISOString()).toBe("2026-10-12T21:00:00.000Z");
+    expect(timeOnDay("2026-10-13", "08:00", "America/Los_Angeles")?.toISOString()).toBe("2026-10-13T15:00:00.000Z");
+  });
+
+  it("refuses a malformed day or time", () => {
+    expect(timeOnDay("2026-10-13", "8am", "UTC")).toBeNull();
+    expect(timeOnDay("2026-10-13", "24:00", "UTC")).toBeNull();
+    expect(timeOnDay(null, "08:00", "UTC")).toBeNull();
+  });
+});
+
+describe("exceedsDaySpan", () => {
+  it("counts both end days", () => {
+    expect(exceedsDaySpan("2026-01-01", "2026-01-07", 7)).toBe(false);
+    expect(exceedsDaySpan("2026-01-01", "2026-01-08", 7)).toBe(true);
+  });
+
+  it("allows any range when there is no limit", () => {
+    expect(exceedsDaySpan("2020-01-01", "2026-01-01", undefined)).toBe(false);
+  });
+});
+
+describe("outsideDaySpan", () => {
+  const anchor = parseDate("2026-03-10");
+
+  it("disables the days that would stretch the range past the limit, on either side", () => {
+    const disabled = outsideDaySpan(anchor, 5);
+    expect(disabled(parseDate("2026-03-14"))).toBe(false);
+    expect(disabled(parseDate("2026-03-15"))).toBe(true);
+    expect(disabled(parseDate("2026-03-06"))).toBe(false);
+    expect(disabled(parseDate("2026-03-05"))).toBe(true);
+  });
+
+  it("disables nothing without an anchor or a limit", () => {
+    expect(outsideDaySpan(undefined, 5)(parseDate("2030-01-01"))).toBe(false);
+    expect(outsideDaySpan(anchor, undefined)(parseDate("2030-01-01"))).toBe(false);
   });
 });

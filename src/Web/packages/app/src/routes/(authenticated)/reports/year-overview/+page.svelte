@@ -1,53 +1,52 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { BAND_KEY_SUFFIX } from "#lib/constants/year-overview-keys.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import { scaleThreshold } from "d3-scale";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     getAvailableYears,
     getYearSummary,
-  } from "$api/generated/dataOverviews.generated.remote";
-  import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
-  import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
-  import HeatmapLegend from "$lib/components/reports/year-overview/HeatmapLegend.svelte";
-  import YearHeatmap from "$lib/components/reports/year-overview/YearHeatmap.svelte";
-  import VisibleChart from "$lib/components/reports/year-overview/VisibleChart.svelte";
+  } from "#lib/api/generated/dataOverviews.generated.remote.js";
+  import GlycemicRiskIndexChart from "#lib/components/reports/GlycemicRiskIndexChart.svelte";
+  import YearOverviewFilters from "#lib/components/reports/year-overview/YearOverviewFilters.svelte";
+  import HeatmapLegend from "#lib/components/reports/year-overview/HeatmapLegend.svelte";
+  import YearHeatmap from "#lib/components/reports/year-overview/YearHeatmap.svelte";
+  import VisibleChart from "#lib/components/reports/year-overview/VisibleChart.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import type {
     DailySummaryDay,
+    GlycemicThresholds,
     GriTimelinePeriod,
-  } from "$api/generated/nocturne-api-client";
-  import { getUnitLabel } from "$lib/utils/formatting";
-  import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
+    TimeZoneUnavailableReason,
+    YearOverviewColorPreferences,
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUnitLabel } from "#lib/utils/formatting.js";
+  import { glucoseUnits, yearOverviewColors } from "#lib/stores/appearance-store.svelte.js";
+
   import {
-    glucoseUnits,
-    yearOverviewColors,
-  } from "$lib/stores/appearance-store.svelte";
-  import {
-    getFocusedIntensityFill,
-    resolveColorFocusRange,
-    resolveGlucoseColorThresholds,
-    applyGlucosePalette,
-    DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
-    GLUCOSE_COLOR_MIN,
-    GLUCOSE_COLOR_MAX,
-    glucoseColorFocusStops,
+    glucoseScale,
+    intensityScale,
+    scaleFill,
+    GLUCOSE_LIMITS,
+    type ColorBoundary,
+    type ColorEnds,
     type ColorFocusRange,
-    type GlucoseColorThresholds,
-  } from "$lib/utils/metric-color-focus";
+  } from "#lib/utils/metric-color-focus.js";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
-  import { getWeekColumns } from "$lib/components/reports/year-overview/week-columns";
-  import { YearLoader } from "$lib/components/reports/year-overview/year-loader";
-  import { toggled } from "$lib/utils/collections";
+  import { YearLoader } from "#lib/components/reports/year-overview/year-loader.js";
+  import { toggled } from "#lib/utils/collections.js";
   import {
     getReportPrintContext,
     setReportPrintMeta,
     setReportPrintPreparation,
-  } from "$lib/components/reports/print/report-print.svelte";
-  import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
+  } from "#lib/components/reports/print/report-print.svelte.js";
+  import type { TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // =========================================================================
   // State
@@ -62,20 +61,15 @@
   let loadingYears = $state<Set<number>>(new Set());
   let failedYears = $state<Set<number>>(new Set());
   let metadataLoaded = $state(false);
+  let timeZoneReason = $state<TimeZoneUnavailableReason>();
   let metadataLoading = $state(false);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
 
-  type HeatmapMetric =
-    | "avgGlucose"
-    | "tir"
-    | "bolus"
-    | "basal"
-    | "tdd"
-    | "carbs";
+  type HeatmapMetric = "avgGlucose" | "tir" | "bolus" | "basal" | "tdd" | "carbs";
 
   const METRIC_OPTIONS: { value: HeatmapMetric; label: string }[] = [
-    { value: "avgGlucose", label: "Avg Glucose" },
-    { value: "tir", label: "Time in Range" },
+    { value: "avgGlucose", label: "Avg glucose" },
+    { value: "tir", label: "Time in range" },
     { value: "bolus", label: "Bolus" },
     { value: "basal", label: "Basal" },
     { value: "tdd", label: "TDD" },
@@ -83,126 +77,160 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
-  const colorsKey = $derived<`${HeatmapMetric}Colors`>(
-    `${selectedMetric}Colors`
-  );
-  const invertKey = $derived<`${HeatmapMetric}Invert`>(
-    `${selectedMetric}Invert`
-  );
-  const bandKey = $derived<`${HeatmapMetric}Band`>(`${selectedMetric}Band`);
-  const colorFocusPreferences = $derived(yearOverviewColors.current);
-  const advancedMode = $derived(colorFocusPreferences.advancedMode ?? false);
-  const transparencyPercent = $derived(
-    Math.max(
-      0,
-      Math.min(100, colorFocusPreferences.outOfBandTransparency ?? 90)
-    )
+
+  /** Each metric's own theme color; glucose draws the heatmap ramp instead. */
+  const METRIC_CSS_VARS: Record<Exclude<HeatmapMetric, "avgGlucose">, string> = {
+    tir: "--glucose-in-range",
+    bolus: "--insulin-bolus",
+    basal: "--basal",
+    tdd: "--insulin",
+    carbs: "--carbs",
+  };
+  const METRIC_UNITS: Record<HeatmapMetric, string> = {
+    avgGlucose: "",
+    tir: "%",
+    bolus: "U",
+    basal: "U",
+    tdd: "U",
+    carbs: "g",
+  };
+
+  type ScaleKeys = {
+    band: `${HeatmapMetric}Band`;
+    boundaries: `${HeatmapMetric}Boundaries`;
+    low: `${HeatmapMetric}LowColor`;
+    high: `${HeatmapMetric}HighColor`;
+  };
+  const scaleKeys = $derived<ScaleKeys>({
+    band: `${selectedMetric}Band`,
+    boundaries: `${selectedMetric}Boundaries`,
+    low: `${selectedMetric}LowColor`,
+    high: `${selectedMetric}HighColor`,
+  });
+  /**
+   * The retired shape applied its bands and dimming only in advanced mode. A blob saved with
+   * advanced mode off carries settings its owner turned off, so they stay off.
+   */
+  const colorPreferences = $derived.by((): YearOverviewColorPreferences => {
+    const stored = yearOverviewColors.current;
+    if (!("advancedMode" in stored) || stored.advancedMode === true) return stored;
+    return Object.fromEntries(
+      Object.entries(stored).filter(
+        ([key]) => !key.endsWith(BAND_KEY_SUFFIX) && key !== "outOfBandTransparency"
+      )
+    );
+  });
+  const dim = $derived(
+    Math.max(0, Math.min(100, colorPreferences.outOfBandTransparency ?? 90))
   );
 
-  const currentMetricColors = $derived.by(() => {
-    const colors = colorFocusPreferences[colorsKey];
-    return colors && colors.length >= 2 ? colors : undefined;
+  /** The largest daily value of a dose or carb metric across the loaded years. */
+  const metricMax = $derived.by(() => {
+    let max = 0;
+    for (const days of yearData.values()) {
+      for (const day of days) {
+        const value =
+          selectedMetric === "bolus"
+            ? day.totalBolusUnits
+            : selectedMetric === "basal"
+              ? day.totalBasalUnits
+              : selectedMetric === "tdd"
+                ? day.totalDailyDose
+                : selectedMetric === "carbs"
+                  ? day.totalCarbs
+                  : undefined;
+        if (value != null && Number.isFinite(value) && value > max) max = value;
+      }
+    }
+    return max;
   });
 
-  const lowColor = $derived(currentMetricColors?.[0]);
-  const highColor = $derived(currentMetricColors?.at(-1));
-  const invert = $derived(!!colorFocusPreferences[invertKey]);
-
-  const focusRange = $derived.by(() => {
-    if (!advancedMode || selectedMetric === "avgGlucose") return null;
-    return resolveColorFocusRange(colorFocusPreferences[selectedMetric]);
-  });
-  const focusBand = $derived.by(() => {
-    if (!advancedMode) return null;
-    return resolveColorFocusRange(colorFocusPreferences[bandKey]);
-  });
-  const glucoseThresholds = $derived(
-    advancedMode
-      ? (resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ??
-          DEFAULT_GLUCOSE_COLOR_THRESHOLDS)
-      : DEFAULT_GLUCOSE_COLOR_THRESHOLDS
+  const scaleLimits = $derived<ColorFocusRange>(
+    selectedMetric === "avgGlucose"
+      ? GLUCOSE_LIMITS
+      : [0, selectedMetric === "tir" ? 100 : Infinity]
   );
-  // Unrecolored ramp, used by the Theme swatch preview so it never reflects the currently active palette.
-  const glucoseThemeStops = $derived(glucoseColorFocusStops(glucoseThresholds));
-  const glucoseLegendStops = $derived(
-    advancedMode
-      ? applyGlucosePalette(
-          glucoseThemeStops,
-          glucoseThresholds[0],
-          glucoseThresholds[3],
-          colorFocusPreferences.avgGlucoseColors?.[0],
-          colorFocusPreferences.avgGlucoseColors?.at(-1),
-          !!colorFocusPreferences.avgGlucoseInvert,
-          colorFocusPreferences.avgGlucoseColors
+  const scaleEnds = $derived<ColorEnds>({
+    low: colorPreferences[scaleKeys.low],
+    high: colorPreferences[scaleKeys.high],
+  });
+  const scale = $derived(
+    selectedMetric === "avgGlucose"
+      ? glucoseScale(
+          colorPreferences.avgGlucoseBand,
+          colorPreferences.avgGlucoseBoundaries,
+          dim,
+          scaleEnds
         )
-      : glucoseThemeStops
+      : intensityScale(
+          METRIC_CSS_VARS[selectedMetric],
+          scaleLimits,
+          metricMax,
+          colorPreferences[scaleKeys.band],
+          colorPreferences[scaleKeys.boundaries],
+          dim,
+          scaleEnds
+        )
   );
 
-  function setAdvancedMode(value: boolean) {
-    const next = { ...colorFocusPreferences, advancedMode: value };
+  /** Writes only the current shape, so keys from a retired one are dropped on the next save. */
+  function saveColorPreferences(
+    change: (next: YearOverviewColorPreferences) => void
+  ) {
+    const next: YearOverviewColorPreferences = {};
+    if (colorPreferences.outOfBandTransparency !== undefined)
+      next.outOfBandTransparency = colorPreferences.outOfBandTransparency;
+    for (const { value } of METRIC_OPTIONS) {
+      const band = colorPreferences[`${value}Band`];
+      const boundaries = colorPreferences[`${value}Boundaries`];
+      const low = colorPreferences[`${value}LowColor`];
+      const high = colorPreferences[`${value}HighColor`];
+      if (band) next[`${value}Band`] = band;
+      if (boundaries) next[`${value}Boundaries`] = boundaries;
+      if (low) next[`${value}LowColor`] = low;
+      if (high) next[`${value}HighColor`] = high;
+    }
+    change(next);
     yearOverviewColors.current = next;
   }
 
-  function setTransparency(value: number | undefined) {
-    const next = { ...colorFocusPreferences };
-    if (value !== undefined && Number.isFinite(value)) {
+  function setScaleWindow(focusWindow: ColorFocusRange | null) {
+    saveColorPreferences((next) => {
+      if (focusWindow) next[scaleKeys.band] = [...focusWindow];
+      else delete next[scaleKeys.band];
+    });
+  }
+
+  function setScaleBoundaries(boundaries: ColorBoundary[] | null) {
+    saveColorPreferences((next) => {
+      if (boundaries?.length)
+        next[scaleKeys.boundaries] = boundaries.map((b) => ({ ...b }));
+      else delete next[scaleKeys.boundaries];
+    });
+  }
+
+  function setScaleEnds(ends: ColorEnds) {
+    saveColorPreferences((next) => {
+      if (ends.low) next[scaleKeys.low] = ends.low;
+      else delete next[scaleKeys.low];
+      if (ends.high) next[scaleKeys.high] = ends.high;
+      else delete next[scaleKeys.high];
+    });
+  }
+
+  function setDim(value: number) {
+    saveColorPreferences((next) => {
       next.outOfBandTransparency = Math.max(0, Math.min(100, value));
-    } else {
-      delete next.outOfBandTransparency;
-    }
-    yearOverviewColors.current = next;
+    });
   }
 
-  function setCustomColors(colors: string[] | undefined) {
-    const next = { ...colorFocusPreferences };
-    if (colors && colors.length >= 2) {
-      next[colorsKey] = [...colors];
-    } else {
-      delete next[colorsKey];
-    }
-    yearOverviewColors.current = next;
-  }
-
-  function setInvert(value: boolean) {
-    const next = { ...colorFocusPreferences };
-    delete next[invertKey];
-    yearOverviewColors.current = value ? { ...next, [invertKey]: true } : next;
-  }
-
-  function setFocusRange(candidate: ColorFocusRange | null) {
-    if (selectedMetric === "avgGlucose") return;
-    const range = resolveColorFocusRange(candidate);
-    if (
-      candidate !== null &&
-      (!range || (selectedMetric === "tir" && range[1] > 100))
-    )
-      return;
-    const next = { ...colorFocusPreferences };
-    if (range) next[selectedMetric] = [...range];
-    else delete next[selectedMetric];
-    yearOverviewColors.current = next;
-  }
-
-  function setGlucoseThresholds(candidate: GlucoseColorThresholds | null) {
-    const thresholds = resolveGlucoseColorThresholds(candidate);
-    if (candidate !== null && !thresholds) return;
-    const next = { ...colorFocusPreferences };
-    if (thresholds) next.avgGlucose = [...thresholds];
-    else delete next.avgGlucose;
-    yearOverviewColors.current = next;
-  }
-
-  function setFocusBand(candidate: ColorFocusRange | null) {
-    const range = resolveColorFocusRange(candidate);
-    if (
-      candidate !== null &&
-      (!range || (selectedMetric === "tir" && range[1] > 100))
-    )
-      return;
-    const next = { ...colorFocusPreferences };
-    if (range) next[bandKey] = [...range];
-    else delete next[bandKey];
-    yearOverviewColors.current = next;
+  function resetScale() {
+    saveColorPreferences((next) => {
+      delete next[scaleKeys.band];
+      delete next[scaleKeys.boundaries];
+      delete next[scaleKeys.low];
+      delete next[scaleKeys.high];
+    });
   }
 
   /** All known data types that can appear in counts */
@@ -216,6 +244,7 @@
     "Notes",
     "DeviceEvents",
     "TempBasals",
+    "BasalInjections",
     "StateSpans",
     "Activity",
     "DeviceStatus",
@@ -228,103 +257,45 @@
   // Glucose color scale
   // =========================================================================
 
-  const GLUCOSE_BANDS = [54, 70, 180, 250];
+  let thresholds = $state<GlycemicThresholds>();
 
-  const glucoseColorScale = scaleThreshold<number, string>()
-    .domain(GLUCOSE_BANDS)
-    .range([
-      "var(--glucose-very-low)",
-      "var(--glucose-low)",
-      "var(--glucose-in-range)",
-      "var(--glucose-high)",
-      "var(--glucose-very-high)",
-    ]);
+  const glucoseBands = $derived(
+    thresholds?.veryLow != null &&
+      thresholds.low != null &&
+      thresholds.high != null &&
+      thresholds.veryHigh != null
+      ? [thresholds.veryLow, thresholds.low, thresholds.high, thresholds.veryHigh]
+      : []
+  );
 
-  const glucoseHatchScale = scaleThreshold<number, TextureKey | null>()
-    .domain(GLUCOSE_BANDS)
-    .range([
-      "very-low-hatch",
-      "low-hatch",
-      null,
-      "high-hatch",
-      "very-high-hatch",
-    ]);
+  const glucoseColorScale = $derived(
+    scaleThreshold<number, string>()
+      .domain(glucoseBands)
+      .range([
+        "var(--glucose-very-low)",
+        "var(--glucose-low)",
+        "var(--glucose-in-range)",
+        "var(--glucose-high)",
+        "var(--glucose-very-high)",
+      ])
+  );
+
+  const glucoseHatchScale = $derived(
+    scaleThreshold<number, TextureKey | null>()
+      .domain(glucoseBands)
+      .range([
+        "very-low-hatch",
+        "low-hatch",
+        null,
+        "high-hatch",
+        "very-high-hatch",
+      ])
+  );
 
   function getCellHatch(data: CalendarDatum | undefined): TextureKey | null {
     if (selectedMetric !== "avgGlucose" || data?.value == null) return null;
     return glucoseHatchScale(data.value);
   }
-
-  /** CSS variable names for each metric's hue */
-  const METRIC_CSS_VARS: Record<
-    Exclude<HeatmapMetric, "avgGlucose">,
-    string
-  > = {
-    tir: "--chart-2",
-    bolus: "--chart-1",
-    basal: "--chart-3",
-    tdd: "--chart-4",
-    carbs: "--chart-5",
-  };
-
-  function metricCssVar(metric: Exclude<HeatmapMetric, "avgGlucose">): string {
-    switch (metric) {
-      case "tir":
-        return METRIC_CSS_VARS.tir;
-      case "bolus":
-        return METRIC_CSS_VARS.bolus;
-      case "basal":
-        return METRIC_CSS_VARS.basal;
-      case "tdd":
-        return METRIC_CSS_VARS.tdd;
-      case "carbs":
-        return METRIC_CSS_VARS.carbs;
-    }
-  }
-
-  /** Compute max value for a metric across all loaded year data */
-  function getMetricMax(metric: HeatmapMetric): number {
-    let max = 0;
-    for (const days of yearData.values()) {
-      for (const day of days) {
-        let val: number | undefined | null;
-        switch (metric) {
-          case "bolus":
-            val = day.totalBolusUnits;
-            break;
-          case "basal":
-            val = day.totalBasalUnits;
-            break;
-          case "tdd":
-            val = day.totalDailyDose;
-            break;
-          case "carbs":
-            val = day.totalCarbs;
-            break;
-          case "tir":
-            val = day.timeInRangePercent;
-            break;
-          default:
-            val = day.averageGlucoseMgdl;
-            break;
-        }
-        if (val != null && Number.isFinite(val) && val > max) max = val;
-      }
-    }
-    return max || 1;
-  }
-
-  /**
-   * Memoized max for current metric — recomputed only when metric or data
-   * changes
-   */
-  const metricMaxCached = $derived.by(() => {
-    // Depend on yearData and selectedMetric
-    void yearData;
-    if (selectedMetric === "avgGlucose") return 1;
-    if (selectedMetric === "tir") return 100;
-    return getMetricMax(selectedMetric);
-  });
 
   /** Get cell value for the selected metric */
   function getMetricCellValue(data: CalendarDatum): number | null {
@@ -346,51 +317,11 @@
 
   function getCellFill(data: CalendarDatum | undefined): string {
     if (!data) return "rgb(0 0 0 / 5%)";
-
-    const opacity = advancedMode ? Math.round(100 - transparencyPercent) : 100;
-
-    if (selectedMetric === "avgGlucose") {
-      if (data.value != null && Number.isFinite(data.value)) {
-        const baseColor = getGlucoseHeatmapFill(data.value, glucoseLegendStops);
-        if (advancedMode) {
-          const band = focusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
-          const lower = band[0] <= GLUCOSE_COLOR_MIN ? -Infinity : band[0];
-          const upper = band[1] >= GLUCOSE_COLOR_MAX ? Infinity : band[1];
-          if (data.value < lower || data.value > upper) {
-            return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
-          }
-        }
-        return baseColor;
-      }
-      if (data.filteredCount > 0) return "var(--muted)";
-      return "rgb(0 0 0 / 5%)";
-    }
-
-    const metricValue = getMetricCellValue(data);
-    if (metricValue == null || !Number.isFinite(metricValue)) {
-      if (data.filteredCount > 0) return "var(--muted)";
-      return "rgb(0 0 0 / 5%)";
-    }
-
-    const cssVar = metricCssVar(selectedMetric);
-    const baseColor = getFocusedIntensityFill(
-      metricValue,
-      focusRange ?? [0, metricMaxCached],
-      cssVar,
-      advancedMode ? lowColor : undefined,
-      advancedMode ? highColor : undefined,
-      advancedMode ? invert : false,
-      advancedMode ? currentMetricColors : undefined
-    );
-    if (advancedMode) {
-      const band = focusBand ?? [0, metricMaxCached];
-      const lower = band[0] <= 0 ? -Infinity : band[0];
-      const upper = band[1] >= metricMaxCached ? Infinity : band[1];
-      if (metricValue < lower || metricValue > upper) {
-        return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
-      }
-    }
-    return baseColor;
+    const value =
+      selectedMetric === "avgGlucose" ? data.value : getMetricCellValue(data);
+    if (value != null && Number.isFinite(value)) return scaleFill(value, scale);
+    if (data.filteredCount > 0) return "var(--muted)";
+    return "rgb(0 0 0 / 5%)";
   }
 
   // =========================================================================
@@ -402,12 +333,10 @@
   const sortedYears = $derived([...availableYears].sort((a, b) => b - a));
 
   setReportPrintMeta(() => {
-    const title = "Year Overview";
-    if (sortedYears.length === 0) return { title };
+    if (sortedYears.length === 0) return {};
     const first = sortedYears.at(-1);
     const last = sortedYears[0];
     return {
-      title,
       period: { label: first === last ? `${last}` : `${first} – ${last}` },
     };
   });
@@ -430,10 +359,12 @@
     metadataLoading = true;
     metadataRequest = (async () => {
       try {
-        const result = await getAvailableYears().run();
+        const result = await fresh(getAvailableYears());
         if (disposed) return;
         availableYears = result.years ?? [];
         availableDataSources = result.availableDataSources ?? [];
+        thresholds = result.thresholds;
+        timeZoneReason = result.timeZoneUnavailableReason;
         metadataLoaded = true;
       } catch (err) {
         console.error("Failed to load available years:", err);
@@ -450,10 +381,10 @@
   const yearLoader = new YearLoader(
     {
       summary: (year, sources) =>
-        getYearSummary({
+        fresh(getYearSummary({
           year,
           dataSources: sources.length ? sources : undefined,
-        }).run(),
+        })),
     },
     {
       daily: (year, result) => {
@@ -490,12 +421,7 @@
       throw new Error("Year overview is unavailable");
     const sources = [...selectedDataSources].sort().join(",");
     for (const year of sortedYears) {
-      if (
-        !(await (failedYears.has(year)
-          ? yearLoader.retry(year)
-          : loadYearData(year)))
-      )
-        throw new Error("Year overview is incomplete");
+      if (!await (failedYears.has(year) ? yearLoader.retry(year) : loadYearData(year))) throw new Error("Year overview is incomplete");
     }
     if (disposed || sources !== [...selectedDataSources].sort().join(",")) {
       throw new Error("Year overview filters changed");
@@ -618,7 +544,7 @@
   }
 
   function navigateToDayInReview(dateStr: string) {
-    goto(resolve(`/reports/day-in-review?date=${dateStr}`));
+    goto(resolve(`reports/day-in-review?date=${dateStr}`));
   }
 
   // =========================================================================
@@ -626,15 +552,13 @@
   // =========================================================================
 
   onMount(() => {
-    // `.run()` rejects when called during the render/effect flush, so defer the
-    // bootstrap to a microtask — onMount's synchronous body still counts as render.
-    queueMicrotask(async () => {
+    void (async () => {
       await loadMetadata();
       if (disposed) return;
       if (sortedYears.length > 0) {
         loadYearData(sortedYears[0]);
       }
-    });
+    })();
     return () => {
       disposed = true;
       yearLoader.dispose();
@@ -683,17 +607,9 @@
   }
 </script>
 
-<svelte:head>
-  <title>Year Overview - Nocturne</title>
-  <meta
-    name="description"
-    content="Multi-year heatmap overview of all your diabetes data"
-  />
-</svelte:head>
-
 <div class="year-overview @container flex min-h-full">
   <!-- Main Content -->
-  <div class="flex-1">
+  <div class="min-w-0 flex-1">
     {#if !metadataLoaded || sortedYears.some((year) => !yearData.has(year) || !griTimelineData.has(year))}
       <p class="hidden print:block">
         This overview is incomplete. Use the report's Print button to load all years before printing.
@@ -703,41 +619,29 @@
     <div class="print:hidden">
       <YearOverviewFilters
         disabled={printContext?.printing ?? false}
-        {availableDataSources}
+        availableDataSources={availableDataSources}
         bind:selectedDataSources
-        {presentDataTypes}
-        {hiddenDataTypes}
-        {toggleDataType}
-        {showAllDataTypes}
+        presentDataTypes={presentDataTypes}
+        hiddenDataTypes={hiddenDataTypes}
+        toggleDataType={toggleDataType}
+        showAllDataTypes={showAllDataTypes}
       />
     </div>
 
     <!-- Color Legend -->
     <HeatmapLegend
       bind:selectedMetric
-      {units}
-      {METRIC_OPTIONS}
-      HEATMAP_STOPS={glucoseLegendStops}
-      themeStops={glucoseThemeStops}
-      {METRIC_CSS_VARS}
-      {getMetricMax}
-      {focusRange}
-      onFocusRangeChange={setFocusRange}
-      {glucoseThresholds}
-      onGlucoseThresholdsChange={setGlucoseThresholds}
-      {focusBand}
-      onFocusBandChange={setFocusBand}
-      {lowColor}
-      {highColor}
-      metricColors={currentMetricColors}
-      {advancedMode}
-      onAdvancedModeChange={setAdvancedMode}
-      {transparencyPercent}
-      onTransparencyChange={setTransparency}
-      onCustomColorsChange={setCustomColors}
-      {invert}
-      onInvertChange={setInvert}
-      glucoseBands={GLUCOSE_BANDS}
+      metricOptions={METRIC_OPTIONS}
+      units={units}
+      unit={METRIC_UNITS[selectedMetric]}
+      scale={scale}
+      limits={scaleLimits}
+      onWindowChange={setScaleWindow}
+      onBoundariesChange={setScaleBoundaries}
+      onEndsChange={setScaleEnds}
+      onDimChange={setDim}
+      onReset={resetScale}
+      glucoseBands={glucoseBands}
     />
 
     <!-- Loading state for metadata -->
@@ -753,31 +657,36 @@
       </div>
     {/if}
 
-    <!-- No data state -->
-    {#if metadataLoaded && sortedYears.length === 0}
+    {#if metadataLoaded && sortedYears.length === 0 && timeZoneReason}
+      <div class="py-20">
+        <p class="text-sm text-muted-foreground">
+          <TimeZoneNote reason={timeZoneReason}>
+            This report cannot group the data into local days and years.
+          </TimeZoneNote>
+        </p>
+      </div>
+    {:else if metadataLoaded && sortedYears.length === 0}
+      <!-- No data state -->
       <div
         class="flex items-center justify-center py-20"
         in:fade={{ duration: 300 }}
       >
-        <div class="max-w-md space-y-4 text-center">
-          <div
-            class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted"
-          >
-            <CalendarDays class="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h2 class="text-xl font-semibold">No Data Available</h2>
-          <p class="text-muted-foreground">
-            There is no data to display yet. Connect a data source in your
-            settings to get started.
-          </p>
-          <Button
-            href="/settings/connectors"
-            variant="outline"
-            class="print:hidden"
-          >
-            Configure Data Sources
-          </Button>
-        </div>
+        <EmptyState
+          art="calendar"
+          title="No data available"
+          headingLevel={2}
+          body="There is no data to display yet. Connect a data source in your settings to get started."
+        >
+          {#snippet action()}
+            <Button
+              href="/settings/connectors"
+              variant="outline"
+              class="print:hidden"
+            >
+              Configure data sources
+            </Button>
+          {/snippet}
+        </EmptyState>
       </div>
     {/if}
 
@@ -786,22 +695,22 @@
       <div class="space-y-10">
         {#each sortedYears as year, yearIndex (year)}
           <YearHeatmap
-            {year}
-            {yearIndex}
-            {loadingYears}
+            year={year}
+            yearIndex={yearIndex}
+            loadingYears={loadingYears}
             failed={failedYears.has(year)}
             onRetry={() => yearLoader.retry(year)}
-            {yearData}
-            {transformYearData}
-            {getCellFill}
-            {getCellHatch}
-            {getWeekColumns}
-            {navigateToDayInReview}
-            {glucoseColorScale}
-            {units}
-            {unitLabel}
-            {formatUnits}
-            {getVisibleCounts}
+            yearData={yearData}
+            transformYearData={transformYearData}
+            getCellFill={getCellFill}
+            getCellHatch={getCellHatch}
+            navigateToDayInReview={navigateToDayInReview}
+            glucoseColorScale={glucoseColorScale}
+            glucoseBands={glucoseBands}
+            units={units}
+            unitLabel={unitLabel}
+            formatUnits={formatUnits}
+            getVisibleCounts={getVisibleCounts}
             bind:sentinelElement={sentinelElements[year]}
           />
 

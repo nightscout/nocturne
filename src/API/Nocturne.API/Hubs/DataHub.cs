@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Extensions;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Queries;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Hubs;
 
@@ -22,6 +23,12 @@ public class DataHub : TenantAwareHub
 {
     private readonly ILogger<DataHub> _logger;
     private readonly IHubTokenAuthorizer _tokenAuthorizer;
+
+    /// <summary>
+    /// One uploader's 48 hours at a 5-minute cadence (576 statuses) with slack. The read is newest
+    /// first, so with several uploaders the oldest part of the window is cut.
+    /// </summary>
+    private const int RetroDeviceStatusLimit = 600;
 
     public DataHub(ILogger<DataHub> logger, IHubTokenAuthorizer tokenAuthorizer)
     {
@@ -114,9 +121,8 @@ public class DataHub : TenantAwareHub
                         Context.ConnectionId, TenantGroup(RealtimeGroups.Relay));
                 }
 
-                // If user is admin, also add to admin group for admin-specific notifications
                 var httpContext = Context.GetHttpContext();
-                if (httpContext?.IsAdmin() == true)
+                if (httpContext?.IsSuperuser() == true)
                 {
                     await Groups.AddToGroupAsync(
                         Context.ConnectionId, TenantGroup(RealtimeGroups.Admin));
@@ -178,9 +184,9 @@ public class DataHub : TenantAwareHub
             var serviceProvider = Context.GetHttpContext()?.RequestServices;
             var entryService = serviceProvider?.GetService<IEntryService>();
             var treatmentService = serviceProvider?.GetService<ITreatmentService>();
-            var projectionService = serviceProvider?.GetService<DeviceStatusProjectionService>();
+            var deviceStatusService = serviceProvider?.GetService<IDeviceStatusService>();
 
-            if (entryService == null || treatmentService == null || projectionService == null)
+            if (entryService == null || treatmentService == null || deviceStatusService == null)
             {
                 _logger.LogWarning("Required services not available for retro data loading");
                 await Clients.Caller.SendAsync(
@@ -198,12 +204,14 @@ public class DataHub : TenantAwareHub
             var endTime = request.LoadedMills;
             var startTime = endTime - (48 * 60 * 60 * 1000); // 48 hours before
 
+            var window = $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}";
+
             var authorization = HubAuthorizationState.Resolve(Context)!;
 
             // Load retro data from multiple collections. The glucose gate is the method's declared
             // scope; treatments and device status answer to their own.
             var entries = await entryService.GetEntriesAsync(
-                find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
+                find: window,
                 count: 1000
             );
 
@@ -211,7 +219,7 @@ public class DataHub : TenantAwareHub
             if (authorization.Satisfies(Scope.TreatmentsRead))
             {
                 treatments = await treatmentService.GetTreatmentsAsync(
-                    find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
+                    find: window,
                     count: 1000
                 );
             }
@@ -219,11 +227,11 @@ public class DataHub : TenantAwareHub
             IEnumerable<Core.Models.DeviceStatus> deviceStatuses = [];
             if (authorization.Satisfies(Scope.DevicesRead))
             {
-                deviceStatuses = await projectionService.GetAsync(
-                    count: 1000,
+                deviceStatuses = await deviceStatusService.GetDeviceStatusesAsync(
+                    FindQuery.ParseDeviceStatus(window),
+                    count: RetroDeviceStatusLimit,
                     skip: 0,
-                    find: null,
-                    ct: default
+                    cancellationToken: default
                 );
             }
 
@@ -268,8 +276,8 @@ public class DataHub : TenantAwareHub
 
     /// <summary>
     /// Subscribe to storage collections (replaces socket.io '/storage' namespace 'subscribe' event).
-    /// Each collection is joined only when the connection's credential satisfies the read scope
-    /// governing it, so the returned list may be narrower than the one requested.
+    /// Each collection is joined only when <see cref="HubAuthorization.MayReceiveCategory"/> allows
+    /// it, so the returned list may be narrower than the one requested.
     /// </summary>
     /// <param name="request">Storage subscription request</param>
     /// <returns>Subscription result</returns>
@@ -277,25 +285,17 @@ public class DataHub : TenantAwareHub
     {
         try
         {
-            var governingScopes = RealtimeCategories.GoverningScopes;
             var collections = request.Collections ?? RealtimeCategories.All;
             var authorization = HubAuthorizationState.Resolve(Context)!;
             var subscribed = new List<string>();
 
             foreach (var collection in collections)
             {
-                // An unclassified collection has no governing scope and cannot be subscribed to.
-                if (!governingScopes.TryGetValue(collection, out var requiredScope))
-                {
-                    continue;
-                }
-
-                if (!authorization.Satisfies(requiredScope))
+                if (!authorization.MayReceiveCategory(collection))
                 {
                     _logger.LogDebug(
-                        "Client {ConnectionId} lacks {RequiredScope} for collection {Collection}",
+                        "Client {ConnectionId} may not receive collection {Collection}",
                         Context.ConnectionId,
-                        requiredScope,
                         collection
                     );
                     continue;

@@ -4,9 +4,6 @@ using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>
-/// Basic glucose statistics
-/// </summary>
 public class BasicGlucoseStats
 {
     /// <summary>
@@ -19,9 +16,6 @@ public class BasicGlucoseStats
     /// </summary>
     public double Mean { get; set; }
 
-    /// <summary>
-    /// Median glucose value
-    /// </summary>
     public double Median { get; set; }
 
     /// <summary>
@@ -86,9 +80,6 @@ public class GlucosePercentiles
     public double P95 { get; set; }
 }
 
-/// <summary>
-/// Glycemic variability metrics
-/// </summary>
 public class GlycemicVariability
 {
     /// <summary>
@@ -111,19 +102,14 @@ public class GlycemicVariability
     /// </summary>
     public double ContinuousOverlappingNetGlycemicAction { get; set; }
 
-    /// <summary>
-    /// Average Daily Risk Range
-    /// </summary>
-    public double AverageDailyRiskRange { get; set; }
+    /// <summary>Null when the tenant has no timezone to bound the days in.</summary>
+    public double? AverageDailyRiskRange { get; set; }
 
-    /// <summary>
-    /// Lability Index
-    /// </summary>
+    /// <summary>Why <see cref="AverageDailyRiskRange"/> is null; null when a zone was applied.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
+
     public double LabilityIndex { get; set; }
 
-    /// <summary>
-    /// J-Index
-    /// </summary>
     public double JIndex { get; set; }
 
     /// <summary>
@@ -152,7 +138,26 @@ public class GlycemicVariability
     public double EstimatedA1c { get; set; }
 
     public A1cDisplayValue EstimatedA1cDisplay => A1cDisplayValue.FromPercent(EstimatedA1c);
-    public A1cDisplayValue A1cTarget => A1cDisplayValue.FromPercent(7);
+    public A1cDisplayValue A1cTarget => A1cDisplayValue.FromPercent(GlucoseConstants.A1cTargetPercent);
+
+    /// <summary>
+    /// Judged per unit on the value as displayed in that unit, so each state agrees with the figure
+    /// shown in its own unit.
+    /// </summary>
+    public A1cTargetState EstimatedA1cMeetsTarget => A1cTargetState.Below(EstimatedA1cDisplay, A1cTarget);
+
+    public double CoefficientOfVariationTarget => GlucoseConstants.CoefficientOfVariationTargetPercent;
+
+    /// <summary>
+    /// Judged on the CV as a whole percent, the way <see cref="CoefficientOfVariation"/> is displayed.
+    /// </summary>
+    public GlycemicVariabilityStatus CoefficientOfVariationStatus =>
+        Math.Round(CoefficientOfVariation, MidpointRounding.AwayFromZero) switch
+        {
+            <= GlucoseConstants.CoefficientOfVariationTargetPercent => GlycemicVariabilityStatus.Stable,
+            <= GlucoseConstants.CoefficientOfVariationVariablePercent => GlycemicVariabilityStatus.Moderate,
+            _ => GlycemicVariabilityStatus.Variable,
+        };
 
     /// <summary>
     /// Glucose Management Indicator - modern replacement for estimated A1c
@@ -171,9 +176,6 @@ public class GlycemicVariability
     public double TimeInFluctuation { get; set; }
 }
 
-/// <summary>
-/// Glycemic thresholds for analysis
-/// </summary>
 public class GlycemicThresholds
 {
     /// <summary>
@@ -203,9 +205,9 @@ public class GlycemicThresholds
     public double TightTargetBottom { get; set; } = GlucoseConstants.TargetBottomMgdl;
 
     /// <summary>
-    /// Tight target range top threshold (default: 140 mg/dL)
+    /// Tight target range top threshold (defaults to <see cref="GlucoseConstants.TightTargetTopMgdl"/>)
     /// </summary>
-    public double TightTargetTop { get; set; } = 140;
+    public double TightTargetTop { get; set; } = GlucoseConstants.TightTargetTopMgdl;
 
     /// <summary>
     /// Threshold for high glucose (defaults to <see cref="GlucoseConstants.TargetTopMgdl"/>)
@@ -218,11 +220,11 @@ public class GlycemicThresholds
     public double VeryHigh { get; set; } = GlucoseConstants.VeryHighMgdl;
 }
 
-/// <summary>
-/// Time in range metrics
-/// </summary>
 public class TimeInRangeMetrics
 {
+    /// <summary>The band edges the percentages, durations and episodes were measured against.</summary>
+    public GlycemicThresholds? Thresholds { get; set; }
+
     /// <summary>
     /// Percentages of time in each range
     /// </summary>
@@ -233,9 +235,6 @@ public class TimeInRangeMetrics
     /// </summary>
     public TimeInRangeDurations Durations { get; set; } = new();
 
-    /// <summary>
-    /// Number of episodes in each range
-    /// </summary>
     public TimeInRangeEpisodes Episodes { get; set; } = new();
 
     /// <summary>
@@ -244,9 +243,14 @@ public class TimeInRangeMetrics
     public TimeInRangeDetailedStats RangeStats { get; set; } = new();
 
     /// <summary>
-    /// Average minutes per day in target, below-range and above-range zones
+    /// Average minutes per covered day in target, below-range and above-range zones
     /// </summary>
     public AverageDailyMinutes AverageDailyMinutes { get; set; } = new();
+
+    /// <summary>
+    /// Episodes per covered day
+    /// </summary>
+    public AverageDailyEpisodes AverageDailyEpisodes { get; set; } = new();
 }
 
 /// <summary>
@@ -271,7 +275,11 @@ public class TimeInRangeDetailedStats
 }
 
 /// <summary>
-/// Time in range percentages
+/// Time in range percentages: the minutes a zone covers over the minutes the readings cover, from
+/// the same minutes that back <see cref="TimeInRangeDurations"/>, so the two agree whatever mix of
+/// sensor cadences the period holds. A count of readings would weigh a one-minute sensor's
+/// reading as much as a five-minute one's. The four outer zones and the time between them sum to
+/// 100; <see cref="Target"/> is that time only when the target range starts where low ends.
 /// </summary>
 public class TimeInRangePercentages
 {
@@ -304,6 +312,16 @@ public class TimeInRangePercentages
     /// Percentage of time in very high range (greater than 250 mg/dL)
     /// </summary>
     public double VeryHigh { get; set; }
+
+    /// <summary>
+    /// Percentage of time below the target range: very low plus low
+    /// </summary>
+    public double BelowRange => VeryLow + Low;
+
+    /// <summary>
+    /// Percentage of time above the target range: high plus very high
+    /// </summary>
+    public double AboveRange => High + VeryHigh;
 }
 
 /// <summary>
@@ -348,8 +366,7 @@ public class ExtendedTimeInRangePercentages
 /// Time in range durations (in minutes), measured from the gaps between the readings themselves
 /// rather than assuming a cadence, so a one-minute sensor and a five-minute one both report the
 /// time they actually covered. A gap the sensor did not cover counts as one extra median gap.
-/// <see cref="TimeInRangePercentages"/> counts readings while these sum time, so the two diverge
-/// on a series with gaps or a cadence that varies.
+/// <see cref="TimeInRangePercentages"/> is these over the covered minutes.
 /// </summary>
 public class TimeInRangeDurations
 {
@@ -396,9 +413,10 @@ public class TimeInRangeDurations
 }
 
 /// <summary>
-/// Average minutes per day in each zone, derived from <see cref="TimeInRangePercentages"/> rather
-/// than the recorded durations. Percentages sum to 100, so target, low and high account for a whole
-/// day even when the underlying data has gaps.
+/// Average minutes per day in each zone: the zone minutes of <see cref="TimeInRangeDurations"/>
+/// over the days the readings cover, which is the time they stand for over twenty-four hours.
+/// A gap the sensor did not cover adds no days, and a period with no covered time reports zero.
+/// <see cref="AverageDailyEpisodes"/> divides by the same days.
 /// </summary>
 public class AverageDailyMinutes
 {
@@ -436,24 +454,12 @@ public class AverageDailyMinutes
 /// </summary>
 public class TimeInRangeEpisodes
 {
-    /// <summary>
-    /// Number of very low episodes
-    /// </summary>
     public int VeryLow { get; set; }
 
-    /// <summary>
-    /// Number of low episodes
-    /// </summary>
     public int Low { get; set; }
 
-    /// <summary>
-    /// Number of high episodes
-    /// </summary>
     public int High { get; set; }
 
-    /// <summary>
-    /// Number of very high episodes
-    /// </summary>
     public int VeryHigh { get; set; }
 
     /// <summary>
@@ -471,8 +477,24 @@ public class TimeInRangeEpisodes
 }
 
 /// <summary>
-/// Glucose distribution data point
+/// <see cref="TimeInRangeEpisodes"/> per covered day, on the days <see cref="AverageDailyMinutes"/>
+/// divides by.
 /// </summary>
+public class AverageDailyEpisodes
+{
+    public double VeryLow { get; set; }
+
+    public double Low { get; set; }
+
+    public double High { get; set; }
+
+    public double VeryHigh { get; set; }
+
+    public double AboveRange { get; set; }
+
+    public double BelowRange { get; set; }
+}
+
 public class DistributionDataPoint
 {
     /// <summary>
@@ -491,35 +513,17 @@ public class DistributionDataPoint
     public double Percent { get; set; }
 }
 
-/// <summary>
-/// Distribution bin configuration
-/// </summary>
 public class DistributionBin
 {
-    /// <summary>
-    /// Range description
-    /// </summary>
     public string Range { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Minimum value for this bin
-    /// </summary>
     public double Min { get; set; }
 
-    /// <summary>
-    /// Maximum value for this bin
-    /// </summary>
     public double Max { get; set; }
 }
 
-/// <summary>
-/// Treatment summary for a collection of treatments
-/// </summary>
 public class TreatmentSummary
 {
-    /// <summary>
-    /// Aggregated treatment totals
-    /// </summary>
     public TreatmentTotals Totals { get; set; } = new();
 
     /// <summary>
@@ -538,9 +542,10 @@ public class TreatmentSummary
     public int CarbEntryCount { get; set; }
 
     /// <summary>
-    /// Grams of carbs per unit of bolus insulin
+    /// Insulin-to-carb ratio as dosed, as <see cref="InsulinDeliveryStatistics.IcRatio"/>; null when
+    /// no manual bolus is paired with a meal
     /// </summary>
-    public double CarbToInsulinRatio { get; set; }
+    public double? CarbToInsulinRatio { get; set; }
 
     /// <summary>
     /// Average bolus insulin per bolus (units), excluding basal
@@ -563,25 +568,13 @@ public class TreatmentSummary
     public double DailyCarbs { get; set; }
 }
 
-/// <summary>
-/// Treatment totals
-/// </summary>
 public class TreatmentTotals
 {
-    /// <summary>
-    /// Food-related totals
-    /// </summary>
     public FoodTotals Food { get; set; } = new();
 
-    /// <summary>
-    /// Insulin-related totals
-    /// </summary>
     public InsulinTotals Insulin { get; set; } = new();
 }
 
-/// <summary>
-/// Food totals
-/// </summary>
 public class FoodTotals
 {
     /// <summary>
@@ -658,30 +651,15 @@ public class DayData
     /// </summary>
     public string Date { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Treatments for this day
-    /// </summary>
     public IEnumerable<Treatment> Treatments { get; set; } = Enumerable.Empty<Treatment>();
 
-    /// <summary>
-    /// Summary of treatments for this day
-    /// </summary>
     public TreatmentSummary TreatmentSummary { get; set; } = new();
 
-    /// <summary>
-    /// Time in range metrics for this day
-    /// </summary>
     public TimeInRangeMetrics TimeInRanges { get; set; } = new();
 }
 
-/// <summary>
-/// Extended analysis configuration
-/// </summary>
 public class ExtendedAnalysisConfig
 {
-    /// <summary>
-    /// Glycemic thresholds to use for analysis
-    /// </summary>
     public GlycemicThresholds Thresholds { get; set; } = new();
 
     /// <summary>
@@ -689,9 +667,6 @@ public class ExtendedAnalysisConfig
     /// </summary>
     public string SensorType { get; set; } = "GENERIC_5MIN";
 
-    /// <summary>
-    /// Whether to include looping-specific metrics
-    /// </summary>
     public bool IncludeLoopingMetrics { get; set; } = false;
 
     /// <summary>
@@ -700,9 +675,6 @@ public class ExtendedAnalysisConfig
     public string Units { get; set; } = "mg/dl";
 }
 
-/// <summary>
-/// Data quality metrics
-/// </summary>
 public class DataQuality
 {
     /// <summary>
@@ -710,9 +682,6 @@ public class DataQuality
     /// </summary>
     public int TotalReadings { get; set; }
 
-    /// <summary>
-    /// Number of missing readings
-    /// </summary>
     public int MissingReadings { get; set; }
 
     /// <summary>
@@ -725,9 +694,6 @@ public class DataQuality
     /// </summary>
     public double CgmActivePercent { get; set; }
 
-    /// <summary>
-    /// Analysis of data gaps
-    /// </summary>
     public GapAnalysis GapAnalysis { get; set; } = new();
 
     /// <summary>
@@ -735,25 +701,13 @@ public class DataQuality
     /// </summary>
     public double NoiseLevel { get; set; }
 
-    /// <summary>
-    /// Number of calibration events
-    /// </summary>
     public int CalibrationEvents { get; set; }
 
-    /// <summary>
-    /// Number of sensor warmup periods
-    /// </summary>
     public int SensorWarmups { get; set; }
 }
 
-/// <summary>
-/// Gap analysis in data
-/// </summary>
 public class GapAnalysis
 {
-    /// <summary>
-    /// Collection of identified data gaps
-    /// </summary>
     public IEnumerable<DataGap> Gaps { get; set; } = Enumerable.Empty<DataGap>();
 
     /// <summary>
@@ -767,9 +721,6 @@ public class GapAnalysis
     public double AverageGap { get; set; }
 }
 
-/// <summary>
-/// Data gap information
-/// </summary>
 public class DataGap
 {
     /// <summary>
@@ -788,9 +739,6 @@ public class DataGap
     public double Duration { get; set; }
 }
 
-/// <summary>
-/// Comprehensive glucose analytics result
-/// </summary>
 public class GlucoseAnalytics
 {
     /// <summary>
@@ -798,9 +746,6 @@ public class GlucoseAnalytics
     /// </summary>
     public BasicGlucoseStats BasicStats { get; set; } = new();
 
-    /// <summary>
-    /// Time in range analysis
-    /// </summary>
     public TimeInRangeMetrics TimeInRange { get; set; } = new();
 
     /// <summary>
@@ -810,9 +755,6 @@ public class GlucoseAnalytics
     /// </summary>
     public GlycemicVariability? GlycemicVariability { get; set; }
 
-    /// <summary>
-    /// Data quality assessment
-    /// </summary>
     public DataQuality DataQuality { get; set; } = new();
 
     /// <summary>
@@ -820,20 +762,20 @@ public class GlucoseAnalytics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }
 
-    /// <summary>
-    /// Time period of the analysis
-    /// </summary>
     public AnalysisTime Time { get; set; } = new();
 
     /// <summary>
     /// Clinical assessment with insights, strengths, and priority areas
     /// </summary>
     public ClinicalTargetAssessment? ClinicalAssessment { get; set; }
+
+    /// <summary>
+    /// Why the tenant's timezone was unavailable. Without a zone, <see cref="GlycemicVariability"/> has no
+    /// average daily risk range and <see cref="Reliability"/> counts days of data on UTC days. Null when a zone was applied.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
-/// <summary>
-/// Analysis time information
-/// </summary>
 public class AnalysisTime
 {
     /// <summary>
@@ -882,9 +824,6 @@ public class MultiPeriodStatistics
     /// </summary>
     public PeriodStatistics Last90Days { get; set; } = new();
 
-    /// <summary>
-    /// When the statistics were last updated
-    /// </summary>
     public DateTime LastUpdated { get; set; }
 }
 
@@ -898,29 +837,14 @@ public class PeriodStatistics
     /// </summary>
     public int PeriodDays { get; set; }
 
-    /// <summary>
-    /// Start date of the period
-    /// </summary>
     public DateTime StartDate { get; set; }
 
-    /// <summary>
-    /// End date of the period
-    /// </summary>
     public DateTime EndDate { get; set; }
 
-    /// <summary>
-    /// Comprehensive glucose analytics for this period
-    /// </summary>
     public GlucoseAnalytics? Analytics { get; set; }
 
-    /// <summary>
-    /// Treatment summary for this period
-    /// </summary>
     public TreatmentSummary? TreatmentSummary { get; set; }
 
-    /// <summary>
-    /// Comprehensive insulin delivery statistics for this period
-    /// </summary>
     public InsulinDeliveryStatistics? InsulinDelivery { get; set; }
 
     /// <summary>
@@ -928,9 +852,6 @@ public class PeriodStatistics
     /// </summary>
     public bool HasSufficientData { get; set; }
 
-    /// <summary>
-    /// Glucose Management Indicator for this period
-    /// </summary>
     public GlucoseManagementIndicator? Gmi { get; set; }
 
     /// <summary>
@@ -938,14 +859,8 @@ public class PeriodStatistics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }
 
-    /// <summary>
-    /// Number of glucose entries in this period
-    /// </summary>
     public int EntryCount { get; set; }
 
-    /// <summary>
-    /// Number of treatments in this period
-    /// </summary>
     public int TreatmentCount { get; set; }
 }
 
@@ -1056,7 +971,8 @@ public enum HourlyClockBasis
 }
 
 /// <summary>
-/// Why no tenant timezone was available, so the hours fell back to each reading's own offset.
+/// Why no tenant timezone was available. What a report does without one is stated on the response
+/// that carries the reason.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TimeZoneUnavailableReason>))]
 public enum TimeZoneUnavailableReason
@@ -1066,9 +982,6 @@ public enum TimeZoneUnavailableReason
 
     /// <summary>The tenant's stored timezone is not one this server recognises; the owner can correct it.</summary>
     Unrecognised,
-
-    /// <summary>The request came through a public share, which cannot read the tenant's settings.</summary>
-    Share,
 
     /// <summary>Looking the timezone up failed.</summary>
     LookupFailed,
@@ -1163,6 +1076,18 @@ public class WeekdayGlucoseSlot
 }
 
 /// <summary>
+/// Response for <c>GET /api/v4/Statistics/weekday-averages</c>.
+/// </summary>
+public class WeekdayAveragesResponse
+{
+    /// <summary>The populated slots in time-of-day order.</summary>
+    public List<WeekdayGlucoseSlot> Slots { get; set; } = [];
+
+    /// <summary>Why <see cref="Slots"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
+}
+
+/// <summary>
 /// Diabetes population types for clinical target assessment
 /// </summary>
 public enum DiabetesPopulation
@@ -1219,7 +1144,6 @@ public class ClinicalTargets
     /// Returns the evidence-based clinical targets for the specified <see cref="DiabetesPopulation"/>.
     /// Based on International Consensus on Time in Range (2019) and subsequent updates.
     /// </summary>
-    /// <param name="population">The diabetes population for which to retrieve targets</param>
     /// <returns>A <see cref="ClinicalTargets"/> instance with population-appropriate thresholds</returns>
     public static ClinicalTargets ForPopulation(DiabetesPopulation population)
     {
@@ -1232,7 +1156,7 @@ public class ClinicalTargets
                 MaxTBRVeryLow = 1,
                 MaxTAR = 25,
                 MaxTARVeryHigh = 5,
-                TargetCV = 36,
+                TargetCV = GlucoseConstants.CoefficientOfVariationTargetPercent,
                 TargetLow = GlucoseConstants.TargetBottomMgdl,
                 TargetHigh = GlucoseConstants.TargetTopMgdl,
             },
@@ -1243,7 +1167,7 @@ public class ClinicalTargets
                 MaxTBRVeryLow = 1,
                 MaxTAR = 25,
                 MaxTARVeryHigh = 5,
-                TargetCV = 36,
+                TargetCV = GlucoseConstants.CoefficientOfVariationTargetPercent,
                 TargetLow = GlucoseConstants.TargetBottomMgdl,
                 TargetHigh = GlucoseConstants.TargetTopMgdl,
             },
@@ -1254,7 +1178,7 @@ public class ClinicalTargets
                 MaxTBRVeryLow = 0,
                 MaxTAR = 50,
                 MaxTARVeryHigh = 10,
-                TargetCV = 36,
+                TargetCV = GlucoseConstants.CoefficientOfVariationTargetPercent,
                 TargetLow = GlucoseConstants.TargetBottomMgdl,
                 TargetHigh = GlucoseConstants.TargetTopMgdl,
             },
@@ -1265,7 +1189,7 @@ public class ClinicalTargets
                 MaxTBRVeryLow = 1,
                 MaxTAR = 25,
                 MaxTARVeryHigh = 5,
-                TargetCV = 36,
+                TargetCV = GlucoseConstants.CoefficientOfVariationTargetPercent,
                 TargetLow = 63,
                 TargetHigh = 140,
             },
@@ -1276,7 +1200,7 @@ public class ClinicalTargets
                 MaxTBRVeryLow = 1,
                 MaxTAR = 25,
                 MaxTARVeryHigh = 5,
-                TargetCV = 36,
+                TargetCV = GlucoseConstants.CoefficientOfVariationTargetPercent,
                 TargetLow = 63,
                 TargetHigh = 140,
             },
@@ -1297,7 +1221,6 @@ public class GlucoseManagementIndicator
     /// <summary>Mean glucose used for calculation (mg/dL)</summary>
     public double MeanGlucose { get; set; }
 
-    /// <summary>Interpretation of the GMI value</summary>
     public GlucoseManagementIndicatorLevel Interpretation { get; set; }
 
     /// <summary>Reliability assessment for this GMI calculation</summary>
@@ -1340,7 +1263,6 @@ public class GlycemicRiskIndex
     /// <summary>Hyper component = VHigh% + (0.5 × High%)</summary>
     public double HyperglycemiaComponent { get; set; }
 
-    /// <summary>Risk zone classification</summary>
     public GRIZone Zone { get; set; }
 
     /// <summary>Interpretation of the GRI score</summary>
@@ -1376,7 +1298,6 @@ public class PeriodMetrics
     /// <summary>Name of the period (e.g., "Overnight", "Morning")</summary>
     public string PeriodName { get; set; } = string.Empty;
 
-    /// <summary>Number of readings in this period</summary>
     public int ReadingCount { get; set; }
 
     /// <summary>Mean glucose (mg/dL)</summary>
@@ -1408,7 +1329,7 @@ public class StatisticReliability
     /// <summary>Whether the data meets clinical reliability criteria for this analysis</summary>
     public bool MeetsReliabilityCriteria { get; set; }
 
-    /// <summary>Number of days with glucose data in this analysis window</summary>
+    /// <summary>Number of days with glucose data in this analysis window, counted on UTC days when the tenant has no timezone</summary>
     public int DaysOfData { get; set; }
 
     /// <summary>Minimum days recommended by clinical guidelines for reliable results</summary>
@@ -1418,18 +1339,13 @@ public class StatisticReliability
     public int ReadingCount { get; set; }
 }
 
-/// <summary>
-/// Target achievement status
-/// </summary>
 public enum TargetStatus
 {
-    /// <summary>Target met</summary>
     Met,
 
     /// <summary>Close to target (within 10%)</summary>
     Close,
 
-    /// <summary>Target not met</summary>
     NotMet,
 
     /// <summary>
@@ -1438,24 +1354,18 @@ public enum TargetStatus
     NotAssessed,
 }
 
-/// <summary>
-/// Individual target assessment
-/// </summary>
 public class TargetAssessment
 {
-    /// <summary>Name of the metric</summary>
     public string MetricName { get; set; } = string.Empty;
 
     /// <summary>Current value, or null when <see cref="Status"/> is <see cref="TargetStatus.NotAssessed"/></summary>
     public double? CurrentValue { get; set; }
 
-    /// <summary>Target value</summary>
     public double TargetValue { get; set; }
 
     /// <summary>Whether target is a maximum (true) or minimum (false)</summary>
     public bool IsMaximumTarget { get; set; }
 
-    /// <summary>Status of target achievement</summary>
     public TargetStatus Status { get; set; }
 
     /// <summary>Difference from target, or null when not assessed</summary>
@@ -1477,15 +1387,10 @@ public class LocalizedInsight
     public Dictionary<string, double> Context { get; set; } = new();
 }
 
-/// <summary>
-/// Comprehensive clinical target assessment
-/// </summary>
 public class ClinicalTargetAssessment
 {
-    /// <summary>Population type used for targets</summary>
     public DiabetesPopulation Population { get; set; }
 
-    /// <summary>Clinical targets used for assessment</summary>
     public ClinicalTargets Targets { get; set; } = new();
 
     /// <summary>Time in range assessment</summary>
@@ -1494,19 +1399,16 @@ public class ClinicalTargetAssessment
     /// <summary>Time below range assessment</summary>
     public TargetAssessment TBRAssessment { get; set; } = new();
 
-    /// <summary>Time very low assessment</summary>
     public TargetAssessment VeryLowAssessment { get; set; } = new();
 
     /// <summary>Time above range assessment</summary>
     public TargetAssessment TARAssessment { get; set; } = new();
 
-    /// <summary>Time very high assessment</summary>
     public TargetAssessment VeryHighAssessment { get; set; } = new();
 
     /// <summary>Coefficient of variation assessment</summary>
     public TargetAssessment CVAssessment { get; set; } = new();
 
-    /// <summary>Number of targets met</summary>
     public int TargetsMet { get; set; }
 
     /// <summary>Total number of targets, assessed or not</summary>
@@ -1518,7 +1420,6 @@ public class ClinicalTargetAssessment
     /// </summary>
     public int TargetsAssessed { get; set; }
 
-    /// <summary>Overall assessment category</summary>
     public ClinicalAssessmentLevel OverallAssessment { get; set; }
 
     /// <summary>List of actionable insights/recommendations with localization keys and context</summary>
@@ -1531,9 +1432,6 @@ public class ClinicalTargetAssessment
     public List<LocalizedInsight> Strengths { get; set; } = new();
 }
 
-/// <summary>
-/// Data sufficiency assessment for reporting
-/// </summary>
 public class DataSufficiencyAssessment
 {
     /// <summary>Whether there is sufficient data for a valid report</summary>
@@ -1542,13 +1440,12 @@ public class DataSufficiencyAssessment
     /// <summary>Number of days in the period</summary>
     public int TotalDays { get; set; }
 
-    /// <summary>Number of days with any data</summary>
+    /// <summary>Number of days with any data, counted on UTC days when <see cref="TimeZoneUnavailableReason"/> is set.</summary>
     public int DaysWithData { get; set; }
 
     /// <summary>Expected number of readings (based on sensor type)</summary>
     public int ExpectedReadings { get; set; }
 
-    /// <summary>Actual number of readings</summary>
     public int ActualReadings { get; set; }
 
     /// <summary>Data completeness percentage</summary>
@@ -1557,7 +1454,7 @@ public class DataSufficiencyAssessment
     /// <summary>Minimum required completeness for valid report (typically 70%)</summary>
     public double MinimumRequiredCompleteness { get; set; } = 70;
 
-    /// <summary>Average readings per day</summary>
+    /// <summary>Average readings per day, over the days of <see cref="DaysWithData"/></summary>
     public double AverageReadingsPerDay { get; set; }
 
     /// <summary>Longest data gap in hours</summary>
@@ -1569,13 +1466,12 @@ public class DataSufficiencyAssessment
     /// <summary>Warning message if data is insufficient</summary>
     public string WarningMessage { get; set; } = string.Empty;
 
-    /// <summary>Recommendation for improving data collection</summary>
     public string Recommendation { get; set; } = string.Empty;
+
+    /// <summary>Why <see cref="DaysWithData"/> and <see cref="AverageReadingsPerDay"/> are counted on UTC days; null when a zone was applied.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
-/// <summary>
-/// Extended glucose analytics with all new metrics
-/// </summary>
 public class ExtendedGlucoseAnalytics : GlucoseAnalytics
 {
     /// <summary>Glucose Management Indicator (modern replacement for eA1c)</summary>
@@ -1584,10 +1480,8 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
     /// <summary>Glycemic Risk Index (composite risk score)</summary>
     public GlycemicRiskIndex GRI { get; set; } = new();
 
-    /// <summary>Clinical target assessment</summary>
     public new ClinicalTargetAssessment ClinicalAssessment { get; set; } = new();
 
-    /// <summary>Data sufficiency assessment</summary>
     public DataSufficiencyAssessment DataSufficiency { get; set; } = new();
 
     /// <summary>Treatment summary if treatment data is available</summary>
@@ -1617,9 +1511,18 @@ public class ReportAnalysisResult
     /// <summary>
     /// Time in the tenant's personal target range schedule, alongside the clinical-consensus
     /// TIR in <see cref="Analysis"/>. Null when the tenant has no target range schedule
-    /// configured or the window has no readings.
+    /// configured, the window has no readings, or the tenant has no usable timezone and the schedule
+    /// has several entries.
     /// </summary>
     public PersonalRangeTimeInRange? PersonalRange { get; set; }
+
+    /// <summary>
+    /// Why the tenant's timezone was unavailable. Without a zone, <see cref="AveragedStats"/> groups
+    /// readings by their own UTC offset, <see cref="Analysis"/> has no average daily risk range and
+    /// counts days of data on UTC days, and <see cref="PersonalRange"/> is null unless the target
+    /// schedule has one entry. Null when a zone was applied.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1655,8 +1558,8 @@ public sealed class ContributingDevice
     /// <summary>The registered <see cref="PatientDevice"/> id, or <c>null</c> for the unattributed bucket.</summary>
     public Guid? PatientDeviceId { get; set; }
 
-    /// <summary>Display name of the device, or "Unattributed" for readings with no <see cref="PatientDeviceId"/>.</summary>
-    public string Name { get; set; } = string.Empty;
+    /// <summary>Display name of the device, or <c>null</c> for the unattributed bucket.</summary>
+    public string? Name { get; set; }
 
     /// <summary>Number of readings attributed to this device within the requested window.</summary>
     public int ReadingCount { get; set; }
@@ -1664,7 +1567,7 @@ public sealed class ContributingDevice
 
 /// <summary>
 /// Data point for site change impact analysis
-/// Represents averaged glucose at a specific time offset from site change
+/// Averaged glucose at a specific time offset from site change
 /// </summary>
 public class SiteChangeImpactDataPoint
 {
@@ -1696,9 +1599,6 @@ public class SiteChangeImpactDataPoint
     public double Percentile90 { get; set; }
 }
 
-/// <summary>
-/// Summary statistics for site change impact
-/// </summary>
 public class SiteChangeImpactSummary
 {
     /// <summary>Average glucose before site change (mg/dL)</summary>
@@ -1726,12 +1626,24 @@ public class SiteChangeImpactSummary
 public class InsulinDeliveryStatistics
 {
     /// <summary>
-    /// Total bolus insulin in units for the period
+    /// Total bolus insulin in units for the period: <see cref="ManualBolus"/> plus
+    /// <see cref="AutomaticBolus"/>.
     /// </summary>
     public double TotalBolus { get; set; }
 
     /// <summary>
-    /// Total basal insulin in units for the period (scheduled + additional)
+    /// Insulin in units from user-initiated boluses for the period.
+    /// </summary>
+    public double ManualBolus { get; set; }
+
+    /// <summary>
+    /// Insulin in units from algorithm-delivered boluses (SMBs) for the period.
+    /// </summary>
+    public double AutomaticBolus { get; set; }
+
+    /// <summary>
+    /// Total basal insulin in units for the period: temp basal delivery plus long-acting basal
+    /// injections. Algorithm boluses are bolus insulin and are not included.
     /// </summary>
     public double TotalBasal { get; set; }
 
@@ -1741,12 +1653,12 @@ public class InsulinDeliveryStatistics
     public double ScheduledBasal { get; set; }
 
     /// <summary>
-    /// Additional basal insulin above scheduled rate (TBR - scheduled) for the period
+    /// Temp basal insulin above the scheduled rate (temp - scheduled) for the period
     /// </summary>
     public double AdditionalBasal { get; set; }
 
     /// <summary>
-    /// Total insulin (bolus + basal) for the period
+    /// Total insulin for the period: <see cref="TotalBolus"/> plus <see cref="TotalBasal"/>
     /// </summary>
     public double TotalInsulin { get; set; }
 
@@ -1756,10 +1668,15 @@ public class InsulinDeliveryStatistics
     public double TotalCarbs { get; set; }
 
     /// <summary>
-    /// Number of manually initiated boluses in the period. Algorithm-delivered micro-boluses
-    /// are excluded and counted by <see cref="MicroBolusCount"/>.
+    /// Grams of carbohydrate per day: <see cref="TotalCarbs"/> over <see cref="WindowDays"/>
     /// </summary>
-    public int BolusCount { get; set; }
+    public double CarbsPerDay { get; set; }
+
+    /// <summary>
+    /// Number of manually initiated boluses in the period. Algorithm-delivered boluses
+    /// are excluded and counted by <see cref="AutomaticBolusCount"/>.
+    /// </summary>
+    public int ManualBolusCount { get; set; }
 
     /// <summary>
     /// Number of basal delivery records in the period: TempBasal segments plus discrete
@@ -1768,47 +1685,101 @@ public class InsulinDeliveryStatistics
     public int BasalCount { get; set; }
 
     /// <summary>
-    /// Total insulin events in the period: manual boluses, micro-boluses, and basal deliveries.
+    /// Total insulin events in the period: manual boluses, automatic boluses, and basal deliveries.
     /// </summary>
     public int InsulinEventCount { get; set; }
 
     /// <summary>
-    /// Percentage of total insulin that is basal (0-100)
+    /// <see cref="TotalBasal"/> as a percentage of <see cref="TotalInsulin"/> (0-100)
     /// </summary>
     public double BasalPercent { get; set; }
 
     /// <summary>
-    /// Percentage of total insulin that is bolus (0-100)
+    /// <see cref="TotalBolus"/>, manual and automatic, as a percentage of <see cref="TotalInsulin"/> (0-100)
     /// </summary>
     public double BolusPercent { get; set; }
 
     /// <summary>
-    /// Average Total Daily Dose (units per day)
+    /// Average Total Daily Dose (units per day): <see cref="TotalInsulin"/> over <see cref="WindowDays"/>
     /// </summary>
     public double Tdd { get; set; }
 
     /// <summary>
-    /// Average bolus size (units)
+    /// Units per day of <see cref="ManualBolus"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double ManualBolusPerDay { get; set; }
+
+    /// <summary>
+    /// Units per day of <see cref="AutomaticBolus"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double AutomaticBolusPerDay { get; set; }
+
+    /// <summary>
+    /// Units per day of <see cref="TotalBasal"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double TotalBasalPerDay { get; set; }
+
+    /// <summary>
+    /// Units per day of <see cref="TotalBolus"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double TotalBolusPerDay { get; set; }
+
+    /// <summary>
+    /// Units per day of <see cref="ScheduledBasal"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double ScheduledBasalPerDay { get; set; }
+
+    /// <summary>
+    /// Average manual bolus size (units): <see cref="ManualBolus"/> over <see cref="ManualBolusCount"/>
     /// </summary>
     public double AvgBolus { get; set; }
 
     /// <summary>
-    /// Number of meal boluses (based on event type)
+    /// Number of manual boluses paired with a meal: the meal of a carb entry linked to the bolus, else
+    /// the nearest meal from 30 minutes before it to 1 hour after it
     /// </summary>
     public int MealBoluses { get; set; }
 
     /// <summary>
-    /// Number of correction boluses (based on event type)
+    /// Number of manual boluses paired with no meal
     /// </summary>
     public int CorrectionBoluses { get; set; }
 
     /// <summary>
-    /// Insulin to carb ratio (grams of carbs per unit of insulin)
+    /// <see cref="MealBoluses"/> per day, over <see cref="WindowDays"/>
     /// </summary>
-    public double IcRatio { get; set; }
+    public double MealBolusesPerDay { get; set; }
 
     /// <summary>
-    /// Average number of boluses per day
+    /// <see cref="CorrectionBoluses"/> per day, over <see cref="WindowDays"/>
+    /// </summary>
+    public double CorrectionBolusesPerDay { get; set; }
+
+    /// <summary>
+    /// <see cref="MealBoluses"/> as a percentage (0-100) of <see cref="ManualBolusCount"/>; 0 with no manual bolus
+    /// </summary>
+    public double MealBolusPercent { get; set; }
+
+    /// <summary>
+    /// <see cref="CorrectionBoluses"/> as a percentage (0-100) of <see cref="ManualBolusCount"/>; 0 with no manual bolus
+    /// </summary>
+    public double CorrectionBolusPercent { get; set; }
+
+    /// <summary>
+    /// Insulin-to-carb ratio as dosed: grams of the meals a manual bolus is paired with, per unit of
+    /// every bolus, manual or automatic, paired with those meals; null when no manual bolus is paired
+    /// with a meal
+    /// </summary>
+    public double? IcRatio { get; set; }
+
+    /// <summary>
+    /// Grams of the meals no manual bolus is paired with, such as hypo treatments and unbolused
+    /// snacks, which <see cref="IcRatio"/> leaves out
+    /// </summary>
+    public double UnpairedCarbs { get; set; }
+
+    /// <summary>
+    /// Average number of manual boluses per day
     /// </summary>
     public double BolusesPerDay { get; set; }
 
@@ -1839,14 +1810,9 @@ public class InsulinDeliveryStatistics
     public int CarbBolusCount { get; set; }
 
     /// <summary>
-    /// Number of algorithm-delivered micro-boluses (SMBs) in the period
+    /// Number of algorithm-delivered boluses (SMBs) in the period
     /// </summary>
-    public int MicroBolusCount { get; set; }
-
-    /// <summary>
-    /// Total insulin delivered via micro-boluses (SMBs) in units
-    /// </summary>
-    public double MicroBolusInsulin { get; set; }
+    public int AutomaticBolusCount { get; set; }
 
     /// <summary>
     /// Total insulin from discrete long-acting basal injections (MDI) in units.
@@ -1860,8 +1826,11 @@ public class InsulinDeliveryStatistics
     public int BasalInjectionCount { get; set; }
 
     /// <summary>
-    /// Reliability assessment for insulin delivery statistics
+    /// The manual boluses that make up <see cref="ManualBolus"/>, one record per counted bolus.
+    /// Filled only when the caller asks for them and holds treatments.read; null otherwise.
     /// </summary>
+    public List<Bolus>? ManualBoluses { get; set; }
+
     public StatisticReliability? Reliability { get; set; }
 }
 
@@ -1881,14 +1850,24 @@ public class DailyBasalBolusRatioData
     public string DisplayDate { get; set; } = string.Empty;
 
     /// <summary>
-    /// Basal insulin delivered in units
+    /// Basal insulin delivered in units: temp basal and long-acting injections, no algorithm boluses
     /// </summary>
     public double Basal { get; set; }
 
     /// <summary>
-    /// Bolus insulin delivered in units
+    /// Bolus insulin delivered in units: <see cref="ManualBolus"/> plus <see cref="AutomaticBolus"/>
     /// </summary>
     public double Bolus { get; set; }
+
+    /// <summary>
+    /// Insulin from user-initiated boluses in units
+    /// </summary>
+    public double ManualBolus { get; set; }
+
+    /// <summary>
+    /// Insulin from algorithm-delivered boluses (SMBs) in units
+    /// </summary>
+    public double AutomaticBolus { get; set; }
 
     /// <summary>
     /// Total insulin (basal + bolus) in units
@@ -1901,19 +1880,18 @@ public class DailyBasalBolusRatioData
     public double BasalPercent { get; set; }
 
     /// <summary>
-    /// Bolus as percentage of total (0-100)
+    /// Bolus, manual and automatic, as percentage of total (0-100)
     /// </summary>
     public double BolusPercent { get; set; }
+
+    /// <summary>
+    /// Carbohydrates logged that day in grams
+    /// </summary>
+    public double Carbs { get; set; }
 }
 
-/// <summary>
-/// Response model for daily basal/bolus ratio statistics
-/// </summary>
 public class DailyBasalBolusRatioResponse
 {
-    /// <summary>
-    /// Daily breakdown of basal/bolus ratios
-    /// </summary>
     public List<DailyBasalBolusRatioData> DailyData { get; set; } = new();
 
     /// <summary>
@@ -1936,6 +1914,9 @@ public class DailyBasalBolusRatioResponse
     /// by it. Not the length of the requested window.
     /// </summary>
     public int DaysWithData { get; set; }
+
+    /// <summary>Why <see cref="DailyData"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1979,14 +1960,8 @@ public class HourlyBasalPercentileData
     public int Count { get; set; }
 }
 
-/// <summary>
-/// Temp basal information statistics
-/// </summary>
 public class TempBasalInfo
 {
-    /// <summary>
-    /// Total number of temp basals in the period
-    /// </summary>
     public int Total { get; set; }
 
     /// <summary>
@@ -2015,13 +1990,10 @@ public class TempBasalInfo
 /// </summary>
 public class BasalStats
 {
-    /// <summary>
-    /// Number of basal events
-    /// </summary>
     public int Count { get; set; }
 
     /// <summary>
-    /// Average basal rate in U/hr
+    /// Time-weighted average basal rate in U/hr
     /// </summary>
     public double AvgRate { get; set; }
 
@@ -2036,14 +2008,16 @@ public class BasalStats
     public double MaxRate { get; set; }
 
     /// <summary>
-    /// Total basal insulin delivered in units
+    /// Total basal insulin delivered in units, from temp basal records only
     /// </summary>
     public double TotalDelivered { get; set; }
+
+    /// <summary>
+    /// <see cref="TotalDelivered"/> per day, over <see cref="BasalAnalysisResponse.WindowDays"/>
+    /// </summary>
+    public double TotalDeliveredPerDay { get; set; }
 }
 
-/// <summary>
-/// Comprehensive basal analysis response
-/// </summary>
 public class BasalAnalysisResponse
 {
     /// <summary>
@@ -2051,9 +2025,6 @@ public class BasalAnalysisResponse
     /// </summary>
     public BasalStats Stats { get; set; } = new();
 
-    /// <summary>
-    /// Temp basal information
-    /// </summary>
     public TempBasalInfo TempBasalInfo { get; set; } = new();
 
     /// <summary>
@@ -2067,15 +2038,15 @@ public class BasalAnalysisResponse
     /// </summary>
     public int WindowDays { get; set; }
 
-    /// <summary>
-    /// Start date of the analysis period
-    /// </summary>
     public string StartDate { get; set; } = string.Empty;
 
-    /// <summary>
-    /// End date of the analysis period
-    /// </summary>
     public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Why <see cref="HourlyPercentiles"/> is empty; null when the tenant's timezone resolved. The
+    /// other figures do not depend on the local clock and are served either way.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -2096,7 +2067,6 @@ public class HourlyInsulinDeliveryPoint
 
     /// <summary>
     /// Average insulin from temp adjustments (Algorithm/Manual/Suspended origin)
-    /// and algorithm micro-boluses
     /// </summary>
     public double TempBasal { get; set; }
 
@@ -2106,12 +2076,23 @@ public class HourlyInsulinDeliveryPoint
     public double Basal { get; set; }
 
     /// <summary>
-    /// Average insulin from user boluses
+    /// Average insulin from user-initiated boluses
     /// </summary>
-    public double Bolus { get; set; }
+    public double ManualBolus { get; set; }
 
     /// <summary>
-    /// Average total insulin delivered during this hour
+    /// Average number of user-initiated boluses given in this hour per day, over the same days as
+    /// <see cref="ManualBolus"/>
+    /// </summary>
+    public double ManualBolusesPerDay { get; set; }
+
+    /// <summary>
+    /// Average insulin from algorithm-delivered boluses (SMBs)
+    /// </summary>
+    public double AutomaticBolus { get; set; }
+
+    /// <summary>
+    /// Average total insulin delivered during this hour: basal plus manual and automatic bolus
     /// </summary>
     public double Total { get; set; }
 
@@ -2119,6 +2100,48 @@ public class HourlyInsulinDeliveryPoint
     /// Number of delivery records contributing to this hour
     /// </summary>
     public int Count { get; set; }
+
+    /// <summary>
+    /// Rate (U/h) the profile schedules for this hour, averaged over the requested range weighted by
+    /// the time each schedule was in effect. Independent of delivery: a zero temp basal leaves it
+    /// unchanged. <see cref="ScheduledBasal"/> is the scheduled-origin insulin actually delivered.
+    /// </summary>
+    public double ProfileBasalRate { get; set; }
+}
+
+/// <summary>
+/// One of the three parts the day is split into for <see cref="HourlyInsulinDeliveryResponse"/>:
+/// morning (06:00 to 12:00), afternoon (12:00 to 18:00) and evening/night (18:00 to 06:00 the next
+/// morning), in the user's profile timezone.
+/// </summary>
+public class InsulinDeliveryPeriodTotal
+{
+    /// <summary>
+    /// Units over the period's hours, summed from the hourly averages
+    /// </summary>
+    public double Units { get; set; }
+
+    /// <summary>
+    /// Percentage (0-100) of the daily total
+    /// </summary>
+    public double Percent { get; set; }
+}
+
+/// <summary>
+/// The three day periods and their sum, for one measure of delivery
+/// </summary>
+public class InsulinDeliveryPeriodBreakdown
+{
+    public InsulinDeliveryPeriodTotal Morning { get; set; } = new();
+
+    public InsulinDeliveryPeriodTotal Afternoon { get; set; } = new();
+
+    public InsulinDeliveryPeriodTotal EveningNight { get; set; } = new();
+
+    /// <summary>
+    /// Units over all 24 hours
+    /// </summary>
+    public double DailyTotal { get; set; }
 }
 
 /// <summary>
@@ -2131,6 +2154,16 @@ public class HourlyInsulinDeliveryResponse
     /// One entry per hour of day (0-23)
     /// </summary>
     public List<HourlyInsulinDeliveryPoint> Hours { get; set; } = new();
+
+    /// <summary>
+    /// Periods over <see cref="HourlyInsulinDeliveryPoint.Total"/>, what the stacked chart plots
+    /// </summary>
+    public InsulinDeliveryPeriodBreakdown TotalDeliveryPeriods { get; set; } = new();
+
+    /// <summary>
+    /// Periods over <see cref="HourlyInsulinDeliveryPoint.Basal"/>, what the basal-only chart plots
+    /// </summary>
+    public InsulinDeliveryPeriodBreakdown BasalPeriods { get; set; } = new();
 
     /// <summary>
     /// Distinct local days this response attributes delivered insulin to. Not the length of the
@@ -2147,14 +2180,13 @@ public class HourlyInsulinDeliveryResponse
     /// End date of the analysis period
     /// </summary>
     public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>Why <see cref="Hours"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
-/// <summary>
-/// Complete site change impact analysis result
-/// </summary>
 public class SiteChangeImpactAnalysis
 {
-    /// <summary>Number of site changes analyzed</summary>
     public int SiteChangeCount { get; set; }
 
     /// <summary>Average number of days between site changes</summary>
@@ -2165,6 +2197,9 @@ public class SiteChangeImpactAnalysis
 
     /// <summary>Summary statistics comparing before vs after</summary>
     public SiteChangeImpactSummary Summary { get; set; } = new();
+
+    /// <summary>The consensus band edges the chart draws its target range between.</summary>
+    public required GlycemicThresholds Thresholds { get; set; }
 
     /// <summary>Hours analyzed before site change</summary>
     public int HoursBeforeChange { get; set; }
@@ -2213,6 +2248,12 @@ public class AidSystemMetrics
 
     /// <summary>Per-device time segments with individual metrics</summary>
     public List<AidTimeSegment> Segments { get; set; } = new();
+
+    /// <summary>
+    /// Why no tenant timezone was available, so device start and end dates were read as UTC days;
+    /// null when they followed the tenant's timezone.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -2224,16 +2265,13 @@ public class AidTimeSegment
     /// <summary>Which AID algorithm was active during this segment</summary>
     public AidAlgorithm Algorithm { get; set; }
 
-    /// <summary>Start of the segment</summary>
     public DateTime StartDate { get; set; }
 
-    /// <summary>End of the segment</summary>
     public DateTime EndDate { get; set; }
 
     /// <summary>Duration of the segment in hours</summary>
     public double DurationHours { get; set; }
 
-    /// <summary>Computed metrics for this segment</summary>
     public AidSegmentMetrics Metrics { get; set; } = new();
 }
 
@@ -2251,8 +2289,14 @@ public class AidSegmentMetrics
     /// <summary>Number of loop iterations (applicable to open-source AIDs)</summary>
     public int? LoopCycleCount { get; set; }
 
-    /// <summary>Number of enacted suggestions</summary>
+    /// <summary>Loop cycles the uploader reported enacted, Loop's open-loop cycles included</summary>
     public int? EnactedCount { get; set; }
+
+    /// <summary>
+    /// Loop cycles enacted with the loop closed (<see cref="V4.ApsLoopCycle.EnactedClosedLoop"/>), whose
+    /// time is <see cref="AidActivePercent"/>
+    /// </summary>
+    public int? ClosedLoopCount { get; set; }
 }
 
 /// <summary>
@@ -2264,16 +2308,14 @@ public class AidDetectionContext
     /// <summary>Which AID algorithm to detect metrics for</summary>
     public AidAlgorithm Algorithm { get; set; }
 
-    /// <summary>Start of the detection window</summary>
     public DateTime StartDate { get; set; }
 
-    /// <summary>End of the detection window</summary>
     public DateTime EndDate { get; set; }
 
-    /// <summary>APS snapshots within the segment window (for OS AID strategies)</summary>
-    public IReadOnlyList<V4.ApsSnapshot> ApsSnapshots { get; set; } = [];
+    /// <summary>APS loop cycles within the segment window (for OS AID strategies)</summary>
+    public IReadOnlyList<V4.ApsLoopCycle> LoopCycles { get; set; } = [];
 
-    /// <summary>Temp basals within the segment window (for TBR-based strategies)</summary>
+    /// <summary>Every temp basal read for the report, not only those in the segment (for TBR-based strategies)</summary>
     public IReadOnlyList<V4.TempBasal> TempBasals { get; set; } = [];
 }
 
@@ -2284,7 +2326,6 @@ public class AidDetectionContext
 /// </summary>
 public class DeviceSegmentInput
 {
-    /// <summary>Which AID algorithm this device uses</summary>
     public AidAlgorithm Algorithm { get; set; }
 
     /// <summary>Start of the device's active window</summary>

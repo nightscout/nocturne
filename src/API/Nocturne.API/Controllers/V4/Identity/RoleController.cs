@@ -33,19 +33,28 @@ public class RoleController : ControllerBase
 
     /// <summary>
     /// List roles for the current tenant.
+    /// A <c>roles.manage</c> caller gets every role; a <c>members.invite</c> or <c>members.manage</c> caller gets only the roles it can grant. <c>CanGrant</c> on each role says whether the caller may confer it.
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.GetRolesAsync"/>
+    /// <remarks>
+    /// A <c>roles.manage</c> caller gets every role; a <c>members.invite</c> or <c>members.manage</c> caller gets only the roles it can grant.
+    /// <c>CanGrant</c> on each role says whether the caller may confer it.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TenantRoleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.RolesManage))
+        if (HttpContext.HasScope(Scope.RolesManage))
+            return Ok(await _roleService.GetRolesAsync(_tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct));
+
+        if (!HttpContext.HasScope(Scope.MembersInvite) && !HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
-        var roles = await _roleService.GetRolesAsync(_tenantAccessor.TenantId, ct);
-        return Ok(roles);
+        var assignable = await _roleService.GetAssignableRolesAsync(
+            _tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct);
+        return Ok(assignable);
     }
 
     /// <summary>
@@ -56,18 +65,20 @@ public class RoleController : ControllerBase
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.RolesManage))
             return Forbid();
 
-        var violation = Scope.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        var grantedScopes = HttpContext.GetGrantedScopes();
+        var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
             return GrantProblem(violation);
 
-        var role = await _roleService.CreateRoleAsync(
-            _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, ct);
-        return StatusCode(StatusCodes.Status201Created, role);
+        var result = await _roleService.CreateRoleAsync(
+            _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, grantedScopes, ct);
+        return result.Role is null ? NameProblem(result) : StatusCode(StatusCodes.Status201Created, result.Role);
     }
 
     /// <summary>
@@ -79,23 +90,25 @@ public class RoleController : ControllerBase
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.RolesManage))
             return Forbid();
 
-        var violation = Scope.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        var grantedScopes = HttpContext.GetGrantedScopes();
+        var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
             return GrantProblem(violation);
 
         try
         {
-            var role = await _roleService.UpdateRoleAsync(
-                _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, ct);
-            if (role == null)
+            var result = await _roleService.UpdateRoleAsync(
+                _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, grantedScopes, ct);
+            if (result == null)
                 return NotFound();
 
-            return Ok(role);
+            return result.Role is null ? NameProblem(result) : Ok(result.Role);
         }
         catch (InvalidOperationException ex)
         {
@@ -123,6 +136,10 @@ public class RoleController : ControllerBase
 
         return NoContent();
     }
+
+    private ObjectResult NameProblem(SaveRoleResult result) =>
+        this.ProblemWithCode(
+            result.ErrorCode!, result.ErrorDescription, StatusCodes.Status409Conflict, title: result.ErrorCode);
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal.

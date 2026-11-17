@@ -55,7 +55,6 @@ public interface IOidcAuthService
     /// <param name="state">State parameter for CSRF verification</param>
     /// <param name="expectedState">Expected state value from cookie</param>
     /// <param name="ipAddress">Client IP address</param>
-    /// <param name="userAgent">User agent string</param>
     /// <param name="currentTenantId">
     /// The tenant the login is being performed against (the resolved subdomain tenant).
     /// When set, the resolved subject must be a member of this tenant or no session is issued.
@@ -70,12 +69,7 @@ public interface IOidcAuthService
         Guid? currentTenantId = null
     );
 
-    /// <summary>
-    /// Refresh the session using a refresh token
-    /// </summary>
-    /// <param name="refreshToken">Current refresh token</param>
     /// <param name="ipAddress">Client IP address</param>
-    /// <param name="userAgent">User agent string</param>
     /// <returns>New session tokens or null if refresh failed</returns>
     Task<OidcTokenResponse?> RefreshSessionAsync(
         string refreshToken,
@@ -91,24 +85,18 @@ public interface IOidcAuthService
     /// <returns>Logout result with optional provider logout URL</returns>
     Task<OidcLogoutResult> LogoutAsync(string refreshToken, Guid? providerId = null);
 
-    /// <summary>
-    /// Get user information from the current session
-    /// </summary>
-    /// <param name="subjectId">Subject ID</param>
     /// <returns>User info or null if not found</returns>
     Task<OidcUserInfo?> GetUserInfoAsync(Guid subjectId);
 
     /// <summary>
     /// Validate a session (check if refresh token is valid)
     /// </summary>
-    /// <param name="refreshToken">Refresh token to validate</param>
     /// <returns>Subject ID if valid, null otherwise</returns>
     Task<Guid?> ValidateSessionAsync(string refreshToken);
 
     /// <summary>
     /// Generate an authorization URL for linking an additional OIDC identity to an already-authenticated subject.
     /// </summary>
-    /// <param name="providerId">The OIDC provider ID to link with.</param>
     /// <param name="subjectId">The currently authenticated subject's ID.</param>
     /// <param name="returnUrl">URL to return to after the linking flow completes.</param>
     /// <param name="tenantSlug">Optional tenant slug for subdomain-scoped deployments.</param>
@@ -164,9 +152,6 @@ public class OidcLinkResult
         => new() { Success = false, Error = error, ErrorDescription = description };
 }
 
-/// <summary>
-/// OIDC authorization request
-/// </summary>
 public class OidcAuthorizationRequest
 {
     /// <summary>
@@ -184,9 +169,6 @@ public class OidcAuthorizationRequest
     /// </summary>
     public string? Nonce { get; set; }
 
-    /// <summary>
-    /// Provider ID
-    /// </summary>
     public Guid ProviderId { get; set; }
 
     /// <summary>
@@ -200,14 +182,8 @@ public class OidcAuthorizationRequest
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
-/// <summary>
-/// OIDC callback result
-/// </summary>
 public class OidcCallbackResult
 {
-    /// <summary>
-    /// Whether the callback was successful
-    /// </summary>
     public bool Success { get; set; }
 
     /// <summary>
@@ -255,8 +231,12 @@ public class OidcCallbackResult
     public Guid? ProviderId { get; set; }
 
     /// <summary>
-    /// Create a successful result
+    /// Set when the identity was accepted but the subject has an authenticator enrolled. No
+    /// session is issued; the token is redeemed with a code at <c>POST /api/auth/totp/login</c>,
+    /// as after a passkey assertion.
     /// </summary>
+    public string? StepUpToken { get; set; }
+
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
@@ -273,15 +253,24 @@ public class OidcCallbackResult
             ProviderId = providerId,
         };
 
-    /// <summary>
-    /// Create a failed result
-    /// </summary>
     public static OidcCallbackResult Failed(string error, string? description = null) =>
         new()
         {
             Success = false,
             Error = error,
             ErrorDescription = description,
+        };
+
+    public static OidcCallbackResult SecondFactorRequired(
+        Guid subjectId, string stepUpToken, string? returnUrl, Guid providerId) =>
+        new()
+        {
+            Success = false,
+            Error = "totp_required",
+            SubjectId = subjectId,
+            StepUpToken = stepUpToken,
+            ReturnUrl = returnUrl,
+            ProviderId = providerId,
         };
 
     /// <summary>
@@ -335,60 +324,27 @@ public class OidcTokenResponse
     /// </summary>
     public DateTimeOffset ExpiresAt { get; set; }
 
-    /// <summary>
-    /// Subject ID
-    /// </summary>
     public Guid SubjectId { get; set; }
 }
 
-/// <summary>
-/// OIDC user information
-/// </summary>
 public class OidcUserInfo
 {
-    /// <summary>
-    /// Subject ID
-    /// </summary>
     public Guid SubjectId { get; set; }
 
-    /// <summary>
-    /// Display name
-    /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Email address
-    /// </summary>
     public string? Email { get; set; }
 
-    /// <summary>
-    /// Whether email is verified
-    /// </summary>
     public bool? EmailVerified { get; set; }
 
-    /// <summary>
-    /// Picture URL
-    /// </summary>
     public string? Picture { get; set; }
 
-    /// <summary>
-    /// Assigned roles
-    /// </summary>
     public List<string> Roles { get; set; } = new();
 
-    /// <summary>
-    /// Resolved permissions
-    /// </summary>
     public List<string> Permissions { get; set; } = new();
 
-    /// <summary>
-    /// OIDC provider name
-    /// </summary>
     public string? ProviderName { get; set; }
 
-    /// <summary>
-    /// Last login time
-    /// </summary>
     public DateTimeOffset? LastLoginAt { get; set; }
 
     /// <summary>
@@ -407,14 +363,8 @@ public class OidcUserInfo
     public string? AvatarUrl { get; set; }
 }
 
-/// <summary>
-/// OIDC logout result
-/// </summary>
 public class OidcLogoutResult
 {
-    /// <summary>
-    /// Whether the logout was successful
-    /// </summary>
     public bool Success { get; set; }
 
     /// <summary>
@@ -427,21 +377,12 @@ public class OidcLogoutResult
     /// </summary>
     public string? Error { get; set; }
 
-    /// <summary>
-    /// Create a successful result
-    /// </summary>
     public static OidcLogoutResult Succeeded(string? providerLogoutUrl = null) =>
         new() { Success = true, ProviderLogoutUrl = providerLogoutUrl };
 
-    /// <summary>
-    /// Create a failed result
-    /// </summary>
     public static OidcLogoutResult Failed(string error) => new() { Success = false, Error = error };
 }
 
-/// <summary>
-/// Result of the setup OIDC callback flow.
-/// </summary>
 public class OidcSetupCallbackResult
 {
     public bool Success { get; set; }

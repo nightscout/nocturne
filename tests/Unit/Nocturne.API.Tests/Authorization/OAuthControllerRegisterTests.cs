@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Docs;
 using Nocturne.Core.Contracts.Auth;
 using Xunit;
 
@@ -98,6 +99,30 @@ public class OAuthControllerRegisterTests
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         bad.Value.Should().BeOfType<OAuthError>()
             .Which.Error.Should().Be("invalid_redirect_uri");
+        _clientService.Verify(
+            s => s.RegisterClientAsync(
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<IReadOnlyList<string>>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Register_WithTheScalarSoftwareId_IsRefused()
+    {
+        var controller = CreateController();
+        var request = new ClientRegistrationRequest
+        {
+            SoftwareId = ScalarAuthProvider.ScalarSoftwareId,
+            Scope = "glucose.read",
+            RedirectUris = ["https://elsewhere.example/callback"],
+        };
+
+        var result = await controller.Register(request, _redirectUriValidator, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value.Should().BeOfType<OAuthError>()
+            .Which.Error.Should().Be("invalid_client_metadata");
         _clientService.Verify(
             s => s.RegisterClientAsync(
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),

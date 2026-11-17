@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import type { TimeFormat } from "$lib/stores/appearance-store.svelte";
+import type { TimeFormat } from "#lib/stores/appearance-store.svelte.js";
 
 // formatting.ts pulls in appearance-store, which pulls in mode-watcher (no node
 // export). Stub the chain, same as formatting.test.ts.
-vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("$app/env", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
   PersistedState: class {
@@ -13,7 +13,7 @@ vi.mock("runed", () => ({
     }
   },
 }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   glucoseUnits: { current: "mg/dl" },
   timeFormat: { current: "12" },
   regionFormat: { current: "" },
@@ -21,7 +21,7 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
 }));
 
 const { formatClockTime } = await import("./clock-time");
-const store = await import("$lib/stores/appearance-store.svelte");
+const store = await import("#lib/stores/appearance-store.svelte.js");
 
 describe("formatClockTime", () => {
   const afternoon = new Date(2026, 11, 31, 14, 5);

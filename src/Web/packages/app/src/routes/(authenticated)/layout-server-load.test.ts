@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const environment = vi.hoisted(() => ({ browser: false }));
-vi.mock("$app/environment", () => ({
+vi.mock("$app/env", () => ({
   get browser() {
     return environment.browser;
   },
@@ -9,8 +9,9 @@ vi.mock("$app/environment", () => ({
   dev: false,
 }));
 import { isRedirect, type Cookies } from "@sveltejs/kit";
-import { classifyHost, isTenantlessHost } from "$lib/server/tenantless-host";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
+import { classifyHost, isTenantlessHost } from "#lib/server/tenantless-host.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 import { load } from "./+layout.server";
 import { load as universalLoad } from "./+layout";
 
@@ -48,10 +49,20 @@ interface Situation {
   permissions?: string[];
   /** The cookies the browser presents on this host. */
   cookies?: Record<string, string>;
+  /** What the backup sign-in prompt endpoint answers; a number rejects with that HTTP status. */
+  backupSignInPrompt?: { show: boolean } | number;
+  /** The caller's tenant memberships; a number rejects with that HTTP status. */
+  myTenants?: { slug: string; displayName?: string }[] | number;
 }
 
 /** URL properties the server load read outside `untrack`, which SvelteKit would re-run it on. */
 let trackedUrlReads: string[] = [];
+let backupSignInPromptReads = 0;
+let myTenantsReachableOnly: (boolean | undefined)[] = [];
+let apiCalls: string[] = [];
+
+/** The invalidation keys the server load registered. */
+let declaredDependencies: string[] = [];
 
 function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T } {
   trackedUrlReads = [];
@@ -76,6 +87,10 @@ function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T }
 }
 
 async function runLoad(situation: Situation) {
+  declaredDependencies = [];
+  backupSignInPromptReads = 0;
+  myTenantsReachableOnly = [];
+  apiCalls = [];
   const { kind } = classifyHost(situation.host, BASE, situation.dashboardSlugs ?? []);
   const tenantless = isTenantlessHost(kind, situation.apexResolvesTenant ?? false);
   const shareHost = kind === "share";
@@ -100,8 +115,27 @@ async function runLoad(situation: Situation) {
     apiClient: {
       status: {
         getStatus: async () => {
+          apiCalls.push("status");
           if (typeof situation.status === "number") throw { status: situation.status };
           return situation.status;
+        },
+      },
+      backupSignInPrompt: {
+        getBackupSignInPrompt: async () => {
+          backupSignInPromptReads++;
+          apiCalls.push("prompt");
+          const answer = situation.backupSignInPrompt ?? { show: false };
+          if (typeof answer === "number") throw { status: answer };
+          return answer;
+        },
+      },
+      myTenants: {
+        getMyTenants: async (reachableOnly?: boolean) => {
+          apiCalls.push("myTenants");
+          const answer = situation.myTenants ?? [];
+          if (typeof answer === "number") throw { status: answer };
+          myTenantsReachableOnly.push(reachableOnly);
+          return answer;
         },
       },
       passkey: {
@@ -119,6 +153,7 @@ async function runLoad(situation: Situation) {
     cookies,
     url,
     untrack,
+    depends: (key: string) => declaredDependencies.push(key),
     parent: async () => ({ tenantless }),
   };
 
@@ -133,10 +168,15 @@ async function runLoad(situation: Situation) {
 /** The page data the load returned, for situations that render rather than redirect. */
 async function loadedData(
   situation: Situation
-): Promise<{ canViewRealtimeData: boolean; user: { name: string } | null }> {
+): Promise<{
+  canViewRealtimeData: boolean;
+  user: { name: string } | null;
+  tenantTargets: { slug: string; displayName: string | null }[];
+}> {
   return (await runLoad(situation)) as {
     canViewRealtimeData: boolean;
     user: { name: string } | null;
+    tenantTargets: { slug: string; displayName: string | null }[];
   };
 }
 
@@ -252,7 +292,7 @@ describe("(authenticated) layout load — where each host situation lands", () =
   });
 });
 
-describe("(authenticated) layout load — the public share host", () => {
+describe("(authenticated) layout load: the public share host", () => {
   const SHARE = `k7m2q9x4r3wt.share.${BASE}`;
 
   /** The tenant behind a live share link: set up, resolved, and granting anonymous read. */
@@ -433,6 +473,31 @@ describe("(authenticated) layout load — realtime data", () => {
   });
 });
 
+describe("(authenticated) layout load — the onboarding core gate on the coach tours", () => {
+  const onboardingComplete = async (situation: Situation) =>
+    ((await runLoad(situation)) as { onboardingComplete: boolean }).onboardingComplete;
+
+  it("opens once the tenant's core is confirmed complete", async () => {
+    await expect(
+      onboardingComplete({
+        host: `acme.${BASE}`,
+        status: { status: "ok", tenantSlug: "acme" },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBe(true);
+  });
+
+  it("stays shut on a share host, which never checks the core", async () => {
+    await expect(
+      onboardingComplete({
+        host: `k7m2q9x4r3wt.share.${BASE}`,
+        status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBe(false);
+  });
+});
+
 describe("(authenticated) layout load — client navigation", () => {
   it("reads the URL only untracked, so navigating does not re-run the server load", async () => {
     await loadedData({
@@ -482,6 +547,27 @@ describe("(authenticated) layout load — client navigation", () => {
         parent: async () => ({ tenantless: false }),
       } as unknown as UniversalLoadEvent)
     ).resolves.toBe(data);
+  });
+});
+
+describe("(authenticated) layout load — revalidation", () => {
+  it("registers the shell key, so invalidating it re-runs the load without a navigation", async () => {
+    await loadedData({
+      host: `acme.${BASE}`,
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(declaredDependencies).toEqual([SHELL_DATA_KEY]);
+  });
+
+  it("registers the shell key before it redirects a visitor whose session has gone", async () => {
+    await redirectLocation({
+      host: `acme.${BASE}`,
+      signedIn: false,
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(declaredDependencies).toEqual([SHELL_DATA_KEY]);
   });
 });
 
@@ -591,5 +677,84 @@ describe("(authenticated) layout load — a session that ended since the server 
     await expect(
       locationOf(navigate({ cookie: "", data: { user: null, isGuestSession: false } }))
     ).resolves.toBeNull();
+  });
+});
+
+describe("(authenticated) layout load: backup sign-in prompt", () => {
+  const tenant = { status: { status: "ok", tenantSlug: "sam" }, authStatus: { onboardingCompleted: true } };
+
+  it("hands the backend's answer to the layout so the prompt renders on the server", async () => {
+    const data = await runLoad({ host: `sam.${BASE}`, ...tenant, backupSignInPrompt: { show: true } });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: true });
+    expect(backupSignInPromptReads).toBe(1);
+  });
+
+  it("starts the read with the status call rather than after it", async () => {
+    await runLoad({ host: `sam.${BASE}`, ...tenant, backupSignInPrompt: { show: true } });
+
+    expect(apiCalls.slice(0, 3).sort()).toEqual(["myTenants", "prompt", "status"]);
+  });
+
+  it("hides the prompt rather than failing the shell when the read fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const data = await runLoad({ host: `sam.${BASE}`, ...tenant, backupSignInPrompt: 500 });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: false });
+  });
+
+  it("does not ask for a share visitor, who has no account", async () => {
+    const data = await runLoad({
+      host: `k7m2q9x4r3wt.share.${BASE}`,
+      status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+      authStatus: { onboardingCompleted: true },
+      backupSignInPrompt: { show: true },
+    });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: false });
+    expect(backupSignInPromptReads).toBe(0);
+  });
+});
+
+describe("(authenticated) layout load: the tenant switcher targets", () => {
+  const tenantHost = {
+    host: `acme.${BASE}`,
+    status: { status: "ok", tenantSlug: "acme" },
+    authStatus: { onboardingCompleted: true },
+  } as const;
+
+  it("offers the tenants the API says a member can reach", async () => {
+    const data = await loadedData({
+      ...tenantHost,
+      myTenants: [
+        { slug: "acme", displayName: "Acme" },
+        { slug: "bravo" },
+      ],
+    });
+
+    expect(data.tenantTargets).toEqual([
+      { slug: "acme", displayName: "Acme" },
+      { slug: "bravo", displayName: null },
+    ]);
+    expect(myTenantsReachableOnly).toEqual([true]);
+  });
+
+  it("reads no memberships for a signed-out visitor", async () => {
+    const data = await loadedData({
+      host: `k7m2q9x4r3wt.share.${BASE}`,
+      status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+      authStatus: { onboardingCompleted: true },
+      myTenants: [{ slug: "acme" }, { slug: "bravo" }],
+    });
+
+    expect(data.tenantTargets).toEqual([]);
+    expect(apiCalls).not.toContain("myTenants");
+  });
+
+  it("offers none rather than failing the shell when the read fails", async () => {
+    const data = await loadedData({ ...tenantHost, myTenants: 500 });
+
+    expect(data.tenantTargets).toEqual([]);
   });
 });

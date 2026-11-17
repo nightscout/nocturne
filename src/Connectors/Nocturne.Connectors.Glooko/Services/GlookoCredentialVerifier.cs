@@ -1,7 +1,10 @@
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Xt;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -12,10 +15,17 @@ namespace Nocturne.Connectors.Glooko.Services;
 ///     test — the emailed code makes the sign-in interactive — so the stored token is checked for
 ///     presence, expiry and acceptance by the server for a real session.
 /// </summary>
-public class GlookoCredentialVerifier(GlookoAuthTokenProvider tokenProvider, IGlookoXtDataClient? xtDataClient = null)
-    : ConnectorCredentialVerifier<GlookoConnectorConfiguration>
+public class GlookoCredentialVerifier(
+    CredentialVerificationTokenProvider<GlookoAuthTokenProvider> tokenProvider,
+    IConnectorRegistration<GlookoConnectorConfiguration> registration,
+    IConnectorConfigurationService configService,
+    IGlookoXtDataClient? xtDataClient = null,
+    TimeProvider? timeProvider = null)
+    : ConnectorCredentialVerifier<GlookoConnectorConfiguration>(registration, configService)
 {
     public override string ConnectorId => "glooko";
+
+    private DateTime Now => (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
 
     protected override async Task<ConnectorCredentialVerificationResult> VerifyConfiguredAsync(
         GlookoConnectorConfiguration config, CancellationToken ct)
@@ -23,7 +33,7 @@ public class GlookoCredentialVerifier(GlookoAuthTokenProvider tokenProvider, IGl
         if (config.IsXt)
             return await VerifyXtAsync(config, ct);
 
-        var authenticated = await tokenProvider.VerifyCredentialsAsync(config, ct);
+        var authenticated = await tokenProvider.Provider.VerifyCredentialsAsync(config, ct);
 
         return authenticated
             ? ConnectorCredentialVerificationResult.Verified()
@@ -38,7 +48,7 @@ public class GlookoCredentialVerifier(GlookoAuthTokenProvider tokenProvider, IGl
             return ConnectorCredentialVerificationResult.Failed(
                 "Glooko XT is not connected yet. Use \"Connect Glooko XT\" to sign in with the emailed code.");
 
-        if (GlookoXtJwt.TryGetExpiry(token) is { } expiry && expiry <= DateTime.UtcNow)
+        if (GlookoXtJwt.TryGetExpiry(token) is { } expiry && expiry <= Now)
             return ConnectorCredentialVerificationResult.Failed(
                 "The Glooko XT sign-in has expired. Sign in again with a new emailed code.");
 
@@ -48,7 +58,7 @@ public class GlookoCredentialVerifier(GlookoAuthTokenProvider tokenProvider, IGl
         try
         {
             await using var session = await xtDataClient.ConnectAsync(GlookoXtConstants.ServerUrl, token, ct);
-            var now = DateTime.UtcNow;
+            var now = Now;
             await session.GetCollectedDataAsync(now.AddMinutes(-5), now, ct);
             return ConnectorCredentialVerificationResult.Verified();
         }
@@ -56,7 +66,7 @@ public class GlookoCredentialVerifier(GlookoAuthTokenProvider tokenProvider, IGl
         {
             return ConnectorCredentialVerificationResult.Failed(ex.Message);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, ct))
         {
             return ConnectorCredentialVerificationResult.Failed($"Glooko XT could not be reached: {ex.Message}");
         }

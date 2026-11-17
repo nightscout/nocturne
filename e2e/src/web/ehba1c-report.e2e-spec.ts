@@ -4,13 +4,16 @@ import { expect, signIn, test } from "./fixtures.ts";
 test.describe("eHbA1c report", () => {
   test("plots a lab result and names it in the tooltip", async ({ page, seed }) => {
     const tenant = await seed();
+    // The timeline is grouped by local day, so a tenant without a time zone has no chart.
+    const patient = await tenant.api.ok<Record<string, unknown>>("GET", "/api/v4/patient-record");
+    await tenant.api.ok("PUT", "/api/v4/patient-record", { ...patient, timezone: "UTC" });
     // Two days of readings: each timeline point needs readings in its trailing window, and
     // uploading them directly is far quicker than the sample-data seeder.
     await postEntries(tenant.api, sgvSeries({ count: 2 * 288, valueAt: (i) => 140 + 30 * Math.sin(i / 20) }));
     const measuredAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
     measuredAt.setUTCHours(0, 0, 0, 0);
     await tenant.api.ok("POST", "/api/v4/lab-results/hba1c", {
-      measuredAt: measuredAt.toISOString(),
+      measuredAt: measuredAt.toISOString().slice(0, 10),
       valuePercent: 6.4,
       note: "E2E lab draw",
     });

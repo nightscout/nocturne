@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BasalSchedule
 /// </summary>
 [Table("basal_schedules")]
-public class BasalScheduleEntity : V4TimeSeriesEntityBase
+public class BasalScheduleEntity : V4TimeSeriesEntityBase, IProfileScopedEntity
 {
     /// <summary>
     /// Profile name this basal schedule belongs to

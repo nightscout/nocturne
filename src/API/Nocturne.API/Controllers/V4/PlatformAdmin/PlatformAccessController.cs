@@ -1,14 +1,13 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -44,7 +43,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 [Route("api/auth/platform-access")]
 [AllowAnonymous]
 public class PlatformAccessController(
-    NocturneDbContext dbContext,
+    ITenantRepository tenants,
     IJwtService jwtService,
     IAuthAuditService authAudit,
     IOptions<OidcOptions> oidcOptions,
@@ -88,10 +87,7 @@ public class PlatformAccessController(
         }
 
         // The tenants table is not RLS-scoped, so this resolves any tenant by slug.
-        var target = await dbContext.Tenants.AsNoTracking()
-            .Where(t => t.Slug == tenant)
-            .Select(t => new { t.Id, t.Slug, t.IsActive })
-            .FirstOrDefaultAsync(ct);
+        var target = await tenants.FindBySlugAsync(tenant, ct);
 
         if (target is null)
             return Problem(detail: $"No tenant is registered under the slug '{tenant}'.", statusCode: StatusCodes.Status404NotFound, title: "Not Found");

@@ -27,7 +27,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
-        _repository = new MeterGlucoseRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), _logger.Object);
+        _repository = new MeterGlucoseRepository(new TestNocturneDbContextFactory(_context), new SystemAuditContext(), _logger.Object);
     }
 
     public void Dispose()

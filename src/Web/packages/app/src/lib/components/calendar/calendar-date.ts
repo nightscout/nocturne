@@ -39,19 +39,24 @@ export function firstDayOfWeek(locale: string): number {
   return startOfWeek(A_SUNDAY, locale).toDate(getLocalTimeZone()).getDay();
 }
 
+/** Zero-based position of the date's weekday in a week that starts on `firstDay` (0 = Sunday). */
+export function weekdayIndex(date: Date, firstDay: number): number {
+  return (date.getDay() - firstDay + 7) % 7;
+}
+
 /**
  * Weekday names for a locale, ordered from its first day of the week.
  *
- * `maxLength` clips each name. Some locales have no genuinely abbreviated
+ * `start` overrides the locale's first day. `maxLength` clips each name. Some locales have no genuinely abbreviated
  * weekday form — pt-PT's "short" names are the full words ("domingo") — which
  * would blow out a fixed seven-column header. Omit it where width is free.
  */
 export function weekdayLabels(
   locale: string,
   weekday: Intl.DateTimeFormatOptions["weekday"] = "short",
-  maxLength?: number
+  maxLength?: number,
+  start: number = firstDayOfWeek(locale)
 ): string[] {
-  const start = firstDayOfWeek(locale);
   const format = new Intl.DateTimeFormat(locale, { weekday });
   return Array.from({ length: 7 }, (_, i) => {
     const label = format.format(daysAfterAnchorSunday(start + i));
@@ -79,6 +84,5 @@ export function leadingBlankDays(
   month: number,
   locale: string
 ): number {
-  const firstOfMonth = new Date(year, month, 1).getDay();
-  return (firstOfMonth - firstDayOfWeek(locale) + 7) % 7;
+  return weekdayIndex(new Date(year, month, 1), firstDayOfWeek(locale));
 }

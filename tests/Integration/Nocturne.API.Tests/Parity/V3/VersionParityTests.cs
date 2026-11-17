@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// Parity tests for /api/v3/version endpoint.
 /// Returns API version information.
 /// </summary>
+[Collection(ParityShards.Two)]
 public class VersionParityTests : ParityTestBase
 {
     public VersionParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -17,7 +18,6 @@ public class VersionParityTests : ParityTestBase
     {
         // Version endpoint has fields that will differ between implementations
         return ComparisonOptions.Default.WithIgnoredFields(
-            "version",        // Nocturne has different version string
             "apiVersion",     // May differ
             "srvDate",        // Current server timestamp
             "storage",        // Storage backend differs (PostgreSQL vs MongoDB)

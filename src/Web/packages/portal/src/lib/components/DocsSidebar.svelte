@@ -13,10 +13,12 @@
     import LayoutGrid from "@lucide/svelte/icons/layout-grid";
     import Package from "@lucide/svelte/icons/package";
     import Utensils from "@lucide/svelte/icons/utensils";
+    import ChartLine from "@lucide/svelte/icons/chart-line";
     import Timer from "@lucide/svelte/icons/timer";
+    import HeartPulse from "@lucide/svelte/icons/heart-pulse";
     import ChevronRight from "@lucide/svelte/icons/chevron-right";
-    import { DOCS_NAV_SECTIONS, type DocsSectionId } from "$lib/data/docs-nav";
-    import { track } from "$lib/analytics";
+    import { DOCS_NAV_SECTIONS, type DocsSectionId } from "#lib/data/docs-nav.js";
+    import { track } from "#lib/analytics.js";
 
     // Exhaustive by type: a new section in docs-nav.ts will not compile until it has an icon.
     const ICONS: Record<DocsSectionId, typeof Rocket> = {
@@ -25,9 +27,11 @@
         authentication: Shield,
         sharing: Share2,
         food: Utensils,
+        reports: ChartLine,
         trackers: Timer,
         alerts: Bell,
         bots: Bot,
+        "data-sources": HeartPulse,
         configuration: Settings,
         observability: Activity,
         "windows-widget": LayoutGrid,
@@ -52,7 +56,7 @@
             <ul class="space-y-1 ml-6">
                 {#each section.items as item (item.href)}
                     <li>
-                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a Pathname from docs-nav.ts, checked against the route manifest -->
+                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a ResolvedPathname from docs-nav.ts, checked against the route manifest -->
                         <a href={item.href}
                             onclick={() => track("Docs Nav", { section: section.id })}
                             class="flex items-center gap-2 py-1.5 text-sm transition-colors {isActive(item.href)

@@ -9,6 +9,8 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -31,14 +33,16 @@ public class MigrationJobServiceTests
     {
         var dbName = $"migration-jobs-{Guid.NewGuid():N}";
         var provider = existingProvider ?? new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .AddDataServices()
             .BuildServiceProvider();
 
         var service = new MigrationJobService(
             NullLogger<MigrationJobService>.Instance,
             provider,
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
 
         return (service, provider);
     }
@@ -115,8 +119,8 @@ public class MigrationJobServiceTests
     {
         var (service, _) = CreateService();
 
-        // Refusing to start without a resolved tenant prevents the detached migration task from
-        // falling back to a stale pooled DbContext tenant and importing into the wrong tenant.
+        // The detached migration task writes under whatever tenant it is given, so it refuses to
+        // start without one.
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.StartMigrationAsync(ApiRequest(), tenantContext: null));
     }
@@ -182,7 +186,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             MigrationJobHarness.BuildProvider(handler),
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
         var tenant = Tenant(Guid.NewGuid());
 
         try
@@ -214,7 +219,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             MigrationJobHarness.BuildProvider(handler, interceptor: terminalPersist),
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
         var tenant = Tenant(Guid.NewGuid());
 
         try
@@ -249,7 +255,8 @@ public class MigrationJobServiceTests
             NullLogger<MigrationJobService>.Instance,
             MigrationJobHarness.BuildProvider(handler),
             new ConfigurationBuilder().Build(),
-            new TenantRunGuard());
+            new TenantRunGuard(),
+            TimeProvider.System);
 
         var first = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
         var second = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
@@ -287,6 +294,47 @@ public class MigrationJobServiceTests
 
             return result;
         }
+    }
+
+    private static MigrationJob CreateJob()
+    {
+        var (_, provider) = CreateService();
+        var id = Guid.NewGuid();
+        return new MigrationJob(
+            id,
+            Guid.NewGuid(),
+            ApiRequest(),
+            new MigrationJobInfo { Id = id, Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow },
+            tenantContext: null,
+            NullLogger.Instance,
+            provider,
+            TimeProvider.System);
+    }
+
+    [Fact]
+    public void UpdateCollectionProgress_keeps_a_recorded_failure_reason()
+    {
+        var job = CreateJob();
+        job.UpdateCollectionProgress("entries", 10, 4, 0, false);
+        job.RecordCollectionFailure("entries", "the source stopped answering");
+
+        job.UpdateCollectionProgress("entries", 10, 5, 1, true);
+
+        var progress = job.GetStatus().CollectionProgress["entries"];
+        progress.FailureReason.Should().Be("the source stopped answering");
+        progress.DocumentsMigrated.Should().Be(5);
+        progress.DocumentsFailed.Should().Be(1);
+    }
+
+    [Fact]
+    public void UpdateCollectionProgress_keeps_a_recorded_skip_reason()
+    {
+        var job = CreateJob();
+        job.RecordCollectionSkipped("profile", "no profile endpoint");
+
+        job.UpdateCollectionProgress("profile", 3, 3, 0, true);
+
+        job.GetStatus().CollectionProgress["profile"].SkippedReason.Should().Be("no profile endpoint");
     }
 
     /// <summary>Holds every source request until released, keeping the job in a live state.</summary>

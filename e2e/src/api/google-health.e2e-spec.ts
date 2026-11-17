@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { env } from "../helpers/env.ts";
-import { googleConsent, googleOptions, googleReadings, waitForGoogleSync } from "../helpers/google-health.ts";
+import { ApiClient } from "../helpers/http.ts";
+import { googleClientId, googleConsent, googleOptions, googleReadings, googleRedirectUri, waitForGoogleSync } from "../helpers/google-health.ts";
 import { seedTenant } from "../helpers/tenant.ts";
 
 describe("Google Health OAuth security and sleep deletion", () => {
   it("invalidates a pending OAuth callback on purge and allows a fresh sign-in", async () => {
     const tenant = await seedTenant();
-    await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions(tenant));
+    await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions());
     const pending = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const callback = await googleConsent(pending.url);
+    const callback = await googleConsent(pending.url, tenant.slug);
     await tenant.api.ok("DELETE", "/api/v4/google-health/readings");
     const rejected = await tenant.api.post<{ detail: string }>("/api/v4/google-health/complete", {
       code: callback.searchParams.get("code"), state: callback.searchParams.get("state"),
@@ -19,7 +20,7 @@ describe("Google Health OAuth security and sleep deletion", () => {
     expect(await googleReadings(tenant)).toEqual({ heart: [], steps: [], weight: [], sleep: [] });
 
     const fresh = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const freshCallback = await googleConsent(fresh.url);
+    const freshCallback = await googleConsent(fresh.url, tenant.slug);
     expect(freshCallback.searchParams.get("state")).not.toBe(callback.searchParams.get("state"));
     await tenant.api.ok("POST", "/api/v4/google-health/complete", {
       code: freshCallback.searchParams.get("code"), state: freshCallback.searchParams.get("state"),
@@ -29,9 +30,9 @@ describe("Google Health OAuth security and sleep deletion", () => {
 
   it("rejects wrong state and replayed authorization callbacks", async () => {
     const tenant = await seedTenant();
-    await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions(tenant));
+    await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions());
     const start = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const callback = await googleConsent(start.url);
+    const callback = await googleConsent(start.url, tenant.slug);
     const payload = { code: callback.searchParams.get("code"), state: callback.searchParams.get("state") };
     const wrong = await tenant.api.post<{ detail: string }>("/api/v4/google-health/complete", { ...payload, state: "wrong-state" });
     expect(wrong.status).toBe(400);
@@ -50,10 +51,10 @@ describe("Google Health OAuth security and sleep deletion", () => {
 
   it("imports all pages, refreshes tokens and keeps user-deleted sleep deleted", async () => {
     const tenant = await seedTenant();
-    const options = googleOptions(tenant);
+    const options = googleOptions();
     await tenant.api.ok("PUT", "/api/v4/google-health/options", options);
     const start = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const callback = await googleConsent(start.url);
+    const callback = await googleConsent(start.url, tenant.slug);
     await tenant.api.ok("POST", "/api/v4/google-health/complete", {
       code: callback.searchParams.get("code"), state: callback.searchParams.get("state"),
     });
@@ -69,10 +70,31 @@ describe("Google Health OAuth security and sleep deletion", () => {
     const repeated = await googleReadings(tenant);
     expect(repeated.sleep.map((row) => row.id)).toEqual([first.sleep[1]!.id]);
     for (const key of ["heart", "steps", "weight"] as const) expect(repeated[key]).toHaveLength(2);
-    const calls = await (await fetch(`${env.mocksUrl}/googlehealth/__requests`)).json() as { path: string; body: string; query: Record<string, string> }[];
-    const ownTokens = calls.filter((call) => call.path === "/oauth2.googleapis.com/token" &&
-      new URLSearchParams(call.body).get("client_id") === options.clientId);
-    expect(ownTokens.some((call) => new URLSearchParams(call.body).get("grant_type") === "authorization_code")).toBe(true);
-    expect(ownTokens.some((call) => new URLSearchParams(call.body).get("grant_type") === "refresh_token")).toBe(true);
+    const stats = await (await fetch(`${env.mocksUrl}/googlehealth/__controls?account=${tenant.slug}`)).json() as { grants: string[] };
+    expect(stats.grants).toContain("authorization_code");
+    expect(stats.grants).toContain("refresh_token");
+  });
+
+  it("signs every tenant in through the instance client and returns via the apex callback", async () => {
+    const tenant = await seedTenant();
+    await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions());
+    const status = await tenant.api.ok<{ available: boolean }>("GET", "/api/v4/google-health");
+    expect(status.available).toBe(true);
+    const start = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
+    const authorization = new URL(start.url).searchParams;
+    expect(authorization.get("client_id")).toBe(googleClientId);
+    expect(authorization.get("redirect_uri")).toBe(googleRedirectUri);
+
+    const callback = await googleConsent(start.url, tenant.slug);
+    expect(`${callback.origin}${callback.pathname}`).toBe(googleRedirectUri);
+    const https = { "x-forwarded-proto": "https" };
+    const apex = await new ApiClient({ host: callback.host }).get(callback.pathname + callback.search, https);
+    expect(apex.status).toBe(302);
+    const relayed = new URL(apex.headers.get("location")!);
+    expect(relayed.origin).toBe(env.tenantSecureWebUrl(tenant.slug));
+    expect(relayed.search).toBe(callback.search);
+    const onTenant = await new ApiClient({ host: relayed.host }).get(relayed.pathname + relayed.search, https);
+    expect(onTenant.status).toBe(303);
+    expect(onTenant.headers.get("location")).toBe(`/settings/connectors/google-health/callback${callback.search}`);
   });
 });

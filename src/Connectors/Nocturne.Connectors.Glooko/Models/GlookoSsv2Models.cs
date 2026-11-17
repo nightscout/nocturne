@@ -102,11 +102,14 @@ public class GlookoEgv
 
     [JsonPropertyName("systemTime")] public string? SystemTime { get; set; }
 
+    /// <summary>Real-UTC upload time (the app stamps it from an NTP-style server-time probe).</summary>
+    [JsonPropertyName("syncTimestamp")] public string? SyncTimestamp { get; set; }
+
     /// <summary>
     ///     Glucose in mg/dL × 100 (integer encoding for 2-decimal precision), always mg/dL regardless of
     ///     the account's display units — same encoding as the v2 <c>cgm/readings</c> feed.
     /// </summary>
-    [JsonPropertyName("glucoseValue")] public double GlucoseValue { get; set; }
+    [JsonPropertyName("glucoseValue")] public double? GlucoseValue { get; set; }
 
     [JsonPropertyName("trendArrow")] public string? TrendArrow { get; set; }
 

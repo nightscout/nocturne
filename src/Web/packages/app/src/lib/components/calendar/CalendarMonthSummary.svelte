@@ -1,15 +1,10 @@
 <script lang="ts">
-  import { formatGlucoseValue } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
+  import { formatGlucoseValue } from "#lib/utils/formatting.js";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
+  import type { PunchCardMonthSummary } from "#lib/api/index.js";
 
   interface Props {
-    monthSummary: {
-      totalReadings: number;
-      inRangePercent: number;
-      avgGlucose: number;
-      avgDailyCarbs: number;
-      tdd: number;
-    };
+    monthSummary?: PunchCardMonthSummary;
     units: GlucoseUnits;
     unitLabel: string;
   }
@@ -21,35 +16,35 @@
   }: Props = $props();
 </script>
 
-{#if monthSummary.totalReadings > 0}
+{#if (monthSummary?.totalReadings ?? 0) > 0}
   <div class="@container mt-4 pt-4 border-t">
   <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
     <div class="text-center">
       <div class="text-2xl font-bold text-glucose-in-range">
-        {monthSummary.inRangePercent.toFixed(1)}%
+        {(monthSummary?.inRangePercent ?? 0).toFixed(1)}%
       </div>
       <div class="text-sm text-muted-foreground">Avg TIR</div>
     </div>
     <div class="text-center">
       <div class="text-2xl font-bold">
-        {formatGlucoseValue(monthSummary.avgGlucose, units)}
+        {formatGlucoseValue(monthSummary?.avgGlucose ?? 0, units)}
         <span class="text-sm font-normal text-muted-foreground">
           {unitLabel}
         </span>
       </div>
-      <div class="text-sm text-muted-foreground">Avg Glucose</div>
+      <div class="text-sm text-muted-foreground">Avg glucose</div>
     </div>
     <div class="text-center">
       <div class="text-2xl font-bold">
-        {monthSummary.avgDailyCarbs.toFixed(0)}g
+        {monthSummary?.avgDailyCarbs != null ? `${monthSummary.avgDailyCarbs.toFixed(0)}g` : "n/a"}
       </div>
       <div class="text-sm text-muted-foreground">
-        Avg Daily Carbs
+        Avg daily carbs
       </div>
     </div>
     <div class="text-center">
       <div class="text-2xl font-bold">
-        {monthSummary.tdd.toFixed(1)}U
+        {monthSummary?.tdd != null ? `${monthSummary.tdd.toFixed(1)}U` : "n/a"}
       </div>
       <div class="text-sm text-muted-foreground">
         Avg TDD

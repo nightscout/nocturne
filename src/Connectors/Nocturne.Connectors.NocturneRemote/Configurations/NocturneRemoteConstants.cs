@@ -14,6 +14,7 @@ public static class NocturneRemoteConstants
     public const string Notes = "/api/v4/observations/notes";
     public const string DeviceEvents = "/api/v4/observations/device-events";
     public const string StateSpans = "/api/v4/state-spans";
+    public const string ProfileActivations = "/api/v4/profile/activations";
     public const string ProfileRecords = "/api/v4/profile/records";
     public const string ApsSnapshots = "/api/v4/device-status/aps";
     public const string PumpSnapshots = "/api/v4/device-status/pump";

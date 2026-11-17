@@ -1,15 +1,17 @@
 using Nocturne.API.Services.Audit;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.V4;
 
 /// <summary>
-/// The create-or-update-by-<c>LegacyId</c> body and the bulk-insert tail shared by the
-/// repository-backed decomposers.
+/// The bulk create-or-update-by-<c>LegacyId</c> writes, the write onto a row resolved by its id, and
+/// the correlation and attribution rules shared by the repository-backed decomposers.
 /// </summary>
 public abstract class DecomposerBase
 {
@@ -18,121 +20,413 @@ public abstract class DecomposerBase
     protected DecomposerBase(ILogger logger) => Logger = logger;
 
     /// <summary>
-    /// Create-or-update under <paramref name="legacyId"/>. <paramref name="beforeWrite"/> runs once the
-    /// stored record is known and before the write, so device-attributed types can settle their
-    /// attribution against it; see <see cref="StampAttributionAsync"/>.
+    /// Writes <paramref name="model"/> onto <paramref name="stored"/>, a row its caller resolved by its
+    /// own id rather than a legacy id, so it may carry none or another one for a bulk upsert to match
+    /// it by; or creates <paramref name="model"/> when nothing is stored, counting a create the
+    /// recreation guard refuses in <see cref="DecompositionResult.SkippedDeleted"/>. A model that
+    /// resolved no device keeps the stored one, as a bulk upsert does
+    /// (<see cref="IPatientDeviceLinked"/>).
     /// </summary>
-    /// <remarks>
-    /// <paramref name="preserveStoredCorrelationId"/> treats the stored correlation id as belonging to
-    /// the row rather than to the decomposition that last touched it. A decomposer mints a fresh id per
-    /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
-    /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
-    /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
-    /// and appends to every index on the table; Npgsql writes a <see cref="Guid"/> big-endian, so a
-    /// UUID v7 id is byte-monotonic in the btree and those appends rarely refill the pages the dead
-    /// entries freed — only vacuum returns an entirely empty one, and not before two cycles — which is
-    /// why density collapses rather than settling. An empty stored id is ignored, so it still
-    /// self-heals on the next write rather than being frozen and stamped across the group; a non-empty
-    /// one is preserved regardless of origin, since nothing distinguishes a client-supplied id from a
-    /// decomposer-minted one.
-    /// <para>
-    /// Only an anchor record may set this, and only where the caller then stamps the rest of the group
-    /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
-    /// written in separate transactions, so one lost to a cancelled sync is recreated under a fresh id
-    /// while the survivors keep the old one, and a reader that loads siblings by correlation id then
-    /// silently returns nothing. Rewriting the id everywhere on every sync is what currently repairs
-    /// that, so removing the rewrite without converging the group would make the damage permanent.
-    /// A group whose members are not all upserted under a shared legacy id has no anchor to converge
-    /// on and must not set this at all: <see cref="DeviceStatusDecomposer"/> creates its extras row
-    /// keyed by the freshly minted id and carrying no legacy id, so preserving on one of its snapshot
-    /// siblings orphans that row outright.
-    /// </para>
-    /// </remarks>
-    /// <param name="findStored">
-    /// Resolves the stored record in place of the lookup by <paramref name="legacyId"/>, for a caller
-    /// that already knows it, including a stored record with no legacy id at all.
-    /// </param>
-    /// <returns>
-    /// The persisted record and whether it was inserted rather than updated, or <see langword="null"/>
-    /// when the write was refused because the record's identity is already held
-    /// (<see cref="RecreationBlockedException"/>) — the outcome the batch path reaches by dropping
-    /// the record from its insert set. It is counted in <see cref="DecompositionResult.SkippedDeleted"/>.
-    /// </returns>
-    protected async Task<(TRecord Record, bool Created)?> UpsertByLegacyIdAsync<TRecord>(
-        ILegacyKeyedRepository<TRecord> repository,
-        string? legacyId,
+    protected static async Task WriteOntoStoredAsync<TRecord>(
+        IV4Repository<TRecord> repository,
+        TRecord? stored,
         TRecord model,
         DecompositionResult result,
         WriteOrigin origin,
-        CancellationToken ct,
-        Func<TRecord?, Task>? beforeWrite = null,
-        bool preserveStoredCorrelationId = false,
-        Func<Task<TRecord?>>? findStored = null)
+        CancellationToken ct)
         where TRecord : class, IV4Record
     {
-        var existing = findStored is not null
-            ? await findStored()
-            : legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
-
-        if (beforeWrite is not null)
-            await beforeWrite(existing);
-
-        var recordType = typeof(TRecord).Name;
-
-        if (existing is null)
+        if (stored is null)
         {
-            TRecord created;
             try
             {
-                created = await repository.CreateAsync(model, origin, ct);
+                result.CreatedRecords.Add(await repository.CreateAsync(model, origin, ct));
             }
             catch (RecreationBlockedException)
             {
-                // No live row carries the legacy id, so what holds it is the user's deletion.
                 result.SkippedDeleted++;
-                Logger.LogDebug("Skipped a {RecordType}: its identity is held by a deleted record", recordType);
-                return null;
             }
-
-            result.CreatedRecords.Add(created);
-            Logger.LogDebug("Created {RecordType} from legacy record {LegacyId}", recordType, legacyId);
-            return (created, true);
+            return;
         }
 
-        if (preserveStoredCorrelationId
-            && existing.CorrelationId is { } storedCorrelationId
-            && storedCorrelationId != Guid.Empty)
-        {
-            model.CorrelationId = storedCorrelationId;
-        }
-
-        model.Id = existing.Id;
-        var updated = await repository.UpdateAsync(existing.Id, model, origin, ct);
-        result.UpdatedRecords.Add(updated);
-        Logger.LogDebug(
-            "Updated existing {RecordType} {Id} from legacy record {LegacyId}", recordType, existing.Id, legacyId);
-        return (updated, false);
+        if (model is IPatientDeviceLinked { PatientDeviceId: null } linked && stored is IPatientDeviceLinked storedLink)
+            linked.PatientDeviceId = storedLink.PatientDeviceId;
+        model.Id = stored.Id;
+        result.UpdatedRecords.Add(await repository.UpdateAsync(stored.Id, model, origin, ct));
     }
 
     /// <summary>
-    /// Carries the attribution stored under the same legacy id forward onto a rebuilt model, then
-    /// stamps whatever is still unattributed. A re-resolution that has since become ambiguous
-    /// therefore cannot displace a stored link.
+    /// One table's <see cref="ILegacyKeyedRepository{TRecord}.GetCorrelationIdsByLegacyIdAsync"/>.
+    /// </summary>
+    protected delegate Task<IEnumerable<LegacyCorrelation>> StoredCorrelationLookup(
+        IEnumerable<string> legacyIds, CancellationToken ct);
+
+    /// <summary>
+    /// The correlation id the stored rows of each of <paramref name="legacyIds"/> already carry,
+    /// taken from the first of <paramref name="tables"/> that holds one.
     /// </summary>
     /// <remarks>
-    /// The source argument is the fallback for records carrying no
-    /// <see cref="IDeviceAttributed.DataSource"/> of their own, so passing the model's own source
-    /// here matches what a batch stamp resolves for the same record with no batch source at all.
+    /// A re-send keeps that id rather than minting a fresh one, so an unchanged re-send stays
+    /// unchanged (<see cref="BulkUpsertAsync{TRecord}"/>), and a group row that carries no legacy id of
+    /// its own is found only through the stored id. Stamping every sibling with the one id also converges
+    /// a group that has forked.
     /// </remarks>
-    protected static Task StampAttributionAsync(
-        IPatientDeviceStamper stamper,
-        IDeviceAttributed model,
-        IDeviceAttributed? existing,
-        IReadOnlyList<DeviceCategory> categories,
-        CancellationToken ct)
+    protected static async Task<Dictionary<string, Guid>> GetStoredCorrelationIdsAsync(
+        IEnumerable<string?> legacyIds, IReadOnlyList<StoredCorrelationLookup> tables, CancellationToken ct)
     {
-        model.PatientDeviceId ??= existing?.PatientDeviceId;
-        return stamper.StampAsync([model], categories, model.DataSource, ct);
+        var correlationIds = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        var ids = legacyIds.OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+            return correlationIds;
+
+        foreach (var table in tables)
+        {
+            foreach (var stored in await table(ids, ct))
+                correlationIds.TryAdd(stored.LegacyId, stored.CorrelationId);
+        }
+
+        return correlationIds;
+    }
+
+    /// <summary>
+    /// The correlation id to write <paramref name="legacyId"/>'s group under: the stored one from
+    /// <see cref="GetStoredCorrelationIdsAsync"/>, else one minted and recorded in
+    /// <paramref name="correlationIds"/> so the batch's duplicates of the legacy id share it.
+    /// </summary>
+    protected static Guid CorrelationIdFor(string? legacyId, Dictionary<string, Guid> correlationIds)
+    {
+        if (legacyId is null)
+            return Guid.CreateVersion7();
+        if (!correlationIds.TryGetValue(legacyId, out var correlationId))
+            correlationIds[legacyId] = correlationId = Guid.CreateVersion7();
+        return correlationId;
+    }
+
+    /// <summary>
+    /// The id forms beyond its legacy id and its own uuid that a table's records go upstream under,
+    /// for <see cref="PointAtStoredRecordsAsync"/> to resolve back.
+    /// </summary>
+    [Flags]
+    protected enum WireForms
+    {
+        None = 0,
+
+        /// <summary>A uuid-shaped legacy id as its 24-hex prefix (<see cref="MongoObjectId.FromGuid"/>).</summary>
+        UuidPrefix = 1,
+
+        /// <summary>Any other non-ObjectId legacy id as its hash (<see cref="MongoObjectId.Coerce"/>).</summary>
+        Hashed = 2,
+
+        /// <summary>A record that carries a legacy id, under its own uuid or that uuid's 24-hex prefix.</summary>
+        KeyedOwnId = 4,
+
+        /// <summary>
+        /// A meal's carbs as write-back splits them off a meal stored as one record, under the hash of
+        /// <see cref="PreBolusSplit.WriteBackCarbsId"/> of the meal's legacy id.
+        /// </summary>
+        PreBolusCarbs = 8,
+    }
+
+    /// <summary>One table a legacy record decomposes into, for <see cref="PointAtStoredRecordsAsync"/>.</summary>
+    protected readonly record struct KeyedTable(
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IReadOnlySet<string>>> Held,
+        IReadOnlyList<WireIdResolver> Resolvers,
+        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<UnkeyedOwnId>>> FindOwnIds,
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<IV4Record>>> AdoptOwnIds,
+        Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation,
+        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<string>>> WriteBackMaySend);
+
+    /// <summary>
+    /// One <see cref="WireForms"/> lookup. <paramref name="PulledOnly"/> keeps it to the ids of
+    /// documents the Nightscout connector pulled, the only ones that carry that form, and gives it
+    /// the time those documents span (<see cref="PulledWindow"/>); <paramref name="TakesUuids"/>
+    /// offers it a canonical uuid besides the ObjectIds every lookup takes.
+    /// </summary>
+    protected readonly record struct WireIdResolver(
+        Func<IReadOnlyCollection<string>, PulledWindow, CancellationToken, Task<IEnumerable<WireLegacyId>>> Resolve,
+        bool PulledOnly,
+        bool TakesUuids = false);
+
+    /// <summary>
+    /// The time the pulled documents of a batch span, widened by <see cref="PulledWindowMargin"/>. A
+    /// copy carries its record's time, so this bounds the records a hashed id can name, which can
+    /// only be found by hashing candidates (<see cref="ILegacyKeyedRepository{TRecord}.ResolveHashedLegacyIdsAsync"/>).
+    /// </summary>
+    protected readonly record struct PulledWindow(DateTime From, DateTime To);
+
+    /// <summary>How far a pulled copy's time may lie from its record's, such as after an edit moved it.</summary>
+    private static readonly TimeSpan PulledWindowMargin = TimeSpan.FromDays(1);
+
+    protected static KeyedTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository, WireForms forms)
+        where TRecord : class, IV4Record
+    {
+        var resolvers = new List<WireIdResolver>();
+        if (forms.HasFlag(WireForms.UuidPrefix))
+            resolvers.Add(new((ids, _, ct) => repository.ResolveUuidLegacyIdsAsync(ids, ct), PulledOnly: false));
+        if (forms.HasFlag(WireForms.Hashed))
+            resolvers.Add(new((ids, window, ct) => repository.ResolveHashedLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
+        if (forms.HasFlag(WireForms.PreBolusCarbs))
+            resolvers.Add(new((ids, window, ct) => repository.ResolvePreBolusCarbsLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
+        if (forms.HasFlag(WireForms.KeyedOwnId))
+            resolvers.Add(new((ids, _, ct) => repository.ResolveKeyedOwnIdsAsync(ids, ct), PulledOnly: false, TakesUuids: true));
+
+        return new(
+            repository.GetHeldLegacyIdsAsync,
+            resolvers,
+            async (ids, source, ct) => await repository.FindUnkeyedOwnIdsAsync(ids, source, ct),
+            async (ids, ct) => await repository.AdoptOwnIdsAsync(ids, ct),
+            repository.AdoptLegacyIdsByCorrelationAsync,
+            repository.GetLegacyIdsWriteBackMaySendAsync);
+    }
+
+    /// <summary>
+    /// Where <see cref="PlanStoredIdentitiesAsync"/> points one document: the id it is stored under,
+    /// whether a record with no legacy id takes that id first, and whether it is a write-back echo.
+    /// <see cref="Fallback"/> is where it points instead when that record no longer can.
+    /// </summary>
+    protected sealed record PlannedIdentity(string? Id, bool Adopt, bool Echo, PlannedIdentity? Fallback = null);
+
+    /// <summary>
+    /// Points each incoming document at the stored record it came from, before the legacy-id
+    /// upserts run: <see cref="PlanStoredIdentitiesAsync"/>, then
+    /// <see cref="ApplyStoredIdentitiesAsync"/>.
+    /// </summary>
+    /// <returns>The echoes among <paramref name="documents"/>, which the caller stores nothing for.</returns>
+    protected static async Task<IReadOnlySet<TDocument>> PointAtStoredRecordsAsync<TDocument>(
+        IEnumerable<TDocument> documents,
+        IReadOnlyList<KeyedTable> tables,
+        Func<TDocument, bool> pulledFromNightscout,
+        CancellationToken ct,
+        Func<string, bool>? uploadedNameCanNameRecord = null)
+        where TDocument : ProcessableDocumentBase
+        => await ApplyStoredIdentitiesAsync(
+            await PlanStoredIdentitiesAsync(documents, tables, pulledFromNightscout, ct, uploadedNameCanNameRecord),
+            tables, ct);
+
+    /// <summary>
+    /// Works out, reading only, which stored record each document names: by its legacy id, or by a
+    /// wire form of it (<see cref="WireForms"/>), or, for a record with no legacy id, by its own
+    /// uuid, which that record then adopts as its legacy id. A copy of a record Nightscout
+    /// write-back sent upstream then updates the record in place, or finds the user's deletion,
+    /// instead of being stored a second time.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The document's <see cref="ProcessableDocumentBase.UpstreamIdentifier"/> is tried first: it is
+    /// where write-back puts the record's key, which survives every Nightscout version (see the
+    /// Nightscout connector's <c>UpstreamIdentityJson</c>). It is taken only when it names a stored
+    /// record. Otherwise it is some other client's identifier, and the document's <c>_id</c> is
+    /// tried the same way; a <c>_id</c> that names nothing stays as it is.
+    /// </para>
+    /// <para>
+    /// A document the Nightscout connector pulled that names a record write-back may have sent
+    /// upstream (<see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/>) is
+    /// that record's write-back echo. The caller writes nothing for it: updating the record would
+    /// re-attribute it to the connector, whose records write-back skips, so a later edit in Nocturne
+    /// would stay local and the next pull would restore the upstream copy over it. Any other record
+    /// a pulled document names, such as one only a Nightscout migration imported, is the upstream's
+    /// own, and the pull updates it.
+    /// </para>
+    /// </remarks>
+    /// <param name="pulledFromNightscout">Whether a document came from the Nightscout connector.</param>
+    /// <param name="uploadedNameCanNameRecord">
+    /// Which ids of a document another uploader sent may name a stored record; by default its own
+    /// uuid or that uuid's prefix (<see cref="MongoObjectId.TryGetOwnIdRange"/>).
+    /// </param>
+    protected static async Task<Dictionary<TDocument, PlannedIdentity>> PlanStoredIdentitiesAsync<TDocument>(
+        IEnumerable<TDocument> documents,
+        IReadOnlyList<KeyedTable> tables,
+        Func<TDocument, bool> pulledFromNightscout,
+        CancellationToken ct,
+        Func<string, bool>? uploadedNameCanNameRecord = null)
+        where TDocument : ProcessableDocumentBase
+    {
+        var all = documents.Distinct<TDocument>(ReferenceEqualityComparer.Instance).ToList();
+        var pulled = new HashSet<TDocument>(all.Where(pulledFromNightscout), ReferenceEqualityComparer.Instance);
+        var plans = new Dictionary<TDocument, PlannedIdentity>(ReferenceEqualityComparer.Instance);
+
+        // Another uploader names a stored record only by the ids a v1 or v3 read serves: its legacy
+        // id, which the upserts match unaided, or its own uuid or that uuid's prefix. A pulled copy
+        // may carry any id write-back sends.
+        var pulledNames = pulled.SelectMany(NamesOf).ToHashSet(StringComparer.Ordinal);
+        var names = all.Where(d => !pulled.Contains(d)).SelectMany(NamesOf)
+            .Where(uploadedNameCanNameRecord ?? (n => MongoObjectId.TryGetOwnIdRange(n, out _, out _)))
+            .ToHashSet(StringComparer.Ordinal);
+        names.UnionWith(pulledNames);
+        if (names.Count == 0)
+        {
+            foreach (var document in all)
+                plans[document] = new PlannedIdentity(document.Id, Adopt: false, Echo: false);
+            return plans;
+        }
+
+        var held = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var table in tables)
+            held.UnionWith(await table.Held(names, ct));
+
+        var resolved = new Dictionary<string, string>(StringComparer.Ordinal);
+        // A document whose identifier is held needs nothing looked up under its _id.
+        var unsettled = all
+            .Where(d => !(IdentifierOf(d) is { } identifier && held.Contains(identifier)))
+            .SelectMany(NamesOf)
+            .Where(n => names.Contains(n) && !held.Contains(n))
+            .ToHashSet(StringComparer.Ordinal);
+        var wireIds = unsettled
+            .Where(n => MongoObjectId.IsObjectId(n) || MongoObjectId.TryGetOwnIdRange(n, out _, out _))
+            .ToHashSet(StringComparer.Ordinal);
+        var pulledTimes = pulled.Where(d => d.Mills > 0).Select(d => d.Mills).ToList();
+        PulledWindow? window = pulledTimes.Count == 0
+            ? null
+            : new PulledWindow(
+                DateTimeOffset.FromUnixTimeMilliseconds(pulledTimes.Min()).UtcDateTime - PulledWindowMargin,
+                DateTimeOffset.FromUnixTimeMilliseconds(pulledTimes.Max()).UtcDateTime + PulledWindowMargin);
+        foreach (var table in tables)
+        {
+            foreach (var (resolve, pulledOnly, takesUuids) in table.Resolvers)
+            {
+                if (pulledOnly && window is null)
+                    continue;
+                var candidates = wireIds
+                    .Where(n => !resolved.ContainsKey(n)
+                                && (!pulledOnly || pulledNames.Contains(n))
+                                && (takesUuids || MongoObjectId.IsObjectId(n)))
+                    .ToHashSet(StringComparer.Ordinal);
+                if (candidates.Count == 0)
+                    continue;
+                foreach (var hit in await resolve(candidates, window ?? default, ct))
+                    resolved.TryAdd(hit.WireId, hit.LegacyId);
+            }
+        }
+
+        var own = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var ownIds = unsettled
+            .Where(n => !resolved.ContainsKey(n) && MongoObjectId.TryGetOwnIdRange(n, out _, out _))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var table in tables)
+        {
+            ownIds.ExceptWith(own.Keys);
+            if (ownIds.Count == 0)
+                break;
+            foreach (var hit in await table.FindOwnIds(ownIds, DataSources.NightscoutConnector, ct))
+                own.TryAdd(hit.WireId, hit.WriteBackMaySend);
+        }
+
+        var keyedIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var document in pulled)
+        {
+            foreach (var name in NamesOf(document))
+            {
+                if (held.Contains(name))
+                    keyedIds.Add(name);
+                else if (resolved.TryGetValue(name, out var legacyId))
+                    keyedIds.Add(legacyId);
+            }
+        }
+
+        var maySend = new HashSet<string>(StringComparer.Ordinal);
+        if (keyedIds.Count > 0)
+        {
+            foreach (var table in tables)
+                maySend.UnionWith(await table.WriteBackMaySend(keyedIds, DataSources.NightscoutConnector, ct));
+        }
+
+        foreach (var document in all)
+        {
+            var isPulled = pulled.Contains(document);
+            var byId = Target(document.Id, isPulled) ?? new PlannedIdentity(document.Id, Adopt: false, Echo: false);
+            var byIdentifier = IdentifierOf(document) is { } identifier ? Target(identifier, isPulled) : null;
+            plans[document] = byIdentifier is { Adopt: true }
+                ? byIdentifier with { Fallback = byId }
+                : byIdentifier ?? byId;
+        }
+
+        return plans;
+
+        PlannedIdentity? Target(string? name, bool isPulled)
+        {
+            if (string.IsNullOrEmpty(name))
+                return null;
+            if (held.Contains(name))
+                return new PlannedIdentity(name, Adopt: false, Echo: isPulled && maySend.Contains(name));
+            if (resolved.TryGetValue(name, out var legacyId))
+                return new PlannedIdentity(legacyId, Adopt: false, Echo: isPulled && maySend.Contains(legacyId));
+            if (own.TryGetValue(name, out var sendable))
+                return new PlannedIdentity(name, Adopt: true, Echo: isPulled && sendable);
+            return null;
+        }
+    }
+
+    private static string? IdentifierOf(ProcessableDocumentBase document)
+        => document.UpstreamIdentifier is { Length: > 0 } identifier && identifier != document.Id ? identifier : null;
+
+    private static IEnumerable<string> NamesOf(ProcessableDocumentBase document)
+    {
+        if (IdentifierOf(document) is { } identifier)
+            yield return identifier;
+        if (document.Id is { Length: > 0 } id)
+            yield return id;
+    }
+
+    /// <summary>
+    /// Carries out <paramref name="plans"/>: gives the records they name by their own uuid those ids
+    /// as legacy ids (<see cref="AdoptOwnIdsAsync"/>), then rewrites each document's id to the id it
+    /// is stored under.
+    /// </summary>
+    /// <returns>The write-back echoes among the planned documents.</returns>
+    protected static async Task<IReadOnlySet<TDocument>> ApplyStoredIdentitiesAsync<TDocument>(
+        IReadOnlyDictionary<TDocument, PlannedIdentity> plans, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
+        where TDocument : ProcessableDocumentBase
+    {
+        var adopted = await AdoptOwnIdsAsync(
+            plans.Values.Where(p => p.Adopt).Select(p => p.Id!).ToHashSet(StringComparer.Ordinal), tables, ct);
+
+        var echoes = new HashSet<TDocument>(ReferenceEqualityComparer.Instance);
+        foreach (var (document, planned) in plans)
+        {
+            var applied = planned.Adopt && !adopted.Contains(planned.Id!)
+                ? planned.Fallback ?? new PlannedIdentity(document.Id, Adopt: false, Echo: false)
+                : planned;
+            document.Id = applied.Id;
+            if (applied.Echo)
+                echoes.Add(document);
+        }
+
+        return echoes;
+    }
+
+    /// <summary>
+    /// Lets the stored record each of <paramref name="ids"/> names by its own uuid
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>) take that id as its legacy
+    /// id, in whichever table holds it, then gives the same id to the records sharing its
+    /// correlation id in every table: the group the legacy record decomposed into, which the
+    /// legacy-id upserts that follow must all match.
+    /// </summary>
+    /// <returns>The ids a stored record took.</returns>
+    private static async Task<IReadOnlySet<string>> AdoptOwnIdsAsync(
+        IReadOnlyCollection<string> ids, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
+    {
+        var adopted = new HashSet<string>(StringComparer.Ordinal);
+        if (ids.Count == 0)
+            return adopted;
+
+        var legacyIdByCorrelation = new Dictionary<Guid, string>();
+        foreach (var table in tables)
+        {
+            foreach (var anchor in await table.AdoptOwnIds(ids, ct))
+            {
+                adopted.Add(anchor.LegacyId!);
+                if (anchor.CorrelationId is { } correlationId && correlationId != Guid.Empty)
+                    legacyIdByCorrelation.TryAdd(correlationId, anchor.LegacyId!);
+            }
+        }
+
+        if (legacyIdByCorrelation.Count > 0)
+        {
+            foreach (var table in tables)
+                await table.AdoptByCorrelation(legacyIdByCorrelation, ct);
+        }
+
+        return adopted;
     }
 
     /// <summary>
@@ -140,20 +434,20 @@ public abstract class DecomposerBase
     /// mutation trail.
     /// </summary>
     /// <remarks>
-    /// Every legacy create reaches a decomposer's batch path — v1 and v3 normalize a lone record
-    /// into a one-element array — so that path carries uploader ingestion (Loop, AAPS, xDrip,
-    /// connectors, the demo seeder) at CGM sample rate. The audit interceptor drops
-    /// system-attributed saves, and provenance for those rows lives on their own
-    /// <see cref="IV4Record.DataSource"/>. The single-record path deliberately keeps caller
-    /// attribution: it is reached from a genuine per-record edit, and since a legacy record
-    /// persists only as its decomposed v4 rows, their audit rows are the whole trail of that edit.
-    /// Connector re-syncs of the single path are system-attributed by the sync scope's own audit
-    /// context rather than here. <see cref="ProfileDecomposer"/> takes no scope on either path: a
-    /// profile persists only as its decomposed rows, so their audit rows are the whole trail of a
-    /// user's profile edit, and an unchanged re-upsert writes nothing to audit.
+    /// The audit interceptor drops system-attributed saves, so a decomposer applies this only to writes
+    /// whose audit rows would not be a person's trail. Entries and device statuses arrive from uploaders
+    /// at CGM sample rate and keep their provenance on each row's <see cref="IV4Record.DataSource"/>, so
+    /// they are system-attributed, except a user's edit of one entry
+    /// (<see cref="Entries.IEntryDecomposer.DecomposeAsync"/>). A legacy treatment or profile persists only as its decomposed
+    /// rows, so their audit rows are the whole trail of a careportal entry or an edit: a live treatment
+    /// keeps the caller's attribution and only a backfill is system-attributed, except the removal of a
+    /// reclassified treatment's rows (<see cref="TreatmentDecomposer.DropAbsentAsync"/>), and
+    /// <see cref="ProfileDecomposer"/> scopes only store removals during document replacement, since
+    /// an unchanged re-upsert writes nothing to audit. Connector syncs are system-attributed by the
+    /// sync scope's own audit context.
     /// </remarks>
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
-        => SystemAuditScope.Push(auditContext);
+        => SystemAuditScope.Push(auditContext, keepWriter: true);
 
     protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
     {
@@ -190,11 +484,11 @@ public abstract class DecomposerBase
     }
 
     /// <summary>
-    /// The batch twin of <see cref="UpsertByLegacyIdAsync"/>: a record whose legacy id is stored
-    /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, so a resend
-    /// through the batch path writes what the same resend through the single path writes.
+    /// Create-or-update by legacy id: a record whose legacy id is stored updates that row and lands in
+    /// <see cref="DecompositionResult.UpdatedRecords"/>, or, when the row already held it, in
+    /// <see cref="DecompositionResult.UnchangedRecords"/>.
     /// </summary>
-    protected static async Task BulkUpsertAsync<TRecord>(
+    protected static async Task<BulkWrite<TRecord>> BulkUpsertAsync<TRecord>(
         IBulkUpsertRepository<TRecord> repository,
         List<TRecord> records,
         DecompositionResult result,
@@ -203,13 +497,21 @@ public abstract class DecomposerBase
         where TRecord : class
     {
         if (records.Count == 0)
-            return;
+            return [];
 
-        var written = await repository.BulkUpsertAsync(records, origin, ct);
-        var updated = new HashSet<TRecord>(written.Updated, ReferenceEqualityComparer.Instance);
-        result.CreatedRecords.AddRange(written.Where(r => !updated.Contains(r)));
-        result.UpdatedRecords.AddRange(written.Updated);
-        result.SkippedDeleted += written.SkippedDeleted;
+        BulkWrite<TRecord> written;
+        try
+        {
+            written = await repository.BulkUpsertAsync(records, origin, ct);
+        }
+        catch (Exception ex) when (CommittedWrite.TryGet<BulkWrite<TRecord>>(ex, out var committed))
+        {
+            Fold(committed, result);
+            throw;
+        }
+
+        Fold(written, result);
+        return written;
     }
 
     protected static async Task BulkCreateAsync<TRecord>(
@@ -223,8 +525,26 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        var written = await repository.BulkCreateAsync(records, origin, ct);
-        result.CreatedRecords.AddRange(written);
+        BulkWrite<TRecord> written;
+        try
+        {
+            written = await repository.BulkCreateAsync(records, origin, ct);
+        }
+        catch (Exception ex) when (CommittedWrite.TryGet<BulkWrite<TRecord>>(ex, out var committed))
+        {
+            Fold(committed, result);
+            throw;
+        }
+
+        Fold(written, result);
+    }
+
+    private static void Fold<TRecord>(BulkWrite<TRecord> written, DecompositionResult result)
+        where TRecord : class
+    {
+        result.CreatedRecords.AddRange(written.Created);
+        result.UpdatedRecords.AddRange(written.Updated);
+        result.UnchangedRecords.AddRange(written.Unchanged);
         result.SkippedDeleted += written.SkippedDeleted;
     }
 }

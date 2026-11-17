@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 
@@ -17,6 +18,7 @@ internal sealed class ProfileLoadStage(
     ITherapySettingsResolver therapySettingsResolver,
     ITargetRangeResolver targetRangeResolver,
     IBasalRateResolver basalRateResolver,
+    TenantClockResolver tenantClock,
     ILogger<ProfileLoadStage> logger
 ) : IChartDataStage
 {
@@ -24,14 +26,11 @@ internal sealed class ProfileLoadStage(
     {
         var hasData = await therapySettingsResolver.HasDataAsync(cancellationToken);
 
-        string? timezone = null;
         ChartThresholdsDto thresholds;
         double defaultBasalRate;
 
         if (hasData)
         {
-            timezone = await therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-
             thresholds = await ChartThresholdsBuilder.BuildAsync(
                 targetRangeResolver, hasProfile: true, context.EndTime, cancellationToken);
             defaultBasalRate = await basalRateResolver.GetBasalRateAsync(context.EndTime, ct: cancellationToken);
@@ -45,9 +44,11 @@ internal sealed class ProfileLoadStage(
             defaultBasalRate = 1.0;
         }
 
+        var clock = await tenantClock.ResolveAsync(cancellationToken);
+
         return context with
         {
-            Timezone = timezone,
+            Zone = clock.Zone,
             Thresholds = thresholds,
             DefaultBasalRate = defaultBasalRate,
         };
