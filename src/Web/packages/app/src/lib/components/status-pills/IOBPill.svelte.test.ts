@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
+import { timeFormat } from "#lib/stores/appearance-store.svelte.js";
 import type { IOBPillData } from "#lib/types/status-pills.js";
 import IOBPill from "./IOBPill.svelte";
 
@@ -64,5 +65,29 @@ describe("IOBPill absent device-status numbers", () => {
     await page.getByRole("button").first().click();
     await expect.element(page.getByText("Basal IOB")).toBeVisible();
     await expect.element(page.getByText("0.42U")).toBeVisible();
+  });
+});
+
+describe("IOBPill last bolus time", () => {
+  const at = new Date(2026, 0, 15, 14, 30).getTime();
+  const withBolus = (): IOBPillData =>
+    withNulls({ lastBolus: { mills: at, insulin: 1.5 } });
+
+  afterEach(() => timeFormat.hydrate("12"));
+
+  it("follows the 24-hour preference", async () => {
+    timeFormat.hydrate("24");
+    render(IOBPill, { data: withBolus() });
+
+    await page.getByRole("button", { name: /IOB/ }).click();
+    await expect.element(page.getByText(/@ 14:30/)).toBeVisible();
+  });
+
+  it("follows the 12-hour preference", async () => {
+    timeFormat.hydrate("12");
+    render(IOBPill, { data: withBolus() });
+
+    await page.getByRole("button", { name: /IOB/ }).click();
+    await expect.element(page.getByText(/@ 2:30\s?PM/i)).toBeVisible();
   });
 });
