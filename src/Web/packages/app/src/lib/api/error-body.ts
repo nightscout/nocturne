@@ -18,6 +18,8 @@ export interface ParsedErrorBody {
   errors?: Record<string, unknown>;
   /** The structured validation issues, when the body carries a well-formed set. */
   issues?: RustValidationIssue[];
+  /** The stable machine code of the problem, when the body carries a well-formed one. */
+  code?: string;
 }
 
 /**
@@ -55,8 +57,20 @@ export function parseErrorBody(err: unknown): ParsedErrorBody | undefined {
     message: sentence(parsed.message),
     errors: isPlainObject(parsed.errors) ? parsed.errors : undefined,
     issues: parseIssues(parsed.issues),
+    code: parseCode(parsed.code),
   };
 }
+
+/**
+ * The problem code a body carries: lower snake_case, the shape the API's codes
+ * are written in. Anything else is dropped, so a caller maps only a value it
+ * can match against a constant.
+ */
+export function parseCode(value: unknown): string | undefined {
+  return typeof value === "string" && PROBLEM_CODE.test(value) ? value : undefined;
+}
+
+const PROBLEM_CODE = /^[a-z0-9_]+$/;
 
 /**
  * The structured issues a body carries, when every entry has the shape one

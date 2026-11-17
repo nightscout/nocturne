@@ -17,6 +17,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.Services.Profiles.Resolvers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -25,7 +26,6 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -90,9 +90,11 @@ public partial class StatisticsControllerTests
             .ReturnsAsync([]);
 
         var statistics = statisticsService ?? _statsServiceMock.Object;
+        var readContext = categoryReadContext ?? new CategoryReadContext();
         var tenantClock = new TenantClockResolver(
             _therapySettingsResolverMock.Object,
-            categoryReadContext ?? new CategoryReadContext(),
+            readContext,
+            new ShareClockDouble(_therapySettingsResolverMock.Object),
             _clockLoggerMock.Object);
         var clock = timeProvider ?? new FakeTimeProvider(DefaultNow);
         var insulinDelivery = new InsulinDeliveryReader(
@@ -125,7 +127,9 @@ public partial class StatisticsControllerTests
                 _aidMetricsServiceMock.Object,
                 new DeviceDateClockResolver(
                     TestDoubles.DeviceDateClockDoubles.Timelines([]),
-                    tenantClock),
+                    tenantClock,
+                    readContext,
+                    new ShareClockDouble(_therapySettingsResolverMock.Object)),
                 TimeProvider.System),
             new RangeAnalyticsReader(
                 _glucoseRepoMock.Object,
@@ -229,7 +233,7 @@ public partial class StatisticsControllerTests
                 It.IsAny<IEnumerable<TempBasal>>(),
                 It.IsAny<DateTime>(),
                 It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(),
+                It.IsAny<TimeZoneInfo>(),
                 It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<CarbIntake>?>()))
             .Returns(new DailyBasalBolusRatioResponse());
@@ -698,37 +702,35 @@ public partial class StatisticsControllerTests
         payload.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.NotConfigured);
     }
 
-    [Theory]
-    [InlineData(true, TimeZoneUnavailableReason.Share)]
-    [InlineData(false, TimeZoneUnavailableReason.NotConfigured)]
-    public async Task GetHourlyPatterns_SaysAShareCannotSeeTheTimezoneRatherThanThatNoneIsSet(
-        bool share, TimeZoneUnavailableReason expected)
+    [Fact]
+    public async Task GetHourlyPatterns_ForAShare_BucketsOnTheTenantsTimezone()
     {
         SetupGlucose(new List<SensorGlucose>());
         var category = new CategoryReadContext();
-        if (share)
-            category.MarkShare();
+        category.MarkShare();
         _therapySettingsResolverMock
             .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync("Europe/Stockholm");
+        TimeZoneInfo? usedTz = null;
         _statsServiceMock
             .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
             .Returns(new HourlyPatterns());
 
         var result = await CreateController(categoryReadContext: category).GetHourlyPatterns(
             new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
 
+        usedTz!.Id.Should().Be("Europe/Stockholm");
         result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<HourlyPatterns>().Subject
-            .TimeZoneUnavailableReason.Should().Be(expected);
+            .TimeZoneUnavailableReason.Should().BeNull();
     }
 
     [Theory]
-    [InlineData(false, TimeZoneUnavailableReason.Unrecognised)]
-    [InlineData(true, TimeZoneUnavailableReason.Share)]
-    public async Task GetHourlyPatterns_WithAStoredTimezoneThatDoesNotResolve_SaysItIsUnrecognised(
-        bool share, TimeZoneUnavailableReason expected)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetHourlyPatterns_WithAStoredTimezoneThatDoesNotResolve_SaysItIsUnrecognised(bool share)
     {
         SetupGlucose(new List<SensorGlucose>());
         var category = new CategoryReadContext();
@@ -747,7 +749,7 @@ public partial class StatisticsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<HourlyPatterns>().Subject
-            .TimeZoneUnavailableReason.Should().Be(expected);
+            .TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.Unrecognised);
     }
 
     [Fact]
@@ -1043,7 +1045,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?, IEnumerable<BasalSegment>?>(
                 (tempBasals, _, _, _, _, _, _, _, _) => passed = tempBasals.ToList())
@@ -1074,7 +1076,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?, IEnumerable<BasalSegment>?>(
                 (_, _, _, _, _, _, _, _, segments) => passed = segments?.ToList())
@@ -1096,7 +1098,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?, IEnumerable<BasalSegment>?>(
                 (_, _, _, _, _, _, _, _, segments) => passed = segments?.ToList())
@@ -1257,7 +1259,7 @@ public partial class StatisticsControllerTests
             .Setup(s => s.CalculateHourlyInsulinDelivery(
                 It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(),
-                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>(),
+                It.IsAny<TimeZoneInfo>(), It.IsAny<IEnumerable<BasalInjection>?>(),
                 It.IsAny<IEnumerable<BasalSegment>?>()))
             .Returns(new HourlyInsulinDeliveryResponse());
 
@@ -2663,6 +2665,41 @@ public partial class StatisticsControllerTests
             It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    public static TheoryData<string> DateRangeActions() => new()
+    {
+        nameof(StatisticsController.GetRangeAnalytics),
+        nameof(StatisticsController.GetWeekdayAverages),
+        nameof(StatisticsController.GetHourlyPatterns),
+        nameof(StatisticsController.GetDailyBasalBolusRatios),
+        nameof(StatisticsController.GetPunchCardData),
+        nameof(StatisticsController.GetInsulinDeliveryStatistics),
+        nameof(StatisticsController.GetBasalAnalysis),
+        nameof(StatisticsController.GetHourlyInsulinDelivery),
+    };
+
+    [Theory]
+    [MemberData(nameof(DateRangeActions))]
+    public async Task DateRangeActions_RejectASpanOverTheReadLimit(string action)
+    {
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(V4ReadLimits.MaxDateSpanDays + 1);
+        var method = typeof(StatisticsController).GetMethod(action)!;
+        object?[] args = method.GetParameters()
+            .Select(p => p.ParameterType == typeof(DateOnly)
+                ? (object)DateOnly.FromDateTime(p.Name == "startDate" ? start : end)
+                : p.ParameterType == typeof(DateTime)
+                    ? p.Name == "startDate" ? start : end
+                    : p.HasDefaultValue ? p.DefaultValue : null)
+            .ToArray();
+
+        var task = (Task)method.Invoke(CreateController(), args)!;
+        await task;
+        var actionResult = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var result = actionResult.GetType().GetProperty("Result")!.GetValue(actionResult);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
     [Fact]
     public async Task GetAidSystemMetrics_PropagatesCancellationRatherThanReturningAPartialReport()
     {
@@ -3043,19 +3080,6 @@ public partial class StatisticsControllerTests
         var tz = TimeZoneInfo.FindSystemTimeZoneById(zone);
         var start = DateOnly.Parse(from);
         var end = DateOnly.Parse(to);
-        try
-        {
-            for (var date = start; date <= end; date = date.AddDays(1))
-            {
-                PunchCardDayWindow.For(date.ToDateTime(TimeOnly.MinValue), tz);
-            }
-        }
-        catch (ArgumentException) when (OperatingSystem.IsWindows())
-        {
-            // Windows time zone data skips local midnight for these zones, which the endpoint rejects; the overlap only exists in IANA data.
-            return;
-        }
-
         var (glucose, boluses, carbs, injections) = PunchCardFixture(tz, start, end);
 
         SetupEmptyTreatments();
@@ -3105,7 +3129,7 @@ public partial class StatisticsControllerTests
     public async Task GetPunchCardData_PutsARecordAtLocalMidnightOnTheDayItOpens()
     {
         var tz = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
-        var midnightUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Unspecified), tz);
+        var midnightUtc = TimeZoneHelper.ConvertTimeToUtc(new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Unspecified), tz);
 
         SetupEmptyTreatments();
         SetupPunchCardGlucose(
@@ -3139,7 +3163,7 @@ public partial class StatisticsControllerTests
         {
             var n = date.DayNumber - start.DayNumber;
             var localMidnight = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
-            var midnightUtc = TimeZoneInfo.ConvertTimeToUtc(localMidnight, tz);
+            var midnightUtc = TimeZoneHelper.ConvertTimeToUtc(localMidnight, tz);
 
             if (n % 7 != 3 && n % 7 != 4)
             {
@@ -3221,8 +3245,8 @@ public partial class StatisticsControllerTests
         {
             var dayStartLocal = DateTime.SpecifyKind(day, DateTimeKind.Unspecified);
             var dayEndLocal = dayStartLocal.AddDays(1).AddTicks(-1);
-            var dayStartMs = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(dayStartLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var dayEndMs = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(dayEndLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var dayStartMs = new DateTimeOffset(TimeZoneHelper.ConvertTimeToUtc(dayStartLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var dayEndMs = new DateTimeOffset(TimeZoneHelper.ConvertTimeToUtc(dayEndLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
 
             var dayEntries = glucoseData.Where(e => e.Mills >= dayStartMs && e.Mills <= dayEndMs).ToList();
             var dayBoluses = manualBoluses.Where(b => b.Mills >= dayStartMs && b.Mills <= dayEndMs).ToList();

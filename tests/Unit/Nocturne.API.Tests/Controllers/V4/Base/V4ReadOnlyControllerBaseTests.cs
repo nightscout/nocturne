@@ -193,10 +193,10 @@ public class V4ReadOnlyControllerBaseTests
     }
 
     [Fact]
-    public async Task GetAll_DateSpanOneMillisecondOverMaximum_ReturnsBadRequest()
+    public async Task GetAll_DateSpanOneMillisecondOverMaximumPlusDaylightSavingMargin_ReturnsBadRequest()
     {
         var to = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays).AddMilliseconds(-1);
+        var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays).Subtract(V4ReadLimits.DaylightSavingMargin).AddMilliseconds(-1);
 
         var result = await _controller.GetAll(from, to, 100, 0, "timestamp_desc", null, null);
 

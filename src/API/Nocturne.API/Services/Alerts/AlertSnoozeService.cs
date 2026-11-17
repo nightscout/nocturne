@@ -122,9 +122,9 @@ internal sealed class AlertSnoozeService(
             : null;
         var baseContext = new SensorContext
         {
-            LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
+            LatestValue = fresh?.Mgdl.ToDecimal(),
             LatestTimestamp = fresh?.Timestamp,
-            TrendRate = (decimal?)fresh?.TrendRate,
+            TrendRate = fresh?.TrendRate?.ToDecimal(),
             LastReadingAt = latest?.Timestamp,
         };
 

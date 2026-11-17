@@ -7,7 +7,7 @@
  * viewer's local zone by default, the patient's configured zone on the server),
  * never UTC midnight, and the end bound is the last millisecond of the last day.
  */
-import { getLocalTimeZone, parseDate, parseDateTime, today } from "@internationalized/date";
+import { getLocalTimeZone, parseDate, parseDateTime, today, type DateValue } from "@internationalized/date";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -130,6 +130,23 @@ export function dayCount(from: string | Date, to: string | Date): number {
   const start = parseDate(toDay(from)).toDate("UTC").getTime();
   const end = parseDate(toDay(to)).toDate("UTC").getTime();
   return Math.max(1, Math.round((end - start) / MS_PER_DAY) + 1);
+}
+
+/** Whether an inclusive range covers more days than `maxDays`. A missing limit allows any range. */
+export function exceedsDaySpan(from: string | Date, to: string | Date, maxDays: number | undefined): boolean {
+  return maxDays !== undefined && dayCount(from, to) > maxDays;
+}
+
+/**
+ * A calendar's disabled-date test for a range with one end on `anchor`: a day that would
+ * stretch the range past `maxDays`. With no anchor or no limit, no day is disabled.
+ */
+export function outsideDaySpan(anchor: DateValue | undefined, maxDays: number | undefined): (day: DateValue) => boolean {
+  return (day) => {
+    if (anchor === undefined) return false;
+    const [from, to] = day.compare(anchor) < 0 ? [day, anchor] : [anchor, day];
+    return exceedsDaySpan(from.toString(), to.toString(), maxDays);
+  };
 }
 
 /** Every `YYYY-MM-DD` day in an inclusive range, in calendar order. */

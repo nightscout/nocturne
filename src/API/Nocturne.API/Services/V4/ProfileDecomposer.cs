@@ -317,7 +317,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         // place it where its client meant it instead. A zone-less startDate is read as UTC where
         // Nightscout reads it in the server's zone, which is UTC in its container image.
         if (profile.Mills != 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
+            return profile.Mills.ToUtcDateTime();
 
         return UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt) ?? DateTime.UnixEpoch;
     }
@@ -519,6 +519,9 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units) =>
         MergeTargets(lows, highs, units, out _);
 
+    /// <param name="lows">The low-target time-value entries from the profile store.</param>
+    /// <param name="highs">The high-target time-value entries from the profile store.</param>
+    /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
     /// <param name="undone">Whether an extra conversion was undone.</param>
     internal static List<V4Models.TargetRangeEntry> MergeTargets(
         List<TimeValue> lows, List<TimeValue> highs, string? units, out bool undone)
@@ -551,6 +554,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 
     /// <summary>
     /// Whether a profile's units string denotes mmol/L (matching the forms Nightscout profiles use).
+    /// Not <see cref="V4Models.GlucoseUnits.Parse"/>: the write and the read must agree on stored rows,
+    /// and rows already stored were converted under this rule.
     /// </summary>
     internal static bool IsMmol(string? units) =>
         units is not null
@@ -559,11 +564,11 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 
     /// <summary>
     /// Converts a stored mg/dL glucose value back to the profile's display units: the inverse of the
-    /// write-time normalisation in <see cref="ConvertSensitivityValues"/> and <see cref="MergeTargets"/>.
+    /// write-time normalisation in <see cref="ConvertSensitivityValues"/> and <see cref="MergeTargets(List{TimeValue}, List{TimeValue}, string)"/>.
     /// mmol values are rounded to one decimal place, the precision Nightscout profiles use.
     /// </summary>
     internal static double FromMgdl(double mgdl, string? units) =>
-        IsMmol(units) ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
+        IsMmol(units) ? ScaledRounding.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
 
     /// <summary>The highest stored mg/dL target one mmol conversion of a real target reaches (22.2 mmol/L).</summary>
     internal const double MaxSingleConversionMgdl = 400;

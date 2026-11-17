@@ -61,7 +61,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         _decomposer = new TreatmentDecomposer(
-            factory,
+            factory, new DecomposedTreatmentKeys(factory),
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
             new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord().Object,
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),

@@ -292,22 +292,78 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     protected abstract void ApplyUpdate(TEntity target, TModel source);
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetAsync" />
-    /// <remarks>
-    /// Virtual so dedup participants (which expose an extended overload with the duplicate
-    /// filter + keyset cursor) can override this 7-arg form to route through their
-    /// filtered overload, preserving the pre-base default-interface bridge behaviour.
-    /// </remarks>
-    public virtual async Task<IEnumerable<TModel>> GetAsync(
+    /// <remarks>Reads through <see cref="PagedRead"/>, so it hides the non-primary copies of duplicate groups.</remarks>
+    public async Task<IEnumerable<TModel>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = InWindow(ctx.Set<TEntity>().AsNoTracking(), from, to, device);
-        if (source != null) query = query.Where(e => e.DataSource == source);
-        query = query.InObservationOrder(descending);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
+        var entities = await PagedRead(
+            ctx.Set<TEntity>().AsNoTracking(), from, to, device, source, limit, offset, descending).ToListAsync(ct);
         return entities.Select(ToDomain);
+    }
+
+    /// <summary>
+    /// The read every <c>GetAsync</c> of a record type serves: the time window, device and source,
+    /// <paramref name="extra"/>, the duplicate filter (<see cref="ReadVisibilityFilter.ExcludeDuplicatesWhereFlagged{TEntity}"/>),
+    /// the keyset cursor, <paramref name="order"/> (observation order by default) and the page.
+    /// </summary>
+    /// <remarks>
+    /// A cursor given as both <paramref name="afterTimestamp"/> and <paramref name="afterId"/> replaces
+    /// <paramref name="offset"/>: it seeks to the cursor row instead of skipping to it.
+    /// </remarks>
+    protected static IQueryable<TEntity> PagedRead(
+        IQueryable<TEntity> rows,
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit, int offset, bool descending,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? extra = null,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? order = null)
+    {
+        var query = InWindow(rows, from, to, device);
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        if (extra != null) query = extra(query);
+        query = query.ExcludeDuplicatesWhereFlagged();
+
+        var seeking = afterTimestamp.HasValue && afterId.HasValue;
+        if (seeking)
+        {
+            query = descending
+                ? query.Where(e => e.Timestamp < afterTimestamp!.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId!.Value))
+                : query.Where(e => e.Timestamp > afterTimestamp!.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId!.Value));
+        }
+
+        query = order != null ? order(query) : query.InObservationOrder(descending);
+        return (seeking ? query : query.Skip(offset)).Take(limit);
+    }
+
+    /// <summary>Returns the records sharing <paramref name="correlationId"/>.</summary>
+    public async Task<IEnumerable<TModel>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.CorrelationId == correlationId)
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
+    }
+
+    /// <summary>Returns the records sharing any of <paramref name="correlationIds"/>; none for an empty set.</summary>
+    public async Task<IEnumerable<TModel>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    {
+        var ids = correlationIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>()
+            .AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
     }
 
     /// <summary>
@@ -496,9 +552,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var schema = entityType.GetSchema();
         var table = schema is null ? tableName : SqlIdentifier.Require(schema, nameof(TEntity)) + "." + tableName;
         var column = SqlIdentifier.Require(
-            entityType.FindProperty(nameof(IV4Entity.LegacyId))!
+            entityType.FindProperty(nameof(ILegacyIdentified.LegacyId))!
                 .GetColumnName(StoreObjectIdentifier.Table(tableName, schema))!,
-            nameof(IV4Entity.LegacyId));
+            nameof(ILegacyIdentified.LegacyId));
 
         var sql = "SELECT * FROM " + table + " WHERE "
             + "encode(substring(sha256(convert_to(" + column + ", 'UTF8')) FROM 1 FOR 12), 'hex') = {0}";
@@ -510,21 +566,43 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var tombstones = ctx.Set<TEntity>().UserTombstones(ctx);
+        var tombstones = ctx.UserTombstones<TEntity>();
 
         if (Guid.TryParse(id, out var guid))
-            return await tombstones.AnyAsync(e => e.Id == guid || e.LegacyId == id, ct);
+            return await tombstones.AnyAsync(OrSyncIdentifier(e => e.Id == guid || e.LegacyId == id, id), ct);
 
         if (!MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-            return await tombstones.AnyAsync(e => e.LegacyId == id, ct);
+            return await tombstones.AnyAsync(OrSyncIdentifier(e => e.LegacyId == id, id), ct);
 
         var dashed = string.Join('-', id[..8], id[8..12], id[12..16], id[16..20], id[20..]) + "%";
         var dashless = id + "%";
-        return await tombstones.AnyAsync(e => e.LegacyId == id
+        return await tombstones.AnyAsync(OrSyncIdentifier(e => e.LegacyId == id
                 || (e.Id >= low && e.Id <= high)
                 || (e.LegacyId != null && e.LegacyId.Length == 36 && EF.Functions.ILike(e.LegacyId, dashed))
-                || (e.LegacyId != null && e.LegacyId.Length == 32 && EF.Functions.ILike(e.LegacyId, dashless)), ct)
-            || await WhereLegacyIdHashesTo(ctx, id).UserTombstones(ctx).AnyAsync(ct);
+                || (e.LegacyId != null && e.LegacyId.Length == 32 && EF.Functions.ILike(e.LegacyId, dashless)), id), ct)
+            || await WhereLegacyIdHashesTo(ctx, id).UserTombstones().AnyAsync(ct);
+    }
+
+    private static readonly bool IsSyncKeyed = typeof(ISyncDedupable).IsAssignableFrom(typeof(TEntity));
+
+    /// <summary>
+    /// <paramref name="byKey"/> or, on a table keyed on <see cref="ISyncDedupable.SyncIdentifier"/>, a
+    /// row that holds <paramref name="id"/> as its sync identifier, whatever its source: a client
+    /// re-sends a record by the sync identifier it uploaded it with.
+    /// </summary>
+    private static Expression<Func<TEntity, bool>> OrSyncIdentifier(Expression<Func<TEntity, bool>> byKey, string id)
+    {
+        if (!IsSyncKeyed)
+            return byKey;
+
+        Expression<Func<TEntity, bool>> bySyncIdentifier =
+            e => EF.Property<string?>(e, nameof(ISyncDedupable.SyncIdentifier)) == id;
+        var row = byKey.Parameters[0];
+        return Expression.Lambda<Func<TEntity, bool>>(
+            Expression.OrElse(
+                byKey.Body,
+                ReplacingExpressionVisitor.Replace(bySyncIdentifier.Parameters[0], row, bySyncIdentifier.Body)),
+            row);
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{T}.GetCorrelationIdsByLegacyIdAsync" />
@@ -555,6 +633,116 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return (await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds.ToHashSet(StringComparer.Ordinal), ct)).Held;
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync" />
+    public async Task<IEnumerable<string>> GetLegacyIdsWriteBackMaySendAsync(
+        IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0 || !IsWriteBackTracked)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var ids = legacyIds.Distinct(StringComparer.Ordinal).ToList();
+        var rows = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.LegacyId != null && ids.Contains(e.LegacyId))
+            .WhereBlocksRecreation()
+            .Select(e => new
+            {
+                LegacyId = e.LegacyId!,
+                e.Id,
+                e.DataSource,
+                e.DeletedAt,
+                WrittenLive = EF.Property<bool>(e, nameof(IWriteBackTracked.WrittenLive)),
+            })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.LegacyId, StringComparer.Ordinal)
+            .Select(g => g
+                .OrderBy(r => r.DeletedAt == null ? 0 : 1)
+                .ThenByDescending(r => r.DeletedAt)
+                .ThenBy(r => r.Id)
+                .First())
+            .Where(r => r.WrittenLive && r.DataSource != skippedSource)
+            .Select(r => r.LegacyId)
+            .ToList();
+    }
+
+    private static readonly bool IsWriteBackTracked = typeof(IWriteBackTracked).IsAssignableFrom(typeof(TEntity));
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.FindUnkeyedOwnIdsAsync" />
+    public async Task<IEnumerable<UnkeyedOwnId>> FindUnkeyedOwnIdsAsync(
+        IReadOnlyCollection<string> ids, string skippedSource, CancellationToken ct = default)
+    {
+        var ranges = OwnIdRanges(ids, MongoObjectId.TryGetOwnIdRange);
+        if (ranges.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var claims = new Dictionary<string, TEntity>(StringComparer.Ordinal);
+        foreach (var chunk in ranges.Chunk(OwnIdRangesPerQuery))
+        {
+            foreach (var row in await UnkeyedRows(ctx).Where(IdInAnyRange(chunk)).OrderBy(e => e.Id).ToListAsync(ct))
+                claims.TryAdd(chunk.First(r => row.Id >= r.Low && row.Id <= r.High).Id, row);
+        }
+
+        if (claims.Count == 0)
+            return [];
+
+        var names = claims.Keys.ToList();
+        var heldLive = (await ctx.Set<TEntity>().AsNoTracking()
+                .Where(e => e.LegacyId != null && names.Contains(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+
+        return claims
+            .Where(c => c.Value.DeletedAt is not null || !heldLive.Contains(c.Key))
+            .Select(c => new UnkeyedOwnId(
+                c.Key,
+                c.Value is IWriteBackTracked { WrittenLive: true } && c.Value.DataSource != skippedSource))
+            .ToList();
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveKeyedOwnIdsAsync" />
+    public async Task<IEnumerable<WireLegacyId>> ResolveKeyedOwnIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var ranges = OwnIdRanges(ids, MongoObjectId.TryGetOwnIdRange);
+        if (ranges.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var resolved = new List<WireLegacyId>();
+        foreach (var chunk in ranges.Chunk(OwnIdRangesPerQuery))
+        {
+            var rows = await ctx.Set<TEntity>()
+                .IncludingDeleted()
+                .AsNoTracking()
+                .Where(e => e.LegacyId != null)
+                .Where(IdInAnyRange(chunk))
+                .Select(e => new { e.Id, LegacyId = e.LegacyId! })
+                .ToListAsync(ct);
+            foreach (var row in rows.OrderBy(r => r.Id))
+                resolved.Add(new WireLegacyId(chunk.First(r => row.Id >= r.Low && row.Id <= r.High).Id, row.LegacyId));
+        }
+
+        return resolved;
+    }
+
+    private delegate bool RangeOf(string id, out Guid low, out Guid high);
+
+    private static List<(string Id, Guid Low, Guid High)> OwnIdRanges(IReadOnlyCollection<string> ids, RangeOf rangeOf)
+    {
+        var ranges = new List<(string Id, Guid Low, Guid High)>();
+        foreach (var id in ids.Distinct(StringComparer.Ordinal))
+        {
+            if (rangeOf(id, out var low, out var high))
+                ranges.Add((id, low, high));
+        }
+
+        return ranges;
+    }
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetByGuidRangeAsync" />
     public async Task<TModel?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
     {
@@ -566,10 +754,168 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entity is null ? null : ToDomain(entity);
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync" />
+    public async Task<IEnumerable<TModel>> AdoptOwnIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var ranges = OwnIdRanges(ids, MongoObjectId.TryGetOwnIdRange);
+        if (ranges.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var claims = new List<(TEntity Row, string LegacyId)>();
+        foreach (var chunk in ranges.Chunk(OwnIdRangesPerQuery))
+        {
+            foreach (var row in await UnkeyedRows(ctx).Where(IdInAnyRange(chunk)).ToListAsync(ct))
+                claims.Add((row, chunk.First(r => row.Id >= r.Low && row.Id <= r.High).Id));
+        }
+
+        return (await AdoptAsync(ctx, claims, ct)).Select(ToDomain).ToList();
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.AdoptLegacyIdsByCorrelationAsync" />
+    public async Task<int> AdoptLegacyIdsByCorrelationAsync(
+        IReadOnlyDictionary<Guid, string> legacyIdByCorrelation, CancellationToken ct = default)
+    {
+        if (legacyIdByCorrelation.Count == 0)
+            return 0;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var correlationIds = legacyIdByCorrelation.Keys.ToList();
+        var rows = await UnkeyedRows(ctx)
+            .Where(e => e.CorrelationId != null && correlationIds.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+
+        var claims = rows.Select(row => (row, legacyIdByCorrelation[row.CorrelationId!.Value])).ToList();
+        return (await AdoptAsync(ctx, claims, ct)).Count;
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync" />
+    public async Task<IEnumerable<WireLegacyId>> ResolveUuidLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var prefixes = ids.Where(MongoObjectId.IsGuidPrefixShaped).Distinct(StringComparer.Ordinal).ToList();
+        if (prefixes.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var legacyIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var chunk in prefixes.Chunk(ServedIdsPerStatement))
+        {
+            var ranges = chunk.SelectMany(UuidPrefixRanges).ToList();
+            var row = ranges[0].Parameters[0];
+            var any = ranges.Skip(1).Aggregate(ranges[0].Body, (matches, range) =>
+                Expression.OrElse(matches, ReplacingExpressionVisitor.Replace(range.Parameters[0], row, range.Body)));
+            legacyIds.UnionWith(await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+                .Where(Expression.Lambda<Func<TEntity, bool>>(any, row))
+                .Select(e => e.LegacyId!)
+                .ToListAsync(ct));
+        }
+
+        var wanted = prefixes.ToHashSet(StringComparer.Ordinal);
+        return legacyIds
+            .Select(legacyId => (Wire: Guid.TryParse(legacyId, out var uuid) ? MongoObjectId.FromGuid(uuid) : null, LegacyId: legacyId))
+            .Where(r => r.Wire is not null && wanted.Contains(r.Wire))
+            .Select(r => new WireLegacyId(r.Wire!, r.LegacyId))
+            .ToList();
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveHashedLegacyIdsAsync" />
+    public Task<IEnumerable<WireLegacyId>> ResolveHashedLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default) =>
+        ResolveWindowLegacyIdsAsync(ids, from, to,
+            legacyId => MongoObjectId.IsObjectId(legacyId) || Guid.TryParse(legacyId, out _) ? null : MongoObjectId.Coerce(legacyId), ct);
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolvePreBolusCarbsLegacyIdsAsync" />
+    public Task<IEnumerable<WireLegacyId>> ResolvePreBolusCarbsLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default) =>
+        ResolveWindowLegacyIdsAsync(ids, from, to, legacyId => MongoObjectId.Coerce(PreBolusSplit.WriteBackCarbsId(legacyId)), ct);
+
+    /// <summary>The legacy ids timed within the window whose <paramref name="wireOf"/> is one of <paramref name="ids"/>.</summary>
+    private async Task<IEnumerable<WireLegacyId>> ResolveWindowLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, Func<string, string?> wireOf, CancellationToken ct)
+    {
+        var hashes = ids.Where(MongoObjectId.IsObjectId).ToHashSet(StringComparer.Ordinal);
+        if (hashes.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var legacyIds = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to && e.LegacyId != null)
+            .Select(e => e.LegacyId!)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return legacyIds
+            .Select(legacyId => (Wire: wireOf(legacyId), LegacyId: legacyId))
+            .Where(r => r.Wire is not null && hashes.Contains(r.Wire))
+            .Select(r => new WireLegacyId(r.Wire!, r.LegacyId))
+            .ToList();
+    }
+
+    /// <summary>Bounds the OR chain <see cref="IdInAnyRange"/> builds for one query.</summary>
+    private const int OwnIdRangesPerQuery = 200;
+
+    private static IQueryable<TEntity> UnkeyedRows(NocturneDbContext ctx) =>
+        ctx.Set<TEntity>()
+            .IncludingDeleted()
+            .AsNoTracking()
+            .Where(e => e.LegacyId == null);
+
+    private static Expression<Func<TEntity, bool>> IdInAnyRange(IEnumerable<(string Id, Guid Low, Guid High)> ranges)
+    {
+        var row = Expression.Parameter(typeof(TEntity), "e");
+        var id = Expression.Property(row, nameof(IIdentified.Id));
+        Expression? any = null;
+        foreach (var (_, low, high) in ranges)
+        {
+            // Closure members rather than constants, so EF sends the bounds as parameters.
+            Expression<Func<Guid>> lowBound = () => low;
+            Expression<Func<Guid>> highBound = () => high;
+            var inRange = Expression.AndAlso(
+                Expression.GreaterThanOrEqual(id, lowBound.Body),
+                Expression.LessThanOrEqual(id, highBound.Body));
+            any = any is null ? inRange : Expression.OrElse(any, inRange);
+        }
+
+        return Expression.Lambda<Func<TEntity, bool>>(any ?? Expression.Constant(false), row);
+    }
+
+    /// <summary>
+    /// Writes each claimed legacy id onto its row, outside audit and broadcast: the id is the one the
+    /// record is already known by on the wire, so what it serves does not change. The unique
+    /// legacy-id index counts live rows only, so a live row takes an id only while no live row holds
+    /// it, which also lets only one of two live claimants of the same id take it; any number of
+    /// deleted rows may share one.
+    /// </summary>
+    private static async Task<List<TEntity>> AdoptAsync(
+        NocturneDbContext ctx, List<(TEntity Row, string LegacyId)> claims, CancellationToken ct)
+    {
+        var adopted = new List<TEntity>();
+        foreach (var (row, legacyId) in claims)
+        {
+            var id = row.Id;
+            var target = ctx.Set<TEntity>()
+                .IncludingDeleted()
+                .Where(e => e.Id == id && e.LegacyId == null);
+            if (row.DeletedAt is null)
+                target = target.Where(_ => !ctx.Set<TEntity>().Any(held => held.LegacyId == legacyId));
+
+            if (await target.ExecuteUpdateAsync(s => s.SetProperty(e => e.LegacyId, legacyId), ct) == 0)
+                continue;
+
+            row.LegacyId = legacyId;
+            adopted.Add(row);
+        }
+
+        return adopted;
+    }
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
     /// <remarks>Virtual: <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/> overrides it to upsert in place.</remarks>
     public virtual async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await InsertAsync(ctx, ToEntity(model), origin, ct);
     }
@@ -614,6 +960,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </remarks>
     public async Task<TModel> UpdateAsync(Guid id, TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
@@ -659,6 +1006,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         if (byLegacyId.Count == 0)
             return new LegacyUpsertBatch<TModel>(outcomes, 0);
 
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
 
         var legacyIds = byLegacyId.Keys.ToList();
@@ -748,7 +1096,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
-        var (_, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
+        var (_, copies, _) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
         await RaiseBroadcastAsync([], [], [ToDomain(entity), .. copies.Select(ToDomain)], origin, ct);
     }
 
@@ -1052,6 +1400,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         List<TModel> records, WriteOrigin origin, bool updateByLegacyId, CancellationToken ct)
     {
         if (records.Count == 0) return [];
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var written = await ctx.ExecuteInTransactionAsync(
             async token =>

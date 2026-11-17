@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.API.Services.Realtime;
@@ -209,16 +210,13 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
         NullLogger<StateSpanRepository>.Instance);
 
     private BodyWeightService BodyWeights(Guid tenant) => new(
-        Tenant(tenant).AsFactory(), Processing<BodyWeight>(), Mock.Of<ISignalRBroadcastService>(),
-        TimeProvider.System, NullLogger<BodyWeightService>.Instance);
+        new BodyWeightRepository(Tenant(tenant).AsFactory(), TimeProvider.System), Processing<BodyWeight>(), Mock.Of<ISignalRBroadcastService>());
 
     private HeartRateService HeartRates(Guid tenant) => new(
-        Tenant(tenant).AsFactory(), Processing<HeartRate>(), Mock.Of<ISignalRBroadcastService>(),
-        TimeProvider.System, NullLogger<HeartRateService>.Instance);
+        new HeartRateRepository(Tenant(tenant).AsFactory(), TimeProvider.System), Processing<HeartRate>(), Mock.Of<ISignalRBroadcastService>());
 
     private StepCountService StepCounts(Guid tenant) => new(
-        Tenant(tenant).AsFactory(), Processing<StepCount>(), Mock.Of<ISignalRBroadcastService>(),
-        TimeProvider.System, NullLogger<StepCountService>.Instance);
+        new StepCountRepository(Tenant(tenant).AsFactory(), TimeProvider.System), Processing<StepCount>(), Mock.Of<ISignalRBroadcastService>());
 
     private NocturneDbContext Tenant(Guid tenant) => new(new DbContextOptionsBuilder<NocturneDbContext>()
         .UseNpgsql(fixture.Database.AppConnectionString)

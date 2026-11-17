@@ -697,7 +697,7 @@ public class ProfileDecomposerTests
             l => l.Log(
                 Microsoft.Extensions.Logging.LogLevel.Warning,
                 It.IsAny<Microsoft.Extensions.Logging.EventId>(),
-                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("AAPS") && state.ToString()!.Contains("doc:AAPS")),
+                It.Is<It.IsAnyType>((state, _) => state!.ToString()!.Contains("AAPS") && state!.ToString()!.Contains("doc:AAPS")),
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Exactly(warnings));

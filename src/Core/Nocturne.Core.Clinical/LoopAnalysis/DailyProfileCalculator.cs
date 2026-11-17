@@ -133,8 +133,8 @@ public static class DailyProfileCalculator
 
         return new DailyProfileRange
         {
-            From = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            To = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            From = from.ToUtcDateTime(),
+            To = to.ToUtcDateTime(),
             SlotMinutes = SlotMinutes,
             Slots = slots,
             HourlyNetLoopCorrection = Hourly(dayCount, acc),
@@ -450,7 +450,7 @@ public static class DailyProfileCalculator
             {
                 Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 DayOfWeek = date.DayOfWeek,
-                Start = DateTimeOffset.FromUnixTimeMilliseconds(dayStarts[d]).UtcDateTime,
+                Start = dayStarts[d].ToUtcDateTime(),
                 Complete = dayStarts[d] >= from && dayStarts[d + 1] <= to,
                 Coverage = coverage.ToCoverage(),
                 NetLoopCorrection = net is { } n ? SlotSummary.Round(n) : null,

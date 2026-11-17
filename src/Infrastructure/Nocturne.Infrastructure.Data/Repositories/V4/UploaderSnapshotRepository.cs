@@ -45,27 +45,6 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
     protected override void ApplyUpdate(UploaderSnapshotEntity target, UploaderSnapshot source) =>
         UploaderSnapshotMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Gets uploader snapshots by correlation IDs.
-    /// </summary>
-    /// <param name="correlationIds">The correlation IDs to match.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching uploader snapshots.</returns>
-    public async Task<IEnumerable<UploaderSnapshot>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
-    {
-        var ids = correlationIds.ToList();
-        if (ids.Count == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.UploaderSnapshots
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-
-        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
-    }
-
     /// <inheritdoc />
     public async Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
     {

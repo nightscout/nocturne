@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
-using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;
@@ -331,6 +331,8 @@ public partial class DeviceSetupService(
     }
 
     /// <summary>The offer of <paramref name="kind"/> and the tracker it stands for.</summary>
+    /// <param name="kind">The offer to find among those of the recorded devices.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="db">The caller's transaction context, so the offer reads what it holds.</param>
     private async Task<(TrackerOffer Offer, ConsumableTrackerSpec Spec)> OfferAsync(
         TrackerOfferKind kind, CancellationToken ct, NocturneDbContext? db = null)

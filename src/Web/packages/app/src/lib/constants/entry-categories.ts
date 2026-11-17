@@ -11,48 +11,36 @@ import {
 export const ENTRY_CATEGORIES = {
   bolus: {
     id: "bolus" as const,
-    name: "Insulin",
-    description: "Bolus insulin deliveries",
     icon: "syringe" as const,
     colorClass: "text-entry-bolus",
     badge: "entry-bolus" as const,
   },
   carbs: {
     id: "carbs" as const,
-    name: "Carbs",
-    description: "Carbohydrate intake records",
     icon: "utensils" as const,
     colorClass: "text-entry-carbs",
     badge: "entry-carbs" as const,
   },
   bgCheck: {
     id: "bgCheck" as const,
-    name: "BG checks",
-    description: "Blood glucose measurements",
     icon: "droplet" as const,
     colorClass: "text-entry-bg-check",
     badge: "entry-bg-check" as const,
   },
   note: {
     id: "note" as const,
-    name: "Notes",
-    description: "User annotations and announcements",
     icon: "file-text" as const,
     colorClass: "text-muted-foreground",
     badge: "secondary" as const,
   },
   deviceEvent: {
     id: "deviceEvent" as const,
-    name: "Device events",
-    description: "Sensor, pump, and site changes",
     icon: "smartphone" as const,
     colorClass: "text-entry-device-event",
     badge: "entry-device-event" as const,
   },
   basalInjection: {
     id: "basalInjection" as const,
-    name: "Long-acting injection",
-    description: "Basal insulin injections (pen / syringe)",
     icon: "syringe" as const,
     colorClass: "text-entry-basal-injection",
     badge: "entry-basal-injection" as const,
@@ -60,6 +48,19 @@ export const ENTRY_CATEGORIES = {
 } as const;
 
 export type EntryCategoryId = keyof typeof ENTRY_CATEGORIES;
+
+/**
+ * The English category names the backend's `TreatmentLogFilter` puts in each record's search
+ * text. Not display copy: the app shows `entryCategoryName`.
+ */
+const CATEGORY_SEARCH_NAMES: Record<EntryCategoryId, string> = {
+  bolus: "Insulin",
+  carbs: "Carbs",
+  bgCheck: "BG checks",
+  note: "Notes",
+  deviceEvent: "Device events",
+  basalInjection: "Long-acting injection",
+};
 
 /** Discriminated union for all v4 record types displayed in the entries table */
 export type EntryRecord =
@@ -148,7 +149,7 @@ export function filterEntryRecords(records: EntryRecord[], filter: EntryFilter):
   const query = filter.search.trim().toLowerCase();
   if (query) {
     filtered = filtered.filter((r) => {
-      const searchable: string[] = [ENTRY_CATEGORIES[r.kind].name];
+      const searchable: string[] = [CATEGORY_SEARCH_NAMES[r.kind]];
 
       switch (r.kind) {
         case "bolus":

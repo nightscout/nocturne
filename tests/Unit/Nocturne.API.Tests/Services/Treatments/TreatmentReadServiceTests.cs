@@ -455,6 +455,60 @@ public class TreatmentReadServiceTests
         stored.Select(t => t.Created.Id).Should().Equal(note.Id.ToString());
     }
 
+    /// <summary>
+    /// A create whose decomposition updated a stored record rather than inserting one is reported
+    /// as an update, so it is announced as one; one that inserted is not.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ReportsATreatmentThatUpdatedAStoredRecordAsUpdated()
+    {
+        var resent = new Treatment { Id = "65a1b2c3d4e5f60718293a4b", Mills = 1000, EventType = "Note", Notes = "resent" };
+        var fresh = new Treatment { Id = "65a1b2c3d4e5f60718293a4c", Mills = 2000, EventType = "Note", Notes = "fresh" };
+        var resentResult = new DecompositionResult();
+        resentResult.UpdatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = resent.Id });
+        var freshResult = new DecompositionResult();
+        freshResult.CreatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = fresh.Id });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resent, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resentResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(fresh, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(freshResult);
+        var stored = new List<StoredTreatment>();
+
+        await _service.CreateAsync([resent, fresh], WriteOrigin.Live, CancellationToken.None, stored);
+
+        stored.Select(t => t.Updated).Should().Equal(true, false);
+    }
+
+    /// <summary>
+    /// A treatment stored as a span (an override here) whose re-upload updated that span is reported
+    /// updated. A pump resume that closed another treatment's suspension span created its own record,
+    /// so it is not.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ReportsATreatmentThatUpdatedItsOwnSpanAsUpdated()
+    {
+        var resentOverride = new Treatment { Id = "override-1", Mills = 1000, EventType = "Temporary Override", Duration = 30 };
+        var resume = new Treatment { Id = "resume-1", Mills = 2000, EventType = "Pump Resume" };
+        var overrideResult = new DecompositionResult();
+        overrideResult.UpdatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = resentOverride.Id });
+        var resumeResult = new DecompositionResult();
+        resumeResult.CreatedRecords.Add(new DeviceEvent { Id = Guid.CreateVersion7(), LegacyId = resume.Id });
+        resumeResult.UpdatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = "pump-suspended-tx:suspend-1" });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resentOverride, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(overrideResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resume, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resumeResult);
+        var stored = new List<StoredTreatment>();
+
+        await _service.CreateAsync([resentOverride, resume], WriteOrigin.Live, CancellationToken.None, stored);
+
+        stored.Select(t => t.Updated).Should().Equal(true, false);
+    }
+
     [Fact]
     public async Task CreateAsync_DoesNotReportATreatmentTheUserDeletedAsStored()
     {

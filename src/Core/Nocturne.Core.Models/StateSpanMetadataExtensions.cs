@@ -147,8 +147,8 @@ public static class StateSpanMetadataExtensions
     private static decimal? CoerceDecimal(object v) => v switch
     {
         decimal d => d,
-        double dbl when double.IsFinite(dbl) => (decimal)dbl,
-        float f when float.IsFinite(f) => (decimal)f,
+        double dbl when double.IsFinite(dbl) => dbl.ToDecimal(),
+        float f when float.IsFinite(f) => f.ToDecimal(),
         int i => i,
         long l => l,
         string s when decimal.TryParse(s, CultureInfo.InvariantCulture, out var p) => p,

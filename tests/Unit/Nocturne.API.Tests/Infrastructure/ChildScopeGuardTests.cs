@@ -62,6 +62,7 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcilePlatformAsync",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcileTenantAsync",
         "src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeJob.cs: ReleaseNoticeJob.NotifyOwnersAsync",
+        "src/API/Nocturne.API/Services/Seeding/SampleDataLiveFeedService.cs: SampleDataLiveFeedService.AdvanceAllAsync",
 
         // Credential and identity lookups: subjects, grants, memberships and guest links, which no
         // category or history policy narrows.
@@ -85,6 +86,11 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
+
+        // A share's zone and timezone timeline, which no category governs and every local-day report
+        // needs. Each returns only the zone id or the timeline's entries.
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimelineAsync",
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimezoneAsync",
 
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an

@@ -98,7 +98,7 @@ public class ConnectedAppsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="IOAuthGrantService.RevokeGrantAsync"/>
     [HttpDelete("{grantId}")]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Revoke(Guid grantId, CancellationToken ct)

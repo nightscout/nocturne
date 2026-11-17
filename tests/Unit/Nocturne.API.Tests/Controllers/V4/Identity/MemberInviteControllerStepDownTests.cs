@@ -25,7 +25,6 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 public sealed class MemberInviteControllerStepDownTests : IDisposable
 {
     private readonly NocturneDbContext _db;
-    private readonly Mock<IAuthAuditService> _audit = new();
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _helperSubjectId = Guid.CreateVersion7();
     private readonly Guid _recipientSubjectId = Guid.CreateVersion7();
@@ -59,6 +58,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         });
         _db.SaveChanges();
         _db.ChangeTracker.Clear();
+        _db.ActingAs(new TestAuditActor { SubjectId = _helperSubjectId });
     }
 
     public void Dispose() => _db.Dispose();
@@ -99,14 +99,13 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
             new TenantRoleService(new TenantMembershipRepository(_db.AsFactory()), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            new TenantMembershipRepository(_db.AsFactory()),
-            _audit.Object)
+            new TenantMembershipRepository(_db.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
-    private async Task<List<string?>> HelperRoleSlugsAsync() =>
+    private async Task<List<string>> HelperRoleSlugsAsync() =>
         await _db.TenantMemberRoles.AsNoTracking()
             .Where(mr => mr.TenantMemberId == _helperMemberId)
             .Select(mr => mr.TenantRole!.Slug)
@@ -134,13 +133,11 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         await Controller(Scope.FullAccess).StepDown(CancellationToken.None);
 
-        _audit.Verify(a => a.LogAsync(
-            AuthAuditEventType.RoleRemoved, _helperSubjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            null, """{"role":"owner","kind":"tenant"}""", null, null, null), Times.Once);
-        _audit.Verify(a => a.LogAsync(
-            AuthAuditEventType.RoleAssigned, _helperSubjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            null, """{"role":"caretaker","kind":"tenant"}""", null, null, null), Times.Once);
-        _audit.VerifyNoOtherCalls();
+        var rows = await _db.AuthAuditLog.AsNoTracking().ToListAsync();
+        rows.Should().HaveCount(2);
+        var logged = rows.Select(a => (a.EventType, a.TargetSubjectId, a.ActorSubjectId, a.TenantId, a.DetailsJson)).ToList();
+        logged.Should().Contain((AuthAuditEventType.RoleRemoved, (Guid?)_helperSubjectId, (Guid?)_helperSubjectId, (Guid?)_tenantId, (string?)"""{"role":"owner","kind":"tenant"}"""));
+        logged.Should().Contain((AuthAuditEventType.RoleAssigned, (Guid?)_helperSubjectId, (Guid?)_helperSubjectId, (Guid?)_tenantId, (string?)"""{"role":"caretaker","kind":"tenant"}"""));
     }
 
     [Fact]
@@ -158,7 +155,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         result.Should().BeOfType<NoContentResult>();
         (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Caretaker);
-        _audit.VerifyNoOtherCalls();
+        (await _db.AuthAuditLog.AsNoTracking().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -170,7 +167,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(TenantOwnerFilter.LastOwnerRefusal);
         (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Owner);
-        _audit.VerifyNoOtherCalls();
+        (await _db.AuthAuditLog.AsNoTracking().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -189,6 +186,6 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Viewer);
-        _audit.VerifyNoOtherCalls();
+        (await _db.AuthAuditLog.AsNoTracking().CountAsync()).Should().Be(0);
     }
 }

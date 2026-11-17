@@ -34,8 +34,8 @@ public sealed record ChartDataContext
     /// <summary>IOB/COB time-series resolution in minutes.</summary>
     public int IntervalMinutes { get; init; }
 
-    /// <summary>StartTime minus 8 hours, used for buffered IOB/COB fetches.</summary>
-    public long BufferStartTime { get; init; }
+    /// <summary>The IOB/COB series' ticks, from <see cref="StartTime"/> to <see cref="EndTime"/>, and the bounds its inputs are read over.</summary>
+    public IobCobSeriesWindow SeriesWindow => new(StartTime, EndTime, IntervalMinutes * 60 * 1000L);
 
     /// <summary>
     /// Whether to fetch and map <see cref="HeartRateSeries"/> and <see cref="StepSeries"/>, both raw

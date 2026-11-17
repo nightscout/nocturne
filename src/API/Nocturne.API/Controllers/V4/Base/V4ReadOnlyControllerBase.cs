@@ -85,18 +85,10 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     protected ActionResult? PrepareListQuery(
         DateTime? from, DateTime? to, string sort, ref int limit, ref int offset, out bool descending)
     {
-        descending = true;
+        if (this.PrepareListPage(sort, ref limit, ref offset, out descending) is { } invalid)
+            return invalid;
 
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        if (this.RejectDateSpan(from, to) is { } overlong)
-            return overlong;
-
-        descending = sort == "timestamp_desc";
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-        return null;
+        return this.RejectDateSpan(from, to);
     }
 
     /// <summary>Retrieves a single record by its unique identifier.</summary>

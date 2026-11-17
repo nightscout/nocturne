@@ -10,6 +10,11 @@ namespace Nocturne.API.Services.Migration;
 /// <param name="BgTargetBottom">The low threshold, in mg/dL.</param>
 /// <param name="BgTargetTop">The high threshold, in mg/dL.</param>
 /// <param name="BgHigh">The urgent high threshold, in mg/dL.</param>
+/// <param name="AlarmUrgentLow">Whether the urgent low alarm is on.</param>
+/// <param name="AlarmLow">Whether the low alarm is on.</param>
+/// <param name="AlarmHigh">Whether the high alarm is on.</param>
+/// <param name="AlarmUrgentHigh">Whether the urgent high alarm is on.</param>
+/// <param name="AlarmTimeagoWarn">Whether the stale-data warning is on.</param>
 public record NightscoutAlarmSettings(
     decimal? BgLow,
     decimal? BgTargetBottom,

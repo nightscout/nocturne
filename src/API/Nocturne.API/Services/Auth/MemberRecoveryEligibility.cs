@@ -34,6 +34,9 @@ public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers
 {
     /// <param name="db">A context on <paramref name="tenantId"/> that is not share-flagged
     /// (<see cref="OrphanedSubjectFilter.OrphanedSubjectsOf"/>).</param>
+    /// <param name="tenantId">The tenant the member is checked as locked out of.</param>
+    /// <param name="subjectId">The member whose eligibility is checked.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<RecoveryEligibility> CheckAsync(
         NocturneDbContext db, Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {

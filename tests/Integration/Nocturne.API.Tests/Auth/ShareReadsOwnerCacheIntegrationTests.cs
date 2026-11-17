@@ -15,7 +15,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// A full-history public share is not history-clamped, so it reads and writes the tenant-keyed
 /// caches. Row level security hides from a share every category it was not granted, and
 /// <c>notes</c>, <c>state_spans</c> and the therapy tables from every share, so whatever an owner's
-/// request leaves in those caches must not reach a share.
+/// request leaves in those caches must not reach a share. The tenant's timezone is the exception: a
+/// share reads it by design, through <c>ShareClockReader</c>.
 /// </summary>
 /// <remarks>
 /// Each test anchors on a cold-cache share read, which only the database answers, and expects the
@@ -55,7 +56,7 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
     }
 
     [Fact]
-    public async Task Share_does_not_read_the_owner_cached_therapy_timezone_from_hourly_patterns()
+    public async Task Share_gets_the_therapy_timezone_from_hourly_patterns_whether_the_owner_cached_it_or_not()
     {
         var profile = new
         {
@@ -83,13 +84,13 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
 
         ClearCaches();
         var cold = await TimeZoneUnavailableReasonAsync(share, path);
-        cold.Should().NotBe("null", "row level security hides the therapy settings from a share");
+        cold.Should().Be("null", "a share reads the tenant's zone through ShareClockReader");
 
         ClearCaches();
         (await TimeZoneUnavailableReasonAsync(AuthenticatedClient, path)).Should().Be("null");
 
         var warm = await TimeZoneUnavailableReasonAsync(share, path);
-        warm.Should().Be(cold, "the owner's cached therapy settings must not reach the share");
+        warm.Should().Be(cold);
     }
 
     [Fact]

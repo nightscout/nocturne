@@ -192,7 +192,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task ThePurgeSoftDeletesTheSourcesRowsCountsThemByTypeAndNamesTheProfiles()
+    public async Task ThePurgeSoftDeletesTheSourcesRowsAndCountsThemByType()
     {
         SeedBolus(Source, null, Now, "mine");
         SeedBolus(Other, null, Now, "theirs");
@@ -208,7 +208,6 @@ public class SourceOwnedDataRepositoryTests : IDisposable
             [SourceDataTypes.StateSpans] = 1,
             [SourceDataTypes.Profiles] = 2,
         });
-        result.ProfileNames.Should().Equal("Day");
 
         await using var db = Context();
         var mine = await db.Boluses.IgnoreQueryFilters().Where(b => b.LegacyId == "mine")

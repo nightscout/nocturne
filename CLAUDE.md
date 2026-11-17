@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nocturne is a .NET 10 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. API versions v1, v2, and v3 maintain compatibility with the original Nightscout API; v4 is new.
+Nocturne is a .NET 11 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. API versions v1, v2, and v3 maintain compatibility with the original Nightscout API; v4 is new.
 
 ## Development Commands
 
@@ -65,6 +65,12 @@ curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
   -H "Content-Type: application/json" \
   -d '{"slug":"test","displayName":"Test","ownerUsername":"dev","sampleData":true}'
 
+# Seeded sample data stays live: in run mode the API continues each seed's simulation every
+# minute (readings, treatments, loop status, heart rate, steps, sleep, device changes). The seed
+# records its timeline in the tenant's settings (`sample-data:timeline`); a tenant seeded
+# before that existed stays frozen until re-seeded. Turn it off to keep data as seeded:
+Dev__LiveSampleData=false aspire start
+
 # End-to-end smoke of the local stack (seed -> data -> login link -> tenant UI)
 dotnet run scripts/dev-smoke.cs
 
@@ -106,6 +112,8 @@ Files covered:
 
 The Docker Compose bundles (`deploy/docker-compose/`, `deploy/portainer/`) are tracked and not hidden; a checkout that hid them with an older `hide-generated` clears the bits with `pnpm run unhide-generated`. Regenerate them with `dotnet run scripts/publish-release.cs` in any PR that changes an input; the `compose-bundle-drift` job in `tests.yml` fails a PR whose bundle differs from a regeneration.
 
+The install scripts under `deploy/install/` and `deploy/oracle-cloud/` are generated the same way, by the `install-scripts` publish step (`InstallScriptPublisher`). Edit their sources in `src/Aspire/Nocturne.Aspire.Host/install/`, never the copies in `deploy/`. `install.sh` is the installer for any Linux server; `oracle-cloud-install.sh` embeds it whole, runs it on the instance and sources it for the shared DNS setup. The secrets `install.sh` generates are the AppHost's secret parameters that carry publish metadata.
+
 To stage translation changes after editing `.po` files or adding new strings, use `pnpm run translations:stage` (it unhides the locales files, then stages them).
 
 The `--skip-worktree` bits may be cleared by git during branch switches that touch those files. Re-run `hide-generated` if any of the above reappear in `git status`.
@@ -133,7 +141,7 @@ Nocturne follows Clean Architecture.
 ```
 src/
 ├── API/Nocturne.API             # ASP.NET Core REST API (controllers for v1-v4 + admin)
-├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, SourceGenerators)
+├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, Hosting)
 ├── Connectors/                  # Data source integrations (Dexcom, Glooko, Libre, etc.)
 ├── Core/
 │   ├── Nocturne.Core.Clinical   # Clinical calculators (statistics, IOB/COB, sleep)
@@ -167,12 +175,53 @@ Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) 
 
 ## Database
 
-- **PostgreSQL** via Entity Framework Core with 70+ migrations
+- **PostgreSQL** via Entity Framework Core: a squashed baseline plus every migration since the last release (see [Migration baseline](#migration-baseline))
 - Domain models → Database entities via mappers in `Infrastructure.Data/Mappers/`
-- EF migrations live in `Nocturne.Infrastructure.Data.Migrations`, which no project references at compile time; the API loads it at runtime from its output directory (so `dotnet watch` never loads the ~1.7M lines of migration Designer files). `dotnet watch` does not see that directory, so after adding a migration restart the API: `aspire resource nocturne-api restart`
+- EF migrations live in `Nocturne.Infrastructure.Data.Migrations`, which no project references at compile time; the API loads it at runtime from its output directory (so `dotnet watch` never loads the migration Designer files). `dotnet watch` does not see that directory, so after adding a migration restart the API: `aspire resource nocturne-api restart`
 - Tables use snake_case (`entries`, `treatments`)
 - UUID v7 for new records; `OriginalId` preserved for MongoDB migration compatibility
 - Row Level Security for multitenancy
+
+### Record writers
+
+Every table in `V4RecordTables.All` carries `writer_grant_id` (`IWriterStamped`): the
+`oauth_grants` id of the credential that inserted the row, stamped on insert by
+`NocturneDbContext` from the scope's audit actor (`AuditContextExtensions.GrantId`) and never
+changed afterwards. It is null for a row a connector, a background job or a signed-in member
+wrote. `data_source`, `device` and `app` hold what the uploader said about itself, which differs
+per record type for one app, so the connections list (`ConnectionService`,
+`GET /api/v4/services/connections`) groups by the writer and treats those strings as the streams
+inside a connection. A new record table implements `IWriterStamped`.
+
+### Migration baseline
+
+The first migration, `<id>_Baseline`, is every migration up to the last one of a
+release (now v0.3.0) squashed into the SQL pg_dump takes of a database migrated
+that far (`<id>_Baseline.sql`, embedded). It keeps the id of the last migration it
+replaces, so an instance on that release or later already has it recorded and
+skips it, and a fresh database runs it and then every later migration.
+
+That release is the oldest one the current build upgrades from. An instance
+migrated by an older one has neither the baseline nor the migrations it replaced,
+so `EnsureReachesBaselineAsync` refuses it at startup, before applying anything,
+and names the release (and its image tag) to run first. The squashed migrations,
+and their tests, are still readable at the tag.
+
+Each release upgrades only from the release before it. Once release N is tagged,
+squash `main` to N's last migration, so N+1 upgrades from N or later; never squash
+to a migration only `main` has, since an instance on the release has to hold the id
+the baseline reuses. N+1's release notes state that minimum. An instance that
+cannot finish N's migrations cannot be rescued by a later release either: the fix
+has to ship as a patch release of N.
+
+```bash
+dotnet run scripts/squash-migrations.cs -- squash <last-migration-id-of-N> <vN>
+dotnet run scripts/squash-migrations.cs -- verify   # dumps a fresh baseline database and diffs it
+```
+
+Then delete the tests that seed before a squashed migration, and the guard
+allowlist entries that name one. A branch holding a migration dated before the
+baseline must regenerate it, or it sorts ahead of the baseline on a fresh database.
 
 ### Unique indexes over existing data
 
@@ -185,8 +234,9 @@ carry pre-index duplicates are the ones upgrading across several versions.
 **Every unique index over a table the migration did not create in that same
 migration ships with a loser-cleanup step earlier in the same `Up`.** Soft-delete
 (or delete) all but the winner of each duplicate key first;
-`20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots` is the worked example,
-including the per-tenant `set_config` loop that FORCE ROW LEVEL SECURITY requires.
+`20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots` (in the baseline now;
+read it at the v0.3.0 tag) is the worked example, including the per-tenant
+`set_config` loop that FORCE ROW LEVEL SECURITY requires.
 A table created in the same migration is exempt — it holds no rows yet, and a
 cleanup there would be dead code.
 
@@ -207,13 +257,13 @@ Know what it actually checks before trusting it:
   `ADD CONSTRAINT … PRIMARY KEY`, since only the `AddPrimaryKey` builder call is
   matched — the rule above is deliberately broader than the guard; and a cleanup
   that cannot run, e.g. wrapped in `IF false`.
-- **Three of its detection paths redden nothing if they break.** Raw-SQL
-  `CREATE UNIQUE INDEX` does fire on a shipped migration —
-  `20260424051736_AddReadAccessAudit` — but that migration is *exempt*, because it
-  creates the table in the same `Up`, so breaking the regex still leaves the suite
-  green. That migration's exact spacing is load-bearing for a regex nothing tests.
-  `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT … UNIQUE`
-  have no live example at all. Treat all three as unexercised.
+- **Most of its detection paths redden nothing if they break.** Only the
+  `ConcurrentIndexBuilder.BuildUnique` path fires on a live migration the guard
+  judges. The fluent `unique: true` `CreateIndex` fires only on a table created in
+  the same migration (`AddJobLedger`), which is exempt, and raw-SQL `CREATE UNIQUE
+  INDEX`, `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT …
+  UNIQUE` have no live example in an `Up` since the baseline. Breaking any of those
+  regexes leaves the suite green. Treat them as unexercised.
 - **A concurrent unique index goes through `ConcurrentIndexBuilder.BuildUnique`**
   (`ConcurrentIndexBuildGuardTests` forbids writing `CREATE UNIQUE INDEX CONCURRENTLY` in a
   migration). The guard reads its table off the `ON <table>` in the definition, and
@@ -227,9 +277,9 @@ only the index still reports, because the exemption cannot match a create it als
 cannot read. A schema qualifier is not a cause — `public.x` resolves to `x` on
 both sides, so a schema-qualified new table is exempted like any other.
 
-Older migrations that predate the rule are listed in the guard by name; an
-instance whose chain fails on one never reaches a later migration, so nothing can
-repair them and nothing may be added to that list.
+The migrations that predated the rule are in the baseline, whose script the guard
+does not read. Its one allowlist, `WidenedPrimaryKeyMigrations`, holds migrations
+whose unique builds become a primary key that contains the old one.
 
 ### Row Level Security
 
@@ -481,6 +531,11 @@ Design notes:
 - **UI copy is Simplified Technical English (ASD-STE100), in American English.** Follow the
   `simple-english` skill. `cd src/Web && pnpm run lint:copy` runs the Vale rules in
   `.vale/styles/Nocturne` over every extracted string. CI fails on errors.
+- **No raw `double`-to-`decimal` casts and no `Math.Round(double, digits)`.** .NET 11 changed both
+  (`(decimal)1.2` is `1.1999999999999999555910790150`; `Math.Round(0.175, 2)` is `0.17`). Convert
+  with `DecimalConversion.ToDecimal()`, round with `ScaledRounding.Round`, and declare a decimal
+  factor as a decimal constant (`GlucoseConstants.MgdlPerMmolDecimal`): the compiler folds a cast
+  of a `const double` to the same wrong number. Both helpers are in `Nocturne.Core.Models`.
 - **No emoji.** Use Lucide icons for UI elements.
 - **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
   no step-by-step banners. Rationale lives at one site and is referenced elsewhere with

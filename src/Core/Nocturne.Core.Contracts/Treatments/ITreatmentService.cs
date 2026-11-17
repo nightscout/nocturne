@@ -122,7 +122,7 @@ public interface ITreatmentService
     );
 
     /// <summary>
-    /// <see cref="CreateTreatmentsAsync"/> for treatments posted to the v1 API, where a meal with a
+    /// <see cref="CreateTreatmentsAsync"/> for treatments written through the v1 API, where a meal with a
     /// <c>preBolus</c> is stored as a bolus and its carbs at the preBolus offset, as Nightscout's
     /// POST stores it. Both halves are returned, the bolus first.
     /// </summary>
@@ -181,6 +181,19 @@ public interface ITreatmentService
     Task<int> RekeyClientIdRecordsAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Rewrites each treatment's id to the legacy id of the stored record it names, as decomposing
+    /// it would, so what is keyed by that id before the decomposition (upstream fingerprints, the
+    /// republish rule) is keyed as the decomposition will write it.
+    /// </summary>
+    /// <returns>
+    /// The write-back echoes among <paramref name="treatments"/>: treatments the Nightscout
+    /// connector pulled that name a record write-back may have sent upstream. Decomposing one stores
+    /// nothing.
+    /// </returns>
+    Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default);
+
     /// <summary>Of treatments <paramref name="source"/> delivered again, the ones to decompose again.</summary>
     Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default);
@@ -191,6 +204,17 @@ public interface ITreatmentService
     /// <param name="treatment">Updated treatment data</param>
     /// <returns>Updated treatment if successful, null otherwise</returns>
     Task<Treatment?> UpdateTreatmentAsync(
+        string id,
+        Treatment treatment,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// <see cref="UpdateTreatmentAsync"/> for a treatment saved through the v1 API, where a meal with
+    /// a <c>preBolus</c> is stored as <see cref="CreateV1TreatmentsAsync"/> stores it, keyed by the
+    /// stored record <paramref name="id"/> names, so a re-send replaces both halves. Returns the bolus.
+    /// </summary>
+    Task<Treatment?> UpdateV1TreatmentAsync(
         string id,
         Treatment treatment,
         CancellationToken cancellationToken = default

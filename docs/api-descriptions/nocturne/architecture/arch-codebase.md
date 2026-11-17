@@ -4,7 +4,7 @@ standalone: true
 ---
 Where things live in the Nocturne repository, for someone who wants to read or change the code behind this API.
 
-Nocturne is a .NET 10 rewrite of the Nightscout API with a SvelteKit web app. It follows Clean Architecture: the domain has no dependency on the web framework or the database, and each outer layer depends only on the layers inside it.
+Nocturne is a .NET 11 rewrite of the Nightscout API with a SvelteKit web app. It follows Clean Architecture: the domain has no dependency on the web framework or the database, and each outer layer depends only on the layers inside it.
 
 ## Repository layout
 

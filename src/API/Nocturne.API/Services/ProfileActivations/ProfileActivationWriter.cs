@@ -1,4 +1,3 @@
-using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
@@ -9,6 +8,7 @@ namespace Nocturne.API.Services.ProfileActivations;
 public sealed record ProfileActivationWrite(ProfileActivation Activation, ProfileActivation? Stored);
 
 /// <summary>The ends and confirmation links one activation settles in its source family.</summary>
+/// <param name="Ends">The end each activation takes, or null for one left running.</param>
 /// <param name="Confirms">The requested activation each effective one confirms, or null for none.</param>
 internal sealed record ProfileActivationSettlement(
     IReadOnlyDictionary<Guid, DateTime?> Ends,
@@ -41,14 +41,12 @@ public sealed class ProfileActivationWriter
     private const int Neighbourhood = 200;
 
     private readonly IProfileActivationRepository _repository;
-    private readonly ITenantCache _cache;
     private readonly ITempBasalRateReresolver _tempBasalRates;
 
     public ProfileActivationWriter(
-        IProfileActivationRepository repository, ITenantCache cache, ITempBasalRateReresolver tempBasalRates)
+        IProfileActivationRepository repository, ITempBasalRateReresolver tempBasalRates)
     {
         _repository = repository;
-        _cache = cache;
         _tempBasalRates = tempBasalRates;
     }
 
@@ -59,6 +57,7 @@ public sealed class ProfileActivationWriter
     /// <param name="activation">The activation to write, carrying the end it was uploaded with: its own length, or none.</param>
     /// <param name="stored">The live row <paramref name="activation"/> replaces, if any.</param>
     /// <param name="store">The write; null when it was refused.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<ProfileActivation?> WriteAsync(
         ProfileActivation activation,
         ProfileActivation? stored,
@@ -72,7 +71,9 @@ public sealed class ProfileActivationWriter
     /// one at a time in that order would, then settles the neighbours they change in one save. The
     /// neighbourhood is read once, around every start the writes touch.
     /// </summary>
+    /// <param name="writes">The activations to write, in the order they settle, each with the live row it replaces.</param>
     /// <param name="store">The write, returning per activation the row written, or null when it was refused.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <remarks>
     /// A confirmation of an activation the batch inserts is written with the settlement rather than
     /// with the row, so no row the store writes names one it may refuse. A refused write settles nothing:
@@ -119,7 +120,6 @@ public sealed class ProfileActivationWriter
         }
 
         await family.SaveAsync(_repository, ct);
-        await InvalidateAsync(ct);
         await _tempBasalRates.AfterActivationsChangedAsync(
             [.. written.OfType<ProfileActivation>().Select(Span), .. moved.Select(Span)], ct);
         return written;
@@ -168,37 +168,28 @@ public sealed class ProfileActivationWriter
         if (written is not null)
         {
             await ResettleNeighboursOfAsync([written], ct);
-            await InvalidateAsync(ct);
         }
         return written;
     }
 
-    /// <summary>Settles again the live neighbours of the removed activations, then clears the cache.</summary>
+    /// <summary>Settles again the live neighbours of the removed activations, then re-resolves the rates they govern.</summary>
     public async Task ResettleAfterRemovalAsync(IReadOnlyCollection<Guid> removedIds, CancellationToken ct)
     {
         IReadOnlyList<ProfileActivation> removed =
             removedIds.Count > 0 ? await _repository.GetIncludingDeletedAsync(removedIds, ct) : [];
         await ResettleNeighboursOfAsync(removed, ct);
-        await InvalidateAsync(ct);
         await _tempBasalRates.AfterActivationsChangedAsync(removed.Select(Span).ToList(), ct);
     }
 
-    private static (string ProfileName, DateTime Start, DateTime? End) Span(ProfileActivation activation) =>
-        (activation.BaseProfileName, activation.StartTimestamp, activation.EndTimestamp);
-
-    public Task InvalidateAsync(CancellationToken ct) =>
-        _cache.RemoveFamilyAsync(TenantCacheFamily.ProfileActivations, ct);
+    private static (DateTime Start, DateTime? End) Span(ProfileActivation activation) =>
+        (activation.StartTimestamp, activation.EndTimestamp);
 
     /// <summary>
-    /// Clears the cache and re-resolves every schedule-derived temp basal rate, after activations
-    /// were removed in bulk without being read. <paramref name="profileNames"/> are the profiles whose
-    /// schedules the same removal deleted.
+    /// Re-resolves every schedule-derived temp basal rate, after activations were removed in bulk
+    /// without being read.
     /// </summary>
-    public async Task AfterBulkRemovalAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct)
-    {
-        await InvalidateAsync(ct);
-        await _tempBasalRates.AfterProfilesChangedAsync(profileNames, ct);
-    }
+    public Task AfterBulkRemovalAsync(CancellationToken ct) =>
+        _tempBasalRates.AfterProfilesChangedAsync(ct);
 
     /// <summary>
     /// Each live activation of the families of <paramref name="removed"/> that one of them ended or

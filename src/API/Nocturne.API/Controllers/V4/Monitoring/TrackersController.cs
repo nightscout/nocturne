@@ -291,7 +291,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [RemoteQuery]
     [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
     public ActionResult<string[]> GetDeviceEventTypes() =>
-        Ok(TreatmentTypes.DeviceEventTypeMap.Keys.ToArray());
+        Ok(TreatmentTypeMaps.DeviceEventTypeMap.Keys.ToArray());
 
     /// <summary>
     /// Get a specific tracker definition

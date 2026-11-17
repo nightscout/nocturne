@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -43,6 +44,22 @@ public class DeviceSubjectFilterTests : IDisposable
         subject.IsSystemSubject.Should().BeTrue();
         subject.IsPlatformAdmin.Should().BeFalse();
         subject.IsDemoSubject.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task The_holders_full_access_is_audited_once_when_it_is_created()
+    {
+        var subjectId = await _context.DeviceSubjectOf(_tenant);
+        await _context.DeviceSubjectOf(_tenant);
+
+        var row = (await _context.AuthAuditLog.AsNoTracking().ToListAsync()).Should().ContainSingle().Subject;
+        row.Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.RoleAssigned,
+            TargetSubjectId = (Guid?)subjectId,
+            TenantId = (Guid?)_tenant,
+            DetailsJson = $$"""{"permission":"{{Scope.FullAccess}}","kind":"tenant"}""",
+        });
     }
 
     [Fact]

@@ -19,7 +19,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class HistoryPagedIndexTests
 {
     [Fact]
-    public void TheHistoryIndexCoversExactlyTheTablesHistoryPages()
+    public void TheHistoryIndexCoversExactlyTheTablesReadBySysUpdatedAt()
     {
         var paged = LegacyTreatmentTables.All
             .Except(LegacyTreatmentTables.StateSpanTables)
@@ -29,9 +29,10 @@ public class HistoryPagedIndexTests
             .Concat(DeviceStatusHistoryTables)
             .Concat(EntryHistoryTables)
             .Concat(ProfileHistoryTables)
+            .Concat(LastModifiedReadTables)
             .ToList();
 
-        paged.Should().HaveCount(20, "an empty set would let the equality below pass vacuously");
+        paged.Should().HaveCount(21, "an empty set would let the equality below pass vacuously");
 
         var indexed = Model().GetEntityTypes()
             .Where(e => e.GetIndexes().Any(IsHistoryIndex))
@@ -39,7 +40,7 @@ public class HistoryPagedIndexTests
             .ToList();
 
         indexed.Should().BeEquivalentTo(paged,
-            "every table a history endpoint pages on sys_updated_at needs the index, and no other table does");
+            "every table a history endpoint pages on sys_updated_at, or the last-modified read takes the newest stamp of, needs the index, and no other table does");
     }
 
     /// <summary>
@@ -89,6 +90,12 @@ public class HistoryPagedIndexTests
         typeof(SensitivityScheduleEntity),
         typeof(TargetRangeScheduleEntity),
     ];
+
+    /// <summary>
+    /// Read by no history endpoint, but the treatments last-modified read takes the newest
+    /// <c>sys_updated_at</c> of each.
+    /// </summary>
+    private static readonly Type[] LastModifiedReadTables = [typeof(BasalInjectionEntity)];
 
     private static bool IsHistoryIndex(IIndex index) =>
         index.GetDatabaseName() == $"ix_{index.DeclaringEntityType.GetTableName()}_tenant_history"

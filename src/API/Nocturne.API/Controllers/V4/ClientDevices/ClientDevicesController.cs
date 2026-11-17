@@ -124,7 +124,7 @@ public class ClientDevicesController : ControllerBase
 
     /// <summary>Rename a device you own.</summary>
     [HttpPatch("{id:guid}")]
-    [RemoteCommand(Invalidates = ["GetDevices"])]
+    [RemoteCommand(Invalidates = ["GetDevices", "Services_GetConnections"])]
     [Authorize]
     [RequireScope(Scope.DeviceNotify, Scope.DeviceActuate)]
     [ProducesResponseType(typeof(ClientDeviceDto), StatusCodes.Status200OK)]
@@ -147,7 +147,7 @@ public class ClientDevicesController : ControllerBase
 
     /// <summary>Revoke (remove) a device you own. Its future registrations start fresh.</summary>
     [HttpDelete("{id:guid}")]
-    [RemoteCommand(Invalidates = ["GetDevices"])]
+    [RemoteCommand(Invalidates = ["GetDevices", "Services_GetConnections"])]
     [Authorize]
     [RequireScope(Scope.DeviceNotify, Scope.DeviceActuate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
@@ -7,7 +6,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -18,8 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing blood glucose check records in the database. A deduplication
 /// participant on top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
-/// so it keeps only the dedup-specific behaviour as overrides (<c>GetAsync</c> extended
-/// with the duplicate filter).
+/// so it adds nothing to the base reads.
 /// </summary>
 public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
@@ -45,65 +42,4 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
 
     /// <inheritdoc />
     protected override void ApplyUpdate(BGCheckEntity target, BGCheck source) => BGCheckMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Gets blood glucose check records based on filter criteria.
-    /// Hides the non-primary copies of duplicate groups.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="device">Optional device filter.</param>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="limit">The maximum number of records to return.</param>
-    /// <param name="offset">The number of records to skip.</param>
-    /// <param name="descending">Whether to sort by timestamp in descending order.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of blood glucose checks.</returns>
-    public override async Task<IEnumerable<BGCheck>> GetAsync(
-        DateTime? from,
-        DateTime? to,
-        string? device,
-        string? source,
-        int limit = 100,
-        int offset = 0,
-        bool descending = true,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.BGChecks.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-
-        query = query.ExcludeDuplicates();
-
-        query = query.InObservationOrder(descending);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
-        return entities.Select(BGCheckMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets blood glucose check records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of blood glucose checks.</returns>
-    public async Task<IEnumerable<BGCheck>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .BGChecks.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(BGCheckMapper.ToDomainModel);
-    }
 }

@@ -68,6 +68,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     private static Treatment Treatment(string eventType, double insulin, double carbs, double preBolus) => new()
     {
         Id = Key,
+        LegacyId = Key,
         EventType = eventType,
         CreatedAt = BolusTime,
         Mills = new DateTimeOffset(At).ToUnixTimeMilliseconds(),
@@ -87,6 +88,8 @@ public class PreBolusWriteBackPullBackTests : IDisposable
         await decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         await WriteBackAsync(treatment, edited);
+        _upstream.Documents.Select(d => (d["created_at"]!.GetValue<string>(), d["carbs"]?.GetValue<double>()))
+            .Should().BeEquivalentTo([(BolusTime, (double?)null), ("2026-09-30T10:15:00.000Z", 30d)]);
         await PullBackAsync(decomposer);
 
         var carbs = await _context.CarbIntakes.AsNoTracking().SingleAsync();
@@ -116,7 +119,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     }
 
     [Fact]
-    public async Task A_bolus_wizard_with_a_preBolus_comes_back_with_its_carbs_and_without_its_preBolus()
+    public async Task A_pulled_back_bolus_wizard_with_a_preBolus_is_an_echo_and_keeps_its_preBolus()
     {
         var decomposer = Treatments();
         var treatment = Treatment("Bolus Wizard", insulin: 3, carbs: 45, preBolus: 20);
@@ -128,8 +131,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
 
         var calculation = await _context.BolusCalculations.AsNoTracking().SingleAsync();
         calculation.CarbInput.Should().Be(45);
-        calculation.PreBolus.Should().BeNull(
-            "a pulled copy replaces the calculation, and the copy upstream cannot carry preBolus beside its carbs");
+        calculation.PreBolus.Should().Be(20, "the pulled copy is the calculation's write-back echo, which writes nothing");
         (await _context.CarbIntakes.AsNoTracking().SingleAsync()).Carbs.Should().Be(45);
         (await _context.Boluses.AsNoTracking().CountAsync()).Should().Be(1);
     }
@@ -172,7 +174,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         return new TreatmentDecomposer(
-            _factory,
+            _factory, new DecomposedTreatmentKeys(_factory),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),

@@ -9,18 +9,20 @@
     const ROOT_MARGIN = "0px 0px -40% 0px";
 
     let observer: IntersectionObserver | undefined;
+    let added: MutationObserver | undefined;
 
     // Each docs page has its own markers, and the layout survives navigation between them, so
-    // the observer is rebuilt for every pageview.
+    // the observers are rebuilt for every pageview.
     afterNavigate(async () => {
         observer?.disconnect();
+        added?.disconnect();
         await tick();
 
         const markers = document.querySelectorAll("[data-install-step]");
         if (markers.length === 0) return;
 
         const reached = new SvelteSet<string>();
-        observer = new IntersectionObserver(
+        const intersections = new IntersectionObserver(
             (entries) => {
                 for (const entry of entries) {
                     if (!entry.isIntersecting) continue;
@@ -33,8 +35,26 @@
             },
             { rootMargin: ROOT_MARGIN },
         );
-        for (const marker of markers) observer.observe(marker);
+        observer = intersections;
+        for (const marker of markers) intersections.observe(marker);
+
+        // A guide shows only the route the reader selected, so a change of route adds markers.
+        added = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (!(node instanceof Element)) continue;
+                    if (node.matches("[data-install-step]")) intersections.observe(node);
+                    for (const marker of node.querySelectorAll("[data-install-step]")) {
+                        intersections.observe(marker);
+                    }
+                }
+            }
+        });
+        added.observe(markers[0].closest("article") ?? document.body, { childList: true, subtree: true });
     });
 
-    $effect(() => () => observer?.disconnect());
+    $effect(() => () => {
+        observer?.disconnect();
+        added?.disconnect();
+    });
 </script>

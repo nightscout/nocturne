@@ -74,6 +74,11 @@ public class ConnectorPropertyAttribute : Attribute
     public string[]? AllowedValues { get; set; }
 
     /// <summary>
+    ///     The only values a numeric property takes, offered as a choice in place of a free number.
+    /// </summary>
+    public int[]? AllowedNumbers { get; set; }
+
+    /// <summary>
     ///     Minimum value for numeric properties. Use NotSet if not applicable.
     /// </summary>
     public int MinValue { get; set; } = NotSet;

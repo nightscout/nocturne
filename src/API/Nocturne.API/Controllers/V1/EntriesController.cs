@@ -276,8 +276,8 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        // Nightscout returns an empty array for count=0 or a negative count.
-        if (count is <= 0)
+        count = LegacyReadLimits.ZeroAsAbsent(count);
+        if (count is < 0)
         {
             return [];
         }

@@ -143,7 +143,8 @@ migration chain themselves. A migration test that seeds part-way along the chain
 it clones the nearest checkpoint at or below it and migrates the rest (at most 24 migrations). The
 checkpoints are template databases every 25 migrations, each built once per process on first use by
 cloning the one before it and migrating forward; the fully migrated template is built apart from
-them. A migration name not in the chain throws.
+them. A migration name not in the chain throws. The chain starts at the squashed baseline (see
+"Migration baseline" in `CLAUDE.md`), so a test can seed no earlier than it.
 
 **`ApiIntegrationTestFixture`** runs the API with `WebApplicationFactory` on a real Kestrel port
 (so HttpClient and SignalR connect over sockets) as Development, against its own `SharedPostgres`

@@ -211,6 +211,7 @@ public class TreatmentDecomposerFixedQueryTests : IDisposable
 
         return new TreatmentDecomposer(
             new CountingContexts(new TestNocturneDbContextFactory(_context), () => _contextOpens++),
+            Double<IDecomposedTreatmentKeys>().Object,
             Table<IBolusRepository, V4Models.Bolus>().Object,
             Table<ITempBasalRepository, V4Models.TempBasal>().Object,
             carbs.Object,
@@ -220,7 +221,7 @@ public class TreatmentDecomposerFixedQueryTests : IDisposable
             Table<IBolusCalculationRepository, V4Models.BolusCalculation>().Object,
             spans.Object,
             activations.Object,
-            new ProfileActivationWriter(activations.Object, Double<ITenantCache>().Object, Double<ITempBasalRateReresolver>().Object),
+            new ProfileActivationWriter(activations.Object, Double<ITempBasalRateReresolver>().Object),
             foods.Object,
             devices.Object,
             Double<IPatientDeviceStamper>().Object,

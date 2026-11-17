@@ -34,7 +34,6 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
     private const long WindowMillis = 24L * 60 * 60 * 1000;
     private const long StepMillis = 60_000;
 
-    private const double DefaultDia = 3.0;
     private const double DefaultBasal = 1.0;
     private const double DefaultSens = 50.0;
     private const double DefaultCarbRatio = 10.0;
@@ -83,7 +82,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
             {
                 StartMills = nowMills,
                 EndMills = windowEnd,
-                Dia = bolus is { Dia: > 0 } ? bolus.Dia : DefaultDia,
+                Dia = bolus is { Dia: > 0 } ? bolus.Dia : TherapySnapshot.DefaultDia,
                 Basal = DefaultBasal,
                 Sens = DefaultSens,
                 CarbRatio = DefaultCarbRatio,

@@ -37,6 +37,7 @@ public sealed class RoleControllerNameCollisionTests
         var details = problem.Value.Should().BeAssignableTo<ProblemDetails>().Subject;
         details.Detail.Should().Be(expected.ErrorDescription);
         details.Title.Should().Be(expected.ErrorCode);
+        details.Extensions.Should().Contain("code", expected.ErrorCode);
     }
 
     [Theory]

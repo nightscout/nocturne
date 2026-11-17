@@ -63,7 +63,6 @@ public class TwiistSignInFailureTests
             resolver,
             NullLogger<TwiistConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             provider);
 
         return await service.SyncDataAsync(

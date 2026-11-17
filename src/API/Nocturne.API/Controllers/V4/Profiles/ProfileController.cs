@@ -233,7 +233,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
 
         await _therapyRepo.SetDefaultAsync(target.Id, ct);
-        await _tempBasalRates.AfterProfilesChangedAsync([profileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
 
         return NoContent();
     }
@@ -358,7 +358,15 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get all therapy settings with optional filtering
     /// </summary>
+    /// <param name="from">Start of the time range to return. Unbounded when omitted.</param>
+    /// <param name="to">End of the time range to return. Unbounded when omitted.</param>
+    /// <param name="limit">Maximum number of records in the page. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip before the page. Defaults to `0`.</param>
+    /// <param name="sort">Order by timestamp: `timestamp_desc` or `timestamp_asc`. Any other value is a 400. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Return only records from this device.</param>
+    /// <param name="source">Return only records from this data source.</param>
     /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("settings")]
     [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
@@ -376,15 +384,9 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return BadRequest(
-                new { error = $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'." }
-            );
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = (await _therapyRepo.GetAsync(
             from,
             to,
@@ -466,7 +468,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(created.Id, ct);
             created.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([created.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync([created.Timestamp], ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
@@ -512,7 +514,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(id, ct);
             updated.IsDefault = true;
         }
-        await _tempBasalRates.AfterProfilesChangedAsync([updated.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync(
             stored is null ? [updated.Timestamp] : [stored.Timestamp, updated.Timestamp], ct);
         return Ok(updated);
@@ -538,7 +540,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
         }
 
-        await _tempBasalRates.AfterProfilesChangedAsync(stored is null ? [] : [stored.ProfileName], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(ct);
         await _closedLoop.AfterLoopSettingsWrittenAsync(stored is null ? [] : [stored.Timestamp], ct);
         return NoContent();
     }

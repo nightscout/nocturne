@@ -19,6 +19,7 @@
     type EntryRecord,
     ENTRY_CATEGORIES,
   } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -290,7 +291,7 @@
   );
 
   function getRowLabel(record: EntryRecord): string {
-    return ENTRY_CATEGORIES[record.kind].name.toLowerCase();
+    return entryCategoryName(record.kind).toLowerCase();
   }
 
   function formatRowTime(record: EntryRecord): string {
@@ -350,7 +351,7 @@
   {#if hasActiveFilters}
     <p class="hidden text-sm print:block">
       Showing {formatNumber(filteredRows.length)} of {formatNumber(allRows.length)} records
-      {#if activeCategory !== "all"}· {ENTRY_CATEGORIES[activeCategory].name}{/if}
+      {#if activeCategory !== "all"}· {entryCategoryName(activeCategory)}{/if}
       {#if searchQuery.trim()}· matching "{searchQuery.trim()}"{/if}
     </p>
   {/if}
@@ -414,7 +415,7 @@
                   onclick={() => handleAddTreatment(cat.id)}
                 >
                   <Icon class="mr-2 h-4 w-4 {cat.colorClass}" />
-                  {cat.name}
+                  {entryCategoryName(cat.id)}
                 </DropdownMenu.Item>
               {/each}
             </DropdownMenu.Content>
@@ -437,7 +438,7 @@
               onremove={() => setCategory("all")}
               removeLabel="Clear category filter"
             >
-              {ENTRY_CATEGORIES[activeCategory].name}
+              {entryCategoryName(activeCategory)}
             </Badge>
           {/if}
 
@@ -505,7 +506,7 @@
               </div>
               <div>
                 <strong>Type:</strong>
-                {ENTRY_CATEGORIES[rowToDelete.kind].name}
+                {entryCategoryName(rowToDelete.kind)}
               </div>
               <div>
                 <strong>Value:</strong>
@@ -592,7 +593,7 @@
                 >
                   <div>
                     <div class="font-medium">
-                      {ENTRY_CATEGORIES[row.kind].name}
+                      {entryCategoryName(row.kind)}
                     </div>
                     <div class="text-xs text-muted-foreground">
                       {formatRowTime(row)}

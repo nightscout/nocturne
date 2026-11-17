@@ -3,6 +3,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Legacy;
@@ -89,7 +90,7 @@ public class TimeQueryController : ControllerBase
     [ProducesResponseType(500)]
     public async Task<ActionResult> GetTimeBasedEntriesWithPrefix(
         string prefix,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -115,7 +116,7 @@ public class TimeQueryController : ControllerBase
     public async Task<ActionResult> GetTimeBasedEntriesWithPrefixAndRegex(
         string prefix,
         string regex,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -126,7 +127,7 @@ public class TimeQueryController : ControllerBase
     private async Task<ActionResult> GetTimeBasedEntriesInternal(
         string? prefix = null,
         string? regex = null,
-        int count = 10,
+        int? count = null,
         string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -141,8 +142,10 @@ public class TimeQueryController : ControllerBase
 
         try
         {
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+
             // Validate parameters
-            if (count < 0)
+            if (pageSize < 0)
             {
                 _logger.LogWarning("Invalid count parameter: {Count}", count);
                 return BadRequest($"Count must be non-negative, got {count}");
@@ -158,7 +161,7 @@ public class TimeQueryController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            var entriesArray = entries.Take(count).ToArray();
+            var entriesArray = entries.Take(pageSize).ToArray();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries for time query",
@@ -349,7 +352,7 @@ public class TimeQueryController : ControllerBase
     public async Task<ActionResult> GetSlicedData(
         string storage,
         string field,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -388,7 +391,7 @@ public class TimeQueryController : ControllerBase
         string storage,
         string field,
         string type,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -429,7 +432,7 @@ public class TimeQueryController : ControllerBase
         string field,
         string type,
         string prefix,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -472,7 +475,7 @@ public class TimeQueryController : ControllerBase
         string type,
         string prefix,
         string regex,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -498,7 +501,7 @@ public class TimeQueryController : ControllerBase
         string? type = null,
         string? prefix = null,
         string? regex = null,
-        int count = 10,
+        int? count = null,
         string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -516,8 +519,10 @@ public class TimeQueryController : ControllerBase
 
         try
         {
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+
             // Validate parameters
-            if (count < 0)
+            if (pageSize < 0)
             {
                 _logger.LogWarning("Invalid count parameter: {Count}", count);
                 return BadRequest($"Count must be non-negative, got {count}");
@@ -546,7 +551,7 @@ public class TimeQueryController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            var entriesArray = entries.Take(count).ToArray();
+            var entriesArray = entries.Take(pageSize).ToArray();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries for slice query",

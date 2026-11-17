@@ -78,7 +78,7 @@ public static class DemoCoverageSeeds
     private static Entry CreateComparisonReading(Entry source)
     {
         var mills = source.Mills + 120_000;
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        var timestamp = mills.ToUtcDateTime();
         var variation = source.Mills / 300_000 % 5 - 2;
         var glucose = Math.Clamp(source.GlucoseMgdl() + variation, 40, 400);
 

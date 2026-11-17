@@ -52,6 +52,7 @@ internal static class MyLifeSyncHarness
             http,
             resolver,
             NullLogger<MyLifeConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
             tokenProvider,
             new MyLifeEventProcessor(),
             sessionCache,

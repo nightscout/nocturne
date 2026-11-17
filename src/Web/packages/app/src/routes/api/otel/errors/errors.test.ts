@@ -163,4 +163,125 @@ describe("POST /api/otel/errors", () => {
     expect(response.status).toBe(400);
     expect(startSpan).not.toHaveBeenCalled();
   });
+
+  describe("Content-Security-Policy reports", () => {
+    const attributes = (): Record<string, string> => startSpan.mock.calls[0][1].attributes;
+
+    function cspRequest(report: Record<string, unknown>): Request {
+      return new Request(URL_UNDER_TEST, {
+        method: "POST",
+        headers: { "Content-Type": "application/csp-report" },
+        body: JSON.stringify({ "csp-report": report }),
+      });
+    }
+
+    it("records a violation as a csp-violation span without an error status", async () => {
+      const setStatus = vi.fn();
+      startSpan.mockReturnValueOnce({ setStatus, end: vi.fn() });
+
+      const response = await post(
+        cspRequest({
+          "document-uri": "https://acme.nocturne.run/reports?token=secret#frag",
+          "blocked-uri": "inline",
+          "violated-directive": "script-src-elem",
+          "effective-directive": "script-src-elem",
+          "original-policy": "script-src 'self'",
+        }),
+      );
+
+      expect(response.status).toBe(204);
+      expect(startSpan.mock.calls[0][0]).toBe("csp-violation");
+      expect(attributes()).toEqual({
+        "csp.blocked_uri": "inline",
+        "csp.violated_directive": "script-src-elem",
+        "csp.effective_directive": "script-src-elem",
+      });
+      expect(setStatus).not.toHaveBeenCalled();
+    });
+
+    it("keeps no share token from a share host in any attribute", async () => {
+      await post(
+        cspRequest({
+          "document-uri": "https://tok3n.share.nocturne.run/?a=1",
+          "blocked-uri": "https://tok3n.share.nocturne.run/assets/x.js",
+          "violated-directive": "script-src-elem",
+          "effective-directive": "script-src-elem",
+        }),
+      );
+
+      expect(JSON.stringify(attributes())).not.toContain("tok3n");
+      expect(attributes()["csp.blocked_uri"]).toBe("self");
+    });
+
+    it("keeps no guest code from the path in any attribute", async () => {
+      await post(
+        cspRequest({
+          "document-uri": "https://acme.nocturne.run/guest/ABCD",
+          "blocked-uri": "https://acme.nocturne.run/guest/ABCD",
+          "violated-directive": "script-src-elem",
+          "effective-directive": "script-src-elem",
+        }),
+      );
+
+      expect(JSON.stringify(attributes())).not.toContain("ABCD");
+      expect(attributes()).not.toHaveProperty("csp.document_uri");
+    });
+
+    it("replaces another share host with a placeholder and keeps other origins whole", async () => {
+      await post(
+        cspRequest({
+          "document-uri": "https://acme.nocturne.run/",
+          "blocked-uri": "wss://other.share.nocturne.run/hub?token=x",
+        }),
+      );
+      await post(
+        cspRequest({
+          "document-uri": "https://acme.nocturne.run/",
+          "blocked-uri": "https://evil.test/x.js?session=secret",
+        }),
+      );
+
+      expect(startSpan.mock.calls[0][1].attributes["csp.blocked_uri"]).toBe("[share-host]");
+      expect(startSpan.mock.calls[1][1].attributes["csp.blocked_uri"]).toBe("https://evil.test");
+    });
+
+    it("keeps a blocked scheme keyword when the document URI cannot be parsed", async () => {
+      await post(cspRequest({ "document-uri": "not a url with spaces", "blocked-uri": "data" }));
+
+      expect(attributes()["csp.blocked_uri"]).toBe("data");
+    });
+
+    it("clamps every reported field", async () => {
+      const long = "z".repeat(5000);
+      await post(cspRequest({ "violated-directive": long, "effective-directive": long }));
+
+      expect(attributes()["csp.violated_directive"]).toHaveLength(4096);
+      expect(attributes()["csp.effective_directive"]).toHaveLength(4096);
+    });
+
+    it("does not 500 on a malformed report and records nothing", async () => {
+      for (const body of [{ "csp-report": "nope" }, { "csp-report": null }, { "csp-report": [1] }]) {
+        const response = await post(
+          new Request(URL_UNDER_TEST, {
+            method: "POST",
+            headers: { "Content-Type": "application/csp-report" },
+            body: JSON.stringify(body),
+          }),
+        );
+        expect(response.status).toBe(204);
+      }
+      expect(startSpan).not.toHaveBeenCalled();
+    });
+
+    it("rejects a csp report that is not JSON", async () => {
+      const response = await post(
+        new Request(URL_UNDER_TEST, {
+          method: "POST",
+          headers: { "Content-Type": "application/csp-report" },
+          body: "{not json",
+        }),
+      );
+      expect(response.status).toBe(400);
+    });
+  });
 });

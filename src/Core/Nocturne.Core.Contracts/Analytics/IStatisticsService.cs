@@ -316,11 +316,6 @@ public interface IStatisticsService
 
     // Unit Conversions
 
-    /// <summary>Convert a glucose value from mg/dL to mmol/L.</summary>
-    /// <param name="mgdl">Glucose value in mg/dL.</param>
-    /// <returns>Glucose value in mmol/L.</returns>
-    double MgdlToMMOL(double mgdl);
-
     /// <summary>Convert a glucose value from mmol/L to mg/dL.</summary>
     /// <param name="mmol">Glucose value in mmol/L.</param>
     /// <returns>Glucose value in mg/dL.</returns>

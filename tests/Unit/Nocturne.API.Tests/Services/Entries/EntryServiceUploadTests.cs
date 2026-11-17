@@ -64,7 +64,7 @@ public class EntryServiceUploadTests
             [
                 new Entry { Id = "a", Sgv = 120, Mills = 1000, Device = "Dexcom G7", Type = "sgv" },
                 new Entry { Id = "b", Mbg = 100, Mills = 2000, Type = "mbg" },
-                new Entry { Id = "c", Sgv = 130, Mills = 3000, Type = null },
+                new Entry { Id = "c", Sgv = 130, Mills = 3000, Type = null! },
             ],
             uploader: null);
 
@@ -230,7 +230,7 @@ public class EntryServiceUploadTests
                 LogLevel.Information,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((v, _) =>
-                    v.ToString()!.Contains("Loop/57")
+                    v!.ToString()!.Contains("Loop/57")
                     && !v.ToString()!.Contains('\u202e')
                     && !v.ToString()!.Contains('\u2028')
                     && !v.ToString()!.Contains(new string('x', 250))),
@@ -275,7 +275,7 @@ public class EntryServiceUploadTests
             l => l.Log(
                 LogLevel.Information,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(fragment)),
+                It.Is<It.IsAnyType>((v, _) => v!.ToString()!.Contains(fragment)),
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             times);

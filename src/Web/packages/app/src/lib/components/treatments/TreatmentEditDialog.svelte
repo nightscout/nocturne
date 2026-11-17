@@ -6,13 +6,14 @@
     GlucoseUnit,
     DeviceEventType,
     PatientInsulin,
+    TreatmentInsulinContext,
     InsulinFormulation,
     CreateBasalInjectionRequest,
   } from "#lib/api/index.js";
   import { InsulinCategory as InsulinCategoryEnum, InsulinRole } from "#lib/api/index.js";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
   import {
-    ENTRY_CATEGORIES,
     getEntryStyle,
   } from "#lib/constants/entry-categories.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
@@ -332,9 +333,6 @@
     basalInjection: Syringe,
   };
 
-  let activeCategory = $derived(
-    activeRecord ? ENTRY_CATEGORIES[activeRecord.kind] : null
-  );
   let activeStyle = $derived(
     activeRecord ? getEntryStyle(activeRecord.kind) : null
   );
@@ -346,6 +344,22 @@
   // title/description/button copy and suppresses edit-only chrome.
   let isCreate = $derived(!activeRecord?.data.id);
 
+  function insulinContextFor(
+    patientInsulinId: string | undefined,
+    existing: TreatmentInsulinContext | undefined
+  ): TreatmentInsulinContext | undefined {
+    const selected = patientInsulins.find((i) => i.id === patientInsulinId);
+    if (!selected) return existing;
+    return {
+      patientInsulinId: selected.id,
+      insulinName: selected.name,
+      dia: selected.dia,
+      peak: selected.peak,
+      curve: selected.curve,
+      concentration: selected.concentration,
+    };
+  }
+
   function handleSubmit() {
     if (!activeRecord) return;
 
@@ -353,12 +367,22 @@
     let updated: EntryRecord;
 
     switch (activeRecord.kind) {
-      case "bolus":
+      case "bolus": {
+        const { patientInsulinId, ...bolusFields } = bolusForm;
         updated = {
           kind: "bolus",
-          data: { ...activeRecord.data, mills, ...bolusForm },
+          data: {
+            ...activeRecord.data,
+            mills,
+            ...bolusFields,
+            insulinContext: insulinContextFor(
+              patientInsulinId,
+              activeRecord.data.insulinContext
+            ),
+          },
         };
         break;
+      }
       case "carbs":
         updated = {
           kind: "carbs",
@@ -384,20 +408,6 @@
         };
         break;
       case "basalInjection": {
-        const existingContext = activeRecord.data.insulinContext;
-        const selectedInsulin = patientInsulins.find(
-          (i) => i.id === basalInjectionForm.patientInsulinId
-        );
-        const nextContext = selectedInsulin
-          ? {
-              patientInsulinId: selectedInsulin.id,
-              insulinName: selectedInsulin.name,
-              dia: selectedInsulin.dia,
-              peak: selectedInsulin.peak,
-              curve: selectedInsulin.curve,
-              concentration: selectedInsulin.concentration,
-            }
-          : existingContext;
         updated = {
           kind: "basalInjection",
           data: {
@@ -405,7 +415,10 @@
             mills,
             units: basalInjectionForm.units ?? activeRecord.data.units,
             notes: basalInjectionForm.notes ?? "",
-            insulinContext: nextContext,
+            insulinContext: insulinContextFor(
+              basalInjectionForm.patientInsulinId,
+              activeRecord.data.insulinContext
+            ),
           },
         };
         break;
@@ -447,19 +460,19 @@
 {/if}
 
 {#snippet dialogBody()}
-    {#if activeRecord && activeCategory && activeStyle && ActiveKindIcon}
+    {#if activeRecord && activeStyle && ActiveKindIcon}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
           <Badge variant={activeStyle.badge}>
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
-            {activeCategory.name}
+            {entryCategoryName(activeRecord.kind)}
           </Badge>
           {isCreate ? "Add record" : "Edit record"}
         </Dialog.Title>
         <Dialog.Description>
           {isCreate
-            ? `Log a new ${activeCategory.name.toLowerCase()} record.`
-            : `Edit the details of this ${activeCategory.name.toLowerCase()} record.`}
+            ? `Log a new ${entryCategoryName(activeRecord.kind).toLowerCase()} record.`
+            : `Edit the details of this ${entryCategoryName(activeRecord.kind).toLowerCase()} record.`}
         </Dialog.Description>
       </Dialog.Header>
 

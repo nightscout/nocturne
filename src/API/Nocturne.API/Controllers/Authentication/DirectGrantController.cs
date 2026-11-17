@@ -45,6 +45,7 @@ public class DirectGrantController : ControllerBase
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectGrantController"/> class.
     /// </summary>
+    /// <param name="subjects">The repository that finds the tenant's device subject, the holder of its site tokens.</param>
     /// <param name="directGrantService">The service that creates, lists, and revokes direct grants.</param>
     public DirectGrantController(
         ISubjectRepository subjects,
@@ -60,7 +61,7 @@ public class DirectGrantController : ControllerBase
     /// <param name="request">The create request containing the human-readable label, desired scopes, and optional expiry.</param>
     /// <returns>A <see cref="CreateDirectGrantResponse"/> containing the grant ID and the single-use plaintext token.</returns>
     [HttpPost]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(typeof(CreateDirectGrantResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -137,7 +138,7 @@ public class DirectGrantController : ControllerBase
     /// <param name="id">The GUID of the grant to revoke.</param>
     /// <returns><c>204 No Content</c> on success (including when already revoked); <c>404 Not Found</c> if the grant does not belong to the current user.</returns>
     [HttpDelete("{id:guid}")]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

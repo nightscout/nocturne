@@ -43,6 +43,7 @@ public class LoopAnalysisController(
     /// target range, with the days behind them.
     /// </summary>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("daily-profile")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -73,6 +74,7 @@ public class LoopAnalysisController(
     /// in the contexts the algorithm relies on it in.
     /// </remarks>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("prediction-accuracy")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -96,6 +98,7 @@ public class LoopAnalysisController(
     /// <c>max_iob</c>, automatic boluses, suggestions not enacted and the sensitivity ratio.
     /// </summary>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("loop-health")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -131,6 +134,7 @@ public class LoopAnalysisController(
     /// the rules apply.
     /// </remarks>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("settings-evidence")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -166,6 +170,7 @@ public class LoopAnalysisController(
     /// the time-zone state and the profiles the <c>profileName</c> filter can be set to.
     /// </summary>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("envelope")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -197,6 +202,7 @@ public class LoopAnalysisController(
     /// </remarks>
     /// <param name="query">The range, comparison and masks (<see cref="LoopAnalysisQuery"/>).</param>
     /// <param name="events">The cohorts and window (<see cref="EventResponseQuery"/>).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     [HttpGet("event-response")]
     [RemoteQuery]
     [RequireScope(LoopAnalysisReadScopeGuard.AdmissionScope)]
@@ -261,6 +267,14 @@ public class LoopAnalysisController(
 
     /// <summary>A request resolved against the tenant clock and the caller.</summary>
     /// <param name="Filter">Null when <see cref="Zone"/> is: without a zone the dates cannot be placed.</param>
+    /// <param name="Zone">The tenant's time zone; null when it has none to resolve.</param>
+    /// <param name="Reason">Why there is no zone; null when there is one.</param>
+    /// <param name="PrimaryRange">The range analysed; null without a zone.</param>
+    /// <param name="ComparisonRange">The range compared against; null without a zone, when none was asked for, and for a history-clamped caller.</param>
+    /// <param name="Masks">The masks left once those the caller may not use are dropped.</param>
+    /// <param name="IgnoredFilters">The query parameters the caller passed that were dropped or overridden.</param>
+    /// <param name="UnavailableFilters">The filters the caller's scopes do not allow.</param>
+    /// <param name="HistoryClamped">Whether the caller is history-clamped.</param>
     private sealed record LoopAnalysisRequest(
         LoopAnalysisFilter? Filter,
         TimeZoneInfo? Zone,

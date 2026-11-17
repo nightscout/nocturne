@@ -5,8 +5,7 @@ using Nocturne.Core.Contracts.Connectors;
 namespace Nocturne.Connectors.Core.Extensions;
 
 /// <summary>
-///     Marks a property as an Aspire parameter to be automatically registered in the Aspire Dashboard.
-///     Used by source generators to generate connector extension methods.
+///     Marks a property as an Aspire parameter, binding it from configuration.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
 public abstract class AspireParameterAttribute(
@@ -44,9 +43,8 @@ public abstract class AspireParameterAttribute(
 }
 
 /// <summary>
-///     Marks a connector configuration class for automatic Aspire extension method generation.
-///     Used by source generators to create AddXxxConnector methods.
-///     Also provides display metadata for the connector in the UI.
+///     A connector's identity and display metadata, declared on its configuration class. Its
+///     service, installer and token provider read their names and data source from here.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]
 public class ConnectorRegistrationAttribute(
@@ -154,6 +152,11 @@ public class ConnectorRegistrationAttribute(
     ///     <see cref="DataSourceId"/>, which it must therefore declare too.
     /// </summary>
     public int SensorReadingIntervalSeconds { get; set; }
+
+    /// <summary>
+    ///     The connector's setup guide in the Nocturne docs, or <c>null</c> when it has none.
+    /// </summary>
+    public string? DocumentationUrl { get; set; }
 
     /// <summary>
     ///     The name <paramref name="configType"/> answers to in messages, falling back to its type

@@ -161,10 +161,10 @@ public class WidgetSummaryService : IWidgetSummaryService
                     await _alertRepository.GetEnabledRulesAsync(cancellationToken));
             current.Status = _statusClassifier.Classify(
                 current.Sgv,
-                DateTimeOffset.FromUnixTimeMilliseconds(current.Mills).UtcDateTime,
+                current.Mills.ToUtcDateTime(),
                 lastReadingAt: null,
                 thresholds,
-                DateTimeOffset.FromUnixTimeMilliseconds(currentTime).UtcDateTime);
+                currentTime.ToUtcDateTime());
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

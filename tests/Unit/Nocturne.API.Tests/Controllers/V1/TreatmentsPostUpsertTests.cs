@@ -60,7 +60,8 @@ public class TreatmentsPostUpsertTests : IDisposable
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, dedup, audit, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
-        var tempBasalRepo = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord();
+        var tempBasalRepo = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord()
+            .HoldingNothing<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>();
         tempBasalRepo.As<IV4Repository<Nocturne.Core.Models.V4.TempBasal>>()
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -80,7 +81,7 @@ public class TreatmentsPostUpsertTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             bolusRepo, tempBasalRepo.Object,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),

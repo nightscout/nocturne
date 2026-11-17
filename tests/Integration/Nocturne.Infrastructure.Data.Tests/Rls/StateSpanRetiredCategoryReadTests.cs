@@ -66,7 +66,7 @@ public class StateSpanRetiredCategoryReadTests : IAsyncLifetime
 
         written.Category.Should().Be(StateSpanCategory.PumpMode);
         await using var read = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);
-        (await read.StateSpans.CountAsync(s => s.OriginalId == "shared-1")).Should().Be(1);
+        (await read.StateSpans.CountAsync(s => s.LegacyId == "shared-1")).Should().Be(1);
     }
 
     private async Task<Guid> SeedDeletedAsync(string category, string originalId, bool deletedByUser)
@@ -77,7 +77,7 @@ public class StateSpanRetiredCategoryReadTests : IAsyncLifetime
             Category = category,
             State = "Active",
             Source = "a",
-            OriginalId = originalId,
+            LegacyId = originalId,
             StartTimestamp = Origin,
         };
         await using var seed = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);

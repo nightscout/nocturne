@@ -22,7 +22,7 @@ public class DeduplicationReconciliationJobTests
     public DeduplicationReconciliationJobTests()
     {
         _dedup
-            .Setup(d => d.ReconcileNewLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(d => d.ReconcileNewLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .Callback(() => _calls.Add("reconcile"))
             .ReturnsAsync(new ReconcileResult(0, true));
         _dedup
@@ -48,13 +48,25 @@ public class DeduplicationReconciliationJobTests
     public async Task A_failed_reconcile_fails_the_run_before_the_repair_and_the_prune()
     {
         _dedup
-            .Setup(d => d.ReconcileNewLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(d => d.ReconcileNewLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
 
         var run = () => RunAsync(active: true);
 
         await run.Should().ThrowAsync<InvalidOperationException>();
         _calls.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    [InlineData(7)]
+    public async Task A_run_skips_a_batch_on_its_third_failure_whatever_the_run_attempts(int attempts)
+    {
+        await RunAsync(active: true, attempts);
+
+        _dedup.Verify(d => d.ReconcileNewLinksAsync(
+            It.IsAny<int>(), It.IsAny<int>(), 3, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -66,11 +78,11 @@ public class DeduplicationReconciliationJobTests
         outcome.Should().Be(JobOutcome.Resume(null, Now + IScheduledJob.InactiveTenantRecheck));
     }
 
-    private async Task<JobOutcome> RunAsync(bool active)
+    private async Task<JobOutcome> RunAsync(bool active, int attempts = 0)
     {
         await using var services = new ServiceCollection().AddSingleton(_dedup.Object).BuildServiceProvider();
         var tenant = new TenantContext(Guid.CreateVersion7(), "t", "T", active, IsDemo: false);
         return await new DeduplicationReconciliationJob(NullLogger<DeduplicationReconciliationJob>.Instance)
-            .RunAsync(new JobRun(tenant, null, 0, services, Now), CancellationToken.None);
+            .RunAsync(new JobRun(tenant, null, attempts, services, Now), CancellationToken.None);
     }
 }

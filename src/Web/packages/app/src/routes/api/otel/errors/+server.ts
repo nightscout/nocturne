@@ -2,6 +2,7 @@ import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { trace, SpanStatusCode } from "@opentelemetry/api";
 import { randomUUID } from "crypto";
+import { isShareHost } from "#lib/share-host.js";
 
 const tracer = trace.getTracer("nocturne-web-client", "1.0.0");
 
@@ -17,6 +18,57 @@ const MAX_BODY_BYTES = 16_384;
  */
 const clampField = (value: unknown): string =>
   typeof value === "string" ? value.slice(0, MAX_FIELD_LENGTH) : "";
+
+/** The browser's `report-uri` body: one object under `csp-report`. */
+type CspViolationBody = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const SHARE_HOST_PLACEHOLDER = "[share-host]";
+const SAME_ORIGIN = "self";
+
+/**
+ * Reduces a blocked URI to what cannot carry a credential. A public share's token is the first
+ * label of its host and a guest link's code is in its path, so a URI on the reporting document's
+ * own origin reads as `self`, and any other keeps its origin, or a placeholder when that origin is
+ * a share host. Keywords such as `inline` and `eval` pass through; anything else unparseable is
+ * dropped. The document's own URI is never recorded, for the same reason.
+ */
+function safeUri(value: unknown, documentOrigin: string | null): string {
+  const raw = clampField(value);
+  if (/^[a-z-]+:?$/i.test(raw)) return raw;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return "";
+  }
+  if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol)) return url.protocol;
+  if (url.origin === documentOrigin) return SAME_ORIGIN;
+  return isShareHost(url.host) ? SHARE_HOST_PLACEHOLDER : url.origin;
+}
+
+function originOf(value: unknown): string | null {
+  try {
+    return new URL(clampField(value)).origin;
+  } catch {
+    return null;
+  }
+}
+
+function recordCspViolation(violation: CspViolationBody): void {
+  const effectiveDirective = clampField(violation["effective-directive"]);
+  const documentOrigin = originOf(violation["document-uri"]);
+  const span = tracer.startSpan("csp-violation", {
+    attributes: {
+      "csp.blocked_uri": safeUri(violation["blocked-uri"], documentOrigin),
+      "csp.violated_directive": clampField(violation["violated-directive"]),
+      "csp.effective_directive": effectiveDirective,
+    },
+  });
+  span.end();
+}
 
 /**
  * Reads the request body with a hard byte ceiling, returning null once the
@@ -84,6 +136,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (typeof body !== "object" || body === null) {
     return json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  if ("csp-report" in body) {
+    const violation: unknown = body["csp-report"];
+    if (isRecord(violation)) recordCspViolation(violation);
+    return new Response(null, { status: 204 });
   }
 
   const errorId = UUID_RE.test(body.errorId) ? body.errorId : randomUUID();

@@ -301,6 +301,7 @@ internal static class CurrentTherapyStateReadScopeGuard
             data.Reservoir = null;
             data.PumpBatteryPercent = null;
             data.PumpBatteryVoltage = null;
+            data.LinkBatteryVoltage = null;
         }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))

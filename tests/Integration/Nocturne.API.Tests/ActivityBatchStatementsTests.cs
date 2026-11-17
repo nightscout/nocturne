@@ -14,6 +14,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Integration;
 
@@ -58,7 +59,7 @@ public class ActivityBatchStatementsTests(ApiIntegrationTestFixture fixture, ITe
             .AddInterceptors(recorder)
             .Options) { TenantId = Fixture.TenantId };
         var decomposer = new ActivityDecomposer(
-            new TestNocturneDbContextFactory(context), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System,
+            new ActivityRecordRepository(new TestNocturneDbContextFactory(context), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(),
             NullLogger<ActivityDecomposer>.Instance);
 
         if (resend)

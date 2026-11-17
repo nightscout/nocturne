@@ -434,7 +434,7 @@ public class TrackerTriggerService : IDeviceEventReactor
         [.. eventTypes
             .Select(canonicalise)
             .OfType<string>()
-            .Select(name => TreatmentTypes.DeviceEventTypeMap.TryGetValue(name, out var parsed)
+            .Select(name => TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(name, out var parsed)
                 ? parsed
                 : (DeviceEventType?)null)
             .OfType<DeviceEventType>()];

@@ -20,7 +20,7 @@ Each tenant has its own host name: `https://<tenant>.<base-domain>`. An instance
 
 ### 2. Create an API token
 
-Sign in to the web app. Open **Settings**, then **Connectors & apps**, then **API tokens**, and create a token with the `glucose.read` scope. The token starts with `noc_` and is shown once.
+Sign in to the web app. Open **Settings**, then **Connectors & apps**. Select **Add a connection**, then **Create API token**, and create a token with the `glucose.read` scope. The token starts with `noc_` and is shown once.
 
 ### 3. Read the latest glucose value
 
@@ -124,7 +124,7 @@ A restore returns `409` when a newer record holds the same `dataSource` and `syn
 
 ### Errors
 
-An error from an operation has a problem details body (RFC 9457). Its `detail` says what is wrong. The OAuth operations, and a `503`, have a body with an `error` code in place of problem details.
+An error from an operation has a problem details body (RFC 9457). Its `detail` says what is wrong, and some errors also carry a stable `code`. The OAuth operations, and a `503`, have a body with an `error` code in place of problem details.
 
 | Status | Meaning |
 | --- | --- |

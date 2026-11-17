@@ -18,6 +18,31 @@ export function coachCopy() {
       description:
         "Drag to pan, pinch or scroll to zoom. Select any point to see the exact reading and time.",
     },
+    "guest-tour.access": {
+      title: "Read-only access",
+      description:
+        "You can read this data, but you cannot change it. This banner shows the time that remains. When the time ends, ask the person who gave you the code for a new code.",
+    },
+    "guest-tour.chart": {
+      title: "Glucose chart",
+      description:
+        "Drag the chart to see earlier readings. Pinch or scroll to zoom. Select a point to see the reading and its time.",
+    },
+    "guest-tour.reports": {
+      title: "Reports",
+      description:
+        "Reports show summaries of a longer period, for example the glucose profile (AGP). Select Reports to see the list.",
+    },
+    "share-tour.reading": {
+      title: "Newest reading",
+      description:
+        "This is the newest glucose reading of the person who shared this page. You can read this page, but you cannot change the data.",
+    },
+    "share-tour.chart": {
+      title: "Glucose chart",
+      description:
+        "This chart shows the recent readings. Drag the chart to see earlier readings. Select a point to see the reading and its time.",
+    },
     "feature-intro.calendar-views": {
       title: "View modes",
       description:

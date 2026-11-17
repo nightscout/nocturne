@@ -429,34 +429,21 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(500)]
     [RequireScope(Scope.TreatmentsRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetTreatmentHistory(
+    public Task<ActionResult> GetTreatmentHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 treatment history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var treatments = await _treatmentService.GetTreatmentsModifiedSinceAsync(
+        =>
+        CreateV3ClockHistoryResponseAsync(
+            "treatment",
             lastModified,
             limit,
-            cancellationToken
+            (since, take) =>
+                _treatmentService.GetTreatmentsModifiedSinceAsync(since, take, cancellationToken),
+            t => t.SrvModified ?? t.Mills,
+            records => records
         );
-
-        var treatmentsList = treatments.ToList();
-        if (treatmentsList.Count > 0)
-        {
-            SetHistoryCursorHeaders(treatmentsList.Max(t => t.SrvModified ?? t.Mills));
-        }
-
-        return CreateV3SuccessResponse(treatmentsList);
-    }
 
     /// <summary>
     /// Partially update a treatment via V3 API (JSON merge-patch).

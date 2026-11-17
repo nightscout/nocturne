@@ -109,6 +109,11 @@
     isDeleteOpen = true;
   }
 
+  const nameProblems = {
+    role_name_taken: "A role with this name already exists. Use a different name.",
+    role_name_reserved: "This name is reserved. Use a different name.",
+  };
+
   async function handleCreate() {
     isCreating = true;
     dialogError = null;
@@ -122,7 +127,7 @@
       resetCreateForm();
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to create role. Try again.");
+      dialogError = describeSubmitError(err, "Failed to create role. Try again.", nameProblems);
     } finally {
       isCreating = false;
     }
@@ -144,7 +149,7 @@
       isEditOpen = false;
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to update role. Try again.");
+      dialogError = describeSubmitError(err, "Failed to update role. Try again.", nameProblems);
     } finally {
       isEditing = false;
     }

@@ -983,9 +983,6 @@ public enum TimeZoneUnavailableReason
     /// <summary>The tenant's stored timezone is not one this server recognises; the owner can correct it.</summary>
     Unrecognised,
 
-    /// <summary>The request came through a public share, which cannot read the tenant's settings.</summary>
-    Share,
-
     /// <summary>Looking the timezone up failed.</summary>
     LookupFailed,
 }

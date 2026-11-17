@@ -52,7 +52,9 @@
     onCancel,
   }: Props = $props();
 
-  const grantableRoles = $derived(roles.filter((r) => r.canGrant));
+  // A role with no access level grants nothing. It is how a member is given no access, which
+  // an invite cannot mean.
+  const grantableRoles = $derived(roles.filter((r) => r.canGrant && r.accessLevel != null));
   const grantableChoices = $derived(
     (roleChoices ?? []).filter((c) => grantableRoles.some((r) => r.id === c.roleId)),
   );

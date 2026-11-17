@@ -23,7 +23,7 @@ Authorization: Bearer <token>
 
 An API token starts with `noc_`. It belongs to one tenant and works only on the host of that tenant.
 
-To create one, sign in to the web app and open **Settings**, then **Connectors & apps**, then **API tokens**. Select the scopes, and copy the token. It is shown once.
+To create one, sign in to the web app and open **Settings**, then **Connectors & apps**. Select **Add a connection**, then **Create API token**. Select the scopes, and copy the token. It is shown once.
 
 ```callout warning
 A token made in the web app does not expire. Keep it as safe as a password, and revoke it when it is no longer needed.

@@ -13,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -47,6 +48,7 @@ public class AuditControllerTests : IDisposable
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _db.CreateContext());
+        var contexts = factoryMock.Object.AsNocturneFactory();
 
         // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default and
         // AuditRetentionPolicy to its 90-day default.
@@ -55,7 +57,8 @@ public class AuditControllerTests : IDisposable
             .Build();
 
         var controller = new AuditController(
-            factoryMock.Object.AsNocturneFactory(),
+            new AuditLogReader(contexts),
+            new AuditConfigRepository(contexts),
             _tenantAccessor.Object,
             _configCache.Object,
             configuration);
@@ -414,6 +417,65 @@ public class AuditControllerTests : IDisposable
         var response = ok.Value.Should().BeOfType<PaginatedResponse<ReadAccessAuditDto>>().Subject;
         response.Data.Should().HaveCount(3);
         response.Pagination.Total.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GetMutations_CarriesEveryColumnIntoItsOwnDtoField()
+    {
+        var actor = Guid.CreateVersion7();
+        var entityId = Guid.CreateVersion7();
+        var created = DateTime.UtcNow.AddMinutes(-5);
+        var id = Guid.CreateVersion7();
+        await using (var db = _db.CreateContext())
+        {
+            db.MutationAuditLog.Add(new MutationAuditLogEntity
+            {
+                Id = id, TenantId = TenantId, EntityType = "Bolus", EntityId = entityId, Action = "update",
+                ChangesJson = "{\"units\":2}", ActorSubjectId = actor, ActorName = "Ada", AuthType = "oauth",
+                IpAddress = "10.0.0.1", Endpoint = "/api/v4/boluses", CreatedAt = created,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetMutationAuditLog(
+            DateTime.UtcNow.AddHours(-1), DateTime.UtcNow);
+
+        var dto = ((PaginatedResponse<MutationAuditDto>)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Data.Single();
+        dto.Should().BeEquivalentTo(new MutationAuditDto
+        {
+            Id = id, CreatedAt = created, EntityType = "Bolus", EntityId = entityId, Action = "update",
+            Changes = "{\"units\":2}", ActorSubjectId = actor, ActorName = "Ada", AuthType = "oauth",
+            IpAddress = "10.0.0.1", Endpoint = "/api/v4/boluses",
+        });
+    }
+
+    [Fact]
+    public async Task GetReads_CarriesEveryColumnIntoItsOwnDtoField()
+    {
+        var actor = Guid.CreateVersion7();
+        var created = DateTime.UtcNow.AddMinutes(-5);
+        var id = Guid.CreateVersion7();
+        await using (var db = _db.CreateContext())
+        {
+            db.ReadAccessLog.Add(new ReadAccessLogEntity
+            {
+                Id = id, TenantId = TenantId, Endpoint = "GET /api/v4/boluses", EntityType = "Bolus", RecordCount = 17,
+                StatusCode = 403, QueryParametersJson = "{\"q\":1}", ActorSubjectId = actor, ActorName = "Ada",
+                AuthType = "oauth", IpAddress = "10.0.0.1", CredentialFingerprint = "fp-123", CreatedAt = created,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetReadAccessAuditLog(
+            DateTime.UtcNow.AddHours(-1), DateTime.UtcNow);
+
+        var dto = ((PaginatedResponse<ReadAccessAuditDto>)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Data.Single();
+        dto.Should().BeEquivalentTo(new ReadAccessAuditDto
+        {
+            Id = id, CreatedAt = created, Endpoint = "GET /api/v4/boluses", EntityType = "Bolus", RecordCount = 17,
+            StatusCode = 403, QueryParameters = "{\"q\":1}", ActorSubjectId = actor, ActorName = "Ada",
+            AuthType = "oauth", IpAddress = "10.0.0.1", CredentialFingerprint = "fp-123",
+        });
     }
 
     [Fact]

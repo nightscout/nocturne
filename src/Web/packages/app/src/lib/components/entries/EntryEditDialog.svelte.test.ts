@@ -98,7 +98,7 @@ describe("EntryEditDialog saves", () => {
   it("creates a meal bolus as the create schemas take it", async () => {
     render(EntryEditDialog, { open: true, entry: null, onClose: () => {} });
 
-    await page.getByRole("button", { name: "Create" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
 
     await vi.waitFor(() => {
       expect(handlers["bolus.create"]).toHaveBeenCalledOnce();
@@ -107,15 +107,26 @@ describe("EntryEditDialog saves", () => {
     expect(handlers["bolus.create"].mock.calls[0][0]).not.toHaveProperty("mills");
   });
 
+  it("starts a new entry at the time it is given", async () => {
+    render(EntryEditDialog, { open: true, entry: null, initialMills: at, onClose: () => {} });
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    await vi.waitFor(() => expect(handlers["bolus.create"]).toHaveBeenCalledOnce());
+    expect(handlers["bolus.create"].mock.calls[0][0]).toMatchObject({
+      timestamp: new Date(at).toISOString(),
+    });
+  });
+
   it("stops saving and stays open when the server refuses a record", async () => {
     handlers["bolus.create"].mockRejectedValueOnce({ status: 400, body: { message: "Insulin is too high" } });
     const onClose = vi.fn();
     render(EntryEditDialog, { open: true, entry: null, onClose });
 
-    await page.getByRole("button", { name: "Create" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith("Insulin is too high"));
-    await expect.element(page.getByRole("button", { name: "Create" })).toBeEnabled();
+    await expect.element(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
     expect(onClose).not.toHaveBeenCalled();
   });
 

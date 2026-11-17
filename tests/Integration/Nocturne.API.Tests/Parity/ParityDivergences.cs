@@ -8,9 +8,10 @@ namespace Nocturne.API.Tests.Integration.Parity;
 /// the status and body kind Nocturne answers with instead, so they stay tested.
 /// </summary>
 /// <remarks>
-/// Four kinds: Nightscout has no such route (A), Nightscout fails with a 500 (B), Nocturne
+/// Five kinds: Nightscout has no such route (A), Nightscout fails with a 500 (B), Nocturne
 /// accepts or validates input Nightscout treats otherwise, which is out of scope for #1746 (C),
-/// and Nightscout answers a bug's output Nocturne does not reproduce (D).
+/// Nightscout answers a bug's output Nocturne does not reproduce (D), and the pinned Nightscout
+/// version answers differently from the current one Nocturne follows (E).
 /// A difference that is a Nocturne bug belongs in <c>tests/quarantine.txt</c>, not here.
 /// </remarks>
 public static class ParityDivergences
@@ -35,6 +36,9 @@ public static class ParityDivergences
 
     private const string UndefinedPropertyCrash =
         "(B) Nightscout 15.0.3 answers 500 (Cannot read properties of undefined) here.";
+
+    private const string ZeroCountPage =
+        "(E) Nightscout 15.0.3 answers [] for count=0; Nightscout 16 serves the route default page, as Nocturne does.";
 
     private const string BasalNaN =
         "(D) Nightscout 15.0.3 speaks \"Your current basal is NaN units per hour and you have 0 units of insulin on board\" in the full status; Nocturne omits the basal sentence and says \"no insulin on board\" for zero.";
@@ -85,6 +89,7 @@ public static class ParityDivergences
         new("V1.CountParityTests.CountTreatments_Empty_ReturnsSameShape", "GET /api/v1/count/treatments/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountTreatments_WithData_ReturnsSameShape", "GET /api/v1/count/treatments/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountTreatments_WithEventTypeFilter_ReturnsSameShape", "GET /api/v1/count/treatments/where", 200, JsonValueKind.Array, CountCrashes),
+        new("V1.EntriesParityTests.GetEntries_ZeroCount_ReturnsSameShape", "GET /api/v1/entries", 200, JsonValueKind.Array, ZeroCountPage),
         new("V1.FoodParityTests.DeleteFood_ByCategory_ReturnsSameShape", "DELETE /api/v1/food", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.IobParityTests.GetIobHourly_Empty_ReturnsSameShape", "GET /api/v1/iob/hourly", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.IobParityTests.GetIobHourly_With24Hours_ReturnsSameShape", "GET /api/v1/iob/hourly", 200, JsonValueKind.Object, NoNightscoutRoute),
@@ -116,6 +121,7 @@ public static class ParityDivergences
         new("V1.TimeQueryParityTests.GetSlice_InvalidStorage_ReturnsSameShape", "GET /api/v1/slice/nonexistent/date", 400, JsonValueKind.String, DateStringCrash),
         new("V1.TimeQueryParityTests.GetSlice_TreatmentsCreatedAt_ReturnsSameShape", "GET /api/v1/slice/treatments/created_at", 200, JsonValueKind.Array, DateStringCrash),
         new("V1.TimeQueryParityTests.GetSlice_WithCount_ReturnsSameShape", "GET /api/v1/slice/entries/date", 200, JsonValueKind.Array, DateStringCrash),
+        new("V1.TreatmentsParityTests.GetTreatments_ZeroCount_ReturnsSameShape", "GET /api/v1/treatments", 200, JsonValueKind.Array, ZeroCountPage),
         new("V2.DDataParityTests.GetDDataAt_FutureTimestamp_ReturnsSameShape", "GET /api/v2/ddata/at/*", 400, JsonValueKind.Object, DateStringCrash),
         new("V2.DDataParityTests.GetDDataAt_InvalidTimestamp_ReturnsSameShape", "GET /api/v2/ddata/at/invalid", 400, JsonValueKind.Object, DateStringCrash),
         new("V2.DDataParityTests.GetDDataAt_UnixTimestamp_ReturnsSameShape", "GET /api/v2/ddata/at/*", 200, JsonValueKind.Object, DateStringCrash),

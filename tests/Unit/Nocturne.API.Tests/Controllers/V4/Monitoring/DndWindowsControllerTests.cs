@@ -5,6 +5,7 @@ using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -70,7 +71,7 @@ public class DndWindowsControllerTests
         await using var db = new NocturneDbContext(options) { TenantId = Tenant };
         var superseded = await db.DndWindows.SingleAsync(w => w.Id == firstId);
         superseded.ClearedAt.Should().NotBeNull();
-        superseded.ClearedBy.Should().Be(DndWindowsController.SupersededBy);
+        superseded.ClearedBy.Should().Be(DndWindowRepository.SupersededBy);
     }
 
     [Fact]
@@ -215,7 +216,7 @@ public class DndWindowsControllerTests
         }
 
         var controller = new DndWindowsController(
-            new TestNocturneDbContextFactory(sqlite.CreateContext(Tenant)));
+            new DndWindowRepository(new TestNocturneDbContextFactory(sqlite.CreateContext(Tenant))));
 
         var result = await controller.Create(Request(id, DndScope.Lows), CancellationToken.None);
 
@@ -318,7 +319,7 @@ public class DndWindowsControllerTests
         await using var db = new NocturneDbContext(options) { TenantId = Tenant };
         var future = await db.DndWindows.SingleAsync(w => w.Id == futureId);
         future.ClearedAt.Should().NotBeNull();
-        future.ClearedBy.Should().Be(DndWindowsController.SupersededBy);
+        future.ClearedBy.Should().Be(DndWindowRepository.SupersededBy);
     }
 
     /// <summary>
@@ -406,7 +407,7 @@ public class DndWindowsControllerTests
             .Options;
         var seed = new NocturneDbContext(options) { TenantId = Tenant };
         var factory = new TestNocturneDbContextFactory(seed);
-        return (new DndWindowsController(factory), options);
+        return (new DndWindowsController(new DndWindowRepository(factory)), options);
     }
 
     private static List<DndWindowResponse> OkValue(ActionResult<List<DndWindowResponse>> result)

@@ -11,6 +11,7 @@ using Nocturne.Widget.Contracts;
 using Nocturne.Widget.Contracts.Helpers;
 using Windows.Graphics;
 using WinRT.Interop;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Desktop.Tray.Views;
 
@@ -126,7 +127,7 @@ public sealed partial class SettingsWindow : Window
         box.LargeChange = step * 10;
     }
 
-    private static double Round1(double value) => Math.Round(value, 1);
+    private static double Round1(double value) => ScaledRounding.Round(value, 1);
 
     private void UpdateAuthStatus()
     {
