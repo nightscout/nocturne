@@ -33,7 +33,6 @@
     margin: 1rem 0;
     padding: 0.75rem 1rem;
     border: var(--scalar-border-width, 1px) solid color-mix(in srgb, var(--accent) 35%, transparent);
-    border-left: 3px solid var(--accent);
     border-radius: var(--scalar-radius, 6px);
     background: color-mix(in srgb, var(--accent) 6%, transparent);
     color: var(--scalar-color-1);
