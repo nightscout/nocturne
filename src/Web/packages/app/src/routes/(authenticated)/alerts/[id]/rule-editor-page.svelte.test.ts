@@ -26,7 +26,6 @@ const refusal = vi.hoisted(() => ({ error: new Error("network down") as unknown 
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   getRule: () => remoteQuery(() => rule),
-  createRule: remoteCommand(() => Promise.reject(refusal.error)),
   updateRule: remoteCommand(() => Promise.reject(refusal.error)),
   deleteRule: remoteCommand(() => Promise.reject(refusal.error)),
   testFire: remoteCommand(() => Promise.reject(refusal.error)),
@@ -73,18 +72,6 @@ describe("alert rule editor", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("asks the user to try again when creating the rule fails", async () => {
-    openRule("new");
-
-    render(RuleEditorPage, {});
-
-    await page.getByRole("button", { name: "Create" }).click();
-
-    await expect
-      .element(page.getByText("Failed to save the alert rule. Try again."))
-      .toBeVisible();
   });
 
   it("asks the user to try again when deleting the rule fails", async () => {

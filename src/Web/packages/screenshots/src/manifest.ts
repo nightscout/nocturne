@@ -507,7 +507,7 @@ export const definitions: ScreenshotDefinition[] = [
 	{
 		id: 'alerts-configuration',
 		route: '/alerts',
-		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New rule button sits in the top corner.',
+		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New alert button sits in the top corner.',
 	},
 	{
 		id: 'report-agp',
