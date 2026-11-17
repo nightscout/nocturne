@@ -9,6 +9,8 @@ namespace Nocturne.Connectors.CareLink.Tests.Mappers;
 
 public class CareLinkTreatmentMapperTests
 {
+    private static readonly DateTime Now = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+
     // pumpOffset 0 → marker dateTime is already UTC, keeping the arithmetic obvious.
     private const double NoOffset = 0;
 
@@ -32,7 +34,7 @@ public class CareLinkTreatmentMapperTests
             Index = 0,
         });
 
-        var boluses = CareLinkTreatmentMapper.MapBoluses(data, NoOffset);
+        var boluses = CareLinkTreatmentMapper.MapBoluses(data, NoOffset, Now);
 
         boluses.Should().HaveCount(1);
         var bolus = boluses[0];
@@ -58,7 +60,7 @@ public class CareLinkTreatmentMapperTests
             ProgrammedFastAmount = 0.3, DeliveredFastAmount = 0.3,
         });
 
-        var bolus = CareLinkTreatmentMapper.MapBoluses(data, NoOffset).Single();
+        var bolus = CareLinkTreatmentMapper.MapBoluses(data, NoOffset, Now).Single();
 
         bolus.Automatic.Should().BeTrue();
         bolus.Kind.Should().Be(BolusKind.Algorithm);
@@ -77,7 +79,7 @@ public class CareLinkTreatmentMapperTests
             ProgrammedDuration = 120,
         });
 
-        var bolus = CareLinkTreatmentMapper.MapBoluses(data, NoOffset).Single();
+        var bolus = CareLinkTreatmentMapper.MapBoluses(data, NoOffset, Now).Single();
 
         bolus.BolusType.Should().Be(expected);
         bolus.Duration.Should().Be(120);
@@ -92,7 +94,7 @@ public class CareLinkTreatmentMapperTests
             ProgrammedFastAmount = 0, DeliveredFastAmount = 0,
         });
 
-        CareLinkTreatmentMapper.MapBoluses(data, NoOffset).Should().BeEmpty();
+        CareLinkTreatmentMapper.MapBoluses(data, NoOffset, Now).Should().BeEmpty();
     }
 
     [Fact]
@@ -103,7 +105,7 @@ public class CareLinkTreatmentMapperTests
             Type = "MEAL", DateTime = "2026-06-10T12:19:35", Amount = 40, Index = 5,
         });
 
-        var carbs = CareLinkTreatmentMapper.MapCarbIntakes(data, NoOffset);
+        var carbs = CareLinkTreatmentMapper.MapCarbIntakes(data, NoOffset, Now);
 
         carbs.Should().HaveCount(1);
         carbs[0].Carbs.Should().Be(40);
@@ -120,7 +122,7 @@ public class CareLinkTreatmentMapperTests
             new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:54:39", Id = 119, BolusAmount = 0.275, Index = 0 },
             new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:59:39", Id = 120, BolusAmount = 0.1, Index = 1 });
 
-        var basals = CareLinkTreatmentMapper.MapTempBasals(data, NoOffset);
+        var basals = CareLinkTreatmentMapper.MapTempBasals(data, NoOffset, Now);
 
         basals.Should().HaveCount(2);
         var first = basals[0];
@@ -145,11 +147,41 @@ public class CareLinkTreatmentMapperTests
             Index = index,
         };
 
-        var atZero = CareLinkTreatmentMapper.MapBoluses(Data(MakeAt(0)), NoOffset).Single();
-        var atNine = CareLinkTreatmentMapper.MapBoluses(Data(MakeAt(9)), NoOffset).Single();
+        var atZero = CareLinkTreatmentMapper.MapBoluses(Data(MakeAt(0)), NoOffset, Now).Single();
+        var atNine = CareLinkTreatmentMapper.MapBoluses(Data(MakeAt(9)), NoOffset, Now).Single();
 
         atZero.SyncIdentifier.Should().Be(atNine.SyncIdentifier);
         atZero.SyncIdentifier.Should().NotContain("0:0").And.StartWith("carelink:insulin:120:");
+    }
+
+    [Fact]
+    public void TempBasals_AreKeyedOnTheirStart_WhateverTheMarkerIdIndexOrNextMarker()
+    {
+        var alone = Data(
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:54:39", Id = 119, BolusAmount = 0.275, Index = 0 });
+        var followed = Data(
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:51:00", Id = 7, BolusAmount = 0.2, Index = 0 },
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:54:39", Id = 1, BolusAmount = 0.3, Index = 1 },
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T11:57:00", Id = 2, BolusAmount = 0.1, Index = 2 });
+
+        var once = CareLinkTreatmentMapper.MapTempBasals(alone, NoOffset, Now).Single();
+        var again = CareLinkTreatmentMapper.MapTempBasals(followed, NoOffset, Now)[1];
+
+        once.LegacyId.Should().Be("carelink_autobasal_1781092479000");
+        once.SyncIdentifier.Should().Be(once.LegacyId);
+        again.LegacyId.Should().Be(once.LegacyId);
+        again.SyncIdentifier.Should().Be(once.SyncIdentifier);
+    }
+
+    [Fact]
+    public void TempBasals_KeyOnTheUtcStart_AfterThePumpOffset()
+    {
+        var data = Data(
+            new CareLinkMarker { Type = "AUTO_BASAL_DELIVERY", DateTime = "2026-06-10T21:54:39", BolusAmount = 0.275 });
+
+        var basal = CareLinkTreatmentMapper.MapTempBasals(data, TimeSpan.FromHours(10).TotalMilliseconds, Now).Single();
+
+        basal.LegacyId.Should().Be("carelink_autobasal_1781092479000");
     }
 
     [Fact]
@@ -160,8 +192,8 @@ public class CareLinkTreatmentMapperTests
             Type = "MEAL", DateTime = "2026-06-10T12:19:35", Amount = 40, Index = index,
         };
 
-        var atZero = CareLinkTreatmentMapper.MapCarbIntakes(Data(MakeAt(0)), NoOffset).Single();
-        var atSeven = CareLinkTreatmentMapper.MapCarbIntakes(Data(MakeAt(7)), NoOffset).Single();
+        var atZero = CareLinkTreatmentMapper.MapCarbIntakes(Data(MakeAt(0)), NoOffset, Now).Single();
+        var atSeven = CareLinkTreatmentMapper.MapCarbIntakes(Data(MakeAt(7)), NoOffset, Now).Single();
 
         atZero.SyncIdentifier.Should().Be(atSeven.SyncIdentifier);
         atZero.SyncIdentifier.Should().StartWith("carelink:meal:");
@@ -171,8 +203,8 @@ public class CareLinkTreatmentMapperTests
     public void Mappers_ReturnEmpty_WhenNoMarkers()
     {
         var empty = new CareLinkData();
-        CareLinkTreatmentMapper.MapBoluses(empty, NoOffset).Should().BeEmpty();
-        CareLinkTreatmentMapper.MapCarbIntakes(empty, NoOffset).Should().BeEmpty();
-        CareLinkTreatmentMapper.MapTempBasals(empty, NoOffset).Should().BeEmpty();
+        CareLinkTreatmentMapper.MapBoluses(empty, NoOffset, Now).Should().BeEmpty();
+        CareLinkTreatmentMapper.MapCarbIntakes(empty, NoOffset, Now).Should().BeEmpty();
+        CareLinkTreatmentMapper.MapTempBasals(empty, NoOffset, Now).Should().BeEmpty();
     }
 }

@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration.Analytics;
 /// <c>GET /api/v4/loop-analysis/prediction-accuracy</c> end to end on PostgreSQL: a week of Loop
 /// predictions every five minutes against flat glucose in Sydney, compared with the week before.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : LoopAnalysisIntegrationTestBase(fixture, output)
@@ -123,7 +124,7 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
     }
 
     [Fact]
-    public async Task A_share_gets_its_reason_and_no_curves()
+    public async Task A_share_gets_the_tenants_clock_and_no_curves()
     {
         await SeedProfileAsync("Australia/Sydney");
         await SeedWeekAsync(WeekStart, predicted: 130);
@@ -131,7 +132,7 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
 
         var body = await GetOkAsync(share, Query(Week));
 
-        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("Share");
+        Absent(body, "timeZoneUnavailableReason").Should().BeTrue();
         body.GetProperty("primary").GetProperty("curves").GetArrayLength().Should().Be(0);
     }
 

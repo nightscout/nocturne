@@ -16,9 +16,12 @@ import { isRecord } from './payload.js';
  * payload and the bridge verifies it locally with the shared INSTANCE_KEY.
  *
  * Wire format: `base64url(json).hexSig`.
- * Payload: `{ h, exp, ...RealtimeGrant }`. `h` is the normalized host the
- * ticket authorizes, `exp` is a unix-ms deadline, and the rest is the API's
- * admission for the credential the ticket was minted for. Binding to the host
+ * Payload: `{ h, t, exp, ...RealtimeGrant }`. `h` is the normalized host the
+ * ticket authorizes, `t` the id of the tenant the API admitted the caller to,
+ * `exp` is a unix-ms deadline, and the rest is the API's admission for the
+ * credential the ticket was minted for. The bridge admits a ticket only while
+ * `t` is the tenant its slug names, so a ticket for a deleted tenant does not
+ * reach the rooms of a tenant created on its slug. Binding to the host
  * (not just the tenant slug) means a ticket minted for one tenant cannot be
  * replayed on a connection that arrives on a different host. The minting endpoint and the handshake both derive the host
  * from X-Forwarded-Host behind the gateway, so they agree for tenant subdomains
@@ -50,6 +53,8 @@ export interface RealtimeGrant {
 export interface HandshakeTicketPayload extends RealtimeGrant {
   /** Normalized host (lowercased, port-stripped) the ticket authorizes. */
   h: string;
+  /** The id of the tenant the API admitted the caller to. */
+  t: string;
   /** Expiration timestamp in unix milliseconds. */
   exp: number;
 }
@@ -98,22 +103,35 @@ export function normalizeHandshakeHost(host: string): string {
   return host.split(':')[0].trim().toLowerCase();
 }
 
-/** Sign a handshake ticket authorizing connections that arrive on `host`. */
+/** Sign a handshake ticket authorizing connections that arrive on `host` for the tenant `tenantId`. */
 export function signHandshakeTicket(
   secret: string,
   host: string,
+  tenantId: string,
   grant: RealtimeGrant,
   ttlMs: number = HANDSHAKE_TICKET_LIFETIME_MS,
   now: number = Date.now(),
 ): string {
   const payload: HandshakeTicketPayload = {
     h: normalizeHandshakeHost(host),
+    t: tenantId,
     exp: now + ttlMs,
     ...grant,
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
   const sig = createHmac('sha256', secret).update(payloadB64).digest('hex');
   return `${payloadB64}.${sig}`;
+}
+
+const TICKET_SHAPE = /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/;
+
+/**
+ * Whether a token has the wire format of a handshake ticket, valid or not. A
+ * client access token (a classic Nightscout `name-digest`, a `noc_` token or a
+ * JWT) never does.
+ */
+export function isHandshakeTicketShaped(token: string): boolean {
+  return TICKET_SHAPE.test(token);
 }
 
 /**
@@ -155,9 +173,9 @@ export function verifyHandshakeTicket(
   }
 
   if (!isRecord(parsed)) return null;
-  const { h, exp } = parsed;
-  if (typeof h !== 'string' || typeof exp !== 'number') return null;
+  const { h, t, exp } = parsed;
+  if (typeof h !== 'string' || typeof t !== 'string' || !t || typeof exp !== 'number') return null;
   if (exp < now) return null;
 
-  return { h, exp, ...readRealtimeGrant(parsed) };
+  return { h, t, exp, ...readRealtimeGrant(parsed) };
 }

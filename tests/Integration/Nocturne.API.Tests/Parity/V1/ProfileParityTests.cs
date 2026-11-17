@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/profile endpoints.
 /// Covers: GET, POST, GET/current, GET/{spec}
 /// </summary>
+[Collection(ParityShards.Two)]
 public class ProfileParityTests : ParityTestBase
 {
     public ProfileParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -88,6 +89,19 @@ public class ProfileParityTests : ParityTestBase
         await SeedProfileAsync(profile2);
 
         await AssertGetParityAsync("/api/v1/profile");
+    }
+
+    [Fact]
+    public async Task GetProfile_ZeroCount_ReturnsSameShape()
+    {
+        var profile1 = TestDataFactory.CreateProfile(defaultProfile: "Day");
+        var profile2 = TestDataFactory.CreateProfile(
+            defaultProfile: "Night", timestamp: TestTimeProvider.GetTestTime(minutesOffset: 1));
+
+        await SeedProfileAsync(profile1);
+        await SeedProfileAsync(profile2);
+
+        await AssertGetParityAsync("/api/v1/profile?count=0");
     }
 
     #endregion

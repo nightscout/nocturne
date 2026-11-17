@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { Artwork } from "water-ui";
     import * as Accordion from "@nocturne/ui/ui/accordion";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -42,7 +43,7 @@
                 },
                 {
                     question: "Do I need technical knowledge to set up Nocturne?",
-                    answer: "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide.",
+                    answer: "You need a Linux server, a domain name, and the ability to paste two commands into a terminal. The install script installs Docker, generates the keys and passwords, and starts Nocturne. If you have no server, the Oracle Cloud guide creates a free one from the browser. Docker Compose and Portainer guides are there for people who prefer to manage the stack themselves.",
                 },
                 {
                     question: "Can I use an existing PostgreSQL database?",
@@ -76,7 +77,7 @@
             questions: [
                 {
                     question: "What technology stack does Nocturne use?",
-                    answer: "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability.",
+                    answer: "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability.",
                 },
                 {
                     question: "How do data connectors work?",
@@ -96,7 +97,15 @@
 </script>
 
 <div class="max-w-[900px] mx-auto px-6">
-    <div class="pt-20 pb-15">
+    <div class="relative pt-20 pb-15">
+        <Artwork
+            artwork="magnifying-glass"
+            palette="water"
+            motion="auto"
+            autoplay="once"
+            position="absolute"
+            class="pointer-events-none -right-8 top-16 hidden size-[260px] opacity-90 lg:block xl:size-[300px]"
+        />
         <h1 class="text-headline font-bold text-foreground m-0 mb-4">Frequently asked questions</h1>
         <p class="text-lead text-muted-foreground max-w-[560px] m-0">
             Answers to frequent questions about Nocturne, installation, migration,

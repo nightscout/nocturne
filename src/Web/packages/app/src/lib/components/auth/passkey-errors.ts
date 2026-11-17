@@ -7,7 +7,7 @@
  * the original to the console.
  */
 
-import { describeSubmitError } from "$lib/forms/submit-error";
+import { describeSubmitError } from "#lib/forms/submit-error.js";
 
 /** Raised when the server didn't return a usable options blob. */
 export class CeremonyOptionsError extends Error {

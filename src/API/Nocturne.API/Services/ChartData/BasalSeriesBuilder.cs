@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
-using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
@@ -11,10 +12,10 @@ namespace Nocturne.API.Services.ChartData;
 /// <summary>
 /// Builds basal delivery series from TempBasal records and profile-inferred rates.
 /// TempBasal records are the v4 source of truth for pump-confirmed basal delivery.
-/// Gaps in TempBasal coverage are filled from the active basal rate schedule, stepping
+/// Gaps in TempBasal coverage are filled from <see cref="ScheduledBasal"/>, stepping
 /// at its exact boundaries; when no TempBasal records exist the entire series is
-/// profile-derived. With no therapy settings at all there is no schedule to
-/// infer from, so the series is left empty rather than invented — a fabricated
+/// inferred from it. With no therapy settings at all there is no schedule to
+/// infer from, so the series is left empty rather than invented: a fabricated
 /// flat rate renders as real delivery on the chart.
 /// </summary>
 internal sealed class BasalSeriesBuilder(
@@ -28,6 +29,7 @@ internal sealed class BasalSeriesBuilder(
         long startTime,
         long endTime,
         double defaultBasalRate,
+        IReadOnlyList<ScaleFactorInterval> overrides,
         CancellationToken ct = default
     )
     {
@@ -38,9 +40,10 @@ internal sealed class BasalSeriesBuilder(
 
         logger.LogDebug("Building basal series from {Count} TempBasal records", sorted.Count);
 
-        var segments = hasData
-            ? await basalSegmentService.GetSegmentsAsync(startTime, endTime, ct).ToListAsync(ct)
-            : [];
+        var scheduled = new ScheduledBasal(
+            hasData ? await basalSegmentService.GetSegmentsAsync(startTime, endTime, ct).ToListAsync(ct) : [],
+            overrides);
+        var segments = scheduled.Segments([]);
         var cursor = 0;
 
         if (sorted.Count == 0)
@@ -72,10 +75,7 @@ internal sealed class BasalSeriesBuilder(
 
             var origin = MapTempBasalOrigin(tb.Origin);
 
-            var scheduledRate = tb.ScheduledRate
-                ?? (hasData && segments.Count > 0
-                    ? segments[SegmentIndexAt(segments, ref cursor, tbStart)].UnitsPerHour
-                    : (double?)null);
+            double? scheduledRate = hasData && segments.Count > 0 ? scheduled.Under(tb, tbStart) : tb.ScheduledRate;
 
             series.Add(
                 new BasalPoint
@@ -114,7 +114,7 @@ internal sealed class BasalSeriesBuilder(
     }
 
     private static List<BasalPoint> FillFromSchedule(
-        IReadOnlyList<BasalSegment> segments,
+        IReadOnlyList<RateSegment> segments,
         ref int cursor,
         long startTime,
         long endTime,
@@ -135,19 +135,19 @@ internal sealed class BasalSeriesBuilder(
         {
             for (
                 var i = SegmentIndexAt(segments, ref cursor, startTime);
-                i < segments.Count && segments[i].StartMills < endTime;
+                i < segments.Count && segments[i].Start < endTime;
                 i++
             )
             {
                 var segment = segments[i];
-                var rate = segment.UnitsPerHour;
+                var rate = segment.Rate;
 
                 if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)
                 {
                     series.Add(
                         new BasalPoint
                         {
-                            Timestamp = Math.Max(startTime, segment.StartMills),
+                            Timestamp = Math.Max(startTime, segment.Start),
                             Rate = rate,
                             ScheduledRate = rate,
                             Origin = BasalDeliveryOrigin.Inferred,
@@ -182,11 +182,11 @@ internal sealed class BasalSeriesBuilder(
     /// Index of the segment covering <paramref name="mills"/>, or the nearest one when none does.
     /// The cursor only moves as far as the instant needs, so ordered lookups walk the list once.
     /// </summary>
-    private static int SegmentIndexAt(IReadOnlyList<BasalSegment> segments, ref int cursor, long mills)
+    private static int SegmentIndexAt(IReadOnlyList<RateSegment> segments, ref int cursor, long mills)
     {
-        while (cursor > 0 && segments[cursor].StartMills > mills)
+        while (cursor > 0 && segments[cursor].Start > mills)
             cursor--;
-        while (cursor < segments.Count - 1 && segments[cursor].EndMills <= mills)
+        while (cursor < segments.Count - 1 && segments[cursor].End <= mills)
             cursor++;
         return cursor;
     }

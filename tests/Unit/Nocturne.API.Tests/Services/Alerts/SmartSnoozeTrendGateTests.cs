@@ -174,14 +174,19 @@ public class SmartSnoozeTrendGateTests
         Evaluate(conditionParams, FiveMinute(50, 60, 75)).Should().Be(TrendGateOutcome.NotApplicable);
     }
 
-    [Theory]
-    [InlineData("""{"direction":"below","value":70}""")]
-    [InlineData("""{"Direction":"BELOW","Value":70}""")]
-    public void Direction_IsReadCaseInsensitively(string conditionParams)
+    [Fact]
+    public void Direction_IsTheWireSpelling()
     {
-        // The stored wire form is snake_case; a case-sensitive read would see no direction and
-        // make the fallback a silent no-op.
-        Evaluate(conditionParams, FiveMinute(58, 60, 65)).Should().Be(TrendGateOutcome.Favorable);
+        Evaluate("""{"direction":"below","value":70}""", FiveMinute(58, 60, 65))
+            .Should().Be(TrendGateOutcome.Favorable);
+    }
+
+    [Theory]
+    [InlineData("""{"Direction":"below","value":70}""")]
+    [InlineData("""{"direction":"BELOW","value":70}""")]
+    public void Direction_InAnotherCase_IsNotRead(string conditionParams)
+    {
+        Evaluate(conditionParams, FiveMinute(58, 60, 65)).Should().Be(TrendGateOutcome.NotApplicable);
     }
 
     [Fact]

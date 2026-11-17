@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "time-of-day-bad-timezones",
-  "description": "an unknown per-rule timezone fails closed (false); an unknown tenant timezone falls back to UTC",
+  "description": "a per-rule timezone that is not an IANA zone id cannot be evaluated, so its rule is skipped; an unknown tenant timezone falls back to UTC",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

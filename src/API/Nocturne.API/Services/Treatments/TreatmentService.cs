@@ -1,6 +1,9 @@
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
+using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
@@ -16,10 +19,10 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
-/// Domain service implementation for <see cref="Treatment"/> operations using Store/Cache/EventSink ports.
-/// Reads are served through <see cref="ITreatmentCache"/> with fallback to <see cref="ITreatmentStore"/>,
-/// writes go through <see cref="ITreatmentStore"/> or <see cref="ITreatmentDecomposer"/> with event
-/// notification via <see cref="IDataEventSink{T}"/>.
+/// <see cref="ITreatmentService"/>, the legacy treatment module's one public face. Reads are served through <see cref="ITreatmentCache"/>
+/// with fallback to <see cref="ITreatmentStore"/>; every legacy treatment write goes through here, to
+/// <see cref="ITreatmentStore"/> or <see cref="ITreatmentDecomposer"/>, with event notification via
+/// <see cref="IDataEventSink{T}"/>.
 /// </summary>
 /// <remarks>
 /// On creation, bolus and basal treatments are automatically enriched with
@@ -31,7 +34,7 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="ITreatmentDecomposer"/>
 /// <seealso cref="IobCalculator"/>
 /// <seealso cref="CobCalculator"/>
-public class TreatmentService : ITreatmentService
+internal class TreatmentService : ITreatmentService
 {
     private const int DefaultCount = 100;
     private const int DefaultFindCount = 1000;
@@ -47,22 +50,16 @@ public class TreatmentService : ITreatmentService
     /// <summary>
     /// Bolus event types that should be enriched with the patient's primary bolus insulin context.
     /// </summary>
-    private static readonly HashSet<string> BolusEventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Snack Bolus",
-        "Meal Bolus",
-        "Correction Bolus",
-        "Combo Bolus"
-    };
+    private static readonly HashSet<string> BolusEventTypes = new(
+        TreatmentTypes.InsulinContextBolusEventTypes,
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Basal event types that should be enriched with the patient's primary basal insulin context.
     /// </summary>
-    private static readonly HashSet<string> BasalEventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Temp Basal",
-        "Temp Basal Start"
-    };
+    private static readonly HashSet<string> BasalEventTypes = new(
+        TreatmentTypes.InsulinContextBasalEventTypes,
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="TreatmentService"/>.
@@ -149,6 +146,19 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public async Task<string?> FindSameEventIdAsync(
+        Treatment treatment, CancellationToken cancellationToken = default)
+    {
+        if (treatment.Mills <= 0)
+            return null;
+
+        return (await _store.GetByRangeAsync(treatment.Mills, treatment.Mills, cancellationToken))
+            .FirstOrDefault(stored => !string.IsNullOrEmpty(stored.Id)
+                && string.Equals(stored.EventType, treatment.EventType, StringComparison.Ordinal))
+            ?.Id;
+    }
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit = 500, CancellationToken cancellationToken = default)
     {
@@ -159,13 +169,12 @@ public class TreatmentService : ITreatmentService
     /// <remarks>
     /// Before persisting, each treatment is enriched with <see cref="TreatmentInsulinContext"/>
     /// via <see cref="PopulateInsulinContextAsync"/> if its <see cref="Treatment.EventType"/>
-    /// matches a known bolus or basal type and no context is already set. After creation,
-    /// the <see cref="ITreatmentCache"/> is invalidated and events are fired via
-    /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>.
+    /// matches a known bolus or basal type and no context is already set.
     /// </remarks>
     public Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
-        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
-        CreateAsync(treatments, splitPreBolus: false, cancellationToken);
+        IEnumerable<Treatment> treatments, WriteOrigin origin = WriteOrigin.Live,
+        CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: false, origin, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
@@ -173,11 +182,49 @@ public class TreatmentService : ITreatmentService
     /// after its insulin context is set, so the carbs take none.
     /// </remarks>
     public Task<BulkWrite<Treatment>> CreateV1TreatmentsAsync(
-        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
-        CreateAsync(treatments, splitPreBolus: true, cancellationToken);
+        IEnumerable<Treatment> treatments, WriteOrigin origin = WriteOrigin.Live,
+        CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: true, origin, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<DecompositionResult> ImportTreatmentsAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default)
+    {
+        await PopulateInsulinContextAsync(treatments, cancellationToken);
+        return await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Backfill, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<long> CountTreatmentsAsync(string? find = null, CancellationToken cancellationToken = default) =>
+        _store.CountAsync(find, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, DateTime>> GetStoredIdsFromSourceAsync(
+        string source, DateTime from, DateTime to, CancellationToken cancellationToken = default) =>
+        _decomposer.GetLegacyIdsFromSourceAsync(source, from, to, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> DeleteFromSourceAsync(
+        string source, IReadOnlySet<string> legacyIds, CancellationToken cancellationToken = default) =>
+        _decomposer.DeleteFromSourceAsync(source, legacyIds, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> RekeyClientIdRecordsAsync(
+        string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.RekeyClientIdRecordsAsync(source, treatments, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.ResolveStoredIdentitiesAsync(treatments, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+        string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        _decomposer.SelectForRepublishAsync(source, treatments, cancellationToken);
 
     private async Task<BulkWrite<Treatment>> CreateAsync(
-        IEnumerable<Treatment> treatments, bool splitPreBolus, CancellationToken cancellationToken)
+        IEnumerable<Treatment> treatments, bool splitPreBolus, WriteOrigin origin, CancellationToken cancellationToken)
     {
         var treatmentList = treatments.ToList();
 
@@ -185,20 +232,15 @@ public class TreatmentService : ITreatmentService
         if (splitPreBolus)
             treatmentList = await SplitPreBolusAsync(treatmentList, cancellationToken);
 
-        BulkWrite<Treatment> created;
-        var stored = new List<Treatment>();
-        var completed = false;
+        var stored = new List<StoredTreatment>();
         try
         {
-            created = await _store.CreateAsync(treatmentList, cancellationToken, stored);
-            completed = true;
+            var created = await _store.CreateAsync(treatmentList, origin, cancellationToken, stored);
+            await RecordRejectedAsync(created);
+            return created;
         }
         catch (TreatmentBatchFailedException failed)
         {
-            // The treatments before the failing one are stored, so reads and write-back must see them.
-            await _cache.InvalidateAsync(CancellationToken.None);
-            completed = true;
-            await _events.OnCreatedAsync(failed.Written, CancellationToken.None);
             await RecordRejectedAsync(failed.Written);
             if (failed.InnerException is OperationCanceledException canceled && cancellationToken.IsCancellationRequested)
                 ExceptionDispatchInfo.Throw(canceled);
@@ -206,20 +248,63 @@ public class TreatmentService : ITreatmentService
         }
         finally
         {
-            // An exception the store does not expect still leaves what it stored before it.
-            if (!completed)
-            {
-                await _cache.InvalidateAsync(CancellationToken.None);
-                if (stored.Count > 0)
-                    await _events.OnCreatedAsync(stored, CancellationToken.None);
-            }
+            // Announce what committed, whatever ended the batch.
+            if (origin == WriteOrigin.Live)
+                await AnnounceCreatedAsync(stored);
+        }
+    }
+
+    /// <summary>
+    /// Announces stored treatments as reads serve them, for the reason <see cref="PatchTreatmentAsync"/>
+    /// reads its record back: a create returns the id of the record it wrote, and a carb intake paired
+    /// into a meal is served under its bolus's. Treatments served as one are announced once. One that
+    /// updated a stored record (<see cref="StoredTreatment.Updated"/>) is announced as the update it
+    /// is, so write-back looks for the copy upstream holds before writing, as for any edit: sent as a
+    /// create, unlooked-for, it would store a second copy beside one held under another form.
+    /// </summary>
+    private async Task AnnounceCreatedAsync(IReadOnlyList<StoredTreatment> stored)
+    {
+        if (stored.Count == 0)
+            return;
+
+        var readBack = await ReadBackAsync(stored);
+        var served = new List<Treatment>(stored.Count);
+        var updated = new HashSet<Treatment>(ReferenceEqualityComparer.Instance);
+        for (var i = 0; i < stored.Count; i++)
+        {
+            var created = stored[i].Created;
+            if (readBack is not null && readBack[i] is null)
+                _logger.LogWarning("Created treatment {Id} did not read back", created.Id);
+
+            var announced = readBack?[i] ?? created;
+            // A state span keeps no data source, and the write-back sink tells a connector's own treatments by it.
+            announced.DataSource ??= created.DataSource;
+            served.Add(announced);
+            if (stored[i].Updated)
+                updated.Add(announced);
         }
 
-        await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnCreatedAsync(created, cancellationToken);
-        await RecordRejectedAsync(created);
+        var distinct = served.DistinctBy(t => t.Id).ToList();
+        List<Treatment> inserted = [.. distinct.Where(t => !updated.Contains(t))];
+        if (inserted.Count > 0)
+            await _events.OnCreatedAsync(inserted, CancellationToken.None);
+        foreach (var reupload in distinct.Where(updated.Contains))
+            await _events.OnUpdatedAsync(reupload, CancellationToken.None);
+    }
 
-        return created;
+    /// <returns><c>null</c> when the read failed.</returns>
+    /// <remarks>The write has committed, so a failed read-back announces the treatments as written.</remarks>
+    private async Task<IReadOnlyList<Treatment?>?> ReadBackAsync(IReadOnlyList<StoredTreatment> stored)
+    {
+        try
+        {
+            return await _store.ReadBackAsync(stored, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "{Count} created treatments could not be read back", stored.Count);
+            return null;
+        }
     }
 
     /// <summary>
@@ -229,7 +314,7 @@ public class TreatmentService : ITreatmentService
     /// </summary>
     private async Task<List<Treatment>> SplitPreBolusAsync(List<Treatment> treatments, CancellationToken ct)
     {
-        var meals = treatments.Select(PreBolusSplit.Split).ToList();
+        var meals = treatments.Select(t => PreBolusSplit.Split(t, TreatmentDecomposer.NormalizeIdentity)).ToList();
         var split = meals.Where(halves => halves.Count == 2).Select(halves => halves[0].Id!).ToList();
         if (split.Count == 0)
             return [.. meals.SelectMany(halves => halves)];
@@ -263,11 +348,9 @@ public class TreatmentService : ITreatmentService
         string id, Treatment treatment, CancellationToken cancellationToken = default)
     {
         Treatment? updated;
-        var completed = false;
         try
         {
             updated = await _store.UpdateAsync(id, treatment, cancellationToken);
-            completed = true;
         }
         catch (DbUpdateException ex) when (StoreRefusal.ReasonFor(ex) is { } reason)
         {
@@ -277,19 +360,37 @@ public class TreatmentService : ITreatmentService
         {
             throw await RefuseAsync(treatment, ex.Message, ex);
         }
-        finally
-        {
-            // A failed update may have committed some of its records, and cached reads would keep serving the old treatment.
-            if (!completed)
-                await _cache.InvalidateAsync(CancellationToken.None);
-        }
 
         if (updated is null) return null;
 
-        await _cache.InvalidateAsync(cancellationToken);
         await _events.OnUpdatedAsync(updated, cancellationToken);
 
         return updated;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A treatment <see cref="PreBolusSplit"/> leaves alone takes <see cref="UpdateTreatmentAsync"/>.
+    /// A meal it splits is written by <see cref="CreateV1TreatmentsAsync"/> under the stored
+    /// record's upsert key, whose bolus half drops any carbs the meal held under that key.
+    /// NIGHTSCOUT-COMPAT: Nightscout's PUT stores the document as sent; a v1 PUT is split as the POST
+    /// is, so a re-send cannot double the meal's carbs.
+    /// </remarks>
+    public async Task<Treatment?> UpdateV1TreatmentAsync(
+        string id, Treatment treatment, CancellationToken cancellationToken = default)
+    {
+        if (!PreBolusSplit.Applies(treatment))
+            return await UpdateTreatmentAsync(id, treatment, cancellationToken);
+
+        if (await _store.GetForUpdateAsync(id, cancellationToken) is not { Id: { } upsertKey } stored)
+            return null;
+
+        var meal = treatment.ShallowCopy();
+        meal.AdditionalProperties = treatment.AdditionalProperties is { } extra ? new(extra) : null;
+        TreatmentClientId.KeepStored(meal, stored);
+        meal.Id = upsertKey;
+        var written = await CreateV1TreatmentsAsync([meal], WriteOrigin.Live, cancellationToken);
+        return TreatmentEcho.InSubmittedOrder(written).FirstOrDefault();
     }
 
     /// <inheritdoc />
@@ -303,10 +404,7 @@ public class TreatmentService : ITreatmentService
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
 
-        // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
-
-        await _cache.InvalidateAsync(cancellationToken);
+        (await _decomposer.DecomposeBatchAsync([existing], WriteOrigin.Live, cancellationToken)).ThrowIfRejected(0);
 
         // The merged record carries the upsert key, which the wire would coerce to a different
         // identifier than the create returned; AAPS stores the identifier from every response and
@@ -328,34 +426,10 @@ public class TreatmentService : ITreatmentService
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
         // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
-        // merge unless the patch explicitly changes _id.
+        // merge.
         var originalId = treatment.Id;
 
-        // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
-        var existingJson = JsonSerializer.Serialize(treatment);
-        using var existingDoc = JsonDocument.Parse(existingJson);
-
-        var merged = new Dictionary<string, object?>();
-        foreach (var prop in existingDoc.RootElement.EnumerateObject())
-            merged[prop.Name] = prop.Value.Clone();
-        foreach (var prop in patchData.EnumerateObject())
-            merged[prop.Name] = prop.Value.Clone();
-
-        var mergedJson = JsonSerializer.Serialize(merged);
-        var patched = JsonSerializer.Deserialize<Treatment>(mergedJson);
-        if (patched == null) return;
-
-        // Copy patched values back to the existing treatment in-place
-        var props = typeof(Treatment).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        foreach (var prop in props)
-        {
-            if (!prop.CanWrite) continue;
-            try
-            {
-                prop.SetValue(treatment, prop.GetValue(patched));
-            }
-            catch { /* skip computed properties that throw on set */ }
-        }
+        JsonMergePatch.ApplyInPlace(treatment, patchData);
 
         // A PATCH updates the record identified by the URL; it never changes identity. Restore the
         // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
@@ -370,7 +444,6 @@ public class TreatmentService : ITreatmentService
         if (await _store.DeleteAsync(id, cancellationToken) is not { } deletion)
             return false;
 
-        await _cache.InvalidateAsync(cancellationToken);
         if (deletion.Served is not null)
             await _events.OnDeletedAsync(deletion.Served, cancellationToken);
 
@@ -389,10 +462,7 @@ public class TreatmentService : ITreatmentService
         if (FindQuery.Parse(find).HasFieldFilters)
             return await DeleteMatchingTreatmentsAsync(find, cancellationToken);
 
-        var count = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
-        if (count > 0)
-            await _cache.InvalidateAsync(cancellationToken);
-        return count;
+        return await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
     }
 
     private async Task<long> DeleteMatchingTreatmentsAsync(string? find, CancellationToken ct)
@@ -410,8 +480,6 @@ public class TreatmentService : ITreatmentService
             }
         }
 
-        if (deleted > 0)
-            await _cache.InvalidateAsync(ct);
         return deleted;
     }
 
@@ -428,7 +496,7 @@ public class TreatmentService : ITreatmentService
     /// <param name="treatments">The treatments to enrich.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     private async Task PopulateInsulinContextAsync(
-        List<Treatment> treatments, CancellationToken cancellationToken)
+        IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken)
     {
         // Determine which lookups we need so we only hit the repo once per type
         var needsBolus = treatments.Any(t =>

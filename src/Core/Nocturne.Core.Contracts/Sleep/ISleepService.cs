@@ -39,6 +39,10 @@ public interface ISleepService
 
     Task<SleepSession?> GetSessionByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Repositories.ISleepSessionRepository.GetSessionBySourceRecordAsync"/>
+    Task<SleepSession?> GetSessionBySourceRecordAsync(
+        SleepSource source, string originalId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Creates or updates a sleep session, matched by its identifier or original ID.
     /// </summary>

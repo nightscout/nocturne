@@ -32,9 +32,10 @@ public interface INocturneDbContextFactory
 
     /// <summary>
     /// Creates a context with no tenant, pinned to <paramref name="subjectId"/>, for a read of one
-    /// subject's own rows across tenants. It sets <c>app.current_subject_id</c> for policies that
-    /// may read it; none does today, and its callers work because the identity tables they read
-    /// carry no Row Level Security.
+    /// subject's own rows across tenants. It sets <c>app.current_subject_id</c>, so the
+    /// <c>subject_pin</c> policy narrows <c>subjects</c>, <c>tenant_members</c> and
+    /// <c>refresh_tokens</c> to that subject's rows. Every other entry point leaves the GUC unset,
+    /// and the policy then admits every row.
     /// </summary>
     ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 
@@ -53,9 +54,9 @@ public interface INocturneDbContextFactory
     /// not see as a reader: whether the tenant is past setup or has an orphaned member, and its
     /// owners. A singleton has no use for it, since its root-resolved factory already reads as no
     /// reader. The identity tables these read (tenant_members, member_roles, tenant_roles,
-    /// subjects, passkey credentials, OIDC identities) are not tenant-scoped and carry no Row Level
-    /// Security today, so a tenant pin returns the same rows; this entry point keeps those reads
-    /// working when they come under it, since a share is hidden every table no category governs.
+    /// subjects, passkey credentials, OIDC identities) are not tenant-scoped and carry no tenant
+    /// policy, so a tenant pin returns the same rows; this entry point keeps those reads working
+    /// if they come under one, since a share is hidden every table no category governs.
     /// <c>SystemPinnedAllowlistTests</c> pins the calling members.
     /// </remarks>
     ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default);

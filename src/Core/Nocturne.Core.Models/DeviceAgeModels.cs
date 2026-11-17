@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
 
@@ -37,6 +38,18 @@ public class DeviceAgePreferences
 
     [JsonPropertyName("enableAlerts")]
     public bool EnableAlerts { get; set; }
+}
+
+/// <summary>
+/// The Nightscout alarm level scale. A device age below its info threshold, or with no change
+/// event found, is <see cref="None"/>.
+/// </summary>
+public static class DeviceAgeLevel
+{
+    public const int None = -3;
+    public const int Info = 0;
+    public const int Warn = 1;
+    public const int Urgent = 2;
 }
 
 /// <summary>
@@ -84,10 +97,10 @@ public class DeviceAgeInfo
     public int MinFractions { get; set; }
 
     /// <summary>
-    /// Notification level based on age thresholds
+    /// Alarm level for the age, on the <see cref="DeviceAgeLevel"/> scale
     /// </summary>
     [JsonPropertyName("level")]
-    public int Level { get; set; }
+    public int Level { get; set; } = DeviceAgeLevel.None;
 
     [JsonPropertyName("display")]
     public string Display { get; set; } = "n/a";
@@ -114,7 +127,7 @@ public class SensorAgeInfo
     /// The most recent valid event type ("Sensor Start" or "Sensor Change")
     /// </summary>
     [JsonPropertyName("min")]
-    public string Min { get; set; } = "Sensor Start";
+    public string Min { get; set; } = TreatmentTypes.SensorStart;
 }
 
 public class DeviceAgeNotification
@@ -128,8 +141,11 @@ public class DeviceAgeNotification
     [JsonPropertyName("pushoverSound")]
     public string PushoverSound { get; set; } = "incoming";
 
+    /// <summary>
+    /// The <see cref="DeviceAgeLevel"/> of the age that raised the notification
+    /// </summary>
     [JsonPropertyName("level")]
-    public int Level { get; set; }
+    public int Level { get; set; } = DeviceAgeLevel.None;
 
     [JsonPropertyName("group")]
     public string Group { get; set; } = string.Empty;

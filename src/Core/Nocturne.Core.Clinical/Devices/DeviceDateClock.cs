@@ -21,7 +21,7 @@ public sealed class DeviceDateClock(
 
     public DateOnly LocalDate(DateTime utc)
     {
-        var instant = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var instant = utc.ToMills();
         var day = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), ZoneAt(utc)));
         while (instant < DayStartMills(day))

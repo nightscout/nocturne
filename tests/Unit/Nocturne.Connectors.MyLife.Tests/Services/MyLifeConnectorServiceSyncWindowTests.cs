@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -142,6 +143,91 @@ public class MyLifeConnectorServiceSyncWindowTests
         fixture.Sync.Since.Should().BeCloseTo(DateTime.UtcNow.AddMonths(-6), TimeSpan.FromMinutes(1));
     }
 
+    /// <summary>
+    /// With no upper bound the range ends at the clock instant, and with no lower bound it reaches
+    /// back from that same instant to the history floor.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheCallerNamesNoUpperBound_EndsAtTheClockInstant()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 20, 10, 0, 0, TimeSpan.Zero));
+        var fixture = new Fixture(
+            GlucoseWatermark,
+            TreatmentWatermark,
+            clock);
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = null,
+            To = null,
+            DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses],
+        });
+
+        fixture.Sync.Until.Should().Be(clock.GetUtcNow().UtcDateTime);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WhenAnExplicitRangeNamesNoLowerBound_CrawlsFromSixMonthsBeforeTheClockInstant()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 20, 10, 0, 0, TimeSpan.Zero));
+        var fixture = new Fixture(
+            clock.GetUtcNow().UtcDateTime.AddDays(-3),
+            clock.GetUtcNow().UtcDateTime.AddDays(-5),
+            clock);
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = null,
+            To = clock.GetUtcNow().UtcDateTime,
+            DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses],
+        });
+
+        fixture.Sync.Since.Should().Be(clock.GetUtcNow().UtcDateTime.AddMonths(-6));
+    }
+
+    /// <summary>
+    /// MyLife gates its temp basals as state spans, so the sync card counts them there and a tenant
+    /// who switched state spans off gets none published.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CountsTempBasalsUnderStateSpans()
+    {
+        var fixture = new Fixture(TempBasalAt(new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc)));
+
+        var result = await fixture.RunAsync(new SyncRequest
+        {
+            From = TreatmentWatermark,
+            DataTypes = [SyncDataType.StateSpans],
+        });
+
+        fixture.TempBasals.Should().ContainSingle();
+        result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int> { [SyncDataType.StateSpans] = 1 });
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WithStateSpansSwitchedOff_PublishesNoTempBasals()
+    {
+        var fixture = new Fixture(TempBasalAt(new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc)));
+
+        var result = await fixture.RunAsync(new SyncRequest
+        {
+            From = TreatmentWatermark,
+            DataTypes = [SyncDataType.TempBasals],
+        });
+
+        fixture.TempBasals.Should().BeEmpty();
+        result.ItemsSynced.Should().NotContainKey(SyncDataType.TempBasals);
+    }
+
+    private static MyLifeEvent TempBasalAt(DateTime at) => new()
+    {
+        EventTypeId = MyLifeEventType.TempBasal,
+        EventDateTime = new DateTimeOffset(at).ToUnixTimeMilliseconds() * 10_000,
+        InformationFromDevice = "{\"ValueInUperH\": 1.5, \"Minutes\": 30}",
+        PatientId = "patient-1",
+        DeviceId = "device-1",
+    };
+
     private static MyLifeEvent BolusAt(DateTime at) => new()
     {
         EventTypeId = MyLifeEventType.BolusNormal,
@@ -165,12 +251,18 @@ public class MyLifeConnectorServiceSyncWindowTests
 
         public List<Bolus> Boluses { get; } = [];
 
+        public List<TempBasal> TempBasals { get; } = [];
+
         public Fixture(params MyLifeEvent[] events)
-            : this(GlucoseWatermark, TreatmentWatermark, events)
+            : this(GlucoseWatermark, TreatmentWatermark, null, events)
         {
         }
 
-        public Fixture(DateTime glucoseWatermark, DateTime treatmentWatermark, params MyLifeEvent[] events)
+        public Fixture(
+            DateTime glucoseWatermark,
+            DateTime treatmentWatermark,
+            TimeProvider? clock = null,
+            params MyLifeEvent[] events)
         {
             var treatments = new Mock<ITreatmentPublisher>();
             treatments
@@ -183,6 +275,13 @@ public class MyLifeConnectorServiceSyncWindowTests
                     It.IsAny<CancellationToken>()))
                 .Callback<IEnumerable<Bolus>, string, WriteOrigin, CancellationToken>(
                     (records, _, _, _) => Boluses.AddRange(records))
+                .ReturnsAsync(true);
+            treatments
+                .Setup(p => p.PublishTempBasalsAsync(
+                    It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
+                    It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<TempBasal>, string, WriteOrigin, CancellationToken>(
+                    (records, _, _, _) => TempBasals.AddRange(records))
                 .ReturnsAsync(true);
 
             var glucose = new Mock<IGlucosePublisher>();
@@ -203,7 +302,8 @@ public class MyLifeConnectorServiceSyncWindowTests
                 http,
                 Guid.NewGuid(),
                 soapClient => Sync = new RecordingSyncService(soapClient, events),
-                publisher.Object);
+                publisher.Object,
+                clock);
         }
 
         public Task<SyncResult> RunAsync(SyncRequest request) =>

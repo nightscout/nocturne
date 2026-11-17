@@ -41,22 +41,15 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     /// <summary>The rows currently flagged <see cref="TherapySettings.IsDefault"/>, newest first.</summary>
     Task<IReadOnlyList<TherapySettings>> GetDefaultsAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// Every live row decomposed from a profile document, as the stores it names and when, leaving out
-    /// profile-switch snapshots (see <see cref="TherapySettings.ProfileSwitchStoreMarker"/>).
-    /// </summary>
+    /// <summary>Every live row decomposed from a profile document, as the stores it names and when.</summary>
     Task<IReadOnlyList<ProfileStoreRow>> GetStoreIndexAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// The newest row decomposed from a profile document, leaving out profile-switch snapshots
-    /// (see <see cref="TherapySettings.ProfileSwitchStoreMarker"/>).
-    /// </summary>
+    /// <summary>The newest row decomposed from a profile document.</summary>
     Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default);
 
     /// <summary>
     /// The ids of the stored profile documents (see <see cref="TherapySettings.DocumentIdOf"/>), newest
-    /// first as Nightscout sorts them: by time descending, then by <c>_id</c> descending. Profile-switch
-    /// snapshots are not documents and are left out.
+    /// first as Nightscout sorts them: by time descending, then by <c>_id</c> descending.
     /// </summary>
     Task<IReadOnlyList<string>> GetDocumentIdsAsync(CancellationToken ct = default);
 
@@ -81,6 +74,14 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     /// </summary>
     /// <param name="documentId">The document's <c>_id</c>.</param>
     Task<IReadOnlyList<TherapySettings>> GetDocumentRowsAsync(string documentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="GetDocumentRowsAsync(string, CancellationToken)"/> for each of
+    /// <paramref name="documentIds"/>, in one query. A document with no live row is absent.
+    /// </summary>
+    /// <param name="documentIds">The documents' <c>_id</c> values.</param>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<TherapySettings>>> GetDocumentRowsAsync(
+        IReadOnlyCollection<string> documentIds, CancellationToken ct = default);
 
     /// <summary>
     /// Makes the row <paramref name="id"/> the tenant's only <see cref="TherapySettings.IsDefault"/> row,

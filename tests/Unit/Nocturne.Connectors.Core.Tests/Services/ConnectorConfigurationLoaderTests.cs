@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
@@ -30,7 +31,8 @@ public class ConnectorConfigurationLoaderTests
         return new ConnectorConfigurationLoader<LoaderTestConfig>(
             registration,
             configService.Object,
-            NullLogger<ConnectorConfigurationLoader<LoaderTestConfig>>.Instance);
+            NullLogger<ConnectorConfigurationLoader<LoaderTestConfig>>.Instance,
+            TimeProvider.System);
     }
 
     [Fact]
@@ -72,6 +74,26 @@ public class ConnectorConfigurationLoaderTests
 
         config.Enabled.Should().BeTrue("a configured, enabled tenant must still sync");
         config.Username.Should().Be("user@example.com", "the stored configuration must be applied");
+    }
+
+    [Fact]
+    public async Task LoadForTenantAsync_DisablesConnector_WhenTheRowHoldsOnlyAnEnabledKeyInAnotherCase()
+    {
+        var configService = new Mock<IConnectorConfigurationService>();
+        configService
+            .Setup(s => s.GetConfigurationAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = ConnectorName,
+                Configuration = JsonDocument.Parse("{\"Enabled\": false}")
+            });
+        configService
+            .Setup(s => s.GetSecretsAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+
+        var config = await CreateLoader(configService).LoadForTenantAsync(CancellationToken.None);
+
+        config.Enabled.Should().BeFalse("a disabled connector must not sync, whatever casing the flag was stored in");
     }
 
     [Fact]
@@ -155,6 +177,44 @@ public class ConnectorConfigurationLoaderTests
             "the tenant must be told which setting is missing, not left looking healthy");
     }
 
+    [Fact]
+    public async Task LoadForTenantAsync_StampsTheHealthErrorWithTheInjectedClock()
+    {
+        var now = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+        var configService = new Mock<IConnectorConfigurationService>();
+        configService
+            .Setup(s => s.GetConfigurationAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = ConnectorName,
+                Configuration = JsonDocument.Parse("{\"enabled\": true}")
+            });
+        configService
+            .Setup(s => s.GetSecretsAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        configService
+            .Setup(s => s.GetHealthStateAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorHealthStateDto { IsHealthy = true });
+        var registration = new ConnectorRegistration<RequiredSecretTestConfig>(new RequiredSecretTestConfig(), ConnectorName);
+        var loader = new ConnectorConfigurationLoader<RequiredSecretTestConfig>(
+            registration,
+            configService.Object,
+            NullLogger<ConnectorConfigurationLoader<RequiredSecretTestConfig>>.Instance,
+            new FakeTimeProvider(now));
+
+        await loader.LoadForTenantAsync(CancellationToken.None);
+
+        configService.Verify(s => s.UpdateHealthStateAsync(
+                ConnectorName,
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<string>(),
+                now.UtcDateTime,
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     /// <summary>
     ///     The loader runs every poll cycle, so an unchanged message must not be rewritten each time.
     /// </summary>
@@ -195,7 +255,8 @@ public class ConnectorConfigurationLoaderTests
         return new ConnectorConfigurationLoader<RequiredSecretTestConfig>(
             registration,
             configService.Object,
-            NullLogger<ConnectorConfigurationLoader<RequiredSecretTestConfig>>.Instance);
+            NullLogger<ConnectorConfigurationLoader<RequiredSecretTestConfig>>.Instance,
+            TimeProvider.System);
     }
 
     private sealed class LoaderTestConfig : BaseConnectorConfiguration
@@ -203,8 +264,6 @@ public class ConnectorConfigurationLoaderTests
         public LoaderTestConfig() => ConnectSource = ConnectSource.Dexcom;
 
         public string Username { get; set; } = string.Empty;
-
-        protected override void ValidateSourceSpecificConfiguration() { }
     }
 
     private sealed class RequiredSecretTestConfig : BaseConnectorConfiguration
@@ -213,7 +272,5 @@ public class ConnectorConfigurationLoaderTests
 
         [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
         public string ApiSecret { get; set; } = string.Empty;
-
-        protected override void ValidateSourceSpecificConfiguration() { }
     }
 }

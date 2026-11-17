@@ -1,4 +1,4 @@
-import { isoNow } from "$lib/utils/now";
+import { isoNow } from "#lib/utils/now.js";
 
 /** The notifications with each unread one that `match` accepts marked read now. */
 export function markedRead<T extends { readAt?: string }>(

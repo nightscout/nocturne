@@ -588,7 +588,7 @@ public class OAuthController : ControllerBase
 
     /// <summary>
     /// Token revocation endpoint (RFC 7009). Per the specification, always returns <c>200 OK</c>
-    /// regardless of whether the token was found or already revoked.
+    /// regardless of whether the token was found or already revoked. Requires no authentication.
     /// </summary>
     /// <remarks>
     /// Anonymous, unlike the introspection endpoint below: the response carries nothing about the
@@ -614,12 +614,14 @@ public class OAuthController : ControllerBase
     /// Get client info for the consent page.
     /// </summary>
     /// <param name="client_id">The client identifier to look up.</param>
-    /// <returns>An <see cref="OAuthClientInfoResponse"/> with the client's display name and whether it is a known first-party client.</returns>
+    /// <param name="scope">The space-delimited scopes the client is requesting.</param>
+    /// <returns>An <see cref="OAuthClientInfoResponse"/> with the client's display name, whether it is a known first-party client, and what the requested scopes allow it to delete (null when no scope is sent).</returns>
     [HttpGet("client-info")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(OAuthClientInfoResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthClientInfoResponse>> GetClientInfo(
-        [FromQuery] string client_id
+        [FromQuery] string client_id,
+        [FromQuery] string? scope = null
     )
     {
         var client = await _clientService.GetClientAsync(client_id);
@@ -639,6 +641,9 @@ public class OAuthController : ControllerBase
             IsKnown = client.IsKnown,
             Homepage = client.ClientUri,
             LogoUri = client.LogoUri,
+            DeletionAccess = string.IsNullOrWhiteSpace(scope)
+                ? null
+                : Scope.DeletionAccess(scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)),
         });
     }
 
@@ -879,6 +884,7 @@ public class OAuthController : ControllerBase
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
     /// Per RFC 7662, an authenticated caller always gets 200 OK; invalid tokens get <c>active=false</c>.
+    /// A request with no identity is refused. A token issued to another subject reads as inactive.
     /// </summary>
     /// <remarks>
     /// RFC 7662 section 2.1 requires the endpoint to authenticate its caller. Every client here is
@@ -1068,7 +1074,7 @@ public class OAuthController : ControllerBase
         ClientId = info.ClientId,
         ClientDisplayName = info.ClientDisplayName,
         ClientIdentity = info.ClientIdentity,
-        Scopes = info.Scopes,
+        Scopes = Scope.ForDisplay(info.Scopes, info.GrantType),
         Label = info.Label,
         CreatedAt = info.CreatedAt,
         LastUsedAt = info.LastUsedAt,

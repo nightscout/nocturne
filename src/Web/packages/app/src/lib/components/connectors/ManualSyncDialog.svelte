@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Item } from "$lib/components/ui/item";
+  import { formatLocale } from "#lib/utils/formatting.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Download from "@lucide/svelte/icons/download";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
-  import type { SyncResult } from "$lib/api/generated/nocturne-api-client";
-  import type { SyncProgressEvent } from "$lib/websocket/types";
-  import { formatSyncMessage } from "$lib/utils/sync-messages";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+  import type { SyncProgressEvent } from "#lib/websocket/types.js";
+  import { formatSyncMessage } from "#lib/utils/sync-messages.js";
   import { tick } from "svelte";
 
   interface LogEntry {
@@ -22,6 +23,8 @@
     isManualSyncing: boolean;
     manualSyncResults: Record<string, SyncResult> | null;
     syncProgress: SyncProgressEvent | null;
+    /** Connector names by id, for the results. An id with no name shows as the id. */
+    connectorNames?: Record<string, string | undefined>;
   }
 
   let {
@@ -29,6 +32,7 @@
     isManualSyncing = false,
     manualSyncResults = null,
     syncProgress = null,
+    connectorNames = {},
   }: Props = $props();
 
   let logEntries = $state<LogEntry[]>([]);
@@ -76,7 +80,11 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Download class="h-5 w-5" />
-        Manual Sync Results
+        {#if isManualSyncing}
+          Syncing connectors
+        {:else}
+          Sync results
+        {/if}
       </Dialog.Title>
       <Dialog.Description>
         Re-sync data from all enabled connectors for the configured lookback
@@ -132,15 +140,12 @@
             </p>
           </div>
         {:else if outcome === "nothing-to-sync"}
-          <div class="rounded-lg border bg-muted/30 p-4">
-            <div class="flex items-center gap-2">
-              <AlertCircle class="h-5 w-5 text-muted-foreground" />
-              <span class="font-medium">Nothing to sync</span>
-            </div>
-            <p class="text-muted-foreground text-sm mt-1">
-              No enabled connectors were found.
-            </p>
-          </div>
+          <EmptyState
+            art="plug"
+            size="compact"
+            title="Nothing to sync"
+            body="No enabled connectors were found."
+          />
         {:else}
           <div class="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
             <div class="flex items-center gap-2 text-destructive">
@@ -155,7 +160,7 @@
 
         {#if connectorResults.length > 0}
           <div class="space-y-3">
-            <h4 class="font-medium text-sm">Connector Results</h4>
+            <h4 class="font-medium text-sm">Connector results</h4>
             <div class="space-y-2">
               {#each connectorResults as [connectorId, result] (connectorId)}
                 <Item variant={result.success ? "success" : "destructive"} class="justify-between">
@@ -166,7 +171,9 @@
                       <AlertCircle class="h-4 w-4 text-destructive" />
                     {/if}
                     <div>
-                      <p class="font-medium text-sm">{connectorId}</p>
+                      <p class="font-medium text-sm">
+                        {connectorNames[connectorId] ?? connectorId}
+                      </p>
                       {#if !result.success && result.message}
                         <p class="text-xs text-muted-foreground">
                           {result.message}

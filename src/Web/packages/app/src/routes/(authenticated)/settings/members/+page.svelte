@@ -1,21 +1,22 @@
 <script lang="ts">
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { describeSubmitError } from "$lib/forms";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { describeSubmitError } from "#lib/forms/index.js";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Users from "@lucide/svelte/icons/users";
-  import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Link from "@lucide/svelte/icons/link";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
-  import { getRoles } from "$lib/api/generated/roles.generated.remote";
-  import { getShareLink } from "$api/generated/shareLinks.generated.remote";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
+  import { getShareLink } from "#lib/api/generated/shareLinks.generated.remote.js";
   import {
     getMembers,
     listInvites,
@@ -24,24 +25,22 @@
     setMemberRoles,
     setMemberPermissions,
     setMemberLimitTo24Hours,
-  } from "$lib/api/generated/memberInvites.generated.remote";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
+  } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
     getPendingRequests,
     approveRequest,
     denyRequest,
-  } from "$lib/api/generated/membershipRequests.generated.remote";
-  import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
-  import PendingInvitesList from "$lib/components/members/PendingInvitesList.svelte";
-  import PendingRequestsList from "$lib/components/members/PendingRequestsList.svelte";
-  import MemberCard, { type MemberChanges } from "$lib/components/members/MemberCard.svelte";
-  import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
-  import PublicAccessCard from "$lib/components/members/PublicAccessCard.svelte";
-  import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
-  import RolesSection from "$lib/components/members/RolesSection.svelte";
-  import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  } from "#lib/api/generated/membershipRequests.generated.remote.js";
+  import CreateInviteCard from "#lib/components/members/CreateInviteCard.svelte";
+  import PendingInvitesList from "#lib/components/members/PendingInvitesList.svelte";
+  import PendingRequestsList from "#lib/components/members/PendingRequestsList.svelte";
+  import MemberCard, { type MemberChanges } from "#lib/components/members/MemberCard.svelte";
+  import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
+  import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
+  import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
+  import RolesSection from "#lib/components/members/RolesSection.svelte";
+  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   const granted = $derived(page.data.effectivePermissions ?? []);
   const canInvite = $derived(satisfiesScope(granted, "members.invite"));
@@ -90,12 +89,6 @@
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
 
-  const publicMember = $derived(allMembers.find((m) => m.isSystemSubject));
-  const sharingConfigured = $derived(
-    (publicMember?.roles ?? []).length > 0 ||
-      (publicMember?.directPermissions ?? []).length > 0,
-  );
-
   // Header status chips
   const memberCount = $derived(allMembers.filter((m) => !m.isSystemSubject).length);
   const publicStatus = $derived(
@@ -109,7 +102,7 @@
   // --- UI state ---
   let showCreateInvite = $state(false);
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
 
   // --- Member edit state ---
   let expandedMember = $state<string | null>(null);
@@ -158,11 +151,11 @@
           ? [setMemberLimitTo24Hours({ id: memberId, request: { limitTo24Hours } })]
           : []),
       ]);
-      successMessage = "Member updated successfully.";
+      successMessage = { text: "Member updated successfully.", wash: true };
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      memberSaveError = describeSubmitError(e, "Failed to update member. Please try again.");
+      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.");
     } finally {
       isSavingMember = false;
     }
@@ -172,13 +165,10 @@
     errorMessage = null;
     try {
       await approveRequest({ id: requestId, request: { roleIds } });
-      // The approved requester becomes a member; GetMembers is on another
-      // controller so ApproveRequest's Invalidates cannot name it.
-      await membersQuery?.refresh();
-      successMessage = "Membership request approved.";
+      successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.");
       clearMessages();
     }
   }
@@ -187,31 +177,28 @@
     errorMessage = null;
     try {
       await denyRequest(requestId);
-      successMessage = "Membership request denied.";
+      successMessage = { text: "Membership request denied.", wash: false };
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to deny request. Try again.");
       clearMessages();
     }
   }
 </script>
 
 <svelte:head>
-  <title>Sharing & Privacy - Settings - Nocturne</title>
+  <title>Sharing & privacy - Settings - Nocturne</title>
 </svelte:head>
 
-<div
-  class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6"
-  {@attach coachmark({ ...coachFor("onboarding.sharing"), completedWhen: () => sharingConfigured })}
->
+<div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Page header -->
   <div class="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
     <div class="flex items-center gap-3">
-      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
         <Users class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">Sharing &amp; Privacy</h1>
+        <h1 class="text-2xl font-bold tracking-tight">Sharing &amp; privacy</h1>
         <p class="text-muted-foreground">
           Control who can see your data, and what they can do with it.
         </p>
@@ -245,10 +232,7 @@
   {/if}
 
   {#if successMessage}
-    <div class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3">
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
-      <p class="text-sm text-success">{successMessage}</p>
-    </div>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   <!-- Public access -->
@@ -277,16 +261,12 @@
       {/if}
 
       {#if visibleMembers.length === 0}
-        <Card.Root>
-          <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
-            <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Users class="h-6 w-6 text-muted-foreground" />
-            </div>
-            <p class="max-w-sm text-sm text-muted-foreground">
-              No members. Invite someone to share your data.
-            </p>
-          </Card.Content>
-        </Card.Root>
+        <EmptyState
+          art="people-group"
+          variant="card"
+          title="No members"
+          body="Invite someone to share your data."
+        />
       {:else}
         {#each visibleMembers as member (member.subjectId)}
           <div transition:slide={{ duration: 300 }} animate:flip={{ duration: 300 }}>
@@ -306,10 +286,10 @@
                 errorMessage = null;
                 try {
                   await removeMember(member.subjectId);
-                  successMessage = "Member removed successfully.";
+                  successMessage = { text: "Member removed successfully.", wash: false };
                   clearMessages();
                 } catch (e) {
-                  errorMessage = describeSubmitError(e, "Failed to remove member. Please try again.");
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.");
                   clearMessages();
                 }
               }}
@@ -324,10 +304,6 @@
         {#if showCreateInvite}
           <CreateInviteCard
             roles={allRoles}
-            onCreated={() => {
-              successMessage = "Invite link created. Share it with the new member.";
-              clearMessages();
-            }}
             onCancel={() => (showCreateInvite = false)}
           />
         {:else}
@@ -336,12 +312,9 @@
             size="lg"
             class="w-full"
             onclick={() => (showCreateInvite = true)}
-            {@attach coachmark({
-              ...coachFor("setup-invite.create-link"),
-            })}
           >
             <Link class="h-4 w-4" />
-            Create Invite Link
+            Create invite link
           </Button>
         {/if}
       {/if}
@@ -350,19 +323,18 @@
       {#if canInvite && activeInvites.length > 0 && !showCreateInvite}
         <PendingInvitesList
           invites={activeInvites}
-          roles={allRoles}
           isRevoking={isRevokingInvite !== null}
           onRevoke={async (inviteId) => {
             isRevokingInvite = inviteId;
             errorMessage = null;
             try {
               await revokeInvite(inviteId);
-              successMessage = "Invite revoked successfully.";
+              successMessage = { text: "Invite revoked successfully.", wash: false };
               clearMessages();
             } catch (err) {
               errorMessage = describeSubmitError(
                 err,
-                "Failed to revoke invite. Please try again."
+                "Failed to revoke invite. Try again."
               );
               clearMessages();
             } finally {
@@ -387,7 +359,7 @@
   {#if canViewAudit}
     <SettingsLinkCard
       link={{
-        title: "Audit Log",
+        title: "Audit log",
         description: "Review changes and access history.",
         href: "/settings/audit",
         icon: ScrollText,
@@ -401,7 +373,7 @@
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
           <ShieldAlert class="h-6 w-6 text-destructive" />
         </div>
-        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <h2 class="text-lg font-semibold">Access denied</h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
           You do not have permission to manage sharing or members. Contact your
           tenant administrator for access.

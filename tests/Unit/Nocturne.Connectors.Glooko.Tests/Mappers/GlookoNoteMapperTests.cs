@@ -21,7 +21,7 @@ public class GlookoNoteMapperTests
     {
         var logger = Mock.Of<ILogger>();
         var timeMapper = new GlookoTimeMapper(new GlookoConnectorConfiguration(), logger);
-        _mapper = new GlookoNoteMapper("glooko-connector", timeMapper, logger);
+        _mapper = new GlookoNoteMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
     }
 
     private static GlookoSsv2Note Note(

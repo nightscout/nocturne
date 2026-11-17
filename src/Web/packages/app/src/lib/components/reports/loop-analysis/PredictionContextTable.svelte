@@ -3,7 +3,7 @@
   bias beside each cell.
 -->
 <script lang="ts">
-  import type { PredictionContext, PredictionCurveAccuracy, PredictionHorizonAccuracy } from "$lib/api";
+  import type { PredictionContext, PredictionCurveAccuracy, PredictionHorizonAccuracy } from "#lib/api/index.js";
   import { contextCaption, contextLabel, curveLabel, horizonLabel } from "./prediction-labels.svelte";
 
   interface Props {

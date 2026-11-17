@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1080" />
+    <title>Nocturne Logo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="vendor/logo.js"></script>
+    <style>
+      /* Copied from the app's static fonts by the build. */
+      @font-face {
+        font-family: "Montserrat";
+        src: url("fonts/Montserrat-VariableFont_wght.ttf") format("truetype-variations");
+        font-weight: 100 900;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1080px;
+        height: 1080px;
+        overflow: hidden;
+        background: #060d1e;
+      }
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1080px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The animation is src/logo/index.js, shared with the report films' end card. -->
+    <div id="root" data-composition-id="nocturne-logo" data-start="0" data-duration="6" data-width="1080" data-height="1080"></div>
+    <script>
+      window.__timelines["nocturne-logo"] = NocturneLogo.buildLogo(document.getElementById("root")).tl;
+    </script>
+  </body>
+</html>

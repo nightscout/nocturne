@@ -106,3 +106,25 @@ public enum BolusType
     /// <summary>Any other automated bolus not categorized as SMB</summary>
     AutomaticBolus,
 }
+
+/// <summary>
+/// Part of the patient's local day in which a meal was eaten.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<MealPeriod>))]
+public enum MealPeriod
+{
+    /// <summary>05:00 to 10:59 local time</summary>
+    Breakfast,
+
+    /// <summary>11:00 to 14:59 local time</summary>
+    Lunch,
+
+    /// <summary>15:00 to 16:59 local time</summary>
+    Snack,
+
+    /// <summary>17:00 to 20:59 local time</summary>
+    Dinner,
+
+    /// <summary>21:00 to 04:59 local time</summary>
+    LateNight,
+}

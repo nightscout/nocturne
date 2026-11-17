@@ -1,5 +1,7 @@
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Clinical.Tests.LoopAnalysis;
 
@@ -62,11 +64,73 @@ public class LoopAnalysisMaskTests
             manualPumpModes: [new(0, 10 * Minute)],
             nonAidPumps: [new(0, 300 * Minute)],
             aidPumps: [new(200 * Minute, 300 * Minute)],
-            apsSnapshotMills: [100 * Minute]);
+            apsSnapshots: [new(100 * Minute, LoopClosed: true)]);
 
         openLoop.Intervals.Should().Equal(
             new MillsInterval(0, 100 * Minute),
             new MillsInterval(130 * Minute, 200 * Minute));
+    }
+
+    [Fact]
+    public void OpenLoop_TakesASnapshotWithTheLoopOpen_EvenOnAnAidPump_UntilOneWithItClosed()
+    {
+        const long Minute = 60_000;
+        var openLoop = LoopAnalysisMask.OpenLoop(
+            manualPumpModes: [],
+            nonAidPumps: [],
+            aidPumps: [new(0, 300 * Minute)],
+            apsSnapshots:
+            [
+                new(100 * Minute, LoopClosed: false),
+                new(105 * Minute, LoopClosed: false),
+                new(110 * Minute, LoopClosed: true),
+                new(200 * Minute, LoopClosed: false),
+            ]);
+
+        openLoop.Intervals.Should().Equal(
+            new MillsInterval(100 * Minute, 110 * Minute),
+            new MillsInterval(200 * Minute, 230 * Minute));
+    }
+
+    [Fact]
+    public void OpenLoop_KeepsTheClosedSnapshot_OfTwoAtOneInstant()
+    {
+        const long Minute = 60_000;
+        var openLoop = LoopAnalysisMask.OpenLoop(
+            manualPumpModes: [],
+            nonAidPumps: [new(0, 300 * Minute)],
+            aidPumps: [],
+            apsSnapshots: [new(100 * Minute, LoopClosed: false), new(100 * Minute, LoopClosed: true)]);
+
+        openLoop.Intervals.Should().Equal(
+            new MillsInterval(0, 100 * Minute),
+            new MillsInterval(130 * Minute, 300 * Minute));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public void OpenLoop_TakesAQuietClosedCycle_AsAidEvidence(bool? closedLoop)
+    {
+        const long Minute = 60_000;
+        var quiet = new ApsLoopCycle
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(100 * Minute).UtcDateTime,
+            AidAlgorithm = AidAlgorithm.Loop,
+            Enacted = false,
+            ClosedLoop = closedLoop,
+        };
+
+        var openLoop = LoopAnalysisMask.OpenLoop(
+            manualPumpModes: [],
+            nonAidPumps: [new(0, 300 * Minute)],
+            aidPumps: [],
+            apsSnapshots: [new(quiet.Mills, quiet.LoopClosed)]);
+
+        quiet.EnactedClosedLoop.Should().BeFalse("AID active % credits only an enacted cycle");
+        openLoop.Intervals.Should().Equal(
+            new MillsInterval(0, 100 * Minute),
+            new MillsInterval(130 * Minute, 300 * Minute));
     }
 
     [Fact]

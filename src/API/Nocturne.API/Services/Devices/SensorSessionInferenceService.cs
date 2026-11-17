@@ -171,7 +171,7 @@ public sealed class SensorSessionInferenceService(
         if (key?.LastIndexOf(':') is not { } colon || colon < 0 || !long.TryParse(key[(colon + 1)..], out var firstReadingMills))
             return start.Timestamp;
 
-        return DateTimeOffset.FromUnixTimeMilliseconds(firstReadingMills).UtcDateTime
+        return firstReadingMills.ToUtcDateTime()
             - TimeSpan.FromMinutes(cgm?.WarmupMinutes ?? 0);
     }
 
@@ -327,5 +327,5 @@ public sealed class SensorSessionInferenceService(
     }
 
     private static string SyncIdentifierFor(Guid patientDeviceId, InferredSensorStart start)
-        => $"{patientDeviceId:N}:{new DateTimeOffset(start.FirstReadingAfter, TimeSpan.Zero).ToUnixTimeMilliseconds()}";
+        => $"{patientDeviceId:N}:{start.FirstReadingAfter.ToMills()}";
 }

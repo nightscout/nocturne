@@ -100,8 +100,13 @@
         minutes_not_positive: "a time of at least 1 minute",
         empty_window: "a time window that opens: from and to cannot be the same",
         invalid_time: "times written as HH:mm",
-        conditions_empty: "at least one condition in every group",
+        "list_empty:conditions": "at least one condition in every group",
     };
+
+    function describeIssue(issue: { reason: string; field?: string | null }): string {
+        const key = issue.field ? `${issue.reason}:${issue.field}` : undefined;
+        return (key !== undefined ? issueText[key] : undefined) ?? issueText[issue.reason] ?? issue.reason;
+    }
 </script>
 
 <figure class="not-prose my-6 overflow-hidden rounded-lg border bg-card text-card-foreground" data-testid="alert-simulator">
@@ -179,7 +184,7 @@
                     {#if issues[index]?.length}
                         <p class="text-sm text-destructive">
                             A save would be refused: this rule needs
-                            {issues[index].map((i) => issueText[i.reason] ?? i.reason).join(", ")}.
+                            {issues[index].map(describeIssue).join(", ")}.
                         </p>
                     {/if}
                 </div>

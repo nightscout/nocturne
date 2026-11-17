@@ -151,6 +151,21 @@ public class CompressionLowRepository : ICompressionLowRepository
     }
 
     /// <summary>
+    /// Check if a suggestion of any status exists for a night.
+    /// </summary>
+    /// <param name="nightOf">The night to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>True if any suggestion exists, otherwise false.</returns>
+    public async Task<bool> AnySuggestionExistsForNightAsync(
+        DateOnly nightOf,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.CompressionLowSuggestions
+            .AnyAsync(s => s.NightOf == nightOf, cancellationToken);
+    }
+
+    /// <summary>
     /// Delete a suggestion by ID
     /// </summary>
     /// <param name="id">The unique identifier of the suggestion to delete.</param>

@@ -53,16 +53,18 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     public Task<(double Low, double High)> GetBGTargetRangeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
         => ResolveRangeAsync(timeMills, specProfile, ct);
 
-    private async Task<(double Low, double High)> ResolveRangeAsync(
-        long timeMills, string? specProfile, CancellationToken ct)
+    public async Task<(double Low, double High)?> FindBGTargetRangeAsync(
+        long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
         var schedule = await ActiveSchedule.ResolveAsync(
             timeMills, specProfile, _activeProfileResolver, _repo, _versions,
             s => s.Entries, s => s.Targets, _therapyRepo, _patientRecordRepo, ct);
-        if (schedule is null)
-            return (DefaultLow, DefaultHigh);
-
-        var range = ScheduleResolution.FindRangeAtTime(schedule.Entries, schedule.SecondsFromMidnight);
-        return range ?? (DefaultLow, DefaultHigh);
+        return schedule is null
+            ? null
+            : ScheduleResolution.FindRangeAtTime(schedule.Entries, schedule.SecondsFromMidnight);
     }
+
+    private async Task<(double Low, double High)> ResolveRangeAsync(
+        long timeMills, string? specProfile, CancellationToken ct)
+        => await FindBGTargetRangeAsync(timeMills, specProfile, ct) ?? (DefaultLow, DefaultHigh);
 }

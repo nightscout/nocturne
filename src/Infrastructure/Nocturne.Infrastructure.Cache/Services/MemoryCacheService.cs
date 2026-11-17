@@ -96,31 +96,6 @@ public class MemoryCacheService : ICacheService, IDisposable
     }
 
     /// <inheritdoc />
-    public Task SetAsync<T>(
-        string key,
-        T value,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken = default
-    )
-        where T : class
-    {
-        try
-        {
-            var fullKey = GetFullKey(key);
-
-            SetTracked(key, fullKey, value, new MemoryCacheEntryOptions { AbsoluteExpiration = expiresAt });
-
-            _logger.LogDebug("Cached value for key: {Key} expires at: {ExpiresAt}", key, expiresAt);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error caching value for key: {Key}", key);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
     public Task RemoveByPatternAsync(string pattern, CancellationToken cancellationToken = default)
     {
         try
@@ -176,32 +151,6 @@ public class MemoryCacheService : ICacheService, IDisposable
             _logger.LogError(ex, "Error checking cache key existence: {Key}", key);
             return Task.FromResult(false);
         }
-    }
-
-    /// <inheritdoc />
-    public async Task<T> GetOrSetAsync<T>(
-        string key,
-        Func<Task<T>> factory,
-        TimeSpan? expiration = null,
-        CancellationToken cancellationToken = default
-    )
-        where T : class
-    {
-        var cachedValue = await GetAsync<T>(key, cancellationToken);
-        if (cachedValue != null)
-        {
-            return cachedValue;
-        }
-
-        _logger.LogDebug("Cache miss for key: {Key}, executing factory function", key);
-        var value = await factory();
-
-        if (value != null)
-        {
-            await SetAsync(key, value, expiration, cancellationToken);
-        }
-
-        return value ?? throw new InvalidOperationException("Factory function returned null value");
     }
 
     private string GetFullKey(string key) => $"{_keyPrefix}{key}";

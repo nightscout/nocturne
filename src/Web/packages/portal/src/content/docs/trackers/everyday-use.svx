@@ -4,7 +4,7 @@ title: Everyday use
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Everyday use
@@ -14,8 +14,8 @@ to two things: start it when you put something new on, and complete it when you
 take it off. If your pump or loop already reports those changes, Nocturne can
 do both for you.
 
-Running trackers are listed on the **Active** tab under **Settings >
-Notifications & Trackers**. Each row shows how long it has left, how old it is
+Running trackers are listed on the **Active** tab on the **Trackers**
+page. Each row shows how long it has left, how old it is
 and when it started.
 
 <Screenshot id="trackers-active" />
@@ -34,6 +34,11 @@ asks for:
 
 A duration tracker with notification steps also shows a preview of when each
 step will fire, worked out from the start time you chose.
+
+If you set an earlier start time on a duration tracker, a step whose time is
+already past when you start the tracker does not send an alert for that run.
+The pill still shows the step. Each step that comes after it sends its alert at
+the usual time.
 
 An event tracker asks for **Scheduled For** instead: the date and time of the
 appointment or refill it counts down to.
@@ -62,6 +67,7 @@ that opens when you tap its pill on the home screen.
   | Category | Reasons offered |
   |----------|-----------------|
   | Sensor, Cannula, Consumable | Fell Off, Replaced Early, plus the general ones |
+  | Pod | Fell Off, Replaced Early, Empty, plus the general ones |
   | Reservoir | Empty, Refilled, plus the general ones |
   | Appointment | Attended, Rescheduled, Cancelled, Missed, plus the general ones |
   | Battery, Reminder, Custom | The general ones: Completed, Failed, Expired, Other |
@@ -104,7 +110,13 @@ Choose the events in the tracker editor, under
 [Restart automatically on](/docs/trackers/setting-up#restarting-automatically).
 The choices are `Sensor Start`, `Sensor Change`, `Sensor Stop`,
 `Transmitter Sensor Insert`, `Site Change`, `Cannula Change`, `Pod Change`,
-`Insulin Change`, `Reservoir Change` and `Pump Battery Change`.
+`Pod Activated`, `Insulin Change`, `Reservoir Change` and `Pump Battery Change`.
+
+A tracker can also
+[stop automatically](/docs/trackers/setting-up#stopping-automatically) on
+`Sensor Stop` or `Pod Deactivated`. Nocturne then completes the running tracker
+and starts nothing. If you delete that event later, the tracker runs again,
+unless a newer run has started since.
 
 If two trackers listen for the same event, such as two infusion sites that are
 both logged as `Site Change`, give each one a notes filter. The tracker then
@@ -141,6 +153,13 @@ rule uses (see
 Acknowledging it marks it as seen, the same as any other alert. That covers the
 steps the tracker has already reached. The next step on the ladder will still
 notify you when its time comes.
+
+On a duration tracker, a step does not fire for a run if its time was already
+past when that run was recorded, for example when you start the tracker with an
+earlier start time. Event trackers always send their steps. If you book an
+appointment two hours ahead, its "24 hours before" step fires at once. If you
+enter an event tracker for a time that is already past, it sends its steps at
+once.
 
 To make every reminder for a tracker stop, complete the tracker. A tracker that
 is not running has nothing to remind you about.

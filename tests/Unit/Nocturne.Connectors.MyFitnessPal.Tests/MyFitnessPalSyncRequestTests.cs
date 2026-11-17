@@ -1,9 +1,16 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using Moq;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Connectors.MyFitnessPal.Services;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests;
@@ -56,20 +63,46 @@ public class MyFitnessPalSyncRequestTests
     [Fact]
     public void IsFullWalkDue_ReadsLastFullWalkAtAgainstTheFullWalkInterval()
     {
-        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration())
+        var now = new DateTimeOffset(2026, 7, 20, 10, 0, 0, TimeSpan.Zero);
+        var service = ServiceAt(now);
+
+        service.IsFullWalkDue(new MyFitnessPalConnectorConfiguration())
             .Should().BeTrue();
 
-        var oneMinuteShort = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
-        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
+        var oneMinuteShort = now - MyFitnessPalConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
+        service.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
         {
             LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteShort),
         }).Should().BeFalse();
 
-        var oneMinuteOver = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
-        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
+        var oneMinuteOver = now - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
+        service.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
         {
             LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteOver),
         }).Should().BeTrue();
+    }
+
+    private static MyFitnessPalConnectorService ServiceAt(DateTimeOffset now)
+    {
+        var resolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null);
+        var http = new HttpClient();
+        var tenant = new Mock<ITenantAccessor>();
+        var tokenProvider = new MyFitnessPalAuthTokenProvider(
+            http,
+            new ConnectorTokenCache(),
+            resolver,
+            tenant.Object,
+            NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
+
+        return new MyFitnessPalConnectorService(
+            http,
+            resolver,
+            NullLogger<MyFitnessPalConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            tokenProvider,
+            Mock.Of<IConnectorConfigurationService>(),
+            timeProvider: new FakeTimeProvider(now));
     }
 
     [Fact]

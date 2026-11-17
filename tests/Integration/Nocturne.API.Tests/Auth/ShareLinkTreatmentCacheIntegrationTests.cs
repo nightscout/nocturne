@@ -20,6 +20,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// <c>count=5</c> reaches the database every time and stands as the control for what row level
 /// security lets the share see.
 /// </remarks>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class ShareLinkTreatmentCacheIntegrationTests : ApiIntegrationTestBase
 {

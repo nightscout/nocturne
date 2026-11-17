@@ -1,16 +1,14 @@
+using Nocturne.API.Services.Health;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Effects;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -19,6 +17,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Xunit;
 using LegacyV1 = Nocturne.API.Controllers.V1;
@@ -124,7 +123,7 @@ public class LegacyPostBodyTests
     public async Task A_v3_food_update_with_a_document_that_does_not_fit_is_a_bad_request()
     {
         var controller = WithContext(new LegacyV3.FoodController(
-            FoodRepository([]), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
+            FoodRepository([]), Mock.Of<IFoodService>(), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
 
         var result = await controller.UpdateFood("x", Json("""{"Name":"Apple","Carbs":"abc","date":1700000000000}"""));
 
@@ -184,7 +183,7 @@ public class LegacyPostBodyTests
     private static Handler V1FoodHandler()
     {
         var foods = new List<Food>();
-        var controller = WithContext(new LegacyV1.FoodController(FoodRepository(foods), NullLogger<LegacyV1.FoodController>.Instance));
+        var controller = WithContext(new LegacyV1.FoodController(FoodRepository(foods), FoodServices.Over(FoodRepository(foods)), NullLogger<LegacyV1.FoodController>.Instance));
         return new Handler(
             """{"Name":"Apple","Carbs":"12"}""",
             """{"Name":"Apple","Carbs":"abc"}""",
@@ -197,7 +196,7 @@ public class LegacyPostBodyTests
     {
         var foods = new List<Food>();
         var controller = WithContext(new LegacyV3.FoodController(
-            FoodRepository(foods), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
+            FoodRepository(foods), FoodServices.Over(FoodRepository(foods)), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
         return new Handler(
             """{"Name":"Apple","Carbs":"12","date":1700000000000}""",
             """{"Name":"Apple","Carbs":"abc","date":1700000000000}""",
@@ -261,10 +260,12 @@ public class LegacyPostBodyTests
             .Setup(s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<Activity>, CancellationToken>((a, _) => activities.AddRange(a))
             .ReturnsAsync([]);
+        var decomposer = new Mock<IActivityDecomposer>();
+        decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.TreatmentsReadWrite);
         var controller = WithContext(new LegacyV1.ActivityController(
-            service.Object, Mock.Of<IActivityDecomposer>(), NullLogger<LegacyV1.ActivityController>.Instance,
+            service.Object, decomposer.Object, NullLogger<LegacyV1.ActivityController>.Instance,
             TimeProvider.System));
-        controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
+        controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.TreatmentsReadWrite };
         return new Handler(
             $$"""{"Type":"walk","Duration":"30","Mills":{{Millis}}}""",
             """{"Type":"walk","Duration":"abc"}""",
@@ -278,15 +279,11 @@ public class LegacyPostBodyTests
         var entries = new List<Entry>();
         var service = new Mock<IEntryService>();
         service
-            .Setup(s => s.CheckForDuplicateEntriesAsync(
-                It.IsAny<IReadOnlyList<EntryDuplicateProbe>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken _) =>
-                probes.Select(_ => (Entry?)null).ToArray());
-        service
-            .Setup(s => s.CreateEntriesAsync(
-                It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((e, _, _) => entries.AddRange(e))
-            .ReturnsAsync([]);
+            .Setup(s => s.UpsertUploadAsync(
+                It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<Entry>, string?, CancellationToken>((processed, _, _) => entries.AddRange(processed))
+            .ReturnsAsync((IReadOnlyList<Entry> processed, string? _, CancellationToken _) =>
+                new EntryUploadResult(processed, processed));
         var controller = WithContext(new LegacyV1.EntriesController(
             service.Object,
             Passthrough(),
@@ -304,40 +301,27 @@ public class LegacyPostBodyTests
     private static Handler DeviceStatusHandler(string name)
     {
         var statuses = new List<DeviceStatus>();
-        var decomposer = new Mock<IDeviceStatusDecomposer>();
-        decomposer
-            .Setup(d => d.DecomposeAsync(
-                It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<DeviceStatus, string?, WriteOrigin, CancellationToken>((ds, _, _, _) => statuses.Add(ds))
-            .ReturnsAsync(new DecompositionResult());
-        var projection = new DeviceStatusProjectionService(
-            Mock.Of<IDeviceStatusGroupRepository>(),
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IStateSpanRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            NullLogger<DeviceStatusProjectionService>.Instance);
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(s => s.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<DeviceStatus>, string?, WriteOrigin, CancellationToken>((created, _, _, _) => statuses.AddRange(created))
+            .ReturnsAsync((IReadOnlyList<DeviceStatus> created, string? _, WriteOrigin _, CancellationToken _) =>
+                new BulkWrite<DeviceStatus>(created, 0));
         var single = $$"""{"app":"AAPS","Device":"openaps://phone","Mills":{{Millis}}}""";
         var malformed = """{"app":"AAPS","Device":"openaps://phone","Mills":"abc"}""";
 
         if (name == "v1 devicestatus")
         {
             var v1 = WithContext(new LegacyV1.DeviceStatusController(
-                projection,
-                decomposer.Object,
-                Mock.Of<IWriteSideEffects>(),
-                Mock.Of<IDataEventSink<DeviceStatus>>(),
+                deviceStatuses.Object,
                 TimeProvider.System,
                 NullLogger<LegacyV1.DeviceStatusController>.Instance));
             return new Handler(single, malformed, async body => Unwrap(await v1.CreateDeviceStatus(Json(body))), () => statuses.Count, () => statuses.All(s => s.Device == "openaps://phone"));
         }
 
         var v3 = WithContext(new LegacyV3.DeviceStatusController(
-            projection,
-            decomposer.Object,
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<LegacyV3.DeviceStatusController>.Instance));
         return new Handler(single, malformed, async body => await v3.CreateDeviceStatus(Json(body)), () => statuses.Count, () => statuses.All(s => s.Device == "openaps://phone"));
@@ -347,12 +331,12 @@ public class LegacyPostBodyTests
     {
         var service = new Mock<ITreatmentService>();
         service
-            .Setup(s => s.CreateV1TreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<Treatment>, CancellationToken>((t, _) => created.AddRange(t))
-            .ReturnsAsync((IEnumerable<Treatment> t, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 0));
+            .Setup(s => s.CreateV1TreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Treatment>, WriteOrigin, CancellationToken>((t, _, _) => created.AddRange(t))
+            .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 0));
         return WithContext(new LegacyV1.TreatmentsController(
             service.Object,
-            new DocumentProcessingService(NullLogger<DocumentProcessingService>.Instance),
+            new DocumentProcessingService(TimeProvider.System, NullLogger<DocumentProcessingService>.Instance),
             TimeProvider.System,
             NullLogger<LegacyV1.TreatmentsController>.Instance));
     }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -17,6 +18,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ProfileVersionCache _versions;
     private readonly IProfileActivationResolver _activations;
+    private readonly TimeProvider _time;
     private readonly ILogger<SensitivityResolver> _logger;
 
     private const double DefaultSensitivity = 50.0;
@@ -28,6 +30,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         IActiveProfileResolver activeProfileResolver,
         ProfileVersionCache versions,
         IProfileActivationResolver activations,
+        TimeProvider timeProvider,
         ILogger<SensitivityResolver> logger)
     {
         _repo = repo;
@@ -36,25 +39,38 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         _activeProfileResolver = activeProfileResolver;
         _versions = versions;
         _activations = activations;
+        _time = timeProvider;
         _logger = logger;
     }
 
     public async Task<double> GetSensitivityAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
-        var schedule = await ActiveSchedule.ResolveAsync(
-            timeMills, specProfile, _activeProfileResolver, _repo, _versions,
-            s => s.Entries, s => s.Sensitivity, _therapyRepo, _patientRecordRepo, ct);
+        var schedule = await ResolveScheduleAsync(timeMills, specProfile, ct);
         if (schedule is null)
             return DefaultSensitivity;
 
-        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight)
-            ?? DefaultSensitivity;
-
-        if (schedule.Adjustment is { } adjustment)
-            value = value * 100.0 / adjustment.Percentage;
-
-        return value;
+        return Scaled(
+            ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight) ?? DefaultSensitivity,
+            schedule);
     }
+
+    public async Task<double?> FindSensitivityAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+    {
+        var schedule = await ResolveScheduleAsync(timeMills, specProfile, ct);
+        return schedule is not null
+            && ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight) is { } value
+                ? Scaled(value, schedule)
+                : null;
+    }
+
+    private Task<ActiveSchedule.At<ScheduleEntry>?> ResolveScheduleAsync(
+        long timeMills, string? specProfile, CancellationToken ct) =>
+        ActiveSchedule.ResolveAsync(
+            timeMills, specProfile, _activeProfileResolver, _repo, _versions,
+            s => s.Entries, s => s.Sensitivity, _therapyRepo, _patientRecordRepo, ct);
+
+    private static double Scaled(double value, ActiveSchedule.At<ScheduleEntry> schedule) =>
+        schedule.Adjustment is { } adjustment ? value * 100.0 / adjustment.Percentage : value;
 
     /// <remarks>
     /// Read off the activation itself, which carries its percentage whether or not its schedules
@@ -62,7 +78,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     /// </remarks>
     public async Task<double?> GetCurrentSensitivityPercentAsync(CancellationToken ct = default)
     {
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var nowMills = _time.GetUtcNow().ToUnixTimeMilliseconds();
         var active = await _activations.GetAtAsync(nowMills, ct);
         if (active is null || active.Activation.Percentage <= 0)
             return null;

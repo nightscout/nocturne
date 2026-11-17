@@ -73,7 +73,7 @@ public abstract class KeyedSoftDeleteAuditTests<TEntity> : AuditedSoftDeleteTest
 
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
         log.EntityType.Should().Be(AuditEntityType);
-        log.SubjectName.Should().Be("tester");
+        log.ActorName.Should().Be("tester");
         AssertUserDeleteAuditRow(log, match);
     }
 
@@ -302,7 +302,7 @@ public class NoteRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAudit
 
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new NoteRepository(
-            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<NoteRepository>(), Broadcaster);
+            contextFactory, new Mock<IDuplicateLinker>().Object, auditContext, Logger<NoteRepository>(), Broadcaster);
 
     protected override NoteEntity NewRow(string? dataSource, string? syncIdentifier) =>
         new()
@@ -329,7 +329,7 @@ public class BolusRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAudi
 
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new BolusRepository(
-            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<BolusRepository>(), Broadcaster);
+            contextFactory, new Mock<IDuplicateLinker>().Object, auditContext, Logger<BolusRepository>(), Broadcaster);
 
     protected override BolusEntity NewRow(string? dataSource, string? syncIdentifier) =>
         new()
@@ -356,7 +356,7 @@ public class CarbIntakeRepositorySyncIdentifierDeleteTests : SyncIdentifierDelet
 
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new CarbIntakeRepository(
-            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<CarbIntakeRepository>(), Broadcaster);
+            contextFactory, new Mock<IDuplicateLinker>().Object, auditContext, Logger<CarbIntakeRepository>(), Broadcaster);
 
     protected override CarbIntakeEntity NewRow(string? dataSource, string? syncIdentifier) =>
         new()
@@ -383,7 +383,7 @@ public class DeviceEventRepositorySyncIdentifierDeleteTests : SyncIdentifierDele
 
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new DeviceEventRepository(
-            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<DeviceEventRepository>(), Broadcaster);
+            contextFactory, new Mock<IDuplicateLinker>().Object, auditContext, Logger<DeviceEventRepository>(), Broadcaster);
 
     protected override DeviceEventEntity NewRow(string? dataSource, string? syncIdentifier) =>
         new()

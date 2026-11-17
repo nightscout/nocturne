@@ -1,13 +1,13 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
-  import { Slider } from "$lib/components/ui/slider";
-  import { Button } from "$lib/components/ui/button";
+  import { Slider } from "#lib/components/ui/slider/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Play from "@lucide/svelte/icons/play";
   import Pause from "@lucide/svelte/icons/pause";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { onDestroy } from "svelte";
-  import { time } from "$lib/utils/formatting";
+  import { time } from "#lib/utils/formatting.js";
   import { CalendarDateTime, fromDate, getLocalTimeZone } from "@internationalized/date";
 
   interface Props {
@@ -152,16 +152,16 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-  class="flex flex-col gap-3 p-4 rounded-lg border bg-card"
+  class="@container flex flex-col gap-3 p-4 rounded-lg border bg-card"
   role="group"
   aria-label="Time scrubber - use arrow keys to navigate, space to play/pause"
 >
   <!-- Time Display -->
-  <div class="flex items-center justify-between">
-    <div class="text-sm text-muted-foreground">
+  <div class="flex items-center justify-between gap-2">
+    <div class="shrink-0 whitespace-nowrap text-xs text-muted-foreground @sm:text-sm">
       {formatSliderLabel(0)}
     </div>
-    <div class="text-center">
+    <div class="min-w-0 text-center">
       <div class="text-2xl font-bold tabular-nums">
         {time(new Date(2000, 0, 1, 0, sliderValue))}
       </div>
@@ -169,7 +169,7 @@
         Scrub time to see data at that moment
       </div>
     </div>
-    <div class="text-sm text-muted-foreground">
+    <div class="shrink-0 whitespace-nowrap text-xs text-muted-foreground @sm:text-sm">
       {formatSliderLabel(totalMinutes - 1)}
     </div>
   </div>

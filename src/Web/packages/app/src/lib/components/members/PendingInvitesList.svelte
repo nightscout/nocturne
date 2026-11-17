@@ -1,35 +1,29 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Link from "@lucide/svelte/icons/link";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import type { MemberInviteInfo, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import type { MemberInviteInfo } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     invites: MemberInviteInfo[];
-    roles: TenantRoleDto[];
     onRevoke: (inviteId: string) => void;
     isRevoking: boolean;
   }
 
-  let { invites = [], roles = [], onRevoke, isRevoking = false }: Props =
+  let { invites = [], onRevoke, isRevoking = false }: Props =
     $props();
-
-  function getRoleName(roleId: string): string {
-    const role = roles.find((r) => r.id === roleId);
-    return role?.name ?? roleId;
-  }
 </script>
 
 <Card.Root>
   <Card.Header class="pb-3">
     <Card.Title class="text-base flex items-center gap-2">
       <Link class="h-4 w-4" />
-      Pending Invites
+      Pending invites
     </Card.Title>
   </Card.Header>
   <Card.Content class="space-y-3">
@@ -40,15 +34,13 @@
         <div class="space-y-1 flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             <p class="text-sm font-medium">
-              {invite.label ?? "Invite Link"}
+              {invite.label ?? "Invite link"}
             </p>
-            {#if invite.roleIds?.length}
-              {#each invite.roleIds as roleId, i (i)}
-                <Badge variant="secondary">
-                  {getRoleName(roleId)}
-                </Badge>
-              {/each}
-            {/if}
+            {#each invite.roleNames ?? [] as roleName, i (i)}
+              <Badge variant="secondary">
+                {roleName}
+              </Badge>
+            {/each}
           </div>
           <p class="text-xs text-muted-foreground">
             Expires {formatMediumDateTime(invite.expiresAt)}

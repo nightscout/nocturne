@@ -1,5 +1,5 @@
 import locales from '../../../../supportedLocales.json'
-import { browser } from '$app/environment'
+import { browser } from '$app/env'
 import { loadLocale } from 'wuchale/load-utils'
 import {
     preferredLanguage,
@@ -10,7 +10,7 @@ import {
 import '../../../../locales/main.loader.svelte.js'
 import '../../../../locales/js.loader.js'
 
-import { building } from '$app/environment'
+import { building } from '$app/env'
 import type { Load } from '@sveltejs/kit'
 
 export const prerender = true;

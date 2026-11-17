@@ -130,6 +130,7 @@
 
 /* Dark mode - THE definitive Classic Nightscout experience */
 /* Pure black, neon green, grey pills - medical device aesthetic */
+@media not print {
 :root.classic-theme.dark,
 .classic-theme .dark {
   /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
@@ -188,4 +189,5 @@
   --percentile-outer: oklch(0.18 0.005 250);
   --percentile-inner: oklch(0.3 0.005 250);
   --percentile-median: oklch(0.65 0.005 250);
+}
 }

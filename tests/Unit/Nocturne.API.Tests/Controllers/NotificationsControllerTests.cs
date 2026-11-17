@@ -121,68 +121,6 @@ public class NotificationsControllerTests
     }
 
     [Fact]
-    public async Task PushoverCallback_WithValidRequest_ReturnsOkResult()
-    {
-        // Arrange
-        var request = new PushoverCallbackRequest
-        {
-            Receipt = "test-receipt-123",
-            Status = 1,
-            AcknowledgedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            AcknowledgedBy = "test-user",
-        };
-
-        var expectedResponse = new NotificationAckResponse
-        {
-            Success = true,
-            Message = "Pushover callback processed successfully",
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        };
-
-        _mockNotificationService
-            .Setup(s =>
-                s.ProcessPushoverCallbackAsync(
-                    It.IsAny<PushoverCallbackRequest>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(expectedResponse);
-
-        // Act
-        var result = await _controller.PushoverCallback(request, CancellationToken.None);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(okResult.Value);
-        Assert.True(response.Success);
-        Assert.Equal("Pushover callback processed successfully", response.Message);
-        _mockNotificationService.Verify(
-            s =>
-                s.ProcessPushoverCallbackAsync(
-                    It.IsAny<PushoverCallbackRequest>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    public async Task PushoverCallback_WithNullRequest_ReturnsBadRequest()
-    {
-        // Arrange
-        PushoverCallbackRequest? request = null;
-
-        // Act
-        var result = await _controller.PushoverCallback(request!, CancellationToken.None);
-
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Request body is required", response.Message);
-    }
-
-    [Fact]
     public async Task GetAdminNotifies_ReturnsOkWithNotifications()
     {
         // Arrange

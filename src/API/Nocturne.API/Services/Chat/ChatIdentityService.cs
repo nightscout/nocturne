@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Chat;
 
@@ -29,6 +30,8 @@ public sealed class ChatIdentityService(
     ChatIdentityDirectoryService directory,
     ChatIdentityPendingLinkService pendingLinks,
     INocturneDbContextFactory contextFactory,
+    ITenantRepository tenants,
+    TimeProvider time,
     ILogger<ChatIdentityService> logger)
 {
     /// <summary>Returns all active chat identity links for the specified tenant.</summary>
@@ -50,11 +53,8 @@ public sealed class ChatIdentityService(
         var pending = await pendingLinks.TryConsumeAsync(token, ct)
             ?? throw new ChatLinkTokenRejectedException("Token expired or already used");
 
-        await using var db = await contextFactory.CreatePlatformAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => new { t.Slug, t.DisplayName })
-            .FirstAsync(ct);
+        var tenant = await tenants.GetAsync(tenantId, ct)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
 
         if (pending.TenantSlug is not null &&
             !string.Equals(pending.TenantSlug, tenant.Slug, StringComparison.OrdinalIgnoreCase))
@@ -107,7 +107,7 @@ public sealed class ChatIdentityService(
         await using var db = await contextFactory.CreatePlatformAsync(ct);
         var row = await db.ChatIdentityPendingLinks.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Token == token, ct);
-        if (row is null || row.ExpiresAt < DateTime.UtcNow) return null;
+        if (row is null || row.ExpiresAt < time.GetUtcNow().UtcDateTime) return null;
         return new ChatIdentityPendingLinkView
         {
             Platform = row.Platform,

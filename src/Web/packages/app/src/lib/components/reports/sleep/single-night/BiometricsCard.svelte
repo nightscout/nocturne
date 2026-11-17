@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
   import Heart from "@lucide/svelte/icons/heart";
   import Activity from "@lucide/svelte/icons/activity";
   import Wind from "@lucide/svelte/icons/wind";

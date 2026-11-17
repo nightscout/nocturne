@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const updateStatus = vi.fn();
 
-vi.mock("$lib/api/generated/coachMarks.generated.remote", () => ({
+vi.mock("#lib/api/generated/coachMarks.generated.remote.js", () => ({
   updateStatus: (arg: unknown) => updateStatus(arg),
 }));
 

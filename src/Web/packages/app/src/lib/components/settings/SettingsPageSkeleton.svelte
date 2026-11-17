@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Card, CardContent, CardHeader } from "#lib/components/ui/card/index.js";
 
   interface Props {
     /** Number of card sections to show */
@@ -10,11 +10,11 @@
   let { cardCount = 3 }: Props = $props();
 </script>
 
-<div class="container mx-auto p-6 max-w-3xl space-y-6">
+<div class="space-y-6">
   <!-- Header Skeleton -->
   <div class="space-y-2">
     <Skeleton class="h-8 w-48" />
-    <Skeleton class="h-4 w-72" />
+    <Skeleton class="h-4 w-72 max-w-full" />
   </div>
 
   <!-- Card Skeletons -->
@@ -23,9 +23,9 @@
       <CardHeader>
         <div class="flex items-center gap-3">
           <Skeleton class="h-10 w-10 rounded-lg" />
-          <div class="space-y-2 flex-1">
+          <div class="min-w-0 space-y-2 flex-1">
             <Skeleton class="h-5 w-40" />
-            <Skeleton class="h-4 w-64" />
+            <Skeleton class="h-4 w-64 max-w-full" />
           </div>
         </div>
       </CardHeader>
@@ -36,14 +36,14 @@
           <div class="flex items-center justify-between">
             <div class="space-y-2">
               <Skeleton class="h-4 w-32" />
-              <Skeleton class="h-3 w-48" />
+              <Skeleton class="h-3 w-48 max-w-full" />
             </div>
             <Skeleton class="h-6 w-11 rounded-full" />
           </div>
           <div class="flex items-center justify-between">
             <div class="space-y-2">
               <Skeleton class="h-4 w-28" />
-              <Skeleton class="h-3 w-44" />
+              <Skeleton class="h-3 w-44 max-w-full" />
             </div>
             <Skeleton class="h-6 w-11 rounded-full" />
           </div>
@@ -66,9 +66,9 @@
             {#each Array(3) as _, i (i)}
               <div class="flex items-center gap-4 p-3 rounded-lg border">
                 <Skeleton class="h-10 w-10 rounded-lg" />
-                <div class="flex-1 space-y-2">
+                <div class="min-w-0 flex-1 space-y-2">
                   <Skeleton class="h-4 w-32" />
-                  <Skeleton class="h-3 w-48" />
+                  <Skeleton class="h-3 w-48 max-w-full" />
                 </div>
                 <Skeleton class="h-8 w-8 rounded-md" />
               </div>

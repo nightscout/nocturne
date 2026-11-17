@@ -110,6 +110,9 @@ public enum ChartColor
     [EnumMember(Value = "tracker-cannula"), JsonStringEnumMemberName("tracker-cannula")]
     TrackerCannula,
 
+    [EnumMember(Value = "tracker-pod"), JsonStringEnumMemberName("tracker-pod")]
+    TrackerPod,
+
     [EnumMember(Value = "tracker-reservoir"), JsonStringEnumMemberName("tracker-reservoir")]
     TrackerReservoir,
 

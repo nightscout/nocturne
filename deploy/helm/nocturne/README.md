@@ -6,7 +6,7 @@ Helm chart for deploying [Nocturne](https://github.com/nightscout/nocturne) on K
 
 ## Install
 
-The chart is published to GitHub Container Registry as an OCI artifact. Released builds are tagged via Chart.yaml's `version:`; `latest` follows `main` HEAD.
+The chart is published to GitHub Container Registry as an OCI artifact. Builds are tagged with semantic versions because Helm requires an OCI tag to match the chart version.
 
 ```bash
 helm install nocturne oci://ghcr.io/nightscout/charts/nocturne \

@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Integration tests for OAuth 2.0 Token Revocation (RFC 7009) and
 /// Token Introspection (RFC 7662) endpoints.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class TokenRevocationIntegrationTests : ApiIntegrationTestBase
 {

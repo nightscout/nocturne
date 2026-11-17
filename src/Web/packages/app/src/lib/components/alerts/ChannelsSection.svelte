@@ -1,42 +1,52 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Bell from "@lucide/svelte/icons/bell";
   import X from "@lucide/svelte/icons/x";
-  import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
-  import { getChannelStatuses } from "$api/generated/systems.generated.remote";
-  import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";
-  import { getInAppRecipients } from "$api/generated/alertRules.generated.remote";
-  import * as Select from "$lib/components/ui/select";
+  import { getLinkedPlatforms } from "#lib/api/generated/linkedPlatforms.generated.remote.js";
+  import { getChannelStatuses } from "#lib/api/generated/systems.generated.remote.js";
+  import { getCapabilityCatalog } from "#lib/api/generated/clientDevices.generated.remote.js";
+  import { getInAppRecipients } from "#lib/api/generated/alertRules.generated.remote.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { ChannelType, AlertRuleSeverity } from "$api-clients";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { ChannelType, AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     ChannelStatusEntry,
     DeviceCapabilityCatalog,
     InAppRecipientResponse,
-  } from "$api-clients";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import { applyChannelDestination, type ChannelDef } from "./types";
   import {
     CHANNEL_META,
-    destinationError,
     findChannelMeta,
     type ChannelMetaEntry,
   } from "./channelMeta";
+  import {
+    channelDescription,
+    channelDestinationHelper,
+    channelDestinationLabel,
+    channelLabel,
+    destinationError,
+  } from "./channelText.svelte";
 
   interface Props {
     channels: ChannelDef[];
     /** The rule's severity, forwarded to the device editor's hardware warning. */
     severity?: AlertRuleSeverity;
+    /** Narrows the kinds that may be added to these; every kind the API offers when omitted. */
+    kinds?: ChannelType[];
   }
 
   let {
     channels = $bindable(),
     severity = AlertRuleSeverity.Warning,
+    kinds,
   }: Props = $props();
 
   const linkedPlatformsQuery = getLinkedPlatforms();
@@ -79,7 +89,9 @@
   // Every entry is listed but disabled until the API has answered, so the menu never
   // silently shrinks to nothing while the query is in flight or after it fails.
   const channelOptions = $derived(
-    statusPending || statusFailed ? CHANNEL_META : CHANNEL_META.filter(isOffered),
+    (statusPending || statusFailed ? CHANNEL_META : CHANNEL_META.filter(isOffered)).filter(
+      (o) => !kinds || kinds.includes(o.type),
+    ),
   );
 
   function addChannel(opt: ChannelMetaEntry): void {
@@ -155,9 +167,12 @@
 
 <div class="space-y-2">
   {#if channels.length === 0}
-    <p class="text-sm text-muted-foreground italic">
-      No channels configured. Add at least one to receive this alert.
-    </p>
+    <EmptyState
+      art="chat-bubble"
+      size="compact"
+      title="No channels configured"
+      body="Add at least one to receive this alert."
+    />
   {/if}
 
   {#each channels as ch, i (ch._uid ?? i)}
@@ -175,13 +190,13 @@
       <div class="flex-1 space-y-2">
         <div class="flex items-center justify-between gap-2">
           <div>
-            <div class="text-sm font-medium">{opt?.label ?? ch.channelType}</div>
-            {#if opt?.description}
-              <div class="text-xs text-muted-foreground">{opt.description}</div>
+            <div class="text-sm font-medium">{opt ? channelLabel(opt.type) : ch.channelType}</div>
+            {#if opt}
+              <div class="text-xs text-muted-foreground">{channelDescription(opt.type)}</div>
             {/if}
             {#if !linked && opt?.platform}
               <div class="text-xs text-status-warning mt-0.5">
-                {platformLabel(opt.platform)} not linked — won't deliver until connected.
+                {platformLabel(opt.platform)} not linked. Nothing is delivered until it is connected.
               </div>
             {/if}
           </div>
@@ -238,15 +253,16 @@
               </p>
             {:else}
               <p class="text-xs text-muted-foreground">
-                Shown in this person's Nocturne notification centre.
+                Shown in this person's Nocturne notification center.
               </p>
             {/if}
           </div>
         {:else}
           {#if opt && needsDestination(ch.channelType)}
             {@const error = destinationError(opt, ch.destination)}
+            {@const helper = channelDestinationHelper(opt.type)}
             <div class="space-y-1.5">
-              <Label size="sm" for="channel-dest-{i}">{opt.destinationLabel}</Label>
+              <Label size="sm" for="channel-dest-{i}">{channelDestinationLabel(opt.type)}</Label>
               <Input
                 id="channel-dest-{i}"
                 type="text"
@@ -255,7 +271,7 @@
                 aria-invalid={error != null}
                 aria-describedby={error != null
                   ? `channel-dest-error-${i}`
-                  : opt.destinationHelper
+                  : helper
                     ? `channel-dest-helper-${i}`
                     : undefined}
                 value={ch.destination}
@@ -267,14 +283,14 @@
                 <p id="channel-dest-error-{i}" class="text-xs text-status-warning">
                   {error}
                 </p>
-              {:else if opt.destinationHelper}
+              {:else if helper}
                 <p id="channel-dest-helper-{i}" class="text-xs text-muted-foreground">
-                  {opt.destinationHelper}
+                  {helper}
                 </p>
               {/if}
             </div>
-          {:else if opt?.destinationHelper}
-            <p class="text-xs text-muted-foreground">{opt.destinationHelper}</p>
+          {:else if opt && channelDestinationHelper(opt.type)}
+            <p class="text-xs text-muted-foreground">{channelDestinationHelper(opt.type)}</p>
           {/if}
           {#if ch.channelType === ChannelType.Webhook}
             <div class="space-y-1.5">
@@ -285,7 +301,7 @@
                   type="password"
                   autocomplete="off"
                   size="sm"
-                  placeholder={ch.hasSecret ? "Saved — type to replace" : "Shared with your receiver"}
+                  placeholder={ch.hasSecret ? "Saved. Type to replace" : "Shared with your receiver"}
                   aria-describedby="channel-secret-helper-{i}"
                   value={ch.secret ?? ""}
                   oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -311,7 +327,7 @@
                 Set this to have Nocturne sign each request with an
                 <code>X-Nocturne-Signature</code> header your receiver can verify. Leave blank if
                 your receiver does not check signatures.{#if ch.hasSecret}
-                  Changing the URL above does not carry the saved secret over — enter it again.
+                  Changing the URL above does not carry the saved secret over. Enter it again.
                 {/if}
               </p>
             </div>
@@ -364,7 +380,7 @@
           disabled={pending || unavailable}
           title={linked
             ? undefined
-            : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
+            : `${platformLabel(o.platform!)} not linked. Connect it in Connectors & apps to enable delivery.`}
           onSelect={() => addChannel(o)}
         >
           <span
@@ -380,7 +396,7 @@
           </span>
           <span class="flex flex-1 flex-col {!linked ? 'opacity-60' : ''}">
             <span class="flex items-center gap-1.5">
-              <span class="text-sm font-medium">{o.label}</span>
+              <span class="text-sm font-medium">{channelLabel(o.type)}</span>
               {#if pending}
                 <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
                   Loading
@@ -395,7 +411,7 @@
                 </span>
               {/if}
             </span>
-            <span class="text-xs text-muted-foreground leading-tight">{o.description}</span>
+            <span class="text-xs text-muted-foreground leading-tight">{channelDescription(o.type)}</span>
           </span>
         </DropdownMenu.Item>
       {/each}

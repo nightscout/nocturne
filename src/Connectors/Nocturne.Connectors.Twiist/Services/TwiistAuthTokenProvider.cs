@@ -20,11 +20,12 @@ public class TwiistAuthTokenProvider(
     IConnectorServerResolver<TwiistConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<TwiistAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<TwiistConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider? timeProvider = null)
+    : AuthTokenProviderBase<TwiistConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>
     /// Cognito access tokens typically expire in 1 hour. Refresh 5 minutes early.
@@ -72,7 +73,6 @@ public class TwiistAuthTokenProvider(
 
                 return (loginAccessToken, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Twiist Cognito authentication",
             cancellationToken);
@@ -81,7 +81,7 @@ public class TwiistAuthTokenProvider(
             return (null, DateTime.MinValue, null);
 
         // Cognito tokens expire in ~1 hour
-        var expiresAt = DateTime.UtcNow.AddHours(1);
+        var expiresAt = _timeProvider.GetUtcNow().UtcDateTime.AddHours(1);
         _logger.LogInformation(
             "Twiist Cognito authentication successful, token expires at {ExpiresAt}",
             expiresAt);

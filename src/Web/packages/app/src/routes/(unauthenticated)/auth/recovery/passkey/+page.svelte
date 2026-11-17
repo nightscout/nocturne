@@ -1,12 +1,13 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { FormError } from "$lib/forms";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { FormError } from "#lib/forms/index.js";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
-  import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
+  import { Artwork } from "water-ui";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
@@ -14,11 +15,11 @@
   import {
     registerOptions,
     registerComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
+  } from "#lib/components/auth/passkey-errors.js";
   import { page } from "$app/state";
 
   /**
@@ -27,11 +28,9 @@
    * with; naming someone else changes nothing about which account is enrolled.
    */
   const username = $derived(page.url.searchParams.get("username") ?? "");
-  const returnUrl = $derived(page.url.searchParams.get("returnUrl") ?? "/");
-  const loginUrl = $derived(
-    resolve(`/auth/login?${new URLSearchParams({ returnUrl })}`)
-  );
 
+  const returnUrl = $derived(page.url.searchParams.get("returnUrl") ?? "/");
+  const loginUrl = $derived(resolve(`auth/login?${new URLSearchParams({ returnUrl })}`));
   let isRegistering = $state(false);
   let registered = $state(false);
   let errorMessage = $state<string | null>(null);
@@ -66,7 +65,7 @@
       errorMessage = describePasskeyError(
         err,
         "register",
-        "We couldn't register a passkey. A recovery code is only good for ten minutes — sign in with another one to try again."
+        "We could not register a passkey. A recovery code is valid for ten minutes only. Sign in with another recovery code to try again."
       );
     } finally {
       isRegistering = false;
@@ -75,24 +74,26 @@
 </script>
 
 <svelte:head>
-  <title>Register a Passkey - Nocturne</title>
+  <title>Register a passkey - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center p-4">
   <Card.Root class="w-full max-w-md">
     <Card.Header class="text-center">
-      <div
-        class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-      >
-        <KeyRound class="h-6 w-6 text-primary" />
-      </div>
+      <Artwork
+        icon={fingerprintArtwork}
+        palette="water"
+        motion="auto"
+        autoplay="once"
+        class="mx-auto mb-2 size-56"
+      />
       <Card.Title class="text-xl">Register a passkey</Card.Title>
       <Card.Description>
         {#if registered}
           Your passkey is ready. Sign in with it to finish.
         {:else}
-          Your recovery code was accepted. It lets you set up a passkey for
-          {username || "your account"} — nothing else — and it expires in ten
+          Your recovery code was accepted. It lets you create a passkey for
+          {username || "your account"} and nothing else. It expires in ten
           minutes.
         {/if}
       </Card.Description>

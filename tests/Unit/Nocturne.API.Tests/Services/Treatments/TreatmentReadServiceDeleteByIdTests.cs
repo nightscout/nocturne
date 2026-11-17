@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -19,7 +20,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class TreatmentReadServiceDeleteByIdTests
 {
     private readonly Mock<IV4ToLegacyProjectionService> _projection = new();
-    private readonly Mock<IDecompositionPipeline> _pipeline = new();
+    private readonly Mock<IPerTreatmentDecomposer> _decomposer = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
     private readonly Mock<ITempBasalRepository> _tempBasalRepo = new();
     private readonly Mock<IBolusRepository> _bolusRepo = new();
     private readonly Mock<ICarbIntakeRepository> _carbIntakeRepo = new();
@@ -34,8 +35,7 @@ public class TreatmentReadServiceDeleteByIdTests
     {
         _service = new TreatmentReadService(
             _projection.Object,
-            new Mock<ITreatmentDecomposer>().Object,
-            _pipeline.Object,
+            _decomposer.Object,
             _tempBasalRepo.Object,
             _bolusRepo.Object,
             _carbIntakeRepo.Object,
@@ -66,8 +66,8 @@ public class TreatmentReadServiceDeleteByIdTests
         deleted.Should().NotBeNull();
         deleted!.Served!.Id.Should().Be(spanId);
         _stateSpans.Verify(s => s.DeleteStateSpanAsync(spanId, It.IsAny<CancellationToken>()), Times.Once);
-        _pipeline.Verify(
-            p => p.DeleteByLegacyIdAsync<Treatment>(clientId, WriteOrigin.Live, It.IsAny<CancellationToken>()),
+        _decomposer.Verify(
+            p => p.DeleteByLegacyIdAsync(clientId, WriteOrigin.Live, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -86,16 +86,16 @@ public class TreatmentReadServiceDeleteByIdTests
         // slots with one method, so only mocks need to distinguish them)
         _bolusRepo.As<IV4Repository<Bolus>>()
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(bolus);
-        _pipeline
-            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>(
+        _decomposer
+            .Setup(p => p.DeleteByLegacyIdAsync(
                 bolus.LegacyId, WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
 
         var deleted = await _service.DeleteAsync(id.ToString());
 
         deleted.Should().NotBeNull();
-        _pipeline.Verify(
-            p => p.DeleteByLegacyIdAsync<Treatment>(bolus.LegacyId, WriteOrigin.Live, It.IsAny<CancellationToken>()),
+        _decomposer.Verify(
+            p => p.DeleteByLegacyIdAsync(bolus.LegacyId, WriteOrigin.Live, It.IsAny<CancellationToken>()),
             Times.Once);
         _bolusRepo.As<IV4Repository<Bolus>>().Verify(
             r => r.DeleteAsync(It.IsAny<Guid>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),

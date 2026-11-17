@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
-  import { buildPreludeDeepLink } from "$lib/utils/prelude-links";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { buildPreludeDeepLink } from "#lib/utils/prelude-links.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   const copy = createCopyFeedback();
   let viewState: "redirecting" | "fallback" = $state("redirecting");
@@ -49,7 +49,7 @@
       <CardHeader>
         <CardTitle>Connect Prelude</CardTitle>
         <CardDescription>
-          Prelude didn't open automatically. You can try these options:
+          Prelude did not open automatically. You can try these options:
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -82,7 +82,7 @@
         </div>
 
         <div class="pt-2">
-          <p class="text-muted-foreground text-sm">Don't have Prelude installed?</p>
+          <p class="text-muted-foreground text-sm">Prelude not installed?</p>
           <Button
             href="https://github.com/nightscout/prelude/releases"
             target="_blank"

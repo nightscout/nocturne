@@ -69,8 +69,8 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
 
 /// A stored rule's condition trees, as [`WireRule`] carries them.
 ///
-/// The root kind is `condition_type`, a kind's wire name ignoring ASCII case;
-/// anything else gives the rule no kinds. The root kind counts whatever the
+/// The root kind is `condition_type`, exactly a kind's wire name; anything
+/// else gives the rule no kinds. The root kind counts whatever the
 /// body. The body's kinds count only when it can be evaluated, nested kinds
 /// resolving as node dispatch resolves them (engine-semantics.md §1.2). The
 /// auto-resolve tree's kinds count whenever `auto_resolve_enabled` and the
@@ -97,12 +97,12 @@ impl<'a> RuleConditions<'a> {
     }
 
     pub(crate) fn kinds(&self) -> Vec<ConditionKind> {
-        let Some(root) = ConditionKind::from_name(self.condition_type) else {
+        let Some(root) = ConditionKind::from_wire(self.condition_type) else {
             return Vec::new();
         };
         let body = parse_payload(root, self.condition_params)
             .ok()
-            .map(|payload| Node::from_rule(root, Some(payload)));
+            .map(Node::from);
         let auto_resolve = self
             .auto_resolve_enabled
             .then(|| parse_auto_resolve(self.auto_resolve_params))
@@ -127,11 +127,7 @@ impl<'a> From<&'a WireRule> for RuleConditions<'a> {
 }
 
 fn leaf_kinds(tree: &Node) -> Vec<ConditionKind> {
-    collect_leaves(tree)
-        .into_iter()
-        .flatten()
-        .filter_map(|leaf| leaf.type_str.as_deref().and_then(ConditionKind::resolve))
-        .collect()
+    collect_leaves(tree).into_iter().map(Node::kind).collect()
 }
 
 /// Every fact any kind of `rule` ([`RuleConditions`]) reads, once each, in
@@ -165,7 +161,7 @@ mod tests {
     use super::*;
     use crate::context::{
         ActiveAlertSnapshot, PredictedPoint, PumpStateSnapshot, SensorContext, StartedSpan,
-        StateSpanSnapshot, TempBasalSnapshot,
+        StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
     };
     use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket};
     use crate::eval::{Env, eval_payload};
@@ -258,7 +254,7 @@ mod tests {
     fn a_leaf_root_is_selected_by_its_own_facts_whatever_its_body() {
         let threshold = json!({"direction": "below", "value": 70});
         assert_eq!(body("threshold", &threshold), [F::Glucose]);
-        assert_eq!(body("THRESHOLD", &threshold), [F::Glucose]);
+        assert_eq!(body("THRESHOLD", &threshold), []);
         assert_eq!(body("tracker_age", &json!("not an object")), [F::Trackers]);
         let rule = RuleConditions::body("threshold", &threshold);
         assert!(references_any(&rule, &[F::Carbs, F::Glucose]));
@@ -268,7 +264,7 @@ mod tests {
     #[test]
     fn a_root_that_is_not_a_wire_name_reads_nothing() {
         let rate = json!({"direction": "falling", "rate": 2});
-        assert_eq!(body("RATE_OF_CHANGE", &rate), [F::Glucose]);
+        assert!(body("RATE_OF_CHANGE", &rate).is_empty());
         assert!(body("RateOfChange", &rate).is_empty());
         assert!(body("1", &rate).is_empty());
         assert!(body("no_such_kind", &json!({})).is_empty());
@@ -281,7 +277,7 @@ mod tests {
             "conditions": [
                 { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
                 { "type": "sustained", "sustained": { "minutes": 15, "child":
-                    { "type": "Iob", "iob": { "operator": ">", "value": 2 } } } }
+                    { "type": "iob", "iob": { "operator": ">", "value": 2 } } } }
             ]
         });
         assert_eq!(body("composite", &tree), [F::Glucose, F::Insulin]);
@@ -314,12 +310,12 @@ mod tests {
     }
 
     #[test]
-    fn a_container_without_its_payload_reads_nothing() {
+    fn a_container_without_its_payload_makes_the_body_unevaluable() {
         let tree = json!({
             "operator": "or",
             "conditions": [ { "type": "not" }, { "type": "sustained" } ]
         });
-        assert!(parse_payload(ConditionKind::Composite, &tree).is_ok());
+        assert!(parse_payload(ConditionKind::Composite, &tree).is_err());
         let rule = RuleConditions::body("composite", &tree);
         assert!(rule_reads(&rule).is_empty());
         assert!(!references_wall_clock(&rule));
@@ -495,7 +491,7 @@ mod tests {
             last_site_change_at: has(F::DeviceAges).then(|| ago(80 * 60)),
             last_sensor_start_at: has(F::DeviceAges).then(|| ago(12 * 24 * 60)),
             active_trackers: if has(F::Trackers) {
-                HashMap::from([(TRACKER_ID, ago(30))])
+                HashMap::from([(TRACKER_ID, TrackerReference::at(ago(30)))])
             } else {
                 HashMap::new()
             },
@@ -518,12 +514,13 @@ mod tests {
     }
 
     /// A payload that is true in `context(reads(kind))` and false in
-    /// `context(&[])`; a container's default payload.
+    /// `context(&[])`; for a container, one over a `threshold`.
     fn sample(kind: ConditionKind) -> Payload {
+        let low = json!({"type": "threshold", "threshold": {"direction": "below", "value": 70}});
         let params = match kind {
-            ConditionKind::Composite | ConditionKind::Not | ConditionKind::Sustained => {
-                return Payload::default_for(kind);
-            }
+            ConditionKind::Composite => json!({"operator": "and", "conditions": [low]}),
+            ConditionKind::Not => json!({"child": low}),
+            ConditionKind::Sustained => json!({"minutes": 5, "child": low}),
             ConditionKind::Threshold => json!({"direction": "below", "value": 70}),
             ConditionKind::RateOfChange => json!({"direction": "falling", "rate": 2}),
             ConditionKind::SignalLoss => json!({"timeout_minutes": 15}),
@@ -554,7 +551,7 @@ mod tests {
             ConditionKind::TimeSinceLastCarb | ConditionKind::TimeSinceLastBolus => {
                 json!({"operator": "<", "minutes": 60})
             }
-            ConditionKind::DayOfWeek => json!({"days": ["Tuesday"]}),
+            ConditionKind::DayOfWeek => json!({"days": ["tuesday"]}),
             ConditionKind::PumpState => json!({"mode": "Exercise", "is_active": true}),
             ConditionKind::StateSpanActive => json!({"category": "Illness", "is_active": true}),
             ConditionKind::TrackerAge => {
@@ -594,8 +591,8 @@ mod tests {
     }
 
     #[test]
-    fn no_kind_moves_with_a_fact_it_does_not_read() {
-        for &kind in ConditionKind::ALL {
+    fn no_leaf_kind_moves_with_a_fact_it_does_not_read() {
+        for &kind in ConditionKind::ALL.iter().filter(|&&k| !is_container(k)) {
             let own = reads(kind);
             let others: Vec<ContextFact> = ContextFact::ALL
                 .iter()

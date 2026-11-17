@@ -9,6 +9,8 @@ namespace Nocturne.Connectors.CareLink.Tests.Mappers;
 
 public class CareLinkSystemEventMapperTests
 {
+    private static readonly DateTime Now = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+
     [Fact]
     public void Map_ReturnsSystemEvent_ForValidAlarm()
     {
@@ -19,7 +21,7 @@ public class CareLinkSystemEventMapperTests
         var serverTimeMs = new DateTimeOffset(2024, 1, 15, 13, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var pumpOffsetMs = TimeSpan.FromHours(1).TotalMilliseconds;
 
-        var result = CareLinkSystemEventMapper.Map(alarm, pumpOffsetMs, serverTimeMs);
+        var result = CareLinkSystemEventMapper.Map(alarm, pumpOffsetMs, serverTimeMs, Now);
 
         result.Should().NotBeNull();
         result!.EventType.Should().Be(SystemEventType.Alarm);
@@ -30,16 +32,43 @@ public class CareLinkSystemEventMapperTests
     }
 
     [Fact]
+    public void Map_StampsCreatedAtFromTheGivenInstant()
+    {
+        var alarm = new CareLinkAlarm { Type = "PUMP_ALERT", Code = 102, Datetime = "2024-01-15T14:30:00" };
+
+        var result = CareLinkSystemEventMapper.Map(alarm, 0, 0, Now);
+
+        result!.CreatedAt.Should().Be(Now);
+    }
+
+    [Fact]
+    public void MapNotifications_StampsEveryEventWithTheBatchInstant()
+    {
+        var history = new CareLinkNotificationHistory
+        {
+            ActiveNotifications =
+            [
+                new CareLinkNotification { ReferenceGUID = "AAA", Type = "ALERT", TriggeredDateTime = "2026-06-10T11:00:00" },
+                new CareLinkNotification { ReferenceGUID = "BBB", Type = "ALERT", TriggeredDateTime = "2026-06-10T11:05:00" },
+            ],
+        };
+
+        var events = CareLinkSystemEventMapper.MapNotifications(history, 0, Now);
+
+        events.Should().HaveCount(2).And.OnlyContain(e => e.CreatedAt == Now);
+    }
+
+    [Fact]
     public void Map_ReturnsNull_WhenAlarmIsNull()
     {
-        CareLinkSystemEventMapper.Map(null, 0, 0).Should().BeNull();
+        CareLinkSystemEventMapper.Map(null, 0, 0, Now).Should().BeNull();
     }
 
     [Fact]
     public void Map_ReturnsNull_WhenDatetimeIsMissing()
     {
         var alarm = new CareLinkAlarm { Type = "ALERT", Code = 1 };
-        CareLinkSystemEventMapper.Map(alarm, 0, 0).Should().BeNull();
+        CareLinkSystemEventMapper.Map(alarm, 0, 0, Now).Should().BeNull();
     }
 
     [Fact]
@@ -66,7 +95,7 @@ public class CareLinkSystemEventMapperTests
             ],
         };
 
-        var events = CareLinkSystemEventMapper.MapNotifications(history, 0);
+        var events = CareLinkSystemEventMapper.MapNotifications(history, 0, Now);
 
         events.Should().HaveCount(2);
 
@@ -98,7 +127,7 @@ public class CareLinkSystemEventMapperTests
             ],
         };
 
-        CareLinkSystemEventMapper.MapNotifications(history, 0).Should().HaveCount(1);
+        CareLinkSystemEventMapper.MapNotifications(history, 0, Now).Should().HaveCount(1);
     }
 
     [Fact]
@@ -112,12 +141,12 @@ public class CareLinkSystemEventMapperTests
             ],
         };
 
-        CareLinkSystemEventMapper.MapNotifications(history, 0).Should().BeEmpty();
+        CareLinkSystemEventMapper.MapNotifications(history, 0, Now).Should().BeEmpty();
     }
 
     [Fact]
     public void MapNotifications_ReturnsEmpty_WhenHistoryIsNull()
     {
-        CareLinkSystemEventMapper.MapNotifications(null, 0).Should().BeEmpty();
+        CareLinkSystemEventMapper.MapNotifications(null, 0, Now).Should().BeEmpty();
     }
 }

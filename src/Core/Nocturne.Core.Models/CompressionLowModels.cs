@@ -1,21 +1,65 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Request to accept a compression low suggestion with adjusted bounds.
-/// The user may adjust the start and end time detected by the algorithm before accepting.
+/// What a review applies to every suggestion it names.
+/// </summary>
+/// <seealso cref="CompressionLowBatchRequest"/>
+[JsonConverter(typeof(JsonStringEnumConverter<CompressionLowBatchAction>))]
+public enum CompressionLowBatchAction
+{
+    /// <summary>Accept each suggestion, creating a data exclusion span for it</summary>
+    Accept,
+
+    /// <summary>Dismiss each suggestion</summary>
+    Dismiss,
+
+    /// <summary>Delete each suggestion and the span an accepted one created</summary>
+    Delete,
+}
+
+/// <summary>
+/// One suggestion in a <see cref="CompressionLowBatchRequest"/>.
 /// </summary>
 /// <seealso cref="CompressionLowSuggestion"/>
-public class AcceptSuggestionRequest
+public class CompressionLowBatchItem
 {
-    /// <summary>Adjusted start of the compression low region (Unix milliseconds)</summary>
-    [JsonPropertyName("startMills")]
-    public long StartMills { get; set; }
+    /// <summary>The suggestion to act on</summary>
+    [JsonPropertyName("id")]
+    public Guid Id { get; set; }
 
-    /// <summary>Adjusted end of the compression low region (Unix milliseconds)</summary>
+    /// <summary>
+    /// Adjusted start of the compression low region (Unix milliseconds). Read only when accepting;
+    /// the detected start is used when it is absent.
+    /// </summary>
+    [JsonPropertyName("startMills")]
+    public long? StartMills { get; set; }
+
+    /// <summary>
+    /// Adjusted end of the compression low region (Unix milliseconds). Read only when accepting;
+    /// the detected end is used when it is absent.
+    /// </summary>
     [JsonPropertyName("endMills")]
-    public long EndMills { get; set; }
+    public long? EndMills { get; set; }
+}
+
+/// <summary>
+/// Request to apply one <see cref="CompressionLowBatchAction"/> to several compression low
+/// suggestions.
+/// </summary>
+/// <seealso cref="CompressionLowBatchItem"/>
+public class CompressionLowBatchRequest
+{
+    /// <summary>The action applied to every item</summary>
+    [Required]
+    [JsonPropertyName("action")]
+    public CompressionLowBatchAction? Action { get; set; }
+
+    /// <summary>The suggestions to act on</summary>
+    [JsonPropertyName("items")]
+    public List<CompressionLowBatchItem> Items { get; set; } = [];
 }
 
 /// <summary>

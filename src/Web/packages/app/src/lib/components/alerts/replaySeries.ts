@@ -1,4 +1,4 @@
-import type { LegendState } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
+import type { LegendState } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
 import type { ConditionNode } from "./types";
 
 type Series = "iob" | "cob" | "basal" | "bolus" | "carbs";

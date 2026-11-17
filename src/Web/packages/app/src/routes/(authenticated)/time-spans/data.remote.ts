@@ -1,357 +1,161 @@
 /**
- * Remote functions for Time Spans page data
- * Fetches all state span categories for visualization
+ * Reads for the therapy timeline. Each category has its own read scope, so a
+ * read the caller is refused comes back null and the page leaves that part out.
  */
-import { randomUUID } from "$lib/utils";
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import {
+  DeviceEventType,
   StateSpanCategory,
-  BasalDeliveryOrigin,
+  type DeviceEvent,
+  type SleepSession,
   type StateSpan,
-  type ProfileActivationDto,
-} from "$lib/api";
-import { profileActivationLabel } from "$lib/utils/profile-activation-label";
+} from "#lib/api/index.js";
+import { readable } from "#lib/server/patient-timezone.js";
 
-/**
- * Input schema for time spans data queries - supports date range
- */
-const timeSpansSchema = z.object({
-  from: z.string(), // ISO date string YYYY-MM-DD
-  to: z.string(), // ISO date string YYYY-MM-DD
+const windowSchema = z.object({
+  from: z.number(),
+  to: z.number(),
 });
 
-export type TimeSpansInput = z.infer<typeof timeSpansSchema>;
-
-/**
- * Processed state span for chart rendering
- */
-export interface ProcessedSpan {
+/** A stretch of time drawn in a context lane. */
+export interface LaneSpan {
   id: string;
-  category: StateSpanCategory;
-  state: string;
-  startTime: Date;
-  endTime: Date;
+  label: string;
+  startMills: number;
+  endMills: number;
   color: string;
-  metadata?: Record<string, unknown>;
-  /** Temp basal rate (U/hr) if applicable */
-  rate?: number | null;
-  /** Temp basal percent if applicable */
-  percent?: number | null;
-  /** Profile name if applicable */
-  profileName?: string | null;
-  /** Basal delivery origin if applicable */
-  origin?: BasalDeliveryOrigin | null;
 }
 
-/**
- * Time spans page data response
- */
-export interface TimeSpansPageData {
-  pumpModeSpans: ProcessedSpan[];
-  profileSpans: ProcessedSpan[];
-  tempBasalSpans: ProcessedSpan[];
-  overrideSpans: ProcessedSpan[];
-  activitySpans: ProcessedSpan[];
-  dateRange: { from: Date; to: Date };
+/** A device change drawn as a point in the device lane. */
+export interface LaneMarker {
+  id: string;
+  mills: number;
+  eventType: DeviceEventType;
 }
 
-/**
- * Map pump mode state to CSS color variable
- */
-function getPumpModeColor(state: string): string {
-  const stateColors: Record<string, string> = {
-    Automatic: "var(--pump-mode-automatic)",
-    Limited: "var(--pump-mode-limited)",
-    Manual: "var(--pump-mode-manual)",
-    Boost: "var(--pump-mode-boost)",
-    EaseOff: "var(--pump-mode-ease-off)",
-    Sleep: "var(--pump-mode-sleep)",
-    Exercise: "var(--pump-mode-exercise)",
-    Suspended: "var(--pump-mode-suspended)",
-    Off: "var(--pump-mode-off)",
-    Liberty: "var(--pump-mode-liberty)",
-  };
-  return stateColors[state] ?? "var(--muted-foreground)";
-}
+const PUMP_MODE_COLORS: Record<string, string> = {
+  Automatic: "var(--pump-mode-automatic)",
+  Limited: "var(--pump-mode-limited)",
+  Manual: "var(--pump-mode-manual)",
+  Boost: "var(--pump-mode-boost)",
+  EaseOff: "var(--pump-mode-ease-off)",
+  Sleep: "var(--pump-mode-sleep)",
+  Exercise: "var(--pump-mode-exercise)",
+  Suspended: "var(--pump-mode-suspended)",
+  Off: "var(--pump-mode-off)",
+  Liberty: "var(--pump-mode-liberty)",
+};
 
-/**
- * Map profile state to CSS color variable
- */
-function getProfileColor(_state: string): string {
-  // Profiles use a neutral color
-  return "var(--chart-1)";
-}
+const ACTIVITY_COLORS: Partial<Record<StateSpanCategory, string>> = {
+  [StateSpanCategory.Exercise]: "var(--pump-mode-exercise)",
+  [StateSpanCategory.Illness]: "var(--system-event-warning)",
+  [StateSpanCategory.Travel]: "var(--chart-3)",
+};
 
-/**
- * Map temp basal state to CSS color variable
- */
-function getTempBasalColor(_state: string): string {
-  return "var(--insulin-basal)";
-}
+/** The device changes that start a new sensor, site, reservoir, pod or battery. */
+const LIFECYCLE_EVENTS: ReadonlySet<DeviceEventType> = new Set([
+  DeviceEventType.SensorStart,
+  DeviceEventType.SensorChange,
+  DeviceEventType.SiteChange,
+  DeviceEventType.CannulaChange,
+  DeviceEventType.InsulinChange,
+  DeviceEventType.ReservoirChange,
+  DeviceEventType.PodChange,
+  DeviceEventType.PumpBatteryChange,
+  DeviceEventType.TransmitterSensorInsert,
+]);
 
-/**
- * Map override state to CSS color variable
- */
-function getOverrideColor(state: string): string {
-  const stateColors: Record<string, string> = {
-    Boost: "var(--pump-mode-boost)",
-    Exercise: "var(--pump-mode-exercise)",
-    Sleep: "var(--pump-mode-sleep)",
-    EaseOff: "var(--pump-mode-ease-off)",
-  };
-  return stateColors[state] ?? "var(--chart-2)";
-}
-
-/**
- * Map activity category to CSS color variable
- */
-function getActivityColor(category: StateSpanCategory): string {
-  const categoryColors: Partial<Record<StateSpanCategory, string>> = {
-    [StateSpanCategory.Exercise]: "var(--pump-mode-exercise)",
-    [StateSpanCategory.Illness]: "var(--system-event-warning)",
-    [StateSpanCategory.Travel]: "var(--chart-3)",
-  };
-  return categoryColors[category] ?? "var(--muted-foreground)";
-}
-
-/**
- * Process raw state spans into chart-ready format
- */
-function processSpans(
+function clip(
   spans: StateSpan[] | null | undefined,
-  rangeStart: number,
-  rangeEnd: number,
-  colorFn: (state: string) => string
-): ProcessedSpan[] {
-  // Handle null/undefined/non-array input
-  if (!spans || !Array.isArray(spans)) {
-    return [];
-  }
-
-  return spans
-    .filter((span) => {
-      const spanStart = span.startMills ?? 0;
-      const spanEnd = span.endMills ?? rangeEnd;
-      return spanEnd > rangeStart && spanStart < rangeEnd;
-    })
-    .map((span) => {
-      const profileName = span.metadata?.profileName ?? span.metadata?.name;
-      return {
-        id: span.id ?? randomUUID(),
-        category: span.category ?? StateSpanCategory.PumpMode,
-        state: span.state ?? "Unknown",
-        startTime: new Date(Math.max(span.startMills ?? 0, rangeStart)),
-        endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
-        color: colorFn(span.state ?? ""),
-        metadata: span.metadata,
-        rate: null,
-        percent: null,
-        profileName: typeof profileName === "string" ? profileName : null,
-        origin: null,
-      };
-    });
-}
-
-/**
- * Process profile activations into chart-ready spans labelled by the profile they run
- */
-function processProfileActivations(
-  activations: ProfileActivationDto[] | null | undefined,
-  rangeStart: number,
-  rangeEnd: number
-): ProcessedSpan[] {
-  if (!activations || !Array.isArray(activations)) {
-    return [];
-  }
-
-  return activations
-    .filter((activation) => {
-      const start = activation.startMills ?? 0;
-      const end = activation.endMills ?? rangeEnd;
-      return end > rangeStart && start < rangeEnd;
-    })
-    .map((activation) => ({
-      id: activation.id ?? randomUUID(),
-      category: StateSpanCategory.Profile,
-      state: activation.phase ?? "Unknown",
-      startTime: new Date(Math.max(activation.startMills ?? 0, rangeStart)),
-      endTime: new Date(Math.min(activation.endMills ?? rangeEnd, rangeEnd)),
-      color: getProfileColor(activation.phase ?? ""),
-      rate: null,
-      percent: null,
-      profileName: profileActivationLabel(activation) ?? null,
-      origin: null,
+  from: number,
+  to: number,
+  label: (span: StateSpan) => string,
+  color: (span: StateSpan) => string
+): LaneSpan[] {
+  return (spans ?? [])
+    .filter((s) => (s.endMills ?? to) > from && (s.startMills ?? 0) < to)
+    .map((s, i) => ({
+      id: s.id ?? `${s.category}-${s.startMills}-${i}`,
+      label: label(s),
+      startMills: Math.max(s.startMills ?? 0, from),
+      endMills: Math.min(s.endMills ?? to, to),
+      color: color(s),
     }));
 }
 
-/**
- * Parse a numeric value from metadata (handles various JSON types)
- */
-function parseMetadataNumber(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? null : parsed;
-  }
-  return null;
-}
+/** The profile versions and changes of the range, and its glucose in 480 buckets. */
+export const getTimelineOverview = query(windowSchema, async ({ from, to }) => {
+  const { apiClient } = getRequestEvent().locals;
+  const [history, glucose] = await Promise.all([
+    readable(() => apiClient.profileHistory.getProfileHistory(from, to)),
+    readable(() => apiClient.profileHistory.getGlucoseTrace(from, to, 480)),
+  ]);
+  return { history, glucose };
+});
 
-/**
- * Parse origin string from metadata to BasalDeliveryOrigin enum
- */
-function parseBasalOrigin(value: unknown): BasalDeliveryOrigin {
-  if (typeof value === "string") {
-    if (value === BasalDeliveryOrigin.Algorithm) return BasalDeliveryOrigin.Algorithm;
-    if (value === BasalDeliveryOrigin.Manual) return BasalDeliveryOrigin.Manual;
-    if (value === BasalDeliveryOrigin.Suspended) return BasalDeliveryOrigin.Suspended;
-    if (value === BasalDeliveryOrigin.Scheduled) return BasalDeliveryOrigin.Scheduled;
-  }
-  return BasalDeliveryOrigin.Scheduled;
-}
+/** Everything the stage draws for its window. */
+export const getTimelineStage = query(windowSchema, async ({ from, to }) => {
+  const { apiClient } = getRequestEvent().locals;
+  const fromIso = new Date(from).toISOString();
+  const toIso = new Date(to).toISOString();
 
-/**
- * Process basal delivery spans - extracts rate and origin from metadata
- */
-function processBasalSpans(
-  spans: StateSpan[] | null | undefined,
-  rangeStart: number,
-  rangeEnd: number,
-  colorFn: (state: string) => string
-): ProcessedSpan[] {
-  // Handle null/undefined/non-array input
-  if (!spans || !Array.isArray(spans)) {
-    return [];
-  }
+  const [lanes, glucose, basalDelivery, pumpModes, overrides, activities, sleep, deviceEvents] =
+    await Promise.all([
+      readable(() => apiClient.profileHistory.getProfileLanes(from, to)),
+      readable(() => apiClient.profileHistory.getGlucoseTrace(from, to, 480)),
+      readable(() => apiClient.chartData.getBasalDeliverySpans(from, to)),
+      readable(() => apiClient.stateSpans.getPumpModes(fromIso, toIso)),
+      readable(() => apiClient.stateSpans.getOverrides(fromIso, toIso)),
+      readable(() => apiClient.stateSpans.getActivities(fromIso, toIso)),
+      readable(() => apiClient.sleep.getSessions(fromIso, toIso, undefined, undefined, 500)),
+      readable(() => apiClient.deviceEvent.getAll(fromIso, toIso, 1000)),
+    ]);
 
-  return spans
-    .filter((span) => {
-      const spanStart = span.startMills ?? 0;
-      const spanEnd = span.endMills ?? rangeEnd;
-      return spanEnd > rangeStart && spanStart < rangeEnd;
-    })
-    .map((span) => ({
-      id: span.id ?? randomUUID(),
-      category: span.category ?? StateSpanCategory.PumpMode,
-      state: span.state ?? "Unknown",
-      startTime: new Date(Math.max(span.startMills ?? 0, rangeStart)),
-      endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
-      color: colorFn(span.state ?? ""),
-      metadata: span.metadata,
-      rate: parseMetadataNumber(span.metadata?.rate) ?? parseMetadataNumber(span.metadata?.absolute),
-      percent: parseMetadataNumber(span.metadata?.percent),
-      profileName: null,
-      origin: parseBasalOrigin(span.metadata?.origin),
-    }));
-}
+  return {
+    lanes,
+    glucose,
+    basalDelivery,
+    pumpModes: pumpModes
+      ? clip(pumpModes.data, from, to, (s) => s.state ?? "", (s) => PUMP_MODE_COLORS[s.state ?? ""] ?? "var(--muted-foreground)")
+      : null,
+    overrides: overrides
+      ? clip(overrides.data, from, to, (s) => String(s.metadata?.reasonDisplay ?? s.metadata?.reason ?? s.state ?? ""), () => "var(--chart-2)")
+      : null,
+    activities: activities
+      ? clip(
+          activities.data,
+          from,
+          to,
+          (s) => s.state ?? "",
+          (s) => (s.category && ACTIVITY_COLORS[s.category]) || "var(--muted-foreground)"
+        )
+      : null,
+    sleep: sleep
+      ? (sleep.data ?? [])
+          .filter((s: SleepSession) => (s.endMills ?? to) > from && (s.startMills ?? 0) < to)
+          .map((s: SleepSession, i: number): LaneSpan => ({
+            id: s.id ?? `sleep-${s.startMills}-${i}`,
+            label: "",
+            startMills: Math.max(s.startMills ?? 0, from),
+            endMills: Math.min(s.endMills ?? to, to),
+            color: "var(--pump-mode-sleep)",
+          }))
+      : null,
+    deviceEvents: deviceEvents
+      ? (deviceEvents.data ?? [])
+          .filter((e: DeviceEvent) => e.eventType != null && LIFECYCLE_EVENTS.has(e.eventType) && e.mills != null)
+          .map((e: DeviceEvent, i: number): LaneMarker => ({
+            id: e.id ?? `event-${e.mills}-${i}`,
+            mills: e.mills!,
+            eventType: e.eventType!,
+          }))
+      : null,
+  };
+});
 
-/**
- * Get all state span data for time spans page visualization
- */
-export const getTimeSpansData = query(
-  timeSpansSchema,
-  async ({ from, to }): Promise<TimeSpansPageData> => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    // Parse date range
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-
-    // Create start of first day and end of last day
-    const startOfRange = new Date(
-      fromDate.getFullYear(),
-      fromDate.getMonth(),
-      fromDate.getDate(),
-      0,
-      0,
-      0
-    );
-    const endOfRange = new Date(
-      toDate.getFullYear(),
-      toDate.getMonth(),
-      toDate.getDate(),
-      23,
-      59,
-      59
-    );
-    const startTime = startOfRange.getTime();
-    const endTime = endOfRange.getTime();
-    const rangeFrom = startOfRange.toISOString();
-    const rangeTo = endOfRange.toISOString();
-
-    try {
-      // Fetch all state span categories in parallel
-      const [pumpModeRes, profileRes, tempBasalRes, overrideRes, activityRes] =
-        await Promise.all([
-          apiClient.stateSpans.getPumpModes(rangeFrom, rangeTo),
-          apiClient.profileActivations.getActivations(rangeFrom, rangeTo),
-          apiClient.stateSpans.getStateSpans(undefined, undefined, rangeFrom, rangeTo),
-          apiClient.stateSpans.getOverrides(rangeFrom, rangeTo),
-          apiClient.stateSpans.getActivities(rangeFrom, rangeTo),
-        ]);
-
-      const pumpModeSpans = pumpModeRes?.data ?? [];
-      const profileActivations = profileRes ?? [];
-      const tempBasalSpans = tempBasalRes?.data ?? [];
-      const overrideSpans = overrideRes?.data ?? [];
-      const activitySpans = activityRes?.data ?? [];
-
-      return {
-        pumpModeSpans: processSpans(
-          pumpModeSpans,
-          startTime,
-          endTime,
-          getPumpModeColor
-        ),
-        profileSpans: processProfileActivations(
-          profileActivations,
-          startTime,
-          endTime
-        ),
-        tempBasalSpans: processBasalSpans(
-          tempBasalSpans,
-          startTime,
-          endTime,
-          getTempBasalColor
-        ),
-        overrideSpans: processSpans(
-          overrideSpans,
-          startTime,
-          endTime,
-          getOverrideColor
-        ),
-        activitySpans: activitySpans
-          .filter((span: StateSpan) => {
-            const spanStart = span.startMills ?? 0;
-            const spanEnd = span.endMills ?? endTime;
-            return spanEnd > startTime && spanStart < endTime;
-          })
-          .map((span: StateSpan) => ({
-            id: span.id ?? randomUUID(),
-            category: span.category ?? StateSpanCategory.Exercise,
-            state: span.state ?? "Unknown",
-            startTime: new Date(Math.max(span.startMills ?? 0, startTime)),
-            endTime: new Date(Math.min(span.endMills ?? endTime, endTime)),
-            color: getActivityColor(span.category ?? StateSpanCategory.Exercise),
-            metadata: span.metadata,
-            rate: null,
-            percent: null,
-            profileName: null,
-          })),
-        dateRange: { from: startOfRange, to: endOfRange },
-      };
-    } catch (err) {
-      console.error("Error loading time spans data:", err);
-      // Return empty data instead of throwing for unauthenticated users
-      return {
-        pumpModeSpans: [],
-        profileSpans: [],
-        tempBasalSpans: [],
-        overrideSpans: [],
-        activitySpans: [],
-        dateRange: { from: startOfRange, to: endOfRange },
-      };
-    }
-  }
-);
+/** The glucose of seven days either side of a change, or null when the caller may not read glucose. */
+export const getChangeGlucose = query(z.object({ at: z.number() }), async ({ at }) => {
+  const { apiClient } = getRequestEvent().locals;
+  return readable(() => apiClient.profileHistory.getGlucoseAroundChange(at, 7));
+});

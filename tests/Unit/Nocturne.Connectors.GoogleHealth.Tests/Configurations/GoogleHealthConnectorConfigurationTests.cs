@@ -134,25 +134,5 @@ public class GoogleHealthConnectorConfigurationTests
         configuration.GrantedScopes.Should().Be("scope-a scope-b");
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(91)]
-    public void Rejects_invalid_lookback_days(int days)
-    {
-        var configuration = ValidConfiguration();
-        configuration.HistoryDays = days;
-
-        configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
-    }
-
-    [Fact]
-    public void Rejects_invalid_import_start()
-    {
-        var configuration = ValidConfiguration();
-        configuration.ImportFrom = "not-a-date";
-
-        configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
-    }
-
     private static GoogleHealthConnectorConfiguration ValidConfiguration() => new();
 }

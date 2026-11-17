@@ -3,9 +3,10 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -50,15 +51,13 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             throw new InvalidOperationException("upsert failed");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task A_failed_upsert_rolls_back_the_excursion_it_opened()
     {
         await using var context = _db.CreateContext();
-        var tracker = new ExcursionTracker(
-            new FailingUpsertRepository(context),
-            new AlertRuleEvaluationGate(),
+        var tracker = EngineTestHarness.BuildRustTracker(
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero)),
-            NullLogger<ExcursionTracker>.Instance);
+            new FailingUpsertRepository(context));
 
         var act = () => tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
@@ -68,15 +67,13 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         (await check.AlertTrackerState.CountAsync()).Should().Be(0);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task A_transition_commits_its_excursion_and_state()
     {
         await using var context = _db.CreateContext();
-        var tracker = new ExcursionTracker(
-            new AlertTrackerRepository(DbUnitOfWork.Own(context)),
-            new AlertRuleEvaluationGate(),
+        var tracker = EngineTestHarness.BuildRustTracker(
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero)),
-            NullLogger<ExcursionTracker>.Instance);
+            new AlertTrackerRepository(DbUnitOfWork.Own(context)));
 
         var opened = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
@@ -88,7 +85,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
 
     private static readonly DateTimeOffset Now = new(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
 
-    [Fact]
+    [NativeFact]
     public async Task A_transition_leaves_what_else_the_context_tracks()
     {
         await using var context = _db.CreateContext();
@@ -125,7 +122,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         }
     }
 
-    [Fact]
+    [NativeFact]
     public async Task A_transition_decided_from_a_state_another_process_changed_writes_nothing()
     {
         var theirs = Guid.Parse("00000000-0000-0000-0003-0000000000e2");
@@ -138,9 +135,8 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             await seed.SaveChangesAsync();
         }
         await using var context = _db.CreateContext();
-        var tracker = new ExcursionTracker(
-            new ConcurrentOpenRepository(context, theirs), new AlertRuleEvaluationGate(),
-            new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance);
+        var tracker = EngineTestHarness.BuildRustTracker(
+            new FakeTimeProvider(Now), new ConcurrentOpenRepository(context, theirs));
 
         var transition = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
@@ -200,10 +196,9 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             .Options) { TenantId = TenantId };
 
     private static ExcursionTracker TrackerOver(NocturneDbContext context) =>
-        new(new AlertTrackerRepository(DbUnitOfWork.Own(context)), new AlertRuleEvaluationGate(),
-            new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance);
+        EngineTestHarness.BuildRustTracker(new FakeTimeProvider(Now), new AlertTrackerRepository(DbUnitOfWork.Own(context)));
 
-    [Fact]
+    [NativeFact]
     public async Task A_retried_open_commits_one_excursion_and_the_state_pointing_at_it()
     {
         await using var context = RetryingContext(faultAfterCommit: false);
@@ -219,7 +214,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         state.ActiveExcursionId.Should().Be(excursion.Id);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task An_open_whose_commit_landed_but_reported_failure_is_not_written_twice()
     {
         await using var context = RetryingContext(faultAfterCommit: true);
@@ -233,7 +228,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         (await check.AlertTrackerState.SingleAsync()).ActiveExcursionId.Should().Be(excursion.Id);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task An_open_whose_commit_landed_is_reported_though_another_process_wrote_the_state_since()
     {
         async Task EnterHysteresis()
@@ -254,7 +249,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         opened.ExcursionId.Should().Be((await check.AlertExcursions.SingleAsync()).Id);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task A_close_whose_commit_landed_is_reported_though_another_process_opened_since()
     {
         var excursionId = Guid.Parse("00000000-0000-0000-0003-0000000000e1");
@@ -294,7 +289,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task A_retried_close_ends_the_excursion_and_idles_the_state()
     {
         var excursionId = Guid.Parse("00000000-0000-0000-0003-0000000000e1");

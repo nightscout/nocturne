@@ -47,13 +47,13 @@ public class StateSpan
     /// When this state began in Unix milliseconds (computed for v1/v3 compatibility)
     /// </summary>
     [JsonPropertyName("startMills")]
-    public long StartMills => new DateTimeOffset(StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long StartMills => StartTimestamp.ToMills();
 
     /// <summary>
     /// When this state ended in Unix milliseconds (computed for v1/v3 compatibility)
     /// </summary>
     [JsonPropertyName("endMills")]
-    public long? EndMills => EndTimestamp.HasValue ? new DateTimeOffset(EndTimestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null;
+    public long? EndMills => EndTimestamp.HasValue ? EndTimestamp.Value.ToMills() : null;
 
     [JsonPropertyName("source")]
     public string? Source { get; set; }
@@ -88,18 +88,4 @@ public class StateSpan
     /// </summary>
     [JsonPropertyName("supersededById")]
     public string? SupersededById { get; set; }
-
-    /// <summary>
-    /// Canonical group ID for deduplication.
-    /// Records with the same CanonicalId represent the same underlying event from different sources.
-    /// </summary>
-    [JsonPropertyName("canonicalId")]
-    public Guid? CanonicalId { get; set; }
-
-    /// <summary>
-    /// List of data sources that contributed to this unified record.
-    /// Only populated when returning merged/unified DTOs.
-    /// </summary>
-    [JsonPropertyName("sources")]
-    public string[]? Sources { get; set; }
 }

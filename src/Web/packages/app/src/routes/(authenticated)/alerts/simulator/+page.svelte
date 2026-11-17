@@ -1,19 +1,18 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { getRules } from "$api/generated/alertRules.generated.remote";
-  import { Button } from "$lib/components/ui/button";
+  import { getRules } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import PlayCircle from "@lucide/svelte/icons/circle-play";
-  import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
+  import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
 
   const rulesQuery = getRules();
 </script>
@@ -28,7 +27,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto(resolve("/alerts"))}
+      onclick={() => goto(resolve('alerts'))}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />
@@ -47,22 +46,12 @@
     <CardHeader>
       <CardTitle class="text-base">Replay window</CardTitle>
       <CardDescription size="sm">
-        Pick a window — rules are evaluated tick-by-tick over the data you actually had.
+        Pick a window. Rules are evaluated tick-by-tick over the data you actually had.
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <svelte:boundary>
-        {#snippet pending()}
-          <div class="flex items-center justify-center py-6 text-muted-foreground">
-            <Loader2 class="h-5 w-5 animate-spin" />
-          </div>
-        {/snippet}
-        {#snippet failed()}
-          <ReplayPanel availableRules={[]} />
-        {/snippet}
-        {@const rules = (await rulesQuery) ?? []}
-        <ReplayPanel availableRules={rules} />
-      </svelte:boundary>
+      <!-- The rules only back the panel's fallback list, so its first replay does not wait on them. -->
+      <ReplayPanel availableRules={rulesQuery.current ?? []} />
     </CardContent>
   </Card>
 </div>

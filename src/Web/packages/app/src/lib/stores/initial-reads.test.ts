@@ -39,7 +39,7 @@ describe("initialReadWindows", () => {
     const w = initialReadWindows(NOW);
     expect(w.to).toBe("2026-10-10T12:00:00.000Z");
     expect(w.oneDayAgo).toBe("2026-10-09T12:00:00.000Z");
-    expect(w.glucoseFrom).toBe(w.oneDayAgo);
+    expect(w.glucoseFrom).toBe("2026-10-10T09:00:00.000Z");
   });
 });
 

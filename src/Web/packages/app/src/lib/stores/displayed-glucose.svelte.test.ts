@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
-import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
+import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
 import {
   PAIR_HOLD_MS,
   displayedGlucose,
@@ -14,7 +14,7 @@ const holder = vi.hoisted(() => ({
   refresh: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("$api/generated/summaries.generated.remote", () => ({
+vi.mock("#lib/api/generated/summaries.generated.remote.js", () => ({
   getSummary: () => ({
     ready: true,
     loading: false,

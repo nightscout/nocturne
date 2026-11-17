@@ -1,12 +1,12 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
+  import * as Card from "#lib/components/ui/card/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import type { SettingsLink } from "./settings-links";
+  import type { SettingsLink } from "#lib/navigation/settings-navigation.svelte.js";
 
   let { link }: { link: SettingsLink } = $props();
 </script>
 
-<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a literal in-app path from settings-links.ts or its caller -->
+<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a literal in-app path from settings-navigation or its caller -->
 <a href={link.href} class="group block">
   <Card.Root interactive class="h-full">
     <Card.Content class="flex items-center gap-4 p-4">

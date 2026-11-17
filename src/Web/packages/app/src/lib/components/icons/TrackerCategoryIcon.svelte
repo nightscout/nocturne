@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { TrackerCategory } from "$api";
+  import { TrackerCategory } from "#lib/api/index.js";
   import SensorIcon from "./SensorIcon.svelte";
   import CannulaIcon from "./CannulaIcon.svelte";
   import BatteryIcon from "./BatteryIcon.svelte";
   import ReservoirIcon from "./ReservoirIcon.svelte";
+  import PodIcon from "./PodIcon.svelte";
   import type { IconProps } from "./types";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Clock from "@lucide/svelte/icons/clock";
@@ -18,13 +19,15 @@
 
 <!--
   TrackerCategoryIcon - renders the appropriate icon for a tracker category.
-  Uses custom wrapper components for Sensor, Cannula, Battery, and Reservoir
+  Uses custom wrapper components for Sensor, Cannula, Pod, Battery, and Reservoir
   so they can be replaced with custom assets later.
 -->
 {#if category === TrackerCategory.Sensor}
   <SensorIcon class={className} {...rest} />
 {:else if category === TrackerCategory.Cannula}
   <CannulaIcon class={className} {...rest} />
+{:else if category === TrackerCategory.Pod}
+  <PodIcon class={className} {...rest} />
 {:else if category === TrackerCategory.Battery}
   <BatteryIcon class={className} {...rest} />
 {:else if category === TrackerCategory.Reservoir}

@@ -28,34 +28,34 @@ internal sealed partial class LoopAnalysisService
     /// carbs and manual boluses that set the context, from
     /// <see cref="PredictionAccuracyCalculator.ContextLookbackMs"/> before it to
     /// <see cref="PredictionAccuracyCalculator.TreatmentsAfterRangeMs"/> after it. Each cycle counts
-    /// once (<see cref="LoopCycles.Distinct"/>), and every APS snapshot is AID evidence for the
-    /// open-loop mask, as on the other pages.
+    /// once (<see cref="LoopCycles.Distinct"/>), and every APS snapshot is evidence for the open-loop
+    /// mask, as on the other pages.
     /// </summary>
     private async Task<PredictionsLoaded> LoadPredictionsAsync(
         Window window, TimeZoneInfo zone, bool needsProfiles, LoopAnalysisFilter filter, CancellationToken ct)
     {
         var (from, to) = (window.From, window.To);
-        var fromUtc = ToUtc(from);
-        var toUtc = ToUtc(to);
+        var fromUtc = from.ToUtcDateTime();
+        var toUtc = to.ToUtcDateTime();
         var readingsEnd = to + PredictionAccuracyCalculator.ReadingsAfterRangeMs;
-        var readingsEndUtc = ToUtc(readingsEnd);
-        var lookbackUtc = ToUtc(from - PredictionAccuracyCalculator.ContextLookbackMs);
-        var treatmentsEndUtc = ToUtc(to + PredictionAccuracyCalculator.TreatmentsAfterRangeMs);
+        var readingsEndUtc = readingsEnd.ToUtcDateTime();
+        var lookbackUtc = (from - PredictionAccuracyCalculator.ContextLookbackMs).ToUtcDateTime();
+        var treatmentsEndUtc = (to + PredictionAccuracyCalculator.TreatmentsAfterRangeMs).ToUtcDateTime();
 
         var predictionTask = apsSnapshotRepository.GetPredictionsAsync(fromUtc, toUtc, ct);
-        var evidenceTask = apsSnapshotRepository.GetIobCobPointsAsync(ToUtc(from - DeviceReportedValues.RecencyThresholdMs), toUtc, ct);
-        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, readingsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
+        var evidenceTask = apsSnapshotRepository.GetIobCobPointsAsync((from - DeviceReportedValues.RecencyThresholdMs).ToUtcDateTime(), toUtc, ct);
+        var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, readingsEndUtc, null, null, int.MaxValue, descending: false, ct: ct, streams: GlucoseStreams.Canonical);
         var bolusTask = bolusRepository.GetAsync(lookbackUtc, treatmentsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var carbTask = carbIntakeRepository.GetAsync(lookbackUtc, treatmentsEndUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var spanTask = stateSpanRepository.GetByCategories(MaskCategories, fromUtc, readingsEndUtc, ct);
         var deviceTask = patientDeviceRepository.GetByDateRangeAsync(fromUtc, toUtc, ct);
         await Task.WhenAll(predictionTask, evidenceTask, glucoseTask, bolusTask, carbTask, spanTask, deviceTask);
 
-        var snapshots = LoopCycles.Distinct(await predictionTask, p => ToMills(p.PredictedStart), p => p.Enacted)
+        var snapshots = LoopCycles.Distinct(await predictionTask, p => p.PredictedStart.ToMills(), p => p.Enacted)
             .Select(PredictionAccuracyCalculator.Parse)
             .OfType<PredictionSnapshot>()
             .ToList();
-        var glucose = await canonicalGlucose.SelectAsync([.. await glucoseTask], ct);
+        List<SensorGlucose> glucose = [.. await glucoseTask];
         var spans = await spanTask;
         var profiles = needsProfiles
             ? ProfileIntervals(await activeProfileResolver.GetProfileSpansForRangeAsync(from, to, ct), to)
@@ -64,7 +64,7 @@ internal sealed partial class LoopAnalysisService
             spans,
             await deviceTask,
             await deviceDates.ResolveAsync(ct),
-            SnapshotMills((await evidenceTask).Select(p => p.Timestamp)),
+            LoopStates(await evidenceTask),
             profiles,
             readingsEnd);
 
@@ -74,8 +74,8 @@ internal sealed partial class LoopAnalysisService
             Snapshots = snapshots,
             Glucose = [.. glucose.Select(g => new GlucoseSample(g.Mills, g.Mgdl)).Where(g => g.Mgdl > 0).OrderBy(g => g.Mills)],
             GlucoseExclusions = IntervalSet.Of(sources.DataExclusions),
-            ReadingsUntil = Math.Min(readingsEnd, ToMills(filter.Now)),
-            HistoryVisibleFrom = filter.HistoryVisibleFrom is { } edge ? ToMills(edge) : null,
+            ReadingsUntil = Math.Min(readingsEnd, filter.Now.ToMills()),
+            HistoryVisibleFrom = filter.HistoryVisibleFrom is { } edge ? edge.ToMills() : null,
             CarbMills = [.. (await carbTask).Where(c => c.Carbs > 0).Select(c => c.Mills).Order()],
             ManualBolusMills = [.. (await bolusTask).Where(b => b.Kind != BolusKind.Algorithm && b.Insulin > 0).Select(b => b.Mills).Order()],
             Adjusted = IntervalSet.Of(sources.Overrides.Concat(sources.TemporaryTargets).Concat(sources.Exercise)),

@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Models.Identity;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.DevOnly;
@@ -21,7 +21,7 @@ public sealed class DevTenantMemberSelectionTests
         var newer = Member(isOwner: true, createdAt: new DateTime(2024, 1, 1));
         var older = Member(isOwner: true, createdAt: new DateTime(2020, 1, 1));
 
-        DevTenantMemberSelection.PickOwnerOrFirst([newer, older], TenantId)
+        DevTenantMemberSelection.PickOwnerOrFirst([newer, older])
             .Should().BeSameAs(older);
     }
 
@@ -35,41 +35,28 @@ public sealed class DevTenantMemberSelectionTests
             .Should().Equal(usable);
     }
 
-    private static TenantMemberEntity Member(
+    private static TenantMemberRecord Member(
         bool isOwner = false,
         bool isActive = true,
         bool isSystemSubject = false,
-        DateTime? createdAt = null) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        TenantId = TenantId,
-        SubjectId = Guid.CreateVersion7(),
-        SysCreatedAt = createdAt ?? DateTime.UtcNow,
-        Subject = new SubjectEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "Member",
-            IsActive = isActive,
-            IsSystemSubject = isSystemSubject,
-        },
-        MemberRoles = isOwner
-            ?
-            [
-                new TenantMemberRoleEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantRoleId = OwnerRoleId,
-                    TenantRole = new TenantRoleEntity
-                    {
-                        Id = OwnerRoleId,
-                        TenantId = TenantId,
-                        Name = "Owner",
-                        Slug = RoleSeeds.Owner,
-                        Permissions = [Scope.FullAccess],
-                        IsSystem = true,
-                    },
-                },
-            ]
+        DateTime? createdAt = null) => new(
+        Id: Guid.CreateVersion7(),
+        TenantId: TenantId,
+        SubjectId: Guid.CreateVersion7(),
+        SubjectName: "Member",
+        SubjectUsername: null,
+        SubjectIsActive: isActive,
+        IsSystemSubject: isSystemSubject,
+        IsDemoSubject: false,
+        IsPlatformAdmin: false,
+        Roles: isOwner
+            ? [new TenantMemberRoleRecord(OwnerRoleId, "Owner", RoleSeeds.Owner, [Scope.FullAccess])]
             : [],
-    };
+        DirectPermissions: null,
+        Label: null,
+        Username: null,
+        LimitTo24Hours: false,
+        LastUsedAt: null,
+        CreatedFromInviteId: null,
+        SysCreatedAt: createdAt ?? DateTime.UtcNow);
 }

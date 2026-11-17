@@ -8,6 +8,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Models;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -30,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 public class ServicesController : ControllerBase
 {
     private readonly IDataSourceService _dataSourceService;
+    private readonly IConnectionService _connectionService;
     private readonly IConnectorHealthService _connectorHealthService;
     private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
@@ -40,6 +42,7 @@ public class ServicesController : ControllerBase
     /// Initializes a new instance of <see cref="ServicesController"/>.
     /// </summary>
     /// <param name="dataSourceService">Service for querying active data sources and their status.</param>
+    /// <param name="connectionService">Service that lists the tenant's connections.</param>
     /// <param name="connectorHealthService">Service for connector health state queries.</param>
     /// <param name="connectorSyncService">Service for triggering on-demand connector syncs.</param>
     /// <param name="logger">Logger instance.</param>
@@ -47,6 +50,7 @@ public class ServicesController : ControllerBase
     /// <param name="baseDomain">Platform base-domain options used to construct the tenant subdomain.</param>
     public ServicesController(
         IDataSourceService dataSourceService,
+        IConnectionService connectionService,
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
@@ -55,6 +59,7 @@ public class ServicesController : ControllerBase
     )
     {
         _dataSourceService = dataSourceService;
+        _connectionService = connectionService;
         _connectorHealthService = connectorHealthService;
         _connectorSyncService = connectorSyncService;
         _logger = logger;
@@ -68,6 +73,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete services overview including active data sources, connectors, and uploader apps</returns>
     [HttpGet]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ServicesOverview), 200)]
     [ProducesResponseType(500)]
@@ -98,12 +104,30 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
+    /// List the tenant's connections: every authorized app, API token and configured connector, with
+    /// the records each wrote in the last 30 days, and the records none of them wrote.
+    /// </summary>
+    /// <inheritdoc cref="IConnectionService.GetConnectionsAsync"/>
+    /// <remarks>
+    /// It lists the caller's credentials, which is the account holder's to read, so a delegated
+    /// credential is refused (<see cref="RequireInteractiveSessionAttribute"/>).
+    /// </remarks>
+    [HttpGet("connections")]
+    [RequireInteractiveSession]
+    [RequireScope(Scope.DevicesRead)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(ConnectionsOverview), 200)]
+    public async Task<ActionResult<ConnectionsOverview>> GetConnections(CancellationToken cancellationToken = default) =>
+        Ok(await _connectionService.GetConnectionsAsync(HttpContext.GetSubjectId(), cancellationToken));
+
+    /// <summary>
     /// Get all active data sources that have been sending data to this Nocturne instance.
     /// This includes CGM apps, AID systems, and any other uploaders.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of active data sources with their status</returns>
     [HttpGet("data-sources")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DataSourceInfo>), 200)]
     [ProducesResponseType(500)]
@@ -132,6 +156,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data source information if found</returns>
     [HttpGet("data-sources/{id}")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(DataSourceInfo), 200)]
     [ProducesResponseType(404)]
@@ -164,6 +189,7 @@ public class ServicesController : ControllerBase
     /// </summary>
     /// <returns>List of available connectors</returns>
     [HttpGet("connectors")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<AvailableConnector>), 200)]
     public async Task<ActionResult<List<AvailableConnector>>> GetAvailableConnectors(
@@ -286,7 +312,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/demo")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDemoData(
@@ -322,7 +348,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/{id}")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -362,6 +388,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data summary with counts by type</returns>
     [HttpGet("connectors/{id}/data-summary")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorDataSummary), 200)]
     [ProducesResponseType(500)]
@@ -401,9 +428,10 @@ public class ServicesController : ControllerBase
     [HttpDelete("connectors/{id}/data")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus", "GetConnectorDataSummary"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus", "GetConnectorDataSummary"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
+    [ProducesResponseType(409)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectorData(
         string id,
@@ -422,6 +450,13 @@ public class ServicesController : ControllerBase
                 if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
                     return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
+                }
+                if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
+                {
+                    return Problem(
+                        detail: "A sync is running for this connector. Wait for it to end, then try again.",
+                        statusCode: 409,
+                        title: "Conflict");
                 }
                 return StatusCode(500, result);
             }
@@ -476,6 +511,7 @@ public class ServicesController : ControllerBase
 
     /// <summary>
     /// Reset a connector's sync cursor for the current tenant and re-pull historical data.
+    /// Re-ingested records are deduplicated. The request runs synchronously: a full-history re-pull can take minutes and may exceed proxy or browser timeouts, so limit it with <c>from</c> or <c>dataTypes</c>.
     /// </summary>
     /// <remarks>
     /// Nocturne does not persist a sync cursor — each data type resumes from the latest record
@@ -548,13 +584,15 @@ public class ServicesController : ControllerBase
     /// Get sync status for a specific connector, including latest timestamps and connector state.
     /// Used by connectors on startup to determine where to resume syncing from.
     /// </summary>
-    /// <param name="id">The connector ID (e.g., "dexcom", "libre", "glooko")</param>
+    /// <param name="id">The connector ID (e.g., "dexcom", "librelinkup", "glooko")</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete sync status including timestamps for entries, treatments, and connector state</returns>
     [HttpGet("connectors/{id}/sync-status")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorSyncStatus), 200)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<ConnectorSyncStatus>> GetConnectorSyncStatus(
         string id,
@@ -568,11 +606,13 @@ public class ServicesController : ControllerBase
             return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
         }
 
+        if (ConnectorMetadataService.GetRegistrationByConnectorId(id)?.DataSourceId is not { Length: > 0 } dataSource)
+        {
+            return Problem(detail: $"Unknown connector '{id}'", statusCode: 404, title: "Not Found");
+        }
+
         try
         {
-            // Map connector ID to data source name used in database
-            var dataSource = MapConnectorIdToDataSource(id);
-
             // Get latest timestamps from V4 glucose tables
             var entryTimestamp = await _dataSourceService.GetLatestGlucoseTimestampBySourceAsync(
                 dataSource,
@@ -621,25 +661,6 @@ public class ServicesController : ControllerBase
             _logger.LogError(ex, "Error getting sync status for connector: {Id}", id);
             return Problem(detail: "Failed to get sync status", statusCode: 500, title: "Internal Server Error");
         }
-    }
-
-    /// <summary>
-    /// Maps a connector ID (e.g., "dexcom") to the data source name used in the database (e.g., "dexcom-connector")
-    /// </summary>
-    private static string MapConnectorIdToDataSource(string connectorId)
-    {
-        // Most connectors use "{id}-connector" format
-        return connectorId.ToLowerInvariant() switch
-        {
-            "dexcom" => "dexcom-connector",
-            "libre" => "libre-connector",
-            "glooko" => "glooko-connector",
-            "nightscout" => "nightscout-connector",
-            "carelink" => "carelink-connector",
-            "myfitnesspal" => "myfitnesspal-connector",
-            "tidepool" => "tidepool-connector",
-            _ => $"{connectorId.ToLowerInvariant()}-connector",
-        };
     }
 
     private ActionResult<Nocturne.Connectors.Core.Models.SyncResult> SyncOrConflict(

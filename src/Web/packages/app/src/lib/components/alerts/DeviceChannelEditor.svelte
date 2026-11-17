@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { toggled } from "$lib/utils/collections";
-  import * as Select from "$lib/components/ui/select";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
+  import { toggled } from "#lib/utils/collections.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import { AlertRuleSeverity } from "$api-clients";
-  import type { DeviceCapabilityCatalog } from "$api-clients";
+  import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+  import type { DeviceCapabilityCatalog } from "#lib/api/generated/nocturne-api-client.js";
   import type { ChannelDef } from "./types";
-  import { deviceKindLabel } from "$lib/utils/device-kind-labels";
+  import { deviceKindLabel } from "#lib/utils/device-kind-labels.js";
 
   interface Props {
     /** The single device_action channel being edited. */

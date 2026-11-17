@@ -63,6 +63,19 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="to">Inclusive end of the time window.</param>
     Task<IReadOnlyList<ApsLoopCycle>> GetLoopCyclesAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
+    /// <summary>
+    /// Sets <see cref="ApsSnapshot.ClosedLoop"/> on the Loop snapshots in a time window to the
+    /// <c>dosingEnabled</c> of the newest Loop settings (therapy settings carrying it) starting at or
+    /// before each one, or to null when none does.
+    /// </summary>
+    /// <param name="from">Inclusive start of the window.</param>
+    /// <param name="to">
+    /// Inclusive end of the window; null runs to the next Loop settings version after
+    /// <paramref name="from"/>, or to the newest Loop snapshot when there is none.
+    /// </param>
+    /// <returns>The number of snapshots changed.</returns>
+    Task<int> StampLoopClosedLoopAsync(DateTime from, DateTime? to, CancellationToken ct = default);
+
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
@@ -106,4 +119,14 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// </summary>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// The marks of the snapshots of <paramref name="devices"/> after <paramref name="after"/> through
+    /// <paramref name="through"/>, and of each device's first <paramref name="following"/> after that,
+    /// leaving out <paramref name="excluded"/>, in one query. A null device matches every device and
+    /// takes its own <paramref name="following"/>.
+    /// </summary>
+    Task<IReadOnlyList<ApsSnapshotMark>> GetMarksAsync(
+        IReadOnlyCollection<string?> devices, DateTime after, DateTime through, int following,
+        IReadOnlyCollection<Guid> excluded, CancellationToken ct = default);
 }

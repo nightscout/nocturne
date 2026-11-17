@@ -1,17 +1,18 @@
 <script lang="ts" generics="T extends ActogramPoint">
   import { Key } from "@nocturne/ui/keys";
-  import { formatShortDate } from "$lib/utils/formatting";
   import type { Snippet } from 'svelte';
   import type {
+    ActogramDay,
     ActogramPoint,
     ActogramRowContext,
     GlucosePoint,
   } from './actogram';
-  import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
+  import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
   import {
     sliceIntoRows,
     sliceBgIntoRows,
     resolveTargetRange,
+    formatActogramDay,
     HOURS_PER_ROW,
   } from './actogram';
   import ActogramRow from './ActogramRow.svelte';
@@ -21,25 +22,25 @@
   import { cubicOut } from 'svelte/easing';
   import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
-  import { Button } from '$lib/components/ui/button';
-  import { bgRange } from '$lib/utils/formatting';
-  import { PrintMode } from '$lib/components/charts/print/print-mode.svelte';
-  import ChartKey, { type ChartKeyItem } from '$lib/components/charts/print/ChartKey.svelte';
+  import { Button } from '#lib/components/ui/button/index.js';
+  import { bgRange } from '#lib/utils/formatting.js';
+  import { PrintMode } from '#lib/components/charts/print/print-mode.svelte.js';
+  import ChartKey, { type ChartKeyItem } from '#lib/components/charts/print/ChartKey.svelte';
 
   interface Props {
     data: T[];
     bgData?: GlucosePoint[];
-    days: Date[];
+    days: ActogramDay[];
     thresholds?: ChartThresholds;
     rowHeight?: number;
     visibleCount?: number;
     /** Leading rows a print carries: the report's range, without scroll-back padding. */
     printCount?: number;
     initialOffset?: number;
-    onVisibleRangeChange?: (from: Date, to: Date) => void;
+    onVisibleRangeChange?: (from: ActogramDay, to: ActogramDay) => void;
     row: Snippet<[ActogramRowContext<T>]>;
-    tooltipValue?: Snippet<[{ point: T; day: Date }]>;
-    rowLabel?: Snippet<[{ day: Date }]>;
+    tooltipValue?: Snippet<[{ point: T; day: ActogramDay }]>;
+    rowLabel?: Snippet<[{ day: ActogramDay }]>;
     /** Key for the marks the `row` snippet draws; glucose overlay entries are added. */
     legend?: ChartKeyItem[];
   }
@@ -112,15 +113,11 @@
       navigate(delta);
     }
   }
-
-  function formatDate(date: Date): string {
-    return formatShortDate(date);
-  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
-  class="flex flex-col w-full"
+  class="@container/actogram flex flex-col w-full"
   tabindex={visibleCount !== undefined ? 0 : undefined}
   onkeydown={handleKeydown}
   role={visibleCount !== undefined ? 'toolbar' : undefined}
@@ -128,7 +125,7 @@
 >
   <!-- X-axis labels (top) -->
   <div class="flex">
-    <div class="w-20 shrink-0 flex items-center justify-center">
+    <div class="w-14 @md/actogram:w-20 shrink-0 flex items-center justify-center">
       {#if visibleCount !== undefined}
         <Button
           variant="ghost-muted"
@@ -136,7 +133,7 @@
           class="print:hidden"
           disabled={offset === 0}
           onclick={() => navigate(-7)}
-          aria-label="Previous week"
+          aria-label="Newer week"
         >
           <ChevronUp class="size-4" />
         </Button>
@@ -146,7 +143,7 @@
       {#each hourLabels as hour (hour)}
         {@const pct = (hour / HOURS_PER_ROW) * 100}
         <span
-          class="absolute left-(--hour-left) text-xs text-muted-foreground -translate-x-1/2"
+          class={["absolute left-(--hour-left) text-xs text-muted-foreground -translate-x-1/2", hour % 12 !== 0 && "hidden @md/actogram:inline"]}
           style:--hour-left="{pct}%"
         >
           {hour % 24 === 0 && hour < 48 ? '0' : hour % 24}h
@@ -156,8 +153,10 @@
   </div>
 
   <!-- Rows -->
-  {#each visibleDataRows as dataRow, i (`${dataRow.day.getTime()}-${i}`)}
+  {#each visibleDataRows as dataRow, i (`${dataRow.day.date}-${i}`)}
     <div
+      data-testid="actogram-row"
+      data-day={dataRow.day.date}
       class="flex h-(--row-h) items-center break-inside-avoid"
       style:--row-h="{rowHeight}px"
       animate:flip={{ duration: 300, easing: cubicOut }}
@@ -165,12 +164,12 @@
       out:fly={{ y: direction === 'down' ? -rowHeight : rowHeight, duration: 300, easing: cubicOut }}
     >
       <!-- Date label -->
-      <div class="w-20 shrink-0">
+      <div class="w-14 @md/actogram:w-20 shrink-0">
         {#if rowLabel}
           {@render rowLabel({ day: dataRow.day })}
         {:else}
           <span class="block text-xs text-muted-foreground text-right pr-2">
-            {formatDate(dataRow.day)}
+            {formatActogramDay(dataRow.day)}
           </span>
         {/if}
       </div>
@@ -190,7 +189,7 @@
   {/each}
 
   {#if legend.length > 0}
-    <ChartKey items={legend} class="mt-3 justify-start pl-20" />
+    <ChartKey items={legend} class="mt-3 justify-start pl-14 @md/actogram:pl-20" />
   {/if}
   {#if bgData?.length && thresholds}
     {@const target = resolveTargetRange(thresholds)}
@@ -200,19 +199,19 @@
         { texture: 'glucose-trace', label: 'Glucose', shape: 'line' },
         { texture: 'target-range-limit', label: `Glucose target range ${bgRange(target.low, target.high)}`, color: 'var(--muted-foreground)', shape: 'line' },
       ]}
-      class="mt-1 hidden justify-start pl-20 [.chart-patterns-on_&]:flex"
+      class="mt-1 hidden justify-start pl-14 @md/actogram:pl-20 [.chart-patterns-on_&]:flex"
     />
   {/if}
 
   {#if visibleCount !== undefined}
     <div class="flex print:hidden">
-      <div class="w-20 shrink-0 flex items-center justify-center">
+      <div class="w-14 @md/actogram:w-20 shrink-0 flex items-center justify-center">
         <Button
           variant="ghost-muted"
           size="icon-2xs"
           disabled={offset >= maxOffset}
           onclick={() => navigate(7)}
-          aria-label="Next week"
+          aria-label="Older week"
         >
           <ChevronDown class="size-4" />
         </Button>

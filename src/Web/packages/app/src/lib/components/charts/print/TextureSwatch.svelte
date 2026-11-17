@@ -3,7 +3,7 @@
   mark it keys, so a black-and-white page can still be read against its legend.
 -->
 <script lang="ts">
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
   import { CHART_TEXTURES, dashClass, patternClass, type TextureKey } from "./chart-print-patterns";
 
   interface Props {

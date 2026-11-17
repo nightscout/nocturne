@@ -57,6 +57,8 @@ fails if they drift from it or if it drifts from the server's own constants.
   1 dp, mg/dL to a whole number).
 - **Target range low / high** — the target-range band and in-range colouring,
   expressed in the display unit (the summary has no range of its own).
+  With mg/dL selected, a bound of 33.3 or below is read as mmol/L and
+  converted, so the default 3.9 / 10.0 becomes 70 / 180 mg/dL.
 
 ### Style
 

@@ -33,13 +33,13 @@ public class SleepSession
     /// When the session started in Unix milliseconds (computed for v1/v3 compatibility).
     /// </summary>
     [JsonPropertyName("startMills")]
-    public long StartMills => new DateTimeOffset(StartTime, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long StartMills => StartTime.ToMills();
 
     /// <summary>
     /// When the session ended in Unix milliseconds (computed for v1/v3 compatibility).
     /// </summary>
     [JsonPropertyName("endMills")]
-    public long EndMills => new DateTimeOffset(EndTime, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long EndMills => EndTime.ToMills();
 
     /// <summary>
     /// IANA timezone where the sleep was recorded.

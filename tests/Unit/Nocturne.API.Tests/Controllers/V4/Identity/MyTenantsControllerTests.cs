@@ -31,7 +31,7 @@ public class MyTenantsControllerTests
     {
         var controller = CreateController(Subjectless(authType));
 
-        var result = await controller.GetMyTenants(CancellationToken.None);
+        var result = await controller.GetMyTenants(ct: CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeAssignableTo<IEnumerable<TenantDto>>()
@@ -76,7 +76,7 @@ public class MyTenantsControllerTests
             SubjectId = _subjectId,
         });
 
-        var result = await controller.GetMyTenants(CancellationToken.None);
+        var result = await controller.GetMyTenants(ct: CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeAssignableTo<IEnumerable<TenantDto>>()
@@ -84,11 +84,37 @@ public class MyTenantsControllerTests
     }
 
     [Fact]
+    public async Task Asking_for_reachable_tenants_returns_only_those_the_member_can_go_to()
+    {
+        var reachable = new TenantDto(
+            Guid.CreateVersion7(), "sleepy", "Sleepy", true, DateTime.UtcNow);
+        _tenantService
+            .Setup(s => s.GetReachableTenantsForSubjectAsync(_subjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([reachable]);
+
+        var controller = CreateController(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
+            SubjectId = _subjectId,
+        });
+
+        var result = await controller.GetMyTenants(reachableOnly: true, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<IEnumerable<TenantDto>>()
+            .Which.Should().ContainSingle().Which.Should().Be(reachable);
+        _tenantService.Verify(
+            s => s.GetTenantsForSubjectAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task An_unauthenticated_caller_is_rejected()
     {
         var controller = CreateController(AuthContext.Unauthenticated());
 
-        var result = await controller.GetMyTenants(CancellationToken.None);
+        var result = await controller.GetMyTenants(ct: CancellationToken.None);
 
         result.Should().BeOfType<UnauthorizedResult>();
     }

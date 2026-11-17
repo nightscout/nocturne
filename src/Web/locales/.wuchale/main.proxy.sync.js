@@ -10,9 +10,10 @@ import * as _w_c_0_7_ from './main.0.ru.compiled.js'
 import * as _w_c_0_8_ from './main.0.zh.compiled.js'
 import * as _w_c_0_9_ from './main.0.ja.compiled.js'
 import * as _w_c_0_10_ from './main.0.ko.compiled.js'
+import * as _w_c_0_11_ from './main.0.cs.compiled.js'
             /** @typedef {import("wuchale/runtime").CatalogModule} CatalogMod */
             /** @type {{[locale: string]: CatalogMod[]}} */
-            const catalogs = {en: [_w_c_0_0_],es: [_w_c_0_1_],fr: [_w_c_0_2_],de: [_w_c_0_3_],it: [_w_c_0_4_],pt: [_w_c_0_5_],nl: [_w_c_0_6_],ru: [_w_c_0_7_],zh: [_w_c_0_8_],ja: [_w_c_0_9_],ko: [_w_c_0_10_]}
+            const catalogs = {en: [_w_c_0_0_],es: [_w_c_0_1_],fr: [_w_c_0_2_],de: [_w_c_0_3_],it: [_w_c_0_4_],pt: [_w_c_0_5_],nl: [_w_c_0_6_],ru: [_w_c_0_7_],zh: [_w_c_0_8_],ja: [_w_c_0_9_],ko: [_w_c_0_10_],cs: [_w_c_0_11_]}
             export const loadCatalog = (/** @type {number} */ loadID, /** @type {string} */ locale) => {
                 return /** @type {CatalogMod} */ (/** @type {CatalogMod[]} */ (catalogs[locale])[loadID])
             }

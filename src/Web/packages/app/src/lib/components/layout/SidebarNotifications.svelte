@@ -1,25 +1,28 @@
 <script lang="ts">
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { cn } from "$lib/utils";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { cn } from "#lib/utils/index.js";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { goto } from "$app/navigation";
+  import { toast } from "svelte-sonner";
+  import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
   import { resolve } from "$app/paths";
   import {
     executeAction,
     markAsRead,
     markAllAsRead,
-  } from "$api/generated/notifications.generated.remote";
+  } from "#lib/api/generated/notifications.generated.remote.js";
   import CheckCheck from "@lucide/svelte/icons/check-check";
   import {
     NotificationUrgency,
     type InAppNotificationDto,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import NotificationItem from "./NotificationItem.svelte";
-  import DndPanel from "$lib/components/alerts/DndPanel.svelte";
+  import DndPanel from "#lib/components/alerts/DndPanel.svelte";
 
   // Get the realtime store for reactive notification data
   const realtimeStore = tryGetRealtimeStore();
@@ -27,9 +30,13 @@
   // State
   let isOpen = $state(false);
   const mealMatchReviewDialog = lazyComponent(
-    () => import("$lib/components/meal-matching/MealMatchReviewDialog.svelte"),
+    () => import("#lib/components/meal-matching/MealMatchReviewDialog.svelte"),
   );
   let reviewNotification = $state<InAppNotificationDto | null>(null);
+  const releaseNotesDialog = lazyComponent(
+    () => import("#lib/components/notifications/ReleaseNotesDialog.svelte"),
+  );
+  let releaseNotification = $state<InAppNotificationDto | null>(null);
 
   // Sort notifications by urgency (Urgent > Hazard > Warn > Info), then by timestamp
   const sortedNotifications = $derived.by(() => {
@@ -40,7 +47,7 @@
       [NotificationUrgency.Info]: 3,
     };
 
-    return [...(realtimeStore?.inAppNotifications ?? [])].sort((a, b) => {
+    return [...realtimeStore?.inAppNotifications ?? []].sort((a, b) => {
       // First sort by urgency
       const urgencyA = urgencyOrder[a.urgency ?? NotificationUrgency.Info] ?? 3;
       const urgencyB = urgencyOrder[b.urgency ?? NotificationUrgency.Info] ?? 3;
@@ -71,14 +78,15 @@
         : "secondary"
   );
 
-  // Handle action on a notification
+  // Every action the server runs from here archives the notification, so the tray
+  // drops it at once; the notificationArchived broadcast confirms it.
   async function handleAction(
     notification: InAppNotificationDto,
     actionId: string
   ) {
     isOpen = false;
+    if (!notification.id) return;
 
-    // Handle review action for meal match notifications
     if (
       notification.type === "meal_matching.suggested_match" &&
       actionId === "review"
@@ -95,47 +103,80 @@
       notification.type === "glucose.compression_low_review" &&
       actionId === "review"
     ) {
-      if (notification.id) {
-        realtimeStore?.markNotificationRead(notification.id);
-        markAsRead(notification.id).catch((err) =>
-          console.error("Failed to mark notification read:", err)
-        );
-      }
-      goto(resolve("/reports/data-quality/compression-lows"));
+      markRead(notification.id);
+      goto(resolve('reports/data-quality/compression-lows'));
+      return;
+    }
+
+    // The release notes open in a dialog. The notice stays until the owner dismisses it or a
+    // newer one supersedes it.
+    if (actionId === "release_notes") {
+      markRead(notification.id);
+      releaseNotification = notification;
+      releaseNotesDialog.open = true;
       return;
     }
 
     if (notification.type === "data.rejected_uploads" && actionId === "review") {
-      if (notification.id) {
-        realtimeStore?.markNotificationRead(notification.id);
-        markAsRead(notification.id).catch((err) =>
-          console.error("Failed to mark notification read:", err)
-        );
-      }
-      goto(resolve("/reports/data-quality/rejected-uploads"));
+      markRead(notification.id);
+      goto(resolve('reports/data-quality/rejected-uploads'));
       return;
     }
 
+    if (notification.type?.startsWith("system.instance_key_changed")) {
+      if (actionId === "open_connectors") {
+        markRead(notification.id);
+        goto(resolve("settings/connectors"));
+        return;
+      }
+      if (actionId === "open_alerts") {
+        markRead(notification.id);
+        goto(resolve("alerts"));
+        return;
+      }
+      if (actionId === "open_platform_settings") {
+        markRead(notification.id);
+        goto(resolve("settings/admin?tab=integrations"));
+        return;
+      }
+    }
+
+    const removal = realtimeStore?.removeNotification(notification.id);
     try {
-      await executeAction({
-        id: notification.id!,
-        actionId,
-      });
+      await executeAction({ id: notification.id, actionId });
+      removal?.settle();
     } catch (err) {
-      console.error("Failed to execute notification action:", err);
+      // A 404 means the notification is already gone, so putting it back would only
+      // offer the same failing action again.
+      if (errorStatus(err) === 404) removal?.release();
+      else removal?.restore();
+      toast.error(describeSubmitError(err));
+    }
+  }
+
+  async function markRead(id: string) {
+    const restore = realtimeStore?.markNotificationsRead((n) => n.id === id);
+    try {
+      await markAsRead(id);
+    } catch (err) {
+      restore?.();
+      toast.error(describeSubmitError(err));
     }
   }
 
   async function handleMarkAllRead() {
-    realtimeStore?.markAllNotificationsRead();
+    const restore = realtimeStore?.markNotificationsRead();
     try {
       await markAllAsRead();
     } catch (err) {
-      console.error("Failed to mark all notifications read:", err);
+      restore?.();
+      toast.error(describeSubmitError(err));
     }
   }
 
+  // Accepting or dismissing the match archives its notification on the server.
   function handleReviewComplete() {
+    if (reviewNotification?.id) realtimeStore?.removeNotification(reviewNotification.id).settle();
     reviewNotification = null;
   }
 </script>
@@ -183,7 +224,7 @@
           {/if}
           {#if sortedNotifications.length > 0}
             <a
-              href={resolve("/settings/trackers")}
+              href={resolve("trackers")}
               class="text-xs text-muted-foreground hover:underline"
             >
               Manage
@@ -192,24 +233,28 @@
         </div>
       </div>
 
-      <DndPanel onNavigate={() => (isOpen = false)} />
+      <DndPanel onNavigate={() => isOpen = false} />
 
       {#if totalCount === 0}
-        <div class="flex flex-col items-center justify-center py-8 text-center">
-          <Bell class="h-8 w-8 text-muted-foreground/50 mb-2" />
-          <p class="text-sm text-muted-foreground">No active notifications</p>
-          <a
-            href={resolve("/settings/trackers")}
-            class="mt-2 text-xs text-primary hover:underline"
-          >
-            Set up trackers
-          </a>
-        </div>
+        <EmptyState
+          art="chat-bubble"
+          size="compact"
+          title="No active notifications"
+        >
+          {#snippet action()}
+            <a
+              href={resolve("trackers")}
+              class="text-xs text-primary hover:underline"
+            >
+              Configure trackers
+            </a>
+          {/snippet}
+        </EmptyState>
       {:else}
         <div class="max-h-[350px] overflow-y-auto">
           {#each sortedNotifications as notification (notification.id)}
             <NotificationItem
-              {notification}
+              notification={notification}
               onAction={(actionId) => handleAction(notification, actionId)}
             />
           {/each}
@@ -218,9 +263,9 @@
 
       <div class="border-t p-2">
         <a
-          href={resolve("/notifications")}
+          href={resolve('notifications')}
           class="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-          onclick={() => (isOpen = false)}
+          onclick={() => isOpen = false}
         >
           <span>View all notifications</span>
           <ChevronRight class="h-4 w-4" />
@@ -238,6 +283,13 @@
       }}
       notification={reviewNotification}
       onComplete={handleReviewComplete}
+    />
+  {/if}
+
+  {#if releaseNotesDialog.component}
+    <releaseNotesDialog.component
+      bind:open={releaseNotesDialog.open}
+      notification={releaseNotification}
     />
   {/if}
 

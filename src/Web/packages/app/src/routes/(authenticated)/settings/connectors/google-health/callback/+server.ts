@@ -1,9 +1,9 @@
 import { redirect } from "@sveltejs/kit";
-import { parseErrorBody } from "$lib/api/error-body";
+import { parseErrorBody } from "#lib/api/error-body.js";
 import {
   isGoogleHealthErrorCode,
   type GoogleHealthErrorCode,
-} from "$lib/connectors/google-health-error-codes";
+} from "#lib/connectors/google-health-error-codes.js";
 import type { RequestHandler } from "./$types";
 
 /**

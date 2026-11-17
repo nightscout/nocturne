@@ -13,8 +13,8 @@ import {
 	type ChannelDef,
 	type ConditionNode,
 } from "./types";
-import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
-import type { AlertRuleResponse } from "$api-clients";
+import { AlertConditionType, AlertRuleSeverity, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {

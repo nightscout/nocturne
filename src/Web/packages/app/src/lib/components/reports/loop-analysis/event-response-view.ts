@@ -1,5 +1,5 @@
-import type { EventMetrics, EventMetricsSummary, EventResponseEvent } from "$lib/api";
-import type { BandColors } from "$lib/components/reports/percentile-band-colors";
+import type { EventMetrics, EventMetricsSummary, EventResponseEvent } from "#lib/api/index.js";
+import type { BandColors } from "#lib/components/reports/percentile-band-colors.js";
 import { covers } from "./daily-profile-view";
 
 /** One hue per cohort, in cohort order, so a cohort reads the same in every panel, the table and the list. */

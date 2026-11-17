@@ -61,7 +61,7 @@ public class SessionsController : ControllerBase
         var result = sessions
             .Select(s => new SessionDto
             {
-                SessionId = s.OidcSessionId ?? s.Id.ToString(),
+                SessionId = s.OidcSessionId!,
                 DeviceDescription = s.DeviceDescription,
                 IpAddress = s.IpAddress,
                 LastActiveAt = s.LastUsedAt ?? s.IssuedAt,
@@ -76,6 +76,7 @@ public class SessionsController : ControllerBase
     /// <summary>
     /// Revoke a login session, logging that device out. Revoking the current
     /// session is allowed and acts as a logout.
+    /// The demo's shared visitor cannot call it (403).
     /// </summary>
     /// <remarks>
     /// The demo's subject is shared, so these sessions belong to other visitors and revoking one
@@ -115,6 +116,7 @@ public class SessionsController : ControllerBase
 
     /// <summary>
     /// Revoke every session except the current one (log out everywhere else).
+    /// The demo's shared visitor cannot call it (403).
     /// </summary>
     /// <remarks>
     /// On the shared demo subject, "everything else" is every other visitor currently using it.
@@ -163,7 +165,7 @@ public class SessionsController : ControllerBase
             return null;
         }
 
-        return await _refreshTokenService.GetSessionIdForTokenAsync(refreshToken);
+        return (await _refreshTokenService.FindOwnerAsync(refreshToken))?.SessionId;
     }
 }
 

@@ -60,13 +60,13 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// <summary>
     /// Start timestamp in Unix milliseconds, computed from <see cref="StartTimestamp"/>.
     /// </summary>
-    public long StartMills => new DateTimeOffset(StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long StartMills => StartTimestamp.ToMills();
 
     /// <summary>
     /// End timestamp in Unix milliseconds, computed from <see cref="EndTimestamp"/>.
     /// Returns <c>null</c> when <see cref="EndTimestamp"/> is not set.
     /// </summary>
-    public long? EndMills => EndTimestamp.HasValue ? new DateTimeOffset(EndTimestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null;
+    public long? EndMills => EndTimestamp.HasValue ? EndTimestamp.Value.ToMills() : null;
 
     /// <summary>
     /// UTC offset in minutes
@@ -147,8 +147,8 @@ public class TempBasal : IV4Record, IDeviceAttributed
     {
         var copy = (TempBasal)MemberwiseClone();
         copy._recordStartMills = RecordStartMills;
-        copy.StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
-        copy.EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+        copy.StartTimestamp = startMills.ToUtcDateTime();
+        copy.EndTimestamp = endMills.ToUtcDateTime();
         return copy;
     }
 

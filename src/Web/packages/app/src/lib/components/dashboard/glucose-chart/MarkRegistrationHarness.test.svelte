@@ -6,7 +6,7 @@
     ChartColor,
     DeviceEventType,
     SystemEventType,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
   import MarkCounter from "./MarkCounter.test.svelte";
   import BolusMarker from "./markers/BolusMarker.svelte";
   import CarbMarker from "./markers/CarbMarker.svelte";

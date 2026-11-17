@@ -14,7 +14,7 @@ namespace Nocturne.Core.Clinical.Tests.Statistics;
 /// </summary>
 public class StatisticsServiceOneRuleTests
 {
-    private readonly StatisticsService _sut = new();
+    private readonly StatisticsService _sut = new(TimeProvider.System);
 
     private static readonly TimeZoneInfo Kathmandu = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kathmandu");
 
@@ -42,6 +42,54 @@ public class StatisticsServiceOneRuleTests
             (analysis.HourlyPercentiles[hour].Count > 0)
                 .Should().Be(delivery.Hours[hour].Basal > 0, $"hour {hour} is sliced by one rule");
         }
+    }
+
+    [Fact]
+    public void BasalAnalysis_AvgRate_WeightsEachRateByTheTimeItRan()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        var tempBasals = new List<TempBasal> { TempBasalAt(1.0, start, start.AddHours(2)) };
+        for (var i = 0; i < 4; i++)
+            tempBasals.Add(TempBasalAt(0, start.AddHours(3).AddMinutes(10 * i), start.AddHours(3).AddMinutes(10 * i + 5)));
+
+        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Mills(end));
+
+        analysis.Stats.AvgRate.Should().Be(0.86);
+        analysis.Stats.MinRate.Should().Be(0);
+        analysis.Stats.MaxRate.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void BasalAnalysis_AvgRate_WeightsAClippedSegmentByItsClippedDuration()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        var tempBasals = new[]
+        {
+            TempBasalAt(1.0, start, start.AddHours(2)),
+            TempBasalAt(3.0, start.AddMinutes(30), start.AddMinutes(36)),
+        };
+
+        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Mills(end));
+
+        analysis.Stats.AvgRate.Should().Be(1.33);
+    }
+
+    [Fact]
+    public void BasalAnalysis_AvgRate_WeightsARunningSegmentByTimeUpToTheWindowEnd()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        var tempBasals = new[]
+        {
+            TempBasalAt(1.0, start, start.AddHours(1)),
+            new TempBasal { StartTimestamp = end.AddHours(-2), EndTimestamp = null, Rate = 2.0, Origin = TempBasalOrigin.Algorithm },
+        };
+
+        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Mills(end));
+
+        analysis.Stats.AvgRate.Should().Be(1.67);
     }
 
     [Fact]
@@ -96,7 +144,7 @@ public class StatisticsServiceOneRuleTests
         var tempBasals = new[] { TempBasalAt(1.0, start.AddDays(1).AddHours(8), start.AddDays(1).AddHours(9)) };
         var boluses = new[] { new Bolus { Insulin = 2.0, Timestamp = start.AddDays(4).AddHours(12) } };
 
-        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, [], tempBasals, Mills(end), TimeZoneInfo.Utc);
+        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, [], tempBasals, start, Mills(end), TimeZoneInfo.Utc);
         var hourly = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], start, end, Mills(end), TimeZoneInfo.Utc);
         var delivery = _sut.CalculateInsulinDeliveryStatistics(boluses, [], tempBasals, [], start, end, Mills(end));
 

@@ -51,6 +51,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
 
     /// <summary>Get the tenant's timezone timeline, ordered by effective date.</summary>
     [HttpGet]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     public async Task<ActionResult<IReadOnlyList<TimezoneTimelineEntry>>> GetTimeline(CancellationToken cancellationToken)
     {
@@ -133,6 +134,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     /// function of the observations, so this never changes anything.
     /// </summary>
     [HttpGet("device-clock")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     public async Task<ActionResult<DeviceClockDiagnostics>> GetDeviceClock(
         [FromServices] IDeviceClockService deviceClock,

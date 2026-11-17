@@ -1,23 +1,26 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Select from "$lib/components/ui/select";
-  import { DurationInput } from "$lib/components/ui/duration-input";
-  import { TrackerNotificationEditor, type TrackerNotification } from "$lib/components/trackers";
-  import EventTypeCombobox from "$lib/components/treatments/EventTypeCombobox.svelte";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { DurationInput } from "#lib/components/ui/duration-input/index.js";
+  import { TrackerNotificationEditor, type TrackerNotification } from "#lib/components/trackers/index.js";
+  import { Artwork } from "water-ui";
+  import { batteryArtwork } from "#lib/watercolour-icons.js";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
+  import { FormError, useSubmission } from "#lib/forms/index.js";
   import { tick } from "svelte";
+  import { getNightscoutEventTypeLabel } from "#lib/constants/device-event-types.svelte.js";
   import {
     TrackerCategory,
     DashboardVisibility,
-    TrackerVisibility,
     TrackerMode,
     NotificationUrgency,
+    PumpCapability,
     type TrackerDefinitionDto,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   const createRemote = trackersRemote.createDefinition;
   const updateRemote = trackersRemote.updateDefinition;
@@ -36,14 +39,14 @@
     formNotifications?: TrackerNotification[];
     formIsFavorite?: boolean;
     formDashboardVisibility?: DashboardVisibility;
-    formVisibility?: TrackerVisibility;
     formMode?: TrackerMode;
     formStartEventType?: string | undefined;
     formCompletionEventType?: string | undefined;
     formTriggerEventTypes?: string[];
+    formEndEventTypes?: string[];
+    formCovers?: PumpCapability[];
     formTriggerNotesContains?: string;
     categoryLabels: Record<TrackerCategory, string>;
-    loadData: () => Promise<void>;
   }
 
   let {
@@ -60,14 +63,14 @@
     formNotifications = $bindable([]),
     formIsFavorite = $bindable(false),
     formDashboardVisibility = $bindable(DashboardVisibility.Always),
-    formVisibility = $bindable(TrackerVisibility.Private),
     formMode = $bindable(TrackerMode.Duration),
     formStartEventType = $bindable(undefined),
     formCompletionEventType = $bindable(undefined),
     formTriggerEventTypes = $bindable([]),
+    formEndEventTypes = $bindable([]),
+    formCovers = $bindable([]),
     formTriggerNotesContains = $bindable(""),
     categoryLabels,
-    loadData,
   }: Props = $props();
 
   const triggerEventTypesQuery = trackersRemote.getTriggerEventTypes();
@@ -87,8 +90,93 @@
       : formTriggerEventTypes.filter((t) => t !== eventType);
   }
 
+  const noDeviceEvent = "none";
+  const deviceEventTypesQuery = trackersRemote.getDeviceEventTypes();
+  const deviceEventTypes = $derived(deviceEventTypesQuery.current ?? []);
+
+  const endEventTypesQuery = trackersRemote.getEndEventTypes();
+  const endEventTypes = $derived(endEventTypesQuery.current ?? []);
+
+  // Posted like the triggers, for the same reason.
+  const postedEnds = $derived(
+    formMode === TrackerMode.Duration && formEndEventTypes.length > 0
+      ? formEndEventTypes
+      : [""]
+  );
+
+  function toggleEnd(eventType: string, checked: boolean) {
+    formEndEventTypes = checked
+      ? [...formEndEventTypes, eventType]
+      : formEndEventTypes.filter((t) => t !== eventType);
+  }
+
+  const capabilityLabels: Record<PumpCapability, string> = {
+    [PumpCapability.Site]: "Infusion site",
+    [PumpCapability.Reservoir]: "Insulin",
+    [PumpCapability.Power]: "Pump battery",
+  };
+
+  const capabilities = Object.values(PumpCapability);
+
+  // Pump hardware only: a sensor, an appointment or a reminder replaces none of these.
+  const showsCovers = $derived(
+    formMode === TrackerMode.Duration &&
+      formCategory !== TrackerCategory.Sensor &&
+      formCategory !== TrackerCategory.Appointment &&
+      formCategory !== TrackerCategory.Reminder
+  );
+
+  // Posted like the triggers, for the same reason.
+  const postedCovers = $derived(
+    showsCovers && formCovers.length > 0 ? formCovers : [""]
+  );
+
+  // A pod tracker that states nothing covers what a pod provides, as the server reads it.
+  const holdsInsulin = $derived(
+    formCategory === TrackerCategory.Reservoir ||
+      (formCategory === TrackerCategory.Pod && formCovers.length === 0) ||
+      (showsCovers && formCovers.includes(PumpCapability.Reservoir))
+  );
+
+  function toggleCover(capability: PumpCapability, checked: boolean) {
+    formCovers = checked
+      ? [...formCovers, capability]
+      : formCovers.filter((c) => c !== capability);
+  }
+
+  // A pod is the site, the insulin and the battery together.
+  function changeCategory(category: string) {
+    if (category === TrackerCategory.Pod) formCovers = [...capabilities];
+  }
+
+  const followsEvents = $derived(
+    formTriggerEventTypes.length > 0 || formEndEventTypes.length > 0
+  );
+
   const createForm = $derived(createRemote.for("create"));
   const updateForm = $derived(updateRemote.for(editingDefinition?.id ?? ""));
+
+  const submission = useSubmission();
+  // A keyed form keeps its issues across openings, so show them only once this opening submits.
+  let submitted = $state(false);
+
+  $effect(() => {
+    if (open) {
+      submission.clear();
+      submitted = false;
+    }
+  });
+
+  async function save(submit: () => Promise<boolean>) {
+    submitted = true;
+    await submission.run(submit, async () => {
+      await tick();
+      open = false;
+    });
+  }
+
+  /** The fields a definition is submitted under: the update form nests them under `request`. */
+  type DefinitionFields = typeof createForm.fields | typeof updateForm.fields.request;
 
   function notificationsToApiFormat(notifications: TrackerNotification[]) {
     return notifications
@@ -102,13 +190,13 @@
   }
 </script>
 
-{#snippet definitionFormFields(prefix: string)}
+{#snippet definitionFormFields(fields: DefinitionFields)}
   <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
     <div class="space-y-2">
       <Label for="name">Name</Label>
       <Input
         id="name"
-        name="{prefix}name"
+        name={fields.name.as("text").name}
         bind:value={formName}
         placeholder="e.g., G7 Sensor"
       />
@@ -117,13 +205,15 @@
       <Label for="category">Category</Label>
       <Select.Root
         type="single"
-        name="{prefix}category"
+        name={fields.category.as("select").name}
         bind:value={formCategory}
+        onValueChange={changeCategory}
       >
-        <Select.Trigger>{categoryLabels[formCategory]}</Select.Trigger>
+        <Select.Trigger data-testid="tracker-category-trigger">{categoryLabels[formCategory]}</Select.Trigger>
         <Select.Content>
           <Select.Item value={TrackerCategory.Sensor} label="Sensor" />
           <Select.Item value={TrackerCategory.Cannula} label="Cannula" />
+          <Select.Item value={TrackerCategory.Pod} label="Pod" />
           <Select.Item value={TrackerCategory.Battery} label="Battery" />
           <Select.Item value={TrackerCategory.Reservoir} label="Reservoir" />
           <Select.Item
@@ -138,19 +228,43 @@
     </div>
   </div>
 
+  {#if formCategory === TrackerCategory.Battery ||
+    formCategory === TrackerCategory.Sensor ||
+    formCategory === TrackerCategory.Cannula}
+    <div class="flex justify-center py-2">
+      {#if formCategory === TrackerCategory.Battery}
+        <Artwork
+          icon={batteryArtwork}
+          palette="water"
+          motion="auto"
+          autoplay="once"
+          class="size-56"
+        />
+      {:else}
+        <Artwork
+          artwork="cgm-sensor"
+          palette="water"
+          motion="auto"
+          autoplay="once"
+          class="size-56"
+        />
+      {/if}
+    </div>
+  {/if}
+
   <div class="space-y-2">
     <Label for="description">Description (optional)</Label>
     <Input
       id="description"
-      name="{prefix}description"
+      name={fields.description.as("text").name}
       bind:value={formDescription}
       placeholder="Optional description"
     />
   </div>
 
   <div class="space-y-2">
-    <Label>Tracker Mode</Label>
-    <Select.Root type="single" name="{prefix}mode" bind:value={formMode}>
+    <Label>Tracker mode</Label>
+    <Select.Root type="single" name={fields.mode.as("select").name} bind:value={formMode}>
       <Select.Trigger>
         {#if formMode === TrackerMode.Duration}
           Duration - runs for a time period
@@ -180,21 +294,48 @@
 
   {#if formMode === TrackerMode.Duration}
     <div class="space-y-2">
-      <Label for="lifespan">Expected Lifespan</Label>
+      <Label for="lifespan">Expected lifespan</Label>
       <DurationInput
         id="lifespan"
         bind:value={formLifespanHours}
         placeholder="e.g., 10x24 or 10d"
       />
-      <input
-        type="hidden"
-        name="n:{prefix}lifespanHours"
-        value={formLifespanHours ?? ""}
-      />
+      {#if formLifespanHours != null}
+        <input {...fields.lifespanHours.as("hidden", formLifespanHours)} />
+      {/if}
     </div>
   {/if}
 
-  {#if formCategory === TrackerCategory.Reservoir}
+  {#if showsCovers}
+    <div class="space-y-3" data-testid="tracker-covers">
+      <div>
+        <Label>Replaced with this part</Label>
+        <p class="text-xs text-muted-foreground">
+          Select what is new each time this tracker restarts. For a pod, select
+          all three.
+        </p>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        {#each capabilities as capability (capability)}
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="covers-{capability}"
+              checked={formCovers.includes(capability)}
+              onCheckedChange={(checked) => toggleCover(capability, checked === true)}
+            />
+            <Label for="covers-{capability}" variant="option" class="cursor-pointer">
+              {capabilityLabels[capability]}
+            </Label>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+  {#each postedCovers as capability, i (i)}
+    <input {...fields.covers[i].as("hidden", capability)} />
+  {/each}
+
+  {#if holdsInsulin}
     <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
       <div class="space-y-2">
         <Label for="lowReservoirUnits">Low reservoir alert (units)</Label>
@@ -236,16 +377,10 @@
         </Select.Root>
       </div>
     </div>
-    <input
-      type="hidden"
-      name="n:{prefix}lowReservoirUnits"
-      value={formLowReservoirUnits ?? ""}
-    />
-    <input
-      type="hidden"
-      name="{prefix}lowReservoirUrgency"
-      value={formLowReservoirUrgency}
-    />
+    {#if formLowReservoirUnits != null}
+      <input {...fields.lowReservoirUnits.as("hidden", formLowReservoirUnits)} />
+    {/if}
+    <input {...fields.lowReservoirUrgency.as("hidden", formLowReservoirUrgency)} />
   {/if}
 
   {#if formMode === TrackerMode.Duration}
@@ -257,7 +392,7 @@
           tracker is completed and a new one starts at that moment.
         </p>
       </div>
-      <div class="grid grid-cols-2 gap-2">
+      <div class="grid grid-cols-1 gap-2 @sm:grid-cols-2">
         {#each triggerEventTypes as eventType (eventType)}
           <div class="flex items-center gap-2">
             <Checkbox
@@ -266,12 +401,35 @@
               onCheckedChange={(checked) => toggleTrigger(eventType, checked === true)}
             />
             <Label for="trigger-{eventType}" variant="option" class="cursor-pointer">
-              {eventType}
+              {getNightscoutEventTypeLabel(eventType)}
             </Label>
           </div>
         {/each}
       </div>
-      {#if formTriggerEventTypes.length > 0}
+    </div>
+    <div class="space-y-3" data-testid="tracker-ends">
+      <div>
+        <Label>Stop automatically on</Label>
+        <p class="text-xs text-muted-foreground">
+          When your pump, loop or a connector reports one of these, the running
+          tracker is completed. A new one does not start until a restart event.
+        </p>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        {#each endEventTypes as eventType (eventType)}
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="end-{eventType}"
+              checked={formEndEventTypes.includes(eventType)}
+              onCheckedChange={(checked) => toggleEnd(eventType, checked === true)}
+            />
+            <Label for="end-{eventType}" variant="option" class="cursor-pointer">
+              {getNightscoutEventTypeLabel(eventType)}
+            </Label>
+          </div>
+        {/each}
+      </div>
+      {#if followsEvents}
         <div class="space-y-2">
           <Label for="triggerNotesContains" size="sm">
             Only when the event's notes contain (optional)
@@ -291,72 +449,45 @@
   {/if}
 
   {#each postedTriggers as eventType, i (i)}
-    <input type="hidden" name="{prefix}triggerEventTypes[]" value={eventType} />
+    <input {...fields.triggerEventTypes[i].as("hidden", eventType)} />
   {/each}
-  <input
-    type="hidden"
-    name="{prefix}triggerNotesContains"
-    value={formTriggerEventTypes.length > 0 ? formTriggerNotesContains : ""}
-  />
+  {#each postedEnds as eventType, i (i)}
+    <input {...fields.endEventTypes[i].as("hidden", eventType)} />
+  {/each}
+  <input {...fields.triggerNotesContains.as("hidden", followsEvents ? formTriggerNotesContains : "")} />
 
   <TrackerNotificationEditor
     bind:notifications={formNotifications}
-    mode={formMode === TrackerMode.Duration ? "Duration" : "Event"}
+    mode={formMode}
     lifespanHours={formMode === TrackerMode.Duration
       ? formLifespanHours
       : undefined}
   />
 
   {#each notificationsToApiFormat(formNotifications) as threshold, i (i)}
-    <input
-      type="hidden"
-      name="{prefix}notificationThresholds[{i}].urgency"
-      value={threshold.urgency}
-    />
-    <input
-      type="hidden"
-      name="n:{prefix}notificationThresholds[{i}].hours"
-      value={threshold.hours}
-    />
-    <input
-      type="hidden"
-      name="{prefix}notificationThresholds[{i}].description"
-      value={threshold.description ?? ""}
-    />
-    <input
-      type="hidden"
-      name="n:{prefix}notificationThresholds[{i}].displayOrder"
-      value={threshold.displayOrder ?? i}
-    />
+    <input {...fields.notificationThresholds[i].urgency.as("hidden", threshold.urgency)} />
+    <input {...fields.notificationThresholds[i].hours.as("hidden", threshold.hours)} />
+    <input {...fields.notificationThresholds[i].description.as("hidden", threshold.description ?? "")} />
+    <input {...fields.notificationThresholds[i].displayOrder.as("hidden", threshold.displayOrder ?? i)} />
   {/each}
 
-  <input
-    type="hidden"
-    name="b:{prefix}isFavorite"
-    value={formIsFavorite ? "on" : ""}
-  />
-  <input type="hidden" name="{prefix}icon" value={formIcon} />
-  <input
-    type="hidden"
-    name="{prefix}startEventType"
-    value={formStartEventType ?? ""}
-  />
-  <input
-    type="hidden"
-    name="{prefix}completionEventType"
-    value={formCompletionEventType ?? ""}
-  />
+  {#if formIsFavorite}
+    <input {...fields.isFavorite.as("hidden", true)} />
+  {/if}
+  <input {...fields.icon.as("hidden", formIcon)} />
+  <input {...fields.startEventType.as("hidden", formStartEventType ?? "")} />
+  <input {...fields.completionEventType.as("hidden", formCompletionEventType ?? "")} />
 
   <div class="space-y-2">
-    <Label for="dashboardVisibility">Dashboard Visibility</Label>
+    <Label for="dashboardVisibility">Dashboard visibility</Label>
     <Select.Root
       type="single"
-      name="{prefix}dashboardVisibility"
+      name={fields.dashboardVisibility.as("select").name}
       bind:value={formDashboardVisibility}
     >
       <Select.Trigger>
         {#if formDashboardVisibility === DashboardVisibility.Off}
-          Off - Don't show on dashboard
+          Off - Do not show on dashboard
         {:else if formDashboardVisibility === DashboardVisibility.Always}
           Always show
         {:else if formDashboardVisibility === DashboardVisibility.Info}
@@ -374,7 +505,7 @@
       <Select.Content>
         <Select.Item
           value={DashboardVisibility.Off}
-          label="Off - Don't show on dashboard"
+          label="Off - Do not show on dashboard"
         />
         <Select.Item value={DashboardVisibility.Always} label="Always show" />
         <Select.Item
@@ -400,39 +531,8 @@
     </p>
   </div>
 
-  <div class="space-y-2">
-    <Label for="visibility">Public Visibility</Label>
-    <Select.Root
-      type="single"
-      name="{prefix}visibility"
-      bind:value={formVisibility}
-    >
-      <Select.Trigger>
-        {#if formVisibility === TrackerVisibility.Public}
-          Public - Other members can see it
-        {:else}
-          Private - Only you can see
-        {/if}
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item
-          value={TrackerVisibility.Public}
-          label="Public - Other members can see it"
-        />
-        <Select.Item
-          value={TrackerVisibility.Private}
-          label="Private - Only you can see"
-        />
-      </Select.Content>
-    </Select.Root>
-    <p class="text-xs text-muted-foreground">
-      Whether other people signed in to this site can see it running. Trackers
-      are never shown on a public share link.
-    </p>
-  </div>
-
   <div class="space-y-3 pt-2 border-t">
-    <Label>Event Integration (Nightscout)</Label>
+    <Label>Event integration (Nightscout)</Label>
     <p class="text-xs text-muted-foreground -mt-1">
       Optionally create treatment events when this tracker starts or completes.
       This maintains compatibility with existing CAGE/SAGE pills.
@@ -440,51 +540,70 @@
 
     <div class="space-y-2">
       <Label for="startEventType" size="sm">Create event on start</Label>
-      <EventTypeCombobox
-        bind:value={formStartEventType}
-        onSelect={(type) => (formStartEventType = type)}
-        placeholder="None - don't create event"
-      />
+      {@render deviceEventPicker(
+        "startEventType",
+        formStartEventType,
+        (type) => (formStartEventType = type),
+      )}
     </div>
 
     <div class="space-y-2">
       <Label for="completionEventType" size="sm">
         Create event on completion
       </Label>
-      <EventTypeCombobox
-        bind:value={formCompletionEventType}
-        onSelect={(type) => (formCompletionEventType = type)}
-        placeholder="None - don't create event"
-      />
+      {@render deviceEventPicker(
+        "completionEventType",
+        formCompletionEventType,
+        (type) => (formCompletionEventType = type),
+      )}
     </div>
   </div>
 {/snippet}
 
+{#snippet deviceEventPicker(
+  id: string,
+  value: string | undefined,
+  onSelect: (type: string | undefined) => void,
+)}
+  <Select.Root
+    type="single"
+    value={value ?? noDeviceEvent}
+    onValueChange={(selected) => onSelect(selected === noDeviceEvent ? undefined : selected)}
+  >
+    <Select.Trigger {id} data-testid={id}>
+      {value ? getNightscoutEventTypeLabel(value) : "None"}
+    </Select.Trigger>
+    <Select.Content>
+      <Select.Item value={noDeviceEvent} label="None" />
+      {#each deviceEventTypes as eventType (eventType)}
+        <Select.Item value={eventType} label={getNightscoutEventTypeLabel(eventType)} />
+      {/each}
+    </Select.Content>
+  </Select.Root>
+{/snippet}
+
 <Dialog.Root bind:open>
   <Dialog.Content
-    class="@container max-w-2xl max-h-[90vh] overflow-y-auto"
+    class="@container max-h-[90vh] overflow-y-auto"
     data-testid="tracker-editor"
   >
     <Dialog.Header>
       <Dialog.Title>
-        {isNewDefinition ? "New Tracker Definition" : "Edit Definition"}
+        {isNewDefinition ? "New tracker definition" : "Edit definition"}
       </Dialog.Title>
     </Dialog.Header>
 
     {#if isNewDefinition}
-      <form
-        {...createForm.enhance(async ({ submit }) => {
-          await submit();
-          if (createForm.result) {
-            await loadData();
-            await tick();
-            open = false;
-          }
-        })}
-      >
+      <form {...createForm.enhance(({ submit }) => save(submit))}>
         <div class="space-y-6 py-4">
-          {@render definitionFormFields("")}
+          {@render definitionFormFields(createForm.fields)}
         </div>
+
+        <FormError
+          issues={submission.error ?? (submitted ? createForm.fields.allIssues() : undefined)}
+          focusOnShow
+          class="mb-4"
+        />
 
         <Dialog.Footer>
           <Button
@@ -503,20 +622,17 @@
         </Dialog.Footer>
       </form>
     {:else}
-      <form
-        {...updateForm.enhance(async ({ submit }) => {
-          await submit();
-          if (updateForm.result) {
-            await loadData();
-            await tick();
-            open = false;
-          }
-        })}
-      >
-        <input type="hidden" name="id" value={editingDefinition?.id ?? ""} />
+      <form {...updateForm.enhance(({ submit }) => save(submit))}>
+        <input {...updateForm.fields.id.as("hidden", editingDefinition?.id ?? "")} />
         <div class="space-y-6 py-4">
-          {@render definitionFormFields("request.")}
+          {@render definitionFormFields(updateForm.fields.request)}
         </div>
+
+        <FormError
+          issues={submission.error ?? (submitted ? updateForm.fields.allIssues() : undefined)}
+          focusOnShow
+          class="mb-4"
+        />
 
         <Dialog.Footer>
           <Button

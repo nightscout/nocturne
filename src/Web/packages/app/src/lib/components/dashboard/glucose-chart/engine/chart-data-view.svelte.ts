@@ -6,16 +6,17 @@ import type {
   ChartSpanKind,
   TrackerCategory,
   ProfileActivationDto,
-} from "$api-clients";
-import type { PredictionData } from "$lib/api/prediction-data";
-import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { distinct } from "$lib/utils/collections";
-import { profileActivationLabel } from "$lib/utils/profile-activation-label";
+  MealPeriod,
+} from "#lib/api/generated/nocturne-api-client.js";
+import type { PredictionData } from "#lib/api/prediction-data.js";
+import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import { distinct } from "#lib/utils/collections.js";
+import { profileActivationLabel } from "#lib/utils/profile-activation-label.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 import { bisector } from "d3";
 // ===== Data Point Types =====
 
@@ -50,6 +51,7 @@ export interface CarbMarkerData {
   time: Date;
   carbs?: number;
   label?: string;
+  mealPeriod?: MealPeriod;
   treatmentId?: string;
   isOffset?: boolean;
   dataSource?: string;
@@ -242,6 +244,7 @@ export interface ChartDataEngine {
   readonly basalData: ChartBasalPoint[];
   readonly scheduledBasalData: ScheduledBasalPoint[];
   readonly maxIOB: number;
+  readonly minIOB: number;
   readonly maxBasalRate: number;
 
   // Thresholds
@@ -360,6 +363,7 @@ export function createChartDataView(
   const cobData = $derived(serverChartData?.cobSeries ?? []);
   const basalData = $derived(serverChartData?.basalSeries ?? []);
   const maxIOB = $derived(serverChartData?.maxIob ?? 3);
+  const minIOB = $derived(serverChartData?.minIob ?? 0);
   const maxBasalRate = $derived(serverChartData?.maxBasalRate ?? 3.0);
 
   const scheduledBasalData = $derived(
@@ -702,6 +706,9 @@ export function createChartDataView(
     },
     get maxIOB() {
       return maxIOB;
+    },
+    get minIOB() {
+      return minIOB;
     },
     get maxBasalRate() {
       return maxBasalRate;

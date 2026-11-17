@@ -2,18 +2,19 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
-import type { TenantRoleDto } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let roles: TenantRoleDto[];
 let createImpl: (arg: unknown) => Promise<unknown>;
 let updateImpl: (arg: unknown) => Promise<unknown>;
+let deleteImpl: (arg: unknown) => Promise<unknown>;
 
-vi.mock("$lib/api/generated/roles.generated.remote", () => ({
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => remoteQuery(() => roles),
   createRole: (arg: unknown) => createImpl(arg),
   updateRole: (arg: unknown) => updateImpl(arg),
-  deleteRole: () => Promise.resolve(),
+  deleteRole: (arg: unknown) => deleteImpl(arg),
 }));
 
 import RolesSection from "./RolesSection.svelte";
@@ -42,6 +43,7 @@ describe("RolesSection", () => {
     roles = [caretaker];
     createImpl = () => Promise.resolve({});
     updateImpl = () => Promise.resolve({});
+    deleteImpl = () => Promise.resolve();
   });
 
   it("offers no Statistics row, and says Reports covers statistics", async () => {
@@ -112,6 +114,30 @@ describe("RolesSection", () => {
     await expect.element(dialog.getByRole("alert")).toHaveTextContent(REFUSAL);
   });
 
+  it("shows the translated sentence for a role name that is taken, not the server's text", async () => {
+    createImpl = async () => error(409, "A role with this name already exists.", { code: "role_name_taken" });
+
+    render(RolesSection);
+    await page.getByRole("button", { name: "Create role" }).click();
+    await page.getByRole("dialog").getByLabelText("Name").fill("Caretaker");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+
+    await expect
+      .element(page.getByRole("dialog").getByRole("alert"))
+      .toHaveTextContent("A role with this name already exists. Use a different name.");
+  });
+
+  it("shows the translated sentence for a rename to a taken name", async () => {
+    updateImpl = async () => error(409, "A role with this name already exists.", { code: "role_name_taken" });
+
+    await openEditAndRename("Owner");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .element(page.getByRole("dialog").getByRole("alert"))
+      .toHaveTextContent("A role with this name already exists. Use a different name.");
+  });
+
   it("does not carry a refused create's message into the next create", async () => {
     createImpl = async () => error(400, REFUSAL);
 
@@ -127,5 +153,37 @@ describe("RolesSection", () => {
 
     await expect.element(page.getByRole("dialog")).toBeVisible();
     expect(page.getByRole("dialog").getByRole("alert").elements()).toHaveLength(0);
+  });
+
+  it("shows a refused delete inside the confirm dialog and keeps it there", async () => {
+    deleteImpl = async () => error(400, REFUSAL);
+
+    render(RolesSection);
+    await page.getByRole("button").nth(2).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete" }).click();
+
+    await expect.element(dialog.getByRole("alert")).toHaveTextContent(REFUSAL);
+    expect(page.getByRole("alert").elements()).toHaveLength(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+    await expect.element(dialog.getByRole("alert")).toHaveTextContent(REFUSAL);
+  });
+
+  it("does not carry a refused delete's message into the next delete", async () => {
+    deleteImpl = async () => error(400, REFUSAL);
+
+    render(RolesSection);
+    await page.getByRole("button").nth(2).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+    await expect.element(page.getByRole("alertdialog").getByRole("alert")).toBeVisible();
+
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+    await expect.element(page.getByRole("alertdialog")).not.toBeInTheDocument();
+    await page.getByRole("button").nth(2).click();
+
+    await expect.element(page.getByRole("alertdialog")).toBeVisible();
+    expect(page.getByRole("alertdialog").getByRole("alert").elements()).toHaveLength(0);
   });
 });

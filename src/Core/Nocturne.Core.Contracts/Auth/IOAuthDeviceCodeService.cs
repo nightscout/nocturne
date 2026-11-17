@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Contracts.Auth;
 
 /// <summary>
@@ -90,6 +92,9 @@ public class DeviceCodeInfo
     public string? ClientDisplayName { get; set; }
 
     public List<string> Scopes { get; set; } = new();
+
+    /// <summary>What approving <see cref="Scopes"/> allows the client to delete.</summary>
+    public ScopeDeletionAccess DeletionAccess => Scope.DeletionAccess(Scopes);
 
     /// <summary>Whether the device code has passed its expiry time.</summary>
     public bool IsExpired { get; set; }

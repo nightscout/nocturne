@@ -90,7 +90,7 @@ public class Entry : ProcessableDocumentBase
             // If date is not set but we have mills, calculate it
             if (_date == null && _mills > 0)
             {
-                return DateTimeOffset.FromUnixTimeMilliseconds(_mills).UtcDateTime;
+                return _mills.ToUtcDateTime();
             }
             // If date is not set but we have dateString, parse it
             if (_date == null && UploaderTimestamp.TryParse(_dateString, out var parsedDate))
@@ -153,6 +153,12 @@ public class Entry : ProcessableDocumentBase
     [JsonPropertyName("sgv")]
     [JsonConverter(typeof(FlexibleNullableDoubleConverter))]
     public double? Sgv { get; set; }
+
+    /// <summary>
+    /// The glucose value in mg/dL: <see cref="Mgdl"/> when set, else <see cref="Sgv"/>, else 0. Mgdl wins
+    /// because it is the canonical mg/dL value and <c>sgv</c> is the legacy wire field.
+    /// </summary>
+    public double GlucoseMgdl() => Mgdl != 0 ? Mgdl : Sgv ?? 0;
 
     /// <summary>
     /// Direction of glucose trend as string for legacy compatibility
@@ -278,22 +284,6 @@ public class Entry : ProcessableDocumentBase
     [JsonPropertyName("meta")]
     [NocturneOnly]
     public Dictionary<string, object>? Meta { get; set; }
-
-    /// <summary>
-    /// Canonical group ID for deduplication.
-    /// Records with the same CanonicalId represent the same underlying event from different sources.
-    /// </summary>
-    [JsonPropertyName("canonicalId")]
-    [NocturneOnly]
-    public Guid? CanonicalId { get; set; }
-
-    /// <summary>
-    /// List of data sources that contributed to this unified record.
-    /// Only populated when returning merged/unified DTOs.
-    /// </summary>
-    [JsonPropertyName("sources")]
-    [NocturneOnly]
-    public string[]? Sources { get; set; }
 
     [JsonPropertyName("app")]
     public string? App { get; set; }

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { timeDay } from "d3-time";
 
-import { firstDayOfWeek } from "$lib/components/calendar/calendar-date";
-import { toDayString } from "$lib/utils/date-range";
+import { firstDayOfWeek } from "#lib/components/calendar/calendar-date.js";
+import { toDayString } from "#lib/utils/date-range.js";
 import { yearCalendarBounds } from "./year-bounds";
 import { layoutYear, monthOutlinePath } from "./week-layout";
 

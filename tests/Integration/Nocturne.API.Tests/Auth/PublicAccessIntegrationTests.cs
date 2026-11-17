@@ -19,6 +19,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// unknown-token 404, rotation) are covered by the share-host integration suite added with the
 /// management API/web phases, plus the AuthenticationMiddleware/TenantResolution unit tests.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class PublicAccessIntegrationTests : ApiIntegrationTestBase
 {

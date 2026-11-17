@@ -1,18 +1,24 @@
 <script lang="ts">
-  import { formatDayTime } from "$lib/utils/formatting";
+  import type { RemoteCommand } from '$app/server';
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { formatDayTime, relativeTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { toggled } from "#lib/utils/collections.js";
+  import { categoriesIn, formatList } from "./data-categories";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import CopyButton from "#lib/components/members/CopyButton.svelte";
+  import { Artwork } from "water-ui";
   import Clock from "@lucide/svelte/icons/clock";
-  import Copy from "@lucide/svelte/icons/copy";
-  import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Link from "@lucide/svelte/icons/link";
@@ -20,16 +26,19 @@
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import {
     getGuestLinks,
+    getGuestLinkScopeOptions,
     createGuestLink,
     revokeGuestLink,
     dismissGuestLink,
-  } from "$api/generated/guestLinks.generated.remote";
+  } from "#lib/api/generated/guestLinks.generated.remote.js";
   import {
     type GuestLinkInfo,
     GuestLinkStatus,
-  } from "$api/generated/nocturne-api-client";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError, FormError } from "#lib/forms/index.js";
+
+  let { onCreated }: { onCreated?: () => void } = $props();
 
   const canCreateGuestLinks = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.guest")
@@ -51,11 +60,20 @@
   const dismissedCount = $derived(allLinks.filter((l) => l.dismissedAt).length);
   let showCreateForm = $state(false);
   let label = $state("");
+
+  const scopeOptionsQuery = $derived(
+    canCreateGuestLinks && showCreateForm ? getGuestLinkScopeOptions() : null
+  );
+  const scopeOptions = $derived(scopeOptionsQuery?.current ?? null);
+  const selectableCategories = $derived(categoriesIn(scopeOptions?.available));
+  /** The creator's picks; null until they change one, so the API's defaults stay ticked. */
+  let pickedScopes = $state<string[] | null>(null);
+  const chosenScopes = $derived(pickedScopes ?? scopeOptions?.defaults ?? []);
   let isCreating = $state(false);
   let createError = $state<string | null>(null);
+  let linkError = $state<string | null>(null);
   let createdCode = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
-  const copy = createCopyFeedback();
 
   function statusLabel(status: GuestLinkStatus | undefined): string {
     switch (status) {
@@ -105,37 +123,17 @@
 
   function formatRelativeExpiry(date: string | undefined | null): string {
     if (!date) return "";
-    const d = new Date(date);
-    const now = Date.now();
-    const diffMs = d.getTime() - now;
-    const absDiffMs = Math.abs(diffMs);
-
-    const minutes = Math.round(absDiffMs / 60_000);
-    const hours = Math.round(absDiffMs / 3_600_000);
-    const days = Math.round(absDiffMs / 86_400_000);
-
-    let relative: string;
-    if (minutes < 1) relative = "less than a minute";
-    else if (minutes < 60)
-      relative = `${minutes} minute${minutes !== 1 ? "s" : ""}`;
-    else if (hours < 48) relative = `${hours} hour${hours !== 1 ? "s" : ""}`;
-    else relative = `${days} day${days !== 1 ? "s" : ""}`;
-
-    return diffMs > 0 ? `Expires in ${relative}` : `Expired ${relative} ago`;
+    const expiresAt = new Date(date).getTime();
+    const relative = relativeTime(expiresAt);
+    return expiresAt > Date.now() ? `Expires ${relative}` : `Expired ${relative}`;
   }
 
   function isTerminal(link: GuestLinkInfo): boolean {
-    return (
-      link.status === GuestLinkStatus.Revoked ||
-      link.status === GuestLinkStatus.Expired
-    );
+    return link.status === GuestLinkStatus.Revoked || link.status === GuestLinkStatus.Expired;
   }
 
   function canRevoke(link: GuestLinkInfo): boolean {
-    return (
-      link.status === GuestLinkStatus.Pending ||
-      link.status === GuestLinkStatus.Active
-    );
+    return link.status === GuestLinkStatus.Pending || link.status === GuestLinkStatus.Active;
   }
 
   /** The backend may report http behind a reverse proxy; use the browser's origin */
@@ -154,46 +152,53 @@
     isCreating = true;
     createError = null;
     try {
-      const result = await createGuestLink({ label: label.trim() });
+      const result = await createGuestLink({
+        label: label.trim(),
+        scopes: chosenScopes,
+      }).updates(getGuestLinks);
       createdCode = result.code ?? null;
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
-      await guestLinksQuery?.refresh();
+      onCreated?.();
     } catch (err) {
       createError = describeSubmitError(
         err,
-        "Failed to create guest link. Please try again."
+        "Failed to create guest link. Try again."
       );
     } finally {
       isCreating = false;
     }
   }
 
-  async function copyText(text: string, type: "code" | "url") {
-    await copy.copy(text, type);
-  }
-
-  /**
-   * Run a guest-link mutation and pull the updated list. The commands' declared
-   * GetGuestLinks invalidation refreshes `getGuestLinks(undefined)`, which is a
-   * different cache key from the `{ includeDismissed: true }` this component
-   * subscribes with, so the refresh has to be issued here.
-   */
-  async function mutateLink(id: string, run: (id: string) => Promise<unknown>) {
+  async function mutateLink(
+    id: string,
+    run: RemoteCommand<string, unknown>,
+    failureMessage: string
+  ) {
     pendingIds = new Set([...pendingIds, id]);
+    linkError = null;
     try {
-      await run(id);
-      await guestLinksQuery?.refresh();
+      await run(id).updates(getGuestLinks);
+    } catch (err) {
+      linkError = describeSubmitError(err, failureMessage);
     } finally {
       pendingIds = new Set([...pendingIds].filter((x) => x !== id));
     }
   }
 
   async function handleDismiss(id: string) {
-    await mutateLink(id, dismissGuestLink);
+    await mutateLink(
+      id,
+      dismissGuestLink,
+      "Failed to dismiss the link. Try again."
+    );
   }
 
   async function handleRevoke(id: string) {
-    await mutateLink(id, revokeGuestLink);
+    await mutateLink(
+      id,
+      revokeGuestLink,
+      "Failed to revoke the link. Try again."
+    );
   }
 
   let reissuingId = $state<string | null>(null);
@@ -204,22 +209,20 @@
    */
   async function handleReissue(link: GuestLinkInfo) {
     reissuingId = link.id!;
-    createError = null;
+    linkError = null;
     try {
       const result = await createGuestLink({
         label: link.label || "Untitled",
         scopes: link.scopes,
-      });
+      }).updates(getGuestLinks);
       createdCode = result.code ?? null;
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       showCreateForm = true;
-      await guestLinksQuery?.refresh();
     } catch (err) {
-      createError = describeSubmitError(
+      linkError = describeSubmitError(
         err,
         "Failed to create a new code. Active links are limited to 5 at a time."
       );
-      showCreateForm = true;
     } finally {
       reissuingId = null;
     }
@@ -228,6 +231,7 @@
   function handleDone() {
     showCreateForm = false;
     label = "";
+    pickedScopes = null;
     createdCode = null;
     createdUrl = null;
     createError = null;
@@ -236,30 +240,31 @@
   function handleCancel() {
     showCreateForm = false;
     label = "";
+    pickedScopes = null;
     createError = null;
   }
 </script>
 
 {#if canCreateGuestLinks}
   <div class="space-y-4" data-testid="guest-links">
-    <div class="flex items-center justify-between gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">
           <Clock class="h-5 w-5" />
-          Temporary Guest Links
+          Temporary guest links
         </h2>
         <p class="text-sm text-muted-foreground mt-0.5">
-          Share read-only access with someone who doesn't have an account
+          Share read-only access with someone who does not have an account
         </p>
       </div>
       {#if !showCreateForm}
         <Button
           variant="outline"
           size="sm"
-          onclick={() => (showCreateForm = true)}
+          onclick={() => showCreateForm = true}
         >
           <Link class="mr-1.5 h-3.5 w-3.5" />
-          Create Guest Link
+          Create guest link
         </Button>
       {/if}
     </div>
@@ -268,26 +273,24 @@
     {#if showCreateForm}
       <Card.Root>
         <Card.Header>
-          <Card.Title class="text-lg">Create Guest Link</Card.Title>
+          <Card.Title class="text-lg">Create guest link</Card.Title>
           <Card.Description>
-            Generate a temporary link for read-only access to reports. The
-            code works once: the first device to enter it stays signed in for
-            48 hours. For another device, issue a new code.
+            Generate a temporary link for read-only access to the categories
+            you choose. The code works once: the first device to enter it stays
+            signed in for 48 hours. For another device, issue a new code.
           </Card.Description>
         </Card.Header>
         <Card.Content>
           {#if createdCode || createdUrl}
             <div class="space-y-4">
-              <div
-                class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-              >
-                <Check
-                  class="mt-0.5 h-4 w-4 shrink-0 text-success"
-                />
-                <p class="text-sm text-success">
-                  Guest link created successfully.
-                </p>
-              </div>
+              <Artwork
+                artwork="key"
+                palette="ember"
+                motion="auto"
+                autoplay="once"
+                class="mx-auto size-32"
+              />
+              <SuccessBanner>Guest link created successfully.</SuccessBanner>
 
               {#if createdCode}
                 <div class="space-y-1.5">
@@ -298,18 +301,11 @@
                     >
                       {createdCode}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
+                    <CopyButton
+                      text={createdCode}
+                      label="Copy code"
                       class="shrink-0 self-center"
-                      onclick={() => copyText(createdCode!, "code")}
-                    >
-                      {#if copy.isCopied("code")}
-                        <Check class="h-4 w-4 text-success" />
-                      {:else}
-                        <Copy class="h-4 w-4" />
-                      {/if}
-                    </Button>
+                    />
                   </div>
                 </div>
               {/if}
@@ -324,18 +320,11 @@
                       readonly
                       class="font-mono"
                     />
-                    <Button
-                      variant="outline"
-                      size="icon"
+                    <CopyButton
+                      text={createdUrl}
+                      label="Copy link"
                       class="shrink-0"
-                      onclick={() => copyText(createdUrl!, "url")}
-                    >
-                      {#if copy.isCopied("url")}
-                        <Check class="h-4 w-4 text-success" />
-                      {:else}
-                        <Copy class="h-4 w-4" />
-                      {/if}
-                    </Button>
+                    />
                   </div>
                 </div>
               {/if}
@@ -362,13 +351,43 @@
                 />
               </div>
 
-              {#if createError}
-                <div
-                  class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-                >
-                  <p class="text-sm text-destructive">{createError}</p>
+              {#if selectableCategories.length > 0}
+                <div class="@container space-y-2" data-testid="guest-link-scopes">
+                  <Label>What they can see</Label>
+                  <div class="grid gap-2 @sm:grid-cols-2">
+                    {#each selectableCategories as cat (cat.scope)}
+                      {@const on = chosenScopes.includes(cat.scope)}
+                      {@const ScopeIcon = cat.icon}
+                      <label
+                        class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors {on
+                          ? 'border-success/40 bg-success/5'
+                          : 'border-border bg-background hover:border-muted-foreground/40'}"
+                      >
+                        <div
+                          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {on
+                            ? 'bg-success/15 text-success'
+                            : 'bg-muted text-muted-foreground'}"
+                        >
+                          <ScopeIcon class="h-4 w-4" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <div class="text-sm font-medium">{cat.name}</div>
+                          <div class="truncate text-xs text-muted-foreground">
+                            {cat.description}
+                          </div>
+                        </div>
+                        <Switch
+                          checked={on}
+                          onCheckedChange={() => pickedScopes = [...toggled(new Set(chosenScopes), cat.scope)]}
+                          aria-label={cat.name}
+                        />
+                      </label>
+                    {/each}
+                  </div>
                 </div>
               {/if}
+
+              <FormError issues={createError} focusOnShow />
 
               <div class="flex gap-3">
                 <Button
@@ -382,13 +401,13 @@
                 <Button
                   type="button"
                   class="flex-1"
-                  disabled={isCreating || !label.trim()}
+                  disabled={isCreating || !label.trim() || chosenScopes.length === 0}
                   onclick={handleCreate}
                 >
                   {#if isCreating}
                     <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
                   {/if}
-                  Create Link
+                  Create link
                 </Button>
               </div>
             </div>
@@ -399,22 +418,15 @@
 
     <!-- Guest Links List -->
     {#if allLinks.length === 0 && !showCreateForm}
-      <Card.Root>
-        <Card.Content
-          class="flex flex-col items-center justify-center py-12 text-center"
-        >
-          <div
-            class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-          >
-            <Clock class="h-6 w-6 text-muted-foreground" />
-          </div>
-          <p class="text-sm text-muted-foreground max-w-sm">
-            No guest links yet. Create one to share temporary read-only access.
-          </p>
-        </Card.Content>
-      </Card.Root>
+      <EmptyState
+        art="key"
+        variant="dashed"
+        title="No guest links yet"
+        body="Create one to share temporary read-only access."
+      />
     {:else if allLinks.length > 0}
       <div class="space-y-2">
+        <FormError issues={linkError} focusOnShow />
         {#each guestLinks as link (link.id)}
           <div
             class={link.dismissedAt ? "opacity-50" : undefined}
@@ -423,6 +435,7 @@
           >
             <Card.Root>
               <Card.Content class="flex items-center gap-4 py-3">
+                <UserAvatar name={link.label || "Untitled"} />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-sm truncate">
@@ -436,6 +449,13 @@
                     class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1"
                   >
                     <span>Created {formatDate(link.createdAt)}</span>
+                    {#if categoriesIn(link.scopes).length > 0}
+                      <span>
+                        Sees {formatList(
+                          categoriesIn(link.scopes).map((c) => c.name.toLowerCase())
+                        )}
+                      </span>
+                    {/if}
                     <span>{formatRelativeExpiry(link.expiresAt)}</span>
                     {#if (link.status === GuestLinkStatus.Active || link.status === GuestLinkStatus.Revoked) && link.activatedAt}
                       <span>
@@ -446,7 +466,7 @@
                     {/if}
                   </div>
                 </div>
-                {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
+                {#if link.status === GuestLinkStatus.Active || isTerminal(link) && !link.dismissedAt}
                   <Button
                     variant="ghost-muted"
                     size="sm"
@@ -494,11 +514,8 @@
         <Button
           variant="ghost-muted"
           size="xs"
-          onclick={() => (showDismissed = !showDismissed)}
-        >
-          {showDismissed ? "Hide" : "Show"}
-          {dismissedCount} dismissed
-        </Button>
+          onclick={() => showDismissed = !showDismissed}
+        >{showDismissed ? "Hide" : "Show"} {dismissedCount} dismissed</Button>
       {/if}
     {/if}
   </div>

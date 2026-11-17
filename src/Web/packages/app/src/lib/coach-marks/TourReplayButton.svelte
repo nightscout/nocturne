@@ -1,7 +1,7 @@
 <!-- Replays coach-mark sequences in order, finished steps included. Shown while a step of one is on the page. -->
 <script lang="ts">
   import { getCoachMarkContext } from "@nocturne/coach";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import CircleQuestionMark from "@lucide/svelte/icons/circle-question-mark";
   import { sequences } from "./sequences";
   import { tourReplayLabel } from "./copy.svelte";
@@ -11,7 +11,10 @@
   const ctx = getCoachMarkContext();
   const label = $derived(tourReplayLabel());
   const shown = $derived(
-    ctx != null && !ctx.disabled && tour.flatMap((name) => sequences[name]?.steps ?? []).some((key) => ctx.getMountedSteps(key).length > 0)
+    ctx != null &&
+      !ctx.disabled &&
+      tour.every((name) => ctx.isSequenceForReader(name)) &&
+      tour.flatMap((name) => sequences[name]?.steps ?? []).some((key) => ctx.getMountedSteps(key).length > 0)
   );
 </script>
 

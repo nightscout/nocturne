@@ -6,30 +6,27 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Activity from "@lucide/svelte/icons/activity";
   import Info from "@lucide/svelte/icons/info";
-  import { getDataQualityReport } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { buildDayBuckets, type DayBucket } from "$lib/components/reports/sensor-integrity/buckets";
-  import NoiseClusterStrips from "$lib/components/reports/sensor-integrity/NoiseClusterStrips.svelte";
-  import NoiseDayChart from "$lib/components/reports/sensor-integrity/NoiseDayChart.svelte";
-  import DataQualityHeadline from "$lib/components/reports/sensor-integrity/DataQualityHeadline.svelte";
-  import HypoAfterNoiseLog from "$lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte";
-  import ClusterTable from "$lib/components/reports/sensor-integrity/ClusterTable.svelte";
-  import HypoMarker from "$lib/components/reports/sensor-integrity/HypoMarker.svelte";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
-  import type { GlucoseCluster } from "$lib/api";
-
-  setReportPrintMeta(() => ({ title: "Signal Integrity" }));
+  import { getDataQualityReport } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { buildDayBuckets, type DayBucket } from "#lib/components/reports/sensor-integrity/buckets.js";
+  import NoiseClusterStrips from "#lib/components/reports/sensor-integrity/NoiseClusterStrips.svelte";
+  import NoiseDayChart from "#lib/components/reports/sensor-integrity/NoiseDayChart.svelte";
+  import DataQualityHeadline from "#lib/components/reports/sensor-integrity/DataQualityHeadline.svelte";
+  import HypoAfterNoiseLog from "#lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte";
+  import ClusterTable from "#lib/components/reports/sensor-integrity/ClusterTable.svelte";
+  import HypoMarker from "#lib/components/reports/sensor-integrity/HypoMarker.svelte";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import type { GlucoseCluster } from "#lib/api/index.js";
 
   const params = requireDateParamsContext(14);
 
   const resource = contextResource(() => getDataQualityReport(params.dateRangeInput), {
-    errorTitle: "Error Loading Data Quality Report",
+    errorTitle: "Error loading data quality report",
   });
 
   const integrity = $derived(resource.current?.integrity);
@@ -61,20 +58,16 @@
   }
 </script>
 
-<svelte:head>
-  <title>Signal Integrity - Nocturne Reports</title>
-</svelte:head>
-
 {#if resource.current}
   <div class="@container space-y-6">
     <!-- Header -->
     <div class="space-y-3">
       <a
-        href={resolve("/reports/data-quality")}
+        href={resolve('reports/data-quality')}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Data Quality
+        Data quality
       </a>
       <div class="flex items-center gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">
@@ -88,7 +81,7 @@
       </div>
     </div>
 
-    <DataQualityHeadline {summary} />
+    <DataQualityHeadline summary={summary} />
 
     <!-- Daily overview: taller than a page at 28 days, so it may break between rows -->
     <Card class="print:break-inside-auto!">
@@ -121,7 +114,11 @@
         </div>
       </CardHeader>
       <CardContent>
-        <NoiseClusterStrips {buckets} {selectedDateMs} onSelectDay={selectDay} />
+        <NoiseClusterStrips
+          buckets={buckets}
+          selectedDateMs={selectedDateMs}
+          onSelectDay={selectDay}
+        />
       </CardContent>
     </Card>
 
@@ -163,9 +160,7 @@
         <CardDescription class="print:hidden">Select a row to expand its day above.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="overflow-x-auto print:overflow-visible">
-          <ClusterTable {clusters} onSelect={selectCluster} />
-        </div>
+        <div class="overflow-x-auto print:overflow-visible"><ClusterTable clusters={clusters} onSelect={selectCluster} /></div>
       </CardContent>
     </Card>
 
@@ -173,8 +168,8 @@
     <div class="flex items-start gap-2 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
       <Info class="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        This is a retrospective analysis of recorded readings. A flagged window indicates a pattern
-        that is statistically unlikely to be physiologic; it does not by itself identify the cause.
+        This is a retrospective analysis of recorded readings. A flagged window shows a pattern
+        that is statistically unlikely to be physiologic. The flag alone does not identify the cause.
         Boundaries are determined after the fact from surrounding readings.
       </p>
     </div>

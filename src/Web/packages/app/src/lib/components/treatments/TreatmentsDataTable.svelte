@@ -1,9 +1,11 @@
 <script lang="ts" module>
+  import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
   import type {
     EntryRecord,
     EntryCategoryId,
-  } from "$lib/constants/entry-categories";
-  import { getEntryStyle } from "$lib/constants/entry-categories";
+  } from "#lib/constants/entry-categories.js";
+  import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";
+  import { getEntryStyle } from "#lib/constants/entry-categories.js";
   import type {
     Column,
     ColumnDef,
@@ -23,27 +25,27 @@
     createSvelteTable,
     FlexRender,
     renderSnippet,
-  } from "$lib/components/ui/data-table";
+  } from "#lib/components/ui/data-table/index.js";
 </script>
 
 <script lang="ts">
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
-  import { cn } from "$lib/utils";
-  import { distinct } from "$lib/utils/collections";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Table from "$lib/components/ui/table";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
+  import { cn } from "#lib/utils/index.js";
+  import { distinct } from "#lib/utils/collections.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { formatDateTimeCompact, bg, bgLabel } from "$lib/utils/formatting";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  import { formatDateTimeCompact, bg, bgLabel } from "#lib/utils/formatting.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
   import ColumnFilterPopover from "./ColumnFilterPopover.svelte";
-  import { getDeviceEventTypeLabel } from "$lib/constants/device-event-types";
+  import { getDeviceEventTypeLabel } from "#lib/constants/device-event-types.svelte.js";
 
   interface Props {
     rows: EntryRecord[];
@@ -94,10 +96,10 @@
   // Map category IDs to display labels
   const categoryLabels: Record<EntryCategoryId, string> = {
     bolus: "Bolus",
-    carbs: "Carb Intake",
-    bgCheck: "BG Check",
+    carbs: "Carb intake",
+    bgCheck: "BG check",
     note: "Note",
-    deviceEvent: "Device Event",
+    deviceEvent: "Device event",
     basalInjection: "Long-acting injection",
   };
 
@@ -161,7 +163,11 @@
       case "note": {
         const parts: string[] = [];
         if (record.data.eventType) parts.push(record.data.eventType);
-        if (record.data.isAnnouncement && !parts.includes("Announcement")) parts.push("Announcement");
+        if (
+          record.data.isAnnouncement &&
+          record.data.eventType !== NightscoutEventType.Announcement
+        )
+          parts.push("Announcement");
         return parts.length > 0 ? parts.join(" \u00B7 ") : "\u2014";
       }
       case "deviceEvent":
@@ -471,9 +477,9 @@
     ...(selectedSources.length > 0 ? [`source: ${selectedSources.join(", ")}`] : []),
   ]);
 
-  const typeFilterOptions: FilterOption[] = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
-    value: id,
-    label: cat.name,
+  const typeFilterOptions: FilterOption[] = Object.values(ENTRY_CATEGORIES).map((cat) => ({
+    value: cat.id,
+    label: entryCategoryName(cat.id),
   }));
 </script>
 

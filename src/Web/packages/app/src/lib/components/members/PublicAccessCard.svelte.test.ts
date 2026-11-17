@@ -3,7 +3,7 @@ import { page as browser } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tick } from "svelte";
 import { page } from "$app/state";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 // The framework registers a query instance from an `$effect.pre` created wherever the query was
 // constructed, and a command's single-flight refresh reaches only the instances still registered.
@@ -25,8 +25,20 @@ interface ShareState {
   canReveal: boolean;
   fullHistory: boolean;
   scopes: string[];
+  shareableScopes: string[];
   lastAccessedAt: string | null;
 }
+
+const SHAREABLE_SCOPES = [
+  "alerts.read",
+  "devices.read",
+  "food.read",
+  "glucose.read",
+  "heartrate.read",
+  "reports.read",
+  "stepcount.read",
+  "treatments.read",
+];
 
 const enabledShare: ShareState = {
   enabled: true,
@@ -35,6 +47,7 @@ const enabledShare: ShareState = {
   canReveal: true,
   fullHistory: false,
   scopes: ["glucose.read"],
+  shareableScopes: SHAREABLE_SCOPES,
   lastAccessedAt: null,
 };
 const disabledShare: ShareState = {
@@ -44,6 +57,7 @@ const disabledShare: ShareState = {
   canReveal: false,
   fullHistory: false,
   scopes: [],
+  shareableScopes: SHAREABLE_SCOPES,
   lastAccessedAt: null,
 };
 
@@ -72,7 +86,7 @@ const disableShareLink = vi.fn(() => {
 let revealResult: ShareState = { ...enabledShare, url: PLAIN_URL, canReveal: true };
 const revealShareLink = vi.fn(async () => revealResult);
 
-vi.mock("$api/generated/shareLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
   getShareLink: () => registerShareQuery(),
   disableShareLink: () => disableShareLink(),
   revealShareLink: () => revealShareLink(),
@@ -183,7 +197,7 @@ describe("PublicAccessCard", () => {
       ).toBeNull()
     );
     expect(document.body.textContent?.replace(/\s+/g, " ")).toContain(
-      "Nocturne can no longer show you what it is"
+      "Nocturne can no longer show you what the link is"
     );
   });
 
@@ -200,7 +214,7 @@ describe("PublicAccessCard", () => {
     // Normalised: the copy wraps across source lines, so the rendered text carries
     // the template's own newlines and indentation mid-sentence.
     expect(document.body.textContent?.replace(/\s+/g, " ")).toContain(
-      "Nocturne can no longer show you what it is"
+      "Nocturne can no longer show you what the link is"
     );
   });
 });

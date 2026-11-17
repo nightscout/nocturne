@@ -11,10 +11,10 @@ import { redirect } from "@sveltejs/kit";
  * and device event change intervals from 90-day history.
  */
 export const getPackingHints = query(async () => {
-  const { locals, url } = getRequestEvent();
+  const { locals } = getRequestEvent();
 
   if (!locals.isAuthenticated) {
-    throw redirect(303, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
+    throw redirect(303, "/auth/login");
   }
 
   const { apiClient } = locals;

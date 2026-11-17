@@ -5,16 +5,16 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Globe from "@lucide/svelte/icons/globe";
   import Bell from "@lucide/svelte/icons/bell";
-  import { browser } from "$app/environment";
-  import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-  import { getDefaultSettings } from "$lib/components/settings/constants";
+  import { browser } from "$app/env";
+  import type { TitleFaviconSettings } from "#lib/stores/serverSettings.js";
+  import { getDefaultSettings } from "#lib/components/settings/constants.js";
 
   // Local storage key
   const STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -59,7 +59,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Globe class="h-5 w-5" />
-      Browser Tab Settings
+      Browser tab settings
     </CardTitle>
     <CardDescription>
       Customize how glucose data appears in the browser tab
@@ -189,7 +189,7 @@
       <div class="space-y-4">
         <h4 class="text-sm font-medium flex items-center gap-2">
           <Bell class="h-4 w-4" />
-          Alarm Integration
+          Alarm integration
         </h4>
 
         <div class="flex items-center justify-between">

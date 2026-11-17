@@ -6,7 +6,7 @@ import { slashCommandHandle } from "../lib/platform-handle.js";
 
 const logger = createLogger();
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]?$/;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?$/;
 
 export function registerAccountCommands(bot: Chat, baseDomain: string) {
   bot.onSlashCommand("/connect", async (event) => {

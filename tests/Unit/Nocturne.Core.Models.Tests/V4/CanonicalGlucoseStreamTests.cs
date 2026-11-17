@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -205,6 +206,22 @@ public class CanonicalGlucoseStreamTests
         // Ordinal key order: dexcom-connector < libre-connector — same winner both buckets.
         result.Should().HaveCount(2);
         result.Should().OnlyContain(r => r.DataSource == "dexcom-connector");
+    }
+
+    [Theory]
+    [InlineData(DataSources.DemoService)]
+    [InlineData(DataSources.Testing)]
+    public void AnEphemeralSource_CompetesOnlyWithItself(string ephemeral)
+    {
+        // "a-..." outranks "xdrip" by key, so in one shared pool the ephemeral stream would hide
+        // the real reading a non-demo read is shown.
+        var ephemeralReading = Reading(0, source: ephemeral, device: "a-sensor");
+        var real = Reading(1, source: "xdrip", device: "phone");
+        var otherEphemeral = Reading(2, source: ephemeral, device: "b-sensor");
+
+        var result = CanonicalGlucoseStream.Select([ephemeralReading, real, otherEphemeral], []);
+
+        result.Should().Equal(ephemeralReading, real);
     }
 
     [Fact]

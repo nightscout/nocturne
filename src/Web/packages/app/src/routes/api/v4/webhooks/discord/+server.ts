@@ -1,8 +1,8 @@
 import type { RequestHandler } from "./$types";
-import { getBot } from "$lib/server/bot";
+import { getBot } from "#lib/server/bot/index.js";
 import { runWithContext, type BotRequestContext } from "@nocturne/bot";
-import { buildUnscopedBotApiClient, buildScopedBotApiClient } from "$lib/server/bot/api-client";
-import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
+import { buildUnscopedBotApiClient, buildScopedBotApiClient } from "#lib/server/bot/api-client.js";
+import { getEffectiveHost, getOriginalProto } from "#lib/server/request-host.js";
 
 export const POST: RequestHandler = async ({ request, cookies, fetch }) => {
 	const bot = await getBot();

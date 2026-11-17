@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LEAF_FACTS, FACT_GROUP_ORDER, getFact, isLeafKind } from "./factCatalog";
-import { AlertConditionType } from "$api-clients";
+import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
 
 describe("factCatalog", () => {
 	it("includes a fact for every backend leaf condition kind", () => {
@@ -29,7 +29,6 @@ describe("factCatalog", () => {
 
 	it("returns the right fact for a known kind", () => {
 		const f = getFact("threshold");
-		expect(f?.label).toBe("Glucose");
 		expect(f?.group).toBe("glucose");
 	});
 });

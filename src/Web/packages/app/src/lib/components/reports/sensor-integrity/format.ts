@@ -2,8 +2,8 @@
  * Presentation helpers for the sensor data-quality report. Copy is factual and non-judgemental:
  * it describes what was detected and why, never whether that is good or bad.
  */
-import { ClusterConfidence, type GlucoseCluster } from "$lib/api";
-import { bg, bgLabel } from "$lib/utils/formatting";
+import { ClusterConfidence, type GlucoseCluster } from "#lib/api/index.js";
+import { bg, bgLabel } from "#lib/utils/formatting.js";
 
 export function confidenceLabel(c: ClusterConfidence | undefined): string {
   switch (c) {

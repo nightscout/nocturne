@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { indexBy } from "$lib/utils/collections";
-  import { formatClock } from "$lib/utils/formatting";
+  import { indexBy } from "#lib/utils/collections.js";
+  import { formatClock } from "#lib/utils/formatting.js";
   import { PieChart, Text, Tooltip } from "layerchart";
-  import type { Bolus, CarbIntake } from "$lib/api";
-  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
-  import * as Breadcrumb from "$lib/components/ui/breadcrumb";
-  import { Button } from "$lib/components/ui/button";
-  import { cn } from "$lib/utils";
-  import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
+  import type { Bolus, CarbIntake } from "#lib/api/index.js";
+  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import * as Breadcrumb from "#lib/components/ui/breadcrumb/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import ChartKey, { type ChartKeyItem } from "#lib/components/charts/print/ChartKey.svelte";
   import { Key } from "@nocturne/ui/keys";
 
   interface Props {
@@ -119,18 +119,18 @@
         ];
       case "basal":
         return [
-          { key: "scheduled-basal", label: "Scheduled Basal", value: scheduledBasal, color: "var(--insulin-scheduled-basal)", texture: "insulin-scheduled-basal" },
-          { key: "additional-basal", label: "Additional Basal", value: additionalBasal, color: "var(--insulin-additional-basal)", texture: "insulin-temp-basal" },
+          { key: "scheduled-basal", label: "Scheduled basal", value: scheduledBasal, color: "var(--insulin-scheduled-basal)", texture: "insulin-scheduled-basal" },
+          { key: "additional-basal", label: "Additional basal", value: additionalBasal, color: "var(--insulin-additional-basal)", texture: "insulin-temp-basal" },
         ];
       case "bolus":
         return [
-          { key: "manual-bolus", label: "Manual Bolus", value: manualBolus, color: "var(--insulin-bolus)", texture: "insulin-bolus", drill: "manual" },
-          { key: "automatic-bolus", label: "Automatic Bolus", value: automaticBolus, color: "var(--iob-temporary)", texture: "insulin-automatic-bolus" },
+          { key: "manual-bolus", label: "Manual bolus", value: manualBolus, color: "var(--insulin-bolus)", texture: "insulin-bolus", drill: "manual" },
+          { key: "automatic-bolus", label: "Automatic bolus", value: automaticBolus, color: "var(--iob-temporary)", texture: "insulin-automatic-bolus" },
         ];
       case "manual":
         if (boluses.length === 0) {
           return [
-            { key: "bolus-0", label: "Manual Bolus", value: manualBolus, color: individualBolusShades[0], texture: "insulin-bolus" },
+            { key: "bolus-0", label: "Manual bolus", value: manualBolus, color: individualBolusShades[0], texture: "insulin-bolus" },
           ];
         }
         return boluses.filter((bolus) => (bolus.insulin ?? 0) > 0).map((bolus, i) => {
@@ -259,7 +259,7 @@
                   <div
                     class="text-xs text-muted-foreground border-t border-border pt-1 mt-1"
                   >
-                    {d.bolus ? "Click to view" : "Click to expand"}
+                    {d.bolus ? "Select to view" : "Select to expand"}
                   </div>
                 {/if}
               </div>

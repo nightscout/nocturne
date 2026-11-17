@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -9,7 +10,7 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class RuleDataNeedsTests
 {
-    [Fact]
+    [NativeFact]
     public void Empty_ruleset_returns_no_needs()
     {
         var result = RuleDataNeeds.Walk(Array.Empty<AlertRuleSnapshot>());
@@ -17,7 +18,7 @@ public class RuleDataNeedsTests
         result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
-    [Fact]
+    [NativeFact]
     public void Threshold_only_triggers_no_optional_needs()
     {
         var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
@@ -27,7 +28,7 @@ public class RuleDataNeedsTests
         result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
-    [Fact]
+    [NativeFact]
     public void Trend_leaf_at_top_level_sets_trend_bucket_need()
     {
         var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"rising_fast"}""");
@@ -38,7 +39,7 @@ public class RuleDataNeedsTests
         result.NeedsIob.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public void Iob_leaf_inside_composite_sets_iob_need()
     {
         var json = """
@@ -56,7 +57,7 @@ public class RuleDataNeedsTests
         result.NeedsIob.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void Nested_composite_with_multiple_kinds_sets_all_relevant_flags()
     {
         var json = """
@@ -85,7 +86,7 @@ public class RuleDataNeedsTests
         result.NeedsSensorAge.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public void Sustained_wrapper_recurses_into_child()
     {
         var json = """
@@ -101,7 +102,7 @@ public class RuleDataNeedsTests
         result.NeedsReservoir.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void Not_wrapper_recurses_into_child()
     {
         var json = """
@@ -116,7 +117,7 @@ public class RuleDataNeedsTests
         result.NeedsSiteAge.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void Malformed_json_treated_as_no_needs()
     {
         var rule = MakeRule(AlertConditionType.Composite, "{ not valid json");
@@ -127,7 +128,7 @@ public class RuleDataNeedsTests
         act().Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
-    [Fact]
+    [NativeFact]
     public void Multiple_rules_are_unioned()
     {
         var trendRule = MakeRule(AlertConditionType.Trend, """{"bucket":"flat"}""");
@@ -141,7 +142,7 @@ public class RuleDataNeedsTests
 
     // ----- Looping kinds -----
 
-    [Fact]
+    [NativeFact]
     public void LoopStale_rule_sets_LastApsCycle_only()
     {
         var rule = MakeRule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
@@ -157,7 +158,7 @@ public class RuleDataNeedsTests
         result.NeedsSensitivityRatio.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public void LoopEnactionStale_rule_sets_LastApsEnacted_and_LastApsCycle()
     {
         // Co-fetch invariant: LoopEnactionStale's evaluator reads HasEverApsCycled (the
@@ -172,7 +173,7 @@ public class RuleDataNeedsTests
         result.NeedsLastApsCycle.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void PumpSuspended_rule_sets_PumpStatus_only()
     {
         var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
@@ -183,7 +184,7 @@ public class RuleDataNeedsTests
         result.NeedsLastApsCycle.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public void PumpBattery_rule_sets_PumpStatus_only()
     {
         var rule = MakeRule(AlertConditionType.PumpBattery, """{"operator":"<","value":20}""");
@@ -193,7 +194,7 @@ public class RuleDataNeedsTests
         result.NeedsPumpStatus.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void TempBasal_rule_sets_TempBasal_only()
     {
         var rule = MakeRule(AlertConditionType.TempBasal,
@@ -205,7 +206,7 @@ public class RuleDataNeedsTests
         result.NeedsPumpStatus.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public void UploaderBattery_rule_sets_UploaderStatus_only()
     {
         var rule = MakeRule(AlertConditionType.UploaderBattery, """{"operator":"<","value":20}""");
@@ -215,7 +216,7 @@ public class RuleDataNeedsTests
         result.NeedsUploaderStatus.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void OverrideActive_rule_sets_Override_only()
     {
         var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
@@ -225,7 +226,7 @@ public class RuleDataNeedsTests
         result.NeedsOverride.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void SensitivityRatio_rule_sets_SensitivityRatio_only()
     {
         var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"operator":"<","value":0.8}""");
@@ -235,7 +236,7 @@ public class RuleDataNeedsTests
         result.NeedsSensitivityRatio.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void TimeOfDay_rule_sets_TenantTimeZone_so_evaluator_can_fall_back_to_tenant_tz()
     {
         // TimeOfDayEvaluator falls back to SensorContext.TenantTimeZoneId when the rule's
@@ -251,7 +252,7 @@ public class RuleDataNeedsTests
         result.NeedsTenantTimeZone.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void Composite_with_loop_stale_inside_not_sustained_sets_LastApsCycle()
     {
         var json = """
@@ -280,7 +281,7 @@ public class RuleDataNeedsTests
         result.NeedsLastApsCycle.Should().BeTrue();
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData("""{"operator":"and"}""")]
     [InlineData("""{"operator":"and","conditions":[null]}""")]
     [InlineData("""{"operator":"and","conditions":[{"iob":{"operator":">","value":2}}]}""")]
@@ -296,7 +297,7 @@ public class RuleDataNeedsTests
         result.NeedsIob.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void Not_and_sustained_with_null_child_contribute_no_needs()
     {
         var not = MakeRule(AlertConditionType.Not, """{}""");
@@ -309,7 +310,7 @@ public class RuleDataNeedsTests
 
     private const string CobZero = """{"type":"cob","cob":{"operator":"==","value":0}}""";
 
-    [Fact]
+    [NativeFact]
     public void Enabled_auto_resolve_condition_sets_a_need_the_body_does_not()
     {
         var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, CobZero);
@@ -319,7 +320,7 @@ public class RuleDataNeedsTests
         result.NeedsCob.Should().BeTrue();
     }
 
-    [Fact]
+    [NativeFact]
     public void Disabled_auto_resolve_condition_contributes_no_needs()
     {
         var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", false, CobZero);
@@ -329,7 +330,7 @@ public class RuleDataNeedsTests
         result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
-    [Fact]
+    [NativeFact]
     public void Nested_auto_resolve_tree_is_walked_with_the_per_node_selections()
     {
         var trackerId = Guid.NewGuid();
@@ -356,7 +357,7 @@ public class RuleDataNeedsTests
         result.ReferencedTrackerDefinitions.Should().BeEquivalentTo(new[] { trackerId });
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("null")]
@@ -371,6 +372,16 @@ public class RuleDataNeedsTests
 
         result.NeedsIob.Should().BeTrue();
         result.NeedsCob.Should().BeFalse();
+    }
+
+    [NativeTheory]
+    [InlineData("""{"mode":8,"is_active":true}""")]
+    [InlineData("""{"mode":"suspended","is_active":true}""")]
+    public void A_pump_mode_that_is_not_a_member_name_selects_no_mode(string conditionParams)
+    {
+        var rule = MakeRule(AlertConditionType.PumpState, conditionParams);
+
+        RuleDataNeeds.Walk(new[] { rule }).ReferencedPumpStates.Should().BeEmpty();
     }
 
     private static AlertRuleSnapshot MakeRule(

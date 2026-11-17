@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
+  import { dashOf } from "#lib/components/charts/print/chart-print-patterns.js";
   import {
     Area,
     Spline,
     Pattern,
+    Rect,
     ChartClipPath,
     Highlight,
     AnnotationLine,
@@ -11,11 +12,11 @@
     getChartContext,
   } from "layerchart";
   import { curveStepAfter } from "d3";
-  import { BasalDeliveryOrigin } from "$api-clients";
+  import { BasalDeliveryOrigin } from "#lib/api/generated/nocturne-api-client.js";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import TrackAxis from "./TrackAxis.svelte";
   import TrackLabel from "./TrackLabel.svelte";
-  import { markerKey } from "$lib/utils/chart-data-merge";
+  import { markerKey } from "#lib/utils/chart-data-merge.js";
 
   interface Props {
     onPointClick?: (time: Date) => void;
@@ -25,6 +26,8 @@
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
+  // Width the "Last pump sync" label needs to its right before it would run off the chart.
+  const LAST_SYNC_LABEL_ROOM = 100;
 
   const basalData = $derived(ctx.engine.basalData);
   const scheduledBasalData = $derived(ctx.engine.scheduledBasalData);
@@ -126,6 +129,7 @@
       {@const spanLower = chartCtx.yScale(basalScale(maxBasalRate * 0.7))}
       {@const labelX = spanLeft + 4}
       {@const labelY = chartCtx.yScale(basalScale(maxBasalRate * 0.8))}
+      <!-- Native rect: up to ~288 temp basals a day; layerchart Rect mounts ~5x slower (0.16 vs 0.03 ms each) and registers a component per span, which mark-registration.svelte.test.ts forbids. -->
       <rect
         x={spanLeft}
         y={Math.min(spanUpper, spanLower)}
@@ -167,7 +171,7 @@
       {@const staleBottom = chartCtx.yScale(basalZero)}
       <Pattern size={8} lines={{ rotate: -45, opacity: ctx.printing ? 0.3 : 0.1 }}>
         {#snippet children({ pattern }: { pattern: string })}
-          <rect
+          <Rect
             x={staleLeft}
             y={Math.min(staleTop, staleBottom)}
             width={staleWidth}
@@ -187,7 +191,7 @@
         x={staleBasalData.start.getTime()}
         y={basalScale(maxBasalRate)}
         label="Last pump sync"
-        labelPlacement="bottom-right"
+        labelPlacement={chartCtx.width - chartCtx.xScale(staleBasalData.start) < LAST_SYNC_LABEL_ROOM ? "bottom-left" : "bottom-right"}
         fill="var(--warning)"
         class="hover:bg-background hover:text-foreground"
       />
@@ -235,6 +239,7 @@
                     chartCtx.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
                   height: Math.abs(bottom - top),
                 }}
+                <!-- Native rect: same measured cost as the temp basal spans above. -->
                 <rect {...step} fill={fillColor} {opacity} />
                 <rect {...step} fill={patternFill} {opacity} />
               {/each}

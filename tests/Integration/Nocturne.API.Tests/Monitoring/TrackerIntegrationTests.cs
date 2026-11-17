@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// Integration tests for the v4 tracker endpoints at
 /// <c>/api/v4/trackers</c>.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class TrackerIntegrationTests : ApiIntegrationTestBase
 {
@@ -52,16 +53,13 @@ public class TrackerIntegrationTests : ApiIntegrationTestBase
         lifespanHours = 720,
         mode = "Duration",
         dashboardVisibility = "Always",
-        visibility = "Public",
         notificationThresholds = new[]
         {
             new
             {
                 urgency = "Warn",
                 hours = 648,
-                pushEnabled = true,
                 displayOrder = 0,
-                respectQuietHours = true
             }
         }
     };
@@ -263,5 +261,68 @@ public class TrackerIntegrationTests : ApiIntegrationTestBase
 
         instances.ValueKind.Should().Be(JsonValueKind.Array);
         instances.GetArrayLength().Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task StartAndComplete_RecordTheirDeviceEvents_WithoutMovingTheTrackerAgain()
+    {
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var definitionResponse = await client.PostAsJsonAsync("/api/v4/trackers/definitions", new
+        {
+            name = "CGM Sensor",
+            category = "Sensor",
+            lifespanHours = 240,
+            mode = "Duration",
+            triggerEventTypes = new[] { "Sensor Start", "Sensor Change" },
+            startEventType = "Sensor Start",
+            completionEventType = "Sensor Change",
+        });
+        definitionResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var definitionId = (await definitionResponse.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetString()!;
+        var instanceId = await StartInstanceAndGetIdAsync(client, definitionId);
+
+        (await RecordedEventTypesAsync(client)).Should().Equal("SensorStart");
+        (await RunningInstanceIdsAsync(client, definitionId)).Should().Equal(instanceId);
+
+        var completeResponse = await client.PutAsJsonAsync(
+            $"/api/v4/trackers/instances/{instanceId}/complete", new { reason = "Completed" });
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await RecordedEventTypesAsync(client)).Should().BeEquivalentTo("SensorStart", "SensorChange");
+        (await RunningInstanceIdsAsync(client, definitionId)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateDefinition_WithAStartEventTypeThatIsNoDeviceEvent_Returns400()
+    {
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+
+        var response = await client.PostAsJsonAsync("/api/v4/trackers/definitions", new
+        {
+            name = "Pen",
+            mode = "Duration",
+            startEventType = "Meal Bolus",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("StartEventType");
+    }
+
+    private static async Task<List<string>> RecordedEventTypesAsync(HttpClient client)
+    {
+        var page = await client.GetFromJsonAsync<JsonElement>("/api/v4/observations/device-events?source=tracker");
+        return [.. page.GetProperty("data").EnumerateArray().Select(e => e.GetProperty("eventType").GetString()!)];
+    }
+
+    private static async Task<List<string>> RunningInstanceIdsAsync(HttpClient client, string definitionId)
+    {
+        var instances = await client.GetFromJsonAsync<JsonElement>("/api/v4/trackers/instances");
+        return
+        [
+            .. instances.EnumerateArray()
+                .Where(i => i.GetProperty("definitionId").GetString() == definitionId)
+                .Select(i => i.GetProperty("id").GetString()!),
+        ];
     }
 }

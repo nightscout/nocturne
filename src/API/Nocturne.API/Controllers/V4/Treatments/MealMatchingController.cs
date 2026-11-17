@@ -60,6 +60,7 @@ public class MealMatchingController : ControllerBase
     /// Get a food entry for review
     /// </summary>
     [HttpGet("food-entries/{id:guid}")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorFoodEntry), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -77,6 +78,7 @@ public class MealMatchingController : ControllerBase
     /// Get suggested meal matches for a date range
     /// </summary>
     [HttpGet("suggestions")]
+    [RequireScope(true, Scope.FoodRead, Scope.TreatmentsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(SuggestedMealMatch[]), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -121,6 +123,7 @@ public class MealMatchingController : ControllerBase
 
     /// <summary>
     /// Accept a meal match
+    /// Links the connector food entry to the carb intake and marks the entry matched. Requires the treatments read-write scope.
     /// </summary>
     /// <remarks>
     /// Writes a <c>treatment_foods</c> row keyed by the carb intake, which
@@ -130,7 +133,7 @@ public class MealMatchingController : ControllerBase
     /// </remarks>
     [HttpPost("accept")]
     [RequireScope(Scope.TreatmentsReadWrite)]
-    [RemoteCommand(Invalidates = ["GetSuggestions"])]
+    [RemoteCommand(Invalidates = ["GetSuggestions", "Nutrition_GetMeals"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> AcceptMatch([FromBody] AcceptMatchRequest request)
@@ -170,6 +173,7 @@ public class MealMatchingController : ControllerBase
 
     /// <summary>
     /// Dismiss a meal match
+    /// Requires the food read-write scope.
     /// </summary>
     /// <remarks>
     /// Writes only the <c>connector_food_entries</c> status, which is the food category in

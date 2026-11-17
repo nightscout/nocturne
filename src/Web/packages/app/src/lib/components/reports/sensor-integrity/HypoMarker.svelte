@@ -14,6 +14,7 @@
   let { x, y, nocturnal }: Props = $props();
 </script>
 
+<!-- Native path: also drawn in a standalone legend svg with no layerchart context; one marker per hypo cluster. -->
 <path
   d={`M ${x - 3.5} ${y - 6} L ${x + 3.5} ${y - 6} L ${x} ${y} Z`}
   stroke-width="1.2"

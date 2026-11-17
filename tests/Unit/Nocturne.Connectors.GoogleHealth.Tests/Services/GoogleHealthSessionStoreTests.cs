@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -79,6 +80,10 @@ public class GoogleHealthSessionStoreTests : IDisposable
                 "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) => secrets = values)
             .Returns(Task.CompletedTask);
+        configurations.Setup(service => service.SaveRuntimeSecretsAsync(
+                "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) => secrets = values)
+            .Returns(Task.CompletedTask);
         configurations.Setup(service => service.GetConfigurationAsync("GoogleHealth", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConnectorConfigurationResponse
             {
@@ -96,7 +101,8 @@ public class GoogleHealthSessionStoreTests : IDisposable
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenant.Object,
             TestPlatform.Options(),
-            NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+            NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
         return new GoogleHealthSessionStore(
             configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(),
             NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout);

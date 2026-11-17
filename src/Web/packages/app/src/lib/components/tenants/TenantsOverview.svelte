@@ -1,10 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getOverview } from "$lib/api/generated/myTenants.generated.remote";
-  import TenantOverviewTile from "$lib/components/tenants/TenantOverviewTile.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { sortTenantsByUrgency } from "$lib/utils/glucose-status";
-  import { pollWhileVisible } from "$lib/utils/poll-while-visible.svelte";
+  import { getOverview } from "#lib/api/generated/myTenants.generated.remote.js";
+  import TenantOverviewTile from "#lib/components/tenants/TenantOverviewTile.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { sortTenantsByUrgency } from "#lib/utils/glucose-status.js";
+  import { pollWhileVisible } from "#lib/utils/poll-while-visible.svelte.js";
 
   /** How often to re-read the cross-tenant overview while the tab is visible. */
   const POLL_MS = 60_000;
@@ -15,7 +15,7 @@
 
   const baseDomain = $derived(page.data.baseDomain ?? null);
 
-  // Detached callback: use .refresh(), not a bare await (no reactive context here).
+  // A bare await would answer with the value this page already holds.
   pollWhileVisible(() => overviewQuery.refresh(), POLL_MS);
 </script>
 
@@ -23,7 +23,7 @@
   <title>Tenants overview - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto space-y-6 p-4 md:p-6">
+<div class="@container container mx-auto space-y-6 p-4 @md:p-6">
   <div>
     <h1 class="text-2xl font-bold">Tenants overview</h1>
     <p class="text-sm text-muted-foreground">
@@ -54,7 +54,7 @@
         No tenants with glucose access.
       </p>
     {:else}
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 @2xl:grid-cols-3 @4xl:grid-cols-4">
         {#each tenants as tenant (tenant.tenantId)}
           <TenantOverviewTile {tenant} {baseDomain} />
         {/each}

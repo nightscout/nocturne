@@ -301,7 +301,7 @@ public class FlexibleDeserializationTests
     {
         var result = JsonSerializer.Deserialize<decimal?>(jsonValue, NumberOptions);
 
-        result.Should().Be(expected.HasValue ? (decimal)expected.Value : null);
+        result.Should().Be(expected?.ToDecimal());
     }
 
     [Theory]
@@ -314,7 +314,7 @@ public class FlexibleDeserializationTests
     {
         var result = JsonSerializer.Deserialize<decimal>(jsonValue, NumberOptions);
 
-        result.Should().Be((decimal)expected);
+        result.Should().Be(expected.ToDecimal());
     }
 
     [Fact]

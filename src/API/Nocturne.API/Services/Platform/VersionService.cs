@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 
@@ -10,29 +11,31 @@ namespace Nocturne.API.Services.Platform;
 /// <seealso cref="IVersionService"/>
 public class VersionService : IVersionService
 {
+    private readonly TimeProvider _time;
     private readonly ILogger<VersionService> _logger;
 
-    public VersionService(ILogger<VersionService> logger)
+    public VersionService(TimeProvider timeProvider, ILogger<VersionService> logger)
     {
+        _time = timeProvider;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get the list of supported API versions
+    /// Get the API levels Nocturne serves, each with its version and mount path.
     /// </summary>
-    /// <returns>List of supported API versions</returns>
-    public async Task<VersionsResponse> GetSupportedVersionsAsync()
+    /// <returns>One entry per supported API level</returns>
+    public Task<IReadOnlyList<ApiVersionEntry>> GetSupportedVersionsAsync()
     {
         _logger.LogDebug("Getting supported API versions");
 
-        var response = new VersionsResponse
-        {
-            Versions = new List<string> { "1", "2", "3" },
-        };
+        IReadOnlyList<ApiVersionEntry> versions =
+        [
+            new(ApplicationConstants.NightscoutApi.V1Version, "/api/v1"),
+            new(ApplicationConstants.NightscoutApi.V2Version, "/api/v2"),
+            new(ApplicationConstants.NightscoutApi.V3Version, "/api/v3"),
+        ];
 
-        _logger.LogDebug("Returning {VersionCount} supported versions", response.Versions.Count);
-
-        return await Task.FromResult(response);
+        return Task.FromResult(versions);
     }
 
     /// <summary>
@@ -49,9 +52,9 @@ public class VersionService : IVersionService
         {
             Version = AppVersion.Current,
             Name = assemblyName,
-            ServerTime = DateTime.UtcNow,
+            ServerTime = _time.GetUtcNow().UtcDateTime,
             Head = Environment.GetEnvironmentVariable("GIT_COMMIT") ?? "unknown",
-            Build = Environment.GetEnvironmentVariable("BUILD_DATE") ?? DateTime.UtcNow.ToString("yyyy.MM.dd"),
+            Build = Environment.GetEnvironmentVariable("BUILD_DATE") ?? _time.GetUtcNow().UtcDateTime.ToString("yyyy.MM.dd"),
             ApiCompatibility = "Nightscout v15.0",
         };
 

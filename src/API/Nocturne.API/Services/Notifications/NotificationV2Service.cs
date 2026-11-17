@@ -18,6 +18,7 @@ public class NotificationV2Service : INotificationV2Service
     private readonly ISignalRBroadcastService _signalRBroadcastService;
     private readonly IProfileProjectionService _profileProjectionService;
     private readonly ILoopService _loopService;
+    private readonly TimeProvider _time;
 
     // Notification levels (replaces legacy notification levels)
     private readonly NotificationLevels _levels = new()
@@ -31,13 +32,15 @@ public class NotificationV2Service : INotificationV2Service
         ILogger<NotificationV2Service> logger,
         ISignalRBroadcastService signalRBroadcastService,
         IProfileProjectionService profileProjectionService,
-        ILoopService loopService
+        ILoopService loopService,
+        TimeProvider timeProvider
     )
     {
         _logger = logger;
         _signalRBroadcastService = signalRBroadcastService;
         _profileProjectionService = profileProjectionService;
         _loopService = loopService;
+        _time = timeProvider;
     }
 
     /// <summary>
@@ -96,7 +99,7 @@ public class NotificationV2Service : INotificationV2Service
                 {
                     Success = false,
                     Message = "Notification must have either title or message",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                 };
             }
 
@@ -106,7 +109,7 @@ public class NotificationV2Service : INotificationV2Service
             notification.Group = notification.Group ?? "default";
             notification.Timestamp =
                 notification.Timestamp == 0
-                    ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    ? _time.GetUtcNow().ToUnixTimeMilliseconds()
                     : notification.Timestamp;
 
             // Process the notification (this would integrate with actual notification systems)
@@ -126,9 +129,9 @@ public class NotificationV2Service : INotificationV2Service
                     title = notification.Title,
                     group = notification.Group,
                     level = notification.Level,
-                    processed_at = DateTimeOffset.UtcNow.ToString("O"),
+                    processed_at = _time.GetUtcNow().ToString("O"),
                 },
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             };
         }
         catch (Exception ex)
@@ -144,7 +147,7 @@ public class NotificationV2Service : INotificationV2Service
             {
                 Success = false,
                 Message = "Internal error processing notification",
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             };
         }
     }
@@ -172,7 +175,7 @@ public class NotificationV2Service : INotificationV2Service
                 email_notifications = false, // Would be true if email service is configured
                 websocket_notifications = true,
             },
-            last_update = DateTimeOffset.UtcNow.ToString("O"),
+            last_update = _time.GetUtcNow().ToString("O"),
         };
     }
 

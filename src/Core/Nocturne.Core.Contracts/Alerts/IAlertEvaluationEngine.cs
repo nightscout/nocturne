@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Alerts;
@@ -56,10 +57,8 @@ public sealed record AlertEngineEvaluation
 }
 
 /// <summary>
-/// Engine seam for alert rule evaluation: one implementation wraps the in-process C#
-/// evaluators ("managed"), another delegates to the Rust engine over FFI ("rust"), and a
-/// third runs both and logs divergences ("shadow"). Selected at startup via the
-/// <c>Alerts:Engine</c> configuration flag (default <c>managed</c>).
+/// Engine seam for alert rule evaluation, implemented over the Rust engine
+/// (<c>crates/nocturne-alerts-core</c>) through its FFI.
 /// </summary>
 /// <remarks>
 /// Implementations own all evaluation-state persistence (sustained timers via
@@ -76,7 +75,7 @@ public interface IAlertEvaluationEngine
     /// tracker advance → unconditional auto-resolve under the <c>auto_resolve</c> path
     /// root (skipped after a close, gated on an active excursion).
     /// </summary>
-    /// <param name="context">Enriched sensor context for the tick. <c>CurrentRuleId</c>/<c>CurrentPath</c> threading is owned by the engine.</param>
+    /// <param name="context">Enriched sensor context for the tick.</param>
     /// <param name="options">Per-call options (leaf log).</param>
     Task<AlertEngineEvaluation> EvaluateRuleAsync(
         AlertRuleSnapshot rule,
@@ -85,20 +84,22 @@ public interface IAlertEvaluationEngine
         CancellationToken ct);
 
     /// <summary>
-    /// Evaluates a single condition tree outside the per-rule driver (no tracker, no
-    /// auto-resolve) under a reserved path root — used for smart-snooze conditions
-    /// (<c>snooze</c>) and other auxiliary evaluation scopes. Sustained timers inside the
-    /// tree are keyed by <c>(ruleId, path)</c> exactly like rule-body timers.
+    /// Evaluates a rule's smart-snooze conditions, outside the per-rule driver (no tracker, no
+    /// auto-resolve), under the reserved <c>snooze</c> path root. Sustained timers inside them are
+    /// keyed by <c>(ruleId, path)</c> exactly like rule-body timers.
     /// </summary>
-    /// <param name="ruleId">The rule whose timer rows the tree's sustained nodes are keyed under.</param>
-    /// <param name="node">The condition tree to evaluate.</param>
-    /// <param name="context">Enriched sensor context. <c>CurrentRuleId</c>/<c>CurrentPath</c> threading is owned by the engine.</param>
-    /// <param name="pathRoot">Root path segment (e.g. <c>snooze</c>).</param>
-    Task<bool> EvaluateNodeAsync(
+    /// <param name="ruleId">The rule the conditions were read from.</param>
+    /// <param name="conditions">The rule's stored snooze <c>conditions</c> list, as read.</param>
+    /// <param name="context">Enriched sensor context.</param>
+    /// <returns>
+    /// Whether the conditions hold. False, with no timer written, when the rule no longer stores
+    /// <paramref name="conditions"/>: an extension decided on a replaced tree is not trusted, so the
+    /// snooze lapses.
+    /// </returns>
+    Task<bool> EvaluateSnoozeAsync(
         Guid ruleId,
-        ConditionNode node,
+        JsonElement conditions,
         SensorContext context,
-        string pathRoot,
         CancellationToken ct);
 
     /// <summary>

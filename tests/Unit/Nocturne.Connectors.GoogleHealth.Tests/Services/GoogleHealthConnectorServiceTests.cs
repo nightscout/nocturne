@@ -800,6 +800,30 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Sync_writes_nothing_while_another_holder_has_the_gate()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
+            : Json("{\"dataPoints\":[]}"));
+        var config = fixture.Configuration();
+        var gateReleased = false;
+        bool? wroteAfterRelease = null;
+        fixture.Writer.Setup(value => value.BeginReconciliationAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTimeOffset>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Callback(() => wroteAfterRelease ??= gateReleased)
+            .ReturnsAsync(() => Guid.NewGuid());
+        await fixture.Gate.WaitAsync();
+        var pending = fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+        Assert.False(pending.IsCompleted);
+        gateReleased = true;
+        fixture.Gate.Release();
+
+        Assert.True((await pending).Success);
+        Assert.True(wroteAfterRelease);
+    }
+
+    [Fact]
     public async Task Waiting_sync_does_not_restore_a_disconnected_session()
     {
         var fixture = new Fixture(_ => throw new InvalidOperationException("Google must not be called"));
@@ -910,6 +934,11 @@ public class GoogleHealthConnectorServiceTests
                 .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
                 .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) =>
+                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
+                .Returns(Task.CompletedTask);
             configurations.Setup(value => value.GetConfigurationAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new ConnectorConfigurationResponse
@@ -976,7 +1005,8 @@ public class GoogleHealthConnectorServiceTests
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 tenant.Object,
                 TestPlatform.Options(),
-                NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+                NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+                Mock.Of<IRetryDelayStrategy>());
             Service = new GoogleHealthConnectorService(
                 new HttpClient(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
@@ -990,7 +1020,9 @@ public class GoogleHealthConnectorServiceTests
                 cursorStore.Object,
                 tenant.Object,
                 loader.Object,
-                NullLogger<GoogleHealthConnectorService>.Instance, timeProvider: timeProvider);
+                NullLogger<GoogleHealthConnectorService>.Instance,
+                Mock.Of<IRetryDelayStrategy>(),
+                timeProvider: timeProvider);
         }
 
         public GoogleHealthConnectorService Service { get; }

@@ -10,7 +10,7 @@ namespace Nocturne.API.Controllers.V1;
 /// Versions controller that provides 1:1 compatibility with Nightscout versions endpoint.
 /// </summary>
 /// <seealso cref="IVersionService"/>
-/// <seealso cref="VersionsResponse"/>
+/// <seealso cref="ApiVersionEntry"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/[controller]")]
@@ -32,36 +32,19 @@ public class VersionsController : ControllerBase
     }
 
     /// <summary>
-    /// Get the list of supported API versions
+    /// Get the API levels served, as a JSON array of <c>version</c> and <c>url</c>.
     /// </summary>
-    /// <returns>List of supported API versions</returns>
+    /// <returns>One entry per supported API level</returns>
     [HttpGet]
     [NightscoutEndpoint("/api/versions")]
-    [ProducesResponseType(typeof(VersionsResponse), 200)]
-    public async Task<ActionResult<VersionsResponse>> GetVersions()
+    [ProducesResponseType(typeof(IReadOnlyList<ApiVersionEntry>), 200)]
+    public async Task<ActionResult<IReadOnlyList<ApiVersionEntry>>> GetVersions()
     {
         _logger.LogDebug(
             "Versions endpoint requested from {RemoteIpAddress}",
             HttpContext.Connection.RemoteIpAddress
         );
 
-        try
-        {
-            var versions = await _versionService.GetSupportedVersionsAsync();
-
-            _logger.LogDebug(
-                "Successfully returned {VersionCount} supported versions",
-                versions.Versions.Count
-            );
-
-            return Ok(versions);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting supported versions");
-
-            // Return minimal version list even on error to maintain compatibility
-            return Ok(new VersionsResponse { Versions = new List<string> { "1" } });
-        }
+        return Ok(await _versionService.GetSupportedVersionsAsync());
     }
 }

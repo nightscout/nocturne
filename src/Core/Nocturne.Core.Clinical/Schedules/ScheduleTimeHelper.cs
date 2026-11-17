@@ -17,17 +17,5 @@ public static class ScheduleTimeHelper
     public static string? TimezoneOf(string? patientTimezone, string? switchTimezone, string? storeTimezone) =>
         NonEmpty(patientTimezone) ?? NonEmpty(switchTimezone) ?? NonEmpty(storeTimezone);
 
-    /// <summary>
-    /// Converts Unix milliseconds to seconds-from-midnight in the given timezone.
-    /// </summary>
-    public static int GetSecondsFromMidnight(long timeMills, TimeZoneInfo timeZone)
-    {
-        var dto = TimeZoneInfo.ConvertTime(
-            DateTimeOffset.FromUnixTimeMilliseconds(timeMills),
-            timeZone
-        );
-        return (int)dto.TimeOfDay.TotalSeconds;
-    }
-
     private static string? NonEmpty(string? timezone) => string.IsNullOrEmpty(timezone) ? null : timezone;
 }

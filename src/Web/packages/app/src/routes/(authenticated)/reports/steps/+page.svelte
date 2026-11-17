@@ -1,35 +1,31 @@
 <script lang="ts">
-  import { formatNumber, formatShortDate } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import Footprints from "@lucide/svelte/icons/footprints";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,
     extentOf,
+    formatActogramDay,
     pointsInRange,
     type ActogramRowContext,
-  } from "$lib/components/actogram";
-  import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
-  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
-  import { toDayString } from "$lib/utils/date-range";
+  } from "#lib/components/actogram/index.js";
+  import { MS_PER_HOUR } from "#lib/components/actogram/actogram.js";
+  import { useActogramReport } from "#lib/hooks/actogram-report.svelte.js";
 
   const VISIBLE_DAYS = 14;
 
-  const report = useActogramReport("Error Loading Step Count Report");
-  const { params: reportsParams, resource: actogramResource } = report;
+  const report = useActogramReport("Error loading step count report");
+  const { resource: actogramResource } = report;
 
   const dayTotals = $derived(actogramResource.current?.stepDayTotals ?? {});
   const noZoneReason = $derived(actogramResource.current?.timeZoneUnavailableReason);
-
-  function formatDate(date: Date): string {
-    return formatShortDate(date);
-  }
 
   // Step data as ActogramPoints
   const stepPoints = $derived(
@@ -41,30 +37,15 @@
     (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
   );
 
-  // Summary statistics scoped to the selected range, not the padded fetch window
-  const selectedStepCounts = $derived(
-    pointsInRange(
-      actogramResource.current?.stepCounts ?? [],
-      reportsParams.dateRangeMillis.from,
-      reportsParams.dateRangeMillis.to
-    )
-  );
-  const totalSteps = $derived(selectedStepCounts.reduce((sum, s) => sum + s.metric, 0));
-  const dayCount = $derived(reportsParams.dayCount);
-  const dailyAverage = $derived(Math.round(totalSteps / dayCount));
-  // Cap bar scale at a reasonable max
-  const barScale = $derived(
-    Math.max(extentOf(selectedStepCounts, (s) => s.metric)?.max ?? 0, 1000)
-  );
+  const stepSummary = $derived(actogramResource.current?.stepSummary);
+  // Bar heights scale to the selected range's largest sample, not the padded fetch window
+  const barScale = $derived.by(() => {
+    const range = actogramResource.current?.range;
+    const stepCounts = actogramResource.current?.stepCounts ?? [];
+    const inRange = range ? pointsInRange(stepCounts, range.from, range.to) : [];
+    return Math.max(extentOf(inRange, (s) => s.metric)?.max ?? 0, 1000);
+  });
 </script>
-
-<svelte:head>
-  <title>Step Count - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Step count actogram with glucose overlay"
-  />
-</svelte:head>
 
 <div class="@container space-y-6">
   <div class="print:hidden">
@@ -75,16 +56,16 @@
 
   <FigureStrip
     figures={[
-      { label: "Total steps", value: formatNumber(totalSteps), unit: "steps" },
-      { label: "Daily average", value: formatNumber(dailyAverage), unit: "steps/day" },
-      { label: "Period", value: String(dayCount), unit: "days" },
+      { label: "Total steps", value: stepSummary ? formatNumber(stepSummary.totalSteps ?? 0) : "--", unit: "steps" },
+      { label: "Daily average", value: stepSummary ? formatNumber(stepSummary.dailyAverage ?? 0) : "--", unit: "steps/day" },
+      { label: "Period", value: stepSummary ? String(stepSummary.dayCount ?? 0) : "--", unit: "days" },
     ]}
   />
 
   {#if noZoneReason}
     <p class="text-sm text-muted-foreground">
       <TimeZoneNote reason={noZoneReason}>
-        This report cannot calculate the total steps for each local day.
+        The rows and their step totals use UTC days.
       </TimeZoneNote>
     </p>
   {/if}
@@ -93,7 +74,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Footprints class="h-5 w-5 text-muted-foreground" />
-        Step Count Actogram
+        Step count actogram
       </CardTitle>
     </CardHeader>
     <CardContent class="w-full overflow-x-auto print:overflow-visible">
@@ -109,12 +90,10 @@
       >
         {#snippet rowLabel({ day })}
           <div class="text-right pr-2">
-            <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
-            {#if !noZoneReason}
-              <div class="text-xs font-medium tabular-nums" data-testid="day-total">
-                {formatNumber(dayTotals[toDayString(day)])} <span class="text-muted-foreground font-normal">steps</span>
-              </div>
-            {/if}
+            <div class="text-xs text-muted-foreground">{formatActogramDay(day)}</div>
+            <div class="text-xs font-medium tabular-nums" data-testid="day-total">
+              {formatNumber(dayTotals[day.date])} <span class="text-muted-foreground font-normal @max-md/actogram:sr-only">steps</span>
+            </div>
           </div>
         {/snippet}
         {#snippet tooltipValue({ point })}
@@ -126,9 +105,11 @@
           {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
             {@const steps = typeof point.steps === "number" ? point.steps : 0}
             {@const barHeight = (steps / barScale) * ctx.height}
-            {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+            {@const x = ctx.xScale(new Date(ctx.day.startMills + hoursFromStart * MS_PER_HOUR))}
             <rect
               data-testid="step-reading"
+              data-steps={steps}
+              data-extended={isExtended}
               {x}
               y={ctx.height - barHeight}
               width={3}

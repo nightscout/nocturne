@@ -30,25 +30,25 @@ public class TreatmentLogControllerTests
     public TreatmentLogControllerTests()
     {
         _boluses.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                false, null, null, null, It.IsAny<CancellationToken>()))
+                null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new Bolus { Insulin = 4, Device = "pump-a", BolusType = BolusType.Normal },
                 new Bolus { Insulin = 2, Device = "pen-b" },
             ]);
         _carbs.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                false, null, null, It.IsAny<CancellationToken>()))
+                null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new CarbIntake { Carbs = 40, Device = "pump-a" },
                 new CarbIntake { Carbs = 25, App = "phone-c" },
             ]);
         _bgChecks.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                false, It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync([new BGCheck { Device = "pump-a", GlucoseType = GlucoseType.Finger }]);
         _notes.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                false, It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Note { Text = "Evening walk" }]);
         _deviceEvents.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                false, null, It.IsAny<CancellationToken>()))
+                null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DeviceEvent { EventType = DeviceEventType.SiteChange }]);
         _basalInjections.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
                 It.IsAny<CancellationToken>()))
@@ -56,7 +56,7 @@ public class TreatmentLogControllerTests
 
         _controller = new TreatmentLogController(
             _boluses.Object, _carbs.Object, _bgChecks.Object, _notes.Object,
-            _deviceEvents.Object, _basalInjections.Object, new StatisticsService());
+            _deviceEvents.Object, _basalInjections.Object, new StatisticsService(TimeProvider.System));
         Grant(Scope.ReportsRead, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead);
     }
 

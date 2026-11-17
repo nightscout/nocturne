@@ -32,7 +32,7 @@ internal sealed class BasalRateHandler : IMyLifeStateSpanHandler
         // which DeviceEventHandler maps.
         var origin = isTemp ? TempBasalOrigin.Algorithm : TempBasalOrigin.Scheduled;
 
-        var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, rate, origin);
+        var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, context.Now, rate, origin);
         return [tempBasal];
     }
 }

@@ -1,6 +1,6 @@
 # Nocturne
 
-A modern, high-performance diabetes management platform built with .NET 10. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
+A modern, high-performance diabetes management platform built with .NET 11. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/Web/packages/screenshots/images/dashboard-overview.dark.webp">
@@ -52,10 +52,12 @@ Nocturne/
 
 ### Prerequisites
 
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+- [.NET 11.0 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) or later
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [Node.js 24+](https://nodejs.org/)
 - [pnpm 9+](https://pnpm.io/)
+- Optional: [Rust](https://rustup.rs/), only to change the alert engine (`crates/`). Without it, the
+  build downloads the engine library that main published for your checkout's `crates/`.
 
 Aspire orchestrates all services with a single command:
 
@@ -66,36 +68,47 @@ aspire start
 Aspire will automatically:
 
 - Start PostgreSQL in a container
+- Build the alert engine's native library (`crates/nocturne-alerts-ffi`) when Rust is installed
 - Run database migrations
 - Start the Nocturne API and SvelteKit frontend
 - Launch any configured data connectors
 - Set up service discovery, health checks, and a YARP gateway
 
-Once running, access the app at `https://nocturne.localhost:1612`. `aspire describe` lists the services and `aspire logs <resource>` tails one. The Aspire dashboard is off by default; start with `Aspire__OptionalServices__AspireDashboard__Enabled=true aspire start` (or set `Aspire:OptionalServices:AspireDashboard:Enabled` in the AppHost appsettings) to get it.
+Once running, access the app at `https://nocturne.localhost:1612`. On an instance with no tenants (a fresh clone, and every worktree, whose Postgres is ephemeral), the AppHost seeds a `dev` tenant with 30 days of sample data before the web app starts, at `https://dev.nocturne.localhost:1612`, and dev auto-login signs you in as its owner, so the first page is a populated dashboard. `aspire logs nocturne-dev-seed` shows what the seed did and how long it took. An instance that already holds a tenant is never seeded, so an existing database keeps its own tenants and has no `dev`. A first start stopped during the seed leaves a partial `dev` tenant that is not seeded again: delete it (the "Delete Tenants" command on `nocturne-postgres-server`) and restart. `aspire describe` lists the services and `aspire logs <resource>` tails one. The Aspire dashboard is off by default; start with `Aspire__OptionalServices__AspireDashboard__Enabled=true aspire start` (or set `Aspire:OptionalServices:AspireDashboard:Enabled` in the AppHost appsettings) to get it.
 
 If .NET is installed outside the default location (e.g. Homebrew), set `DOTNET_ROOT` to the directory holding the real `dotnet` binary before `aspire start` (Homebrew: `export DOTNET_ROOT="$(brew --prefix dotnet)/libexec"`).
 
 In run mode the AppHost pins two host ports (main checkout; worktrees stay dynamic):
 
-- **`https://nocturne.localhost:1612`** — the YARP gateway (the app; tenants at `https://<slug>.nocturne.localhost:1612`)
+- **`https://nocturne.localhost:1612`** — the YARP gateway (the app; tenants at `https://<slug>.nocturne.localhost:1612`, the seeded one at `https://dev.nocturne.localhost:1612`)
 - **`http://localhost:1610`** — nocturne-api directly (stable target for scripts and the dev-only admin API)
 
 The API always runs with `ASPNETCORE_ENVIRONMENT=Development` under `aspire start`, so the dev-only surface (`/api/v4/dev-only/*`) exists locally and never in published images.
 
+The dev shortcuts live under `Dev` in the AppHost appsettings (see `appsettings.example.json`). To test the first-run wizard and the passkey UI, turn both off:
+
+```bash
+Dev__AutoSeed__Enabled=false Dev__AutoLogin=false aspire start
+```
+
+`Dev__AutoSeed__SampleDataDays` sets how much history the `dev` tenant gets (default 30).
+
 ## Multitenancy and Passkeys (Local Domains)
 
-The default local base domain is **`nocturne.localhost`**. Browsers resolve every `*.localhost` name to loopback themselves, so tenant subdomains (`sleepy.nocturne.localhost`) need no DNS or hosts-file setup, and WebAuthn accepts `nocturne.localhost` as the passkey Relying Party ID — unlike bare `localhost`, which browsers reject on subdomain origins as a public suffix.
+The default local base domain is **`nocturne.localhost`**. Browsers resolve every `*.localhost` name to loopback themselves, so tenant subdomains (`dev.nocturne.localhost`) need no DNS or hosts-file setup, and WebAuthn accepts `nocturne.localhost` as the passkey Relying Party ID — unlike bare `localhost`, which browsers reject on subdomain origins as a public suffix.
 
 TLS: if [mkcert](https://github.com/FiloSottile/mkcert) is installed (`winget install FiloSottile.mkcert` / `brew install mkcert`), the AppHost generates a trusted wildcard certificate for `*.nocturne.localhost` automatically — note this runs `mkcert -install`, which adds the mkcert root CA to your system trust store. Without mkcert, the gateway falls back to the ASP.NET dev certificate and tenant subdomains show a browser certificate warning (functional, just noisy).
 
 Migrating from an older checkout: the local base domain used to be bare `localhost`, and passkeys are scoped to the WebAuthn RP ID derived from it — credentials registered under the old domain won't assert under `nocturne.localhost`. Register a fresh passkey once (then export it as a fixture, below).
 
-### Seed a loginable tenant with data in one call
+### Seed another loginable tenant with data in one call
+
+The `dev` tenant already exists (see above), so another tenant needs another slug:
 
 ```bash
 curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
   -H "Content-Type: application/json" \
-  -d '{ "slug": "sleepy", "displayName": "Sleepy", "ownerUsername": "dev", "sampleData": true }'
+  -d '{ "slug": "test", "displayName": "Test", "ownerUsername": "dev", "sampleData": true }'
 ```
 
 The response includes `url` and `loginLink` — open the `loginLink` in a browser and you're signed in as the owner, looking at realistic CGM data. `GET /api/v4/dev-only/auth/login?tenant=<slug>&format=json` (or POST) returns a token pair for headless clients instead. `scripts/dev-smoke.cs` runs the whole path end to end: `dotnet run scripts/dev-smoke.cs`.
@@ -121,13 +134,24 @@ cd src/Aspire/Nocturne.Aspire.Host
 dotnet user-secrets set "LocalDev:Domain" "nocturne.test"
 ```
 
-This requires mkcert and one hosts-file line per tenant slug (`127.0.0.1 sleepy.nocturne.test` — hosts files don't support wildcards). The app is then at `https://nocturne.test` with no port.
+This requires mkcert and one hosts-file line per tenant slug (`127.0.0.1 dev.nocturne.test` — hosts files don't support wildcards). The app is then at `https://nocturne.test` with no port.
 
-## Production Deployment (Docker Compose)
+## Production Deployment
 
-The easiest way to deploy Nocturne is with the production Docker Compose bundle. Each [GitHub Release](https://github.com/nightscout/nocturne/releases) includes ready-to-use artifacts, or you can generate them locally.
+The easiest way to deploy Nocturne is the install script. On a Linux server with systemd, as root:
 
-### Using a release
+```bash
+curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/install.sh -o install.sh
+sudo BASE_DOMAIN=nocturne.example.com bash install.sh
+```
+
+It installs Docker when it is absent, downloads the production Docker Compose bundle to `/opt/nocturne`, generates the keys and passwords, sets the DNS record for a DuckDNS name (or prints the two records to create), and starts the stack. Re-running it repairs a failed install. See the [install script guide](https://getnocturne.dev/docs/installation/install-script). The Oracle Cloud installer (`oracle-cloud-install.sh`) provisions a free server and runs this same script on it.
+
+Both scripts are generated: edit their sources in `src/Aspire/Nocturne.Aspire.Host/install/` and regenerate with `dotnet run scripts/publish-release.cs`.
+
+### Using the Docker Compose bundle by hand
+
+Each [GitHub Release](https://github.com/nightscout/nocturne/releases) includes the bundle the script uses, or you can generate it locally.
 
 Download `docker-compose.yaml` and `.env.example` from the [latest release](https://github.com/nightscout/nocturne/releases).
 
@@ -154,7 +178,7 @@ The production compose includes [Watchtower](https://github.com/nicholas-fedor/w
 
 ### First-run setup
 
-A fresh install has no tenants, so the API answers every request with `503 {"error":"setup_required"}` until the first owner secures the instance. This is expected — it's the signal for the web UI to show the setup wizard.
+A fresh install has no tenants, so the API answers every request with `503 {"error":"setup_required"}` until the first owner secures the instance. This is expected — it's the signal for the web UI to show the setup wizard. A local `aspire start` skips this step: it seeds a `dev` tenant (see [Quick Start with Aspire](#quick-start-with-aspire-development)).
 
 **In a browser (normal path).** Open your Nocturne site (the apex `https://<BASE_DOMAIN>/`). The setup wizard walks you through creating the first tenant and registering a passkey (or linking an OIDC provider). When it completes you're shown a set of recovery codes — save them. That's the whole setup.
 
@@ -203,11 +227,10 @@ Send the member `https://<tenant-host>/auth/recovery?code=<code>`. The code work
 
 ### Generating locally
 
-If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:
+If you have the .NET 11 SDK and Aspire CLI installed, you can generate the production bundle from source:
 
 ```bash
-dotnet run scripts/publish-release.cs              # outputs to ./release-output
-dotnet run scripts/publish-release.cs ./deploy     # or specify a directory
+dotnet run scripts/publish-release.cs              # regenerates deploy/ and docs/diagrams/; CI fails a PR whose bundle drifts
 ```
 
 ### PostgreSQL Roles
@@ -292,4 +315,4 @@ Nocturne is a labor of love built by volunteers. If you find it useful, please c
 ### Acknowledgments
 
 - Built on the shoulders of the [Nightscout Project](https://github.com/nightscout/cgm-remote-monitor)
-- Powered by [.NET 10](https://dotnet.microsoft.com/) and [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
+- Powered by [.NET 11](https://dotnet.microsoft.com/) and [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)

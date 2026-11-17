@@ -38,7 +38,7 @@ public interface IProfileProjectionService
     /// <summary>
     /// A page of the stored profile documents, each carrying every one of its stores: newest first
     /// when <paramref name="descending"/> is <c>true</c>, otherwise oldest first, the page cut from
-    /// that order. Profile-switch snapshots are not documents and are left out.
+    /// that order.
     /// </summary>
     /// <param name="count">Maximum number of documents to return.</param>
     /// <param name="skip">Number of documents to skip.</param>
@@ -48,7 +48,8 @@ public interface IProfileProjectionService
     /// <summary>
     /// Profiles whose <c>srvModified</c> — the newest write stamp among the therapy settings and the
     /// schedules they are assembled from — falls after <paramref name="cursorMills"/>, oldest first,
-    /// for the v3 <c>history/{lastModified}</c> endpoint.
+    /// for the v3 <c>history/{lastModified}</c> endpoint. AAPS activates the last profile of a page,
+    /// so another order switches the profile a user has active.
     /// </summary>
     /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
     /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>

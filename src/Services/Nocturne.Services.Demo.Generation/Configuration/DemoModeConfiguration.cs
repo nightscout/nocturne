@@ -84,7 +84,7 @@ public class DemoModeConfiguration
     /// <summary>
     /// Total duration of insulin action (DIA) in minutes.
     /// </summary>
-    public double InsulinDurationMinutes { get; set; } = 180.0;
+    public double InsulinDurationMinutes { get; set; } = 300.0;
 
     /// <summary>
     /// Time in minutes when carb absorption peaks.

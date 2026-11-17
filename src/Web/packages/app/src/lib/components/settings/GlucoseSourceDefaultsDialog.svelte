@@ -1,17 +1,18 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { GlucoseProcessing, type GlucoseProcessingSourceDefault } from "$api";
+  import { GlucoseProcessing, type GlucoseProcessingSourceDefault } from "#lib/api/index.js";
 
   interface Props {
     open: boolean;
@@ -49,18 +50,21 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-[640px]">
     <Dialog.Header>
-      <Dialog.Title>Source Default Rules</Dialog.Title>
+      <Dialog.Title>Source default rules</Dialog.Title>
       <Dialog.Description>
-        Configure glucose processing defaults per uploading client. Rules are evaluated top-to-bottom; first match wins.
+        Configure glucose processing defaults per uploading client. Rules are evaluated from top to bottom. The first match wins.
       </Dialog.Description>
     </Dialog.Header>
 
-    <div class="space-y-2 py-4">
+    <div class="@container space-y-2 py-4">
       {#if localRules.length === 0}
-        <div class="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-          <p class="text-sm">No rules configured.</p>
-          <p class="text-xs">Add a rule to set processing defaults based on the uploading client.</p>
-        </div>
+        <EmptyState
+          art="plug"
+          size="compact"
+          variant="outline"
+          title="No rules configured"
+          body="Add a rule to set processing defaults based on the uploading client."
+        />
       {:else}
         {#each localRules as rule, index (index)}
           <div
@@ -89,13 +93,13 @@
               dragIndex = null;
               dropIndex = null;
             }}
-            class="flex items-center gap-2 rounded-lg border p-2 transition-all {dropIndex === index
+            class="flex flex-wrap items-center gap-2 rounded-lg border p-2 transition-all @lg:flex-nowrap {dropIndex === index
               ? 'border-primary bg-accent'
               : 'border-border'} {dragIndex === index ? 'opacity-50' : ''}"
           >
             <GripVertical class="h-4 w-4 shrink-0 text-muted-foreground cursor-grab" />
 
-            <div class="w-[120px] shrink-0">
+            <div class="min-w-0 flex-1 @lg:w-[120px] @lg:flex-none">
               <Select
                 type="single"
                 value={rule.field}
@@ -113,7 +117,7 @@
               </Select>
             </div>
 
-            <div class="flex-1 min-w-0">
+            <div class="order-last basis-full min-w-0 @lg:order-none @lg:basis-auto @lg:flex-1">
               <Input
                 placeholder="Prefix to match..."
                 value={rule.match}
@@ -123,7 +127,7 @@
               />
             </div>
 
-            <div class="w-[150px] shrink-0">
+            <div class="min-w-0 flex-1 @lg:w-[150px] @lg:flex-none">
               <Select
                 type="single"
                 value={rule.processing}

@@ -9,24 +9,22 @@ namespace Nocturne.Connectors.Core.Services;
 public class ConnectorConfigurationLoader<TConfig>(
     IConnectorRegistration<TConfig> registration,
     IConnectorConfigurationService configService,
-    ILogger<ConnectorConfigurationLoader<TConfig>> logger)
+    ILogger<ConnectorConfigurationLoader<TConfig>> logger,
+    TimeProvider timeProvider)
     : IConnectorConfigurationLoader<TConfig>
     where TConfig : BaseConnectorConfiguration, new()
 {
-    private static readonly JsonSerializerOptions CloneOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+    private readonly ConnectorConfigurationReader<TConfig> _reader = new(registration, configService);
+    private readonly TimeProvider _timeProvider = timeProvider;
 
     public async Task<TConfig> LoadForTenantAsync(CancellationToken ct)
     {
-        // Start from a fresh copy of the startup defaults
-        var config = CloneDefaults(registration.Defaults);
+        TConfig? config = null;
 
         try
         {
-            var dbConfig = await configService.GetConfigurationAsync(registration.ConnectorName, ct);
-            if (dbConfig is null)
+            config = await _reader.ReadConfigurationAsync(registration.Defaults, ct);
+            if (config is null)
             {
                 // No per-tenant configuration row exists, so this connector is not configured for
                 // this tenant and must not sync. registration.Defaults sets Enabled = true (a C#
@@ -34,24 +32,19 @@ public class ConnectorConfigurationLoader<TConfig>(
                 // would poll every tenant with empty credentials — producing auth failures and
                 // "configuration not found" health-state noise across all tenants. The secrets live
                 // on the same row, so there is nothing to read for them either.
+                config = ConnectorConfigurationReader<TConfig>.Seed(registration.Defaults, null);
                 config.Enabled = false;
                 return config;
             }
 
-            if (dbConfig.Configuration != null)
-                ConnectorConfigurationBinder.ApplyJsonToConfig(dbConfig.Configuration, config);
-            else
-                config.Enabled = false;
-
-            var secrets = await configService.GetSecretsAsync(registration.ConnectorName, ct);
-            if (secrets.Count > 0)
-                ConnectorConfigurationBinder.ApplySecretsToConfig(secrets, config);
+            await _reader.ApplySecretsAsync(config, null, ct);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonException)
         {
             logger.LogWarning(ex,
                 "Failed to load database configuration for {ConnectorName}",
                 registration.ConnectorName);
+            config ??= ConnectorConfigurationReader<TConfig>.Seed(registration.Defaults, null);
         }
 
         // A connector can have a config row that is enabled yet missing its required credentials —
@@ -98,7 +91,7 @@ public class ConnectorConfigurationLoader<TConfig>(
             await configService.UpdateHealthStateAsync(
                 registration.ConnectorName,
                 lastErrorMessage: message,
-                lastErrorAt: DateTime.UtcNow,
+                lastErrorAt: _timeProvider.GetUtcNow().UtcDateTime,
                 isHealthy: false,
                 ct: ct);
         }
@@ -108,11 +101,5 @@ public class ConnectorConfigurationLoader<TConfig>(
                 "Failed to record incomplete configuration for {ConnectorName}",
                 registration.ConnectorName);
         }
-    }
-
-    private static TConfig CloneDefaults(TConfig source)
-    {
-        var json = JsonSerializer.Serialize(source, CloneOptions);
-        return JsonSerializer.Deserialize<TConfig>(json, CloneOptions)!;
     }
 }

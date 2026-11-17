@@ -136,7 +136,7 @@
 
 <Tooltip.Root
   {context}
-  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm"
+  class="bg-popover border border-border rounded-lg shadow-xl text-xs z-50"
 >
   {#snippet children({ data })}
     {@const activeBasal = findBasalValue(data.time)}

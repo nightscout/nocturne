@@ -42,7 +42,7 @@ public static class ChartColorMapper
                 ChartColor.GlucoseInRange,
             DeviceEventType.SensorStop => ChartColor.GlucoseLow,
             DeviceEventType.SiteChange or DeviceEventType.PodChange
-                or DeviceEventType.CannulaChange =>
+                or DeviceEventType.PodActivated or DeviceEventType.CannulaChange =>
                 ChartColor.InsulinBolus,
             DeviceEventType.InsulinChange or DeviceEventType.ReservoirChange =>
                 ChartColor.InsulinBasal,
@@ -55,6 +55,7 @@ public static class ChartColorMapper
         {
             TrackerCategory.Sensor => ChartColor.TrackerSensor,
             TrackerCategory.Cannula => ChartColor.TrackerCannula,
+            TrackerCategory.Pod => ChartColor.TrackerPod,
             TrackerCategory.Reservoir => ChartColor.TrackerReservoir,
             TrackerCategory.Battery => ChartColor.TrackerBattery,
             TrackerCategory.Consumable => ChartColor.TrackerConsumable,

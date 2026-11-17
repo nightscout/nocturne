@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { scopeCategories } from "$lib/constants/scope-labels.svelte";
+  import { scopeCategories } from "#lib/constants/scope-labels.svelte.js";
 
   interface SummaryEntry {
     name: string;
@@ -25,7 +25,7 @@
         held.push({ name: cat.label, level: "Full access", scope: cat.full });
         covered.push(...(cat.alsoGrants ?? []));
       } else if (cat.readwrite && set.has(cat.readwrite)) {
-        held.push({ name: cat.label, level: "Read & Write", scope: cat.readwrite });
+        held.push({ name: cat.label, level: "Read & write", scope: cat.readwrite });
       } else if (cat.read && set.has(cat.read)) {
         held.push({ name: cat.label, level: "Read", scope: cat.read });
       }

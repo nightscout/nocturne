@@ -1,17 +1,18 @@
 <script lang="ts">
+  import { formatAge } from "#lib/components/trackers/age.svelte.js";
   import { resolve } from "$app/paths";
-  import { startOfDay, toDayString } from "$lib/utils/date-range";
-  import { formatDayTime, formatLongDate } from "$lib/utils/formatting";
+  import { startOfDay, toDayString } from "#lib/utils/date-range.js";
+  import { formatDayTime, formatLongDate } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import History from "@lucide/svelte/icons/history";
   import Clock from "@lucide/svelte/icons/clock";
@@ -23,16 +24,17 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import { cn } from "$lib/utils";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import {
     CompletionReason,
     type TrackerInstanceDto,
-  } from "$api";
+  } from "#lib/api/index.js";
 
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { untrack } from "svelte";
 
   // Get the realtime store for reactive tracker data
@@ -44,15 +46,10 @@
   const trackerNotifications = $derived(realtimeStore.trackerNotifications);
 
   // Count by level for display
-  const urgentCount = $derived(
-    trackerNotifications.filter((n) => n.level === "urgent").length
-  );
-  const hazardCount = $derived(
-    trackerNotifications.filter((n) => n.level === "hazard").length
-  );
-  const warnCount = $derived(
-    trackerNotifications.filter((n) => n.level === "warn").length
-  );
+  const urgentCount = $derived(trackerNotifications.filter((n) => n.level === "urgent").length);
+
+  const hazardCount = $derived(trackerNotifications.filter((n) => n.level === "hazard").length);
+  const warnCount = $derived(trackerNotifications.filter((n) => n.level === "warn").length);
 
   // Completion reason labels
   const completionReasonLabels: Record<CompletionReason, string> = {
@@ -60,24 +57,15 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
     [CompletionReason.Rescheduled]: "Rescheduled",
-    [CompletionReason.Cancelled]: "Cancelled",
+    [CompletionReason.Cancelled]: "Canceled",
     [CompletionReason.Missed]: "Missed",
   };
-
-  // Format age
-  function formatAge(hours: number): string {
-    if (hours < 1) return `${Math.floor(hours * 60)}m`;
-    if (hours < 24) return `${Math.floor(hours)}h`;
-    const days = Math.floor(hours / 24);
-    const h = Math.floor(hours % 24);
-    return h > 0 ? `${days}d ${h}h` : `${days}d`;
-  }
 
   // Format date
   function formatDate(dateStr: string | undefined): string {
@@ -188,9 +176,9 @@
   <div class="mb-8">
     <div class="flex items-center gap-3 mb-2">
       <div
-        class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
+        class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10"
       >
-        <Bell class="h-5 w-5 text-primary" />
+        <Bell class="size-6 text-primary" />
       </div>
       <div class="flex-1">
         <div class="flex items-center gap-3">
@@ -207,14 +195,14 @@
   </div>
 
   <div class="space-y-6">
-      <!-- Tracker Notifications Section -->
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle class="flex items-center gap-2">
-              <Timer class="h-5 w-5 text-severity-hazard" />
-              Tracker Alerts
-            </CardTitle>
+    <!-- Tracker Notifications Section -->
+    <Card>
+      <CardHeader class="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle class="flex items-center gap-2">
+            <Timer class="h-5 w-5 text-severity-hazard" />
+            Tracker alerts
+          </CardTitle>
             <CardDescription>
               Consumable and reminder notifications
             </CardDescription>
@@ -229,7 +217,7 @@
             {#if warnCount > 0}
               <Badge variant="severity-warn">{warnCount} warning</Badge>
             {/if}
-            <a href={resolve("/settings/trackers")}>
+            <a href={resolve("trackers")}>
               <Button variant="outline" size="sm">
                 <Settings2 class="h-4 w-4 mr-2" />
                 Manage
@@ -239,88 +227,85 @@
         </CardHeader>
         <CardContent>
           {#if trackerNotifications.length === 0}
-            <div class="text-center py-8 text-muted-foreground">
-              <Check class="h-12 w-12 mx-auto mb-3 text-success opacity-50" />
-              <p>All caught up! No active tracker alerts.</p>
-            </div>
-          {:else}
-            <div class="space-y-3">
-              {#each trackerNotifications as notification (notification.id)}
-                {@const LevelIcon = getLevelIcon(notification.level)}
-                <div
+            <EmptyState art="confirmation-mark" title="No active tracker alerts" />
+        {:else}
+          <div class="space-y-3">
+            {#each trackerNotifications as notification (notification.id)}
+              {@const LevelIcon = getLevelIcon(notification.level)}
+              <div
                   class={cn(
                     "flex items-start gap-3 p-4 rounded-lg border",
                     getLevelClass(notification.level)
                   )}
-                >
+              >
                   <div class="flex-shrink-0 mt-0.5">
                     <LevelIcon class="h-5 w-5" />
                   </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2">
                       <span class="font-medium">
                         {notification.definitionName}
                       </span>
                       <Badge variant="outline" class="ml-auto">
                         {formatAge(notification.ageHours ?? 0)}
                       </Badge>
-                    </div>
+                  </div>
                     <p class="text-sm mt-1 opacity-75">
                       {buildMessage(notification)}
                     </p>
-                    {#if notification.startedAt}
+                  {#if notification.startedAt}
                       <p class="text-xs mt-1 opacity-50">
                         Started {formatDate(notification.startedAt)}
                       </p>
-                    {/if}
-                  </div>
+                  {/if}
                 </div>
-              {/each}
-            </div>
-          {/if}
-        </CardContent>
-      </Card>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </CardContent>
+    </Card>
 
-      <!-- History Section -->
-      <Card>
-        <CardHeader>
-          <CardTitle class="flex items-center gap-2">
-            <History class="h-5 w-5 text-muted-foreground" />
-            Notification History
-          </CardTitle>
+    <!-- History Section -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <History class="h-5 w-5 text-muted-foreground" />
+          Notification history
+        </CardTitle>
           <CardDescription>
             Past tracker notifications and completions
           </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <svelte:boundary>
-            {#snippet pending()}
+      </CardHeader>
+      <CardContent>
+        <svelte:boundary>
+          {#snippet pending()}
               <div class="flex items-center justify-center py-12">
                 <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            {/snippet}
-            {#snippet failed(error, reset)}
-              <div class="py-6 text-center">
-                <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
+          {/snippet}
+          {#snippet failed(error, reset)}
+            <div class="py-6 text-center">
+              <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
                 <p class="text-destructive">
                   {remoteErrorMessage(error, "Failed to load notification data")}
                 </p>
-                <Button variant="outline" class="mt-4" onclick={reset}>Retry</Button>
-              </div>
-            {/snippet}
+              <Button variant="outline" class="mt-4" onclick={reset}>Retry</Button>
+            </div>
+          {/snippet}
 
-            {@const historyInstances = (await historyQuery) ?? []}
-            {@const groupedHistory = ensureGroupsInitialized(groupHistoryByDate(historyInstances))}
+          {@const historyInstances = await historyQuery ?? []}
+          {@const groupedHistory = ensureGroupsInitialized(groupHistoryByDate(historyInstances))}
 
-            {#if historyInstances.length === 0}
-              <div class="text-center py-8 text-muted-foreground">
-                <History class="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No history yet</p>
-                <p class="text-sm">Completed trackers will appear here</p>
-              </div>
-            {:else}
-              <div class="space-y-4">
-                {#each Object.entries(groupedHistory) as [date, instances] (date)}
+          {#if historyInstances.length === 0}
+            <EmptyState
+              art="clock"
+              title="No history yet"
+              body="Completed trackers will appear here"
+            />
+          {:else}
+            <div class="space-y-4">
+              {#each Object.entries(groupedHistory) as [date, instances] (date)}
                 <Collapsible.Root
                   open={isExpanded(date)}
                   onOpenChange={() => toggleGroup(date)}

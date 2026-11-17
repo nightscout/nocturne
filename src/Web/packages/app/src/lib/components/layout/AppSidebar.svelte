@@ -1,29 +1,30 @@
 <script lang="ts">
   import { page } from "$app/state";
 
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as Select from "$lib/components/ui/select";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import SidebarGlucoseWidget from "./SidebarGlucoseWidget.svelte";
   import SidebarNotifications from "./SidebarNotifications.svelte";
-  import SidebarDndToggle from "$lib/components/alerts/SidebarDndToggle.svelte";
+  import SidebarDndToggle from "#lib/components/alerts/SidebarDndToggle.svelte";
+  import SetupOpenCount from "#lib/components/setup-hub/SetupOpenCount.svelte";
   import UserMenu from "./UserMenu.svelte";
-  import LanguageSelector from "$lib/components/LanguageSelector.svelte";
-  import { updateLanguagePreference } from "$api/user-preferences.remote";
-  import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
-  import { getMyTenants } from "$lib/api/generated/myTenants.generated.remote";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { whenIdle } from "$lib/utils/when-idle";
+  import LanguageSelector from "#lib/components/LanguageSelector.svelte";
+  import { updateLanguagePreference } from "#lib/api/user-preferences.remote.js";
+  import { hasLanguagePreference } from "#lib/stores/appearance-store.svelte.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
-  import { buildAppNavigation, type NavItem, type NavLink } from "$lib/navigation/app-navigation.svelte";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { coachmark } from "@nocturne/coach";
+  import { whileShown } from "#lib/coach-marks/attach.js";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { buildAppNavigation, type NavItem, type NavLink } from "#lib/navigation/app-navigation.svelte.js";
   import {
     goToTenant,
-    resolveTenantSwitcher,
     type TenantSwitcherTarget,
-  } from "$lib/utils/tenant-host";
-  import type { AuthUser } from "$lib/stores/auth-store.svelte";
+  } from "#lib/utils/tenant-host.js";
+  import type { AuthUser } from "#lib/stores/auth-store.svelte.js";
 
   interface Props {
     /** Current authenticated user (passed from layout data) */
@@ -40,6 +41,8 @@
     baseDomain?: string | null;
     /** Whether this host serves the cross-tenant dashboard rather than one tenant (from layout data) */
     tenantless?: boolean;
+    /** The tenants the current member can move between (from layout data) */
+    tenantTargets?: TenantSwitcherTarget[];
   }
 
   const {
@@ -50,9 +53,13 @@
     currentSlug = null,
     baseDomain = null,
     tenantless = false,
+    tenantTargets = [],
   }: Props = $props();
 
   const sidebar = Sidebar.useSidebar();
+
+  // Absolutely positioned over the item, so the menu lays out the same before it arrives.
+  const selectionEdge = stillArtwork(() => import("#lib/watercolour/selection-edge.js"));
 
   // Defer localStorage check to after hydration so SSR and client initial render
   // both produce the same DOM (avoids hydration mismatch from conditional rendering).
@@ -65,10 +72,6 @@
   $effect(() => {
     langPrefKnown = hasLanguagePreference();
   });
-
-  // Tenant switcher state
-  let tenantTargets = $state<TenantSwitcherTarget[]>([]);
-  let totalTenantCount = $state(0);
 
   /**
    * Platform-admin "access" mode: the session is a short-lived platform-access grant on a
@@ -90,13 +93,6 @@
   // Available tenants for the subdomain switcher. The switcher is valued by slug, so a host that
   // names no tenant needs a sentinel; a slug can never be one, having no underscores.
   const TENANTLESS = "__self__";
-  // Read once the page is idle: the list decides whether the switcher and the Tenants nav item
-  // render.
-  let idle = $state(false);
-  $effect(() => whenIdle(() => (idle = true)));
-  const isMember = $derived(user !== null && !isGuestSession);
-  const myTenantsQuery = $derived(idle && isMember ? getMyTenants() : null);
-  retainQuery(() => myTenantsQuery);
 
   function handleTenantChange(value: string | undefined) {
     if (!value || !baseDomain || value === TENANTLESS || value === currentSlug) {
@@ -112,22 +108,10 @@
       : target.slug;
   }
 
-  // Use $effect (not onMount) so this also runs when `user` becomes available
-  // after client-side login navigation.
-  $effect(() => {
-    if (!user || isGuestSession) return;
-    const tenants = myTenantsQuery?.current;
-    if (tenants === undefined) return;
-
-    const switcher = resolveTenantSwitcher(tenants);
-    totalTenantCount = switcher.totalCount;
-    tenantTargets = switcher.targets;
-  });
-
   // A platform-access grant views a tenant the operator is not a member of, so the host's slug
   // can name a tenant the list does not carry.
   const viewedTenantLabel = $derived.by(() => {
-    if (!currentSlug) return "My Data";
+    if (!currentSlug) return "My data";
     const viewed = tenantTargets.find((t) => t.slug === currentSlug);
     return viewed ? formatTenantLabel(viewed) : currentSlug;
   });
@@ -138,7 +122,7 @@
       isGuestSession,
       isPlatformAdmin,
       grantedScopes: page.data.effectivePermissions ?? [],
-      tenantCount: totalTenantCount,
+      tenantCount: tenantTargets.length,
       tenantless,
     }),
   );
@@ -171,10 +155,23 @@
     });
   });
 
+  /**
+   * The edge marks the most specific active item on screen: a parent only while
+   * its active child is hidden, in a closed submenu or the icon rail.
+   */
+  const showParentEdge = (item: NavItem): boolean =>
+    isActive(item) && (!openMenus[item.id] || sidebar.state === "collapsed");
+
   function toggleMenu(id: string) {
     openMenus[id] = !openMenus[id];
   }
 </script>
+
+{#snippet edge(active: boolean)}
+  {#if selectionEdge.component}
+    <selectionEdge.component {active} />
+  {/if}
+{/snippet}
 
 <Sidebar.Sidebar collapsible="icon">
   <Sidebar.Header
@@ -222,7 +219,7 @@
       <p class="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Eye class="h-3 w-3 shrink-0" />
         <span
-          >Viewing <span class="font-medium text-foreground">{currentSlug}</span> — you
+          >Viewing <span class="font-medium text-foreground">{currentSlug}</span>: you
           are not a member</span
         >
       </p>
@@ -236,7 +233,7 @@
 
   <!-- The switcher needs a host to navigate to, so unlike the Tenants nav item it stays gated
        on baseDomain. -->
-  {#if baseDomain && totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
+  {#if baseDomain && tenantTargets.length > 1 && !isGuestSession}
     <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
       <p
         class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
@@ -254,7 +251,7 @@
         </Select.Trigger>
         <Select.Content>
           {#if !currentSlug}
-            <Select.Item value={TENANTLESS}>My Data</Select.Item>
+            <Select.Item value={TENANTLESS}>My data</Select.Item>
           {/if}
           {#each tenantTargets as target (target.slug)}
             <Select.Item value={target.slug}>
@@ -279,11 +276,17 @@
                 open={openMenus[item.id]}
                 onOpenChange={() => toggleMenu(item.id)}
               >
-                <Sidebar.MenuItem>
+                <!-- On a phone the navigation is a sheet, and a tip raised as it opens covers it. -->
+                <Sidebar.MenuItem
+                  {@attach isGuestSession && item.id === "reports" && !sidebar.isMobile
+                    ? whileShown(coachmark(coachFor("guest-tour.reports")))
+                    : undefined}
+                >
                   <Sidebar.MenuButton
                     isActive={isActive(item)}
                     onclick={() => toggleMenu(item.id)}
                   >
+                    {@render edge(showParentEdge(item))}
                     <item.icon class="h-4 w-4" />
                     <span class="group-data-[collapsible=icon]:hidden">
                       {item.title}
@@ -308,8 +311,12 @@
                             href={child.href}
                             isActive={isActive(child)}
                           >
+                            {@render edge(isActive(child))}
                             <child.icon class="h-4 w-4" />
                             <span>{child.title}</span>
+                            {#if child.href === "/setup"}
+                              <SetupOpenCount />
+                            {/if}
                           </Sidebar.MenuSubButton>
                         {/if}
                       </Sidebar.MenuSubItem>
@@ -324,6 +331,7 @@
                   {#snippet child({ props })}
                     <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a runtime string | undefined from NavItem; resolve() requires a literal route id and throws on undefined -->
                     <a href={item.href} {...props}>
+                      {@render edge(isActive(item))}
                       <item.icon class="h-4 w-4" />
                       <span class="group-data-[collapsible=icon]:hidden">
                         {item.title}

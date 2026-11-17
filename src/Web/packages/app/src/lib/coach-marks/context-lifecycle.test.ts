@@ -172,4 +172,24 @@ describe("a forced sequence", () => {
 
     expect(context.activeKey).toBeNull();
   });
+
+  it("ends on navigation unless it is start-only, leaving its next step to organic selection", async () => {
+    const sequences: SequenceConfig = {
+      tour: { priority: 100, steps: ["tour.first", "tour.second"] },
+    };
+    const context = await started(sequences);
+    const leave = context.register(makeRegistration("tour.first"));
+    context.startSequence("tour");
+    context.complete("tour.first");
+
+    context.clearQuiet();
+    leave();
+    context.register(makeRegistration("tour.second"));
+    await Promise.resolve();
+
+    // A forced run raises its step as it registers; organic selection waits for the settle timer.
+    expect(context.activeKey).toBeNull();
+    settle();
+    expect(context.activeKey).toBe("tour.second");
+  });
 });

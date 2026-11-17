@@ -1,19 +1,19 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Food } from "$api";
-import Composer from "$routes/(authenticated)/food/Composer.svelte";
-import InlineEditor from "$routes/(authenticated)/food/InlineEditor.svelte";
-import FoodStateHost from "$lib/test-stubs/FoodStateHost.test-stub.svelte";
+import type { Food } from "#lib/api/index.js";
+import Composer from "#routes/(authenticated)/food/Composer.svelte";
+import InlineEditor from "#routes/(authenticated)/food/InlineEditor.svelte";
+import FoodStateHost from "#lib/test-stubs/FoodStateHost.test-stub.svelte";
 import AddFoodDialog from "./AddFoodDialog.svelte";
-import { energyUnit } from "$lib/stores/appearance-store.svelte";
+import { energyUnit } from "#lib/stores/appearance-store.svelte.js";
 
 const remote = vi.hoisted(() => ({
   createFood: vi.fn((food: Food) => Promise.resolve({ ...food, _id: "new" })),
   updateFood: vi.fn(({ request }: { request: Food }) => Promise.resolve(request)),
 }));
 
-vi.mock("$api/generated/foods.generated.remote", () => remote);
+vi.mock("#lib/api/generated/foods.generated.remote.js", () => remote);
 
 const food: Food = {
   _id: "f1",
@@ -34,7 +34,7 @@ const textFields = [
   /^Energy/,
 ];
 const selectFields = [/^Category$/];
-const groupFields = [/^Unit$/, /^Glycemic Index$/];
+const groupFields = [/^Unit$/, /^Glycemic index$/];
 
 async function expectAllFields() {
   for (const label of textFields) {
@@ -58,7 +58,7 @@ function overflowingElements(form: Element) {
 }
 
 function crushedToggles(form: Element) {
-  const minimumGroupWidth = { Unit: 200, "Glycemic Index": 180 };
+  const minimumGroupWidth = { Unit: 200, "Glycemic index": 180 };
   return [...form.querySelectorAll("[data-toggle-group-root]")].flatMap(
     (group) => {
       const box = group.getBoundingClientRect();

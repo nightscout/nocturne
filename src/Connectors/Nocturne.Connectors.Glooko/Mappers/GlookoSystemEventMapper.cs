@@ -56,7 +56,7 @@ public class GlookoSystemEventMapper
                             name
                             ?? alarm.Data?.AlarmDescription
                             ?? "Unknown alarm",
-                        Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
+                        Mills = timestamp.ToMills(),
                         Source = _connectorSource,
                         Metadata = new Dictionary<string, object>
                         {
@@ -109,7 +109,7 @@ public class GlookoSystemEventMapper
                     Category = SystemEventCategory.Pump,
                     Code = code,
                     Description = code ?? "Unknown alarm",
-                    Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
+                    Mills = timestamp.ToMills(),
                     Source = _connectorSource,
                     Metadata = new Dictionary<string, object>
                     {

@@ -26,7 +26,8 @@ namespace Nocturne.API.Services.Alerts.Providers;
 internal sealed class DeviceActionProvider(
     ISignalRBroadcastService broadcastService,
     IMemoryCache cache,
-    ILogger<DeviceActionProvider> logger)
+    ILogger<DeviceActionProvider> logger,
+    TimeProvider timeProvider)
 {
     /// <summary>Max live device_action nudges broadcast per (tenant, kind) per <see cref="RateWindow"/>.</summary>
     internal const int MaxNudgesPerWindow = 30;
@@ -97,7 +98,7 @@ internal sealed class DeviceActionProvider(
     /// </summary>
     private bool WithinRateLimit(Guid tenantId, string kind)
     {
-        var bucket = DateTime.UtcNow.Ticks / RateWindow.Ticks;
+        var bucket = timeProvider.GetUtcNow().UtcDateTime.Ticks / RateWindow.Ticks;
         var key = $"device_action_rl:{tenantId}:{kind}:{bucket}";
         var count = cache.GetOrCreate(key, entry =>
         {

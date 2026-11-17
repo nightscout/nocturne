@@ -62,7 +62,7 @@ public class GlookoFetchRetryTests
             Server = GlookoConstants.RegionEU,
         };
 
-        return new GlookoSyncContext(config, DataSources.GlookoConnector, NullLogger.Instance)
+        return new GlookoSyncContext(config, DataSources.GlookoConnector, NullLogger.Instance, TimeProvider.System)
         {
             SessionCookie = "_logbook-web_session=sess",
         };
@@ -79,8 +79,8 @@ public class GlookoFetchRetryTests
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             delays.Object,
-            Mock.Of<IRateLimitingStrategy>(),
-            new StaticGlookoTokenProvider());
+            new StaticGlookoTokenProvider(),
+            endpointPause: TimeSpan.Zero);
 
         return (service, delays);
     }

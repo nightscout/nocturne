@@ -9,13 +9,13 @@
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
     entries: Array<{ mills: number; mgdl: number }>;
-    /** Unix milliseconds for the start of the calendar day */
-    dayStartMills?: number;
+    /** The calendar day in Unix milliseconds: its start and its exclusive end */
+    day?: { startMills: number; endMills: number };
     /** Click handler */
     onclick?: () => void;
   }
 
-  let { entries, dayStartMills, onclick }: Props = $props();
+  let { entries, day, onclick }: Props = $props();
 </script>
 
 <!-- eslint-disable-next-line no-restricted-syntax -- the whole chart is the click target -->
@@ -25,7 +25,7 @@
   {onclick}
 >
   {#if entries.length > 0}
-    <GlucoseSparkline {entries} {dayStartMills} />
+    <GlucoseSparkline {entries} {day} />
   {:else}
     <svg width="100%" height="100%" class="rounded-lg overflow-hidden">
       <text

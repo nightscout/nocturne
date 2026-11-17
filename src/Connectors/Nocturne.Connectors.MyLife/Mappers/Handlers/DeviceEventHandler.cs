@@ -36,7 +36,7 @@ internal sealed class DeviceEventHandler : IMyLifeHandler
             return [];
 
         var notes = ev.InformationFromDevice;
-        var deviceEvent = MyLifeFactory.CreateDeviceEvent(ev, eventType, notes);
+        var deviceEvent = MyLifeFactory.CreateDeviceEvent(ev, context.Now, eventType, notes);
         return [deviceEvent];
     }
 }

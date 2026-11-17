@@ -114,8 +114,8 @@ public static class DemoFixtureGenerator
             .Select(step => new TempBasal
             {
                 Id = Guid.CreateVersion7(),
-                StartTimestamp = step.Time,
-                EndTimestamp = step.Time.AddMinutes(5),
+                StartTimestamp = step.Utc,
+                EndTimestamp = step.Utc.AddMinutes(5),
                 Rate = step.TempBasalRate ?? 1.0,
                 Origin = step.TempBasalRate.HasValue ? TempBasalOrigin.Algorithm : TempBasalOrigin.Scheduled,
             });
@@ -123,6 +123,7 @@ public static class DemoFixtureGenerator
 
     private static DemoDataGenerator CreateGenerator(int days, int randomSeed) => new(
         Options.Create(new DemoModeConfiguration { BackfillDays = days, RandomSeed = randomSeed }),
+        new DemoClock(TimeProvider.System, TimeZoneInfo.Utc),
         NullLogger<DemoDataGenerator>.Instance,
         NullLoggerFactory.Instance);
 

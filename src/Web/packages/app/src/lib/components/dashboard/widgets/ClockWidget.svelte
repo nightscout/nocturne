@@ -1,7 +1,7 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { time, formatWeekdayDate } from "$lib/utils/formatting";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { time, formatWeekdayDate } from "#lib/utils/formatting.js";
 
   const realtimeStore = getRealtimeStore();
 

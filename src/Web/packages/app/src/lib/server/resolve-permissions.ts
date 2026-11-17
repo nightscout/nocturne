@@ -1,5 +1,5 @@
-import type { MyPermissionsResponse } from "$lib/api";
-import { isApiOutage } from "$lib/server/api-outage";
+import type { MyPermissionsResponse } from "#lib/api/index.js";
+import { isApiOutage } from "#lib/server/api-outage.js";
 
 /**
  * The viewer's granted scopes and history window, which the UI uses to offer only what the

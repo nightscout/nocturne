@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
-import type { ClockElement, ClockSettings } from "$lib/api";
+import type { ClockElement, ClockSettings } from "#lib/api/index.js";
 import type {
   GlucoseUnits,
   TimeFormat,
-} from "$lib/stores/appearance-store.svelte";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
-import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
+} from "#lib/stores/appearance-store.svelte.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
 
 // formatting.ts pulls in appearance-store, which pulls in mode-watcher (no node
 // export). Stub the chain, same as formatting.test.ts.
-vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("$app/env", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
   PersistedState: class {
@@ -19,7 +19,7 @@ vi.mock("runed", () => ({
     }
   },
 }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   glucoseUnits: { current: "mg/dl" },
   timeFormat: { current: "12" },
   regionFormat: { current: "en-GB" },
@@ -27,8 +27,8 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
 }));
 
 const { renderClockElementValue } = await import("./element-value");
-const { UNWIRED_ELEMENT_TYPES } = await import("$lib/clock-builder/types");
-const store = await import("$lib/stores/appearance-store.svelte");
+const { UNWIRED_ELEMENT_TYPES } = await import("#lib/clock-builder/types.js");
+const store = await import("#lib/stores/appearance-store.svelte.js");
 
 const now = new Date(2026, 11, 31, 14, 5);
 
@@ -127,16 +127,18 @@ describe("renderClockElementValue", () => {
   });
 
   it("renders the reading age from the reading, not a sample", () => {
-    expect(render(el({ type: "age" }))).toBe("7m ago");
+    expect(render(el({ type: "age" }))).toBe(
+      new Intl.RelativeTimeFormat("en-GB", { style: "narrow", numeric: "auto" }).format(-7, "minute")
+    );
   });
 
-  it("drops the preposition for a reading under a minute old", () => {
+  it("reads a reading under a minute old as now", () => {
     expect(
       render(el({ type: "age" }), mgdl12, {
         ...glucose,
         lastUpdated: now.getTime(),
       })
-    ).toBe("now");
+    ).toBe(new Intl.RelativeTimeFormat("en-GB", { style: "narrow", numeric: "auto" }).format(0, "second"));
   });
 
   it("renders a placeholder, not a number, when there is no reading", () => {
@@ -181,7 +183,7 @@ describe("renderClockElementValue", () => {
 
 describe("ELEMENT_GROUPS", () => {
   it("does not offer element types with no runtime data source", async () => {
-    const { ELEMENT_GROUPS } = await import("$lib/clock-builder/types");
+    const { ELEMENT_GROUPS } = await import("#lib/clock-builder/types.js");
     const offered = ELEMENT_GROUPS.flatMap((g) => g.types);
     for (const type of UNWIRED_ELEMENT_TYPES) {
       expect(offered).not.toContain(type);

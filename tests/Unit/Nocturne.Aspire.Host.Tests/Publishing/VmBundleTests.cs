@@ -64,7 +64,7 @@ public class VmBundleTests
     }
 
     private static IEnumerable<string> Profiles(string service) =>
-        ((YamlSequenceNode)Service(Compose, service)["profiles"]).Select(node => ((YamlScalarNode)node).Value!);
+        ((YamlSequenceNode)ShippedService(Compose, service)["profiles"]).Select(node => ((YamlScalarNode)node).Value!);
 
     private static string Read(string path) => File.ReadAllText(Path.Combine(RepositoryRoot(), path));
 

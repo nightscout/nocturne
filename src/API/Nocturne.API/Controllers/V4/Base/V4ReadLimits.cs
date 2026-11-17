@@ -1,4 +1,7 @@
+using Nocturne.Core.Constants;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Clinical.LoopAnalysis;
 
 namespace Nocturne.API.Controllers.V4.Base;
 
@@ -22,6 +25,11 @@ namespace Nocturne.API.Controllers.V4.Base;
 public static class V4ReadLimits
 {
     /// <summary>
+    /// The most a daylight saving change moves a zone's offset.
+    /// </summary>
+    public static readonly TimeSpan DaylightSavingMargin = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Maximum records a V4 list read may return.
     /// </summary>
     /// <remarks>
@@ -30,16 +38,8 @@ public static class V4ReadLimits
     /// </remarks>
     public const int MaxPageSize = 100_000;
 
-    /// <summary>
-    /// Maximum records reachable across a V4 read that merges several sources in memory before it
-    /// paginates, counting both the page and everything skipped to reach it.
-    /// </summary>
-    /// <remarks>
-    /// Bounds the window rather than the page because such a read over-fetches
-    /// <c>limit + offset</c> records from every source it merges, so clamping <c>limit</c> alone
-    /// would leave the cost proportional to <c>offset</c>. Deeper pages come back empty.
-    /// </remarks>
-    public const int MaxMergedPageWindow = 10_000;
+    /// <inheritdoc cref="V4ApiLimits.MaxMergedPageWindow"/>
+    public const int MaxMergedPageWindow = V4ApiLimits.MaxMergedPageWindow;
 
     /// <summary>
     /// Maximum records one page of a page-numbered V4 read may return.
@@ -52,24 +52,22 @@ public static class V4ReadLimits
     /// </remarks>
     public const int MaxOrdinalPageSize = 100;
 
-    /// <summary>
-    /// Maximum span, in days, between the <c>from</c> and <c>to</c> bounds of a V4 range read.
-    /// </summary>
-    /// <remarks>
-    /// The widest range the report pages offer is 90 days, but their date picker also takes an
-    /// arbitrary custom range, so the ceiling sits far enough above the presets to leave the picker
-    /// usable. A range with only one bound set is not spanned and is left alone.
-    /// </remarks>
-    public const int MaxDateSpanDays = 366;
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public const int MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays;
 
     /// <summary>
-    /// Maximum span, in days, of a CGM comparison or sleep trends window.
+    /// Maximum local calendar days a CGM comparison or sleep trends window may cover.
     /// </summary>
     /// <remarks>
-    /// Both routes held a 90-day contract before the shared ceiling existed, and their callers send
-    /// the picker range unpadded, so the widest preset fits exactly.
+    /// Counted in the tenant's zone, from the day of <c>from</c> through the day of <c>to</c>
+    /// inclusive, by <see cref="RejectAnalyticsSpanAsync"/>. A range of exactly this many days ends
+    /// on the last millisecond of its final day, which is what the report pages send; ending on the
+    /// midnight after it counts one day more. Loop Analysis trims to this many days instead of
+    /// refusing, in <c>LoopAnalysisRanges</c>.
     /// </remarks>
     public const int MaxAnalyticsSpanDays = 90;
+
+    private const int ZoneLookupMarginDays = 2;
 
     /// <summary>
     /// Maximum span, in days, of an actogram window.
@@ -117,10 +115,16 @@ public static class V4ReadLimits
     /// <summary>
     /// Rejects a range read whose bounds are further apart than <paramref name="maxDays"/>.
     /// </summary>
+    /// <remarks>
+    /// A client cuts a range of <paramref name="maxDays"/> local calendar days from the first
+    /// midnight to the last millisecond of the last day, and a daylight saving change inside it
+    /// makes that span up to <see cref="DaylightSavingMargin"/> longer in UTC, so the check allows
+    /// that margin.
+    /// </remarks>
     /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
     public static ObjectResult? RejectDateSpan(
         this ControllerBase controller, DateTime? from, DateTime? to, int maxDays = MaxDateSpanDays) =>
-        from is { } start && to is { } end && (end - start).TotalDays > maxDays
+        from is { } start && to is { } end && end - start > TimeSpan.FromDays(maxDays) + DaylightSavingMargin
             ? DateSpanProblem(controller, maxDays)
             : null;
 
@@ -134,6 +138,82 @@ public static class V4ReadLimits
         (double)toMills - fromMills > (double)maxDays * TimeSpan.MillisecondsPerDay
             ? DateSpanProblem(controller, maxDays)
             : null;
+
+    /// <summary>
+    /// Reads the <c>sort</c> of a V4 list: <c>timestamp_desc</c> or <c>timestamp_asc</c>.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the sort is usable.</returns>
+    public static ObjectResult? RejectInvalidSort(this ControllerBase controller, string sort, out bool descending)
+    {
+        descending = sort == "timestamp_desc";
+        return sort is "timestamp_desc" or "timestamp_asc"
+            ? null
+            : controller.Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+    }
+
+    /// <summary>
+    /// Reads the <c>sort</c> of a V4 list and clamps its paging window to this class's ceilings.
+    /// </summary>
+    /// <returns>The error response to return, or <c>null</c> when the query is usable.</returns>
+    public static ObjectResult? PrepareListPage(
+        this ControllerBase controller, string sort, ref int limit, ref int offset, out bool descending)
+    {
+        if (controller.RejectInvalidSort(sort, out descending) is { } invalid)
+            return invalid;
+
+        limit = ClampLimit(limit);
+        offset = ClampOffset(offset);
+        return null;
+    }
+
+    /// <summary>
+    /// Rejects a CGM comparison or sleep trends range that covers more than
+    /// <see cref="MaxAnalyticsSpanDays"/> days in the tenant's zone.
+    /// </summary>
+    /// <remarks>
+    /// The zone is looked up only when the span in UTC is within <see cref="ZoneLookupMarginDays"/>
+    /// of the cap, because outside that band no zone offset can change the answer. A tenant with no
+    /// zone counts UTC days: the CGM comparison client cuts its days in UTC when the patient has no
+    /// zone.
+    /// </remarks>
+    /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
+    public static async Task<ObjectResult?> RejectAnalyticsSpanAsync(
+        this ControllerBase controller, DateTime? from, DateTime? to, TenantClockResolver tenantClock, CancellationToken ct)
+    {
+        if (from is not { } start || to is not { } end)
+            return null;
+
+        var spanDays = (end - start).TotalDays;
+        if (spanDays < MaxAnalyticsSpanDays - ZoneLookupMarginDays)
+            return null;
+        if (spanDays > MaxAnalyticsSpanDays + ZoneLookupMarginDays)
+            return DateSpanProblem(controller, MaxAnalyticsSpanDays);
+
+        var (zone, _) = await tenantClock.ResolveAsync(ct);
+        return controller.RejectLocalDaySpan(start, end, zone ?? TimeZoneInfo.Utc, MaxAnalyticsSpanDays);
+    }
+
+    /// <summary>
+    /// Rejects a range read that covers more than <paramref name="maxDays"/> calendar days in
+    /// <paramref name="zone"/>, counting the day of <paramref name="from"/> through the day of
+    /// <paramref name="to"/> inclusive.
+    /// </summary>
+    /// <remarks>
+    /// Bounds are read as UTC instants, which is what a query-bound <see cref="DateTime"/> with no
+    /// offset is taken to be elsewhere in V4.
+    /// </remarks>
+    /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
+    public static ObjectResult? RejectLocalDaySpan(
+        this ControllerBase controller, DateTime? from, DateTime? to, TimeZoneInfo zone, int maxDays)
+    {
+        if (from is not { } start || to is not { } end)
+            return null;
+
+        var (firstDay, lastDay) = LocalSlotBinning.LocalDaySpan(start, end, zone);
+        return lastDay.DayNumber - firstDay.DayNumber + 1 > maxDays
+            ? DateSpanProblem(controller, maxDays)
+            : null;
+    }
 
     private static ObjectResult DateSpanProblem(ControllerBase controller, int maxDays) =>
         controller.Problem(detail: $"Date range must not exceed {maxDays} days.", statusCode: 400, title: "Bad Request");

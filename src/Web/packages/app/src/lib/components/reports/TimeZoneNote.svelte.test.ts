@@ -2,16 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createRawSnippet } from "svelte";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 import TimeZoneNote from "./TimeZoneNote.svelte";
 
 const pageSentence = createRawSnippet(() => ({ render: () => "<span>This page sentence stays.</span>" }));
 
 describe("TimeZoneNote", () => {
   it.each([
-    [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/, undefined],
     [TimeZoneUnavailableReason.LookupFailed, /The time zone of this data did not load/, /reload the report later/],
-    [TimeZoneUnavailableReason.Unrecognised, /does not recognise the time zone/, /correct the time zone/],
+    [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/, /correct the time zone/],
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/, /set a time zone/],
   ])("states why there is no zone for %s, then the page sentence", async (reason, cause, remedy) => {
     const { container } = render(TimeZoneNote, { props: { reason, children: pageSentence } });

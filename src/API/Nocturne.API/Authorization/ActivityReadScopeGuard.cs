@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Extensions;
@@ -82,6 +83,22 @@ internal static class ActivityReadScopeGuard
         IReadOnlySet<string> grantedScopes)
     {
         return Scope.Satisfies(grantedScopes, decomposer.RequiredReadScope(activity));
+    }
+
+    /// <summary>
+    /// The first of <paramref name="stored"/> the caller may read, or <see langword="null"/>. One id
+    /// can name a record in several storages, so a record the caller may not read must not hide one
+    /// it may.
+    /// </summary>
+    /// <param name="stored">The records an id names, as <c>IActivityService.GetStoredActivitiesAsync</c> returns them.</param>
+    /// <param name="decomposer">Classifier that maps each activity to its required read scope.</param>
+    /// <param name="grantedScopes">The caller's normalized granted scopes.</param>
+    public static Activity? FirstReadable(
+        IEnumerable<Activity> stored,
+        IActivityDecomposer decomposer,
+        IReadOnlySet<string> grantedScopes)
+    {
+        return stored.FirstOrDefault(activity => CanRead(activity, decomposer, grantedScopes));
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -15,8 +16,10 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -34,7 +37,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly Mock<IProfileDecomposer> _profiles = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TreatmentDecomposer _decomposer;
@@ -45,18 +47,21 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context = _db.CreateContext();
 
         _decomposer = new(
-            _context.AsFactory(),
-            Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
-            Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
-            Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            EmptyLegacyKeyed.Of<IBolusRepository, Nocturne.Core.Models.V4.Bolus>(),
+            EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(),
+            EmptyLegacyKeyed.Of<ICarbIntakeRepository, Nocturne.Core.Models.V4.CarbIntake>(),
+            EmptyLegacyKeyed.Of<IBGCheckRepository, Nocturne.Core.Models.V4.BGCheck>(),
+            EmptyLegacyKeyed.Of<INoteRepository, Nocturne.Core.Models.V4.Note>(),
+            EmptyLegacyKeyed.Of<IDeviceEventRepository, Nocturne.Core.Models.V4.DeviceEvent>(),
+            EmptyLegacyKeyed.Of<IBolusCalculationRepository, Nocturne.Core.Models.V4.BolusCalculation>(),
             Mock.Of<IStateSpanService>(),
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            _profiles.Object,
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             new AuditContext { IsSystem = true },
@@ -138,7 +143,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         AddSpan("override", "Override", Connector, """{"collection":"treatments","utcOffset":0}""", At.AddMinutes(5));
         AddSpan("target", "TemporaryTarget", Connector, """{"utcOffset":0}""", At.AddMinutes(10));
         AddSpan("devicestatus-override", "Override", Connector, """{"reason":"devicestatus"}""", At);
-        AddSpan("old-profile-span", "Profile", Connector, """{"utcOffset":0}""", At);
         AddActivation("other-source", Other, At);
         AddActivation("before-window", Connector, At.AddHours(-3));
         await _context.SaveChangesAsync();
@@ -152,7 +156,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_profile_switch_is_deleted_with_its_profile_rows_once_the_source_drops_it()
+    public async Task A_profile_switch_is_deleted_once_the_source_drops_it()
     {
         AddActivation("switch", Connector, At);
         AddActivation("kept", Connector, At.AddMinutes(5));
@@ -168,8 +172,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             .DeletedAt.Should().NotBeNull();
         (await _context.ProfileActivations.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.LegacyId == "kept"))
             .DeletedAt.Should().BeNull();
-        _profiles.Verify(p => p.DeleteByLegacyIdAsync("switch", WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
-        _profiles.VerifyNoOtherCalls();
     }
 
     private void AddActivation(string legacyId, string source, DateTime start) =>
@@ -183,7 +185,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     private void AddSpan(string originalId, string category, string source, string metadataJson, DateTime start) =>
         _context.StateSpans.Add(new StateSpanEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = originalId, Category = category,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = originalId, Category = category,
             State = "Active", StartTimestamp = start, Source = source, MetadataJson = metadataJson,
         });
 
@@ -221,7 +223,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context.StateSpans.Add(new StateSpanEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, Category = nameof(StateSpanCategory.Override),
-            State = "Custom", StartTimestamp = At, OriginalId = "override",
+            State = "Custom", StartTimestamp = At, LegacyId = "override",
         });
         await _context.SaveChangesAsync();
 

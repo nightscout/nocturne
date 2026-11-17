@@ -1,6 +1,6 @@
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Models.Identity;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -49,10 +49,10 @@ public interface ITenantOverviewService
 /// with the credential's limit and the member's exemption.
 /// </param>
 /// <param name="EffectivePermissions">
-/// The membership's <see cref="TenantMemberEntity.EffectivePermissions"/>.
+/// The membership's <see cref="TenantMemberRecord.EffectivePermissions"/>.
 /// </param>
 public sealed record GlucoseReadTenant(
-    TenantEntity Tenant,
+    TenantRecord Tenant,
     IReadOnlySet<string> AllowedScopes,
     bool MembershipLimitTo24Hours,
     IReadOnlySet<string> EffectivePermissions);

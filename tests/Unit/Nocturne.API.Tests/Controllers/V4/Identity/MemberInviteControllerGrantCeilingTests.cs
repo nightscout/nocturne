@@ -7,6 +7,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -14,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
 
@@ -133,10 +135,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             Mock.Of<ITenantService>(),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
-            new TenantRoleService(_dbContext.AsFactory()),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            _dbContext.AsFactory())
+            new TenantMembershipRepository(_dbContext.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
@@ -366,7 +368,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     public async Task SetMemberRoles_refusesTakingOwnerFromTheOnlyOwner()
     {
         await GiveOwnerRoleAsync(_targetMemberId);
-        var controller = BuildController(AdministratorScopes);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.SetMemberRoles(
             _targetMemberId,
@@ -397,8 +399,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             .Select(mr => mr.TenantRoleId).ToListAsync()).Should().BeEquivalentTo([_ownerRoleId, _caretakerRoleId]);
     }
 
-    [Fact]
-    public async Task SetMemberRoles_allowsTakingOwnerFromAnOwnerWhenAnotherActiveOwnerRemains()
+    private async Task AddSecondOwnerAsync()
     {
         var secondSubjectId = Guid.CreateVersion7();
         var secondMember = new TenantMemberEntity
@@ -411,9 +412,15 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         _dbContext.TenantMembers.Add(secondMember);
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
-        await GiveOwnerRoleAsync(_targetMemberId);
         await GiveOwnerRoleAsync(secondMember.Id);
-        var controller = BuildController(AdministratorScopes);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_allowsTakingOwnerFromAnOwnerWhenAnotherActiveOwnerRemains()
+    {
+        await AddSecondOwnerAsync();
+        await GiveOwnerRoleAsync(_targetMemberId);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.SetMemberRoles(
             _targetMemberId,
@@ -422,8 +429,93 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        (await _dbContext.TenantMemberRoles.Where(mr => mr.TenantMemberId == _targetMemberId)
-            .Select(mr => mr.TenantRoleId).ToListAsync()).Should().BeEquivalentTo([_caretakerRoleId]);
+        (await TargetRoleIdsAsync()).Should().BeEquivalentTo([_caretakerRoleId]);
+    }
+
+    private Task<List<Guid>> TargetRoleIdsAsync() =>
+        _dbContext.TenantMemberRoles.AsNoTracking()
+            .Where(mr => mr.TenantMemberId == _targetMemberId)
+            .Select(mr => mr.TenantRoleId)
+            .ToListAsync();
+
+    private async Task GiveCaretakerRoleAsync(Guid memberId)
+    {
+        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantMemberId = memberId,
+            TenantRoleId = _caretakerRoleId,
+        });
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_mayAddAGrantableRoleToAMemberHoldingAnUngrantableOne()
+    {
+        await GiveOwnerRoleAsync(_targetMemberId);
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_ownerRoleId, _caretakerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await TargetRoleIdsAsync()).Should().BeEquivalentTo([_ownerRoleId, _caretakerRoleId]);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_mayRemoveAGrantableRoleFromAMemberHoldingAnUngrantableOne()
+    {
+        await GiveOwnerRoleAsync(_targetMemberId);
+        await GiveCaretakerRoleAsync(_targetMemberId);
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_ownerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await TargetRoleIdsAsync()).Should().BeEquivalentTo([_ownerRoleId]);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_savingTheHeldSetUnchangedPassesWhenItHoldsAnUngrantableRole()
+    {
+        await GiveOwnerRoleAsync(_targetMemberId);
+        await GiveCaretakerRoleAsync(_targetMemberId);
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_caretakerRoleId, _ownerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await TargetRoleIdsAsync()).Should().BeEquivalentTo([_ownerRoleId, _caretakerRoleId]);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_cannotRemoveARoleTheCallerCouldNotGrant()
+    {
+        // A second owner remains, so the last-owner rule cannot be what refuses this.
+        await AddSecondOwnerAsync();
+        await GiveOwnerRoleAsync(_targetMemberId);
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_caretakerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, "Cannot remove a role you cannot grant.");
+        (await TargetRoleIdsAsync()).Should().BeEquivalentTo([_ownerRoleId]);
     }
 
     [Fact]

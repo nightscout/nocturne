@@ -1,4 +1,4 @@
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 /**
  * Runs a provider change that the API refuses with 409 when some members sign in only through

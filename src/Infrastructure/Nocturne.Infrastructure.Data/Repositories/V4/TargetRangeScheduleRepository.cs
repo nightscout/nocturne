@@ -1,31 +1,28 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing target range schedules in the database. A LegacyId-only type (no
-/// SyncId-upsert, no DeduplicationService participation), so it uses the shared
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the target-range-specific
-/// queries below.
+/// SyncId-upsert, no deduplication), so it uses the shared
+/// <see cref="ProfileScopedRepositoryBase{TModel,TEntity}"/> behaviour unchanged.
 /// </summary>
-public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedule, TargetRangeScheduleEntity>, ITargetRangeScheduleRepository
+public class TargetRangeScheduleRepository : ProfileScopedRepositoryBase<TargetRangeSchedule, TargetRangeScheduleEntity>, ITargetRangeScheduleRepository
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="TargetRangeScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TargetRangeScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+    public TargetRangeScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
+        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
     {
     }
 
@@ -38,79 +35,4 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     /// <inheritdoc />
     protected override void ApplyUpdate(TargetRangeScheduleEntity target, TargetRangeSchedule source) =>
         TargetRangeScheduleMapper.UpdateEntity(target, source);
-
-    /// <inheritdoc cref="TherapySettingsRepository.Listed"/>
-    protected override IQueryable<TargetRangeScheduleEntity> Listed(IQueryable<TargetRangeScheduleEntity> rows) =>
-        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
-
-    /// <summary>
-    /// Gets target range schedules by profile name.
-    /// </summary>
-    /// <param name="profileName">The name of the profile.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of target range schedules.</returns>
-    public async Task<IEnumerable<TargetRangeSchedule>> GetByProfileNameAsync(
-        string profileName,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .TargetRangeSchedules.AsNoTracking()
-            .Where(e => e.ProfileName == profileName)
-            .OrderByDescending(e => e.Timestamp)
-            .ToListAsync(ct);
-        return entities.Select(TargetRangeScheduleMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets the most recent target range schedule for a profile that was active at-or-before the given timestamp.
-    /// </summary>
-    /// <param name="profileName">The name of the profile.</param>
-    /// <param name="timestamp">The point-in-time to query against.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The matching target range schedule, or null if none found.</returns>
-    public async Task<TargetRangeSchedule?> GetActiveAtAsync(
-        string profileName, DateTime timestamp, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = await ctx.TargetRangeSchedules
-            .AsNoTracking()
-            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
-            .OrderByDescending(e => e.Timestamp)
-            .FirstOrDefaultAsync(ct);
-
-        return entity is null ? null : TargetRangeScheduleMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes target range schedules by legacy identifier prefix.
-    /// </summary>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.TargetRangeSchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
-            AuditContext, $"legacy_id_prefix={prefix}", ct);
-    }
-
-    /// <summary>
-    /// Gets target range schedules by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of target range schedules.</returns>
-    public async Task<IEnumerable<TargetRangeSchedule>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .TargetRangeSchedules.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(TargetRangeScheduleMapper.ToDomainModel);
-    }
 }

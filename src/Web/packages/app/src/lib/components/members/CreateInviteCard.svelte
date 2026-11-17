@@ -1,36 +1,63 @@
+<script module lang="ts">
+  /** An access level in plain words, granting one role. */
+  export interface InviteRoleChoice {
+    roleId: string;
+    label: string;
+    description: string;
+  }
+</script>
+
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
-  import Check from "@lucide/svelte/icons/check";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { Select, SelectContent, SelectItem, SelectTrigger } from "#lib/components/ui/select/index.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
-  import Copy from "@lucide/svelte/icons/copy";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor, inviteLinkCopy } from "$lib/coach-marks/copy.svelte";
-  import { createInvite } from "$api/generated/memberInvites.generated.remote";
-  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
-  import { describeSubmitError } from "$lib/forms";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import CopyInvitationMessageButton from "#lib/components/members/CopyInvitationMessageButton.svelte";
+  import CopyButton from "#lib/components/members/CopyButton.svelte";
+  import { Artwork } from "water-ui";
+  import { createInvite } from "#lib/api/generated/memberInvites.generated.remote.js";
+  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { describeSubmitError, FormError } from "#lib/forms/index.js";
 
   interface Props {
     roles: TenantRoleDto[];
-    onCreated: (url: string) => void;
+    /**
+     * Offered as a single choice in place of the role checkboxes and direct permissions, for
+     * someone who should not need to know the roles by name. Empty falls back to the checkboxes.
+     */
+    roleChoices?: InviteRoleChoice[];
+    /** The link lets in one person, with no choice to allow more. */
+    singleUseOnly?: boolean;
+    /** Offers the 24-hour limit. Off for a role the server never clamps, which would refuse it. */
+    offerHistoryLimit?: boolean;
+    onCreated?: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
+    roleChoices,
+    singleUseOnly = false,
+    offerHistoryLimit = true,
     onCreated,
     onCancel,
   }: Props = $props();
+
+  // A role with no access level grants nothing. It is how a member is given no access, which
+  // an invite cannot mean.
+  const grantableRoles = $derived(roles.filter((r) => r.canGrant && r.accessLevel != null));
+  const grantableChoices = $derived(
+    (roleChoices ?? []).filter((c) => grantableRoles.some((r) => r.id === c.roleId)),
+  );
 
   // The API refuses anything past 90 days: the token is a bearer credential for tenant
   // membership, so its lifetime is bounded rather than free-form.
@@ -47,27 +74,28 @@
     EXPIRY_OPTIONS.find((o) => o.value === expiresInDays)?.label ?? `${expiresInDays} days`,
   );
   let inviteLabel = $state("");
-  let inviteRoleIds = $state<string[]>([]);
+  let chosenRoleIds = $state<string[]>([]);
+  /** A single choice is the answer already, so it needs no click. */
+  const inviteRoleIds = $derived(
+    chosenRoleIds.length === 0 && grantableChoices.length === 1
+      ? [grantableChoices[0].roleId]
+      : chosenRoleIds,
+  );
   let inviteDirectPermissions = $state<string[]>([]);
   let showInvitePermissions = $state(false);
   let allowMultipleUses = $state(false);
   let limitTo24Hours = $state(false);
   let createdInviteUrl = $state<string | null>(null);
   let createdByName = $state<string | undefined>(undefined);
-  const copy = createCopyFeedback();
   let isCreatingInvite = $state(false);
   let errorMessage = $state<string | null>(null);
 
   function toggleInviteRole(roleId: string) {
-    if (inviteRoleIds.includes(roleId)) {
-      inviteRoleIds = inviteRoleIds.filter((r) => r !== roleId);
+    if (chosenRoleIds.includes(roleId)) {
+      chosenRoleIds = chosenRoleIds.filter((r) => r !== roleId);
     } else {
-      inviteRoleIds = [...inviteRoleIds, roleId];
+      chosenRoleIds = [...chosenRoleIds, roleId];
     }
-  }
-
-  async function copyInviteUrl() {
-    if (createdInviteUrl) await copy.copy(createdInviteUrl);
   }
 
   async function handleCreateInvite() {
@@ -90,10 +118,10 @@
         createdInviteUrl = result.inviteUrl.startsWith("http")
           ? result.inviteUrl
           : `${window.location.origin}${result.inviteUrl}`;
-        onCreated(createdInviteUrl);
+        onCreated?.(createdInviteUrl);
       }
     } catch (e) {
-      errorMessage = describeSubmitError(e, "Failed to create invite. Please try again.");
+      errorMessage = describeSubmitError(e, "Failed to create invite. Try again.");
     } finally {
       isCreatingInvite = false;
     }
@@ -112,7 +140,7 @@
   function resetForm() {
     expiresInDays = 7;
     inviteLabel = "";
-    inviteRoleIds = [];
+    chosenRoleIds = [];
     inviteDirectPermissions = [];
     showInvitePermissions = false;
     allowMultipleUses = false;
@@ -125,7 +153,7 @@
 
 <Card.Root data-testid="create-invite-card">
   <Card.Header>
-    <Card.Title class="text-lg">Create Invite Link</Card.Title>
+    <Card.Title class="text-lg">Create invite link</Card.Title>
     <Card.Description>
       Generate a shareable link. Anyone with this link can accept the invite
       after signing in.
@@ -134,34 +162,27 @@
   <Card.Content class="@container">
     {#if createdInviteUrl}
       <div class="space-y-4">
-        <div
-          class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-        >
-          <Check
-            class="mt-0.5 h-4 w-4 shrink-0 text-success"
-          />
-          <p class="text-sm text-success">
-            Invite link created. Share it with the new member.
-          </p>
-        </div>
+        <Artwork
+          artwork="people-group"
+          palette="dusk"
+          motion="auto"
+          autoplay="once"
+          class="mx-auto size-32"
+        />
+        <SuccessBanner>Invite link created. Share it with the new member.</SuccessBanner>
 
-        <div class="flex gap-2" {@attach coachmark({
-          key: "setup-invite.copy-link",
-          ...inviteLinkCopy(expiryLabel),
-        })}>
+        <div class="flex gap-2">
           <Input
             type="text"
             value={createdInviteUrl}
             readonly
             class="font-mono"
           />
-          <Button variant="outline" size="icon" onclick={copyInviteUrl}>
-            {#if copy.isCopied()}
-              <Check class="h-4 w-4 text-success" />
-            {:else}
-              <Copy class="h-4 w-4" />
-            {/if}
-          </Button>
+          <CopyButton
+            text={createdInviteUrl}
+            label="Copy invite link"
+            oncopied={() => (errorMessage = null)}
+          />
         </div>
 
         <CopyInvitationMessageButton
@@ -185,13 +206,29 @@
           />
         </div>
 
+        {#if grantableChoices.length}
+          <div class="space-y-2">
+            <Label id="invite-access-label">What can they do?</Label>
+            <RadioGroup.Root
+              class="gap-2"
+              aria-labelledby="invite-access-label"
+              value={inviteRoleIds[0]}
+              onValueChange={(value) => (chosenRoleIds = [value])}
+            >
+              {#each grantableChoices as choice (choice.roleId)}
+                <RadioGroup.Card value={choice.roleId}>
+                  <span class="text-sm font-medium">{choice.label}</span>
+                  <span class="text-xs text-muted-foreground">{choice.description}</span>
+                </RadioGroup.Card>
+              {/each}
+            </RadioGroup.Root>
+          </div>
+        {:else}
         <!-- Role multi-select -->
-        <div class="space-y-2" {@attach coachmark({
-          ...coachFor("setup-invite.roles"),
-        })}>
+        <div class="space-y-2">
           <Label>Roles</Label>
           <div class="grid gap-2 @sm:grid-cols-2">
-            {#each roles as role (role.id)}
+            {#each grantableRoles as role (role.id)}
               <div class="flex items-center gap-2">
                 <Checkbox
                   id="invite-role-{role.id}"
@@ -208,6 +245,7 @@
             {/each}
           </div>
         </div>
+        {/if}
 
         <div class="space-y-2">
           <Label for="invite-expiry">Link expires</Label>
@@ -230,6 +268,7 @@
           </p>
         </div>
 
+        {#if !grantableChoices.length}
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
           open={showInvitePermissions}
@@ -243,7 +282,7 @@
                 {:else}
                   <ChevronDown class="h-4 w-4" />
                 {/if}
-                Direct Permissions (optional)
+                Direct permissions (optional)
               </Button>
             {/snippet}
           </Collapsible.Trigger>
@@ -253,7 +292,9 @@
             </div>
           </Collapsible.Content>
         </Collapsible.Root>
+        {/if}
 
+        {#if offerHistoryLimit}
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"
         >
@@ -276,7 +317,9 @@
             </p>
           </div>
         </div>
+        {/if}
 
+        {#if !singleUseOnly}
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"
         >
@@ -299,14 +342,9 @@
             </p>
           </div>
         </div>
-
-        {#if errorMessage}
-          <div
-            class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-          >
-            <p class="text-sm text-destructive">{errorMessage}</p>
-          </div>
         {/if}
+
+        <FormError issues={errorMessage} focusOnShow />
 
         <div class="flex gap-3">
           <Button
@@ -328,7 +366,7 @@
             {#if isCreatingInvite}
               <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
             {/if}
-            Create Link
+            Create link
           </Button>
         </div>
       </div>

@@ -23,7 +23,7 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public TandemBolusResult Map(IEnumerable<TandemPumpEvent> events)
+    public TandemBolusResult Map(IEnumerable<TandemPumpEvent> events, DateTime now)
     {
         var result = new TandemBolusResult();
 
@@ -40,7 +40,6 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
             group[ev.Name] = ev;
         }
 
-        var now = DateTime.UtcNow;
 
         foreach (var (bolusId, group) in byId)
         {

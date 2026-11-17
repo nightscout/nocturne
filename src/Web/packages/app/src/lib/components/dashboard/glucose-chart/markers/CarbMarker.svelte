@@ -3,7 +3,7 @@
     CARB_LABEL_Y,
     CARB_MARKER_POINTS,
     MARKER_HALF_WIDTH,
-  } from "$lib/components/icons/marker-shapes";
+  } from "#lib/components/icons/marker-shapes.js";
 
   interface Props {
     xPos: number;

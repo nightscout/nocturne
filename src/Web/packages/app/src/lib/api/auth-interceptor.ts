@@ -4,8 +4,8 @@
  * Intercepts 401 Unauthorized responses and redirects to login page.
  */
 
-import { browser } from "$app/environment";
-import { isShareHost } from "$lib/share-host";
+import { browser } from "$app/env";
+import { isShareHost } from "#lib/share-host.js";
 
 /**
  * Auth interceptor state

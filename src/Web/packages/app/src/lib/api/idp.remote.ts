@@ -1,47 +1,42 @@
 /**
- * Remote functions for the Insulin Dosing Profile (IDP) report Fetches sensor
- * glucose, boluses, carb intakes, insulin delivery stats, profile summary,
+ * Remote functions for the Insulin Dosing Profile (IDP) report. Fetches the sensor
+ * reading count, the hourly insulin delivery pattern, insulin delivery stats, the profiles in force,
  * extended glucose analytics, averaged stats, and basal analysis
  */
 import { getRequestEvent, query } from "$app/server";
-import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
+import { readable } from "#lib/server/patient-timezone.js";
 
 export type { DateRangeInput } from "./report-range";
 
-/**
- * Combined query to get all data needed for the Insulin Dosing Profile report.
- * Fetches entries, boluses, and carb intakes first (with pagination), then
- * fetches analytics and profile data in parallel.
- */
+/** Combined query to get all data needed for the Insulin Dosing Profile report. */
 export const getIdpData = query(DateRangeSchema.optional(), async (input) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   const { startDate, endDate } = await resolveReportRange(input, 14);
 
-  // Raw readings (paginated) and boluses for the charts.
-  const [entries, bolusResult] = await Promise.all([
-    fetchAllGlucose(apiClient, startDate, endDate),
-    apiClient.bolus.getAll(startDate, endDate, 10000),
-  ]);
-  const boluses = bolusResult.data ?? [];
-
-  // Insulin/profile/AID stats and server-side glucose analytics in parallel.
-  const [insulinDeliveryStats, profileSummary, rangeAnalytics, aidSystemMetrics] =
+  // The page shows how many readings the window holds, not the readings, so one row and the
+  // total stand in for them. Every read is independent of the others.
+  const [readings, hourlyDelivery, insulinDeliveryStats, activeSchedules, rangeAnalytics, aidSystemMetrics] =
     await Promise.all([
+      apiClient.sensorGlucose.getAll(startDate, endDate, 1, 0, undefined, undefined, undefined, true),
+      apiClient.statistics.getHourlyInsulinDelivery(startDate, endDate),
       apiClient.statistics.getInsulinDeliveryStatistics(startDate, endDate),
-      apiClient.profile.getProfileSummary(startDate, endDate),
+      // Therapy settings need therapy.read; without it the report renders
+      // with no basal schedule rather than not at all.
+      readable(() => apiClient.profile.getActiveSchedules(startDate, endDate)),
       apiClient.statistics.getRangeAnalytics(startDate, endDate),
       apiClient.statistics.getAidSystemMetrics(startDate, endDate),
     ]);
-
   return {
-    entries,
-    boluses,
+    readingCount: readings.pagination?.total ?? 0,
+    hourlyBolusCounts: hourlyDelivery.hours ?? [],
+    hourlyTimeZoneUnavailableReason: hourlyDelivery.timeZoneUnavailableReason,
     insulinDeliveryStats,
-    profileSummary,
+    activeSchedules: activeSchedules ?? [],
     analysis: rangeAnalytics.analysis,
     averagedStats: rangeAnalytics.averagedStats,
+    timeZoneUnavailableReason: rangeAnalytics.timeZoneUnavailableReason,
     aidSystemMetrics,
     dateRange: {
       from: startDate,

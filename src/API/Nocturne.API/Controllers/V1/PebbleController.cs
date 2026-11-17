@@ -3,17 +3,16 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
-using Nocturne.API.Extensions;
-using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
+using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -24,22 +23,21 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <remarks>
 /// The action requires only <c>glucose.read</c> while the response also carries IOB and COB, from the
-/// AID system or treatments (<see cref="ICurrentIobCobReader"/>), and the uploader battery. This is
+/// AID system or treatments (<see cref="IIobCobReader"/>), and the uploader battery. This is
 /// the accepted narrowing described on <see cref="V2.PropertiesController"/>, which names the
 /// per-category follow-up.
 /// </remarks>
 /// <seealso cref="IEntryService"/>
-/// <seealso cref="ICurrentIobCobReader"/>
+/// <seealso cref="IIobCobReader"/>
 [ApiController]
 [Tags("V1")]
 [Route("")]
 public class PebbleController : ControllerBase
 {
     private readonly IEntryService _entryService;
-    private readonly ICurrentIobCobReader _iobCobReader;
+    private readonly IIobCobReader _iobCobReader;
     private readonly IUploaderSnapshotRepository _uploaderSnapshots;
-    private readonly ITenantAppearanceReader _appearanceReader;
-    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantGlucoseUnits _glucoseUnits;
     private readonly ILogger<PebbleController> _logger;
 
     /// <summary>
@@ -55,23 +53,20 @@ public class PebbleController : ControllerBase
     /// <param name="entryService">Service for glucose entry retrieval.</param>
     /// <param name="iobCobReader">Reader of the IOB and COB now.</param>
     /// <param name="uploaderSnapshots">Repository of uploader snapshots, for the battery.</param>
-    /// <param name="appearanceReader">Reader of the owner's display preferences, for the default units.</param>
-    /// <param name="tenantAccessor">Accessor for the current tenant.</param>
+    /// <param name="glucoseUnits">Resolver of the tenant's glucose units, for the default units.</param>
     /// <param name="logger">Logger instance.</param>
     public PebbleController(
         IEntryService entryService,
-        ICurrentIobCobReader iobCobReader,
+        IIobCobReader iobCobReader,
         IUploaderSnapshotRepository uploaderSnapshots,
-        ITenantAppearanceReader appearanceReader,
-        ITenantAccessor tenantAccessor,
+        ITenantGlucoseUnits glucoseUnits,
         ILogger<PebbleController> logger
     )
     {
         _entryService = entryService;
         _iobCobReader = iobCobReader;
         _uploaderSnapshots = uploaderSnapshots;
-        _appearanceReader = appearanceReader;
-        _tenantAccessor = tenantAccessor;
+        _glucoseUnits = glucoseUnits;
         _logger = logger;
     }
 
@@ -126,7 +121,7 @@ public class PebbleController : ControllerBase
                 var entry = entries[i];
                 var bg = new PebbleBg
                 {
-                    Sgv = FormatGlucose(entry.Sgv ?? entry.Mgdl, useMmol),
+                    Sgv = FormatGlucose(entry.GlucoseMgdl(), useMmol),
                     Trend = entry.Trend ?? DirectionExtensions.ParseToTrendNumber(entry.Direction),
                     Direction = entry.Direction ?? "NONE",
                     Datetime = entry.Mills
@@ -142,8 +137,8 @@ public class PebbleController : ControllerBase
                     );
 
                     bg.Battery = battery;
-                    bg.Iob = iobCob?.IobDisplay;
-                    bg.Cob = iobCob?.Cob;
+                    bg.Iob = iobCob?.Iob.Display;
+                    bg.Cob = iobCob?.Cob?.Display;
                 }
 
                 bgs.Add(bg);
@@ -184,11 +179,12 @@ public class PebbleController : ControllerBase
         }
     }
 
-    private async Task<CurrentIobCob?> ReadIobCobAsync(CancellationToken cancellationToken)
+    private async Task<IobCobReading?> ReadIobCobAsync(CancellationToken cancellationToken)
     {
         try
         {
-            return await _iobCobReader.GetAsync(cancellationToken);
+            return await _iobCobReader.ReadTotalAsync(
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), live: true, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -217,9 +213,9 @@ public class PebbleController : ControllerBase
     private async Task<bool> ResolveUseMmolAsync(string? units, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(units))
-            return GlucoseUnits.IsMmol(units);
+            return GlucoseUnits.Parse(units) == GlucoseUnit.Mmol;
 
-        return await GlucoseUnits.UsesMmolAsync(_appearanceReader, _tenantAccessor, cancellationToken);
+        return await _glucoseUnits.UsesMmolAsync(cancellationToken);
     }
 
     private static string FormatGlucose(double mgdl, bool useMmol)

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "composite-and-or",
-  "description": "and requires all children true; or requires any; empty conditions and unknown operators are false",
+  "description": "and requires all children true; or requires any; an empty conditions list or an unknown operator cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

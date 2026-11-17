@@ -1,10 +1,10 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
+  import { Card, CardContent } from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Luggage from "@lucide/svelte/icons/luggage";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Activity from "@lucide/svelte/icons/activity";
@@ -13,10 +13,10 @@
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import Info from "@lucide/svelte/icons/info";
   import ListChecks from "@lucide/svelte/icons/list-checks";
-  import SupplyCategory from "$lib/components/tools/packing/supply-category.svelte";
-  import { categories } from "$lib/components/tools/packing/packing-config";
+  import SupplyCategory from "#lib/components/tools/packing/supply-category.svelte";
+  import { categories } from "#lib/components/tools/packing/packing-config.js";
   import { getPackingHints } from "./packing.remote";
-  import { encodeBase64Utf8 } from "$lib/utils";
+  import { encodeBase64Utf8 } from "#lib/utils/index.js";
 
   const hintsQuery = getPackingHints();
   const hints = $derived(hintsQuery.current);
@@ -54,7 +54,7 @@
     });
 
     const encoded = encodeBase64Utf8(JSON.stringify(items));
-    goto(resolve(`/tools/packing/list?d=${encodeURIComponent(encoded)}`));
+    goto(resolve(`tools/packing/list?d=${encodeURIComponent(encoded)}`));
   }
 
   const totalItems = $derived(
@@ -71,7 +71,7 @@
     <div>
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <Luggage class="h-6 w-6" />
-        Packing Calculator
+        Packing calculator
       </h1>
       <p class="text-muted-foreground text-sm">
         Configure what you need, then generate a shareable packing list.
@@ -107,7 +107,7 @@
     <SupplyCategory
       config={category}
       icon={iconMap[category.icon]}
-      {tripDays}
+      tripDays={tripDays}
       avgTdd={hints?.avgTdd ?? null}
       eventIntervals={hints?.eventIntervals ?? {}}
       bind:itemStates={categoryStates[ci]}
@@ -126,7 +126,7 @@
       </p>
       <Button size="lg" disabled={totalItems === 0} onclick={generateList}>
         <ListChecks class="h-4 w-4" />
-        Generate Packing List
+        Generate packing list
       </Button>
     </CardContent>
   </Card>

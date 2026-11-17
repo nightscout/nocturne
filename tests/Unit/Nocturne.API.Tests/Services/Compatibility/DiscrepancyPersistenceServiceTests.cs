@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Services.Compatibility;
@@ -47,7 +48,27 @@ public class DiscrepancyPersistenceServiceTests
     private static DiscrepancyPersistenceService Create(
         IDiscrepancyAnalysisRepository repository,
         IDiscrepancyForwardingService forwarder) =>
-        new(repository, forwarder, NullLogger<DiscrepancyPersistenceService>.Instance);
+        new(repository, forwarder, TimeProvider.System, NullLogger<DiscrepancyPersistenceService>.Instance);
+
+    [Fact]
+    public async Task CleanupOldDataAsync_DeletesAnalysesOlderThanTheRetentionWindowBeforeNow()
+    {
+        var now = new DateTimeOffset(2026, 10, 29, 3, 4, 5, TimeSpan.Zero);
+        var repository = new Mock<IDiscrepancyAnalysisRepository>();
+        repository
+            .Setup(r => r.DeleteOldAnalysesAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
+        var service = new DiscrepancyPersistenceService(
+            repository.Object,
+            Mock.Of<IDiscrepancyForwardingService>(),
+            new FakeTimeProvider(now),
+            NullLogger<DiscrepancyPersistenceService>.Instance);
+
+        var deleted = await service.CleanupOldDataAsync(retentionDays: 7);
+
+        deleted.Should().Be(3);
+        repository.Verify(r => r.DeleteOldAnalysesAsync(now.AddDays(-7), It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
     public async Task StoreAnalysisAsync_HasForwardedByTheTimeItReturns()
@@ -98,6 +119,7 @@ public class DiscrepancyPersistenceServiceTests
         var services = new ServiceCollection();
         services.AddSingleton(RepositoryReturning(id).Object);
         services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<IDiscrepancyForwardingService>(_ =>
             new ScopeBoundForwarder(entered, gate.Task, disposedWhenUsed));
         services.AddScoped<DiscrepancyPersistenceService>();

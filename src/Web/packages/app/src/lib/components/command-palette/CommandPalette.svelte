@@ -1,17 +1,17 @@
 <script lang="ts">
-  import * as Command from "$lib/components/ui/command";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     glucoseChartLookback,
     setColorScheme,
     getColorScheme,
     getGlucoseUnits,
     setGlucoseUnits,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
   import { userPrefersMode } from "mode-watcher";
   import {
     paletteItemsFor,
@@ -27,8 +27,11 @@
     recordRecent,
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
+  import { consumableAgeHours } from "./consumable-age";
+  import { LegacyConsumableKind } from "#lib/api/index.js";
+  import { formatAge } from "#lib/components/trackers/age.svelte.js";
   import Star from "@lucide/svelte/icons/star";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
 
   interface Props {
     open: boolean;
@@ -96,6 +99,17 @@
       ]);
   });
 
+  function consumableAge(kind: LegacyConsumableKind): string | undefined {
+    const hours = consumableAgeHours(
+      kind,
+      realtimeStore.legacyFallbacks,
+      realtimeStore.legacyCoverage,
+      realtimeStore.trackerInstances,
+      realtimeStore.now
+    );
+    return hours === undefined ? undefined : formatAge(hours);
+  }
+
   function getStatValue(itemId: string): string | undefined {
     const pills = realtimeStore.pillsData;
     switch (itemId) {
@@ -104,9 +118,9 @@
       case "stat-cob":
         return pills.cob?.display ?? undefined;
       case "stat-cage":
-        return pills.cage?.display ?? undefined;
+        return consumableAge(LegacyConsumableKind.Site);
       case "stat-sage":
-        return pills.sage?.display ?? undefined;
+        return consumableAge(LegacyConsumableKind.Sensor);
       case "stat-a1c":
         return undefined;
       case "stat-tir":
@@ -131,12 +145,12 @@
     switch (itemId) {
       case "qs-dark-mode": {
         const mode = userPrefersMode.current;
-        return `Dark Mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
+        return `Dark mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
       }
       case "qs-glucose-units":
         return `Units: ${getGlucoseUnits() === "mg/dl" ? "mg/dL" : "mmol/L"}`;
       case "qs-chart-lookback":
-        return `Chart Lookback: ${glucoseChartLookback.current}h`;
+        return `Chart lookback: ${glucoseChartLookback.current}h`;
       default:
         return "";
     }
@@ -179,15 +193,15 @@
       }
       case "action-add-treatment":
         open = false;
-        goto(resolve("/reports/treatments"));
+        goto(resolve('reports/treatments'));
         break;
       case "action-add-food":
         open = false;
-        goto(resolve("/food"));
+        goto(resolve('food'));
         break;
       case "action-manual-sync":
         open = false;
-        goto(resolve("/settings/connectors"));
+        goto(resolve('settings/connectors'));
         break;
     }
   }

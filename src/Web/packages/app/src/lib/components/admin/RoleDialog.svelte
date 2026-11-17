@@ -1,13 +1,13 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Badge } from "$lib/components/ui/badge";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import type { TenantRoleDto } from "$api";
+  import type { TenantRoleDto } from "#lib/api/index.js";
 
   const permissionCategories = [
     {
@@ -31,7 +31,7 @@
       ],
     },
     {
-      name: "API - Device Status",
+      name: "API - Device status",
       permissions: [
         "api:devicestatus:read",
         "api:devicestatus:create",
@@ -55,7 +55,7 @@
       ],
     },
     {
-      name: "Care Portal",
+      name: "Careportal",
       permissions: [
         "careportal:read",
         "careportal:create",
@@ -116,12 +116,12 @@
   <Dialog.Content class="max-w-2xl max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
-        {isNewRole ? "New Role" : "Edit Role"}
+        {isNewRole ? "New role" : "Edit role"}
       </Dialog.Title>
       <Dialog.Description>
         {#if roleCreatedFromSubjectDialog}
           Create a role with fine-grained permissions for your subject. After
-          saving, you'll return to the subject dialog with this role selected.
+          saving, you will return to the subject dialog with this role selected.
         {:else if isNewRole}
           Create a new role with specific permissions.
         {:else}
@@ -155,11 +155,11 @@
       <div class="space-y-2">
         <Label>Permissions</Label>
 
-        <div class="space-y-4">
+        <div class="@container space-y-4">
           {#each permissionCategories as category (category.name)}
             <div class="border rounded-lg p-3 bg-muted/50">
               <h4 class="text-sm font-medium mb-2">{category.name}</h4>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid gap-2 @sm:grid-cols-2">
                 {#each category.permissions as perm (perm)}
                   <label class="flex items-center gap-2 cursor-pointer">
                     <Checkbox
@@ -176,7 +176,7 @@
 
           <!-- Custom permission input -->
           <div class="border rounded-lg p-3">
-            <h4 class="text-sm font-medium mb-2">Custom Permission</h4>
+            <h4 class="text-sm font-medium mb-2">Custom permission</h4>
             <div class="flex gap-2">
               <Input
                 bind:value={customPermission}
@@ -200,7 +200,7 @@
           {#if roleFormPermissions.length > 0}
             <div class="border rounded-lg p-3">
               <h4 class="text-sm font-medium mb-2">
-                Selected Permissions ({roleFormPermissions.length})
+                Selected permissions ({roleFormPermissions.length})
               </h4>
               <div class="flex flex-wrap gap-1">
                 {#each roleFormPermissions as perm, i (i)}

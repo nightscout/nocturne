@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "crypto";
-import { env } from "$env/dynamic/private";
+import { INSTANCE_KEY } from "$app/env/private";
 
 /**
  * The shared instance key and the headers that carry it. Owns both directions:
@@ -31,7 +31,7 @@ export const INSTANCE_SERVICE_NAME = "nocturne-web";
  * Null when no instance key is configured.
  */
 export function getHashedInstanceKey(): string | null {
-  const instanceKey = env.INSTANCE_KEY;
+  const instanceKey = INSTANCE_KEY;
   return instanceKey
     ? createHash("sha256").update(instanceKey).digest("hex").toLowerCase()
     : null;

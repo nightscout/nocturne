@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -121,8 +122,20 @@ public sealed class EntryCapture
     /// <summary>Record a single legacy-entry projection fan-out.</summary>
     public void Add(EntryProjectionEvent ev) => _events.Enqueue(ev);
 
+    private readonly ConcurrentQueue<IReadOnlyList<Entry>> _written = new();
+
+    /// <summary>Record one <see cref="IDataEventSink{T}.OnWrittenAsync"/> report.</summary>
+    public void AddWritten(IReadOnlyList<Entry> entries) => _written.Enqueue(entries);
+
+    /// <summary>The <see cref="IDataEventSink{T}.OnWrittenAsync"/> reports, apart from the projections.</summary>
+    public IReadOnlyList<IReadOnlyList<Entry>> Written() => _written.ToArray();
+
     /// <summary>Drop all captured events — call at the start of each scenario.</summary>
-    public void Clear() => _events.Clear();
+    public void Clear()
+    {
+        _events.Clear();
+        _written.Clear();
+    }
 
     /// <summary>Point-in-time snapshot of the captured events in fire order.</summary>
     public IReadOnlyList<EntryProjectionEvent> Snapshot() => _events.ToArray();
@@ -149,9 +162,66 @@ internal sealed class CapturingEntrySink(EntryCapture capture) : IDataEventSink<
         return Task.CompletedTask;
     }
 
+    public Task OnWrittenAsync(IReadOnlyList<Entry> items, CancellationToken ct = default)
+    {
+        capture.AddWritten(items);
+        return Task.CompletedTask;
+    }
+
     public Task OnDeletedAsync(Entry? item, CancellationToken ct = default)
     {
         if (item is not null) capture.Add(new EntryProjectionEvent("deleted", [item]));
         return Task.CompletedTask;
     }
+}
+
+/// <summary>
+/// Thread-safe singleton collector of the readings the sensor glucose chokepoint relays through
+/// <see cref="IGlucoseReadingBroadcaster"/>, one list per relay, in fire order.
+/// </summary>
+public sealed class GlucoseReadingCapture
+{
+    private readonly ConcurrentQueue<IReadOnlyList<SensorGlucose>> _relays = new();
+
+    /// <summary>Record one relay.</summary>
+    public void Add(IReadOnlyList<SensorGlucose> readings) => _relays.Enqueue(readings);
+
+    /// <summary>Drop all captured relays — call at the start of each scenario.</summary>
+    public void Clear() => _relays.Clear();
+
+    /// <summary>Point-in-time snapshot of the captured relays in fire order.</summary>
+    public IReadOnlyList<IReadOnlyList<SensorGlucose>> Snapshot() => _relays.ToArray();
+}
+
+/// <summary>
+/// Capturing <see cref="IGlucoseReadingBroadcaster"/> that records into <see cref="GlucoseReadingCapture"/>
+/// instead of touching SignalR.
+/// </summary>
+internal sealed class CapturingGlucoseReadingBroadcaster(GlucoseReadingCapture capture) : IGlucoseReadingBroadcaster
+{
+    public Task BroadcastAsync(IReadOnlyList<SensorGlucose> readings, CancellationToken ct = default)
+    {
+        capture.Add(readings);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Records the model types each committed write reports to the legacy read caches, in place of the
+/// API's cache clear.
+/// </summary>
+public sealed class CacheInvalidationCapture : Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation
+{
+    private readonly ConcurrentQueue<Type> _written = new();
+
+    public Task WrittenAsync(IReadOnlyCollection<Type> models)
+    {
+        foreach (var model in models)
+            _written.Enqueue(model);
+        return Task.CompletedTask;
+    }
+
+    public void Clear() => _written.Clear();
+
+    public IReadOnlyList<Type> Snapshot() => _written.ToArray();
 }

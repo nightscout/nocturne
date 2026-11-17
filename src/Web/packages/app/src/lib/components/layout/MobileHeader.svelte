@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getDirectionInfo } from "$lib/utils";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
-    minutesAgo,
-  } from "$lib/utils/formatting";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-  import { GlucoseValueIndicator } from "$lib/components/shared";
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
-  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+    relativeAge,
+  } from "#lib/utils/formatting.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -26,8 +26,8 @@
   const glucose = displayedGlucose(realtimeStore);
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
-  // This header is the only glucose surface on a phone — CurrentBGDisplay hides
-  // itself below @md — so it carries the same stale/disconnected states.
+  // This header is the glucose surface on a phone unless the Current Glucose widget is showing —
+  // CurrentBGDisplay hides itself below @md — so it carries the same stale/disconnected states.
   const rawCurrentBG = $derived(glucose.currentBG);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(
@@ -41,9 +41,11 @@
   // glucose value.
   const isLoading = $derived(rawCurrentBG <= 0);
   const statusText = $derived(
-    isDisconnected ? "Connection Error" : minutesAgo(lastUpdated, now)
+    isDisconnected
+      ? "Connection error"
+      : relativeAge(lastUpdated, { now, fallback: "Unknown" })
   );
-  const statusTooltip = $derived(`Last reading: ${minutesAgo(lastUpdated, now)}`);
+  const statusTooltip = $derived(`Last reading: ${relativeAge(lastUpdated, { now, fallback: "Unknown" })}`);
 
   // Handle scroll events
   function handleScroll() {
@@ -64,7 +66,7 @@
     lastScrollY = currentScrollY;
   }
 
-  // The layout's sticky banner strip reads this to sit flush under the header as it slides.
+  // Page-level sticky bars read this, through --app-sticky-top, to sit flush under the header as it slides.
   $effect(() => {
     const root = document.documentElement;
     root.style.setProperty("--mobile-header-offset", isVisible ? "3.5rem" : "0px");

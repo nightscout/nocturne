@@ -1,25 +1,26 @@
 <script lang="ts">
+  import { ConnectorConfigCategory } from "#lib/constants/connector-config-categories.js";
   import { SvelteSet } from "svelte/reactivity";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Button } from "$lib/components/ui/button";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  } from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -31,8 +32,8 @@
   import type {
     JsonSchema,
     JsonSchemaProperty,
-  } from "$lib/utils/connector-json-schema";
-  import { getPropertyMeta } from "$lib/config/connectorPropertyMeta";
+  } from "#lib/utils/connector-json-schema.js";
+  import { getPropertyMeta, type PropertyMeta } from "#lib/config/connectorPropertyMeta.js";
 
   interface Props {
     schema: JsonSchema;
@@ -44,6 +45,8 @@
     hasSecrets?: boolean;
     /** Whether to show the .env variable name hints. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /** Names the save, for a form whose save also starts something. The save is then the form's one large action. */
+    saveLabel?: string;
     onSave: (config: Record<string, unknown>, secrets: Record<string, string>) => Promise<void>;
   }
 
@@ -54,6 +57,7 @@
     effectiveConfig = null,
     hasSecrets = false,
     showEnvVarHints = true,
+    saveLabel,
     onSave,
   }: Props = $props();
 
@@ -132,7 +136,7 @@
       const category = getPropertyMeta(propName).category;
 
       // Skip credential-category fields - they're shown in the credentials card
-      if (category === "Credentials") continue;
+      if (category === ConnectorConfigCategory.Credentials) continue;
 
       if (!groups[category]) {
         groups[category] = {
@@ -153,10 +157,10 @@
 
   // Separate main and advanced groups
   const mainGroups = $derived(
-    groupedProperties.filter((g) => g.name !== "Advanced")
+    groupedProperties.filter((g) => g.name !== ConnectorConfigCategory.Advanced)
   );
   const advancedGroup = $derived(
-    groupedProperties.find((g) => g.name === "Advanced")
+    groupedProperties.find((g) => g.name === ConnectorConfigCategory.Advanced)
   );
 
   // Get secret fields
@@ -176,7 +180,7 @@
     return Object.entries(schema.properties)
       .filter(
         ([name, propSchema]) =>
-          getPropertyMeta(name).category === "Credentials" &&
+          getPropertyMeta(name).category === ConnectorConfigCategory.Credentials &&
           !secretFieldSet.has(name) &&
           propSchema["x-hidden"] !== true
       )
@@ -246,6 +250,15 @@
 
   function setPropertyValue(propName: string, value: unknown) {
     configuration = { ...configuration, [propName]: value };
+  }
+
+  function optionLabel(meta: PropertyMeta, option: unknown): string {
+    return meta.optionLabels?.[String(option)] ?? String(option);
+  }
+
+  /** A select holds strings, so a numeric choice is read back as the number the schema lists. */
+  function optionValue(propSchema: JsonSchemaProperty, selected: string): string | number {
+    return propSchema.enum?.find((option) => String(option) === selected) ?? selected;
   }
 
   function getSecretValue(propName: string): string {
@@ -321,7 +334,7 @@
                 <RotateCcw class="h-3 w-3" />
               </Button>
             {:else if hasEnvOverride(propName)}
-              <Badge variant="outline">From Env</Badge>
+              <Badge variant="outline">From env</Badge>
             {/if}
           </div>
           {#if meta.description}
@@ -355,25 +368,27 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
+      {@const chosen = getPropertyValue(propName)}
+      {@const choiceDescription = meta.choiceDescription ?? meta.description}
       <Select
         type="single"
-        value={String(getPropertyValue(propName) ?? propSchema.default ?? "")}
-        onValueChange={(value) => setPropertyValue(propName, value)}
+        value={String(chosen ?? propSchema.default ?? "")}
+        onValueChange={(value) => setPropertyValue(propName, optionValue(propSchema, value))}
       >
         <SelectTrigger>
-          <span>{getPropertyValue(propName) ?? "Select..."}</span>
+          <span>{chosen === undefined || chosen === null ? "Select..." : optionLabel(meta, chosen)}</span>
         </SelectTrigger>
         <SelectContent>
           {#each propSchema.enum as option (option)}
-            <SelectItem value={option}>{option}</SelectItem>
+            <SelectItem value={String(option)}>{optionLabel(meta, option)}</SelectItem>
           {/each}
         </SelectContent>
       </Select>
-      {#if meta.description}
-        <p class="text-sm text-muted-foreground">{meta.description}</p>
+      {#if choiceDescription}
+        <p class="text-sm text-muted-foreground">{choiceDescription}</p>
       {/if}
       {@render envVarHint(propSchema["x-envVar"])}
     {:else if propSchema.type === "integer" || propSchema.type === "number"}
@@ -393,7 +408,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input
@@ -444,7 +459,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input
@@ -595,7 +610,19 @@
   {/if}
 
   <!-- Sticky Save Bar -->
-  {#if hasAnyUnsavedChanges}
+  {#if hasAnyUnsavedChanges && saveLabel}
+    <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex flex-col gap-2">
+      <Button size="xl" class="w-full" onclick={handleSave} disabled={isSaving}>
+        {#if isSaving}
+          <Loader2 class="animate-spin" />
+        {/if}
+        {saveLabel}
+      </Button>
+      <Button variant="ghost" onclick={handleCancel} disabled={isSaving}>
+        Cancel
+      </Button>
+    </div>
+  {:else if hasAnyUnsavedChanges}
     <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex items-center justify-between gap-4">
       <p class="text-sm text-muted-foreground">You have unsaved changes</p>
       <div class="flex gap-2">

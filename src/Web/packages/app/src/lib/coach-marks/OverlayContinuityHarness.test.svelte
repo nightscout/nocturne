@@ -5,6 +5,7 @@
     type CoachLabels,
     type CoachMarkAdapter,
     type CoachMarkOptions,
+    type CoachRouter,
     type SequenceConfig,
   } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
@@ -15,7 +16,8 @@
     forced = false,
     multiStep = false,
     labels = coachLabels(),
-  }: { forced?: boolean; multiStep?: boolean; labels?: CoachLabels } = $props();
+    router,
+  }: { forced?: boolean; multiStep?: boolean; labels?: CoachLabels; router?: CoachRouter } = $props();
 
   const adapter: CoachMarkAdapter = {
     fetchAll: async () => [],
@@ -50,7 +52,7 @@
   );
 </script>
 
-<CoachMarkProvider {adapter} {labels} {sequences} settleDelay={10} seenDwellMs={100000}>
+<CoachMarkProvider {adapter} {labels} {sequences} {router} settleDelay={10} seenDwellMs={100000}>
   <Starter sequence="tour" />
   <div {@attach coachmark(alpha)}>Alpha target</div>
   <div

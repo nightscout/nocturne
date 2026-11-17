@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { copyToClipboard } from "$lib/utils";
+  import { copyToClipboard } from "#lib/utils/index.js";
 
   interface Props {
     codes: string[];
@@ -60,11 +60,11 @@
   }
 </script>
 
-<div class="space-y-4">
+<div class="@container space-y-4">
   <div class="space-y-3">
     <div class="flex items-center gap-2">
       <ShieldCheck class="h-5 w-5 text-primary" />
-      <h3 class="font-medium">Recovery Codes</h3>
+      <h3 class="font-medium">Recovery codes</h3>
     </div>
     <p class="text-sm text-muted-foreground">
       Save these recovery codes in a safe place. If you lose access to your
@@ -76,7 +76,7 @@
       <div class="grid grid-cols-2 gap-2 rounded-lg border bg-muted/50 p-4">
         {#each codes as code, i (i)}
           <code
-            class="rounded bg-background px-2 py-1 text-center text-sm font-mono"
+            class="rounded bg-background px-2 py-1 text-center text-sm font-mono break-all"
           >
             {code}
           </code>
@@ -114,7 +114,7 @@
         >
           <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <p class="text-sm text-destructive">
-            The codes weren't copied — your browser blocked clipboard access.
+            The codes were not copied. Your browser blocked clipboard access.
             Download them, or write them down and confirm below.
           </p>
         </div>
@@ -127,7 +127,7 @@
             onCheckedChange={(checked: boolean) =>
               (confirmedWrittenDown = checked)}
           />
-          <span>I've written down my recovery codes</span>
+          <span>I wrote down my recovery codes</span>
         </label>
       {/if}
 

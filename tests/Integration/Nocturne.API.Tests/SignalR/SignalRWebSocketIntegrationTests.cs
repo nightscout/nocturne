@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration.SignalR;
 /// Integration tests for SignalR WebSocket functionality and domain service broadcasting
 /// Tests real-time communication and legacy compatibility
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Parity]
 public class SignalRWebSocketIntegrationTests : ApiIntegrationTestBase
 {

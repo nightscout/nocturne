@@ -1,14 +1,14 @@
 <script lang="ts">
   import { Tooltip, getChartContext } from "layerchart";
-  import { cn } from "$lib/utils";
-  import { BasalDeliveryOrigin, ChartSpanKind } from "$api-clients";
+  import { cn } from "#lib/utils/index.js";
+  import { BasalDeliveryOrigin, ChartSpanKind } from "#lib/api/generated/nocturne-api-client.js";
   import {
     bg,
     bgLabel,
     formatCarbDisplay,
     formatInsulinDisplay,
     time,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import { getGlucoseChartContext } from "./chart-context.svelte";
   import { isBasalAdjusted } from "./engine/basal-presentation";
   import type { GlucosePoint } from "./engine/chart-data-view.svelte";
@@ -69,7 +69,7 @@
 
 <Tooltip.Root
   context={chartCtx}
-  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm print:hidden"
+  class="border border-border rounded-lg shadow-xl text-xs z-50 print:hidden"
 >
   {#snippet children({ data })}
     {@const activeBasal = findBasal(data.time)}
@@ -151,8 +151,8 @@
               ? "Suspended"
               : isAdjusted
                 ? activeBasal.origin === BasalDeliveryOrigin.Algorithm
-                  ? "Auto Basal"
-                  : "Temp Basal"
+                  ? "Auto basal"
+                  : "Temp basal"
                 : "Basal"}
           <Tooltip.Item
             label={basalLabel}
@@ -185,9 +185,9 @@
             activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
               ? "Suspended"
               : activeBasalDelivery.origin === BasalDeliveryOrigin.Algorithm
-                ? "Auto Basal"
+                ? "Auto basal"
                 : activeBasalDelivery.origin === BasalDeliveryOrigin.Manual
-                  ? "Temp Basal"
+                  ? "Temp basal"
                   : "Basal"}
           <Tooltip.Item
             label={basalLabel}
@@ -205,7 +205,7 @@
           />
         {:else if activeTempBasal && activeTempBasal.rate != null}
           <Tooltip.Item
-            label="Temp Basal"
+            label="Temp basal"
             value={activeTempBasal.rate}
             format="decimal"
             color="var(--insulin-temp-basal)"
@@ -221,7 +221,7 @@
       {/if}
       {#if showPumpModes && activePumpMode}
         <Tooltip.Item
-          label="Pump Mode"
+          label="Pump mode"
           value={activePumpMode.state}
           color={activePumpMode.color}
           class="font-medium"

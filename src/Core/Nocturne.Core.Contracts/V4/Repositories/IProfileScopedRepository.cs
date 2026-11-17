@@ -27,6 +27,21 @@ public interface IProfileScopedRepository<TRecord> : ILegacyKeyedRepository<TRec
     /// <param name="correlationId">Correlation ID linking related records (e.g. from one profile upload).</param>
     Task<IEnumerable<TRecord>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default);
 
+    /// <summary>Every record carrying any of <paramref name="correlationIds"/>, in one query.</summary>
+    Task<IEnumerable<TRecord>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// For each of <paramref name="profileNames"/> that has records, the one
+    /// <see cref="GetByProfileNameAsync"/> returns first, in one query.
+    /// </summary>
+    Task<IEnumerable<TRecord>> GetNewestByProfileNamesAsync(
+        IEnumerable<string> profileNames, CancellationToken ct = default);
+
+    /// <summary>Every record filed under any of <paramref name="profileNames"/>, in one query.</summary>
+    Task<IEnumerable<TRecord>> GetByProfileNamesAsync(
+        IEnumerable<string> profileNames, CancellationToken ct = default);
+
     /// <summary>
     /// Delete all records whose legacy ObjectId starts with <paramref name="prefix"/>, replacing an
     /// entire profile upload atomically during decomposition.

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Popover from "$lib/components/ui/popover";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import { PROFILE_ICONS } from "$lib/constants/profile-icons";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { PROFILE_ICONS } from "#lib/constants/profile-icons.js";
   import type { Icon } from "@lucide/svelte";
   import User from "@lucide/svelte/icons/user";
   import UserCircle from "@lucide/svelte/icons/circle-user";

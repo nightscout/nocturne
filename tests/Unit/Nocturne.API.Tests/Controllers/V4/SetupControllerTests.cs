@@ -17,11 +17,14 @@ using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Services.Connectors;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -84,7 +87,9 @@ public class SetupControllerTests : IDisposable
         // behaviour under test, and BootstrapAsync is not virtual.
         _platformOptions = new PlatformOptions();
         _platformAdminBootstrap = new PlatformAdminBootstrapService(
-            _dbFactory.Object.AsNocturneFactory(),
+            new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
             Options.Create(_platformOptions),
             NullLogger<PlatformAdminBootstrapService>.Instance);
 
@@ -104,13 +109,15 @@ public class SetupControllerTests : IDisposable
             _recoveryCodeService.Object,
             _sessionService.Object,
             _subjectService.Object,
-            _dbFactory.Object.AsNocturneFactory(),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
             _oidcOptions,
             _oidcAuthService.Object,
             Options.Create(operatorConfig),
             httpClientFactory,
             _platformAdminBootstrap,
-            new InstanceSetupState(_dbFactory.Object.AsNocturneFactory()),
+            new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory())),
             logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
@@ -526,6 +533,40 @@ public class SetupControllerTests : IDisposable
             .Should().BeFalse();
     }
 
+    [Fact]
+    public async Task OwnerOptions_AuditsTheOwnerRoleAsTheOwnersOwnAct()
+    {
+        var tenantId = Guid.CreateVersion7();
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        _dbContext.Set<TenantRoleEntity>().Add(new TenantRoleEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, Name = "Owner", Slug = RoleSeeds.Owner, IsSystem = true,
+        });
+        await _dbContext.SaveChangesAsync();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
+
+        await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var context = FreshContext();
+        var owner = await context.TenantMembers.SingleAsync(m => m.TenantId == tenantId);
+        var row = (await context.AuthAuditLog.ToListAsync()).Should().ContainSingle().Subject;
+        row.Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.RoleAssigned,
+            TargetSubjectId = (Guid?)owner.SubjectId,
+            ActorSubjectId = (Guid?)owner.SubjectId,
+            ActorCredential = (string?)null,
+            DetailsJson = """{"role":"owner","kind":"tenant"}""",
+        });
+    }
+
     // SoftLock_TenantWithOnlySystemMembers_OwnerOptionsSucceeds is an integration test — it
     // asserts what the tenant pin makes reachable, which needs real policies.
 
@@ -705,7 +746,7 @@ public class SetupControllerTests : IDisposable
             .ReturnsAsync(["code-1"]);
         _sessionService
             .Setup(s => s.IssueSessionAsync(ownerSubjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, ownerSubjectId));
 
         var result = await _controller.OwnerComplete(
             new SetupOwnerCompleteRequest
@@ -988,7 +1029,7 @@ public class SetupControllerTests : IDisposable
             .ReturnsAsync(["code-1", "code-2"]);
         _sessionService
             .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access", "refresh", 3600));
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 3600, subjectId));
     }
 
     private void SetOidcStateCookieOnRequest(string state) =>
@@ -1049,8 +1090,7 @@ public class SetupControllerTests : IDisposable
     /// <summary>
     /// Seeds the state a fresh install reaches after tenant creation and a first pass
     /// through owner setup: a sole tenant whose credential-less member holds the owner
-    /// role. <see cref="ITenantService.AddMemberAsync"/> is mocked, so the membership
-    /// and its role link are written directly.
+    /// role, written directly.
     /// </summary>
     private async Task<(Guid TenantId, Guid SubjectId)> SeedSoleTenantWithOwnerRoleAsync()
     {

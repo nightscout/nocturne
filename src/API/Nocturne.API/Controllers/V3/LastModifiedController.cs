@@ -31,6 +31,7 @@ public class LastModifiedController : ControllerBase
 
     /// <summary>
     /// Get last modified timestamps for the collections the caller can read.
+    /// On an internal error it still returns 200, with an empty <c>collections</c> map.
     /// </summary>
     /// <returns>A <see cref="LastModifiedResponse"/> with per-collection timestamps and server time.</returns>
     /// <remarks>
@@ -76,13 +77,10 @@ public class LastModifiedController : ControllerBase
     {
         var collections = new Dictionary<string, long>();
 
-        static long ToUnixMillis(DateTime value) =>
-            new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-
         void Add(string key, DateTime? value)
         {
             if (value.HasValue)
-                collections[key] = ToUnixMillis(value.Value);
+                collections[key] = value.Value.ToMills();
         }
 
         Add("entries", lastModified.Entries);
@@ -103,7 +101,7 @@ public class LastModifiedController : ControllerBase
         {
             Result = new V3LastModifiedResult
             {
-                SrvDate = ToUnixMillis(lastModified.ServerTime),
+                SrvDate = lastModified.ServerTime.ToMills(),
                 Collections = collections,
             },
         };

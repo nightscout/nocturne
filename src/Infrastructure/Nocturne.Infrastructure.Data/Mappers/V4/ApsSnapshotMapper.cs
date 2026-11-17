@@ -70,6 +70,7 @@ public static class ApsSnapshotMapper
             RecommendedBolus = entity.RecommendedBolus,
             SensitivityRatio = entity.SensitivityRatio,
             Enacted = entity.Enacted,
+            ClosedLoop = entity.ClosedLoop,
             EnactedRate = entity.EnactedRate,
             EnactedDuration = entity.EnactedDuration,
             EnactedBolusVolume = entity.EnactedBolusVolume,

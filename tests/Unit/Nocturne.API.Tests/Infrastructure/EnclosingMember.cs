@@ -32,10 +32,15 @@ internal static class EnclosingMember
             _ => member.Kind().ToString(),
         };
 
-        var types = (member ?? node).Ancestors().OfType<BaseTypeDeclarationSyntax>()
+        return string.Join(".", Types(member ?? node).Append(name));
+    }
+
+    /// <summary>The type a syntax node sits in, qualified by its enclosing types, or the member when it sits in none.</summary>
+    public static string TypeOf(SyntaxNode node) =>
+        Types(node).ToList() is { Count: > 0 } types ? string.Join(".", types) : Of(node);
+
+    private static IEnumerable<string> Types(SyntaxNode node) =>
+        node.Ancestors().OfType<BaseTypeDeclarationSyntax>()
             .Reverse()
             .Select(type => type.Identifier.ValueText);
-
-        return string.Join(".", types.Append(name));
-    }
 }

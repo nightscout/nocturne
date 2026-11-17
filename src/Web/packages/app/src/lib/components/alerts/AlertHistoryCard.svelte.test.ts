@@ -5,7 +5,7 @@ import {
 	AlertConditionType,
 	type AlertHistoryResponse,
 	type HistoryExcursionResponse,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 import AlertHistoryCard from "./AlertHistoryCard.svelte";
 
 function excursion(over: Partial<HistoryExcursionResponse> = {}): HistoryExcursionResponse {
@@ -38,7 +38,7 @@ describe("AlertHistoryCard", () => {
 			onLoadPage: () => {},
 		});
 
-		await expect.element(page.getByText("Alert History", { exact: true })).toBeVisible();
+		await expect.element(page.getByText("Alert history", { exact: true })).toBeVisible();
 		await expect
 			.element(page.getByText("Past alert excursions and their resolution"))
 			.toBeVisible();
@@ -86,7 +86,7 @@ describe("AlertHistoryCard", () => {
 		});
 
 		await expect.element(page.getByText("Low Alert")).toBeVisible();
-		await expect.element(page.getByText("Threshold")).toBeVisible();
+		await expect.element(page.getByText("Glucose threshold")).toBeVisible();
 		await expect.element(page.getByText(/admin/)).toBeVisible();
 	});
 

@@ -39,10 +39,11 @@ public class SensorGlucoseAnalyticsReadTests(V4GoldenFixture fixture)
         slim.Should().OnlyContain(r => r.AdditionalProperties == null);
 
         var expected = await repo.GetAsync(start.AddMinutes(5), start.AddMinutes(20), "a", "projection-test",
-            2, 1, descending, nativeOnly: true);
+            2, 1, descending);
         var actual = await repo.GetForAnalyticsAsync(start.AddMinutes(5), start.AddMinutes(20), "a", "projection-test",
-            2, 1, descending, nativeOnly: true);
+            2, 1, descending);
         actual.Select(Values).Should().Equal(expected.Select(Values));
+        actual.Should().Contain(r => r.Id == full.Single(f => f.LegacyId == "legacy-6").Id);
 
         var cursor = full[3];
         expected = await repo.GetAsync(start, null, null, null, 3, 99, descending,

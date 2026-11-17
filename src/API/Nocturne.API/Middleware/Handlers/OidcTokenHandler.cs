@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -30,6 +31,7 @@ public class OidcTokenHandler : IAuthHandler
     private readonly ILogger<OidcTokenHandler> _logger;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly string _ownIssuer;
 
     // Cache for OIDC configuration managers (keyed by issuer URL)
     private static readonly Dictionary<
@@ -45,13 +47,15 @@ public class OidcTokenHandler : IAuthHandler
         IServiceScopeFactory scopeFactory,
         ILogger<OidcTokenHandler> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory
+        IHttpClientFactory httpClientFactory,
+        IOptions<Nocturne.Core.Models.Configuration.JwtOptions> jwtOptions
     )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _ownIssuer = jwtOptions.Value.Issuer;
     }
 
     /// <inheritdoc />
@@ -78,7 +82,9 @@ public class OidcTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        if (string.IsNullOrEmpty(issuer))
+        // Nocturne's own tokens are signed with its own key, which no OIDC provider holds, so
+        // they are left to the later handlers without a provider lookup on every request.
+        if (string.IsNullOrEmpty(issuer) || string.Equals(issuer, _ownIssuer, StringComparison.Ordinal))
         {
             return AuthResult.Skip();
         }
@@ -92,7 +98,7 @@ public class OidcTokenHandler : IAuthHandler
         {
             provider = await oidcProviderService.GetProviderByIssuerAsync(issuer);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CredentialFailure.Is(ex))
         {
             _logger.LogWarning(ex, "Error looking up OIDC provider for issuer {Issuer}", issuer);
             return AuthResult.Skip();
@@ -136,7 +142,7 @@ public class OidcTokenHandler : IAuthHandler
 
             return AuthResult.Success(authContext);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CredentialFailure.Is(ex))
         {
             _logger.LogError(
                 ex,

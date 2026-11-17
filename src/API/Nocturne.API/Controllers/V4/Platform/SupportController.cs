@@ -269,6 +269,7 @@ public class SupportController(
 
     /// <summary>
     /// Returns the tenant configuration a reporter may attach to a support issue.
+    /// Requires the tenant settings scope.
     /// </summary>
     /// <remarks>
     /// Gated like <see cref="V4.ConnectorStatusController"/>, whose connector health this reports a
@@ -311,6 +312,7 @@ public class SupportController(
     /// <summary>
     /// Returns operator support configuration for the frontend.
     /// When no operator is configured, both channels are null and the default GitHub flow applies.
+    /// Does not require authentication.
     /// </summary>
     /// <remarks>
     /// Anonymous because the hosts that most need the operator's address — an inactive tenant's,

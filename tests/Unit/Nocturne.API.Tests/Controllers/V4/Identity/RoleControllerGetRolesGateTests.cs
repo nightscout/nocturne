@@ -15,7 +15,7 @@ public sealed class RoleControllerGetRolesGateTests
     private readonly Mock<ITenantRoleService> _roles = new();
 
     private static TenantRoleDto Role(string slug, params string[] permissions) =>
-        new(Guid.CreateVersion7(), slug, slug, null, [.. permissions], false, 0, DateTime.UtcNow);
+        new(Guid.CreateVersion7(), slug, slug, null, [.. permissions], false, 0, DateTime.UtcNow, true);
 
     private RoleController BuildController(params string[] grantedScopes)
     {
@@ -46,7 +46,10 @@ public sealed class RoleControllerGetRolesGateTests
 
         result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeEquivalentTo(new List<TenantRoleDto> { viewer });
-        _roles.Verify(s => s.GetRolesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _roles.Verify(
+            s => s.GetRolesAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -67,7 +70,12 @@ public sealed class RoleControllerGetRolesGateTests
     public async Task GetRoles_asRolesManageCaller_returnsEveryRole()
     {
         var all = new List<TenantRoleDto> { Role("owner", "*"), Role("viewer", "glucose.read") };
-        _roles.Setup(s => s.GetRolesAsync(_tenantId, It.IsAny<CancellationToken>())).ReturnsAsync(all);
+        _roles
+            .Setup(s => s.GetRolesAsync(
+                _tenantId,
+                It.Is<IReadOnlyCollection<string>>(g => g.Contains(Scope.RolesManage)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(all);
 
         var result = await BuildController(Scope.RolesManage).GetRoles(CancellationToken.None);
 

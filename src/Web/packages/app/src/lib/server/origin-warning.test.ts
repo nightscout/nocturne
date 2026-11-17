@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EventEmitter } from "node:events";
-
-// @ts-expect-error - plain JS module shipped beside server.js, no types
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { createReportBudget, warnOnOriginMismatch } from "../../../server-origin-warning.js";
 
 /** A response whose status is chosen by the test and whose `finish` the test fires. */
@@ -36,7 +35,7 @@ function report(
 ): string[] {
   const logged: string[] = [];
   const res = new FakeResponse(statusCode);
-  warnOnOriginMismatch(fakeRequest(origin, forwarded), res, {
+  warnOnOriginMismatch(fakeRequest(origin, forwarded) as unknown as IncomingMessage, res as unknown as ServerResponse, {
     budget,
     warn: (m: string) => logged.push(m),
     now: () => at,

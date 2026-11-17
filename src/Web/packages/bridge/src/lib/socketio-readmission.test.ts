@@ -9,6 +9,14 @@ import SocketIOServer, {
 import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
 
 const SECRET = 'test-instance-key-0123456789';
+const TENANT_ID = '0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b';
+
+/** The server, with `TENANT_ID` as the tenant every slug names. */
+function servingTenant(server: SocketIOServer): SocketIOServer {
+  server.isCurrentTenant = async (_slug, id) => id === TENANT_ID;
+  server.holdsTenantNow = (_slug, id) => id === TENANT_ID;
+  return server;
+}
 const HOST = 'rhys.nocturne.run';
 
 function grant(extra: Partial<RealtimeGrant> = {}): RealtimeGrant {
@@ -23,7 +31,7 @@ const refused = { ok: false, status: 401 };
 const failing = { ok: false, status: 503 };
 
 function makeServer() {
-  return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, 'http://api.internal');
+  return servingTenant(new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, 'http://api.internal'));
 }
 
 /** A socket already past the handshake, with the members a re-check touches. */
@@ -75,8 +83,71 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     );
     await server.readmit(socket as never);
 
-    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys:category:care']);
+    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:legacy:treatments',
+    ]);
     expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('narrows a restricted socket to the category rooms a fresh admission still grants', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      admission({ tenantRelay: false, categories: ['entries', 'care'], historyClamped: false }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const socket = admittedSocket();
+    await server.handleAuthorize(socket as never, { token: 'guest-token' });
+    expect(socket.join.mock.calls.map(([room]) => room).sort()).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:category:entries',
+      'tenant:rhys:legacy:entries',
+      'tenant:rhys:legacy:treatments',
+    ]);
+
+    fetchMock.mockResolvedValue(admission({ tenantRelay: false, categories: ['entries'], historyClamped: false }));
+    await server.readmit(socket as never);
+
+    expect(socket.leave.mock.calls.map(([room]) => room)).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:legacy:treatments',
+    ]);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('leaves every category room of a restricted socket whose admission is withdrawn', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      admission({ tenantRelay: false, categories: ['entries', 'care'], historyClamped: false }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const socket = admittedSocket();
+    await server.handleAuthorize(socket as never, { token: 'guest-token' });
+
+    fetchMock.mockResolvedValue(admission({ tenantRelay: false, categories: [], historyClamped: false }));
+    await server.readmit(socket as never);
+
+    expect(socket.leave.mock.calls.map(([room]) => room).sort()).toEqual([
+      'tenant:rhys:category:care',
+      'tenant:rhys:category:entries',
+      'tenant:rhys:legacy:entries',
+      'tenant:rhys:legacy:treatments',
+    ]);
+  });
+
+  it('disconnects a restricted socket once the API refuses its credential', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      admission({ tenantRelay: false, categories: ['entries'], historyClamped: false }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const socket = admittedSocket();
+    await server.handleAuthorize(socket as never, { token: 'guest-token' });
+
+    fetchMock.mockResolvedValue(refused);
+    await server.readmit(socket as never);
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('leaves every room when the admission turns restricted', async () => {
@@ -90,7 +161,7 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     await server.readmit(socket as never);
 
     expect(socket.leave.mock.calls.map(([room]) => room).sort()).toEqual(
-      ['tenant:rhys', 'tenant:rhys:category:entries'].sort(),
+      ['tenant:rhys', 'tenant:rhys:legacy', 'tenant:rhys:category:entries', 'tenant:rhys:legacy:entries'].sort(),
     );
   });
 
@@ -239,7 +310,7 @@ describe('SocketIOServer re-admission of a browser socket admitted on a ticket',
 
   async function listening() {
     const http = createServer();
-    const server = new SocketIOServer(http, {}, 'nocturne.run', null, SECRET);
+    const server = servingTenant(new SocketIOServer(http, {}, 'nocturne.run', null, SECRET));
     await server.start();
     await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
     return { server, port: (http.address() as AddressInfo).port };
@@ -253,7 +324,7 @@ describe('SocketIOServer re-admission of a browser socket admitted on a ticket',
       transports: ['websocket'],
       reconnection: false,
       extraHeaders: { 'X-Forwarded-Host': HOST },
-      auth: { token: signHandshakeTicket(SECRET, HOST, admitted) },
+      auth: { token: signHandshakeTicket(SECRET, HOST, TENANT_ID, admitted) },
     });
     clients.push(client);
     client.on('realtime_ticket', (ack: (reply: TicketReply) => void) => ack(answer()));
@@ -270,7 +341,7 @@ describe('SocketIOServer re-admission of a browser socket admitted on a ticket',
   it('moves the socket onto the rooms of the fresh ticket', async () => {
     const { server, port } = await listening();
     const client = await browser(port, grant({ categories: ['entries', 'care'] }), () => ({
-      token: signHandshakeTicket(SECRET, HOST, grant({ categories: ['entries'] })),
+      token: signHandshakeTicket(SECRET, HOST, TENANT_ID, grant({ categories: ['entries'] })),
       denied: false,
     }));
     const socket = serverSocket(server, client);
@@ -283,10 +354,44 @@ describe('SocketIOServer re-admission of a browser socket admitted on a ticket',
     await server.stop();
   });
 
+  it('takes a restricted ticket socket off the category rooms its fresh ticket drops', async () => {
+    const { server, port } = await listening();
+    const client = await browser(port, grant({ tenantRelay: false, categories: ['entries', 'care'] }), () => ({
+      token: signHandshakeTicket(SECRET, HOST, TENANT_ID, grant({ tenantRelay: false, categories: ['entries'] })),
+      denied: false,
+    }));
+    const socket = serverSocket(server, client);
+    const rooms = () => [...socket.rooms].filter((room) => room !== socket.id).sort();
+    expect(rooms()).toEqual(['tenant:rhys:category:care', 'tenant:rhys:category:entries']);
+
+    await server.readmit(socket);
+
+    expect(rooms()).toEqual(['tenant:rhys:category:entries']);
+    await server.stop();
+  });
+
+  it('takes a restricted ticket socket off every room once its fresh ticket grants none', async () => {
+    const { server, port } = await listening();
+    const client = await browser(port, grant({ tenantRelay: false, categories: ['entries', 'care'] }), () => ({
+      token: signHandshakeTicket(SECRET, HOST, TENANT_ID, grant({ tenantRelay: false, categories: [] })),
+      denied: false,
+    }));
+    const socket = serverSocket(server, client);
+
+    await server.readmit(socket);
+
+    expect([...socket.rooms].filter((room) => room !== socket.id)).toEqual([]);
+    await server.stop();
+  });
+
   it.each([
     ['a denial', () => ({ token: null, denied: true })],
-    ['a ticket minted for another host', () => ({ token: signHandshakeTicket(SECRET, 'other.nocturne.run', grant()), denied: false })],
-    ['a tampered ticket', () => ({ token: signHandshakeTicket('another-key', HOST, grant()), denied: false })],
+    ['a ticket minted for another host', () => ({ token: signHandshakeTicket(SECRET, 'other.nocturne.run', TENANT_ID, grant()), denied: false })],
+    ['a tampered ticket', () => ({ token: signHandshakeTicket('another-key', HOST, TENANT_ID, grant()), denied: false })],
+    [
+      'a ticket for a tenant its slug no longer names',
+      () => ({ token: signHandshakeTicket(SECRET, HOST, '0198a3c4-0000-7000-8000-000000000000', grant()), denied: false }),
+    ],
   ])('closes the transport of a socket that answers with %s', async (_case, answer) => {
     const { server, port } = await listening();
     const client = await browser(port, grant({ categories: ['entries'] }), answer);
@@ -297,6 +402,29 @@ describe('SocketIOServer re-admission of a browser socket admitted on a ticket',
 
     expect(await disconnected).toBe('transport close');
     expect(socket.connected).toBe(false);
+    await server.stop();
+  });
+
+  it('closes the transport of a socket whose slug names another tenant by the time its fresh ticket is applied', async () => {
+    const { server, port } = await listening();
+    const client = await browser(port, grant({ categories: ['entries'] }), () => ({
+      token: signHandshakeTicket(SECRET, HOST, TENANT_ID, grant({ categories: ['entries'] })),
+      denied: false,
+    }));
+    const socket = serverSocket(server, client);
+    const disconnected = new Promise<string>((resolve) => client.once('disconnect', resolve));
+    let current = TENANT_ID;
+    server.holdsTenantNow = (_slug, id) => id === current;
+    server.isCurrentTenant = async (_slug, id) => {
+      const held = id === current;
+      current = '0198a3c4-0000-7000-8000-000000000001';
+      return held;
+    };
+
+    await server.readmit(socket);
+
+    expect(await disconnected).toBe('transport close');
+    expect([...socket.rooms].filter((room) => room.startsWith('tenant:'))).toEqual([]);
     await server.stop();
   });
 

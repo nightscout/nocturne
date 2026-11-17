@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
 
   let { children } = $props();
 </script>

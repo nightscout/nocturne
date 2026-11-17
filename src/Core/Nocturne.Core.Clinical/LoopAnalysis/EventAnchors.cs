@@ -8,13 +8,11 @@ public readonly record struct EventAnchor(long Mills, EventAnchorKind Kind, doub
 /// <summary>Finds the instants each <see cref="EventAnchorKind"/> aligns on.</summary>
 public static class EventAnchors
 {
-    /// <summary>
-    /// How far either side of a bolus a carb entry makes it a meal bolus rather than a correction,
-    /// and of a rise makes it an announced meal. Pre-bolusing commonly runs 15 to 20 minutes ahead of
-    /// eating, and a carb entry is often logged after the plate is cleared; half an hour covers both
-    /// without reaching the next meal.
-    /// </summary>
-    public const long CarbFreeMs = 30 * LocalSlotBinning.MinuteMs;
+    /// <summary>A pre-bolus for a slow meal or a high glucose can come up to an hour before eating.</summary>
+    public const long BolusBeforeMealMs = 60 * LocalSlotBinning.MinuteMs;
+
+    /// <summary>A carb entry is often logged, or a bolus given, after the plate is cleared.</summary>
+    public const long BolusAfterMealMs = 30 * LocalSlotBinning.MinuteMs;
 
     /// <summary>
     /// Which way glucose is expected to go after an anchor of <paramref name="kind"/>. A sensor start
@@ -42,13 +40,13 @@ public static class EventAnchors
             .Select(g => new EventAnchor(g.Key, EventAnchorKind.Meal, g.Sum(c => c.Grams))),
     ];
 
-    /// <summary>Every manual dose with no carb entry within <see cref="CarbFreeMs"/> either side.</summary>
+    /// <summary>Every manual dose that <see cref="MealPairing"/> pairs with no meal.</summary>
     public static List<EventAnchor> CorrectionBoluses(IEnumerable<InsulinDose> doses, IReadOnlyList<CarbEvent> carbs)
     {
-        var carbMills = CarbMills(carbs);
+        var pairing = new MealPairing(carbs);
         return
         [
-            .. doses.Where(d => !d.Automatic && d.Units > 0 && !AnyWithin(carbMills, d.Mills - CarbFreeMs, d.Mills + CarbFreeMs))
+            .. doses.Where(d => !d.Automatic && d.Units > 0 && pairing.MealOf(d) is null)
                 .Select(d => d.Mills)
                 .Distinct()
                 .Order()
@@ -105,5 +103,47 @@ public static class EventAnchors
                 return false;
         }
         return true;
+    }
+}
+
+/// <summary>
+/// The meal of <see cref="EventAnchors.Meals"/> each dose was given for. A dose pairs with the meal
+/// of a carb entry sharing its <see cref="InsulinDose.CorrelationId"/>, else with the nearest meal
+/// from <see cref="EventAnchors.BolusAfterMealMs"/> before it to
+/// <see cref="EventAnchors.BolusBeforeMealMs"/> after it, the earlier on a tie. A dose pairs with one
+/// meal only, so a bolus between two meals is not counted for both.
+/// </summary>
+public sealed class MealPairing
+{
+    private readonly Dictionary<Guid, int> _mealByCorrelation = [];
+
+    public MealPairing(IEnumerable<CarbEvent> carbs)
+    {
+        var carbList = carbs.Where(c => c.Grams > 0).ToList();
+        Meals = EventAnchors.Meals(carbList);
+        foreach (var carb in carbList.OrderBy(c => c.Mills))
+        {
+            if (carb.CorrelationId is { } id)
+                _mealByCorrelation.TryAdd(id, SortedSearch.FirstEndingAfter(Meals, carb.Mills - 1, static m => m.Mills));
+        }
+    }
+
+    public IReadOnlyList<EventAnchor> Meals { get; }
+
+    /// <summary>The index in <see cref="Meals"/> of the meal <paramref name="dose"/> pairs with, or null.</summary>
+    public int? MealOf(InsulinDose dose)
+    {
+        if (dose.CorrelationId is { } id && _mealByCorrelation.TryGetValue(id, out var linked))
+            return linked;
+
+        int? nearest = null;
+        for (var i = SortedSearch.FirstEndingAfter(Meals, dose.Mills - EventAnchors.BolusAfterMealMs - 1, static m => m.Mills);
+             i < Meals.Count && Meals[i].Mills <= dose.Mills + EventAnchors.BolusBeforeMealMs;
+             i++)
+        {
+            if (nearest is not { } best || Math.Abs(Meals[i].Mills - dose.Mills) < Math.Abs(Meals[best].Mills - dose.Mills))
+                nearest = i;
+        }
+        return nearest;
     }
 }

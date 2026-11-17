@@ -97,7 +97,7 @@ public class TotpControllerLoginGateTests
     private void SetupSessionIssuance() =>
         _sessionService
             .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 3600));
+            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 3600, Guid.Empty));
 
     private Task<ActionResult<TotpLoginResponse>> LoginAsync() =>
         CreateController().Login(new TotpLoginRequest { StepUpToken = "step-up", Code = "123456" });

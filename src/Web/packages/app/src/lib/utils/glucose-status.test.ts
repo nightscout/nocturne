@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
-import type { TenantOverviewItem } from "$lib/api/generated/nocturne-api-client";
+import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
 import {
   glucoseStatusStyles,
   glucoseStatusSortOrder,

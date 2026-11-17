@@ -2,8 +2,18 @@ import { GLUCOSE_HEATMAP_LEGEND_STOPS } from "./chart-colors";
 
 export type ColorFocusRange = readonly [number, number];
 
-/** Pins the color `position` (0 to 1) of the way along a ramp to `value`. */
-export type ColorBoundary = { readonly value: number; readonly position: number };
+/**
+ * Pins the color `position` (0 to 1) of the way along a ramp to `value`. A `color` replaces
+ * the ramp's own color there.
+ */
+export type ColorBoundary = {
+  readonly value: number;
+  readonly position: number;
+  readonly color?: string;
+};
+
+/** Colors chosen for the ends of a ramp; an end left unset keeps the theme color. */
+export type ColorEnds = { readonly low?: string; readonly high?: string };
 
 export type RampStop = { readonly position: number; readonly color: string };
 
@@ -28,7 +38,9 @@ export function metricRamp(cssVar: string): readonly RampStop[] {
 }
 
 export interface MetricScale {
+  /** The theme ramp with the chosen colors in place. */
   ramp: readonly RampStop[];
+  ends: ColorEnds;
   /** The values the ramp spans; beyond it a value takes the end color. */
   domain: ColorFocusRange;
   /** The extent of the slider and of the drawn scale. */
@@ -43,13 +55,21 @@ export interface MetricScale {
 export const GLUCOSE_LIMITS: ColorFocusRange = [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
 
 /** The glucose ramp keeps its fixed mg/dL domain, so a color means the same reading whatever the window. */
-export function glucoseScale(savedWindow: unknown, savedBoundaries: unknown, dim: number): MetricScale {
+export function glucoseScale(
+  savedWindow: unknown,
+  savedBoundaries: unknown,
+  dim: number,
+  savedEnds: ColorEnds = {}
+): MetricScale {
+  const boundaries = resolveColorBoundaries(savedBoundaries, GLUCOSE_LIMITS) ?? [];
+  const ends = resolveColorEnds(savedEnds);
   return {
-    ramp: GLUCOSE_RAMP,
+    ramp: paintRamp(GLUCOSE_RAMP, ends, boundaries, GLUCOSE_LIMITS),
+    ends,
     domain: GLUCOSE_LIMITS,
     axis: GLUCOSE_LIMITS,
     window: resolveColorFocusRange(savedWindow, GLUCOSE_LIMITS) ?? GLUCOSE_LIMITS,
-    boundaries: resolveColorBoundaries(savedBoundaries, GLUCOSE_LIMITS) ?? [],
+    boundaries,
     dim,
   };
 }
@@ -64,7 +84,8 @@ export function intensityScale(
   observedMax: number,
   savedWindow: unknown,
   savedBoundaries: unknown,
-  dim: number
+  dim: number,
+  savedEnds: ColorEnds = {}
 ): MetricScale {
   const max = Number.isFinite(limits[1])
     ? limits[1]
@@ -76,8 +97,10 @@ export function intensityScale(
   // Checked against the limits, not the window: a boundary the window no longer reaches is
   // kept, and only the ramp ignores it.
   const boundaries = resolveColorBoundaries(savedBoundaries, limits) ?? [];
+  const ends = resolveColorEnds(savedEnds);
   return {
-    ramp: metricRamp(cssVar),
+    ramp: paintRamp(metricRamp(cssVar), ends, boundaries, window),
+    ends,
     domain: window,
     axis: [
       limits[0],
@@ -108,7 +131,55 @@ export function resolveColorFocusRange(
     : null;
 }
 
-/** Boundaries strictly inside `limits`, strictly increasing in both value and position. */
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/** The form a native color input reads and writes. */
+export function isHexColor(candidate: unknown): candidate is string {
+  return typeof candidate === "string" && HEX_COLOR.test(candidate);
+}
+
+/** Drops an end color that is not a hex color rather than refusing the pair. */
+export function resolveColorEnds(candidate: ColorEnds): ColorEnds {
+  const ends: { low?: string; high?: string } = {};
+  if (isHexColor(candidate.low)) ends.low = candidate.low;
+  if (isHexColor(candidate.high)) ends.high = candidate.high;
+  return ends;
+}
+
+/**
+ * The base ramp with the end colors in place of its ends and each colored boundary inside
+ * `domain` as a stop of its own. A boundary the domain does not reach is ignored, as
+ * {@link rampPosition} ignores it.
+ */
+export function paintRamp(
+  base: readonly RampStop[],
+  ends: ColorEnds,
+  boundaries: readonly ColorBoundary[],
+  domain: ColorFocusRange
+): readonly RampStop[] {
+  const pinned = boundaries.filter(
+    (b): b is ColorBoundary & { color: string } =>
+      b.color !== undefined && b.value > domain[0] && b.value < domain[1]
+  );
+  if (!ends.low && !ends.high && pinned.length === 0) return base;
+  const stops = base
+    .filter((stop) => !pinned.some((b) => b.position === stop.position))
+    .map((stop, i, all) =>
+      i === 0 && ends.low
+        ? { ...stop, color: ends.low }
+        : i === all.length - 1 && ends.high
+          ? { ...stop, color: ends.high }
+          : stop
+    );
+  return [...stops, ...pinned.map((b) => ({ position: b.position, color: b.color }))].sort(
+    (a, b) => a.position - b.position
+  );
+}
+
+/**
+ * Boundaries strictly inside `limits`, strictly increasing in both value and position, each
+ * with at most a hex color.
+ */
 export function resolveColorBoundaries(
   candidate: unknown,
   limits: ColorFocusRange
@@ -119,7 +190,9 @@ export function resolveColorBoundaries(
     if (typeof item !== "object" || item === null || !("value" in item) || !("position" in item))
       return null;
     const { value, position } = item;
+    const color = "color" in item ? item.color : undefined;
     if (
+      (color !== undefined && color !== null && !isHexColor(color)) ||
       typeof value !== "number" ||
       typeof position !== "number" ||
       !Number.isFinite(value) ||
@@ -132,7 +205,7 @@ export function resolveColorBoundaries(
       return null;
     const previous = boundaries.at(-1);
     if (previous && (value <= previous.value || position <= previous.position)) return null;
-    boundaries.push({ value, position });
+    boundaries.push(isHexColor(color) ? { value, position, color } : { value, position });
   }
   return boundaries;
 }

@@ -10,7 +10,7 @@ vi.mock("../bot.remote", () => ({
   buildTenantRedirectUrl: vi.fn(),
 }));
 
-vi.mock("$lib/api/generated/chatIdentities.generated.remote", () => ({
+vi.mock("#lib/api/generated/chatIdentities.generated.remote.js", () => ({
   getPending: () => ({ current: { platform: "discord" }, error: undefined }),
   claimLink: claim_link,
 }));
@@ -25,8 +25,8 @@ describe("confirming a chat link", () => {
 
   it.each([
     [409, "This chat account is already linked to another member."],
-    [400, "This link is expired or invalid. Please run /connect in your chat app again."],
-    [500, "Failed to link account. Please try again."],
+    [400, "This link is expired or invalid. Run /connect in your chat app again."],
+    [500, "Failed to link account. Try again."],
   ])("tells the member why a %i refusal linked nothing", async (status, message) => {
     claim_link.mockRejectedValue({ status, body: { message: "server wording" } });
     render(AuthorizePage);

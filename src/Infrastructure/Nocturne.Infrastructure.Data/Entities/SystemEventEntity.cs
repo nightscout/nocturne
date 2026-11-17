@@ -10,10 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 [Table("system_events")]
 public class SystemEventEntity : ITenantScoped
 {
-    /// <summary>
-    /// Primary key - UUID Version 7 for time-ordered, globally unique identification
-    /// </summary>
-    [Key]
+    /// <summary>Row id, unique within its tenant: the primary key is <c>(TenantId, Id)</c>.</summary>
     public Guid Id { get; set; }
 
     /// <summary>

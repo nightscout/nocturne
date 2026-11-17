@@ -69,7 +69,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
 
         var log = await ReadAuditLogAsync();
         log.Should().HaveCount(2).And.OnlyContain(l =>
-            l.Action == "delete" && l.EntityType == AuditEntityType && l.SubjectName == "tester");
+            l.Action == "delete" && l.EntityType == AuditEntityType && l.ActorName == "tester");
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
 
         var log = await ReadAuditLogAsync();
         log.Should().HaveCount(3).And.OnlyContain(l =>
-            l.Action == "delete" && l.EntityType == AuditEntityType && l.SubjectName == "tester");
+            l.Action == "delete" && l.EntityType == AuditEntityType && l.ActorName == "tester");
     }
 
     [Fact]
@@ -207,8 +207,8 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
     private void SeedMany(int count, string dataSource)
     {
         var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-        for (var i = 0; i < count; i++)
-            Seed(start.AddMinutes(i), dataSource);
+        AddRange(Enumerable.Range(0, count)
+            .Select(i => NewRow(Guid.CreateVersion7(), start.AddMinutes(i), dataSource, device: null)));
     }
 }
 
@@ -282,7 +282,7 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new SensorGlucoseRepository(
             contextFactory,
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             auditContext,
             Logger<SensorGlucoseRepository>(),
             entrySink: EntrySink.Object);

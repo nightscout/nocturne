@@ -1,14 +1,18 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect } from "vitest";
-import type { PunchCardDay } from "$api";
+import type { PunchCardDay } from "#lib/api/index.js";
 import CalendarDayCellHarness from "./CalendarDayCellHarness.test.svelte";
 
 const noop = () => {};
 
-function renderCell(day: PunchCardDay | { empty: true; dayNumber: number }, showTirPercent: boolean) {
+function renderCell(
+	day: PunchCardDay | { empty: true; dayNumber: number },
+	showTirPercent: boolean,
+	viewMode: "tir" | "profile" = "tir",
+) {
 	return render(CalendarDayCellHarness, {
 		day,
-		viewMode: "tir",
+		viewMode,
 		showTirPercent,
 		currentYear: 2025,
 		currentMonth: 5,
@@ -68,5 +72,55 @@ describe("CalendarDayCell TIR percentage", () => {
 		const { container } = renderCell({ empty: true, dayNumber: 3 }, true);
 
 		expect(container.querySelector("[data-testid='tir-percent']")).toBeNull();
+	});
+});
+
+describe("CalendarDayCell profile day domain", () => {
+	const hour = 3_600_000;
+	const start = 1792879200000;
+	const readings = [
+		{ mills: start, mgdl: 120 },
+		{ mills: start + 2 * hour, mgdl: 140 },
+	];
+	const profileDay = (endTimestamp?: number): PunchCardDay => ({
+		...dayWithData(72),
+		date: "2026-10-31",
+		timestamp: start,
+		endTimestamp,
+		entries: readings,
+	});
+
+	async function lineRightEdge(day: PunchCardDay) {
+		const { container } = renderCell(day, false, "profile");
+		await expect.poll(() => container.querySelector("svg path.lc-area-line")).not.toBeNull();
+		const box = (container.querySelector("svg path.lc-area-line") as SVGGraphicsElement).getBBox();
+		const plotWidth = container.querySelector("svg")!.getBoundingClientRect().width - 2;
+		return { right: box.x + box.width, plotWidth };
+	}
+
+	it("spans the sparkline over the day the backend served, from timestamp to endTimestamp", async () => {
+		const { right, plotWidth } = await lineRightEdge(profileDay(start + 25 * hour));
+
+		expect(right).toBeCloseTo(plotWidth * (2 / 25), 0);
+	});
+
+	it("spans a 23 hour day by its real length", async () => {
+		const { right, plotWidth } = await lineRightEdge(profileDay(start + 23 * hour));
+
+		expect(right).toBeCloseTo(plotWidth * (2 / 23), 0);
+	});
+
+	it("falls back to the local calendar day of the first reading when endTimestamp is missing", async () => {
+		const localMidnight = new Date(2026, 9, 6).getTime();
+		const { right, plotWidth } = await lineRightEdge({
+			...profileDay(undefined),
+			timestamp: localMidnight,
+			entries: [
+				{ mills: localMidnight, mgdl: 120 },
+				{ mills: localMidnight + 2 * hour, mgdl: 140 },
+			],
+		});
+
+		expect(right).toBeCloseTo(plotWidth * (2 / 24), 0);
 	});
 });

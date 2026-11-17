@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import { onDestroy } from "svelte";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { toast } from "svelte-sonner";
   import Link2 from "@lucide/svelte/icons/link-2";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -13,9 +13,13 @@
     startDeduplicationJob,
     getJobStatus as getDeduplicationJobStatus,
     cancelJob as cancelDeduplicationJob,
-  } from "$api/generated/deduplications.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import type { DeduplicationJobStatus } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/deduplications.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import {
+    DeduplicationJobState,
+    type DeduplicationJobStatus,
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     open: boolean;
@@ -62,19 +66,19 @@
       if (!deduplicationJobId) return;
 
       try {
-        const status = await getDeduplicationJobStatus(deduplicationJobId).run();
+        const status = await fresh(getDeduplicationJobStatus(deduplicationJobId));
         if (status) {
           deduplicationStatus = status;
 
           if (
-            status.state === "Completed" ||
-            status.state === "Failed" ||
-            status.state === "Cancelled"
+            status.state === DeduplicationJobState.Completed ||
+            status.state === DeduplicationJobState.Failed ||
+            status.state === DeduplicationJobState.Cancelled
           ) {
             stopDeduplicationPolling();
             isDeduplicating = false;
 
-            if (status.state === "Failed") {
+            if (status.state === DeduplicationJobState.Failed) {
               deduplicationError = status.result?.errorMessage ?? "Job failed";
             }
 
@@ -84,18 +88,18 @@
             const twoMinutes = 2 * 60 * 1000;
 
             if (!open || elapsed > twoMinutes) {
-              if (status.state === "Completed") {
+              if (status.state === DeduplicationJobState.Completed) {
                 const processed = formatNumber(status.result?.totalRecordsProcessed);
                 const groups = formatNumber(status.result?.duplicateGroupsFound);
                 toast.success("Deduplication complete", {
                   description: `Processed ${processed} records, found ${groups} duplicate groups`,
                 });
-              } else if (status.state === "Failed") {
+              } else if (status.state === DeduplicationJobState.Failed) {
                 toast.error("Deduplication failed", {
                   description: status.result?.errorMessage ?? "An unknown error occurred",
                 });
-              } else if (status.state === "Cancelled") {
-                toast.info("Deduplication cancelled");
+              } else if (status.state === DeduplicationJobState.Cancelled) {
+                toast.info("Deduplication canceled");
               }
             }
 
@@ -146,7 +150,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Link2 class="h-5 w-5 text-primary" />
-        Deduplicate Records
+        Deduplicate records
       </Dialog.Title>
       <Dialog.Description>
         Link records from multiple data sources that represent the same
@@ -165,11 +169,11 @@
             {deduplicationError}
           </p>
         </div>
-      {:else if deduplicationStatus?.state === "Completed"}
+      {:else if deduplicationStatus?.state === DeduplicationJobState.Completed}
         <div class="rounded-lg border border-success/30 bg-success/10 p-4">
           <div class="flex items-center gap-2 text-success">
             <CheckCircle class="h-5 w-5" />
-            <span class="font-medium">Deduplication Complete</span>
+            <span class="font-medium">Deduplication complete</span>
           </div>
           {#if deduplicationStatus.result}
             <div class="mt-3 space-y-1 text-sm text-success">
@@ -194,11 +198,11 @@
             </div>
           {/if}
         </div>
-      {:else if deduplicationStatus?.state === "Cancelled"}
+      {:else if deduplicationStatus?.state === DeduplicationJobState.Cancelled}
         <div class="rounded-lg border border-warning/30 bg-warning/10 p-4">
           <div class="flex items-center gap-2 text-warning">
             <AlertTriangle class="h-5 w-5" />
-            <span class="font-medium">Job Cancelled</span>
+            <span class="font-medium">Job canceled</span>
           </div>
         </div>
       {:else if isDeduplicating}
@@ -240,21 +244,19 @@
           {/if}
 
           <p class="text-xs text-muted-foreground">
-            You can close this dialog — the job will continue in the background
-            and you'll be notified when it's done.
+            You can close this dialog. The job will continue in the background,
+            and you will get a notification when it is done.
           </p>
         </div>
       {:else}
         <div class="rounded-lg border bg-muted/50 p-4">
           <p class="text-sm text-muted-foreground">
-            This process will scan all your glucose records, treatments, and
-            state spans to identify and link records that represent the same
-            event from different data sources.
+            This process scans all your glucose records, treatments, and state spans. It links records that represent the same event from different data sources.
           </p>
           <ul class="mt-3 text-sm text-muted-foreground list-disc list-inside space-y-1">
             <li>Records within 30 seconds are considered potential matches</li>
             <li>Matching criteria include timestamps and values</li>
-            <li>Original data is preserved; only links are created</li>
+            <li>Original data is preserved. Only links are created</li>
             <li>Safe to run multiple times</li>
           </ul>
         </div>
@@ -263,16 +265,16 @@
 
     <Dialog.Footer>
       <Button variant="outline" onclick={closeDeduplicationDialog}>
-        {deduplicationStatus?.state === "Completed" ? "Done" : "Close"}
+        {deduplicationStatus?.state === DeduplicationJobState.Completed ? "Done" : "Close"}
       </Button>
       {#if isDeduplicating}
         <Button variant="destructive" onclick={cancelDeduplication}>
-          Cancel Job
+          Cancel job
         </Button>
-      {:else if !deduplicationStatus || deduplicationStatus.state === "Failed" || deduplicationStatus.state === "Cancelled"}
+      {:else if !deduplicationStatus || deduplicationStatus.state === DeduplicationJobState.Failed || deduplicationStatus.state === DeduplicationJobState.Cancelled}
         <Button onclick={startDeduplication}>
           <Link2 class="h-4 w-4" />
-          Start Deduplication
+          Start deduplication
         </Button>
       {/if}
     </Dialog.Footer>

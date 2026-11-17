@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -85,7 +86,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.IncludingDeleted(ctx);
-        var since = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var since = (cursorMills + 1).ToUtcDateTime();
         var horizon = await HistoryHorizon.GetAsync(ctx, _logger, ct) ?? DateTime.MaxValue;
 
         // A status's rows are written together, so a quarter more rows than the page usually settles
@@ -160,12 +161,12 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         if (settled.Count <= limit)
             return settled;
 
-        var last = HistoryPage.ToMilliseconds(settled[limit - 1].Group.ModifiedAt);
-        return settled.TakeWhile((s, i) => i < limit || HistoryPage.ToMilliseconds(s.Group.ModifiedAt) == last);
+        var last = settled[limit - 1].Group.ModifiedAt.ToMills();
+        return settled.TakeWhile((s, i) => i < limit || s.Group.ModifiedAt.ToMills() == last);
     }
 
     private static DateTime Millisecond(DateTime stamp) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(HistoryPage.ToMilliseconds(stamp)).UtcDateTime;
+        stamp.ToMills().ToUtcDateTime();
 
     private static IEnumerable<AnchorRow> Ordered(IEnumerable<AnchorRow> anchors, bool descending) =>
         descending

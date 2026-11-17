@@ -3,13 +3,15 @@
 
 import { spawn, spawnSync, type SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const E2E_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const REPO_ROOT = resolve(E2E_DIR, "..");
+/** Where the API container writes .NET crash dumps and crash reports (`/crash-dumps` inside it). */
+export const CRASH_DIR = join(E2E_DIR, "crash-dumps");
 
 /** Ports and hosts the stack publishes; overridable so two checkouts can run side by side. */
 export const config = {
@@ -37,9 +39,30 @@ export function dockerEnv(): NodeJS.ProcessEnv {
 
 const env = dockerEnv();
 
+const WINDOWS_SHIMS = new Set(["pnpm"]);
+
+/**
+ * pnpm is a `.cmd` shim on some Windows installs, which Node refuses to spawn without a shell. The
+ * shim goes through cmd as one command string, resolved by bare name so a `.exe` install works too.
+ * Everything else, and every other platform, spawns directly.
+ */
+function invocation(cmd: string, args: string[]): { file: string; args: string[]; options: { shell?: true } } {
+  if (process.platform !== "win32" || !WINDOWS_SHIMS.has(cmd)) return { file: cmd, args, options: {} };
+  return { file: [cmd, ...args.map(quoteForCmd)].join(" "), args: [], options: { shell: true } };
+}
+
+function quoteForCmd(arg: string): string {
+  if (/^[\w@+=:,./\\-]+$/.test(arg)) return arg;
+  // cmd expands %VAR% even inside quotes, and a quote cannot be escaped portably.
+  if (/["%\r\n]/.test(arg)) throw new Error(`cannot pass ${JSON.stringify(arg)} through cmd`);
+  // A backslash before the closing quote would escape it, so trailing backslashes are doubled.
+  return `"${arg.replace(/(\\+)$/, "$1$1")}"`;
+}
+
 export function run(cmd: string, args: string[], opts: SpawnOptions = {}): Promise<number> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(cmd, args, { stdio: "inherit", env, cwd: REPO_ROOT, ...opts });
+    const call = invocation(cmd, args);
+    const child = spawn(call.file, call.args, { stdio: "inherit", env, cwd: REPO_ROOT, ...call.options, ...opts });
     child.on("error", reject);
     child.on("exit", (code, signal) => resolvePromise(code ?? (signal ? 1 : 0)));
   });
@@ -51,15 +74,68 @@ export async function mustRun(cmd: string, args: string[], opts: SpawnOptions = 
 }
 
 export function capture(cmd: string, args: string[], opts: { cwd?: string } = {}): string {
-  const result = spawnSync(cmd, args, { env, cwd: opts.cwd ?? REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const call = invocation(cmd, args);
+  const result = spawnSync(call.file, call.args, {
+    env, cwd: opts.cwd ?? REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...call.options,
+  });
   if (result.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed: ${result.stderr}`);
   return result.stdout;
 }
 
 export function compose(project: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}): Promise<number> {
+  // Created here rather than left to the bind mount, which would make it root-owned, and opened to
+  // everyone because the API runs as the image's non-root `app` user.
+  if (mkdirSync(CRASH_DIR, { recursive: true })) chmodSync(CRASH_DIR, 0o777);
   return run("docker", ["compose", "-p", project, "-f", join(E2E_DIR, "docker-compose.yml"), ...args], {
     env: { ...env, ...extraEnv },
   });
+}
+
+/** Run before a stack starts, so the artifact holds only this run's crash dumps. */
+export function clearCrashDumps() {
+  rmSync(CRASH_DIR, { recursive: true, force: true });
+}
+
+/**
+ * Writes the compose logs to e2e/docker-compose-logs.txt, then prints each container's exit state
+ * and any crash dump, so a container that died is diagnosable from the job log. Each part only
+ * logs its own failure: this runs on the way to rethrowing the original error and tearing down.
+ */
+export function reportFailure(project: string, { printLogs }: { printLogs: boolean }) {
+  const composeArgs = ["compose", "-p", project, "-f", join(E2E_DIR, "docker-compose.yml")];
+  try {
+    const logs = capture("docker", [...composeArgs, "logs", "--no-color", "--timestamps"]);
+    writeFileSync(join(E2E_DIR, "docker-compose-logs.txt"), logs);
+    if (printLogs) console.log(`[e2e] docker compose logs:\n${logs}`);
+  } catch (err) {
+    console.error(`[e2e] could not capture the compose logs: ${err instanceof Error ? err.message : err}`);
+  }
+
+  let ids: string[] = [];
+  try {
+    ids = capture("docker", [...composeArgs, "ps", "--all", "--quiet"]).split("\n").filter(Boolean);
+  } catch (err) {
+    console.error(`[e2e] could not list the containers: ${err instanceof Error ? err.message : err}`);
+  }
+  if (ids.length > 0) {
+    const state = "{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oomKilled={{.State.OOMKilled}}"
+      + " restarts={{.RestartCount}}{{if .State.Health}} health={{.State.Health.Status}}{{end}}"
+      + " started={{.State.StartedAt}} finished={{.State.FinishedAt}}{{if .State.Error}} error={{.State.Error}}{{end}}";
+    try {
+      console.log(`[e2e] container states:\n${capture("docker", ["inspect", "--format", state, ...ids])}`);
+    } catch (err) {
+      console.error(`[e2e] could not inspect the containers: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  try {
+    const dumps = existsSync(CRASH_DIR) ? readdirSync(CRASH_DIR) : [];
+    console.log(dumps.length > 0
+      ? `[e2e] crash dumps in e2e/crash-dumps: ${dumps.join(", ")}`
+      : "[e2e] no crash dumps in e2e/crash-dumps");
+  } catch (err) {
+    console.error(`[e2e] could not list the crash dumps: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 /**
@@ -89,7 +165,10 @@ export function imageExists(ref: string): boolean {
   return spawnSync("docker", ["image", "inspect", ref], { env, stdio: "ignore" }).status === 0;
 }
 
-const API_INPUTS = ["src", ":!src/Web", ":!src/Portal", ":!src/Desktop", "Directory.Packages.props", "global.json"];
+const API_INPUTS = [
+  "src", ":!src/Web", ":!src/Portal", ":!src/Desktop", "crates", "scripts/Shared",
+  "scripts/alerts-native-build.cs", "Directory.Packages.props", "global.json",
+];
 const WEB_INPUTS = ["src/Web", "Dockerfile.web"];
 const GENERATED_CLIENT = join(REPO_ROOT, "src/Web/packages/app/src/lib/api");
 const CLIENT_STAMP = join(E2E_DIR, ".state", "client-generated-from");
@@ -110,8 +189,14 @@ function dockerArch(): "amd64" | "arm64" {
 async function buildApi(ref: string) {
   const [repository, tag] = ref.split(":");
   const rid = dockerArch() === "arm64" ? "linux-arm64" : "linux-x64";
+  // The API refuses to start without the nocturne_alerts native library, which the publish packs
+  // only when it has been built.
+  const nativeProperties = join(E2E_DIR, ".state", "alerts-native-properties");
+  mkdirSync(dirname(nativeProperties), { recursive: true });
+  await mustRun("dotnet", ["run", "scripts/alerts-native-build.cs", rid, nativeProperties]);
   await mustRun("dotnet", [
     "publish", "src/API/Nocturne.API/Nocturne.API.csproj",
+    ...readFileSync(nativeProperties, "utf8").split(/\r?\n/).filter(Boolean),
     "-c", "Release",
     "-r", rid,
     "-p:PublishProfile=DefaultContainer",

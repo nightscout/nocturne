@@ -417,4 +417,9 @@ public enum DataSourceDeleteError
     /// The deletion itself failed.
     /// </summary>
     DeleteFailed,
+
+    /// <summary>
+    /// A sync of the connector is still running, so nothing was deleted.
+    /// </summary>
+    SyncRunning,
 }

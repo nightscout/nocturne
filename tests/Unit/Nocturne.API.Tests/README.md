@@ -96,15 +96,15 @@ support tested in Ar2Tests and Ar2Service)
 [x] - notifications.test.js (NotificationV2ServiceTests)
 [x] - notifications-api.test.js (NotificationV1ServiceTests)
 [ ] - storage.test.js
-[x] - openaps.test.js (OpenApsServiceTests)
+[x] - openaps.test.js (OpenApsServiceTests, DeviceStatusPropertiesTests)
 [ ] - pebble.test.js
 [ ] - pluginbase.test.js
 [ ] - plugins.test.js
 [x] - profile.test.js (ProfileServiceTests)
 [ ] - profileeditor.test.js
-[x] - pump.test.js (PumpServiceTests)
+[x] - pump.test.js (DeviceStatusPropertiesTests)
 [ ] - pushnotify.test.js
-[x] - pushover.test.js (PushoverServiceTests)
+[ ] - pushover.test.js
 [ ] - query.test.js
 [ ] - rawbg.test.js
 [ ] - reports.test.js

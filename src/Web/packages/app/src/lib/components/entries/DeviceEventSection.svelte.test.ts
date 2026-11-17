@@ -7,19 +7,19 @@ describe("DeviceEventSection", () => {
 	it("renders section heading", async () => {
 		render(DeviceEventSection, { deviceEvent: {} });
 
-		await expect.element(page.getByText("Device Event")).toBeVisible();
+		await expect.element(page.getByText("Device event")).toBeVisible();
 	});
 
 	it("renders event type selector", async () => {
 		render(DeviceEventSection, { deviceEvent: {} });
 
-		await expect.element(page.getByText("Event Type")).toBeVisible();
+		await expect.element(page.getByText("Event type")).toBeVisible();
 	});
 
 	it("defaults to Site Change when no event type set", async () => {
 		render(DeviceEventSection, { deviceEvent: {} });
 
-		await expect.element(page.getByText("Site Change")).toBeVisible();
+		await expect.element(page.getByText("Site change")).toBeVisible();
 	});
 
 	it("renders notes textarea", async () => {
@@ -31,13 +31,13 @@ describe("DeviceEventSection", () => {
 	it("does not show remove button when onRemove is not provided", async () => {
 		render(DeviceEventSection, { deviceEvent: {} });
 
-		await expect.element(page.getByText("Device Event")).toBeVisible();
+		await expect.element(page.getByText("Device event")).toBeVisible();
 	});
 
 	it("shows remove button when onRemove is provided", async () => {
 		const on_remove = vi.fn();
 		render(DeviceEventSection, { deviceEvent: {}, onRemove: on_remove });
 
-		await expect.element(page.getByText("Device Event")).toBeVisible();
+		await expect.element(page.getByText("Device event")).toBeVisible();
 	});
 });

@@ -1,15 +1,15 @@
 <script lang="ts">
-  import DateRangePicker from "$lib/components/ui/date-range-picker.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
+  import DateRangePicker from "#lib/components/ui/date-range-picker.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import X from "@lucide/svelte/icons/x";
   import Check from "@lucide/svelte/icons/check";
-  import * as Popover from "$lib/components/ui/popover";
-  import * as Command from "$lib/components/ui/command";
-  import { cn } from "$lib/utils";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     dateRange: { from?: string; to?: string };

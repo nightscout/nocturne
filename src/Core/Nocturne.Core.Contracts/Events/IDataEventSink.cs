@@ -32,13 +32,6 @@ public interface IDataEventSink<in T>
     Task OnUpdatedAsync(T item, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>
-    /// Called before a record is deleted, allowing the sink to capture state
-    /// (e.g., for cascading deletes or audit logging).
-    /// </summary>
-    /// <param name="id">The identifier of the record about to be deleted.</param>
-    Task BeforeDeleteAsync(string id, CancellationToken ct = default) => Task.CompletedTask;
-
-    /// <summary>
     /// Called after a record has been deleted.
     /// </summary>
     /// <param name="item">The deleted record, or <c>null</c> if it was not available.</param>

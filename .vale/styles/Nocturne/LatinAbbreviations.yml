@@ -1,0 +1,11 @@
+# GR-6: Latin abbreviations translate badly and read as jargon.
+extends: substitution
+message: "GR-6: write '%s' instead of '%s'."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+nonword: true
+swap:
+  '\be\.g\.': 'for example'
+  '\bi\.e\.': 'that is'
+  '\betc\.': 'and more, or name the items'

@@ -5,7 +5,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// Two evaluation paths drive the same rule's state machine in this process: the 30s
-/// <see cref="AlertSweepService"/> and the orchestrator's per-reading pass. Read-modify-write
+/// <see cref="AlertSweepJob"/> and the orchestrator's per-reading pass. Read-modify-write
 /// of tracker state is not atomic, so at a crossing instant both can read <c>idle</c>, both
 /// open an excursion, and the second state write orphans the first excursion row. Locks are
 /// striped per rule id so evaluations of unrelated rules never queue behind each other, and

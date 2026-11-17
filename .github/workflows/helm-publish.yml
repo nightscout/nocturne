@@ -8,7 +8,7 @@ name: Publish Helm chart
 #
 # Version selection:
 #   - tag `v*`              → strip `v` prefix          (no `latest`)
-#   - main / master push    → Chart.yaml `version:`     + `latest`
+#   - main / master push    → Chart.yaml `version:`
 #   - any other branch push → `<Chart.yaml version>-<short-sha>` (immutable)
 #
 # After the first successful publish, set the `charts/nocturne` package to
@@ -51,17 +51,13 @@ jobs:
           CHART_VERSION=$(yq '.version' "$CHART_PATH/Chart.yaml")
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-            EXTRA_TAGS=""
           elif [[ "${GITHUB_REF}" == refs/heads/main || "${GITHUB_REF}" == refs/heads/master ]]; then
             VERSION="${CHART_VERSION}"
-            EXTRA_TAGS="latest"
           else
             SHORT_SHA="${GITHUB_SHA:0:7}"
             VERSION="${CHART_VERSION}-${SHORT_SHA}"
-            EXTRA_TAGS=""
           fi
-          echo "version=$VERSION"          | tee -a "$GITHUB_OUTPUT"
-          echo "extra_tags=$EXTRA_TAGS"    | tee -a "$GITHUB_OUTPUT"
+          echo "version=$VERSION" | tee -a "$GITHUB_OUTPUT"
 
       - name: Resolve chart dependencies
         run: |
@@ -82,28 +78,12 @@ jobs:
           helm package "$CHART_PATH" --version "${{ steps.version.outputs.version }}" --destination .
           helm push "${CHART_NAME}-${{ steps.version.outputs.version }}.tgz" "oci://${REGISTRY}/${REGISTRY_NAMESPACE}"
 
-      - name: Package and push additional tags
-        if: steps.version.outputs.extra_tags != ''
-        run: |
-          set -euo pipefail
-          # OCI helm tags are derived from the chart tarball's --version, so we
-          # repackage with each additional tag value and push separately.
-          for TAG in ${{ steps.version.outputs.extra_tags }}; do
-            helm package "$CHART_PATH" --version "$TAG" --destination .
-            helm push "${CHART_NAME}-${TAG}.tgz" "oci://${REGISTRY}/${REGISTRY_NAMESPACE}"
-          done
-
       - name: Summary
         run: |
           {
             echo "## Published chart"
             echo ""
             echo "- \`oci://${REGISTRY}/${REGISTRY_NAMESPACE}/${CHART_NAME}:${{ steps.version.outputs.version }}\`"
-            if [ -n "${{ steps.version.outputs.extra_tags }}" ]; then
-              for TAG in ${{ steps.version.outputs.extra_tags }}; do
-                echo "- \`oci://${REGISTRY}/${REGISTRY_NAMESPACE}/${CHART_NAME}:${TAG}\`"
-              done
-            fi
             echo ""
             echo "Install:"
             echo ""

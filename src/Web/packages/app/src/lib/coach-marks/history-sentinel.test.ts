@@ -2,28 +2,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistorySentinel } from "@nocturne/coach";
 import type { CoachNavigation, CoachRouter, SentinelWindow } from "@nocturne/coach";
 
-/** A session history whose `back()` lands a task later, as a browser's does. */
-function fakeWindow(initialState: unknown = { page: "a" }) {
-  const entries: unknown[] = [initialState];
+interface Entry {
+  url: string;
+  coachMark: boolean;
+}
+
+/**
+ * A browser and a router with shallow routing. `back()` lands a task later, as a browser's does,
+ * and the sentinel's popstate listener runs before the router updates its page state, as it does on
+ * a first load.
+ */
+function fakeBrowser() {
+  const entries: Entry[] = [{ url: "/a", coachMark: false }];
   let index = 0;
+  let pageState: Entry = entries[0];
   const listeners = new Set<() => void>();
+  let hook: (navigation: CoachNavigation) => void = () => {};
 
   const history = {
-    get state() {
-      return entries[index];
-    },
-    get length() {
-      return entries.length;
-    },
-    pushState(state: unknown) {
-      entries.splice(index + 1);
-      entries.push(state);
-      index++;
-    },
+    pushState: vi.fn(),
+    replaceState: vi.fn(),
     back() {
       setTimeout(() => {
         index--;
         for (const listener of listeners) listener();
+        pageState = entries[index];
       }, 0);
     },
   };
@@ -35,30 +38,14 @@ function fakeWindow(initialState: unknown = { page: "a" }) {
     setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
   } as unknown as SentinelWindow;
 
-  return {
-    win,
-    history,
-    entries,
-    get index() {
-      return index;
-    },
-    /** The browser's back button. */
-    pressBack: () => history.back(),
-    /** A router committing a navigation. */
-    navigateTo: (state: unknown) => history.pushState(state),
-  };
-}
+  function commit(entry: Entry) {
+    entries.splice(index + 1);
+    entries.push(entry);
+    index++;
+    pageState = entry;
+  }
 
-function fakeRouter() {
-  let hook: (navigation: CoachNavigation) => void = () => {};
-  const router: CoachRouter & { goto: ReturnType<typeof vi.fn> } = {
-    beforeNavigate: (callback) => {
-      hook = callback;
-    },
-    goto: vi.fn(async () => {}),
-  };
-
-  function navigate(type: string, url = "https://example.test/next") {
+  function navigate(type: string, url = "/next") {
     let settle: () => void = () => {};
     let fail: (reason: unknown) => void = () => {};
     const complete = new Promise<void>((resolve, reject) => {
@@ -67,7 +54,7 @@ function fakeRouter() {
     });
     const navigation = {
       type,
-      to: { url: new URL(url) },
+      to: { url: new URL(url, "https://example.test") },
       willUnload: false,
       cancelled: false,
       cancel() {
@@ -77,10 +64,47 @@ function fakeRouter() {
       complete,
     };
     hook(navigation);
-    return { navigation, finish: () => settle() };
+    return {
+      navigation,
+      finish: () => {
+        if (navigation.cancelled) return;
+        commit({ url, coachMark: false });
+        settle();
+      },
+    };
   }
 
-  return { router, navigate };
+  const router: CoachRouter = {
+    beforeNavigate: (callback) => {
+      hook = callback;
+    },
+    goto: vi.fn(async (target: URL) => navigate("goto", target.pathname).finish()),
+    pushMarkedEntry: () => commit({ url: entries[index].url, coachMark: true }),
+    isMarkedEntry: () => pageState.coachMark,
+  };
+
+  return {
+    win,
+    history,
+    router,
+    navigate,
+    pressBack: () => history.back(),
+    get current() {
+      return entries[index];
+    },
+    /** The entries a back press can reach, oldest first, ending at the current one. */
+    get reachable() {
+      return entries.slice(0, index + 1);
+    },
+  };
+}
+
+function connected(onBack: () => void = () => {}) {
+  const browser = fakeBrowser();
+  const sentinel = new HistorySentinel(onBack, browser.win);
+  sentinel.bindRouter(browser.router);
+  sentinel.connect();
+  return { browser, sentinel };
 }
 
 const flush = () => vi.runAllTimersAsync();
@@ -94,24 +118,19 @@ afterEach(() => {
 });
 
 describe("history sentinel", () => {
-  it("pops its entry when the overlay closes", async () => {
-    const browser = fakeWindow();
-    const sentinel = new HistorySentinel(() => {}, browser.win);
-    sentinel.connect();
+  it("adds a shallow entry through the router, never through the history API", () => {
+    const { browser, sentinel } = connected();
 
     sentinel.push();
-    expect(browser.index).toBe(1);
-    sentinel.release();
-    await flush();
 
-    expect(browser.index).toBe(0);
+    expect(browser.current).toEqual({ url: "/a", coachMark: true });
+    expect(browser.history.pushState).not.toHaveBeenCalled();
+    expect(browser.history.replaceState).not.toHaveBeenCalled();
   });
 
-  it("reports the back button and does not pop a second time", async () => {
-    const browser = fakeWindow();
+  it("dismisses the overlay on back and stays on the page", async () => {
     const onBack = vi.fn();
-    const sentinel = new HistorySentinel(onBack, browser.win);
-    sentinel.connect();
+    const { browser, sentinel } = connected(onBack);
     sentinel.push();
 
     browser.pressBack();
@@ -120,84 +139,119 @@ describe("history sentinel", () => {
     await flush();
 
     expect(onBack).toHaveBeenCalledOnce();
-    expect(browser.index).toBe(0);
+    expect(browser.current).toEqual({ url: "/a", coachMark: false });
   });
 
-  it("does not pop under a navigation in flight, which would cancel it", async () => {
-    const browser = fakeWindow();
-    const { router, navigate } = fakeRouter();
-    const sentinel = new HistorySentinel(() => {}, browser.win);
-    sentinel.bindRouter(router);
-    sentinel.connect();
+  it("pops its entry when the overlay closes another way", async () => {
+    const onBack = vi.fn();
+    const { browser, sentinel } = connected(onBack);
     sentinel.push();
 
-    const back = vi.spyOn(browser.history, "back");
-    navigate("goto");
     sentinel.release();
     await flush();
 
+    expect(browser.current).toEqual({ url: "/a", coachMark: false });
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("keeps one entry while the overlay moves from step to step", async () => {
+    const { browser, sentinel } = connected();
+
+    sentinel.push();
+    sentinel.release();
+    sentinel.push();
+    await flush();
+
+    expect(browser.current.coachMark).toBe(true);
+    sentinel.release();
+    await flush();
+    expect(browser.current).toEqual({ url: "/a", coachMark: false });
+  });
+
+  it("re-issues a link followed from the overlay without leaving its entry under the new page", async () => {
+    const { browser, sentinel } = connected();
+    sentinel.push();
+
+    const { navigation } = browser.navigate("link", "/reports");
+    expect(navigation.cancelled).toBe(true);
+    await flush();
+
+    expect(browser.router.goto).toHaveBeenCalledWith(new URL("https://example.test/reports"));
+    expect(browser.reachable).toEqual([
+      { url: "/a", coachMark: false },
+      { url: "/reports", coachMark: false },
+      { url: "/reports", coachMark: true },
+    ]);
+
+    sentinel.release();
+    await flush();
+    expect(browser.current).toEqual({ url: "/reports", coachMark: false });
+  });
+
+  it("adopts an entry already marked rather than pushing a second one", async () => {
+    const onBack = vi.fn();
+    const { browser, sentinel } = connected(onBack);
+    browser.router.pushMarkedEntry();
+
+    sentinel.push();
+    expect(browser.reachable).toHaveLength(2);
+
+    browser.pressBack();
+    await flush();
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("lets a link through when its entry is no longer current", async () => {
+    const { browser, sentinel } = connected();
+    sentinel.push();
+    const back = vi.spyOn(browser.history, "back");
+
+    browser.navigate("goto", "/later");
+    browser.navigate("goto", "/next").finish();
+    await flush();
+    const { navigation } = browser.navigate("link", "/reports");
+    await flush();
+
+    expect(navigation.cancelled).toBe(false);
     expect(back).not.toHaveBeenCalled();
   });
 
-  it("pops normally once an earlier navigation has finished", async () => {
-    const browser = fakeWindow();
-    const { router, navigate } = fakeRouter();
-    const sentinel = new HistorySentinel(() => {}, browser.win);
-    sentinel.bindRouter(router);
-    sentinel.connect();
-
-    const { finish } = navigate("goto");
-    browser.navigateTo({ page: "b" });
-    finish();
-    await flush();
-
+  it("does not pop under a navigation in flight, which would cancel it", async () => {
+    const { browser, sentinel } = connected();
     sentinel.push();
-    sentinel.release();
-    await flush();
-
-    expect(browser.index).toBe(1);
-    expect(browser.history.state).toEqual({ page: "b" });
-  });
-
-  it("re-issues a link followed from the overlay after popping its entry", async () => {
-    const browser = fakeWindow();
-    const { router, navigate } = fakeRouter();
-    const sentinel = new HistorySentinel(() => {}, browser.win);
-    sentinel.bindRouter(router);
-    sentinel.connect();
-    sentinel.push();
-
-    const { navigation } = navigate("link", "https://example.test/reports");
-    expect(navigation.cancelled).toBe(true);
-    expect(router.goto).not.toHaveBeenCalled();
-    await flush();
-
-    expect(browser.index).toBe(0);
-    expect(router.goto).toHaveBeenCalledWith(new URL("https://example.test/reports"));
-  });
-
-  it("pops an entry left current by a reload", async () => {
-    const browser = fakeWindow({ page: "a", __coachMark: true });
-    const sentinel = new HistorySentinel(() => {}, browser.win);
     const back = vi.spyOn(browser.history, "back");
 
-    sentinel.connect();
+    const { finish } = browser.navigate("goto");
+    sentinel.release();
     await flush();
+    expect(back).not.toHaveBeenCalled();
 
-    expect(back).toHaveBeenCalledOnce();
+    finish();
+    await flush();
+    expect(browser.current).toEqual({ url: "/next", coachMark: false });
   });
 
-  it("pushes again when a new overlay rises while the last entry is still popping", async () => {
-    const browser = fakeWindow();
-    const sentinel = new HistorySentinel(() => {}, browser.win);
-    sentinel.connect();
+  it("defers a push during a navigation in flight until it settles", async () => {
+    const { browser, sentinel } = connected();
 
+    const { finish } = browser.navigate("goto");
     sentinel.push();
+    expect(browser.current).toEqual({ url: "/a", coachMark: false });
+
+    finish();
+    await flush();
+    expect(browser.current).toEqual({ url: "/next", coachMark: true });
+  });
+
+  it("pops its entry once a navigation that never left it is cancelled", async () => {
+    const { browser, sentinel } = connected();
+    sentinel.push();
+
+    const { navigation } = browser.navigate("goto");
     sentinel.release();
-    sentinel.push();
+    navigation.cancel();
     await flush();
 
-    expect(browser.index).toBe(1);
-    expect(browser.history.state).toMatchObject({ __coachMark: true });
+    expect(browser.current).toEqual({ url: "/a", coachMark: false });
   });
 });

@@ -2,8 +2,8 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Npgsql;
 using Xunit;
@@ -36,7 +36,8 @@ public class DndWindowRepositoryTests
         await SeedTenantAsync(tenant);
 
         await using var provider = BuildProvider();
-        var repository = NewRepository(provider);
+        await using var scope = provider.CreateAsyncScope();
+        var repository = NewRepository(scope.ServiceProvider, tenant);
 
         // Two rows that must come back...
         await InsertWindowAsync(tenant, DndScope.All, now.AddMinutes(-30), endsAt: null);
@@ -46,7 +47,7 @@ public class DndWindowRepositoryTests
         await InsertWindowAsync(tenant, DndScope.Highs, now.AddDays(-30), endsAt: now.AddDays(-30).AddHours(8));
         await InsertWindowAsync(tenant, DndScope.Lows, now.AddMinutes(-20), endsAt: null, clearedAt: now.AddMinutes(-1));
 
-        var windows = await repository.GetUnexpiredDndWindowsAsync(tenant, now, CancellationToken.None);
+        var windows = await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None);
 
         windows.Should().HaveCount(2, "expired and cleared windows must not reach the evaluation path");
         windows.Select(w => w.Scope).Should().BeEquivalentTo(new[] { DndScope.All, DndScope.Lows });
@@ -64,7 +65,8 @@ public class DndWindowRepositoryTests
         await SeedTenantAsync(tenant);
 
         await using var provider = BuildProvider();
-        var repository = NewRepository(provider);
+        await using var scope = provider.CreateAsyncScope();
+        var repository = NewRepository(scope.ServiceProvider, tenant);
 
         for (var day = 1; day <= 5; day++)
         {
@@ -72,13 +74,12 @@ public class DndWindowRepositoryTests
                 tenant, DndScope.All, now.AddDays(-day), endsAt: now.AddDays(-day).AddHours(1));
         }
 
-        (await repository.GetUnexpiredDndWindowsAsync(tenant, now, CancellationToken.None))
+        (await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None))
             .Should().BeEmpty();
 
         await using var context = await provider
-            .GetRequiredService<IDbContextFactory<NocturneDbContext>>()
-            .CreateDbContextAsync();
-        context.TenantId = tenant;
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(tenant);
         (await context.DndWindows.CountAsync()).Should().Be(5, "cleared/expired rows are audit history");
     }
 
@@ -94,14 +95,15 @@ public class DndWindowRepositoryTests
         await SeedTenantAsync(tenant);
 
         await using var provider = BuildProvider();
-        var repository = NewRepository(provider);
+        await using var scope = provider.CreateAsyncScope();
+        var repository = NewRepository(scope.ServiceProvider, tenant);
 
         var endsAt = now.AddMinutes(15);
         await InsertWindowAsync(tenant, DndScope.All, now.AddMinutes(-5), endsAt);
 
-        (await repository.GetUnexpiredDndWindowsAsync(tenant, endsAt.AddSeconds(-1), CancellationToken.None))
+        (await repository.GetUnexpiredDndWindowsAsync(endsAt.AddSeconds(-1), CancellationToken.None))
             .Should().HaveCount(1);
-        (await repository.GetUnexpiredDndWindowsAsync(tenant, endsAt, CancellationToken.None))
+        (await repository.GetUnexpiredDndWindowsAsync(endsAt, CancellationToken.None))
             .Should().BeEmpty("ends_at is exclusive, so the window is over at exactly that instant");
     }
 
@@ -117,12 +119,13 @@ public class DndWindowRepositoryTests
         await SeedTenantAsync(tenant);
 
         await using var provider = BuildProvider();
-        var repository = NewRepository(provider);
+        await using var scope = provider.CreateAsyncScope();
+        var repository = NewRepository(scope.ServiceProvider, tenant);
 
         await InsertWindowAsync(tenant, DndScope.All, now.AddHours(-4), endsAt: now.AddHours(-3));
         await InsertWindowAsync(tenant, DndScope.Lows, now.AddHours(-2), endsAt: null, clearedAt: now.AddHours(-1));
 
-        var windows = await repository.GetDndWindowsAsOfAsync(tenant, now, CancellationToken.None);
+        var windows = await repository.GetDndWindowsAsOfAsync(now, CancellationToken.None);
 
         windows.Should().HaveCount(2);
         windows.Should().Contain(w => w.ClearedAt != null);
@@ -139,14 +142,19 @@ public class DndWindowRepositoryTests
         await SeedTenantAsync(theirs);
 
         await using var provider = BuildProvider();
-        var repository = NewRepository(provider);
+        await using var scope = provider.CreateAsyncScope();
+        var repository = NewRepository(scope.ServiceProvider, mine);
 
         await InsertWindowAsync(mine, DndScope.Lows, now.AddMinutes(-5), endsAt: null);
         await InsertWindowAsync(theirs, DndScope.All, now.AddMinutes(-5), endsAt: null);
 
-        var windows = await repository.GetUnexpiredDndWindowsAsync(mine, now, CancellationToken.None);
+        var windows = await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None);
 
         windows.Should().ContainSingle().Which.Scope.Should().Be(DndScope.Lows);
+
+        await using var theirScope = provider.CreateAsyncScope();
+        (await NewRepository(theirScope.ServiceProvider, theirs).GetUnexpiredDndWindowsAsync(now, CancellationToken.None))
+            .Should().ContainSingle().Which.Scope.Should().Be(DndScope.All);
     }
 
     /// <summary>
@@ -162,11 +170,12 @@ public class DndWindowRepositoryTests
         await SeedTenantAsync(tenant);
 
         await using var provider = BuildProvider();
-        var repository = NewRepository(provider);
+        await using var scope = provider.CreateAsyncScope();
+        var repository = NewRepository(scope.ServiceProvider, tenant);
 
         await InsertWindowAsync(tenant, DndScope.All, now.AddMinutes(-5), endsAt: now.AddHours(2));
 
-        var window = (await repository.GetUnexpiredDndWindowsAsync(tenant, now, CancellationToken.None)).Single();
+        var window = (await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None)).Single();
 
         window.StartedAt.Kind.Should().Be(DateTimeKind.Utc);
         window.EndsAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
@@ -175,17 +184,14 @@ public class DndWindowRepositoryTests
 
     // ---- helpers ----
 
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
-    }
+    private ServiceProvider BuildProvider() => TenantReaderData.BuildProvider(_fx.AppConnectionString);
 
-    private static AlertRepository NewRepository(ServiceProvider provider) =>
-        new(provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>());
+    /// <summary>A repository on <paramref name="scope"/>, resolved to <paramref name="tenant"/>.</summary>
+    private static AlertRepository NewRepository(IServiceProvider scope, Guid tenant)
+    {
+        TenantReaderData.Resolve(scope, tenant);
+        return new AlertRepository(scope.GetRequiredService<INocturneDbContextFactory>());
+    }
 
     private async Task SeedTenantAsync(Guid tenantId)
     {

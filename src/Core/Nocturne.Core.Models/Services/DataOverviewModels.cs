@@ -69,6 +69,10 @@ public class DataOverviewYearsResponse
     [JsonPropertyName("availableDataSources")]
     public string[] AvailableDataSources { get; set; } = [];
 
+    /// <summary>The band edges the year heatmaps colour a day's glucose against.</summary>
+    [JsonPropertyName("thresholds")]
+    public required GlycemicThresholds Thresholds { get; set; }
+
     /// <summary>Why <see cref="Years"/> is empty; null when the tenant's timezone resolved.</summary>
     [JsonPropertyName("timeZoneUnavailableReason")]
     public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }

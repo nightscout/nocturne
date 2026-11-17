@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import CalendarDayCell from "./CalendarDayCell.svelte";
 
   let cellProps: ComponentProps<typeof CalendarDayCell> = $props();

@@ -5,7 +5,8 @@ import type {
   TrackerInstanceDto,
   TrackerRealtimeAction,
   InAppNotificationDto,
-} from '$lib/api/generated/nocturne-api-client';
+  SyncPhase,
+} from '#lib/api/generated/nocturne-api-client.js';
 
 // Re-export API client types for convenience
 export type { Entry, Treatment };
@@ -29,6 +30,8 @@ export type WebSocketConnectionStatus =
 // WebSocket client configuration
 export interface WebSocketConfig {
   url: string;
+  /** The host has no realtime feed, so the client never asks for a ticket or opens a socket. */
+  disabled?: boolean;
   reconnectAttempts: number;
   reconnectDelay: number;
   maxReconnectDelay: number;
@@ -85,6 +88,10 @@ export interface TrackerUpdateEvent {
   instance: TrackerInstanceDto;
 }
 
+export interface TrackerDefinitionUpdateEvent {
+  definitionId: string;
+}
+
 export interface NotificationUpdateEvent {
   action: 'created' | 'archived' | 'updated';
   notification: InAppNotificationDto;
@@ -101,7 +108,7 @@ export type SyncMessageType =
 export interface SyncProgressEvent {
   connectorId: string;
   connectorName: string;
-  phase: "Syncing" | "Completed" | "Failed";
+  phase: SyncPhase;
   errorMessage: string | null;
   timestamp: string;
   messageType: SyncMessageType | null;
@@ -141,6 +148,7 @@ export interface WebSocketEventHandlers {
 
   // Tracker events
   trackerUpdate: (event: TrackerUpdateEvent) => void;
+  trackerDefinitionUpdate: (event: TrackerDefinitionUpdateEvent) => void;
 
   // In-app notification events
   notificationCreated: (notification: InAppNotificationDto) => void;

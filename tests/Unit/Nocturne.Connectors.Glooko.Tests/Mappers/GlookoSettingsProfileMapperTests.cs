@@ -20,7 +20,7 @@ public class GlookoSettingsProfileMapperTests
 
     public GlookoSettingsProfileMapperTests()
     {
-        _mapper = new GlookoSettingsProfileMapper(ConnectorSource, Mock.Of<ILogger>());
+        _mapper = new GlookoSettingsProfileMapper(ConnectorSource, Mock.Of<ILogger>(), TimeProvider.System);
     }
 
     /// <summary>Builds a settings record matching the live shape from the task brief.</summary>

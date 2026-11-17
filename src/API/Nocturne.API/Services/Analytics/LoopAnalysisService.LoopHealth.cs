@@ -15,7 +15,7 @@ internal sealed partial class LoopAnalysisService
     {
         var (primary, comparison, names) = await ForRangesAsync(
             filter,
-            window => LoadLoopHealthAsync(window, zone, ToMills(filter.Now), ct),
+            window => LoadLoopHealthAsync(window, zone, filter.Now.ToMills(), ct),
             (loaded, window) => CalculateLoopHealth(loaded, filter, window, zone));
         return new LoopHealthResponse { Primary = primary, Comparison = comparison, ProfileNames = names };
     }
@@ -37,7 +37,7 @@ internal sealed partial class LoopAnalysisService
     {
         var to = window.To;
         var cyclesTask = apsSnapshotRepository.GetLoopCyclesAsync(
-            ToUtc(window.From - LoopHealthCalculator.TempLookbackMs - LoopHealthCalculator.SetterWindowMs), ToUtc(to), ct);
+            (window.From - LoopHealthCalculator.TempLookbackMs - LoopHealthCalculator.SetterWindowMs).ToUtcDateTime(), to.ToUtcDateTime(), ct);
         var commonTask = LoadCommonAsync(window, ct);
         await Task.WhenAll(cyclesTask, commonTask);
 
@@ -60,7 +60,7 @@ internal sealed partial class LoopAnalysisService
 
         return new LoopHealthLoaded(
             inputs,
-            Sources(common, SnapshotMills(cycles.Select(c => c.Timestamp)), to),
+            Sources(common, LoopStates(cycles), to),
             common.Devices,
             common.DeviceDates,
             common.TempBasals);
@@ -77,13 +77,13 @@ internal sealed partial class LoopAnalysisService
         var range = LoopHealthCalculator.Calculate(
             inputs, Mask(filter, window, zone, loaded.Sources), window.From, window.To);
 
-        var start = ToUtc(window.From);
-        var end = ToUtc(window.To);
+        var start = window.From.ToUtcDateTime();
+        var end = window.To.ToUtcDateTime();
         var overall = aidSystemMetrics.Calculate(
             new AidSystemMetricsRecords(
                 loaded.Devices,
                 [.. inputs.Cycles.Where(c => c.Timestamp >= start && c.Timestamp < end)],
-                [.. loaded.TempBasals.Where(t => t.StartTimestamp < end && (t.EndTimestamp is null || t.EndTimestamp >= start))],
+                loaded.TempBasals,
                 [],
                 [.. inputs.Glucose.Where(g => g.Mills >= window.From && g.Mills < window.To)],
                 null,
@@ -105,25 +105,20 @@ internal sealed partial class LoopAnalysisService
         IReadOnlyList<ProfileSpan> profiles, long to, CancellationToken ct)
     {
         var versions = await VersionsByProfileAsync(profiles, therapySettingsRepository, ct);
+        return MaximumBasalRateSteps(profiles, versions, to);
+    }
 
+    internal static StepTimeline<double> MaximumBasalRateSteps(
+        IReadOnlyList<ProfileSpan> profiles, IReadOnlyDictionary<string, TherapySettings[]> versions, long to)
+    {
         var steps = new List<Step<double>>();
         foreach (var profile in profiles)
         {
-            var start = profile.StartMills;
-            var end = profile.EndMills ?? to;
-            var bounds = versions[profile.ProfileName]
-                .Select(v => ToMills(DateTime.SpecifyKind(v.Timestamp, DateTimeKind.Utc)))
-                .Where(m => m > start && m < end)
-                .Append(start)
-                .Append(end)
-                .Distinct()
-                .Order()
-                .ToList();
-            for (var i = 0; i + 1 < bounds.Count; i++)
+            foreach (var slice in ProfileVersionCache.Slice(
+                versions[profile.ProfileName], profile.StartMills, profile.EndMills ?? to))
             {
-                var settings = ProfileVersionCache.ActiveAt(versions[profile.ProfileName], ToUtc(bounds[i]));
-                if (settings?.LoopSettings?.MaximumBasalRatePerHour is { } maximum)
-                    steps.Add(new Step<double>(bounds[i], bounds[i + 1], maximum));
+                if (slice.Version.LoopSettings?.MaximumBasalRatePerHour is { } maximum)
+                    steps.Add(new Step<double>(slice.StartMills, slice.EndMills, maximum));
             }
         }
         return StepTimeline<double>.LatestStartedWins(steps);

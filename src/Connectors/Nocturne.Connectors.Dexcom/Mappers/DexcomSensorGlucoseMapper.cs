@@ -11,11 +11,10 @@ public class DexcomSensorGlucoseMapper(ILogger logger)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public IEnumerable<SensorGlucose> MapBatchData(DexcomEntry[]? batchData)
+    public IEnumerable<SensorGlucose> MapBatchData(DexcomEntry[]? batchData, DateTime now)
     {
         if (batchData == null || batchData.Length == 0) return [];
 
-        var now = DateTime.UtcNow;
         return ConnectorFaults.NonNullRecords(batchData, _logger, DataSources.DexcomConnector, "Dexcom entry")
             .Where(entry => entry.Value > 0)
             .Select(entry => ConvertEntry(entry, now))

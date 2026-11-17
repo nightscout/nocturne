@@ -9,18 +9,16 @@ namespace Nocturne.API.Services.AidDetection;
 /// through temporary basal rate (TBR) records rather than APS snapshots.
 /// </summary>
 /// <remarks>
-/// Durations are clamped to the evaluation window defined by
-/// <see cref="AidDetectionContext.StartDate"/> and <see cref="AidDetectionContext.EndDate"/>.
-/// TBRs without an explicit end time are assumed to last <c>5</c> minutes. Overlapping TBRs
-/// cover their shared time once, as their <see cref="IntervalUnion"/>.
-/// <see cref="AidSegmentMetrics.LoopCycleCount"/> and <see cref="AidSegmentMetrics.EnactedCount"/>
-/// are not applicable for this strategy and are returned as <see langword="null"/>.
+/// <see cref="AidDetectionContext.TempBasals"/> is every temp basal read from
+/// <see cref="StatisticsService.TempBasalReadStart"/>, not only those inside the window: a record
+/// counts for the time it ran inside the window, as <see cref="StatisticsService.DeliveredWithin"/>
+/// decides, and what cancels or supersedes it can lie outside.
+/// <see cref="AidSegmentMetrics.LoopCycleCount"/>, <see cref="AidSegmentMetrics.EnactedCount"/> and
+/// <see cref="AidSegmentMetrics.ClosedLoopCount"/> are not applicable for this strategy and are returned as <see langword="null"/>.
 /// </remarks>
 /// <seealso cref="IAidDetectionStrategy"/>
 public class TbrBasedStrategy : IAidDetectionStrategy
 {
-    private const double DefaultDurationMinutes = 5.0;
-
     /// <inheritdoc/>
     public IReadOnlySet<AidAlgorithm> SupportedAlgorithms { get; } = new HashSet<AidAlgorithm>
     {
@@ -32,39 +30,30 @@ public class TbrBasedStrategy : IAidDetectionStrategy
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Returns an empty <see cref="AidSegmentMetrics"/> when no TBR records are present
-    /// in the supplied <paramref name="context"/>.
+    /// Returns an empty <see cref="AidSegmentMetrics"/> when no temp basal delivered inside the window.
     /// </remarks>
     public AidSegmentMetrics CalculateMetrics(AidDetectionContext context)
     {
-        var tempBasals = context.TempBasals;
+        var delivered = StatisticsService.DeliveredWithin(
+            context.TempBasals, context.StartDate, context.EndDate.ToMills());
 
-        if (tempBasals.Count == 0)
+        if (delivered.Count == 0)
         {
             return new AidSegmentMetrics();
         }
 
         var total = context.EndDate - context.StartDate;
-        var all = tempBasals
-            .Select(tbr => (Tbr: tbr, Interval: ClampedInterval(tbr, context.StartDate, context.EndDate)))
-            .ToList();
 
         return new AidSegmentMetrics
         {
-            AidActivePercent = IntervalUnion.Length(all
-                .Where(t => t.Tbr.Origin == TempBasalOrigin.Algorithm)
-                .Select(t => t.Interval)) / total * 100.0,
-            PumpUsePercent = IntervalUnion.Length(all.Select(t => t.Interval)) / total * 100.0,
+            AidActivePercent = Percent(delivered.Where(t => t.Origin == TempBasalOrigin.Algorithm), total),
+            PumpUsePercent = Percent(delivered, total),
             LoopCycleCount = null,
-            EnactedCount = null
+            EnactedCount = null,
+            ClosedLoopCount = null
         };
     }
 
-    private static (DateTime Start, DateTime End) ClampedInterval(TempBasal tbr, DateTime windowStart, DateTime windowEnd)
-    {
-        var end = tbr.EndTimestamp ?? tbr.StartTimestamp.AddMinutes(DefaultDurationMinutes);
-        return (
-            tbr.StartTimestamp < windowStart ? windowStart : tbr.StartTimestamp,
-            end > windowEnd ? windowEnd : end);
-    }
+    private static double Percent(IEnumerable<TempBasal> delivered, TimeSpan total) =>
+        IntervalUnion.Length(delivered.Select(t => (t.StartTimestamp, t.EndTimestamp!.Value))) / total * 100.0;
 }

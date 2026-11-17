@@ -21,7 +21,7 @@ public class GlookoDeviceMapperTests
     {
         var config = new GlookoConnectorConfiguration { TimezoneOffset = offset };
         var timeMapper = new GlookoTimeMapper(config, NullLogger.Instance);
-        return new GlookoDeviceMapper(ConnectorSource, timeMapper, NullLogger.Instance);
+        return new GlookoDeviceMapper(ConnectorSource, timeMapper, NullLogger.Instance, TimeProvider.System);
     }
 
     private static GlookoSsv2Device Pump(

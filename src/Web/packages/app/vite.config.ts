@@ -1,11 +1,15 @@
 import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import adapter from "@sveltejs/adapter-node";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import commonjs from "vite-plugin-commonjs";
 import lingo from 'vite-plugin-lingo';
 import tailwindcss from "@tailwindcss/vite";
 import { setupBridge } from "@nocturne/bridge";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { KIT_CSP } from "./src/lib/server/content-security-policy";
+import manifest from "./package.json" with { type: "json" };
 
 // @resend/chat-sdk-adapter (via @nocturne/bot) renders email cards with React
 // (react-email). It declares react/react-dom as transitive peers, so pnpm
@@ -25,11 +29,16 @@ import { dirname } from "node:path";
 const require = createRequire(
   createRequire(import.meta.url).resolve("@nocturne/bot/package.json"),
 );
+const workspaceDependencies = Object.entries(manifest.dependencies)
+  .filter(([, version]) => version.startsWith("workspace:"))
+  .map(([name]) => name);
+
 const reactAliases = {
   react: dirname(require.resolve("react/package.json")),
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
 import { wuchale } from 'wuchale/vite'
+import { privateDevCatalogue } from './wuchale.dev.js'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -54,7 +63,11 @@ export default defineConfig(({ mode }) => {
       // store path at prerender/runtime. Same reason for layerchart and its
       // @layerstack/* utilities: their dist emits bare `svelte` imports that
       // Node can't resolve from pnpm's isolated store, so bundle them for SSR.
-      noExternal: ["@resend/chat-sdk-adapter", "layerchart", /^@layerstack\//],
+      //
+      // adapter-node marks every production dependency external unless it is named here, and the
+      // runtime image installs none of the workspace packages, so those stay bundled as Vite
+      // bundled linked packages before.
+      noExternal: [...workspaceDependencies, "@resend/chat-sdk-adapter", "layerchart", /^@layerstack\//],
     },
     optimizeDeps: {
       // sveltekit-search-params is only imported by the dashboard's
@@ -74,12 +87,23 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       tailwindcss(),
-      sveltekit(),
+      sveltekit({
+        preprocess: vitePreprocess(),
+        compilerOptions: { experimental: { async: true } },
+        adapter: adapter({ out: "build", precompress: true }),
+        // Turns off SvelteKit's form origin check; csrfHandle in hooks.server.ts runs it instead.
+        csrf: { trustedOrigins: ["*"] },
+        // The dev server's HMR client needs inline scripts, eval and its own socket.
+        ...(mode === "development" ? {} : { csp: KIT_CSP }),
+        experimental: { remoteFunctions: true },
+        tracing: { server: true },
+      }),
       commonjs(),
     lingo({
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
+      privateDevCatalogue('app'),
       wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {

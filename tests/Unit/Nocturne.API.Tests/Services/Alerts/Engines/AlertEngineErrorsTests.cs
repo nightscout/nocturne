@@ -16,7 +16,7 @@ public class AlertEngineErrorsTests
     private readonly FakeTimeProvider _time = new(Start);
 
     [Fact]
-    public void A_native_failure_is_counted_with_its_operation_and_engine_and_rethrown()
+    public void A_native_failure_is_counted_with_its_operation_and_rethrown()
     {
         using var factory = new TestMeterFactory();
         var measurements = new List<(long Value, Dictionary<string, object?> Tags)>();
@@ -31,14 +31,14 @@ public class AlertEngineErrorsTests
         listener.Start();
         var errors = new AlertEngineErrors(factory, _time);
 
-        var act = () => errors.Track<int>("evaluate_node", AlertEngineErrors.RustEngine,
+        var act = () => errors.Track<int>("evaluate_node",
             () => throw new RustAlertEngineException("bad"));
 
         act.Should().Throw<RustAlertEngineException>();
         measurements.Should().ContainSingle();
         measurements[0].Value.Should().Be(1);
-        measurements[0].Tags.Should().Contain("operation", "evaluate_node").And.Contain("engine", "rust");
-        errors.Latest.Should().Be(new AlertEngineError(Start, "evaluate_node", "rust"));
+        measurements[0].Tags.Should().Contain("operation", "evaluate_node").And.NotContainKey("engine");
+        errors.Latest.Should().Be(new AlertEngineError(Start, "evaluate_node"));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class AlertEngineErrorsTests
         using var factory = new TestMeterFactory();
         var errors = new AlertEngineErrors(factory, _time);
 
-        errors.Track("evaluate", AlertEngineErrors.RustEngine, () => 42).Should().Be(42);
+        errors.Track("evaluate", () => 42).Should().Be(42);
 
         errors.Latest.Should().BeNull();
     }
@@ -58,7 +58,7 @@ public class AlertEngineErrorsTests
         using var factory = new TestMeterFactory();
         var errors = new AlertEngineErrors(factory, _time);
 
-        var act = () => errors.Track<int>("evaluate", AlertEngineErrors.RustEngine,
+        var act = () => errors.Track<int>("evaluate",
             () => throw new RustAlertEngineException("rejected", "malformed condition node: type_missing"));
 
         act.Should().Throw<RustAlertEngineException>();
@@ -71,33 +71,18 @@ public class AlertEngineErrorsTests
     {
         using var factory = new TestMeterFactory();
         var errors = new AlertEngineErrors(factory, _time);
-        var rust = new AlertEngineSelection(AlertEngineMode.Rust, "rust");
-        void Fail() => FluentActions.Invoking(() => errors.Track<int>("evaluate", AlertEngineErrors.RustEngine,
+        void Fail() => FluentActions.Invoking(() => errors.Track<int>("evaluate",
             () => throw new RustAlertEngineException("bad"))).Should().Throw<RustAlertEngineException>();
 
         for (var i = 0; i < AlertEngineHealthCheck.UnhealthyMinimumFailures; i++) Fail();
-        errors.Track("evaluate", AlertEngineErrors.RustEngine, () => 1);
-        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Unhealthy);
+        errors.Track("evaluate", () => 1);
+        (await CheckAsync(errors)).Status.Should().Be(HealthStatus.Unhealthy);
 
-        for (var i = 0; i < 20; i++) errors.Track("evaluate", AlertEngineErrors.RustEngine, () => 1);
-        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Degraded, "most calls succeed");
+        for (var i = 0; i < 20; i++) errors.Track("evaluate", () => 1);
+        (await CheckAsync(errors)).Status.Should().Be(HealthStatus.Degraded, "most calls succeed");
 
         _time.Advance(AlertEngineErrors.WindowLength);
-        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Healthy);
-    }
-
-    [Fact]
-    public async Task A_failing_shadow_engine_is_only_degraded_as_managed_serves_alerts()
-    {
-        using var factory = new TestMeterFactory();
-        var errors = new AlertEngineErrors(factory, _time);
-        for (var i = 0; i < 2 * AlertEngineHealthCheck.UnhealthyMinimumFailures; i++)
-            errors.Record("evaluate", AlertEngineErrors.ShadowEngine);
-
-        var result = await CheckAsync(new AlertEngineSelection(AlertEngineMode.Shadow, "shadow"), errors);
-
-        result.Status.Should().Be(HealthStatus.Degraded);
-        result.Description.Should().Contain("shadow");
+        (await CheckAsync(errors)).Status.Should().Be(HealthStatus.Healthy);
     }
 
     [Fact]
@@ -106,14 +91,14 @@ public class AlertEngineErrorsTests
         using var factory = new TestMeterFactory();
         var errors = new AlertEngineErrors(factory, _time);
 
-        errors.Record("evaluate", AlertEngineErrors.RustEngine);
+        errors.Record("evaluate");
 
-        (await CheckAsync(new AlertEngineSelection(AlertEngineMode.Rust, "rust"), errors))
+        (await CheckAsync(errors))
             .Status.Should().Be(HealthStatus.Degraded);
     }
 
-    private async Task<HealthCheckResult> CheckAsync(AlertEngineSelection selection, AlertEngineErrors errors) =>
-        await new AlertEngineHealthCheck(selection, errors, _time)
+    private async Task<HealthCheckResult> CheckAsync(AlertEngineErrors errors) =>
+        await new AlertEngineHealthCheck(new AlertEngineNativeLibrary("0.1.0", "2025b"), errors, _time)
             .CheckHealthAsync(new HealthCheckContext());
 
     [Fact]
@@ -121,26 +106,13 @@ public class AlertEngineErrorsTests
     {
         using var factory = new TestMeterFactory();
         var errors = new AlertEngineErrors(factory, _time);
-        var rust = new AlertEngineSelection(AlertEngineMode.Rust, "rust");
 
-        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Healthy);
+        (await CheckAsync(errors)).Status.Should().Be(HealthStatus.Healthy);
 
-        errors.Record("evaluate", AlertEngineErrors.RustEngine);
-        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Degraded);
+        errors.Record("evaluate");
+        (await CheckAsync(errors)).Status.Should().Be(HealthStatus.Degraded);
 
         _time.Advance(AlertEngineHealthCheck.FailingWindow);
-        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Healthy);
-    }
-
-    [Fact]
-    public async Task Shadow_that_fell_back_to_managed_is_degraded()
-    {
-        using var factory = new TestMeterFactory();
-        var errors = new AlertEngineErrors(factory, _time);
-
-        (await CheckAsync(new AlertEngineSelection(AlertEngineMode.Managed, "shadow"), errors))
-            .Status.Should().Be(HealthStatus.Degraded);
-        (await CheckAsync(new AlertEngineSelection(AlertEngineMode.Managed, "managed"), errors))
-            .Status.Should().Be(HealthStatus.Healthy);
+        (await CheckAsync(errors)).Status.Should().Be(HealthStatus.Healthy);
     }
 }

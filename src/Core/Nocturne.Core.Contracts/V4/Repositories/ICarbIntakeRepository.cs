@@ -8,8 +8,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </summary>
 /// <remarks>
 /// Carb intake records are produced natively by the Nocturne v4 meal submission flow, or projected
-/// from legacy V1/V2/V3 treatment records. The <paramref name="nativeOnly"/> filter on <c>GetAsync</c>
-/// excludes projected records, returning only those entered through the V4 API.
+/// from legacy V1/V2/V3 treatment records.
 /// </remarks>
 /// <seealso cref="CarbIntake"/>
 /// <seealso cref="IBolusRepository"/>
@@ -27,7 +26,6 @@ public interface ICarbIntakeRepository
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
     Task<IEnumerable<CarbIntake>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -36,7 +34,6 @@ public interface ICarbIntakeRepository
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
         CancellationToken ct = default
@@ -46,7 +43,7 @@ public interface ICarbIntakeRepository
     Task<IEnumerable<CarbIntake>> IV4Repository<CarbIntake>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, null, null, ct);
 
     /// <summary>Delete <see cref="CarbIntake"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
@@ -65,6 +62,24 @@ public interface ICarbIntakeRepository
     /// <param name="correlationId">Correlation ID linking a carb entry to its associated bolus or meal.</param>
     Task<IEnumerable<CarbIntake>> GetByCorrelationIdAsync(
         Guid correlationId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>Every <see cref="CarbIntake"/> sharing one of <paramref name="correlationIds"/>, in one query.</summary>
+    Task<IEnumerable<CarbIntake>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// The intakes of more than zero carbs timestamped in [<paramref name="from"/>, <paramref name="to"/>],
+    /// newest first, from the demo source only when <paramref name="demo"/> is set and from every other
+    /// source otherwise. Rows flagged as duplicates are included.
+    /// </summary>
+    Task<IReadOnlyList<CarbIntake>> GetMealCandidatesAsync(
+        DateTime from,
+        DateTime to,
+        bool demo,
         CancellationToken ct = default
     );
 }

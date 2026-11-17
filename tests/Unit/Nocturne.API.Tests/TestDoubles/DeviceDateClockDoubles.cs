@@ -25,9 +25,14 @@ internal static class DeviceDateClockDoubles
             .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(profileZone);
 
+        var context = readContext ?? new CategoryReadContext();
+        var timelines = Timelines(timeline ?? []);
+        var share = new ShareClockDouble(therapy.Object, timelines);
         return new DeviceDateClockResolver(
-            Timelines(timeline ?? []),
-            new TenantClockResolver(therapy.Object, readContext ?? new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance));
+            timelines,
+            new TenantClockResolver(therapy.Object, context, share, NullLogger<TenantClockResolver>.Instance),
+            context,
+            share);
     }
 
     public static ITimezoneTimelineService Timelines(IReadOnlyList<TimezoneTimelineEntry> entries)

@@ -39,7 +39,7 @@ public class LoopAnalysisTempBasalCancelTests
             .Returns((long from, long to, CancellationToken _) =>
                 new[] { new BasalSegment(from, to, 1.0, 1.0, "Default") }.ToAsyncEnumerable());
         var series = await new BasalSeriesBuilder(settings.Object, schedule.Object, NullLogger<BasalSeriesBuilder>.Instance)
-            .BuildAsync(clipped, From, To, 1.0);
+            .BuildAsync(clipped, From, To, 1.0, []);
 
         NetInsulinAboveSchedule.DeliveredFromSeries(series, To, evidence)
             .Select(d => (d.Start, d.End, d.Rate))

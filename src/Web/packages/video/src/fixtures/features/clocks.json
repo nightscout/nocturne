@@ -1,0 +1,288 @@
+{
+ "route": "/clock/config/01a16d06-7deb-7c50-b331-0bf3fa78072d",
+ "params": {
+  "id": "01a16d06-7deb-7c50-b331-0bf3fa78072d"
+ },
+ "capturedAt": 1792830508406,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792830300000,
+   "sgv": 221,
+   "direction": "FortyFiveDown",
+   "delta": -3.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830000000,
+   "sgv": 225,
+   "direction": "FortyFiveDown",
+   "delta": -3.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829700000,
+   "sgv": 228,
+   "direction": "FortyFiveDown",
+   "delta": -2.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829400000,
+   "sgv": 230,
+   "direction": "Flat",
+   "delta": -1.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829100000,
+   "sgv": 232,
+   "direction": "Flat",
+   "delta": -1.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 234,
+   "direction": "Flat",
+   "delta": -0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 235,
+   "direction": "Flat",
+   "delta": -1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 236,
+   "direction": "Flat",
+   "delta": 0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 235,
+   "direction": "Flat",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 233,
+   "direction": "Flat",
+   "delta": 1.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 232,
+   "direction": "FortyFiveUp",
+   "delta": 2.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 230,
+   "direction": "FortyFiveUp",
+   "delta": 4.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 226,
+   "direction": "SingleUp",
+   "delta": 6.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 219,
+   "direction": "SingleUp",
+   "delta": 7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 212,
+   "direction": "SingleUp",
+   "delta": 7.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 205,
+   "direction": "SingleUp",
+   "delta": 8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 197,
+   "direction": "SingleUp",
+   "delta": 6.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 190,
+   "direction": "SingleUp",
+   "delta": 7.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 183,
+   "direction": "SingleUp",
+   "delta": 9.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 173,
+   "direction": "SingleUp",
+   "delta": 9.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 163,
+   "direction": "DoubleUp",
+   "delta": 10.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 153,
+   "direction": "DoubleUp",
+   "delta": 12.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 141,
+   "direction": "DoubleUp",
+   "delta": 10.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 130,
+   "direction": "DoubleUp",
+   "delta": 11.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823100000,
+   "sgv": 119,
+   "direction": "DoubleUp",
+   "delta": 10.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822800000,
+   "sgv": 109,
+   "direction": "SingleUp",
+   "delta": 8.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822500000,
+   "sgv": 100,
+   "direction": "FortyFiveUp",
+   "delta": 4.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822200000,
+   "sgv": 95,
+   "direction": "FortyFiveUp",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821900000,
+   "sgv": 93,
+   "direction": "Flat",
+   "delta": -0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821600000,
+   "sgv": 94,
+   "direction": "Flat",
+   "delta": 1.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821300000,
+   "sgv": 92,
+   "direction": "Flat",
+   "delta": 0.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821000000,
+   "sgv": 92,
+   "direction": "Flat",
+   "delta": -0.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820700000,
+   "sgv": 92,
+   "direction": "Flat",
+   "delta": -1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820400000,
+   "sgv": 93,
+   "direction": "Flat",
+   "delta": 0.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820100000,
+   "sgv": 93,
+   "direction": "Flat",
+   "delta": -0.1
+  }
+ ],
+ "results": {
+  "getByIdForEdit": "[{\"id\":1,\"name\":2,\"config\":3},\"01a16d06-7deb-7c50-b331-0bf3fa78072d\",\"Bedside Clock\",{\"rows\":4,\"settings\":34},[5,20,27],{\"elements\":6},[7,16],{\"type\":8,\"size\":9,\"showUnits\":10,\"hours\":10,\"width\":10,\"height\":10,\"minutesAhead\":10,\"definitionId\":10,\"show\":10,\"categories\":10,\"visibilityThreshold\":10,\"text\":10,\"style\":11,\"chartConfig\":10},\"sg\",40,null,{\"color\":12,\"font\":13,\"fontWeight\":14,\"opacity\":15,\"custom\":10},\"dynamic\",\"system\",\"medium\",1,{\"type\":17,\"size\":18,\"showUnits\":10,\"hours\":10,\"width\":10,\"height\":10,\"minutesAhead\":10,\"definitionId\":10,\"show\":10,\"categories\":10,\"visibilityThreshold\":10,\"text\":10,\"style\":19,\"chartConfig\":10},\"arrow\",25,{\"color\":12,\"font\":13,\"fontWeight\":14,\"opacity\":15,\"custom\":10},{\"elements\":21},[22],{\"type\":23,\"size\":24,\"showUnits\":25,\"hours\":10,\"width\":10,\"height\":10,\"minutesAhead\":10,\"definitionId\":10,\"show\":10,\"categories\":10,\"visibilityThreshold\":10,\"text\":10,\"style\":26,\"chartConfig\":10},\"delta\",14,true,{\"color\":12,\"font\":13,\"fontWeight\":14,\"opacity\":15,\"custom\":10},{\"elements\":28},[29],{\"type\":30,\"size\":31,\"showUnits\":10,\"hours\":10,\"width\":10,\"height\":10,\"minutesAhead\":10,\"definitionId\":10,\"show\":10,\"categories\":10,\"visibilityThreshold\":10,\"text\":10,\"style\":32,\"chartConfig\":10},\"age\",10,{\"color\":10,\"font\":13,\"fontWeight\":14,\"opacity\":33,\"custom\":10},0.7,{\"bgColor\":35,\"staleMinutes\":36,\"alwaysShowTime\":35,\"backgroundImage\":10,\"backgroundOpacity\":37,\"screensaverMode\":35,\"glucoseUnits\":38,\"timeFormat\":39},false,13,100,\"mg/dl\",\"12\"]",
+  "getActiveAlerts": "[[]]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16d06-359a-780a-b51f-32a7c77c6892\",\"films-1792830485894\",\"Sample\",true,\"2026-10-24T08:28:05.914928Z\"]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16d06-35bd-7bdd-88eb-42b98718fda6\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T08:43:24+00:00\"]",
+  "getAll": "[[]]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":7,\"trackers\":11,\"alarm\":4,\"predictions\":4,\"serverMills\":46},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},221,\"FortyFiveDown\",null,-3.7,1792830300000,0,\"InRange\",[],3.48,[12,23,28,37],{\"id\":13,\"definitionId\":14,\"name\":15,\"icon\":16,\"category\":17,\"mode\":18,\"ageHours\":19,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":21,\"percentElapsed\":22},\"01a16d06-7ca3-726e-93c8-27d8882bf5c3\",\"01a16d06-7c30-7d0c-bf25-09a05e70c28b\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",12.3,\"Info\",72,17,{\"id\":24,\"definitionId\":25,\"name\":26,\"icon\":27,\"category\":26,\"mode\":18,\"ageHours\":19,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":21,\"percentElapsed\":22},\"01a16d06-7d2a-7ba9-8d06-3183ae348189\",\"01a16d06-7ca8-72b5-ba72-5b9791945ae9\",\"Reservoir\",\"cylinder\",{\"id\":29,\"definitionId\":30,\"name\":31,\"icon\":32,\"category\":33,\"mode\":18,\"ageHours\":34,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":35,\"percentElapsed\":36},\"01a16d06-7c2a-7f35-b3f2-32af49952908\",\"01a16d06-7c02-755f-8843-aa4799e3bca8\",\"CGM Sensor\",\"radio\",\"Sensor\",226.3,240,94,{\"id\":38,\"definitionId\":39,\"name\":40,\"icon\":41,\"category\":42,\"mode\":18,\"ageHours\":43,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":44,\"percentElapsed\":45},\"01a16d06-7d3f-7ee0-b0b6-728ffc52aece\",\"01a16d06-7d30-78bb-9f57-53af8c149a41\",\"Pump Battery\",\"battery\",\"Battery\",263.9,504,52,1792830509958]"
+ },
+ "phases": [
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "update": "[{\"id\":1,\"userId\":2,\"name\":3,\"config\":4,\"createdAt\":46,\"updatedAt\":47},\"01a16d06-7deb-7c50-b331-0bf3fa78072d\",\"01a16d06-35bd-7bdd-88eb-42b98718fda6\",\"Bedside Clock\",{\"rows\":5,\"settings\":40},[6,27,34],{\"elements\":7},[8,17,23],{\"type\":9,\"size\":10,\"showUnits\":11,\"hours\":11,\"width\":11,\"height\":11,\"minutesAhead\":11,\"definitionId\":11,\"show\":11,\"categories\":11,\"visibilityThreshold\":11,\"text\":11,\"style\":12,\"chartConfig\":11},\"time\",20,null,{\"color\":13,\"font\":14,\"fontWeight\":15,\"opacity\":16,\"custom\":11},\"#ffffff\",\"system\",\"medium\",0.7,{\"type\":18,\"size\":19,\"showUnits\":11,\"hours\":11,\"width\":11,\"height\":11,\"minutesAhead\":11,\"definitionId\":11,\"show\":11,\"categories\":11,\"visibilityThreshold\":11,\"text\":11,\"style\":20,\"chartConfig\":11},\"sg\",40,{\"color\":21,\"font\":14,\"fontWeight\":15,\"opacity\":22,\"custom\":11},\"dynamic\",1,{\"type\":24,\"size\":25,\"showUnits\":11,\"hours\":11,\"width\":11,\"height\":11,\"minutesAhead\":11,\"definitionId\":11,\"show\":11,\"categories\":11,\"visibilityThreshold\":11,\"text\":11,\"style\":26,\"chartConfig\":11},\"arrow\",25,{\"color\":21,\"font\":14,\"fontWeight\":15,\"opacity\":22,\"custom\":11},{\"elements\":28},[29],{\"type\":30,\"size\":31,\"showUnits\":32,\"hours\":11,\"width\":11,\"height\":11,\"minutesAhead\":11,\"definitionId\":11,\"show\":11,\"categories\":11,\"visibilityThreshold\":11,\"text\":11,\"style\":33,\"chartConfig\":11},\"delta\",14,true,{\"color\":21,\"font\":14,\"fontWeight\":15,\"opacity\":22,\"custom\":11},{\"elements\":35},[36],{\"type\":37,\"size\":38,\"showUnits\":11,\"hours\":11,\"width\":11,\"height\":11,\"minutesAhead\":11,\"definitionId\":11,\"show\":11,\"categories\":11,\"visibilityThreshold\":11,\"text\":11,\"style\":39,\"chartConfig\":11},\"age\",10,{\"color\":11,\"font\":14,\"fontWeight\":15,\"opacity\":16,\"custom\":11},{\"bgColor\":41,\"staleMinutes\":42,\"alwaysShowTime\":41,\"backgroundImage\":11,\"backgroundOpacity\":43,\"screensaverMode\":41,\"glucoseUnits\":44,\"timeFormat\":45},false,13,100,\"mg/dl\",\"12\",\"2026-10-24T08:28:24.435095Z\",\"2026-10-24T08:28:36.592115Z\"]"
+   }
+  }
+ ]
+}

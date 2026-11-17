@@ -26,7 +26,7 @@ public class GlookoV4TreatmentMapperV3DeviceEventTests
         var logger = Mock.Of<ILogger>();
         var config = new GlookoConnectorConfiguration();
         var timeMapper = new GlookoTimeMapper(config, logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
     }
 
     private static GlookoV3GraphResponse BuildGraphData(

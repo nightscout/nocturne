@@ -1,6 +1,5 @@
+import { untrack } from "svelte";
 import type { CoachNavigation, CoachRouter } from "./types.js";
-
-const MARKER = "__coachMark";
 
 export type SentinelWindow = Pick<
   Window,
@@ -8,14 +7,18 @@ export type SentinelWindow = Pick<
 >;
 
 /**
- * Holds one history entry above the page while an overlay is up, so the back button dismisses the
- * overlay rather than leaving the page.
+ * Holds one shallow history entry above the page while an overlay is up, so the back button
+ * dismisses the overlay rather than leaving the page.
+ *
+ * The entry is marked in the router's page state, which the router updates in its own popstate
+ * listener. That listener can run after this one, so a pop is read a task later.
  *
  * SvelteKit's popstate handler resets its navigation token before it checks whether the entry
  * changed, so a `history.back()` issued while a navigation is loading cancels that navigation. The
- * entry is therefore never popped under a navigation in flight. An in-app link followed while the
- * entry is current is cancelled instead, the entry popped, and the link re-issued through the
- * router, so the entry is not left stranded under the new page as a back press that goes nowhere.
+ * entry is therefore never pushed or popped under a navigation in flight; the sentinel catches up
+ * once it settles. An in-app link followed while the entry is current is cancelled instead, the
+ * entry popped, and the link re-issued through the router, so the entry is not left stranded under
+ * the new page as a back press that goes nowhere.
  */
 export class HistorySentinel {
   private pushed = false;
@@ -43,68 +46,72 @@ export class HistorySentinel {
   connect(): () => void {
     const win = this.win;
     const onPopState = () => {
-      if (this.settlePop) {
-        const settle = this.settlePop;
-        this.settlePop = null;
-        // Every other popstate listener, the router's included, has to finish with this entry
-        // before anything navigates again.
-        win.setTimeout(settle, 0);
-        return;
-      }
-      if (this.pushed && !this.isMarked()) {
-        this.pushed = false;
-        this.onBack();
-      }
+      win.setTimeout(() => {
+        if (this.settlePop) {
+          const settle = this.settlePop;
+          this.settlePop = null;
+          settle();
+          return;
+        }
+        if (this.pushed && !this.router?.isMarkedEntry()) {
+          this.pushed = false;
+          this.onBack();
+        }
+      }, 0);
     };
     win.addEventListener("popstate", onPopState);
-
-    // A reload while an overlay was up leaves its entry current.
-    if (this.isMarked()) {
-      this.pushed = true;
-      void this.pop();
-    }
-
     return () => win.removeEventListener("popstate", onPopState);
   }
 
   push(): void {
     this.wanted = true;
-    if (this.pushed || this.popping || this.navigations > 0) return;
-    const { history } = this.win;
-    history.pushState({ ...history.state, [MARKER]: true }, "");
-    this.pushed = true;
+    this.sync();
   }
 
   release(): void {
     this.wanted = false;
-    if (this.navigations > 0) {
-      this.pushed = false;
-      return;
-    }
-    void this.pop();
+    this.sync();
   }
 
-  private isMarked(): boolean {
-    return this.win.history.state?.[MARKER] === true;
+  /**
+   * Callers push and release from effects. The router's page state is reactive, so reading it
+   * tracked would re-run the caller's effect on every pop, and its teardown would pop a second time.
+   */
+  private sync(): void {
+    untrack(() => {
+      const router = this.router;
+      if (!router || this.popping || this.navigations > 0) return;
+      const marked = router.isMarkedEntry();
+      if (this.wanted) {
+        if (!marked) router.pushMarkedEntry();
+        this.pushed = true;
+      } else if (this.pushed) {
+        this.pushed = false;
+        if (marked) void this.pop();
+      }
+    });
   }
 
   private pop(): Promise<void> {
     if (this.popping) return this.popping;
-    if (!this.pushed || !this.isMarked()) {
-      this.pushed = false;
-      return Promise.resolve();
-    }
-
-    this.pushed = false;
     this.popping = new Promise<void>((resolve) => {
       this.settlePop = () => {
         this.popping = null;
         resolve();
-        if (this.wanted) this.push();
+        this.sync();
       };
       this.win.history.back();
     });
     return this.popping;
+  }
+
+  private settleAfter(done: Promise<unknown>): void {
+    this.navigations++;
+    const settle = () => {
+      this.navigations--;
+      this.sync();
+    };
+    done.then(settle, settle);
   }
 
   private onBeforeNavigate(navigation: CoachNavigation): void {
@@ -116,19 +123,15 @@ export class HistorySentinel {
       navigation.type === "link" &&
       !navigation.willUnload &&
       this.pushed &&
-      this.isMarked()
+      router.isMarkedEntry()
     ) {
       navigation.cancel();
       navigation.complete.catch(() => {});
-      this.wanted = false;
-      void this.pop().then(() => router.goto(to.url));
+      this.pushed = false;
+      this.settleAfter(this.pop().then(() => router.goto(to.url)));
       return;
     }
 
-    this.navigations++;
-    const settle = () => {
-      this.navigations--;
-    };
-    navigation.complete.then(settle, settle);
+    this.settleAfter(navigation.complete);
   }
 }

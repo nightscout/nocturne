@@ -12,7 +12,8 @@ namespace Nocturne.API.Tests.Migration;
 /// The request sequence an API-mode migration issues while pulling a collection page by page.
 /// Every page is explicitly dated and asks for <see cref="LegacyReadLimits.MaxMergedCount"/>
 /// records: a larger page is clamped by the merged v1 reads, and since a short page ends the pull,
-/// a clamped first page would import one page and report the collection complete. The cursor field
+/// a clamped first page would import one page and report the collection complete. Device status
+/// asks for <see cref="MigrationJob.DeviceStatusPageSize"/>. The cursor field
 /// differs per collection (entries carry a numeric <c>date</c>, everything else an ISO
 /// <c>created_at</c>), so each has to page back on its own field or the second request repeats the
 /// first page.
@@ -50,12 +51,12 @@ public class MigrationPagedPullTests
         "[" + string.Join(",", Enumerable.Range(0, LegacyReadLimits.MaxMergedCount).Select(record)) + "]";
 
     [Theory]
-    [InlineData("entries", "find[date][$lte]=")]
-    [InlineData("treatments", "find[created_at][$lte]=")]
-    [InlineData("devicestatus", "find[created_at][$lte]=")]
-    [InlineData("activity", "find[created_at][$lte]=")]
+    [InlineData("entries", "find[date][$lte]=", LegacyReadLimits.MaxMergedCount)]
+    [InlineData("treatments", "find[created_at][$lte]=", LegacyReadLimits.MaxMergedCount)]
+    [InlineData("devicestatus", "find[created_at][$lte]=", MigrationJob.DeviceStatusPageSize)]
+    [InlineData("activity", "find[created_at][$lte]=", LegacyReadLimits.MaxMergedCount)]
     public async Task A_pull_asks_for_a_full_page_and_dates_it_on_the_collections_own_cursor_field(
-        string collection, string cursorField)
+        string collection, string cursorField, int pageSize)
     {
         var handler = new NightscoutPager(
             $"/api/v1/{collection}.json",
@@ -65,8 +66,29 @@ public class MigrationPagedPullTests
         await MigrationJobHarness.RunAsync(provider, collection);
 
         handler.Requests.Should().ContainSingle()
-            .Which.Should().Contain($"count={LegacyReadLimits.MaxMergedCount}&")
+            .Which.Should().Contain($"count={pageSize}&")
             .And.Contain(cursorField);
+    }
+
+    [Fact]
+    public async Task Device_status_pages_back_after_a_full_page_of_its_own_size()
+    {
+        var oldest = DateTimeOffset.Parse("2026-02-01T00:00:00Z");
+        var handler = new NightscoutPager(
+            "/api/v1/devicestatus.json",
+            new Queue<(HttpStatusCode, string)>([
+                (HttpStatusCode.OK, "[" + string.Join(",", Enumerable.Range(0, MigrationJob.DeviceStatusPageSize).Select(i =>
+                    $$"""{"_id":"ds{{i}}","created_at":"{{oldest.AddMinutes(i):yyyy-MM-ddTHH:mm:ss.fffZ}}"}""")) + "]"),
+                (HttpStatusCode.OK, """[{ }]"""),
+            ]));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        await MigrationJobHarness.RunAsync(provider, "devicestatus");
+
+        handler.Requests.Should().HaveCount(2);
+        handler.Requests.Should().OnlyContain(r => r.Contains($"count={MigrationJob.DeviceStatusPageSize}&"));
+        handler.Requests[1].Should().Contain(
+            $"find[created_at][$lte]={oldest.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss'Z'}");
     }
 
     [Fact]

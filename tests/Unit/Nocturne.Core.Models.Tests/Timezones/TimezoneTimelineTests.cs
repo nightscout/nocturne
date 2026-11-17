@@ -100,25 +100,25 @@ public class TimezoneTimelineTests
     // ── DST edge hours never throw and never drop a reading ──────────────────
 
     [Fact]
-    public void SpringForwardGap_NonExistentLocalTime_IsNudgedPastTheGap()
+    public void SpringForwardGap_NonExistentLocalTime_MapsToTheEndOfTheGap()
     {
         var timeline = new TimezoneTimeline([Origin("America/Toronto")]);
 
-        // 02:30 on 2026-03-08 never existed (clocks jumped 02:00 -> 03:00). Nudge to 03:30 EDT (-4) = 07:30Z.
+        // 02:30 on 2026-03-08 never existed (clocks jumped 02:00 -> 03:00). The first instant after the gap is 03:00 EDT (-4) = 07:00Z.
         var act = () => timeline.ToUtc(FakeUtc(2026, 3, 8, 2, 30));
         act.Should().NotThrow();
-        timeline.ToUtc(FakeUtc(2026, 3, 8, 2, 30)).Should().Be(Utc(2026, 3, 8, 7, 30));
+        timeline.ToUtc(FakeUtc(2026, 3, 8, 2, 30)).Should().Be(Utc(2026, 3, 8, 7, 0));
     }
 
     [Fact]
-    public void FallBackAmbiguousHour_TakesStandardTimeInterpretation()
+    public void FallBackAmbiguousHour_TakesTheFirstOccurrence()
     {
         var timeline = new TimezoneTimeline([Origin("America/Toronto")]);
 
-        // 01:30 on 2026-11-01 occurs twice; standard-time (EST -5) interpretation = 06:30Z.
+        // 01:30 on 2026-11-01 occurs twice; first occurrence (EDT -4) = 05:30Z.
         var result = timeline.ToUtc(FakeUtc(2026, 11, 1, 1, 30));
         result.Kind.Should().Be(DateTimeKind.Utc);
-        result.Should().Be(Utc(2026, 11, 1, 6, 30));
+        result.Should().Be(Utc(2026, 11, 1, 5, 30));
     }
 
     // ── Empty-timeline fallback (no regression for un-seeded tenants) ────────

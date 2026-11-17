@@ -71,6 +71,54 @@ describe('TenantRegistry', () => {
     expect(tenants.get('fresh')?.connect).toHaveBeenCalledTimes(1);
   });
 
+  it('names a tenant it holds without reading the tenant list again', async () => {
+    const { tenants, discover } = registry([directory({ rhys: 't1' })]);
+    await tenants.refresh();
+
+    expect(await tenants.holds('rhys', 't1')).toBe(true);
+    expect(discover).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the tenant list before deciding on a slug it holds no tenant for', async () => {
+    const { tenants, discover } = registry([directory({ fresh: 't1' })]);
+
+    expect(await tenants.holds('fresh', 't1')).toBe(true);
+    expect(discover).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses the tenant a recreated slug named before, once the tenant list is read again', async () => {
+    vi.useFakeTimers();
+    const { tenants, discover } = registry([directory({ rhys: 'old' }), directory({ rhys: 'new' })]);
+    await tenants.refresh();
+
+    const recreated = tenants.holds('rhys', 'new');
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+    expect(await recreated).toBe(true);
+
+    const replaced = tenants.holds('rhys', 'old');
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+    expect(await replaced).toBe(false);
+    expect(discover).toHaveBeenCalledTimes(3);
+  });
+
+  it('answers holdsNow from the list as last applied, without a read', async () => {
+    const { tenants, discover } = registry([directory({ rhys: 't1' })]);
+    expect(tenants.holdsNow('rhys', 't1')).toBe(false);
+
+    await tenants.refresh();
+
+    expect(tenants.holdsNow('rhys', 't1')).toBe(true);
+    expect(tenants.holdsNow('rhys', 't2')).toBe(false);
+    expect(tenants.holdsNow('sam', 't1')).toBe(false);
+    expect(discover).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a tenant it cannot confirm because the tenant list cannot be read', async () => {
+    const { tenants } = registry([new Error('API down')]);
+
+    expect(await tenants.holds('rhys', 't1')).toBe(false);
+  });
+
   it('does not rediscover for a tenant it already holds', async () => {
     vi.useFakeTimers();
     const { tenants, discover } = registry([directory({ rhys: 't1' })]);

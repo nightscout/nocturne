@@ -1,0 +1,14 @@
+# Built by `pnpm build`: every film's composition is written from its film (scripts/composition.js);
+# only the logo's is kept by hand.
+compositions/*
+!compositions/logo/
+compositions/logo/vendor/
+compositions/logo/fonts/
+
+renders/
+# HyperFrames working state; Studio's manual edits are the only part worth keeping.
+**/.hyperframes/*
+!**/.hyperframes/studio-manual-edits.json
+
+# Design-hook scan cache.
+.impeccable/

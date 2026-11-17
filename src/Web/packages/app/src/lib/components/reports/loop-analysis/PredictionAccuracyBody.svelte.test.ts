@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { PredictionCurve, TimeZoneUnavailableReason } from "$lib/api";
+import { PredictionCurve, TimeZoneUnavailableReason } from "#lib/api/index.js";
 import PredictionAccuracyBody from "./PredictionAccuracyBody.svelte";
 import { predictionResponse } from "./prediction-accuracy.test-fixtures";
 
@@ -195,7 +195,7 @@ describe("PredictionAccuracyBody", () => {
     });
 
     await expect.element(page.getByText("This report needs a time zone")).toBeVisible();
-    expect(page.getByText("Predictions analysed").elements()).toHaveLength(0);
+    expect(page.getByText("Predictions analyzed").elements()).toHaveLength(0);
   });
 
   it("says a clamped viewer sees only the last 24 hours", async () => {

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "time-of-day-mis-cased-timezones",
-  "description": "a mis-cased ETC/GMT-2 resolves to UTC\u002B2, per rule and tenant, rather than failing closed or falling back to UTC",
+  "description": "a mis-cased per-rule ETC/GMT-2 is not a zone id, so its rule is skipped; a mis-cased tenant ETC/GMT-2 resolves to UTC+2",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

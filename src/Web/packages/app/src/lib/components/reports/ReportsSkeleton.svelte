@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Card, CardContent, CardHeader } from "#lib/components/ui/card/index.js";
 </script>
 
 <div class="@container space-y-6 @lg:space-y-8">
@@ -58,13 +58,13 @@
 
     <Card class="@4xl:col-span-2">
       <CardHeader>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div class="flex items-center gap-2">
               <Skeleton class="h-5 w-5 rounded" />
               <Skeleton class="h-5 w-32" />
             </div>
-            <Skeleton class="h-4 w-56 mt-1" />
+            <Skeleton class="h-4 w-56 max-w-full mt-1" />
           </div>
           <Skeleton class="h-9 w-28 rounded-md" />
         </div>

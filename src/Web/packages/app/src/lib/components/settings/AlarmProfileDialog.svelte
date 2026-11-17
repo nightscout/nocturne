@@ -6,16 +6,16 @@
     DialogFooter,
     DialogHeader,
     DialogTitle,
-  } from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
+  } from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import {
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-  } from "$lib/components/ui/tabs";
+  } from "#lib/components/ui/tabs/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import Eye from "@lucide/svelte/icons/eye";
@@ -25,8 +25,8 @@
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,
-  } from "$lib/types/alarm-profile";
-  import { normalizeAlarmType } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
+  import { normalizeAlarmType } from "#lib/types/alarm-profile.js";
   import AlarmGeneralTab from "./alarm-profile/AlarmGeneralTab.svelte";
   import AlarmAudioTab from "./alarm-profile/AlarmAudioTab.svelte";
   import AlarmVisualTab from "./alarm-profile/AlarmVisualTab.svelte";
@@ -104,7 +104,7 @@
     <DialogHeader>
       <DialogTitle class="flex items-center gap-2">
         <Bell class="h-5 w-5" />
-        {editedProfile.id ? "Edit Alarm" : "New Alarm"}
+        {editedProfile.id ? "Edit alarm" : "New alarm"}
       </DialogTitle>
       <DialogDescription>
         Configure all aspects of this alarm including sounds, visuals, and smart
@@ -112,27 +112,27 @@
       </DialogDescription>
     </DialogHeader>
 
-    <div class="flex-1 overflow-y-auto py-4">
+    <div class="@container flex-1 overflow-y-auto py-4">
       <Tabs value="general" class="w-full">
-        <TabsList class="grid w-full grid-cols-5">
+        <TabsList variant="wrap">
           <TabsTrigger value="general">
-            <Settings2 class="h-4 w-4 mr-2" />
+            <Settings2 class="hidden @lg:block h-4 w-4 mr-2" />
             General
           </TabsTrigger>
           <TabsTrigger value="audio">
-            <Volume2 class="h-4 w-4 mr-2" />
+            <Volume2 class="hidden @lg:block h-4 w-4 mr-2" />
             Audio
           </TabsTrigger>
           <TabsTrigger value="visual">
-            <Eye class="h-4 w-4 mr-2" />
+            <Eye class="hidden @lg:block h-4 w-4 mr-2" />
             Visual
           </TabsTrigger>
           <TabsTrigger value="snooze">
-            <Timer class="h-4 w-4 mr-2" />
+            <Timer class="hidden @lg:block h-4 w-4 mr-2" />
             Snooze
           </TabsTrigger>
           <TabsTrigger value="schedule">
-            <Clock class="h-4 w-4 mr-2" />
+            <Clock class="hidden @lg:block h-4 w-4 mr-2" />
             Schedule
           </TabsTrigger>
         </TabsList>
@@ -173,11 +173,11 @@
       >
         <div class="flex items-center gap-2">
           <Switch bind:checked={editedProfile.enabled} />
-          <Label>Alarm Enabled</Label>
+          <Label>Alarm enabled</Label>
         </div>
         <div class="flex flex-wrap gap-2">
           <Button variant="outline" onclick={onCancel}>Cancel</Button>
-          <Button onclick={handleSave}>Save Alarm</Button>
+          <Button onclick={handleSave}>Save alarm</Button>
         </div>
       </div>
     </DialogFooter>

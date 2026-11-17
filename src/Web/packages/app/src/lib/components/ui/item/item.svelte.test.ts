@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import { createRawSnippet } from "svelte";
-import { Item } from "$lib/components/ui/item";
+import { Item } from "#lib/components/ui/item/index.js";
 
 const children = createRawSnippet(() => ({ render: () => "<span>Dexcom</span>" }));
 

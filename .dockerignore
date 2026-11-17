@@ -62,7 +62,6 @@ docs/
 # Development and example configs are excluded
 appsettings.Development.json
 appsettings.*.example.json
-appsettings.pushover.example.json
 
 # Ignore Azure and deployment files
 azure.yaml

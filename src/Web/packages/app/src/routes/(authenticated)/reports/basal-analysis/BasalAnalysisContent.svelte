@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Info from "@lucide/svelte/icons/info";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -16,29 +16,26 @@
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Clock from "@lucide/svelte/icons/clock";
   import Gauge from "@lucide/svelte/icons/gauge";
-  import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
-  import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import {
-    getBasalAnalysis,
-    getHourlyInsulinDelivery,
-  } from "$api/generated/statistics.generated.remote";
+  import BasalRatePercentileChart from "#lib/components/reports/BasalRatePercentileChart.svelte";
+  import InsulinDeliveryChart from "#lib/components/reports/InsulinDeliveryChart.svelte";
+  import ReportsSkeleton from "#lib/components/reports/ReportsSkeleton.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { getBasalAnalysisReport, getHourlyDeliveryReport } from "#lib/api/reports.remote.js";
 
   interface Props {
-    analysisDates: { startDate: string; endDate: string };
+    range: { from: string; to: string };
     dateInfo: { from: Date; to: Date; dayCount: number };
   }
-  let { analysisDates, dateInfo }: Props = $props();
+  let { range, dateInfo }: Props = $props();
 
   // Query instances are created once per component instance (the parent remounts
   // this component via {#key} when the date range changes). Creating a query
   // inside $derived and polling .loading/.current can strand the resolved
   // response on a superseded instance (sveltejs/kit#14915), leaving .loading
   // stuck at true and the page blank. Component-level instances avoid the race.
-  const hourlyDeliveryQuery = getHourlyInsulinDelivery(analysisDates);
-  const analysisQuery = getBasalAnalysis(analysisDates);
+  const hourlyDeliveryQuery = getHourlyDeliveryReport(range);
+  const analysisQuery = getBasalAnalysisReport(range);
 
   const hourlyDelivery = $derived(hourlyDeliveryQuery.current);
 
@@ -50,6 +47,7 @@
       minRate: s?.minRate ?? 0,
       maxRate: s?.maxRate ?? 0,
       totalDelivered: s?.totalDelivered ?? 0,
+      totalDeliveredPerDay: s?.totalDeliveredPerDay ?? 0,
     };
   });
 
@@ -77,7 +75,7 @@
       <CardHeader>
         <CardTitle variant="destructive" class="flex items-center gap-2 text-base">
           <Info class="h-5 w-5" />
-          Error Loading Basal Analysis
+          Error loading basal analysis
         </CardTitle>
       </CardHeader>
       <CardContent variant="muted">
@@ -102,7 +100,7 @@
             variant="outline"
             size="sm"
           >
-            Insulin Delivery
+            Insulin delivery
             <ArrowRight class="h-4 w-4" />
           </Button>
         </div>
@@ -126,7 +124,7 @@
       <CardHeader class="pb-3">
         <CardTitle class="flex items-center gap-2 text-base">
           <HelpCircle class="h-5 w-5 text-info" />
-          Understanding This Report
+          Understanding this report
         </CardTitle>
       </CardHeader>
       <CardContent size="sm" class="space-y-2">
@@ -152,10 +150,10 @@
 
     <FigureStrip
       figures={[
-        { label: "Avg Rate", value: basalStats.avgRate.toFixed(2), unit: "U/hr" },
-        { label: "Total Basal", value: basalStats.totalDelivered.toFixed(1), unit: "units delivered" },
-        { label: "Temp Basals", value: tempBasalInfo.perDay.toFixed(1), unit: "per day avg" },
-        { label: "High / Low", value: `${tempBasalInfo.highTemps} / ${tempBasalInfo.lowTemps}`, unit: "temp basals" },
+        { label: "Avg rate", value: basalStats.avgRate.toFixed(2), unit: "U/hr" },
+        { label: "Total basal", value: basalStats.totalDelivered.toFixed(1), unit: "units delivered" },
+        { label: "Temp basals", value: tempBasalInfo.perDay.toFixed(1), unit: "per day avg" },
+        { label: "High / low", value: `${tempBasalInfo.highTemps} / ${tempBasalInfo.lowTemps}`, unit: "temp basals" },
       ]}
     />
 
@@ -171,7 +169,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Gauge class="h-5 w-5 text-muted-foreground" />
-          Basal Rate Percentile Chart
+          Basal rate percentile chart
         </CardTitle>
         <CardDescription>
           Your typical basal delivery pattern across 24 hours (like an AGP for
@@ -190,7 +188,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Clock class="h-5 w-5 text-muted-foreground" />
-          Average Hourly Basal Delivery
+          Average hourly basal delivery
         </CardTitle>
         <CardDescription>
           Average basal insulin delivered per hour of the day
@@ -206,13 +204,13 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Info class="h-5 w-5 text-muted-foreground" />
-            Basal Insights
+            Basal insights
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div class="divide-y divide-border">
             <div class="py-3 first:pt-0">
-              <h4 class="font-medium">Basal Rate Range</h4>
+              <h4 class="font-medium">Basal rate range</h4>
               <p class="text-sm text-muted-foreground">
                 Your basal rates ranged from
                 <strong>{basalStats.minRate.toFixed(2)} U/hr</strong>
@@ -221,7 +219,7 @@
             </div>
 
             <div class="py-3">
-              <h4 class="font-medium">Temp Basal Activity</h4>
+              <h4 class="font-medium">Temp basal activity</h4>
               <p class="text-sm text-muted-foreground">
                 {#if tempBasalInfo.perDay > 0}
                   <strong class="tabular-nums">{tempBasalInfo.perDay.toFixed(1)}</strong>
@@ -234,7 +232,7 @@
 
             {#if tempBasalInfo.zeroTemps > 0}
               <div class="py-3">
-                <h4 class="font-medium">Suspend/Zero Temp Basals</h4>
+                <h4 class="font-medium">Suspend/zero temp basals</h4>
                 <p class="text-sm text-muted-foreground">
                   <strong>{tempBasalInfo.zeroTemps}</strong>
                   zero or suspend temp basals were recorded.
@@ -243,12 +241,12 @@
             {/if}
 
             <div class="py-3 last:pb-0">
-              <h4 class="font-medium">Daily Basal Insulin</h4>
+              <h4 class="font-medium">Daily basal insulin</h4>
               <p class="text-sm text-muted-foreground">
                 Average of <strong>
-                  {(basalStats.totalDelivered / dateInfo.dayCount).toFixed(1)} units
+                  {basalStats.totalDeliveredPerDay.toFixed(1)} units
                 </strong>
-                of basal insulin delivered per day over this {dateInfo.dayCount}-day
+                of basal insulin delivered per day over this {analysisQuery.current?.windowDays ?? dateInfo.dayCount}-day
                 period.
               </p>
             </div>
@@ -261,14 +259,14 @@
     <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
       <Button href="/reports" variant="outline" size="sm">
         <ArrowLeft class="h-4 w-4" />
-        All Reports
+        All reports
       </Button>
       <Button href="/reports/insulin-delivery" size="sm">
-        Insulin Delivery Report
+        Insulin delivery report
         <ArrowRight class="h-4 w-4" />
       </Button>
       <Button href="/reports/treatments" variant="outline" size="sm">
-        Treatment Log
+        Treatment log
       </Button>
     </div>
 

@@ -1,5 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { fade } from "svelte/transition";
+  import { prefersReducedMotion } from "water-ui";
+  import { deferredArtwork } from "#lib/watercolour-deferral.svelte.js";
   import FirstReadingEmptyStateLoader from "./FirstReadingEmptyStateLoader.svelte";
 
   interface Props {
@@ -25,15 +28,48 @@
 
   let { chart, bypass, recentHistoryReady, hasRecentHistory }: Props = $props();
 
+  /** Short enough that the chart is readable within a second of the reading. */
+  const ARRIVAL_FADE_MS = 700;
+
   let emptyStateShown = $state(false);
 
   // The chart is rendered once, here, so it is never destroyed and remounted as
   // the empty state comes and goes; it is only hidden behind the empty state.
   const chartHidden = $derived(!bypass && emptyStateShown);
+
+  // Data turning up while the empty state is on screen is the tenant's first
+  // reading ever: the empty state only shows when none has arrived, and the
+  // loader unmounts with `bypass`, so nothing resets `emptyStateShown`.
+  const firstReadingArrived = $derived(bypass && emptyStateShown);
+  // The sunrise mounts as the reading lands and is released straight away, so
+  // all it plays is its fade off the chart already in place beneath it.
+  let arrivalShown = $state(true);
+  // Loaded while the empty state shows, so it is in hand when the reading lands; a reading that
+  // lands before deferred watercolour comes due plays no sunrise.
+  const arrivalArtwork = deferredArtwork(() => import("#lib/watercolour/artwork.js"), () => emptyStateShown);
+  $effect(() => {
+    if (firstReadingArrived) arrivalShown = false;
+  });
 </script>
 
-<div hidden={chartHidden} aria-hidden={chartHidden}>
+<div class="relative" hidden={chartHidden} aria-hidden={chartHidden}>
   {@render chart(!chartHidden)}
+
+  {#if firstReadingArrived && arrivalShown && arrivalArtwork.component && !prefersReducedMotion()}
+    <div
+      data-testid="first-reading-arrival"
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-0 grid place-items-center rounded-xl border bg-card"
+      out:fade={{ duration: ARRIVAL_FADE_MS }}
+    >
+      <arrivalArtwork.component
+        artwork="sunrise"
+        palette="ember"
+        motion="reduced"
+        class="size-full max-h-80 max-w-80"
+      />
+    </div>
+  {/if}
 </div>
 
 <!--

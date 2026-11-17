@@ -1,19 +1,22 @@
 <script lang="ts">
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import AppSidebar from "./AppSidebar.svelte";
-  import type { AuthUser } from "$lib/stores/auth-store.svelte";
+  import type { AuthUser } from "#lib/stores/auth-store.svelte.js";
+  import type { TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
 
   const {
     user = null,
     isGuestSession = false,
     currentSlug = null,
     baseDomain = null,
+    tenantTargets = [],
   }: {
     user?: AuthUser | null;
     isGuestSession?: boolean;
     currentSlug?: string | null;
     baseDomain?: string | null;
+    tenantTargets?: TenantSwitcherTarget[];
   } = $props();
 
   // The glucose widget reads the store from context. Never initialized, so no socket opens.
@@ -28,5 +31,5 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} />
+  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} {tenantTargets} />
 </Sidebar.Provider>

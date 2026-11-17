@@ -42,10 +42,23 @@ public interface ICompressionLowService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete a suggestion and its associated state span if accepted
+    /// Apply one action to several suggestions. Every item is checked before any is written, and
+    /// one that fails the check rejects the whole batch untouched.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when the suggestion is not found.</exception>
-    Task DeleteSuggestionAsync(
-        Guid id,
+    /// <remarks>
+    /// The writes then run one after another and are not one database commit: a span, a suggestion
+    /// row and a notification are written by services that each open their own context, so a
+    /// failure part way leaves the earlier items applied. A retry finishes the rest: a suggestion
+    /// already in the state the action leaves it in is skipped, and deleting one that is already
+    /// gone does nothing. An accept that wrote its span but failed before the suggestion recorded
+    /// it writes the span again on retry.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown before any write when the action is unknown, or an item is not found or not in a state the
+    /// action applies to; and part way through when a suggestion changes under the batch.
+    /// </exception>
+    Task ApplyBatchAsync(
+        CompressionLowBatchAction action,
+        IReadOnlyCollection<CompressionLowBatchItem> items,
         CancellationToken cancellationToken = default);
 }

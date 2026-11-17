@@ -10,11 +10,12 @@ using V4BolusType = Nocturne.Core.Models.V4.BolusType;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
-public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
+public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger, TimeProvider clock)
 {
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly GlookoTimeMapper _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly TimeProvider _clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
     private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
         ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
@@ -24,6 +25,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public (List<Bolus> boluses, List<CarbIntake> carbs, List<DecompositionBatch> batches) MapBatchData(GlookoBatchData batchData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var boluses = new List<Bolus>();
         var carbs = new List<CarbIntake>();
         var batches = new List<DecompositionBatch>();
@@ -36,7 +38,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 {
                     var bolusDate = _timeMapper.GetRawGlookoDate(bolus.Timestamp, bolus.PumpTimestamp);
                     var correctedDate = _timeMapper.GetCorrectedGlookoTime(bolusDate);
-                    var now = DateTime.UtcNow;
 
                     var hasInsulin = bolus.InsulinDelivered > 0;
                     var hasCarbs = bolus.CarbsInput > 0;
@@ -119,7 +120,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                         ? $"glooko_food_{food.Guid}"
                         : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
 
-                    var now = DateTime.UtcNow;
                     carbs.Add(new CarbIntake
                     {
                         Id = Guid.CreateVersion7(),
@@ -150,6 +150,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapFoodsToCarbIntakes(GlookoBatchData batchData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
         if (batchData.Foods == null) return carbs;
 
@@ -169,7 +170,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ? $"glooko_food_{food.Guid}"
                     : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
 
-                var now = DateTime.UtcNow;
                 carbs.Add(new CarbIntake
                 {
                     Id = Guid.CreateVersion7(),
@@ -231,11 +231,11 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ExternalFoodId = externalFoodId,
                     ConsumedAt = new DateTimeOffset(correctedDate, TimeSpan.Zero),
                     MealName = food.Description ?? food.Name ?? string.Empty,
-                    Carbs = (decimal)carbValue,
-                    Protein = (decimal)(food.Protein ?? 0),
-                    Fat = (decimal)(food.Fat ?? 0),
+                    Carbs = carbValue.ToDecimal(),
+                    Protein = (food.Protein ?? 0).ToDecimal(),
+                    Fat = (food.Fat ?? 0).ToDecimal(),
                     Energy = ToKilojoules(food.Calories),
-                    Servings = (decimal)portions,
+                    Servings = portions.ToDecimal(),
                     ServingDescription = BuildServingDescription(food),
                     Food = BuildFoodImport(food, externalFoodId),
                 });
@@ -264,17 +264,17 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             ExternalId = externalFoodId,
             Name = food.Name ?? food.Description ?? string.Empty,
             BrandName = food.Brand,
-            Carbs = (decimal)carbValue,
-            Protein = (decimal)(food.Protein ?? 0),
-            Fat = (decimal)(food.Fat ?? 0),
+            Carbs = carbValue.ToDecimal(),
+            Protein = (food.Protein ?? 0).ToDecimal(),
+            Fat = (food.Fat ?? 0).ToDecimal(),
             Energy = ToKilojoules(food.Calories),
-            Portion = (decimal)(food.ServingQuantity ?? 1),
+            Portion = (food.ServingQuantity ?? 1).ToDecimal(),
             Unit = food.ServingUnit,
         };
     }
 
     private static decimal ToKilojoules(double? kilocalories) =>
-        (decimal)((kilocalories ?? 0) * NutritionConstants.KilojoulesPerKilocalorie);
+        ((kilocalories ?? 0) * NutritionConstants.KilojoulesPerKilocalorie).ToDecimal();
 
     /// <summary>
     /// Builds a human-readable serving description from Glooko food data.
@@ -301,6 +301,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public (List<Bolus> boluses, List<CarbIntake> carbs, List<DecompositionBatch> batches) MapV3Boluses(GlookoV3GraphResponse graphData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var boluses = new List<Bolus>();
         var carbs = new List<CarbIntake>();
         var batches = new List<DecompositionBatch>();
@@ -322,7 +323,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             {
                 var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(bolus.X).UtcDateTime;
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(bolus.X);
-                var now = DateTime.UtcNow;
 
                 var insulin = bolus.Data?.DeliveredUnits ?? bolus.Data?.ProgrammedUnits ?? bolus.Y;
                 var carbsInput = bolus.Data?.CarbsInput ?? 0;
@@ -404,6 +404,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapV3CarbAll(GlookoV3GraphResponse graphData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
 
         if (graphData?.Series?.CarbAll == null)
@@ -418,7 +419,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(point.X).UtcDateTime;
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(point.X);
-                var now = DateTime.UtcNow;
 
                 carbs.Add(new CarbIntake
                 {
@@ -486,6 +486,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         string legacyKind,
         List<DeviceEvent> into)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         if (points == null)
             return;
 
@@ -495,7 +496,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             {
                 var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X);
-                var now = DateTime.UtcNow;
 
                 into.Add(new DeviceEvent
                 {
@@ -525,6 +525,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapV3HistoryMealsToCarbIntakes(GlookoV3HistoriesResponse historiesData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
         if (historiesData?.Histories == null) return carbs;
 
@@ -544,7 +545,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ? $"glooko_v3meal_{meal.Guid}"
                     : GenerateLegacyId("v3meal", timestamp.Value, $"carbs:{totalCarbs}");
 
-                var now = DateTime.UtcNow;
                 carbs.Add(new CarbIntake
                 {
                     Id = Guid.CreateVersion7(),
@@ -640,11 +640,11 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                             ExternalFoodId = externalFoodId,
                             ConsumedAt = new DateTimeOffset(timestamp.Value, TimeSpan.Zero),
                             MealName = mealLabel,
-                            Carbs = (decimal)carbValue,
-                            Protein = (decimal)(food.Protein ?? 0),
-                            Fat = (decimal)(food.Fat ?? 0),
+                            Carbs = carbValue.ToDecimal(),
+                            Protein = (food.Protein ?? 0).ToDecimal(),
+                            Fat = (food.Fat ?? 0).ToDecimal(),
                             Energy = ToKilojoules(food.Calories),
-                            Servings = (decimal)portions,
+                            Servings = portions.ToDecimal(),
                             ServingDescription = BuildV3ServingDescription(food),
                             Food = BuildMergedFoodImport(food, v2Match, externalFoodId),
                         });
@@ -685,11 +685,11 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             ExternalId = externalFoodId,
             Name = food.Name,
             BrandName = v2Match?.Brand ?? food.Brand,
-            Carbs = (decimal)(food.Carbs ?? 0),
-            Protein = (decimal)(food.Protein ?? 0),
-            Fat = (decimal)(food.Fat ?? 0),
+            Carbs = (food.Carbs ?? 0).ToDecimal(),
+            Protein = (food.Protein ?? 0).ToDecimal(),
+            Fat = (food.Fat ?? 0).ToDecimal(),
             Energy = ToKilojoules(food.Calories),
-            Portion = (decimal)(food.ServingQuantity ?? 1),
+            Portion = (food.ServingQuantity ?? 1).ToDecimal(),
             Unit = food.ServingUnit,
         };
     }
@@ -755,6 +755,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public (List<BasalInjection> basalInjections, List<Bolus> boluses) MapV3ManualInsulin(GlookoV3GraphResponse graphData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
@@ -773,7 +774,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                     var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(point.X).UtcDateTime;
                     var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(point.X);
-                    var now = DateTime.UtcNow;
 
                     var insulinContext = ResolveInsulinContext(point.InsulinName, InsulinCategory.LongActing, InsulinCategory.UltraLongActing);
 
@@ -809,7 +809,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                     var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(point.X).UtcDateTime;
                     var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(point.X);
-                    var now = DateTime.UtcNow;
 
                     var insulinContext = ResolveInsulinContext(point.InsulinName, InsulinCategory.RapidActing, InsulinCategory.ShortActing);
 
@@ -854,6 +853,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         IReadOnlyList<GlookoInjectionInsulin> injectionBasals,
         IReadOnlyList<GlookoInjectionInsulin> injectionBoluses)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
@@ -865,7 +865,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var rawTimestamp = _timeMapper.GetRawGlookoDate(basal.Timestamp, basal.PumpTimestamp);
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-                var now = DateTime.UtcNow;
 
                 var legacyId = !string.IsNullOrEmpty(basal.Guid)
                     ? $"glooko_injection_basal_{basal.Guid}"
@@ -899,7 +898,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var rawTimestamp = _timeMapper.GetRawGlookoDate(bolus.Timestamp, bolus.PumpTimestamp);
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-                var now = DateTime.UtcNow;
 
                 var legacyId = !string.IsNullOrEmpty(bolus.Guid)
                     ? $"glooko_injection_bolus_{bolus.Guid}"
@@ -947,6 +945,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     public (List<BasalInjection> basalInjections, List<Bolus> boluses) MapSsv2InsulinEvents(
         IReadOnlyList<GlookoSsv2InsulinEvent> insulinEvents)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
@@ -959,7 +958,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 // display_time wins over event_time: GetRawGlookoDate prefers its second arg when present.
                 var rawTimestamp = _timeMapper.GetRawGlookoDate(evt.EventTime ?? string.Empty, evt.DisplayTime);
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-                var now = DateTime.UtcNow;
 
                 var isBasal = IsLongActingInsulinType(evt.InsulinType);
 
@@ -1039,6 +1037,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapSsv2CarbsEvents(IReadOnlyList<GlookoSsv2CarbsEvent> carbsEvents)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
 
         foreach (var evt in Records(carbsEvents, "SSV2 carbs event"))
@@ -1052,7 +1051,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 var rawTimestamp = _timeMapper.GetRawGlookoDate(
                     evt.EventTime ?? evt.Timestamp ?? string.Empty, evt.DisplayTime);
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-                var now = DateTime.UtcNow;
 
                 var legacyId = !string.IsNullOrEmpty(evt.Guid)
                     ? $"glooko_carbs_event_{evt.Guid}"
@@ -1092,6 +1090,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<Bolus> MapSsv2ExtendedBoluses(IReadOnlyList<GlookoExtendedBolus> extendedBoluses)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var boluses = new List<Bolus>();
 
         foreach (var eb in Records(extendedBoluses, "SSV2 extended bolus"))
@@ -1107,7 +1106,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var rawTimestamp = _timeMapper.GetRawGlookoDate(eb.Timestamp, eb.PumpTimestamp);
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-                var now = DateTime.UtcNow;
 
                 var bolusType = initial > 0 && extended > 0 ? V4BolusType.Dual : V4BolusType.Square;
 

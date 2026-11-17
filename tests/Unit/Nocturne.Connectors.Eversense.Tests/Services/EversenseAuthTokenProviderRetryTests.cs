@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -59,6 +60,40 @@ public class EversenseAuthTokenProviderRetryTests
         token.Should().BeNull();
         handler.TokenCalls.Should().Be(maxRetryAttempts, "the configured attempt budget is what gets spent");
     }
+
+    [Fact]
+    public async Task Token_ExpiresFiveMinutesBeforeItsLifetimeEnds()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var provider = ProviderFor(new EversenseTokenHandler(), clock);
+
+        await provider.GetValidTokenAsync(Config(), CancellationToken.None);
+
+        provider.TokenExpiresAt.Should().Be(clock.GetUtcNow().UtcDateTime.AddMinutes(55));
+        clock.Advance(TimeSpan.FromMinutes(54));
+        provider.IsTokenExpired.Should().BeFalse();
+        clock.Advance(TimeSpan.FromMinutes(2));
+        provider.IsTokenExpired.Should().BeTrue();
+    }
+
+    private static EversenseAuthTokenProvider ProviderFor(EversenseTokenHandler handler, TimeProvider clock)
+    {
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+
+        return new EversenseAuthTokenProvider(
+            new HttpClient(handler),
+            new ConnectorTokenCache(clock),
+            new ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null),
+            tenantAccessor.Object,
+            NullLogger<EversenseAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            clock);
+    }
+
+    private static EversenseConnectorConfiguration Config() =>
+        new() { Username = "someone@example.com", Password = "hunter2", Server = "US" };
 
     private static async Task<string?> AuthenticateAsync(
         EversenseTokenHandler handler, int maxRetryAttempts = 3)

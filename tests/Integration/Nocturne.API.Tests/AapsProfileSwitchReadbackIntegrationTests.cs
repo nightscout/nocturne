@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration;
 /// treatment reads and drops any that lack a field it requires (<c>TreatmentMapper.kt</c> in AAPS
 /// core/nssdk). These read the wire JSON those endpoints serve.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class AapsProfileSwitchReadbackIntegrationTests : ApiIntegrationTestBase
 {

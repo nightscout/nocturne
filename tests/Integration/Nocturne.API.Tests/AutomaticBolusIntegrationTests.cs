@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration;
 /// are stored as algorithm boluses, counted as automatic delivery, and still read back from v1 as
 /// the event type and flag that were uploaded.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class AutomaticBolusIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)

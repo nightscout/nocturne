@@ -89,7 +89,7 @@ public static class DemoCommandExtensions
         ExecuteCommandContext context)
         where T : IResourceWithEndpoints
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<ProjectResource>>();
+        var logger = context.Services.GetRequiredService<ILogger<ProjectResource>>();
 
         try
         {
