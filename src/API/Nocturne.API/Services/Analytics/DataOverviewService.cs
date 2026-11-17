@@ -699,8 +699,7 @@ public class DataOverviewService : IDataOverviewService
 
             var daysWithData = prefixDaysWithData[i + 1] - prefixDaysWithData[windowStart];
             var weightedMeanMgdl = weightedSum[i] / weightedCount[i];
-            // ADAG-derived eA1C formula (Nathan et al., 2008): %A1C = (mean mg/dL + 46.7) / 28.7.
-            var estimatedA1c = (weightedMeanMgdl + 46.7) / 28.7;
+            var estimatedA1c = GlucoseStatistics.EstimatedA1C(weightedMeanMgdl);
 
             points.Add(
                 new EHbA1cPoint

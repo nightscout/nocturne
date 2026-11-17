@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -67,19 +68,19 @@ public class DeviceAgeService : IDeviceAgeService
         var sensorChange = CreateDeviceAgeInfo(sensorChangeEvent, effectivePrefs, "SAGE", "Sensor");
 
         // Determine which is more recent (min = most recent valid one)
-        var min = "Sensor Start";
+        var min = TreatmentTypes.SensorStart;
         if (sensorChange.Found && sensorStart.Found)
         {
             if (sensorChange.TreatmentDate >= sensorStart.TreatmentDate)
             {
-                min = "Sensor Change";
+                min = TreatmentTypes.SensorChange;
                 // Legacy behavior: if Sensor Change is more recent, hide Sensor Start
                 sensorStart.Found = false;
             }
         }
         else if (sensorChange.Found && !sensorStart.Found)
         {
-            min = "Sensor Change";
+            min = TreatmentTypes.SensorChange;
         }
 
         return new SensorAgeInfo
