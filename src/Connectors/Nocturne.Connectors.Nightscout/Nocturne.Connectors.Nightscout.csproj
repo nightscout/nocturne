@@ -17,6 +17,7 @@
     </ItemGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Connectors.Nightscout.Tests"/>
+        <InternalsVisibleTo Include="Nocturne.API.Tests"/>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>

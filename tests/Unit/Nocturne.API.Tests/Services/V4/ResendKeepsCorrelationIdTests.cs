@@ -143,7 +143,7 @@ public class ResendKeepsCorrelationIdTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         return new TreatmentDecomposer(
-            _factory, new DecomposedTreatmentKeys(_factory),
+            _factory, new DecomposedTreatmentKeys(_factory, TimeProvider.System),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -161,6 +161,6 @@ public class ResendKeepsCorrelationIdTests : IDisposable
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,
-            NullLogger<TreatmentDecomposer>.Instance);
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
     }
 }

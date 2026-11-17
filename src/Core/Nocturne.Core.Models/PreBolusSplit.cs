@@ -135,6 +135,17 @@ public static class PreBolusSplit
     /// </summary>
     public static string WriteBackCarbsId(string legacyId) => Derived(WriteBackCarbsIdPrefix, legacyId);
 
+    /// <summary>
+    /// Whether <paramref name="name"/> is an id the carbs <see cref="ForWriteBack"/> splits off the
+    /// meal <paramref name="legacyId"/> names go upstream or come back under: <see cref="WriteBackCarbsId"/>
+    /// of it, or that id's <see cref="MongoObjectId.Coerce"/>.
+    /// </summary>
+    public static bool NamesWriteBackCarbs(string name, string legacyId)
+    {
+        var carbsId = WriteBackCarbsId(legacyId);
+        return name == carbsId || name == MongoObjectId.Coerce(carbsId);
+    }
+
     private static string Derived(string prefix, string id) =>
         prefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)))[..48];
 }

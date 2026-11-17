@@ -67,6 +67,7 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
             new HttpClient(upstream, disposeHandler: false),
             loader.Object,
             new NightscoutCircuitBreaker(),
+            scope.ServiceProvider.GetRequiredService<IWriteBackSentRecords>(),
             NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
         await act(ActivatorUtilities.CreateInstance<TreatmentService>(scope.ServiceProvider, (IDataEventSink<Treatment>)sink));

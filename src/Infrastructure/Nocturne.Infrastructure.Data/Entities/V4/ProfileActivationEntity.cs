@@ -9,12 +9,17 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// </summary>
 [Table("profile_activations")]
 public class ProfileActivationEntity
-    : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IWriteBackTracked
+    : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IWriteBackSent
 {
     /// <inheritdoc />
     [AuditIgnored]
     [Column("written_live")]
     public bool WrittenLive { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("write_back_sent_fingerprint")]
+    public string? WriteBackSentFingerprint { get; set; }
 
     [Column("end_timestamp")]
     public DateTime? EndTimestamp { get; set; }

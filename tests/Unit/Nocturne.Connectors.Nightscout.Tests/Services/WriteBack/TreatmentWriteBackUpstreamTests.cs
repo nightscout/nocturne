@@ -7,6 +7,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -36,7 +37,8 @@ public class TreatmentWriteBackUpstreamTests
             WriteBackBatchSize = 50,
         });
         return new NightscoutTreatmentWriteBackSink(
-            new HttpClient(upstream), loader.Object, new NightscoutCircuitBreaker(), NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
+            new HttpClient(upstream), loader.Object, new NightscoutCircuitBreaker(), Mock.Of<IWriteBackSentRecords>(),
+            NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
     }
 
     /// <summary>What write-back sent before <c>UpstreamIdentityJson</c>: the treatment through the web defaults.</summary>

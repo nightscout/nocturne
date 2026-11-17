@@ -9,6 +9,7 @@ using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -55,7 +56,7 @@ public class NightscoutWriteBackSinkEndpointTests
         => new(Client(h), LoaderFor(c ?? _config), _breaker, NullLogger<NightscoutEntryWriteBackSink>.Instance);
 
     private NightscoutTreatmentWriteBackSink TreatmentSink(RecordingHttpMessageHandler h)
-        => new(Client(h), LoaderFor(_config), _breaker, NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
+        => new(Client(h), LoaderFor(_config), _breaker, Mock.Of<IWriteBackSentRecords>(), NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
     private NightscoutDeviceStatusWriteBackSink DeviceStatusSink(RecordingHttpMessageHandler h)
         => new(Client(h), LoaderFor(_config), _breaker, NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance);

@@ -77,8 +77,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         for (var i = 0; i < filtered.Count; i += batchSize)
         {
             var batch = filtered.Skip(i).Take(batchSize).ToList();
-            if (await SendCreatedAsync(config, batch, ct))
-                await AfterWrittenAsync(config, batch, ct);
+            if (await SendCreatedAsync(config, batch, ct) is { Count: > 0 } accepted)
+                await AfterWrittenAsync(config, accepted, ct);
         }
     }
 
@@ -88,8 +88,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         if (config is null || ShouldSkip(item))
             return;
 
-        if (await SendCreatedAsync(config, [item], ct))
-            await AfterWrittenAsync(config, [item], ct);
+        if (await SendCreatedAsync(config, [item], ct) is { Count: > 0 } accepted)
+            await AfterWrittenAsync(config, accepted, ct);
     }
 
     public async Task OnUpdatedAsync(T item, CancellationToken ct = default)
@@ -117,6 +117,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
 
     /// <summary>
     /// Runs once upstream has accepted <paramref name="items"/>, to tidy what an earlier write left there.
+    /// It gets every item upstream accepted or already stores, also when others of the same batch failed.
     /// </summary>
     protected virtual Task AfterWrittenAsync(
         NightscoutConnectorConfiguration config, IReadOnlyList<T> items, CancellationToken ct)
@@ -203,28 +204,29 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return filtered;
     }
 
-    private async Task<bool> SendCreatedAsync(NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct)
+    /// <returns>The items of <paramref name="batch"/> upstream accepted or already stores.</returns>
+    private async Task<IReadOnlyList<T>> SendCreatedAsync(NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct)
     {
         if (await TrySendAsync(config, HttpMethod.Post, await PrepareAsync(config, batch, ct), SerializerOptions, ct) is not { } outcome)
-            return false;
+            return [];
         if (outcome.Refusal is not { } refusal)
-            return true;
+            return batch;
 
         if (!IsAlreadyStored(refusal))
         {
             RecordFailure(null, HttpMethod.Post);
-            return false;
+            return [];
         }
 
         if (batch.Count == 1)
         {
             _circuitBreaker.RecordSuccess();
-            return true;
+            return batch;
         }
 
-        var written = true;
+        var written = new List<T>(batch.Count);
         foreach (var item in batch)
-            written &= await SendCreatedAsync(config, [item], ct);
+            written.AddRange(await SendCreatedAsync(config, [item], ct));
         return written;
     }
 

@@ -20,13 +20,15 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// return only a count: a referential clean-up
 /// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>), the duplicate flag
 /// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
-/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, and the stamp of a
-/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>). A lifted statement may also be a read
+/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, the stamp of a
+/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>), and the stamp of what write-back
+/// is sending and sent (<see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSendingAsync"/>, <see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSentAsync"/>). A lifted statement may also be a read
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
 /// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),
 /// and the restore's check of the unique keys a restored row would take
-/// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant.
+/// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant,
+/// and whether write-back sent a record (<see cref="Repositories.V4.DecomposedTreatmentKeys.GetSentUpstreamAsync"/>).
 /// <para>
 /// A user's delete or restore of a record the clamp shows its caller reaches every copy in the
 /// record's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>), so the copies the clamp hides

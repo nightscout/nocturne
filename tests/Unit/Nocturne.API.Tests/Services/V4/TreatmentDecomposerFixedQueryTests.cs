@@ -229,6 +229,6 @@ public class TreatmentDecomposerFixedQueryTests : IDisposable
             Double<IPatientInsulinRepository>().Object,
             new RelativeTempBasalRates(basal.Object),
             Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
     }
 }

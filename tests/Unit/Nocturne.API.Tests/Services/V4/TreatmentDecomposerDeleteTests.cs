@@ -86,7 +86,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         NocturneDbContext context,
         IAuditContext auditContext,
         Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>? logger = null) => new(
-        context.AsFactory(), new DecomposedTreatmentKeys(context.AsFactory()),
+        context.AsFactory(), new DecomposedTreatmentKeys(context.AsFactory(), TimeProvider.System),
         Mock.Of<IBolusRepository>(),
         Mock.Of<ITempBasalRepository>(),
         Mock.Of<ICarbIntakeRepository>(),
@@ -104,7 +104,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         Mock.Of<IPatientInsulinRepository>(),
         TempBasalTestDeps.Unscheduled(),
         auditContext,
-        logger ?? NullLogger<TreatmentDecomposer>.Instance,
+        logger ?? NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System,
         legacyReads: _legacyReads);
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>

@@ -965,6 +965,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
         services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
+        services.AddScoped<IWriteBackSentRecords>(sp => sp.GetRequiredService<IDecomposedTreatmentKeys>());
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
         // Manually-entered lab results (outside the V4 sync/dedup family)

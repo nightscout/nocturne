@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Bolus
 /// </summary>
 [Table("boluses")]
-public class BolusEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
+public class BolusEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackSent
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -21,6 +21,11 @@ public class BolusEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttrib
     [AuditIgnored]
     [Column("written_live")]
     public bool WrittenLive { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("write_back_sent_fingerprint")]
+    public string? WriteBackSentFingerprint { get; set; }
 
     /// <inheritdoc />
     [AuditIgnored]

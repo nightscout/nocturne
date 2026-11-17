@@ -9,6 +9,7 @@ internal sealed class TreatmentDecomposition : GroupedDecomposition
 {
     private readonly Dictionary<int, Exception> _rejected = [];
     private readonly HashSet<int> _wroteNothing = [];
+    private readonly HashSet<int> _upstreamEdits = [];
 
     /// <summary>
     /// The treatments refused for their data, by batch index, with the refusal: a
@@ -31,6 +32,12 @@ internal sealed class TreatmentDecomposition : GroupedDecomposition
 
     /// <summary>Marks a treatment that writes nothing of its own: one Nocturne does not store, or one held by a temp basal.</summary>
     internal void WritesNothing(int index) => _wroteNothing.Add(index);
+
+    /// <summary>Marks a pulled treatment applied as an upstream edit of a record write-back sent.</summary>
+    internal void AppliesUpstreamEdit(int index) => _upstreamEdits.Add(index);
+
+    /// <summary>Whether the treatment at <paramref name="index"/> was applied as an upstream edit of a record write-back sent.</summary>
+    public bool IsUpstreamEdit(int index) => _upstreamEdits.Contains(index) && !_rejected.ContainsKey(index);
 
     /// <summary>
     /// What the treatment at <paramref name="index"/> leaves stored, as a decomposition of its own: the
