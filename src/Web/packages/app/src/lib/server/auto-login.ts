@@ -40,7 +40,8 @@ export function autoLoginEndpoint(
  * been spent.
  *
  * The session is host-scoped (cookie domain = the exact host that set it) and only
- * authenticates on a tenant subdomain. Opened on the apex host, the issued session
+ * authenticates on a host that resolves a tenant: a tenant subdomain, or the apex of an
+ * instance with a sole tenant. Opened on an apex that resolves none, the issued session
  * never authenticates, so the auth guard bounces straight back — and a blind
  * re-redirect would loop forever, flooding the API with 401s from the dashboard load
  * on every pass. If the marker is already present the attempt has been had, and the

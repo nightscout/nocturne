@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/times/* and /api/v1/slice/* endpoints.
 /// Covers time-based queries and data slicing operations.
 /// </summary>
+[Collection(ParityShards.Two)]
 public class TimeQueryParityTests : ParityTestBase
 {
     public TimeQueryParityTests(ParityTestFixture fixture, ITestOutputHelper output)

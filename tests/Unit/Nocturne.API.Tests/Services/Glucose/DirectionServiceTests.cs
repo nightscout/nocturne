@@ -207,6 +207,48 @@ public class DirectionServiceTests
     }
 
     [Theory]
+    [InlineData("mmol")]
+    [InlineData("mmol/L")]
+    [InlineData("MMOL")]
+    [InlineData(" mmol/l ")]
+    public void CalculateDelta_ReadsAnyMmolSpellingAsMmol(string units)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new List<Entry>
+        {
+            new() { Mills = now - (5 * 60 * 1000), Mgdl = 90 },
+            new() { Mills = now, Mgdl = 99 },
+        };
+
+        var result = DirectionService.CalculateDelta(entries, units);
+
+        Assert.NotNull(result);
+        Assert.Equal(0.5, result.Scaled);
+        Assert.Equal("+0.5", result.Display);
+    }
+
+    [Theory]
+    [InlineData("mg/dL")]
+    [InlineData("mgdl")]
+    [InlineData("")]
+    [InlineData("g/L")]
+    public void CalculateDelta_ReadsAnythingButMmolAsMgdl(string units)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new List<Entry>
+        {
+            new() { Mills = now - (5 * 60 * 1000), Mgdl = 90 },
+            new() { Mills = now, Mgdl = 99 },
+        };
+
+        var result = DirectionService.CalculateDelta(entries, units);
+
+        Assert.NotNull(result);
+        Assert.Equal(9, result.Scaled);
+        Assert.Equal("+9", result.Display);
+    }
+
+    [Theory]
     [InlineData(7)]
     [InlineData(9)]
     public void CalculateDelta_ShouldNotInterpolateWhenAtMostNineMinutesApart(int gapMinutes)

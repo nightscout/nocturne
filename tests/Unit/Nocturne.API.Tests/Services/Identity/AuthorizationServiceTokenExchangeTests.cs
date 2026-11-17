@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -66,8 +67,9 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             _mockSubjectService.Object,
             new Mock<IRoleService>().Object,
             new Mock<IDirectGrantService>().Object,
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             _mockJwtService.Object,
-            _dbContext.AsFactory(),
+            new SubjectRepository(_dbContext.AsFactory()),
             _categoryReadContext,
             TimeProvider.System
         );
@@ -161,6 +163,22 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             It.IsAny<TimeSpan?>(),
             It.IsAny<bool>(),
             It.IsAny<Guid?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateJwtFromAccessTokenAsync_NocToken_ListsTheGrantsShiroPermissionsAsOneGroup()
+    {
+        var token = "noc_dashboardtoken";
+        SeedGrant(token, scopes: ["glucose.read", "treatments.readwrite"]);
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        var group = Assert.Single(result!.PermissionGroups);
+        Assert.Equal(
+            ["api:entries:read", "api:treatments:create", "api:treatments:delete", "api:treatments:read", "api:treatments:update"],
+            group);
     }
 
     [Theory]
@@ -384,8 +402,9 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             _mockSubjectService.Object,
             new Mock<IRoleService>().Object,
             new Mock<IDirectGrantService>().Object,
+            new OAuthGrantRepository(context.AsFactory()),
             _mockJwtService.Object,
-            context.AsFactory(),
+            new SubjectRepository(context.AsFactory()),
             _categoryReadContext,
             TimeProvider.System
         );

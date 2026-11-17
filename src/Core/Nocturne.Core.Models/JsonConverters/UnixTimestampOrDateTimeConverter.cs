@@ -24,7 +24,7 @@ public class UnixTimestampOrDateTimeConverter : JsonConverter<DateTime?>
             case JsonTokenType.Number:
                 // Handle Unix timestamp (milliseconds)
                 var timestamp = reader.GetInt64();
-                return DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime;
+                return timestamp.ToUtcDateTime();
 
             case JsonTokenType.String:
                 // Handle ISO datetime string

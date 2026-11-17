@@ -8,7 +8,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Mappers;
 using Nocturne.Connectors.Dexcom.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -17,36 +16,25 @@ namespace Nocturne.Connectors.Dexcom.Services;
 /// <summary>
 ///     Connector service for Dexcom Share data source.
 /// </summary>
-public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfiguration>
+public class DexcomConnectorService
+    : TokenConnectorService<DexcomConnectorConfiguration, DexcomAuthTokenProvider>
 {
     private readonly DexcomSensorGlucoseMapper _sensorGlucoseMapper;
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly DexcomAuthTokenProvider _tokenProvider;
 
     public DexcomConnectorService(
         HttpClient httpClient,
         IConnectorServerResolver<DexcomConnectorConfiguration> serverResolver,
         ILogger<DexcomConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         DexcomAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy =
-            retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy =
-            rateLimitingStrategy
-            ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
-        _tokenProvider =
-            tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _sensorGlucoseMapper = new DexcomSensorGlucoseMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.DexcomConnector;
     public override string ServiceName => "Dexcom Share";
 
     /// <summary>
@@ -83,20 +71,17 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             return result;
         }
 
-        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        if (await ValidTokenAsync(config, cancellationToken) is null)
             return AuthenticationFailedResult();
-        }
 
         try
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                sensorGlucose.ToList(), config, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             RecordSyncError(result, ex);
         }
@@ -107,23 +92,19 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     private async Task<DexcomEntry[]?> FetchBatchDataAsync(
         DexcomConnectorConfiguration config, DateTime? since, CancellationToken cancellationToken)
     {
-        var sessionId = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(sessionId))
+        var sessionId = await ValidTokenAsync(config, cancellationToken);
+        if (sessionId is null)
         {
             _logger.LogWarning(
                 "[{ConnectorSource}] Failed to get valid session, authentication failed",
                 ConnectorSource
             );
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
-
         var fetched = await ExecuteWithRetryAsync(
             async () => await FetchRawDataCoreAsync(config, sessionId, since, cancellationToken),
-            _retryDelayStrategy,
-            ReauthenticateWith(_tokenProvider, config, t => sessionId = t, cancellationToken),
+            ReauthenticateWith(config, t => sessionId = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchDexcomData",
             cancellationToken: cancellationToken

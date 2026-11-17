@@ -13,6 +13,7 @@ public static class BulkInsertExtensions
     /// Inserts the candidates whose key no blocking row holds. Runs inside the caller's transaction
     /// and execution strategy; it opens and commits neither.
     /// </summary>
+    /// <param name="ctx">The context the survivors are saved through; its change tracker is cleared after each chunk.</param>
     /// <param name="candidates">The entities to deduplicate, filter, and insert.</param>
     /// <param name="key">
     /// The entity's external identity, or null/empty when it has none. A candidate with no key cannot
@@ -23,6 +24,7 @@ public static class BulkInsertExtensions
     /// The stored-row lookup per <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>.
     /// Only keyed candidates are submitted.
     /// </param>
+    /// <param name="ct">Cancels the blocking lookup and the inserts.</param>
     /// <returns>The inserted entities and how many were withheld because the user had deleted them.</returns>
     public static async Task<(List<TEntity> Inserted, int SkippedDeleted)> InsertUnblockedAsync<TEntity, TKey>(
         this NocturneDbContext ctx,

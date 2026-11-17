@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// - DELETE: DELETE /entries/{id}
 /// - BULK: POST /entries/bulk
 /// </summary>
+[Collection(ParityShards.One)]
 public class EntriesParityTests : ParityTestBase
 {
     public EntriesParityTests(ParityTestFixture fixture, ITestOutputHelper output)

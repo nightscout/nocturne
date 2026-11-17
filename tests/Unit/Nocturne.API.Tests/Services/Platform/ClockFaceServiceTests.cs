@@ -7,6 +7,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Platform;
 
 [Trait("Category", "Unit")]
@@ -18,7 +20,7 @@ public class ClockFaceServiceTests
     public ClockFaceServiceTests()
     {
         _db.TenantId = Guid.NewGuid();
-        _service = new ClockFaceService(_db.AsFactory(), TimeProvider.System, NullLogger<ClockFaceService>.Instance);
+        _service = new ClockFaceService(_db.AsFactory(), new SubjectRepository(_db.AsFactory()), TimeProvider.System, NullLogger<ClockFaceService>.Instance);
     }
 
     private Guid AddSubject(string? preferences)

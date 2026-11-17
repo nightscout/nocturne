@@ -17,6 +17,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -69,12 +70,13 @@ public class DirectGrantControllerTests : IDisposable
             new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
         var directGrantService = new DirectGrantService(
+            _dbContext.AsFactory(),
             auditService,
             new GrantRevocationService(
                 new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
 
-        _controller = new DirectGrantController(_dbContext.AsFactory(), directGrantService);
+        _controller = new DirectGrantController(new SubjectRepository(_dbContext.AsFactory()), directGrantService);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,
@@ -104,7 +106,7 @@ public class DirectGrantControllerTests : IDisposable
 
         var row = await _dbContext.AuthAuditLog.AsNoTracking().SingleAsync();
         Assert.Equal(AuthAuditEventType.TokenIssued, row.EventType);
-        Assert.Equal(_subjectId, row.SubjectId);
+        Assert.Equal(_subjectId, row.TargetSubjectId);
         Assert.Equal(_subjectId, row.ActorSubjectId);
         Assert.Null(row.ActorCredential);
         Assert.Equal(_testTenantId, row.TenantId);

@@ -8,7 +8,9 @@ using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.SetupHub;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -44,11 +46,11 @@ public class SetupHubServiceTests
     private static SetupHubService ServiceOver(NocturneDbContext db)
     {
         var factory = new TestNocturneDbContextFactory(db);
-        return new(factory, new ISetupHubItem[]
+        return new(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new ISetupHubItem[]
         {
             // Registered out of order on purpose: the key decides the hub order.
-            new AboutItem(factory), new SharingItem(factory, TimeProvider.System), new TherapyItem(factory),
-            DevicesItemOver(db), new AlertsItem(factory), new ConnectDataItem(factory),
+            new AboutItem(factory), new SharingItem(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
+            DevicesItemOver(db), new AlertsItem(factory, new TenantRepository(factory), new AlertRuleRepository(factory)), new ConnectDataItem(factory, new ConnectorConfigurationRepository(factory)),
         });
     }
 
@@ -124,7 +126,7 @@ public class SetupHubServiceTests
     [Fact]
     public async Task AFreshTenant_IsOfferedEveryItemInHubOrder_AllOpen()
     {
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
 
         hub.Items.Select(i => i.Key).Should().Equal(Enum.GetValues<SetupHubItemKey>());
         hub.Items.Should().OnlyContain(i => i.State == SetupHubItemState.Open);
@@ -142,7 +144,7 @@ public class SetupHubServiceTests
         });
         await _db.SaveChangesAsync();
 
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
 
         hub.Items.Should().NotContain(i => i.Key == SetupHubItemKey.ConnectData);
         hub.TotalCount.Should().Be(5);
@@ -151,7 +153,7 @@ public class SetupHubServiceTests
     [Fact]
     public async Task ConnectData_OnceListed_StaysListedUntilTheFirstReadingMakesItDone()
     {
-        await Service.GetAsync(CancellationToken.None);
+        await Service.GetAsync(null, CancellationToken.None);
 
         _db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
         {
@@ -159,14 +161,14 @@ public class SetupHubServiceTests
         });
         await _db.SaveChangesAsync();
 
-        var saved = await Service.GetAsync(CancellationToken.None);
+        var saved = await Service.GetAsync(null, CancellationToken.None);
         saved.Items.Should().ContainSingle(i => i.Key == SetupHubItemKey.ConnectData)
             .Which.State.Should().Be(SetupHubItemState.Open, "a saved source is not a working one");
 
         _db.SensorGlucose.Add(Reading(TenantId));
         await _db.SaveChangesAsync();
 
-        var receiving = await Service.GetAsync(CancellationToken.None);
+        var receiving = await Service.GetAsync(null, CancellationToken.None);
         receiving.Items.Single(i => i.Key == SetupHubItemKey.ConnectData)
             .State.Should().Be(SetupHubItemState.Done);
     }
@@ -174,16 +176,16 @@ public class SetupHubServiceTests
     [Fact]
     public async Task Done_NeverReverts_WhenWhatMadeItDoneGoesAway()
     {
-        await Service.GetAsync(CancellationToken.None);
+        await Service.GetAsync(null, CancellationToken.None);
         var reading = Reading(TenantId);
         _db.SensorGlucose.Add(reading);
         await _db.SaveChangesAsync();
-        await Service.GetAsync(CancellationToken.None);
+        await Service.GetAsync(null, CancellationToken.None);
 
         _db.SensorGlucose.Remove(reading);
         await _db.SaveChangesAsync();
 
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
         hub.Items.Single(i => i.Key == SetupHubItemKey.ConnectData)
             .State.Should().Be(SetupHubItemState.Done);
     }
@@ -203,7 +205,7 @@ public class SetupHubServiceTests
         _db.Tenants.Single(t => t.Id == TenantId).ShareToken = "digest";
         await _db.SaveChangesAsync();
 
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
 
         hub.Items.Should().NotContain(i => i.Key == SetupHubItemKey.ConnectData, "the tenant already has data");
         hub.Items.Should().HaveCount(5).And.OnlyContain(i => i.State == SetupHubItemState.Done);
@@ -219,7 +221,7 @@ public class SetupHubServiceTests
         RuleWithTest(confirmed: true, managedBy: "tracker:x");
         await _db.SaveChangesAsync();
 
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
 
         hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Open);
     }
@@ -246,7 +248,7 @@ public class SetupHubServiceTests
         });
 
     private async Task<SetupHubItemState> SharingStateAsync() =>
-        (await Service.GetAsync(CancellationToken.None)).Items.Single(i => i.Key == SetupHubItemKey.Sharing).State;
+        (await Service.GetAsync(null, CancellationToken.None)).Items.Single(i => i.Key == SetupHubItemKey.Sharing).State;
 
     [Fact]
     public async Task Sharing_StaysOpen_ForAnOwnerAloneWithTheirOwnAppsAndTokens()
@@ -284,7 +286,7 @@ public class SetupHubServiceTests
         AddInvite(expiry.UtcDateTime);
         AddGrant(OAuthGrantTypes.Guest, expiresAt: expiry.UtcDateTime);
         await _db.SaveChangesAsync();
-        var item = new SharingItem(new TestNocturneDbContextFactory(_db), clock);
+        var item = new SharingItem(new TestNocturneDbContextFactory(_db), new TenantRepository(new TestNocturneDbContextFactory(_db)), new TenantMembershipRepository(new TestNocturneDbContextFactory(_db)), new MemberInviteRepository(new TestNocturneDbContextFactory(_db)), new OAuthGrantRepository(new TestNocturneDbContextFactory(_db)), clock);
 
         (await item.WorksAsync(CancellationToken.None)).Should().BeTrue();
 
@@ -319,7 +321,7 @@ public class SetupHubServiceTests
     [Fact]
     public async Task Sharing_JustMe_ResolvesIt_UntilTheOwnerSharesAfterAll()
     {
-        var justMe = await Service.SetStateAsync(SetupHubItemKey.Sharing, SetupHubItemState.NotForMe, CancellationToken.None);
+        var justMe = await Service.SetStateAsync(null, SetupHubItemKey.Sharing, SetupHubItemState.NotForMe, CancellationToken.None);
         justMe.Items.Single(i => i.Key == SetupHubItemKey.Sharing).State.Should().Be(SetupHubItemState.NotForMe);
 
         AddGrant(OAuthGrantTypes.Guest);
@@ -328,13 +330,150 @@ public class SetupHubServiceTests
         (await SharingStateAsync()).Should().Be(SetupHubItemState.Done);
     }
 
+    private TenantRoleEntity? _ownerRole;
+
+    /// <summary>
+    /// A person member, saved on its own so it joins after every earlier one: the save stamps the
+    /// join time, and the first person to join is the helper.
+    /// </summary>
+    private Guid AddPerson(string name, bool owner)
+    {
+        if (owner && _ownerRole is null)
+        {
+            _ownerRole = new TenantRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Owner", Slug = RoleSeeds.Owner, Permissions = [Scope.FullAccess],
+            };
+            _db.TenantRoles.Add(_ownerRole);
+        }
+
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = name };
+        var member = new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = subject.Id,
+        };
+        _db.Subjects.Add(subject);
+        _db.TenantMembers.Add(member);
+        if (owner)
+            _db.TenantMemberRoles.Add(new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = _ownerRole!.Id });
+        _db.SaveChanges();
+        return subject.Id;
+    }
+
+    private void Answer(PatientRelationship relationship, bool handedOver = false)
+    {
+        var tenant = _db.Tenants.Single(t => t.Id == TenantId);
+        tenant.PatientRelationship = relationship;
+        tenant.HandedOverAt = handedOver ? DateTime.UtcNow : null;
+    }
+
+    [Fact]
+    public async Task Sharing_ForAHelper_StaysOpenWithAnInviteTheRecipientHasNotAccepted()
+    {
+        Answer(PatientRelationship.Helper);
+        AddPerson("Helper", owner: true);
+        AddInvite(DateTime.UtcNow.AddDays(7));
+        AddGrant(OAuthGrantTypes.Guest, expiresAt: DateTime.UtcNow.AddHours(48));
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Open, "a helper shares by handing over, not by any link");
+    }
+
+    [Fact]
+    public async Task Sharing_ForAHelper_IsNotDoneByAMemberWhoDoesNotOwnTheTenant()
+    {
+        Answer(PatientRelationship.Helper);
+        AddPerson("Helper", owner: true);
+        AddPerson("Carer", owner: false);
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Open);
+    }
+
+    [Fact]
+    public async Task Sharing_ForAHelper_IsDoneOnceTheRecipientOwnsTheTenant()
+    {
+        Answer(PatientRelationship.Helper);
+        AddPerson("Helper", owner: true);
+        AddPerson("Sam", owner: true);
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Done);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(PatientRelationship.Self)]
+    [InlineData(PatientRelationship.Caregiver)]
+    public async Task Handover_IsNull_ForATenantNoHelperSetUp(PatientRelationship? relationship)
+    {
+        if (relationship is { } answered)
+            Answer(answered);
+        var owner = AddPerson("Owner", owner: true);
+        AddPerson("Partner", owner: true);
+        await _db.SaveChangesAsync();
+
+        (await Service.GetAsync(owner, CancellationToken.None)).Handover.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handover_BeforeTheRecipientJoins_TellsTheHelperTheyCannotStepDownYet()
+    {
+        Answer(PatientRelationship.Helper);
+        var helper = AddPerson("Alex", owner: true);
+        await _db.SaveChangesAsync();
+
+        (await Service.GetAsync(helper, CancellationToken.None)).Handover.Should().Be(
+            new SetupHubHandover("Alex", CallerIsHelper: true, RecipientJoined: false, RecipientAnswered: false, CanStepDown: false));
+    }
+
+    [Fact]
+    public async Task Handover_OnceTheRecipientJoins_NamesTheHelperToTheRecipient_AndLetsOnlyTheHelperStepDown()
+    {
+        Answer(PatientRelationship.Helper);
+        var helper = AddPerson("Alex", owner: true);
+        var recipient = AddPerson("Sam", owner: true);
+        await _db.SaveChangesAsync();
+
+        (await Service.GetAsync(recipient, CancellationToken.None)).Handover.Should().Be(
+            new SetupHubHandover("Alex", CallerIsHelper: false, RecipientJoined: true, RecipientAnswered: false, CanStepDown: false));
+        (await Service.GetAsync(helper, CancellationToken.None)).Handover.Should().Be(
+            new SetupHubHandover("Alex", CallerIsHelper: true, RecipientJoined: true, RecipientAnswered: false, CanStepDown: true));
+    }
+
+    [Fact]
+    public async Task Handover_SurvivesTheRecipientsAnswer_SoTheHelperCanStillStepDown()
+    {
+        Answer(PatientRelationship.Self, handedOver: true);
+        var helper = AddPerson("Alex", owner: true);
+        var recipient = AddPerson("Sam", owner: true);
+        await _db.SaveChangesAsync();
+
+        (await Service.GetAsync(helper, CancellationToken.None)).Handover.Should().Be(
+            new SetupHubHandover("Alex", CallerIsHelper: true, RecipientJoined: true, RecipientAnswered: true, CanStepDown: true));
+        (await Service.GetAsync(recipient, CancellationToken.None)).Handover!.RecipientAnswered.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handover_AfterTheHelperSteppedDown_StillNamesThemAsTheHelper()
+    {
+        Answer(PatientRelationship.Helper);
+        AddPerson("Alex", owner: false);
+        var recipient = AddPerson("Sam", owner: true);
+        await _db.SaveChangesAsync();
+
+        (await Service.GetAsync(recipient, CancellationToken.None)).Handover.Should().Be(
+            new SetupHubHandover("Alex", CallerIsHelper: false, RecipientJoined: true, RecipientAnswered: false, CanStepDown: false),
+            "the recipient is the only owner left, and is still not the helper");
+    }
+
     [Fact]
     public async Task Alerts_IsDone_OnceATestOfAnEnabledRuleIsConfirmedReceived()
     {
         RuleWithTest(confirmed: true);
         await _db.SaveChangesAsync();
 
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
 
         hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Done);
     }
@@ -342,27 +481,27 @@ public class SetupHubServiceTests
     [Fact]
     public async Task NotForMe_ResolvesTheItem_AndReopeningPutsItBack()
     {
-        var set = await Service.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.NotForMe, CancellationToken.None);
+        var set = await Service.SetStateAsync(null, SetupHubItemKey.Alerts, SetupHubItemState.NotForMe, CancellationToken.None);
         set.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.NotForMe);
         set.ResolvedCount.Should().Be(1);
         set.OpenCount.Should().Be(5);
 
-        var reread = await Service.GetAsync(CancellationToken.None);
+        var reread = await Service.GetAsync(null, CancellationToken.None);
         reread.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State
             .Should().Be(SetupHubItemState.NotForMe, "revisiting the hub never clears a choice");
 
-        var reopened = await Service.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.Open, CancellationToken.None);
+        var reopened = await Service.SetStateAsync(null, SetupHubItemKey.Alerts, SetupHubItemState.Open, CancellationToken.None);
         reopened.ResolvedCount.Should().Be(0);
     }
 
     [Fact]
     public async Task NotForMe_GivesWayToDone_WhenTheThingStartsWorking()
     {
-        await Service.SetStateAsync(SetupHubItemKey.Devices, SetupHubItemState.NotForMe, CancellationToken.None);
+        await Service.SetStateAsync(null, SetupHubItemKey.Devices, SetupHubItemState.NotForMe, CancellationToken.None);
         AddCgmAndInsulin();
         await _db.SaveChangesAsync();
 
-        var hub = await Service.GetAsync(CancellationToken.None);
+        var hub = await Service.GetAsync(null, CancellationToken.None);
 
         hub.Items.Single(i => i.Key == SetupHubItemKey.Devices).State.Should().Be(SetupHubItemState.Done);
     }
@@ -374,26 +513,26 @@ public class SetupHubServiceTests
         AddCgmAndInsulin();
         await _db.SaveChangesAsync();
 
-        await Service.Invoking(s => s.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.Done, CancellationToken.None))
+        await Service.Invoking(s => s.SetStateAsync(null, SetupHubItemKey.Alerts, SetupHubItemState.Done, CancellationToken.None))
             .Should().ThrowAsync<ArgumentException>();
-        await Service.Invoking(s => s.SetStateAsync(SetupHubItemKey.Devices, SetupHubItemState.NotForMe, CancellationToken.None))
+        await Service.Invoking(s => s.SetStateAsync(null, SetupHubItemKey.Devices, SetupHubItemState.NotForMe, CancellationToken.None))
             .Should().ThrowAsync<InvalidOperationException>();
-        await Service.Invoking(s => s.SetStateAsync(SetupHubItemKey.ConnectData, SetupHubItemState.NotForMe, CancellationToken.None))
+        await Service.Invoking(s => s.SetStateAsync(null, SetupHubItemKey.ConnectData, SetupHubItemState.NotForMe, CancellationToken.None))
             .Should().ThrowAsync<KeyNotFoundException>();
     }
 
     [Fact]
     public async Task AnotherTenant_NeitherSeesThisHub_NorResolvesItWithItsData()
     {
-        await Service.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.NotForMe, CancellationToken.None);
+        await Service.SetStateAsync(null, SetupHubItemKey.Alerts, SetupHubItemState.NotForMe, CancellationToken.None);
         _db.SensorGlucose.Add(Reading(OtherTenantId));
         await _db.SaveChangesAsync();
 
         await using var other = ContextFor(OtherTenantId);
-        var theirs = await ServiceOver(other).GetAsync(CancellationToken.None);
+        var theirs = await ServiceOver(other).GetAsync(null, CancellationToken.None);
         theirs.Items.Should().NotContain(i => i.State == SetupHubItemState.NotForMe);
 
-        var ours = await Service.GetAsync(CancellationToken.None);
+        var ours = await Service.GetAsync(null, CancellationToken.None);
         ours.Items.Single(i => i.Key == SetupHubItemKey.ConnectData).State
             .Should().Be(SetupHubItemState.Open, "another tenant's reading is not ours");
         _db.SetupHubItems.Should().OnlyContain(r => r.TenantId == TenantId);
@@ -402,27 +541,27 @@ public class SetupHubServiceTests
     [Fact]
     public async Task Strip_IsOfferedOnlyToAnEnrolledTenantWithSomethingOpen()
     {
-        (await Service.GetAsync(CancellationToken.None)).ShowStrip.Should().BeFalse("the tenant onboarded before the hub");
+        (await Service.GetAsync(null, CancellationToken.None)).ShowStrip.Should().BeFalse("the tenant onboarded before the hub");
 
         Enrol();
-        (await Service.GetAsync(CancellationToken.None)).ShowStrip.Should().BeTrue();
+        (await Service.GetAsync(null, CancellationToken.None)).ShowStrip.Should().BeTrue();
 
         foreach (var key in Enum.GetValues<SetupHubItemKey>())
-            await Service.SetStateAsync(key, SetupHubItemState.NotForMe, CancellationToken.None);
-        (await Service.GetAsync(CancellationToken.None)).ShowStrip.Should().BeFalse("everything is resolved");
+            await Service.SetStateAsync(null, key, SetupHubItemState.NotForMe, CancellationToken.None);
+        (await Service.GetAsync(null, CancellationToken.None)).ShowStrip.Should().BeFalse("everything is resolved");
     }
 
     [Fact]
     public async Task DismissingTheStrip_HidesItUntilTheHubChanges()
     {
         Enrol();
-        var before = await Service.GetAsync(CancellationToken.None);
+        var before = await Service.GetAsync(null, CancellationToken.None);
 
-        var dismissed = await Service.DismissStripAsync(before.Revision, CancellationToken.None);
+        var dismissed = await Service.DismissStripAsync(null, before.Revision, CancellationToken.None);
         dismissed.ShowStrip.Should().BeFalse();
-        (await Service.GetAsync(CancellationToken.None)).ShowStrip.Should().BeFalse();
+        (await Service.GetAsync(null, CancellationToken.None)).ShowStrip.Should().BeFalse();
 
-        var changed = await Service.SetStateAsync(SetupHubItemKey.About, SetupHubItemState.NotForMe, CancellationToken.None);
+        var changed = await Service.SetStateAsync(null, SetupHubItemKey.About, SetupHubItemState.NotForMe, CancellationToken.None);
         changed.Revision.Should().NotBe(before.Revision);
         changed.ShowStrip.Should().BeTrue();
     }

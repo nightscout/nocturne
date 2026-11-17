@@ -17,23 +17,28 @@ public class CoachMarkService : ICoachMarkService
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly TimeProvider _time;
     private readonly ILogger<CoachMarkService> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="CoachMarkService"/>.
     /// </summary>
+    /// <param name="contexts">Opens the context each call reads and writes coach mark states through.</param>
     /// <param name="httpContextAccessor">Accessor for the current HTTP context and authenticated subject.</param>
+    /// <param name="timeProvider">Clock that stamps seen and completed times.</param>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
     public CoachMarkService(
         INocturneDbContextFactory contexts,
         IHttpContextAccessor httpContextAccessor,
+        TimeProvider timeProvider,
         ILogger<CoachMarkService> logger
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _httpContextAccessor =
             httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+        _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -124,13 +129,13 @@ public class CoachMarkService : ICoachMarkService
             // Set SeenAt on first transition to "seen" (or any later state)
             if (entity.SeenAt is null && status is "seen" or "completed" or "dismissed")
             {
-                entity.SeenAt = DateTime.UtcNow;
+                entity.SeenAt = _time.GetUtcNow().UtcDateTime;
             }
 
             // Set CompletedAt on first transition to "completed" or "dismissed"
             if (entity.CompletedAt is null && status is "completed" or "dismissed")
             {
-                entity.CompletedAt = DateTime.UtcNow;
+                entity.CompletedAt = _time.GetUtcNow().UtcDateTime;
             }
 
             await db.SaveChangesAsync(cancellationToken);

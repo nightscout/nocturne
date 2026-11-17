@@ -12,30 +12,28 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// - GET /api/v2/properties - Get all properties
 /// - GET /api/v2/properties/{path} - Get specific properties
 /// </summary>
+[Collection(ParityShards.One)]
 public class PropertiesParityTests : ParityTestBase
 {
     public PropertiesParityTests(ParityTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
-    public override async Task InitializeAsync()
-    {
-        await base.InitializeAsync();
-        await WaitForNightscoutEmptyAsync();
-    }
+    protected override ComparisonOptions GetComparisonOptions() => Options;
 
-    protected override ComparisonOptions GetComparisonOptions()
-    {
-        // Properties responses contain dynamic computed values. Nocturne computes iob activity
-        // from the resolved sensitivity, a default one with no profile, where Nightscout reports 0,
-        // and no client shows it. The three-decimal iob and the unrounded cob move between the two
-        // requests, so only their displays are compared.
-        return ComparisonOptions.Default.WithIgnoredFields(
-            "serverTime",
-            "serverTimeEpoch",
-            "uptime",
-            "lastUpdated"
-        ).WithPresenceOnlyFields("activity", "iob", "cob").WithReloadLagTolerance();
-    }
+    /// <summary>
+    /// Nocturne computes iob activity from the resolved sensitivity, a default one with no profile,
+    /// where Nightscout reports 0, and no client shows it. The three-decimal iob moves between the
+    /// two requests, so only its display is compared. The unrounded cob and its display are compared
+    /// to within <see cref="ComparisonOptions.ReloadLagToleranceTable"/>; the rest of the cob
+    /// property (decayedBy, isDecaying, carbs_hr, rawCarbImpact, source, lastCarbs) does not move
+    /// with time while the carbs decay, so it is compared exactly.
+    /// </summary>
+    internal static readonly ComparisonOptions Options = ComparisonOptions.Default.WithIgnoredFields(
+        "serverTime",
+        "serverTimeEpoch",
+        "uptime",
+        "lastUpdated"
+    ).WithPresenceOnlyFields("activity", "iob").WithReloadLagTolerance();
 
     #region Helper Methods
 
@@ -202,6 +200,7 @@ public class PropertiesParityTests : ParityTestBase
     [Fact]
     public async Task GetAllProperties_Empty_ReturnsSameShape()
     {
+        await WaitForNightscoutEmptyAsync();
         await AssertGetParityAsync("/api/v2/properties");
     }
 
@@ -300,7 +299,7 @@ public class PropertiesParityTests : ParityTestBase
     {
         await SeedProfileForTestAsync();
 
-        await WaitForNightscoutBodyAsync("/api/v2/summary", body => body?["profile"] is JsonObject);
+        await WaitForNightscoutBodyAsync("/api/v2/summary", body => body?["profile"] is JsonObject { Count: > 0 });
         await AssertGetParityAsync("/api/v2/properties/basal");
     }
 
@@ -470,6 +469,7 @@ public class PropertiesParityTests : ParityTestBase
     [Fact]
     public async Task GetSpecificProperty_EmptyPath_ReturnsSameShape()
     {
+        await WaitForNightscoutEmptyAsync();
         await AssertGetParityAsync("/api/v2/properties/");
     }
 

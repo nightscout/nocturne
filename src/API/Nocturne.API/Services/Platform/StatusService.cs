@@ -11,9 +11,11 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -46,11 +48,15 @@ public class StatusService : IStatusService
     private readonly CacheFlights _flights;
     private readonly IDemoModeService _demoModeService;
     private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly ICollectionLastModifiedReader _collections;
+    private readonly ITenantRepository _tenantRepository;
+    private readonly ISubjectRepository _subjects;
+    private readonly IRoleRepository _roles;
+    private readonly IOidcProviderRepository _oidcProviders;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
-    private readonly ITenantService _tenants;
-    private readonly ITenantAppearanceReader _appearanceReader;
+    private readonly ITenantGlucoseUnits _glucoseUnits;
     private readonly IGlucoseStatusClassifier _thresholdClassifier;
     private readonly IAlertRepository _alertRepository;
     private readonly ICategoryReadContext _categoryReadContext;
@@ -77,11 +83,15 @@ public class StatusService : IStatusService
         CacheFlights flights,
         IDemoModeService demoModeService,
         INocturneDbContextFactory dbContextFactory,
+        ICollectionLastModifiedReader collections,
+        ITenantRepository tenantRepository,
+        ISubjectRepository subjects,
+        IRoleRepository roles,
+        IOidcProviderRepository oidcProviders,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
-        ITenantService tenants,
-        ITenantAppearanceReader appearanceReader,
+        ITenantGlucoseUnits glucoseUnits,
         IGlucoseStatusClassifier thresholdClassifier,
         IAlertRepository alertRepository,
         ICategoryReadContext categoryReadContext,
@@ -94,11 +104,15 @@ public class StatusService : IStatusService
         _flights = flights;
         _demoModeService = demoModeService;
         _dbContextFactory = dbContextFactory;
+        _collections = collections;
+        _tenantRepository = tenantRepository;
+        _subjects = subjects;
+        _roles = roles;
+        _oidcProviders = oidcProviders;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
-        _tenants = tenants;
-        _appearanceReader = appearanceReader;
+        _glucoseUnits = glucoseUnits;
         _thresholdClassifier = thresholdClassifier;
         _alertRepository = alertRepository;
         _categoryReadContext = categoryReadContext;
@@ -117,7 +131,8 @@ public class StatusService : IStatusService
             {
                 Status = "setup_required",
                 Name = "Nocturne",
-                Version = AppVersion.Current,
+                Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+                NocturneVersion = AppVersion.Current,
                 ServerTime = _time.GetUtcNow().UtcDateTime,
                 ApiEnabled = false,
             };
@@ -143,7 +158,6 @@ public class StatusService : IStatusService
     {
         _logger.LogDebug("Generating system status response");
 
-        var version = AppVersion.Current;
         var serverTime = _time.GetUtcNow().UtcDateTime;
         var (settings, thresholdsDegraded) = await GetPublicSettingsAsync();
 
@@ -173,12 +187,7 @@ public class StatusService : IStatusService
         {
             isDemo = true;
 
-            await using var ctx = await _dbContextFactory.CreatePlatformAsync();
-            nextResetAt = await ctx.Tenants
-                .AsNoTracking()
-                .Where(t => t.Id == tenantContext.TenantId)
-                .Select(t => t.DemoConfig != null ? t.DemoConfig.NextResetAt : null)
-                .FirstOrDefaultAsync();
+            nextResetAt = (await _tenantRepository.GetAsync(tenantContext.TenantId, CancellationToken.None))?.DemoConfig?.NextResetAt;
         }
 
         // Resolve whether this tenant grants anonymous read access (its public subject carries a
@@ -205,7 +214,8 @@ public class StatusService : IStatusService
         {
             Status = "ok",
             Name = _configuration[ServiceNames.ConfigKeys.NightscoutSiteName] ?? "nightscout",
-            Version = version,
+            Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+            NocturneVersion = AppVersion.Current,
             ServerTime = serverTime,
             ApiEnabled = true,
             CareportalEnabled = _configuration.GetValue<bool>("Features:CareportalEnabled", true),
@@ -214,7 +224,6 @@ public class StatusService : IStatusService
             Build = GetBuildDate(),
             Settings = settings,
             ExtendedSettings = GetExtendedSettings(),
-            Authorized = null, // Nightscout returns null for unauthenticated requests
             RuntimeState = _demoModeService.IsEnabled ? "demo" : "loaded",
             IsDemo = isDemo,
             NextResetAt = nextResetAt,
@@ -224,7 +233,7 @@ public class StatusService : IStatusService
         _logger.LogDebug(
             "Status response generated for site: {SiteName}, version: {Version}, demoMode: {DemoMode}",
             response.Name,
-            response.Version,
+            response.NocturneVersion,
             _demoModeService.IsEnabled
         );
 
@@ -397,14 +406,8 @@ public class StatusService : IStatusService
     {
         var settings = new Dictionary<string, object>();
 
-        // Core display settings. Units are the owner's own choice, else the tenant default chosen in
-        // onboarding, which is what a Nightscout client reads as DISPLAY_UNITS.
-        var appearance = await _appearanceReader.GetTenantAppearanceAsync(_tenantAccessor.TenantId);
-        var tenantUnits = appearance.GlucoseUnits
-            ?? (_tenantAccessor.Context is { } tenant
-                ? await _tenants.GetDefaultGlucoseUnitsAsync(tenant.TenantId)
-                : null);
-        settings["units"] = tenantUnits ?? GlucoseUnitDefaults.MgDl;
+        // Core display settings. Units are what a Nightscout client reads as DISPLAY_UNITS.
+        settings["units"] = await _glucoseUnits.ResolveAsync();
         settings["timeFormat"] = _configuration.GetValue<int>("Display:TimeFormat", 12);
         settings["dayStart"] = _configuration.GetValue<int>("Display:DayStart", 7);
         settings["dayEnd"] = _configuration.GetValue<int>("Display:DayEnd", 21);
@@ -504,7 +507,7 @@ public class StatusService : IStatusService
         var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
         try
         {
-            var rules = await _alertRepository.GetEnabledRulesAsync(_tenantAccessor.TenantId, ct);
+            var rules = await _alertRepository.GetEnabledRulesAsync(ct);
             return (_thresholdClassifier.ResolveThresholds(rules), false);
         }
         catch (DbException ex)
@@ -569,7 +572,8 @@ public class StatusService : IStatusService
             ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
             Status = basicStatus.Status,
             Name = basicStatus.Name ?? "Nocturne",
-            Version = basicStatus.Version ?? AppVersion.Current,
+            Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+            NocturneVersion = AppVersion.Current,
             ServerTime = serverTime,
             SrvDate = serverTime.ToMills(),
             ApiEnabled = basicStatus.ApiEnabled,
@@ -611,56 +615,22 @@ public class StatusService : IStatusService
         var serverTime = _time.GetUtcNow().UtcDateTime;
         var grantedScopes = _httpContextAccessor.HttpContext?.GetGrantedScopes() ?? new HashSet<string>();
 
-        Task<DateTime?> ReadableLastModifiedAsync(string collection, Func<NocturneDbContext, Task<DateTime?>> query) =>
+        Task<DateTime?> ReadableAsync(string collection, Func<Task<DateTime?>> read) =>
             LegacyStorageReadScopes.CanRead(grantedScopes, collection)
-                ? LastModifiedAsync(query)
+                ? read()
                 : Task.FromResult<DateTime?>(null);
 
-        // Each query gets its own short-lived DbContext via the factory so they can
-        // run concurrently — a single DbContext is not thread-safe.
-        var entriesTask = ReadableLastModifiedAsync("entries", async ctx =>
-        {
-            var timestamps = new[]
-            {
-                await ctx.SensorGlucose.IncludingDeleted().AsNoTracking().OrderByDescending(e => e.SysUpdatedAt).Select(e => (DateTime?)e.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.MeterGlucose.IncludingDeleted().AsNoTracking().OrderByDescending(m => m.SysUpdatedAt).Select(m => (DateTime?)m.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.Calibrations.IncludingDeleted().AsNoTracking().OrderByDescending(c => c.SysUpdatedAt).Select(c => (DateTime?)c.SysUpdatedAt).FirstOrDefaultAsync(),
-            };
-            return timestamps.Where(d => d.HasValue).Max();
-        });
+        Task<DateTime?> ReadableLastModifiedAsync(string collection, Func<NocturneDbContext, Task<DateTime?>> query) =>
+            ReadableAsync(collection, () => LastModifiedAsync(query));
 
-        var treatmentsTask = ReadableLastModifiedAsync("treatments", async ctx =>
-        {
-            var timestamps = new[]
-            {
-                await ctx.Boluses.IncludingDeleted().AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.CarbIntakes.IncludingDeleted().AsNoTracking().OrderByDescending(c => c.SysUpdatedAt).Select(c => (DateTime?)c.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.BGChecks.IncludingDeleted().AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.Notes.IncludingDeleted().AsNoTracking().OrderByDescending(n => n.SysUpdatedAt).Select(n => (DateTime?)n.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.DeviceEvents.IncludingDeleted().AsNoTracking().OrderByDescending(d => d.SysUpdatedAt).Select(d => (DateTime?)d.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.TempBasals.IncludingDeleted().AsNoTracking().OrderByDescending(t => t.SysUpdatedAt).Select(t => (DateTime?)t.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.BolusCalculations.IncludingDeleted().AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
-            };
-            return timestamps.Where(d => d.HasValue).Max();
-        });
+        Task<DateTime?> ReadableRecordsLastModifiedAsync(string collection) =>
+            ReadableAsync(collection, () => _collections.LastModifiedAsync(collection, CancellationToken.None));
 
-        var profileTask = ReadableLastModifiedAsync("profile", async ctx =>
-        {
-            var timestamps = new[]
-            {
-                await ctx.TherapySettings.IncludingDeleted().AsNoTracking().OrderByDescending(t => t.SysUpdatedAt).Select(t => (DateTime?)t.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.BasalSchedules.IncludingDeleted().AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.CarbRatioSchedules.IncludingDeleted().AsNoTracking().OrderByDescending(c => c.SysUpdatedAt).Select(c => (DateTime?)c.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.SensitivitySchedules.IncludingDeleted().AsNoTracking().OrderByDescending(s => s.SysUpdatedAt).Select(s => (DateTime?)s.SysUpdatedAt).FirstOrDefaultAsync(),
-                await ctx.TargetRangeSchedules.IncludingDeleted().AsNoTracking().OrderByDescending(t => t.SysUpdatedAt).Select(t => (DateTime?)t.SysUpdatedAt).FirstOrDefaultAsync(),
-            };
-            return timestamps.Where(d => d.HasValue).Max();
-        });
-
-        var deviceStatusTask = ReadableLastModifiedAsync("devicestatus", ctx => ctx.ApsSnapshots.IncludingDeleted().AsNoTracking()
-            .OrderByDescending(d => d.SysUpdatedAt)
-            .Select(d => (DateTime?)d.SysUpdatedAt)
-            .FirstOrDefaultAsync());
+        // Each read opens its own context, so they run concurrently.
+        var entriesTask = ReadableRecordsLastModifiedAsync("entries");
+        var treatmentsTask = ReadableRecordsLastModifiedAsync("treatments");
+        var profileTask = ReadableRecordsLastModifiedAsync("profile");
+        var deviceStatusTask = ReadableRecordsLastModifiedAsync("devicestatus");
 
         var foodTask = ReadableLastModifiedAsync("food", ctx => ctx.Foods.IncludingDeleted().AsNoTracking()
             .OrderByDescending(f => f.SysUpdatedAt)
@@ -673,20 +643,9 @@ public class StatusService : IStatusService
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))
             .FirstOrDefaultAsync());
 
-        var authSubjectsTask = LastModifiedAsync(ctx => ctx.Subjects.AsNoTracking()
-            .OrderByDescending(s => s.UpdatedAt)
-            .Select(s => (DateTime?)s.UpdatedAt)
-            .FirstOrDefaultAsync());
-
-        var roleTask = LastModifiedAsync(ctx => ctx.Roles.AsNoTracking()
-            .OrderByDescending(r => r.UpdatedAt)
-            .Select(r => (DateTime?)r.UpdatedAt)
-            .FirstOrDefaultAsync());
-
-        var oidcProviderTask = LastModifiedAsync(ctx => ctx.OidcProviders.AsNoTracking()
-            .OrderByDescending(p => p.UpdatedAt)
-            .Select(p => (DateTime?)p.UpdatedAt)
-            .FirstOrDefaultAsync());
+        var authSubjectsTask = _subjects.LastModifiedAsync(CancellationToken.None);
+        var roleTask = _roles.LastModifiedAsync(CancellationToken.None);
+        var oidcProviderTask = _oidcProviders.LastModifiedAsync(CancellationToken.None);
 
         await Task.WhenAll(
             entriesTask, treatmentsTask, profileTask, deviceStatusTask,
@@ -774,10 +733,8 @@ public class StatusService : IStatusService
         try
         {
             await using var ctx = await _dbContextFactory.CreatePlatformAsync();
-            var conn = ctx.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open)
-                await conn.OpenAsync();
-            return _postgresVersion = conn.ServerVersion;
+            await ctx.Database.OpenConnectionAsync();
+            return _postgresVersion = ctx.Database.GetDbConnection().ServerVersion;
         }
         catch (Exception ex)
         {

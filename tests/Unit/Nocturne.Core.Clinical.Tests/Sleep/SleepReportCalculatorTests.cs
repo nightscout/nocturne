@@ -756,6 +756,79 @@ public class SleepReportCalculatorTests
     }
 
     [Fact]
+    public void ComputeTrendsSummary_CountsTheNightsEachMeanAverages()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, OvernightTirPct = 80, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, OvernightTirPct = null, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, OvernightTirPct = 90, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, OvernightTirPct = null, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.NightCount.Should().Be(4);
+        result.ScoredNightCount.Should().Be(2);
+        result.TirNightCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_NoScoredOrTirNights_CountsZero()
+    {
+        var nights = new[] { new SleepNightSummary { SleepMinutes = 440 } };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.ScoredNightCount.Should().Be(0);
+        result.TirNightCount.Should().Be(0);
+        result.MeanScore.Should().BeNull();
+        result.MeanTirPct.Should().BeNull();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_IncludesEstimatedScore_WhenAScoredNightIsComputed()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, ScoreSource = SleepScoreSource.Computed, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_DoesNotIncludeEstimatedScore_WhenEveryScoredNightIsFromTheDevice()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_DoesNotIncludeEstimatedScore_WhenOnlyAnUnscoredNightIsComputed()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, ScoreSource = SleepScoreSource.Computed, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeFalse();
+    }
+
+    [Fact]
     public void ComputeTrendsSummary_Computes7dVsPrior7dDeltas()
     {
         // 14 nights: first 7 score=60, last 7 score=80 → delta = +20

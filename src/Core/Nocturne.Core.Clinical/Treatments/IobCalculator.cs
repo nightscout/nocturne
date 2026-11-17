@@ -419,8 +419,8 @@ public class IobCalculator(
     internal async Task<IobResult?> GetDeviceIobAsync(long time, bool live, CancellationToken ct = default)
     {
         var (from, to) = DeviceReportedValues.Window(time, live);
-        var fromTime = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime;
-        var toTime = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime;
+        var fromTime = from.ToUtcDateTime();
+        var toTime = to.ToUtcDateTime();
 
         var aps = (await apsSnapshotRepo.GetAsync(
             from: fromTime, to: toTime, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
@@ -449,7 +449,7 @@ public class IobCalculator(
     #region Helper Methods
 
     /// <summary>Nightscout's <c>roundToThreeDecimals</c>, which rounds a midpoint up; Nightscout's IOB is never negative.</summary>
-    private static double RoundToThreeDecimals(double num) => Math.Round(num, 3, MidpointRounding.AwayFromZero);
+    private static double RoundToThreeDecimals(double num) => ScaledRounding.Round(num, 3, MidpointRounding.AwayFromZero);
 
     #endregion
 }

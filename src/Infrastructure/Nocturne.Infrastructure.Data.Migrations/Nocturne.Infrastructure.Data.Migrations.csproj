@@ -3,13 +3,18 @@
          the API loads it from its output directory at runtime (NocturneMigrationsAssembly), so it
          stays out of the dotnet watch workspace. -->
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootNamespace>Nocturne.Infrastructure.Data</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Infrastructure.Data.Tests" />
+    </ItemGroup>
+    <!-- The baseline's script (scripts/squash-migrations.cs). Embedded rather than a string
+         literal, which at this size exceeds the compiler's string heap. -->
+    <ItemGroup>
+        <EmbeddedResource Include="Migrations\*_Baseline.sql" LogicalName="Nocturne.Infrastructure.Data.Migrations.Baseline.sql" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj" />

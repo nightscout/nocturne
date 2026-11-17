@@ -46,6 +46,8 @@ declare global {
 			errorId?: string;
 			/** The server's structured validation issues, when the rejection carried them. */
 			issues?: RustValidationIssue[];
+			/** The stable machine code of the problem, when the rejection carried one. */
+			code?: string;
 		}
 		type TenantStatus = TenantStatusResponse;
 		/** How this request's status call settled: its body, or the failure the client threw. */

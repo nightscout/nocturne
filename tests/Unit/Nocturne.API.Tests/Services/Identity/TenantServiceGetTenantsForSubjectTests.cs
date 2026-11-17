@@ -12,6 +12,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -36,11 +37,15 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
 
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
+        new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 

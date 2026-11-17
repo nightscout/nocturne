@@ -64,7 +64,10 @@ public class ChatIdentityController : ControllerBase
     private ChatLinkScope OwnedByCaller()
         => ChatLinkScope.ForOwner(_tenantAccessor.TenantId, GetUserIdOrThrow());
 
-    /// <summary>List active chat identity links for the current tenant.</summary>
+    /// <summary>
+    /// List active chat identity links for the current tenant, including other members' links.
+    /// The chat account ID is withheld on other members' links, and the default-link label is filled in only for the caller's own.
+    /// </summary>
     /// <remarks>
     /// <para>
     /// The list stays tenant-scoped, so a chat account linked to several tenants shows a
@@ -105,7 +108,10 @@ public class ChatIdentityController : ControllerBase
         return Ok(responses);
     }
 
-    /// <summary>Claim a pending link token after /connect slash command auth.</summary>
+    /// <summary>
+    /// Claim a pending link token after /connect slash command auth.
+    /// Answers 400 for a token that cannot be claimed here and 409 when this tenant's link for the chat account belongs to another member.
+    /// </summary>
     /// <remarks>
     /// Answers 400 for a token that cannot be claimed here
     /// (<see cref="ChatLinkTokenRejectedException"/>) and 409 when this tenant's link for the chat

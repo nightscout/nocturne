@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Nocturne.Aspire.Host.Publishing;
-using YamlDotNet.RepresentationModel;
 using Xunit;
+using static Nocturne.Aspire.Host.Tests.Publishing.ComposeYaml;
 
 namespace Nocturne.Aspire.Host.Tests.Publishing;
 
@@ -17,14 +17,7 @@ public class GateWatchtowerApiOnTokenTests
               WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_API_TOKEN}"
         """;
 
-    private static string? Env(string compose, string key)
-    {
-        var yaml = new YamlStream();
-        yaml.Load(new StringReader(compose));
-        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
-        var watchtower = (YamlMappingNode)((YamlMappingNode)root["services"])["watchtower"];
-        return ((YamlScalarNode)((YamlMappingNode)watchtower["environment"])[key]).Value;
-    }
+    private static string? Env(string compose, string key) => EnvValue(compose, "watchtower", key);
 
     [Fact]
     public void TheEndpointsTurnOnOnlyWhenTheTokenIsSet()
@@ -62,26 +55,5 @@ public class GateWatchtowerApiOnTokenTests
             """;
 
         PortainerComposePublisherExtensions.GateWatchtowerApiOnToken(compose).Should().Be(compose);
-    }
-
-    [Fact]
-    public void TheSelfContainedComposeGatesTheEndpoints()
-    {
-        var dir = Directory.CreateTempSubdirectory();
-        try
-        {
-            var init = Path.Combine(dir.FullName, "00-init.sh");
-            var caddyfile = Path.Combine(dir.FullName, "Caddyfile");
-            File.WriteAllText(init, "#!/bin/bash\n");
-            File.WriteAllText(caddyfile, "{$BASE_DOMAIN} {\n}\n");
-
-            var result = PortainerComposePublisherExtensions.SelfContainCompose(Compose, init, caddyfile);
-
-            Env(result, "WATCHTOWER_HTTP_API_ENDPOINTS").Should().Be("${WATCHTOWER_API_TOKEN:+history,config}");
-        }
-        finally
-        {
-            dir.Delete(recursive: true);
-        }
     }
 }

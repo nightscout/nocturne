@@ -33,7 +33,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
         if (!HttpContext.HasScope(Scope.FullAccess))
             return Forbid();
 
-        return Ok(await setupHub.GetAsync(ct));
+        return Ok(await setupHub.GetAsync(HttpContext.GetSubjectId(), ct));
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
 
         try
         {
-            return Ok(await setupHub.SetStateAsync(key, request.State, ct));
+            return Ok(await setupHub.SetStateAsync(HttpContext.GetSubjectId(), key, request.State, ct));
         }
         catch (KeyNotFoundException)
         {
@@ -88,7 +88,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
 
         try
         {
-            return Ok(await setupHub.ConfirmAboutAsync(ct));
+            return Ok(await setupHub.ConfirmAboutAsync(HttpContext.GetSubjectId(), ct));
         }
         catch (KeyNotFoundException)
         {
@@ -112,7 +112,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
         if (!HttpContext.HasScope(Scope.FullAccess))
             return Forbid();
 
-        return Ok(await setupHub.DismissStripAsync(request.Revision, ct));
+        return Ok(await setupHub.DismissStripAsync(HttpContext.GetSubjectId(), request.Revision, ct));
     }
 }
 

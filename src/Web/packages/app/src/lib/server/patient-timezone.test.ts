@@ -20,7 +20,7 @@ function request(answer: Source): Stub {
   );
   return {
     locals: {
-      apiClient: { patientRecord: { getPatientTimezone } },
+      apiClient: { patientTimezone: { getPatientTimezone } },
     } as unknown as RequestEvent["locals"],
     getPatientTimezone,
   };

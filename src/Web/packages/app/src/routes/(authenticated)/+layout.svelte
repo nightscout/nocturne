@@ -31,19 +31,24 @@
   import InitialReadsPrefetch from "#lib/components/layout/InitialReadsPrefetch.svelte";
   import GuestBanner from "#lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "#lib/components/layout/BackupSignInPrompt.svelte";
+  import ImportInBackgroundBanner from "#lib/components/migration/ImportInBackgroundBanner.svelte";
+  import ImportInBackgroundNotice from "#lib/components/migration/ImportInBackgroundNotice.svelte";
+  import { createImportWatcher } from "#lib/migration/background-import.svelte.js";
+  import { MigrationJobState } from "#lib/api/index.js";
+  import { toast } from "svelte-sonner";
   import MembershipRequestAutoSubmit from "#lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { getEngineHost } from "water-ui";
   import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
-  import { CoachMarkProvider } from "@nocturne/coach";
+  import { CoachMarkProvider, coachmark } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "#lib/coach-marks/adapter.js";
   import { createCoachRouter } from "#lib/coach-marks/router.js";
-  import { ONBOARDING_CORE_GATE, sequences } from "#lib/coach-marks/sequences.js";
-  import { coachLabels } from "#lib/coach-marks/copy.svelte.js";
+  import { ONBOARDING_CORE_GATE, coachAudience, sequences } from "#lib/coach-marks/sequences.js";
+  import { coachFor, coachLabels } from "#lib/coach-marks/copy.svelte.js";
   import CoachParamHandler from "#lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
   import ChartPrintPatterns from "#lib/components/charts/print/ChartPrintPatterns.svelte";
@@ -118,7 +123,23 @@
   });
   let bannerStripHeight = $state(0);
 
-  const coachMarkAdapter = createCoachMarkAdapter(tenantless);
+  const importWatcher = createImportWatcher({
+    ended: (state, status) => {
+      if (state === MigrationJobState.Completed && !status.hasFailures) {
+        toast.success("The import from Nightscout is complete.");
+      } else {
+        toast.warning("The import from Nightscout did not import everything. See Settings.");
+      }
+    },
+  });
+  // svelte-ignore state_referenced_locally
+  const watchesImport = !tenantless && !!data.user && !data.isGuestSession && !data.isDemo;
+  onMount(() => (watchesImport ? importWatcher.start() : undefined));
+
+  const audience = $derived(coachAudience(data));
+  // The coach-mark endpoints keep marks per subject, and a guest or a share viewer has none.
+  // svelte-ignore state_referenced_locally
+  const coachMarkAdapter = createCoachMarkAdapter(tenantless || audience !== "member");
   const coachRouter = createCoachRouter();
 
   // Title/Favicon service for dynamic updates
@@ -275,6 +296,7 @@
   adapter={coachMarkAdapter}
   labels={coachLabels()}
   {sequences}
+  {audience}
   gates={{ [ONBOARDING_CORE_GATE]: data.onboardingComplete }}
   router={coachRouter}
 >
@@ -298,12 +320,20 @@
             <DemoBanner nextResetAt={data.nextResetAt} />
           {/if}
           {#if data.isGuestSession && data.guestExpiresAt}
-            <GuestBanner expiresAt={data.guestExpiresAt} />
+            <div {@attach coachmark(coachFor("guest-tour.access"))}>
+              <GuestBanner expiresAt={data.guestExpiresAt} />
+            </div>
           {/if}
           {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
             <BackupSignInPrompt show={data.showBackupSignInPrompt} />
           {/if}
+          {#if watchesImport}
+            <ImportInBackgroundBanner watcher={importWatcher} />
+          {/if}
       </div>
+      {#if watchesImport}
+        <ImportInBackgroundNotice watcher={importWatcher} />
+      {/if}
       {#if !tenantless}
         <MembershipRequestAutoSubmit
           isAuthenticated={!!data.user}

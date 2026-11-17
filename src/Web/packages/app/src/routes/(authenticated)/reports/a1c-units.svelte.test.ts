@@ -5,11 +5,12 @@ import { page as appPage } from "$app/state";
 import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
 import { reportsOverviewScopes } from "#lib/navigation/report-navigation.svelte.js";
 
-vi.mock("#lib/api/reports.remote.js", () => ({ getReportsData: vi.fn() }));
+vi.mock("#lib/api/reports.remote.js", () => ({ getReadingCount: vi.fn(), getReportsAnalysis: vi.fn() }));
 vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ dateRangeInput: {} }),
 }));
 vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
+  useResourceContext: () => {},
   contextResource: () => ({
     loading: false,
     error: null,
@@ -37,7 +38,7 @@ beforeEach(() => {
 
 it("changes only A1c units while CV and time below range remain percentages", async () => {
   render(ReportsPage);
-  await expect.element(page.getByText(/^53\s*mmol\/mol$/)).toBeVisible();
+  await expect.element(page.getByText(/^53\.0\s*mmol\/mol$/)).toBeVisible();
   await expect.element(page.getByText(/^33\s*%$/)).toBeVisible();
   await expect.element(page.getByText(/^4\.0\s*%$/)).toBeVisible();
 });

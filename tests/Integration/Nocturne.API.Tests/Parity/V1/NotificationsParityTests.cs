@@ -9,6 +9,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/notifications/* and /api/v1/adminnotifies endpoints.
 /// Covers notification acknowledgment and admin notifications.
 /// </summary>
+[Collection(ParityShards.Two)]
 public class NotificationsParityTests : ParityTestBase
 {
     public NotificationsParityTests(ParityTestFixture fixture, ITestOutputHelper output)

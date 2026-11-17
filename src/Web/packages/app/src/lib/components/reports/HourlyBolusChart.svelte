@@ -1,33 +1,20 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
-  import type { Bolus } from "#lib/api/index.js";
+  import type { HourlyInsulinDeliveryPoint } from "#lib/api/index.js";
 
   interface Props {
-    /** Raw bolus records for the report period */
-    boluses: Bolus[];
-    /** Number of days in the report period (used to compute averages) */
-    dayCount: number;
+    /** The hours of the report period, in the patient's timezone */
+    hours: HourlyInsulinDeliveryPoint[];
   }
 
-  let { boluses, dayCount }: Props = $props();
+  let { hours }: Props = $props();
 
-  /** Bucket boluses by hour-of-day and compute average count per hour */
-  const chartData = $derived.by(() => {
-    const counts = new Array<number>(24).fill(0);
-
-    for (const b of boluses) {
-      if (b.mills == null) continue;
-      const hour = new Date(b.mills).getHours();
-      counts[hour] += 1;
-    }
-
-    const divisor = Math.max(dayCount, 1);
-
-    return counts.map((count, hour) => ({
-      hour: `${hour.toString().padStart(2, "0")}:00`,
-      avg: Math.round((count / divisor) * 100) / 100,
-    }));
-  });
+  const chartData = $derived(
+    hours.map((h) => ({
+      hour: `${(h.hour ?? 0).toString().padStart(2, "0")}:00`,
+      avg: h.manualBolusesPerDay ?? 0,
+    }))
+  );
 
   const hasData = $derived(chartData.some((d) => d.avg > 0));
 </script>

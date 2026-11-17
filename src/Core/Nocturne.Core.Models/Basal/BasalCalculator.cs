@@ -109,8 +109,8 @@ public static class BasalCalculator
     {
         // Span one local day before fromMills and one after toMills to capture boundaries that
         // straddle midnight after timeshift.
-        var fromUtc = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime;
-        var toUtc = DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime;
+        var fromUtc = fromMills.ToUtcDateTime();
+        var toUtc = toMills.ToUtcDateTime();
         var firstLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(fromUtc, tz)).AddDays(-1);
         var lastLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(toUtc, tz)).AddDays(1);
 

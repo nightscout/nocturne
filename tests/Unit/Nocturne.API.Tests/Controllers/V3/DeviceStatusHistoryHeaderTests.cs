@@ -5,16 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V3;
-using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Repositories;
-using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Queries;
-using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V3;
@@ -29,21 +22,16 @@ public class DeviceStatusHistoryHeaderTests
     [Fact]
     public async Task GetDeviceStatusHistory_SetsCursorHeadersFromServerWriteTime()
     {
-        var eventTime = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc);
-        var writtenAt = eventTime.AddHours(3);
-        var aps = new ApsSnapshot
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = eventTime,
-            ModifiedAt = writtenAt,
-            AidAlgorithm = AidAlgorithm.Loop,
-        };
+        var eventTime = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero);
+        var written = eventTime.AddHours(3).ToUnixTimeMilliseconds();
 
-        var controller = Controller(new HistoryRecord<DeviceStatusGroup>(new(aps, null, null, null, aps.ModifiedAt), Deleted: false));
+        var controller = Controller(new DeviceStatus
+        {
+            Id = "5f8d0c1e8a7b4c3d9e5f0001", Mills = eventTime.ToUnixTimeMilliseconds(), SrvModified = written,
+        });
 
         await controller.GetDeviceStatusHistory(0);
 
-        var written = new DateTimeOffset(writtenAt).ToUnixTimeMilliseconds();
         controller.Response.Headers["ETag"].ToString().Should().Be($"W/\"{written}\"");
         controller.Response.Headers["Last-Modified"].ToString()
             .Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(written).UtcDateTime.ToString("R"));
@@ -52,15 +40,15 @@ public class DeviceStatusHistoryHeaderTests
     [Fact]
     public async Task GetDeviceStatusHistory_DeletedStatus_IsServedWithIsValidFalse()
     {
-        var aps = new ApsSnapshot
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
-            ModifiedAt = new DateTime(2024, 3, 26, 13, 0, 0, DateTimeKind.Utc),
-            AidAlgorithm = AidAlgorithm.Loop,
-        };
+        var modified = new DateTimeOffset(2024, 3, 26, 13, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-        var result = await Controller(new HistoryRecord<DeviceStatusGroup>(new(aps, null, null, null, aps.ModifiedAt), Deleted: true))
+        var result = await Controller(new DeviceStatus
+            {
+                Id = "5f8d0c1e8a7b4c3d9e5f0001",
+                Mills = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                SrvModified = modified,
+                IsValid = false,
+            })
             .GetDeviceStatusHistory(0);
 
         var body = JsonSerializer.SerializeToElement(
@@ -68,31 +56,18 @@ public class DeviceStatusHistoryHeaderTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var status = body.GetProperty("result").EnumerateArray().Should().ContainSingle().Subject;
         status.GetProperty("isValid").GetBoolean().Should().BeFalse();
-        status.GetProperty("srvModified").GetInt64()
-            .Should().Be(new DateTimeOffset(aps.ModifiedAt).ToUnixTimeMilliseconds());
+        status.GetProperty("srvModified").GetInt64().Should().Be(modified);
     }
 
-    private static DeviceStatusController Controller(params HistoryRecord<DeviceStatusGroup>[] page)
+    private static DeviceStatusController Controller(params DeviceStatus[] page)
     {
-        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
-        groupRepo
-            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(s => s.GetDeviceStatusesModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(page);
-        var projection = new DeviceStatusProjectionService(
-            groupRepo.Object,
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IStateSpanRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            TimeProvider.System,
-            NullLogger<DeviceStatusProjectionService>.Instance);
 
         return new DeviceStatusController(
-            projection,
-            Mock.Of<IDeviceStatusDecomposer>(),
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<DeviceStatusController>.Instance)
         {

@@ -59,7 +59,7 @@ public class StateSpanSupersessionClampTests : IAsyncLifetime
             scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
             var repository = new StateSpanRepository(
                 scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(),
-                new Mock<IDeduplicationService>().Object,
+                new Mock<IDuplicateLinker>().Object,
                 new Mock<IAuditContext>().Object,
                 NullLogger<StateSpanRepository>.Instance);
 

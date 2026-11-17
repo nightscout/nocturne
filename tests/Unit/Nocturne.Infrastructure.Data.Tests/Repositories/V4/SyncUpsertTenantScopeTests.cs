@@ -47,7 +47,7 @@ public class SyncUpsertTenantScopeTests : IDisposable
         _contextA = _db.CreateContext();
         _repoA = new BolusRepository(
             new TestNocturneDbContextFactory(_contextA),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance);
     }

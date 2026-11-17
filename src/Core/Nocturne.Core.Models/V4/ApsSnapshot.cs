@@ -28,7 +28,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="Bolus"/>
 /// <seealso cref="TempBasal"/>
 [JsonSchemaFlatten]
-public class ApsSnapshot : V4RecordBase
+public class ApsSnapshot : V4RecordBase, IPatientDeviceLinked
 {
     /// <summary>
     /// Foreign key to the <see cref="Device"/> table.

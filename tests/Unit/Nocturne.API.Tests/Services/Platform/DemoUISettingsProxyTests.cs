@@ -45,7 +45,7 @@ public class DemoUISettingsProxyTests
 
         var settings = await _proxy.GetAsync(CancellationToken.None);
 
-        settings!.Devices.ConnectedDevices.Should().ContainSingle().Which.Id.Should().Be(DeviceId);
+        settings!.Devices!.ConnectedDevices.Should().ContainSingle().Which.Id.Should().Be(DeviceId);
         _service.Calls.Should().Be(1);
     }
 
@@ -53,11 +53,11 @@ public class DemoUISettingsProxyTests
     public async Task HandsEachCallerItsOwnCopy()
     {
         var first = await _proxy.GetAsync(CancellationToken.None);
-        first!.Devices.ConnectedDevices.Clear();
+        first!.Devices!.ConnectedDevices.Clear();
 
         var second = await _proxy.GetAsync(CancellationToken.None);
 
-        second!.Devices.ConnectedDevices.Should().ContainSingle();
+        second!.Devices!.ConnectedDevices.Should().ContainSingle();
     }
 
     [Fact]

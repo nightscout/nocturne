@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -285,7 +286,12 @@ public class TenantAlertSettingsControllerTests
         if (timezoneFailure is null) timezone.ReturnsAsync(timezoneId);
         else timezone.ThrowsAsync(timezoneFailure);
         var time = new FakeTimeProvider(now ?? DateTimeOffset.UtcNow);
-        return (new TenantAlertSettingsController(factory, therapy.Object, time), options);
+        var controller = new TenantAlertSettingsController(
+            new TenantAlertSettingsRepository(factory, time),
+            new DndWindowRepository(factory, time),
+            therapy.Object,
+            time);
+        return (controller, options);
     }
 
     private static TenantAlertSettingsResponse OkValue(ActionResult<TenantAlertSettingsResponse> result)

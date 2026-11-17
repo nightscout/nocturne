@@ -31,8 +31,11 @@ public interface ITenantRoleService
     Task<TenantRoleDto?> GetRoleByIdAsync(
         Guid tenantId, Guid roleId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default);
 
-    /// <summary>Creates a new custom role with the specified permissions.</summary>
-    Task<TenantRoleDto> CreateRoleAsync(
+    /// <summary>
+    /// Creates a new custom role with the specified permissions. A name whose slug is reserved or
+    /// already used by another role of the tenant is refused with <see cref="SaveRoleResult"/>.
+    /// </summary>
+    Task<SaveRoleResult> CreateRoleAsync(
         Guid tenantId,
         string name,
         string? description,
@@ -42,9 +45,11 @@ public interface ITenantRoleService
 
     /// <summary>
     /// Updates a role's name, description, and permissions. Returns null when
-    /// <paramref name="tenantId"/> has no role with that ID.
+    /// <paramref name="tenantId"/> has no role with that ID. A new name whose slug is reserved or
+    /// already used by another role of the tenant is refused with <see cref="SaveRoleResult"/>; a
+    /// name that keeps the role's own slug is not.
     /// </summary>
-    Task<TenantRoleDto?> UpdateRoleAsync(
+    Task<SaveRoleResult?> UpdateRoleAsync(
         Guid tenantId,
         Guid roleId,
         string name,
@@ -137,6 +142,27 @@ public record TenantRoleDto(
 )
 {
     public RoleAccessLevel? AccessLevel => RoleAccessLevels.Of(Permissions);
+}
+
+/// <summary>
+/// Outcome of creating or renaming a role. <c>Role</c> is set exactly when the save succeeded;
+/// otherwise <c>ErrorCode</c> is one of <see cref="NameTaken"/> and <see cref="NameReserved"/>.
+/// </summary>
+public record SaveRoleResult(TenantRoleDto? Role, string? ErrorCode, string? ErrorDescription)
+{
+    /// <summary>Another role of the tenant already has this name's slug.</summary>
+    public const string NameTaken = "role_name_taken";
+
+    /// <summary>The slug belongs to a seed role, whether or not the tenant still holds it.</summary>
+    public const string NameReserved = "role_name_reserved";
+
+    public static SaveRoleResult Saved(TenantRoleDto role) => new(role, null, null);
+
+    public static SaveRoleResult Taken { get; } =
+        new(null, NameTaken, "A role with this name already exists.");
+
+    public static SaveRoleResult Reserved { get; } =
+        new(null, NameReserved, "This name is reserved.");
 }
 
 /// <summary>

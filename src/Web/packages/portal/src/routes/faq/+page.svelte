@@ -43,7 +43,7 @@
                 },
                 {
                     question: "Do I need technical knowledge to set up Nocturne?",
-                    answer: "Basic familiarity with Docker and the command line is helpful. Each release ships a ready-made compose file and an environment template; you fill in a domain name, an instance key, and four database passwords. Most people get running by following the installation guide.",
+                    answer: "You need a Linux server, a domain name, and the ability to paste two commands into a terminal. The install script installs Docker, generates the keys and passwords, and starts Nocturne. If you have no server, the Oracle Cloud guide creates a free one from the browser. Docker Compose and Portainer guides are there for people who prefer to manage the stack themselves.",
                 },
                 {
                     question: "Can I use an existing PostgreSQL database?",
@@ -77,7 +77,7 @@
             questions: [
                 {
                     question: "What technology stack does Nocturne use?",
-                    answer: "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability.",
+                    answer: "Nocturne is built on .NET 11 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability.",
                 },
                 {
                     question: "How do data connectors work?",

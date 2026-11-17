@@ -79,8 +79,8 @@ public class GlookoFetchRetryTests
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             delays.Object,
-            Mock.Of<IRateLimitingStrategy>(),
-            new StaticGlookoTokenProvider());
+            new StaticGlookoTokenProvider(),
+            endpointPause: TimeSpan.Zero);
 
         return (service, delays);
     }

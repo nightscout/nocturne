@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
@@ -30,6 +31,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Repositories;
 using Npgsql;
 using Xunit;
 
@@ -113,7 +115,9 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
                 .Where(row => row.TenantId == first).Select(row => row.SecretsJson).SingleAsync());
 
         var holders = new PostgresGoogleHealthGrantHolders(real.GetRequiredService<IServiceScopeFactory>(),
-            real.GetRequiredService<INocturneDbContextFactory>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
+            new GoogleHealthGrantHolderRepository(real.GetRequiredService<INocturneDbContextFactory>()),
+            real.GetRequiredService<ITenantRepository>(),
+            NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
         Assert.Equal(GoogleHealthGrantSharing.Shared, await holders.SharingAsync(second, "encrypted-account", default));
         Assert.Equal(GoogleHealthGrantSharing.NotShared, await holders.SharingAsync(first, "disconnected-account", default));
@@ -132,8 +136,9 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     }
 
     private PostgresGoogleHealthGrantHolders Holders() =>
-        new(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<INocturneDbContextFactory>(),
-            NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
+        new(provider.GetRequiredService<IServiceScopeFactory>(),
+            new GoogleHealthGrantHolderRepository(provider.GetRequiredService<INocturneDbContextFactory>()),
+            provider.GetRequiredService<ITenantRepository>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
     private async Task StoreAsync(Guid tenant, GoogleHealthSessionStore sessions, string refreshToken, string account)
     {
@@ -157,7 +162,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(value => value.IsResolved).Returns(true);
         accessor.SetupGet(value => value.TenantId).Returns(tenant);
-        var platform = Options.Create(new GoogleHealthPlatformOptions
+        var platform = new Mock<IGoogleHealthPlatformSettings>();
+        platform.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleHealthPlatformOptions
         {
             ClientId = "synthetic.apps.googleusercontent.com",
             ClientSecret = "synthetic-secret",
@@ -167,8 +173,9 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         disposables.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(http, new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            accessor.Object, platform, NullLogger<GoogleHealthAuthTokenProvider>.Instance);
-        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform,
+            accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
+        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform.Object,
             NullLogger<GoogleHealthSessionStore>.Instance);
     }
 
@@ -182,6 +189,11 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
                 "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
                 (_, values, _, _) => secrets[tenant] = new(values, StringComparer.OrdinalIgnoreCase))
+            .Returns(Task.CompletedTask);
+        configurations.Setup(value => value.SaveRuntimeSecretsAsync(
+                "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, CancellationToken>(
+                (_, values, _) => secrets[tenant] = new(values, StringComparer.OrdinalIgnoreCase))
             .Returns(Task.CompletedTask);
         return configurations.Object;
     }

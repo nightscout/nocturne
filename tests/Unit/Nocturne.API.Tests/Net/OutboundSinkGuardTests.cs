@@ -17,6 +17,8 @@ using Nocturne.Core.Models.Net;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Net;
 
 /// <summary>
@@ -111,7 +113,7 @@ public class OutboundSinkGuardTests
     {
         var factory = new RecordingClientFactory();
         var controller = new OidcProviderAdminController(
-            Mock.Of<IOidcProviderService>(), contexts: Mock.Of<INocturneDbContextFactory>(), factory);
+            Mock.Of<IOidcProviderService>(), Mock.Of<ISubjectRepository>(), factory);
 
         await controller.TestUnsaved(new TestProviderRequest("https://someones-idp.example"));
 

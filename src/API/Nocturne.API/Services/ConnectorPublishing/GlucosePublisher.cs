@@ -4,7 +4,6 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -12,6 +11,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -86,12 +86,12 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            entries, e => e.Id,
+            entries,
             unheld => PublishEntriesAsync(unheld, source, origin, cancellationToken),
             source,
-            ids => _sensorGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _meterGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _calibrationRepository.GetHeldLegacyIdsAsync(ids, cancellationToken));
+            ids => HeldAsync(_sensorGlucoseRepository, ids, cancellationToken),
+            ids => HeldAsync(_meterGlucoseRepository, ids, cancellationToken),
+            ids => HeldAsync(_calibrationRepository, ids, cancellationToken));
 
     /// <remarks>
     /// Alert evaluation after the write is this publisher's one addition to the shared shape.

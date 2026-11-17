@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
@@ -19,6 +20,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -83,6 +85,7 @@ public class MealMatchingServiceTests
         return new TenantClockResolver(
             therapy.Object,
             Mock.Of<ICategoryReadContext>(),
+            new ShareClockDouble(therapy.Object),
             Mock.Of<ILogger<TenantClockResolver>>());
     }
 
@@ -100,7 +103,7 @@ public class MealMatchingServiceTests
             TenantId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
         };
         var settings = new MyFitnessPalMatchingSettingsService(
-            context.AsFactory(),
+            new SettingsRepository(context.AsFactory()),
             TimeProvider.System,
             NullLogger<MyFitnessPalMatchingSettingsService>.Instance);
         await context.DisposeAsync();

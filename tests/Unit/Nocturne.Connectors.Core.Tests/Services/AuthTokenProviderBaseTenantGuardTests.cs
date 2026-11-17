@@ -77,7 +77,8 @@ file class TestTokenProvider(
     IConnectorServerResolver<TestConnectorConfig> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger logger)
-    : AuthTokenProviderBase<TestConnectorConfig>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<TestConnectorConfig>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, new RecordingRetryDelayStrategy())
 {
     protected override string ConnectorName => "Test";
 

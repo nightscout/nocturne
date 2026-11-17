@@ -1,10 +1,14 @@
+using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
@@ -45,6 +49,8 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TreatmentService _service;
+    private readonly TreatmentsController _controller;
+    private readonly Mock<IDataEventSink<Treatment>> _events = new();
 
     public TreatmentServicePreBolusSplitTests()
     {
@@ -59,7 +65,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             Endpoint = "POST /api/v1/treatments",
         };
 
-        var dedup = new Mock<IDeduplicationService>().Object;
+        var dedup = new Mock<IDuplicateLinker>().Object;
         var factory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(factory, dedup, caller, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(factory, dedup, caller, NullLogger<CarbIntakeRepository>.Instance);
@@ -74,7 +80,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var devices = new Mock<IDeviceService>();
+        var devices = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
         devices
             .Setup(s => s.ResolveAsync(
                 It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -82,7 +88,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             bolusRepo, tempBasalRepo,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),
@@ -91,7 +97,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
             foods.Object,
             devices.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             caller,
@@ -100,25 +106,31 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
         var projection = new V4ToLegacyProjectionService(
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
             tempBasalRepo, bolusCalcRepo,
-            Mock.Of<IProfileActivationRepository>(),
+            ProfileActivationTestDeps.Repository(_context),
             foods.Object,
             _context.AsFactory(),
             NullLogger<V4ToLegacyProjectionService>.Instance);
 
-        var pipeline = new DecompositionPipeline(
-            new ServiceCollection().AddSingleton<IDecomposer<Treatment>>(decomposer).BuildServiceProvider(),
-            NullLogger<DecompositionPipeline>.Instance);
 
         var store = new TreatmentReadService(
-            projection, decomposer, pipeline,
+            projection, decomposer,
             tempBasalRepo, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
-            Mock.Of<IProfileActivationRepository>(),
+            ProfileActivationTestDeps.Repository(_context),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
 
         _service = new TreatmentService(
-            store, decomposer, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
+            store, decomposer, Mock.Of<ITreatmentCache>(), _events.Object,
             Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);
+
+        _controller = new TreatmentsController(
+            _service,
+            new DocumentProcessingService(TimeProvider.System, NullLogger<DocumentProcessingService>.Instance),
+            TimeProvider.System,
+            NullLogger<TreatmentsController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
     }
 
     public void Dispose()
@@ -132,6 +144,30 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
 
     private async Task<List<Treatment>> PostAsync(params string[] documents) =>
         [.. await _service.CreateV1TreatmentsAsync(documents.Select(Parse))];
+
+    private async Task<Treatment> PutAsync(string json) =>
+        OkValue<Treatment>((await _controller.SaveTreatments(JsonDocument.Parse(json).RootElement)).Result);
+
+    private async Task<Treatment> PutAsync(string id, string json) =>
+        OkValue<Treatment>((await _controller.UpdateTreatment(id, Parse(json))).Result);
+
+    private async Task<Treatment[]> PostToV1Async(string json) =>
+        OkValue<Treatment[]>((await _controller.CreateTreatments(JsonDocument.Parse(json).RootElement)).Result);
+
+    private static T OkValue<T>(IActionResult? result) =>
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<T>().Subject;
+
+    private async Task OneSplitMealAsync(string? legacyId = null)
+    {
+        var (boluses, carbs) = await LiveRowsAsync();
+        var bolus = boluses.Should().ContainSingle().Subject;
+        (bolus.Timestamp, bolus.Insulin).Should().Be((At, 2.0));
+        var carb = carbs.Should().ContainSingle("one meal holds one carb intake").Subject;
+        (carb.Timestamp, carb.Carbs).Should().Be((At.AddMinutes(15), 30.0));
+        carb.LegacyId.Should().Be(PreBolusSplit.CarbsId(bolus.LegacyId!));
+        if (legacyId is not null)
+            bolus.LegacyId.Should().Be(legacyId);
+    }
 
     private async Task<List<Treatment>> ReadAsync() =>
         [.. (await _service.GetTreatmentsAsync(count: 100)).OrderBy(t => t.Mills)];
@@ -338,5 +374,157 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
         var (boluses, carbs) = await LiveRowsAsync();
         boluses.Should().ContainSingle().Which.Timestamp.Should().Be(At);
         carbs.Should().ContainSingle().Which.Timestamp.Should().Be(At);
+    }
+
+    private const string MealWithId =
+        """{"_id":"6a1f000000000000000000dd","eventType":"Meal Bolus","created_at":"2026-09-30T10:00:00Z","carbs":30,"insulin":2,"preBolus":15}""";
+
+    private const string LoopMeal =
+        """{"_id":"69F15FD2-8075-4DEB-AEA3-4352F455840D","eventType":"Meal Bolus","created_at":"2026-09-30T10:00:00Z","carbs":30,"insulin":2,"preBolus":15}""";
+
+    [Theory]
+    [InlineData(MealWithId)]
+    [InlineData(Repro)]
+    public async Task A_meal_a_v1_post_split_and_a_v1_put_re_sends_as_one_record_holds_one_carb_intake(string document)
+    {
+        await PostAsync(document);
+
+        var saved = await PutAsync(document);
+
+        await OneSplitMealAsync();
+        (saved.Mills, saved.Insulin, saved.Carbs, saved.PreBolus).Should().Be((Mills(At), 2.0, (double?)null, 15.0));
+        (await ReadAsync()).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task A_v1_put_by_the_served_id_keeps_the_carbs_on_the_key_the_bolus_is_stored_under()
+    {
+        var posted = await PostAsync(MealWithId);
+
+        await PutAsync(posted[0].Id!, MealWithId.Replace("\"carbs\":30", "\"carbs\":40"));
+
+        var (boluses, carbs) = await LiveRowsAsync();
+        boluses.Should().ContainSingle().Which.LegacyId.Should().Be("6a1f000000000000000000dd");
+        var carb = carbs.Should().ContainSingle().Subject;
+        (carb.LegacyId, carb.Timestamp, carb.Carbs)
+            .Should().Be((PreBolusSplit.CarbsId("6a1f000000000000000000dd"), At.AddMinutes(15), 40.0));
+    }
+
+    [Theory]
+    [InlineData(LoopMeal)]
+    [InlineData(Repro)]
+    public async Task A_v1_put_of_a_new_meal_stores_it_split(string document)
+    {
+        var saved = await PutAsync(document);
+
+        await OneSplitMealAsync();
+        (saved.Mills, saved.Carbs).Should().Be((Mills(At), (double?)null));
+    }
+
+    [Fact]
+    public async Task A_v1_put_of_a_meal_stored_before_the_split_moves_its_carbs_off_the_meal()
+    {
+        await _service.CreateTreatmentsAsync([Parse(MealWithId)]);
+
+        _events.Invocations.Clear();
+
+        await PutAsync(MealWithId);
+
+        await OneSplitMealAsync("6a1f000000000000000000dd");
+        _events.Verify(e => e.OnUpdatedAsync(
+            It.Is<Treatment>(t => t.Insulin == 2.0 && t.Carbs == null), It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.OnCreatedAsync(
+            It.Is<IReadOnlyList<Treatment>>(c => c.Count == 1 && c[0].Carbs == 30.0 && c[0].Insulin == null),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_v1_put_editing_a_split_meal_announces_both_halves_as_updates()
+    {
+        await PostAsync(MealWithId);
+        _events.Invocations.Clear();
+
+        await PutAsync(MealWithId.Replace("\"carbs\":30", "\"carbs\":40"));
+
+        _events.Verify(e => e.OnUpdatedAsync(
+            It.Is<Treatment>(t => t.Carbs == 40.0), It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _events.Verify(e => e.OnCreatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_v1_post_without_an_id_that_replaces_a_stored_meal_stores_it_split()
+    {
+        await _service.CreateTreatmentsAsync([Parse(Repro)]);
+
+        var posted = await PostToV1Async(Repro);
+
+        await OneSplitMealAsync();
+        posted.Select(t => (t.Mills, t.Carbs)).Should().Equal((Mills(At), (double?)null));
+    }
+
+    [Fact]
+    public async Task A_v1_post_re_sending_a_meal_stored_before_the_split_announces_the_meal_as_updated()
+    {
+        await _service.CreateTreatmentsAsync([Parse(MealWithId)]);
+        _events.Invocations.Clear();
+
+        await PostAsync(MealWithId);
+
+        _events.Verify(e => e.OnUpdatedAsync(
+            It.Is<Treatment>(t => t.Insulin == 2.0 && t.Carbs == null), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_v1_post_without_an_id_re_sending_a_split_meal_holds_one_carb_intake()
+    {
+        await PostToV1Async(Repro);
+
+        await PostToV1Async(Repro);
+
+        await OneSplitMealAsync();
+    }
+
+    [Theory]
+    [InlineData(LoopMeal)]
+    [InlineData(Repro)]
+    public async Task A_meal_the_user_deleted_stays_deleted_when_put(string document)
+    {
+        var stored = (await _service.CreateTreatmentsAsync([Parse(document)])).Single();
+        (await _service.DeleteTreatmentAsync(stored.Id!)).Should().BeTrue();
+
+        await _controller.SaveTreatments(JsonDocument.Parse(document).RootElement);
+
+        (await ReadAsync()).Should().BeEmpty();
+        var (boluses, carbs) = await LiveRowsAsync();
+        (boluses.Count, carbs.Count).Should().Be((0, 0));
+    }
+
+    [Fact]
+    public async Task A_v1_put_of_a_meal_whose_bolus_the_user_deleted_writes_no_carbs_at_the_bolus()
+    {
+        var posted = await PostAsync(Repro);
+        (await _service.DeleteTreatmentAsync(posted[0].Id!)).Should().BeTrue();
+
+        await _controller.SaveTreatments(JsonDocument.Parse(Repro).RootElement);
+
+        var (boluses, carbs) = await LiveRowsAsync();
+        boluses.Should().BeEmpty();
+        carbs.Should().ContainSingle().Which.Timestamp.Should().Be(At.AddMinutes(15));
+    }
+
+    [Fact]
+    public async Task A_v1_put_of_a_treatment_with_nothing_to_split_updates_it_in_place()
+    {
+        const string document =
+            """{"_id":"6a1f000000000000000000ee","eventType":"Meal Bolus","created_at":"2026-09-30T10:00:00Z","carbs":30,"insulin":2}""";
+        await PostAsync(document);
+
+        await PutAsync(document.Replace("\"carbs\":30", "\"carbs\":45"));
+
+        var (boluses, carbs) = await LiveRowsAsync();
+        boluses.Should().ContainSingle().Which.Timestamp.Should().Be(At);
+        var carb = carbs.Should().ContainSingle().Subject;
+        (carb.LegacyId, carb.Timestamp, carb.Carbs).Should().Be(("6a1f000000000000000000ee", At, 45.0));
     }
 }

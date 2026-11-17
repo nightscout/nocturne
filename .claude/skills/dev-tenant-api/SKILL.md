@@ -12,16 +12,24 @@ Requires a running stack (`aspire start`; see the aspire skill). Run-mode pins:
 | nocturne-api (direct) | `http://localhost:1610` |
 | Gateway / tenant UI | `https://<slug>.nocturne.localhost:1612` |
 
+A stack with no tenants (a fresh clone, every worktree) already holds a `dev`
+tenant: the `nocturne-dev-seed` resource seeds it with 30 days of sample data
+before the web app starts, at `https://dev.nocturne.localhost:1612`
+(`aspire describe` lists it as "Dev tenant"). An instance that already holds a
+tenant is never seeded.
+
 Worktrees get dynamic ports — read them from `aspire describe`. A **404 on any
 `/api/v4/dev-only/*` route means the API isn't running in Development** (never
 the case under `aspire start`; always the case on published images).
 
-## One call: loginable tenant with data
+## One call: another loginable tenant with data
+
+`dev` exists already, so pick another slug:
 
 ```bash
 curl -s -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
   -H "Content-Type: application/json" \
-  -d '{"slug":"sleepy","displayName":"Sleepy","ownerUsername":"dev","sampleData":true,"sampleDataDays":7}'
+  -d '{"slug":"test","displayName":"Test","ownerUsername":"dev","sampleData":true,"sampleDataDays":7}'
 ```
 
 Response: `{tenantId, subjectId, accessToken, refreshToken, expiresInSeconds,
@@ -48,12 +56,12 @@ carries the per-type counts.
 Tenants resolve from the Host header. Directly against :1610, spoof it:
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" -H "X-Forwarded-Host: sleepy.nocturne.localhost" \
+curl -H "Authorization: Bearer $TOKEN" -H "X-Forwarded-Host: dev.nocturne.localhost" \
   http://localhost:1610/api/v4/status
 ```
 
 Via the gateway, browsers resolve `*.localhost` themselves but curl may not:
-add `--resolve sleepy.nocturne.localhost:1612:127.0.0.1` and `-k` (without
+add `--resolve dev.nocturne.localhost:1612:127.0.0.1` and `-k` (without
 mkcert the dev cert doesn't name tenant subdomains).
 
 ## Session login without seeding
@@ -74,10 +82,13 @@ re-authenticates transparently on the next navigation.
 
 Turn it **off when testing auth itself** (passkey ceremony, logout,
 recovery mode, share links' anonymous view of the login page) with
-`NOCTURNE_DEV_AUTO_LOGIN=false aspire start` (or `"NOCTURNE_DEV_AUTO_LOGIN": false`
+`Dev__AutoLogin=false aspire start` (or `"Dev": { "AutoLogin": false }`
 in the AppHost appsettings) — with it on, the unauthenticated login UI is
 unreachable. It only affects browser
 navigation; headless/bearer flows are unchanged.
+
+To test the first-run wizard, also turn off the seed:
+`Dev__AutoSeed__Enabled=false Dev__AutoLogin=false aspire start`.
 
 ## Dev passkey fixture (real authenticator across DB wipes)
 

@@ -15,17 +15,12 @@ using Xunit;
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
 /// <summary>
-/// Shared fixture for parity tests that manages both:
-/// - Nightscout 15.0.3 (via NightscoutContainer with MongoDB)
-/// - Nocturne (via WebApplicationFactory with PostgreSQL)
-///
-/// Follows the same shared container pattern as TestDatabaseFixture.
+/// The fixture of one parity shard (<see cref="ParityShards"/>): a Nightscout 15.0.3 with its own
+/// MongoDB, and a Nocturne host on its own database.
 /// </summary>
 public class ParityTestFixture : IAsyncLifetime
 {
-    private static readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
-    private static SharedParityState? _sharedState;
-    private static int _instanceCount;
+    private ParityStack? _stack;
 
     private const string TenantSlug = "parity";
 
@@ -35,60 +30,37 @@ public class ParityTestFixture : IAsyncLifetime
     /// <summary>
     /// HttpClient for Nightscout V1/V2 API (uses api-secret header)
     /// </summary>
-    public HttpClient NightscoutClient => _sharedState?.NightscoutClient
+    public HttpClient NightscoutClient => _stack?.NightscoutClient
         ?? throw new InvalidOperationException("Fixture not initialized");
 
     /// <summary>
     /// HttpClient for Nightscout V3 API (uses JWT Bearer token)
     /// </summary>
-    public HttpClient NightscoutV3Client => _sharedState?.NightscoutV3Client
+    public HttpClient NightscoutV3Client => _stack?.NightscoutV3Client
         ?? throw new InvalidOperationException("Fixture not initialized");
 
-    public HttpClient NocturneClient => _sharedState?.NocturneClient
+    public HttpClient NocturneClient => _stack?.NocturneClient
         ?? throw new InvalidOperationException("Fixture not initialized");
 
 
     /// <summary>
     /// The JWT token used for V3 API authentication (for debugging)
     /// </summary>
-    public string? JwtToken => _sharedState?.NightscoutContainer.JwtToken;
+    public string? JwtToken => _stack?.NightscoutContainer.JwtToken;
 
     public async Task InitializeAsync()
     {
-        await _initializationSemaphore.WaitAsync();
-        try
-        {
-            if (_sharedState == null)
-            {
-                using var measurement = TestPerformanceTracker.MeasureTest("ParityTestFixture.Initialize");
-                _sharedState = new SharedParityState();
-                await _sharedState.InitializeAsync();
-            }
-
-            Interlocked.Increment(ref _instanceCount);
-        }
-        finally
-        {
-            _initializationSemaphore.Release();
-        }
+        using var measurement = TestPerformanceTracker.MeasureTest("ParityTestFixture.Initialize");
+        _stack = new ParityStack();
+        await _stack.InitializeAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await _initializationSemaphore.WaitAsync();
-        try
+        if (_stack != null)
         {
-            var remainingInstances = Interlocked.Decrement(ref _instanceCount);
-
-            if (remainingInstances == 0 && _sharedState != null)
-            {
-                await _sharedState.DisposeAsync();
-                _sharedState = null;
-            }
-        }
-        finally
-        {
-            _initializationSemaphore.Release();
+            await _stack.DisposeAsync();
+            _stack = null;
         }
     }
 
@@ -98,10 +70,10 @@ public class ParityTestFixture : IAsyncLifetime
     /// </summary>
     public async Task CleanupDataAsync(CancellationToken cancellationToken = default)
     {
-        if (_sharedState == null) return;
+        if (_stack == null) return;
 
         // Nocturne first: its records, not the tenant, its members or the API secret's grant.
-        await using (var conn = new NpgsqlConnection(_sharedState.SuperuserConnectionString))
+        await using (var conn = new NpgsqlConnection(_stack.SuperuserConnectionString))
         {
             await conn.OpenAsync(cancellationToken);
             await using var cmd = conn.CreateCommand();
@@ -110,16 +82,13 @@ public class ParityTestFixture : IAsyncLifetime
         }
 
         await ApiIntegrationTestFixture.ClearApiCachesAsync(
-            _sharedState.Services, _sharedState.TenantId, cancellationToken);
+            _stack.Services, _stack.TenantId, cancellationToken);
 
         // Clean Nightscout (network calls - may have latency)
-        await _sharedState.NightscoutContainer.CleanupDataAsync(cancellationToken);
+        await _stack.NightscoutContainer.CleanupDataAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Shared state across all parity tests in the collection
-    /// </summary>
-    private class SharedParityState : IAsyncDisposable
+    private class ParityStack : IAsyncDisposable
     {
         private WebApplicationFactory<Nocturne.API.Program>? _nocturneFactory;
         private HttpClient? _nightscoutV3Client;
@@ -202,6 +171,7 @@ public class ParityTestFixture : IAsyncLifetime
                         {
                             config.EnableDetailedErrors = true;
                             config.EnableSensitiveDataLogging = true;
+                            config.MaxPoolSize = ApiIntegrationTestFixture.MaxPoolSize;
                         });
                     });
 
@@ -248,23 +218,40 @@ public class ParityTestFixture : IAsyncLifetime
 
         public async ValueTask DisposeAsync()
         {
-            NocturneClient.Dispose();
+            // Null after a failed InitializeAsync, which must still stop the containers.
+            NocturneClient?.Dispose();
             _nightscoutV3Client?.Dispose();
 
             _nocturneFactory?.Dispose();
 
             await NightscoutContainer.DisposeAsync();
-
         }
     }
 }
 
 /// <summary>
-/// Collection definition for parity tests to share the fixture.
-/// DisableParallelization ensures tests run sequentially to avoid data contamination
-/// since they share the same Nightscout and PostgreSQL instances.
+/// The shards of the parity suite. Each is an xUnit collection with a
+/// <see cref="ParityTestFixture"/> of its own (its own Nightscout, MongoDB, Nocturne host and
+/// database), so the shards run in parallel with each other and the rest of the suite, while the
+/// tests inside one run one after another, cleaned before each test by <c>ParityTestBase</c>.
 /// </summary>
-[CollectionDefinition("Parity", DisableParallelization = true)]
-public class ParityTestCollection : ICollectionFixture<ParityTestFixture>
+/// <remarks>
+/// Most of a shard's time is idle, waiting for Nightscout's reload
+/// (<see cref="Parity.ParityTestBase.WaitForNightscoutBodyAsync"/>), so a shard costs a Nightscout,
+/// a MongoDB and an API host more than it costs CPU. A class names its shard on itself under the
+/// rules of <see cref="ApiIntegrationShards"/>, which <see cref="ParityShardTests"/> holds for these.
+/// The shards are balanced by measured duration; <c>tests/README.md</c> says how to measure them.
+/// </remarks>
+public static class ParityShards
 {
+    public const string One = "Parity1";
+    public const string Two = "Parity2";
+
+    public static readonly IReadOnlyList<string> All = [One, Two];
 }
+
+[CollectionDefinition(ParityShards.One)]
+public class ParityShard1 : ICollectionFixture<ParityTestFixture>;
+
+[CollectionDefinition(ParityShards.Two)]
+public class ParityShard2 : ICollectionFixture<ParityTestFixture>;

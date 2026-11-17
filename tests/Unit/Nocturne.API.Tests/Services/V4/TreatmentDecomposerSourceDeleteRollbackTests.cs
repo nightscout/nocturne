@@ -1,9 +1,9 @@
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Infrastructure;
 using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -20,6 +20,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -47,7 +48,7 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
         _context = _db.CreateContext();
 
         _decomposer = new(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
             Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
             Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
@@ -55,9 +56,9 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IDeviceService>(),
+            new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IActiveProfileResolver>(),
+            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             new AuditContext { IsSystem = true },
@@ -110,7 +111,7 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
         });
         _context.StateSpans.Add(new StateSpanEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "t-4", Source = Connector,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "t-4", Source = Connector,
             Category = "Override", State = "Active", StartTimestamp = At,
             MetadataJson = """{"collection":"treatments","utcOffset":0}""",
         });
@@ -154,7 +155,7 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rolled_back_legacy_id_delete_reaches_the_pipeline_caller_as_an_error_not_as_nothing_deleted()
+    public async Task A_rolled_back_legacy_id_delete_reaches_the_caller_as_an_error_not_as_nothing_deleted()
     {
         _context.Boluses.Add(new BolusEntity
         {
@@ -166,11 +167,9 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
         });
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
-        var services = new ServiceCollection().AddSingleton<IDecomposer<Treatment>>(_decomposer).BuildServiceProvider();
-        var pipeline = new DecompositionPipeline(services, NullLogger<DecompositionPipeline>.Instance);
 
         _failure.FailOn = "UPDATE \"carb_intakes\"";
-        var act = () => pipeline.DeleteByLegacyIdAsync<Treatment>("t-3", WriteOrigin.Live);
+        var act = () => _decomposer.DeleteByLegacyIdAsync("t-3", WriteOrigin.Live);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("injected write failure");
     }

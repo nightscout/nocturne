@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -62,14 +63,15 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             .Returns<Dictionary<string, string>>(d => d);
 
         _service = new ConnectorConfigurationService(
-            _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
             _auditContext.Object,
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 
@@ -138,8 +140,8 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
     [Fact]
     public async Task EveryWriteMethodOnTheServiceIsGuarded()
     {
-        // Pins the completeness claim itself. The four write methods on the interface must all
-        // refuse the demo subject; if a fifth is added, this fails rather than the claim quietly
+        // Pins the completeness claim itself. Every write method on the interface must
+        // refuse the demo subject; if another is added, this fails rather than the claim quietly
         // becoming false.
         SetCaller(isDemoSubject: true);
 
@@ -149,6 +151,8 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
                 () => _service.SaveConfigurationAsync(ConnectorName, CareLinkAccount("a@b.c", "AU"))),
             (nameof(IConnectorConfigurationService.SaveSecretsAsync),
                 () => _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" })),
+            (nameof(IConnectorConfigurationService.SaveRuntimeSecretsAsync),
+                () => _service.SaveRuntimeSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" })),
             (nameof(IConnectorConfigurationService.SetActiveAsync),
                 () => _service.SetActiveAsync(ConnectorName, true)),
             (nameof(IConnectorConfigurationService.DeleteConfigurationAsync),

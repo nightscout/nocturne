@@ -89,8 +89,8 @@ public class AlertDeliveryWebhookSigningTests
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
-        var channels = await new AlertRepository(factory)
-            .GetChannelsForRuleAsync(Tenant, ruleId, CancellationToken.None);
+        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant))
+            .GetChannelsAsync([ruleId], CancellationToken.None))[ruleId];
 
         var provider = new WebhookProvider(
             WebhookTestHarness.Sender(handler), encryption, NullLogger<WebhookProvider>.Instance);
@@ -99,6 +99,7 @@ public class AlertDeliveryWebhookSigningTests
 
         var service = new AlertDeliveryService(
             factory.AsNocturneFactory(),
+            new TenantMembershipRepository(factory.AsNocturneFactory()),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),

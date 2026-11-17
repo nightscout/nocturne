@@ -12,6 +12,7 @@ using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -41,6 +42,7 @@ public class AlertDeliveryServiceTestFireTests
         var serviceProvider = new ServiceCollection().BuildServiceProvider();
         var service = new AlertDeliveryService(
             factory.AsNocturneFactory(),
+            new TenantMembershipRepository(factory.AsNocturneFactory()),
             tenantAccessor,
             Mock.Of<ISignalRBroadcastService>(),
             alarmRelay ?? Mock.Of<IEngineAlarmRelay>(),

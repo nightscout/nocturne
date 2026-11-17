@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
@@ -16,12 +17,24 @@ namespace Nocturne.API.Services.ClientDevices;
 public class ClientDeviceService : IClientDeviceService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthGrantRepository _grants;
+    private readonly TimeProvider _time;
     private readonly ILogger<ClientDeviceService> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="ClientDeviceService"/> class.</summary>
-    public ClientDeviceService(INocturneDbContextFactory contexts, ILogger<ClientDeviceService> logger)
+    /// <param name="contexts">Opens the context each operation reads and writes device registrations on.</param>
+    /// <param name="grants">The grants devices registered under, for the app name a device is shown with.</param>
+    /// <param name="timeProvider">The clock for last-seen and update stamps, and for which excursions are still active.</param>
+    /// <param name="logger">Logs registrations, dropped capabilities and concurrent registrations.</param>
+    public ClientDeviceService(
+        INocturneDbContextFactory contexts,
+        IOAuthGrantRepository grants,
+        TimeProvider timeProvider,
+        ILogger<ClientDeviceService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -129,20 +142,19 @@ public class ClientDeviceService : IClientDeviceService
         CancellationToken cancellationToken = default)
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var rows = await db.ClientDevices
+        var devices = await db.ClientDevices
+            .AsNoTracking()
             .Where(d => d.SubjectId == subjectId)
             .OrderByDescending(d => d.LastSeenAt)
-            .Select(d => new
-            {
-                Device = d,
-                AppName = db.OAuthGrants
-                    .Where(g => g.Id == d.GrantId)
-                    .Select(g => g.Client!.DisplayName)
-                    .FirstOrDefault(),
-            })
             .ToListAsync(cancellationToken);
 
-        return rows.Select(r => ToDto(r.Device, r.AppName)).ToList();
+        var appNames = await _grants.GetClientDisplayNamesAsync(
+            devices.Where(d => d.GrantId is not null).Select(d => d.GrantId!.Value).Distinct().ToList(),
+            cancellationToken);
+
+        return devices
+            .Select(d => ToDto(d, d.GrantId is { } grantId ? appNames.GetValueOrDefault(grantId) : null))
+            .ToList();
     }
 
     /// <inheritdoc />
@@ -179,7 +191,7 @@ public class ClientDeviceService : IClientDeviceService
         }
 
         device.Label = label;
-        device.UpdatedAt = DateTime.UtcNow;
+        device.UpdatedAt = _time.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(cancellationToken);
         return ToDto(device);
     }
@@ -225,7 +237,7 @@ public class ClientDeviceService : IClientDeviceService
         // EndedAt > now admits test fires: AlertDeliveryService.TestFireAsync gives a
         // device_action test excursion a short future end so it appears here for the window
         // and then self-withdraws. Real excursions always end in the past.
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         var excursions = await db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
@@ -278,14 +290,14 @@ public class ClientDeviceService : IClientDeviceService
         return intents;
     }
 
-    private static void Apply(
+    private void Apply(
         ClientDeviceEntity entity,
         Guid subjectId,
         RegisterDeviceRequest request,
         string[] capabilities,
         Guid? grantId)
     {
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         entity.SubjectId = subjectId;
         entity.Kind = request.Kind;
         entity.Label = request.Label;

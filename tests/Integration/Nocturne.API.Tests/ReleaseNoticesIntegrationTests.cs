@@ -11,6 +11,7 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration;
 
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class ReleaseNoticesIntegrationTests : ApiIntegrationTestBase
 {
@@ -25,13 +26,13 @@ public class ReleaseNoticesIntegrationTests : ApiIntegrationTestBase
         var tenant = Fixture.TenantId;
         var owner = Guid.NewGuid();
 
-        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
-        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeFalse();
-        (await ledger.TryClaimAsync(ReleaseNoticeService.InstalledKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
-        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, Guid.NewGuid(), CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeJob.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeJob.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeFalse();
+        (await ledger.TryClaimAsync(ReleaseNoticeJob.InstalledKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeJob.AvailableKind, version, tenant, Guid.NewGuid(), CancellationToken.None)).Should().BeTrue();
 
-        await ledger.ReleaseAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None);
-        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        await ledger.ReleaseAsync(ReleaseNoticeJob.AvailableKind, version, tenant, owner, CancellationToken.None);
+        (await ledger.TryClaimAsync(ReleaseNoticeJob.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]

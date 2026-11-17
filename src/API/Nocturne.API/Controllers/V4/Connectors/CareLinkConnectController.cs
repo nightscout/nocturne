@@ -127,7 +127,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// connector secret. Returns the discovered username/country for auto-filling the config form.
     /// </summary>
     [HttpPost("complete")]
-    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RemoteCommand(Invalidates = ["Configuration_GetConfiguration", "Configuration_GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(CareLinkConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -285,8 +285,8 @@ public partial class CareLinkConnectController : ControllerBase
     /// Applies the signed-in account to the stored configuration. The region is authoritative — it is
     /// the cloud the stored tokens belong to — while a username or country the profile did not report
     /// leaves whatever is configured alone. Merges into <paramref name="existing"/> because
-    /// <see cref="IConnectorConfigurationService.SaveConfigurationAsync"/> replaces the whole
-    /// document, and dropping the tenant's sync toggles and intervals here would be silent.
+    /// <see cref="IConnectorConfigurationService.SaveConfigurationAsync"/> replaces every key but the
+    /// enabled flag, and dropping the tenant's sync toggles and intervals here would be silent.
     /// </summary>
     public static JsonDocument MergeSignedInAccount(
         JsonDocument? existing, string server, string? username, string? country)

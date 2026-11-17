@@ -1,12 +1,11 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
@@ -60,17 +59,20 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
     private readonly TimeProvider _time;
     private readonly ILogger<ConnectorCursorResetJobService> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConnectorResetJobRepository _records;
     private readonly ConcurrentDictionary<Guid, ConnectorResetJob> _jobs = new();
 
     /// <summary>Initializes a new instance of <see cref="ConnectorCursorResetJobService"/>.</summary>
     public ConnectorCursorResetJobService(
         TimeProvider timeProvider,
         ILogger<ConnectorCursorResetJobService> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IConnectorResetJobRepository records)
     {
         _time = timeProvider;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _records = records ?? throw new ArgumentNullException(nameof(records));
     }
 
     /// <inheritdoc />
@@ -107,7 +109,8 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
             connectors.Connectors.Select(c => c.ConnectorName),
             _time,
             _logger,
-            _serviceProvider);
+            _serviceProvider,
+            _records);
         // Record the job before the work starts. The in-process task cannot survive an API
         // restart, but its record must — otherwise a restart mid-run leaves the operator
         // polling a 404 with no way to tell "never existed" from "killed partway". Registered
@@ -146,7 +149,7 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
         if (_jobs.TryGetValue(jobId, out var job))
             return job.GetStatus();
 
-        var record = await FindRecordAsync(jobId, ct)
+        var record = await _records.FindAsync(jobId, ct)
             ?? throw new KeyNotFoundException($"Connector cursor reset job {jobId} not found");
 
         return ConnectorResetJob.StatusFromRecord(record);
@@ -163,7 +166,7 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
             return;
         }
 
-        var record = await FindRecordAsync(jobId, ct)
+        var record = await _records.FindAsync(jobId, ct)
             ?? throw new KeyNotFoundException($"Connector cursor reset job {jobId} not found");
 
         // The record exists but the job is not in memory — terminal, or orphaned by a restart
@@ -171,15 +174,6 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
         _logger.LogInformation(
             "Cancel requested for connector cursor reset job {JobId} which is no longer running (state {State})",
             jobId, record.State);
-    }
-
-    private async Task<ConnectorResetJobEntity?> FindRecordAsync(Guid jobId, CancellationToken ct)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        await using var db = await scope.ServiceProvider
-            .GetRequiredService<INocturneDbContextFactory>()
-            .CreateAsync(ct);
-        return await db.ConnectorResetJobs.FindAsync([jobId], ct);
     }
 }
 
@@ -199,6 +193,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
     private readonly List<SyncDataType>? _dataTypes;
     private readonly ILogger _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConnectorResetJobRepository _records;
     private readonly CancellationTokenSource _cts = new();
     private readonly TimeProvider _time;
     private readonly DateTime _createdAt;
@@ -221,7 +216,8 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         IEnumerable<string> connectorNames,
         TimeProvider time,
         ILogger logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IConnectorResetJobRepository records)
     {
         _id = id;
         _tenantId = tenantId;
@@ -232,6 +228,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         _createdAt = time.GetUtcNow().UtcDateTime;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _records = records;
 
         var order = new List<string>();
         foreach (var name in connectorNames)
@@ -312,13 +309,8 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
     /// <summary>The target tenant, or null when it no longer exists.</summary>
     private async Task<TenantContext?> LoadTenantAsync(CancellationToken ct)
     {
-        await using var db = await _serviceProvider.GetRequiredService<INocturneDbContextFactory>()
-            .CreatePlatformAsync(ct);
-
-        return await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == _tenantId)
-            .Select(t => new TenantContext(t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo))
-            .FirstOrDefaultAsync(ct);
+        var tenant = await _serviceProvider.GetRequiredService<ITenantRepository>().GetAsync(_tenantId, ct);
+        return tenant?.ToContext();
     }
 
     /// <summary>
@@ -331,30 +323,18 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         try
         {
             var status = GetStatus();
-            using var scope = _serviceProvider.CreateScope();
-            await using var db = await scope.ServiceProvider
-                .GetRequiredService<INocturneDbContextFactory>()
-                .CreateAsync(ct);
-
-            var record = await db.ConnectorResetJobs.FindAsync([_id], ct);
-            if (record is null)
-            {
-                record = new ConnectorResetJobEntity { Id = _id };
-                db.ConnectorResetJobs.Add(record);
-            }
-
-            record.TenantId = status.TenantId;
-            record.TenantSlug = status.TenantSlug;
-            record.State = status.State.ToString();
-            record.CreatedAt = status.CreatedAt;
-            record.StartedAt = status.StartedAt;
-            record.CompletedAt = status.CompletedAt;
-            record.ErrorMessage = status.ErrorMessage is { Length: > 1000 } e ? e[..1000] : status.ErrorMessage;
-            record.TotalConnectors = status.TotalConnectors;
-            record.CompletedConnectors = status.CompletedConnectors;
-            record.ConnectorsJson = JsonSerializer.Serialize(status.Connectors);
-
-            await db.SaveChangesAsync(ct);
+            await _records.SaveAsync(new ConnectorResetJobRecord(
+                _id,
+                status.TenantId,
+                status.TenantSlug,
+                status.State.ToString(),
+                status.CreatedAt,
+                status.StartedAt,
+                status.CompletedAt,
+                status.ErrorMessage is { Length: > 1000 } e ? e[..1000] : status.ErrorMessage,
+                status.TotalConnectors,
+                status.CompletedConnectors,
+                JsonSerializer.Serialize(status.Connectors)), ct);
         }
         catch (Exception ex) when (_state is not ConnectorResetJobState.Pending)
         {
@@ -363,7 +343,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
     }
 
     /// <summary>Reconstructs a pollable status from a persisted record (post-restart lookups).</summary>
-    public static ConnectorResetJobStatus StatusFromRecord(ConnectorResetJobEntity record)
+    public static ConnectorResetJobStatus StatusFromRecord(ConnectorResetJobRecord record)
     {
         var connectors = record.ConnectorsJson is null
             ? []

@@ -1,15 +1,14 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Abstractions;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -56,13 +55,12 @@ public record UnitsAndTimezoneDto(
 
 /// <inheritdoc />
 public class UnitsAndTimezoneService(
-    INocturneDbContextFactory contexts,
+    ISubjectRepository subjects,
     ITenantService tenants,
     IPatientRecordRepository patientRecords,
     IConnectorConfigurationService connectorConfigurations,
     IMigrationJobService migrations,
     ICacheService cache,
-    TimeProvider time,
     ILogger<UnitsAndTimezoneService> logger) : IUnitsAndTimezoneService
 {
     /// <summary>The connector onboarding saves a Nightscout instance under.</summary>
@@ -73,11 +71,7 @@ public class UnitsAndTimezoneService(
     {
         var (nightscout, unavailable) = readNightscout ? await ReadNightscoutAsync(ct) : (null, false);
 
-        await using var db = await contexts.CreateAsync(ct);
-        var preferences = await db.Subjects.AsNoTracking()
-            .Where(s => s.Id == ownerSubjectId)
-            .Select(s => s.Preferences)
-            .FirstOrDefaultAsync(ct);
+        var preferences = (await subjects.GetAsync(ownerSubjectId, ct))?.Preferences;
         var record = await patientRecords.GetAsync(ct);
 
         return new UnitsAndTimezoneDto(
@@ -92,16 +86,11 @@ public class UnitsAndTimezoneService(
     public async Task<UnitsAndTimezoneDto> SetAsync(
         Guid tenantId, Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default)
     {
-        await using (var db = await contexts.CreateAsync(ct))
-        {
-            var subject = await db.Subjects.FirstAsync(s => s.Id == ownerSubjectId, ct);
-
-            var preferences = UserDisplayPreferences.Deserialize(subject.Preferences);
-            preferences.GlucoseUnits = glucoseUnits;
-            subject.Preferences = preferences.Serialize();
-            subject.UpdatedAt = time.GetUtcNow().UtcDateTime;
-            await db.SaveChangesAsync(ct);
-        }
+        var stored = await subjects.GetAsync(ownerSubjectId, ct)
+            ?? throw new InvalidOperationException($"Subject {ownerSubjectId} not found.");
+        var preferences = UserDisplayPreferences.Deserialize(stored.Preferences);
+        preferences.GlucoseUnits = glucoseUnits;
+        await subjects.UpdateAsync(ownerSubjectId, new SubjectEdit(Preferences: preferences.Serialize()), ct);
 
         await tenants.SetDefaultGlucoseUnitsAsync(tenantId, glucoseUnits, ct);
         await cache.RemoveByPatternAsync(StatusService.SystemStatusCacheKey(tenantId.ToString()) + "*", ct);

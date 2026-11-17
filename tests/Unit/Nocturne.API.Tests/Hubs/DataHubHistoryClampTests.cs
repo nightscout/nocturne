@@ -1,27 +1,22 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Connections.Features;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
-using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.API.Services.Identity;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -33,15 +28,10 @@ namespace Nocturne.API.Tests.Hubs;
 [Trait("Category", "Unit")]
 public class DataHubHistoryClampTests
 {
-    private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-    private static readonly Guid Subject = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static readonly Guid Tenant = DataHubTestHarness.Tenant;
+    private static readonly Guid Subject = DataHubTestHarness.Subject;
     private static readonly long TwoDaysAgoMills =
         DateTimeOffset.UtcNow.AddDays(-2).ToUnixTimeMilliseconds();
-
-    private sealed class TestHttpContextFeature : IHttpContextFeature
-    {
-        public HttpContext? HttpContext { get; set; }
-    }
 
     /// <summary>What the read context and a context of the handshake scope said at the moment entries were read.</summary>
     private sealed class ReadObservation
@@ -55,24 +45,17 @@ public class DataHubHistoryClampTests
     {
         var seen = new ReadObservation();
         var entryService = new Mock<IEntryService>();
-        var treatmentService = new Mock<ITreatmentService>();
+        var deviceStatusService = new Mock<IDeviceStatusService>();
+        deviceStatusService
+            .Setup(s => s.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>()))
+            .ReturnsAsync([]);
+        var authorizer = new Mock<IHubTokenAuthorizer>();
 
-        var services = new ServiceCollection();
-        var database = $"DataHubHistoryClamp_{Guid.NewGuid()}";
-        services.AddDbContextFactory<NocturneDbContext>(options => options.UseInMemoryDatabase(database));
-        services.AddDataServices();
-        services.AddSingleton(entryService.Object);
-        services.AddSingleton(treatmentService.Object);
-        services.AddSingleton(new DeviceStatusProjectionService(
-            Mock.Of<IDeviceStatusGroupRepository>(),
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IStateSpanRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            TimeProvider.System,
-            NullLogger<DeviceStatusProjectionService>.Instance));
-        var requestServices = services.BuildServiceProvider().CreateScope().ServiceProvider;
+        var (hub, httpContext) = DataHubTestHarness.CreateHub(
+            entryService.Object, new Mock<ITreatmentService>().Object, deviceStatusService.Object, authorizer.Object);
+        var requestServices = httpContext.RequestServices;
 
         // A context the handshake request created before any credential was known.
         var db = requestServices.GetRequiredService<INocturneDbContextFactory>().CreateAsync().AsTask().GetAwaiter().GetResult();
@@ -87,29 +70,6 @@ public class DataHubHistoryClampTests
                 seen.DbContextClamped = db.HistoryClamped;
                 return [];
             });
-
-        var httpContext = new DefaultHttpContext { RequestServices = requestServices };
-        httpContext.Items["TenantContext"] =
-            new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
-
-        var features = new FeatureCollection();
-        features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = httpContext });
-
-        var callerContext = new Mock<HubCallerContext>();
-        callerContext.SetupGet(c => c.ConnectionId).Returns("conn-1");
-        callerContext.SetupGet(c => c.Features).Returns(features);
-        callerContext.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
-
-        var clients = new Mock<IHubCallerClients>();
-        clients.SetupGet(c => c.Caller).Returns(Mock.Of<ISingleClientProxy>());
-
-        var authorizer = new Mock<IHubTokenAuthorizer>();
-        var hub = new DataHub(NullLogger<DataHub>.Instance, authorizer.Object)
-        {
-            Context = callerContext.Object,
-            Groups = Mock.Of<IGroupManager>(),
-            Clients = clients.Object,
-        };
 
         return (hub, httpContext, authorizer, seen);
     }

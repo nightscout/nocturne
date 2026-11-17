@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Nocturne is a modern .NET 10 rewrite of the Nightscout diabetes management API with full feature parity. The goal is 1:1 API compatibility with the legacy JavaScript Nightscout implementation.
+Nocturne is a modern .NET 11 rewrite of the Nightscout diabetes management API with full feature parity. The goal is 1:1 API compatibility with the legacy JavaScript Nightscout implementation.
 
 ## Architecture
 
@@ -26,8 +26,8 @@ src/
 All services are defined in `Core.Contracts` and registered as scoped:
 
 ```csharp
-// Interface: src/Core/Nocturne.Core.Contracts/IEntryService.cs
-// Implementation: src/API/Nocturne.API/Services/EntryService.cs
+// Interface: src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs
+// Implementation: src/API/Nocturne.API/Services/Entries/EntryService.cs
 builder.Services.AddScoped<IEntryService, EntryService>();
 ```
 
@@ -73,7 +73,7 @@ dotnet test --filter "Category!=Integration&Category!=Performance"
 # Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
-# Generate TypeScript API client (uses NSwag with .NET 10)
+# Generate TypeScript API client (uses NSwag with .NET 11)
 dotnet build -t:GenerateClient src/API/Nocturne.API
 
 # Or from the web app directory
@@ -118,11 +118,11 @@ cd src/Web && pnpm dev
 
 ## Key Files to Reference
 
-| Concept           | Example File                                               |
-| ----------------- | ---------------------------------------------------------- |
-| API Controller    | `src/API/Nocturne.API/Controllers/V1/EntriesController.cs` |
-| Service Interface | `src/Core/Nocturne.Core.Contracts/IEntryService.cs`        |
-| Domain Model      | `src/Core/Nocturne.Core.Models/Entry.cs`                   |
-| Connector         | `src/Connectors/Nocturne.Connectors.Dexcom/`               |
-| Aspire Host       | `src/Aspire/Nocturne.Aspire.Host/Program.cs`               |
-| Unit Test         | `tests/Unit/Nocturne.API.Tests/`                           |
+| Concept           | Example File                                                 |
+| ----------------- | ------------------------------------------------------------ |
+| API Controller    | `src/API/Nocturne.API/Controllers/V1/EntriesController.cs`   |
+| Service Interface | `src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs`  |
+| Domain Model      | `src/Core/Nocturne.Core.Models/Entry.cs`                     |
+| Connector         | `src/Connectors/Nocturne.Connectors.Dexcom/`                 |
+| Aspire Host       | `src/Aspire/Nocturne.Aspire.Host/Program.cs`                 |
+| Unit Test         | `tests/Unit/Nocturne.API.Tests/`                             |

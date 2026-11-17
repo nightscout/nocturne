@@ -1,4 +1,5 @@
 import { isInternalOnlyApiPath } from "#lib/server/internal-only-api-paths.js";
+import { isCrossSiteFormRequest, isProxiedApiPath } from "#lib/server/csrf.js";
 import { randomUUID } from "#lib/utils/index.js";
 import { isRecord, nonEmptyString } from "#lib/utils/type-guards.js";
 import { applySecurityHeaders, parseFrameAncestors } from "#lib/server/security-headers.js";
@@ -315,12 +316,11 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
 
 // Proxy handler for /api requests
 const proxyHandle: Handle = async ({ event, resolve }) => {
-  // Check if the request is for /api (but not SvelteKit-handled routes like webhooks and bot dispatch)
   const path = event.url.pathname;
   if (isInternalOnlyApiPath(path)) {
     return new Response("Not Found", { status: 404 });
   }
-  if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot") && !path.startsWith("/api/otel")) {
+  if (isProxiedApiPath(path)) {
     const apiBaseUrl = getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error(
@@ -608,6 +608,17 @@ const healthHandle: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
+// SvelteKit skips its own check in dev too.
+const csrfHandle: Handle = async ({ event, resolve }) => {
+  if (!dev && isCrossSiteFormRequest(event.request)) {
+    const message = `Cross-site ${event.request.method} form submissions are forbidden`;
+    return event.request.headers.get("accept") === "application/json"
+      ? Response.json({ message }, { status: 403 })
+      : new Response(message, { status: 403 });
+  }
+  return resolve(event);
+};
+
 // requestContextHandle comes first of the request-serving handlers: everything after it reads
 // the facts it establishes.
 //
@@ -615,4 +626,4 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 // none of the locals they set and the API authenticates it and answers its setup/recovery state
 // itself, so running them first cost every browser /api call three serial API round-trips, and let
 // a session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, proxyHandle, resetBitsId, colorSchemeHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, csrfHandle, proxyHandle, resetBitsId, colorSchemeHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);

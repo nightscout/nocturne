@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -54,7 +55,7 @@ public class ConnectorSyncCursorStoreTests : IDisposable
     }
 
     private ConnectorSyncCursorStore Store(NocturneDbContext db) =>
-        new(db.AsFactory(), TimeProvider.System,
+        new(new ConnectorConfigurationRepository(db.AsFactory()),
         NullLogger<ConnectorSyncCursorStore>.Instance);
 
     [Theory]

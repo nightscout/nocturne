@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// Goldens pinning the CURRENT behaviour of the LegacyId-only V4 repositories — the ones that do NOT
 /// participate in cross-connector canonical dedup. Each: intra-batch LegacyId dedup collapses a
 /// duplicate, and (the classification guard) NO canonical links are created. If the V4RepositoryBase
-/// refactor accidentally wires one of these onto the DeduplicationService axis, the zero-links
+/// refactor accidentally wires one of these onto the deduplication axis, the zero-links
 /// assertion fails. Held identical across the refactor.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -26,7 +26,7 @@ public class LegacyIdOnlyGoldenTests
     {
         // Two distinct LegacyIds + one intra-batch duplicate of the first → the duplicate collapses.
         (await _fx.QueryAsync(tenant, countRows)).Should().Be(2, "intra-batch LegacyId dedup keeps one row per LegacyId");
-        // These types are not DeduplicationService participants — they never create canonical links.
+        // These types are not deduplication participants — they never create canonical links.
         (await _fx.QueryAsync(tenant, ctx => ctx.LinkedRecords.AsNoTracking().CountAsync()))
             .Should().Be(0, "LegacyId-only repositories must not create canonical links");
     }

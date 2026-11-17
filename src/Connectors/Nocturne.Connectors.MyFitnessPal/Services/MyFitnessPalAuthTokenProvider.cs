@@ -26,22 +26,19 @@ public class MyFitnessPalAuthTokenProvider(
     ILogger<MyFitnessPalAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
-    : AuthTokenProviderBase<MyFitnessPalConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<MyFitnessPalConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     public const string RefreshTokenMetadataKey = "RefreshToken";
     public const string UserIdMetadataKey = "UserId";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         MyFitnessPalConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var token = await ExecuteWithRetryAsync(
             async attempt => await RequestTokenAsync(config, attempt, cancellationToken),
-            _retryDelayStrategy,
             config.MaxRetryAttempts,
             "MyFitnessPal authentication",
             cancellationToken

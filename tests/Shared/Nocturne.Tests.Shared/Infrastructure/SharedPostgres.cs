@@ -1,4 +1,9 @@
+using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Npgsql;
@@ -20,6 +25,14 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 /// clones the bootstrapped but unmigrated database instead, for tests that migrate step by step.
 /// </para>
 /// <para>
+/// A migration test seeds at the migration before the one it tests, most of the way along the
+/// chain. <see cref="CreateDatabaseAtMigrationAsync"/> clones the nearest checkpoint at or below
+/// that migration and migrates the rest of the way. Checkpoint <c>k</c> holds the first
+/// <c>k × </c><see cref="CheckpointInterval"/> migrations and is built once per process, on first
+/// use, by cloning checkpoint <c>k − 1</c> and migrating forward. The fully migrated template is
+/// built apart from the checkpoints, through the API's own migration path.
+/// </para>
+/// <para>
 /// The container runs with durability off on a tmpfs data directory, like the e2e stack: nothing
 /// in it outlives the process. Testcontainers' reaper removes it when the process exits.
 /// </para>
@@ -32,6 +45,15 @@ public static class SharedPostgres
     private const string MigratorPassword = "shared-migrator-test-only";
     private const string AppPassword = "shared-app-test-only";
     private const string WebPassword = "shared-web-test-only";
+
+    /// <summary>
+    /// Migrations between checkpoints. A shorter interval adds a file copy, taken under
+    /// <see cref="CloneLock"/>, to the walk up the chain for each checkpoint; a longer one leaves
+    /// more of the chain for each request to migrate on its own clone.
+    /// </summary>
+    private const int CheckpointInterval = 25;
+
+    private static readonly Lazy<string[]> Migrations = new(ReadMigrations, LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<Task<Server>> Instance = new(StartAsync, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -52,6 +74,54 @@ public static class SharedPostgres
     {
         var server = await Instance.Value;
         return await server.CloneAsync(EmptyTemplate, prefix);
+    }
+
+    /// <summary>
+    /// A fresh database migrated up to and including <paramref name="migration"/>, as a test's own
+    /// <see cref="IMigrator"/> with <see cref="TenantConnectionInterceptor"/> would leave it, and
+    /// without the startup reconcilers' output.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="migration"/> is not in the chain.</exception>
+    public static async Task<TestDatabase> CreateDatabaseAtMigrationAsync(string migration, string prefix)
+    {
+        var applied = Array.IndexOf(Migrations.Value, migration) + 1;
+        if (applied == 0)
+        {
+            throw new ArgumentException($"{migration} is not a migration of {nameof(NocturneDbContext)}.", nameof(migration));
+        }
+
+        var server = await Instance.Value;
+        var database = await server.CloneAsync(await server.CheckpointAsync(applied / CheckpointInterval), prefix);
+        if (applied % CheckpointInterval != 0)
+        {
+            await MigrateAsync(database.MigratorConnectionString, migration);
+        }
+
+        return database;
+    }
+
+    private static string[] ReadMigrations()
+    {
+        using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(npgsql => npgsql.UseNocturneMigrations())
+            .Options);
+        return [.. context.Database.GetMigrations()];
+    }
+
+    /// <remarks>
+    /// The command timeout is the production migrator's (<c>CreateMigratorContext</c>): a checkpoint
+    /// every migration fixture depends on should not fail on a loaded machine's 30-second default.
+    /// </remarks>
+    private static async Task MigrateAsync(string migratorConnectionString, string migration)
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(migratorConnectionString, npgsql => npgsql
+                .CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds)
+                .UseNocturneMigrations())
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options;
+        await using var context = new NocturneDbContext(options);
+        await context.GetService<IMigrator>().MigrateAsync(migration);
     }
 
     private static async Task<Server> StartAsync()
@@ -91,6 +161,7 @@ public static class SharedPostgres
 
     private sealed class Server(PostgreSqlContainer container)
     {
+        private readonly ConcurrentDictionary<int, Lazy<Task<string>>> _checkpoints = new();
         private int _sequence;
 
         public Task MigratedTemplateReady { get; set; } = Task.CompletedTask;
@@ -118,6 +189,27 @@ public static class SharedPostgres
             // Pooled connections would keep the template "in use" and fail every clone.
             await using var pooled = new NpgsqlConnection(migrator);
             NpgsqlConnection.ClearPool(pooled);
+        }
+
+        /// <returns>The template database holding checkpoint <paramref name="k"/>; checkpoint 0 is the empty one.</returns>
+        public Task<string> CheckpointAsync(int k) =>
+            k == 0
+                ? Task.FromResult(EmptyTemplate)
+                : _checkpoints.GetOrAdd(k, n => new(() => BuildCheckpointAsync(n), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+
+        /// <remarks>
+        /// Migrates without pooling, so no connection outlives the build to keep the template "in use",
+        /// whatever data source EF builds over the connection string.
+        /// </remarks>
+        private async Task<string> BuildCheckpointAsync(int k)
+        {
+            var source = await CheckpointAsync(k - 1);
+            var name = $"nocturne_checkpoint_{k * CheckpointInterval}";
+            await CloneIntoAsync(source, name);
+
+            var migrator = ConnectionString(name, "nocturne_migrator", MigratorPassword) + ";Pooling=false";
+            await MigrateAsync(migrator, Migrations.Value[k * CheckpointInterval - 1]);
+            return name;
         }
 
         public async Task<TestDatabase> CloneAsync(string template, string prefix)

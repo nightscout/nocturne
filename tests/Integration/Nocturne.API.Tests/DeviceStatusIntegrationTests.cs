@@ -12,6 +12,7 @@ namespace Nocturne.API.Tests.Integration;
 /// <summary>
 /// Integration tests for DeviceStatus and Health endpoints against the API running in-process on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 [Parity]
 public class DeviceStatusIntegrationTests : ApiIntegrationTestBase

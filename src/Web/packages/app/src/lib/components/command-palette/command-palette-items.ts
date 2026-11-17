@@ -10,6 +10,7 @@ import Activity from "@lucide/svelte/icons/activity";
 import Apple from "@lucide/svelte/icons/apple";
 import Bell from "@lucide/svelte/icons/bell";
 import Building from "@lucide/svelte/icons/building";
+import MailPlus from "@lucide/svelte/icons/mail-plus";
 import CalendarDays from "@lucide/svelte/icons/calendar-days";
 import CirclePlus from "@lucide/svelte/icons/circle-plus";
 import Clock from "@lucide/svelte/icons/clock";
@@ -182,9 +183,9 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-time-spans",
-		label: "Time spans",
+		label: "Therapy timeline",
 		group: "pages",
-		keywords: ["time spans", "ranges", "periods"],
+		keywords: ["therapy timeline", "time spans", "profile history", "profile changes"],
 		icon: Clock,
 		href: "/time-spans",
 	},
@@ -204,6 +205,15 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
 		href: "/settings/admin/tenants",
+		platformAdmin: true,
+	},
+	{
+		id: "page-invite-people",
+		label: "Invite people",
+		group: "settings",
+		keywords: ["invite", "sign up", "new site", "new tenant", "platform admin"],
+		icon: MailPlus,
+		href: "/settings/admin/invites",
 		platformAdmin: true,
 	},
 	{

@@ -21,24 +21,21 @@
   import ReportsSkeleton from "#lib/components/reports/ReportsSkeleton.svelte";
   import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
-  import {
-    getBasalAnalysis,
-    getHourlyInsulinDelivery,
-  } from "#lib/api/generated/statistics.generated.remote.js";
+  import { getBasalAnalysisReport, getHourlyDeliveryReport } from "#lib/api/reports.remote.js";
 
   interface Props {
-    analysisDates: { startDate: string; endDate: string };
+    range: { from: string; to: string };
     dateInfo: { from: Date; to: Date; dayCount: number };
   }
-  let { analysisDates, dateInfo }: Props = $props();
+  let { range, dateInfo }: Props = $props();
 
   // Query instances are created once per component instance (the parent remounts
   // this component via {#key} when the date range changes). Creating a query
   // inside $derived and polling .loading/.current can strand the resolved
   // response on a superseded instance (sveltejs/kit#14915), leaving .loading
   // stuck at true and the page blank. Component-level instances avoid the race.
-  const hourlyDeliveryQuery = getHourlyInsulinDelivery(analysisDates);
-  const analysisQuery = getBasalAnalysis(analysisDates);
+  const hourlyDeliveryQuery = getHourlyDeliveryReport(range);
+  const analysisQuery = getBasalAnalysisReport(range);
 
   const hourlyDelivery = $derived(hourlyDeliveryQuery.current);
 
@@ -50,6 +47,7 @@
       minRate: s?.minRate ?? 0,
       maxRate: s?.maxRate ?? 0,
       totalDelivered: s?.totalDelivered ?? 0,
+      totalDeliveredPerDay: s?.totalDeliveredPerDay ?? 0,
     };
   });
 
@@ -246,9 +244,9 @@
               <h4 class="font-medium">Daily basal insulin</h4>
               <p class="text-sm text-muted-foreground">
                 Average of <strong>
-                  {(basalStats.totalDelivered / dateInfo.dayCount).toFixed(1)} units
+                  {basalStats.totalDeliveredPerDay.toFixed(1)} units
                 </strong>
-                of basal insulin delivered per day over this {dateInfo.dayCount}-day
+                of basal insulin delivered per day over this {analysisQuery.current?.windowDays ?? dateInfo.dayCount}-day
                 period.
               </p>
             </div>

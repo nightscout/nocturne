@@ -43,6 +43,12 @@ export interface SequenceDefinition {
   steps: string[];
   /** A sequence that must be done first, or a {@link CoachGates} entry the host must set true. */
   prerequisite?: string;
+  /**
+   * The reader this sequence is written for, matched against the provider's `audience`. For any
+   * other reader its marks draw no dot, nothing selects it, and a start or a replay of it is
+   * refused. A sequence without one is for every reader.
+   */
+  audience?: string;
   completesKeys?: string[];
   /** Dismissing a step of this sequence also holds back every other mark until the next navigation. */
   quietOnDismiss?: boolean;
@@ -96,6 +102,8 @@ export interface CoachMarkProviderOptions {
   labels: CoachLabels;
   sequences?: SequenceConfig;
   gates?: CoachGates;
+  /** The reader on this page, matched against each sequence's `audience`. */
+  audience?: string;
   settleDelay?: number;
   seenDwellMs?: number;
 }

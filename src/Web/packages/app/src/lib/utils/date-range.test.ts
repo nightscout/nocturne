@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
+import { parseDate } from "@internationalized/date";
 import {
   dayCount,
   endOfDay,
+  exceedsDaySpan,
   isDayString,
   isTimeZone,
+  outsideDaySpan,
   resolveDayRange,
   startOfDay,
   timeOnDay,
@@ -209,5 +212,33 @@ describe("timeOnDay", () => {
     expect(timeOnDay("2026-10-13", "8am", "UTC")).toBeNull();
     expect(timeOnDay("2026-10-13", "24:00", "UTC")).toBeNull();
     expect(timeOnDay(null, "08:00", "UTC")).toBeNull();
+  });
+});
+
+describe("exceedsDaySpan", () => {
+  it("counts both end days", () => {
+    expect(exceedsDaySpan("2026-01-01", "2026-01-07", 7)).toBe(false);
+    expect(exceedsDaySpan("2026-01-01", "2026-01-08", 7)).toBe(true);
+  });
+
+  it("allows any range when there is no limit", () => {
+    expect(exceedsDaySpan("2020-01-01", "2026-01-01", undefined)).toBe(false);
+  });
+});
+
+describe("outsideDaySpan", () => {
+  const anchor = parseDate("2026-03-10");
+
+  it("disables the days that would stretch the range past the limit, on either side", () => {
+    const disabled = outsideDaySpan(anchor, 5);
+    expect(disabled(parseDate("2026-03-14"))).toBe(false);
+    expect(disabled(parseDate("2026-03-15"))).toBe(true);
+    expect(disabled(parseDate("2026-03-06"))).toBe(false);
+    expect(disabled(parseDate("2026-03-05"))).toBe(true);
+  });
+
+  it("disables nothing without an anchor or a limit", () => {
+    expect(outsideDaySpan(undefined, 5)(parseDate("2030-01-01"))).toBe(false);
+    expect(outsideDaySpan(anchor, undefined)(parseDate("2030-01-01"))).toBe(false);
   });
 });

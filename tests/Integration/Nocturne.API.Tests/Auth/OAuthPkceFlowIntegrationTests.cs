@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Covers dynamic client registration, authorization endpoint validation,
 /// token exchange (happy path and error cases), and scope enforcement.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
 {

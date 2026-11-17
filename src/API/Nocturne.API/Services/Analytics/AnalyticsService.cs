@@ -35,6 +35,7 @@ public class AnalyticsService : IAnalyticsService
 {
     private readonly ILogger<AnalyticsService> _logger;
     private readonly AnalyticsConfiguration _config;
+    private readonly TimeProvider _time;
 
     private readonly string _sessionId;
     private readonly string _installationId;
@@ -53,11 +54,13 @@ public class AnalyticsService : IAnalyticsService
 
     public AnalyticsService(
         ILogger<AnalyticsService> logger,
-        IOptions<AnalyticsConfiguration> config
+        IOptions<AnalyticsConfiguration> config,
+        TimeProvider timeProvider
     )
     {
         _logger = logger;
         _config = config.Value;
+        _time = timeProvider;
 
         _sessionId = GenerateSessionId();
         _installationId = GetOrCreateInstallationId();
@@ -69,7 +72,7 @@ public class AnalyticsService : IAnalyticsService
         _featureUsageCounts = new ConcurrentDictionary<string, long>();
 
         _collectionConfig = new AnalyticsCollectionConfig();
-        _startTime = DateTime.UtcNow;
+        _startTime = _time.GetUtcNow().UtcDateTime;
 
         if (_config.VerboseLogging)
         {
@@ -129,7 +132,7 @@ public class AnalyticsService : IAnalyticsService
             Action = method,
             Label = normalizedEndpoint,
             Value = responseTime,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             Metadata = new Dictionary<string, object>
             {
                 ["status_code"] = statusCode,
@@ -158,7 +161,7 @@ public class AnalyticsService : IAnalyticsService
             Category = "ui",
             Action = "view",
             Label = page,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             Metadata = new Dictionary<string, object>(),
         };
 
@@ -190,7 +193,7 @@ public class AnalyticsService : IAnalyticsService
             Category = "feature",
             Action = action,
             Label = feature,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             Metadata = metadata ?? new Dictionary<string, object>(),
         };
 
@@ -214,7 +217,7 @@ public class AnalyticsService : IAnalyticsService
             Category = "system",
             Action = eventType,
             Label = message,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             Metadata = new Dictionary<string, object> { ["severity"] = severity },
         };
 
@@ -231,7 +234,7 @@ public class AnalyticsService : IAnalyticsService
 
         // Ensure session ID is set
         analyticsEvent.SessionId = _sessionId;
-        analyticsEvent.Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        analyticsEvent.Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
         await EnqueueEventAsync(analyticsEvent, cancellationToken);
     }
@@ -248,7 +251,7 @@ public class AnalyticsService : IAnalyticsService
     /// </summary>
     public PerformanceMetrics GetPerformanceMetrics()
     {
-        var uptime = DateTime.UtcNow - _startTime;
+        var uptime = _time.GetUtcNow().UtcDateTime - _startTime;
         var totalRequests = Interlocked.Read(ref _totalRequests);
         var totalErrors = Interlocked.Read(ref _totalErrors);
 
@@ -265,18 +268,18 @@ public class AnalyticsService : IAnalyticsService
 
         return new PerformanceMetrics
         {
-            AverageResponseTime = Math.Round(averageResponseTime, 2),
+            AverageResponseTime = ScaledRounding.Round(averageResponseTime, 2),
             TotalRequests = totalRequests,
             ErrorCount = totalErrors,
             MemoryUsageMB = GC.GetTotalMemory(false) / 1024 / 1024,
-            UptimeHours = Math.Round(uptime.TotalHours, 2),
+            UptimeHours = ScaledRounding.Round(uptime.TotalHours, 2),
             TopEndpoints = topEndpoints,
         };
     }
 
     public UsageStatistics GetUsageStatistics()
     {
-        var uptime = DateTime.UtcNow - _startTime;
+        var uptime = _time.GetUtcNow().UtcDateTime - _startTime;
 
         return new UsageStatistics
         {
@@ -285,7 +288,7 @@ public class AnalyticsService : IAnalyticsService
                 .OrderByDescending(kvp => kvp.Value)
                 .Take(10)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-            AverageSessionDuration = Math.Round(uptime.TotalMinutes, 2),
+            AverageSessionDuration = ScaledRounding.Round(uptime.TotalMinutes, 2),
             DeviceTypes = _pageViewCounts.Any()
                 ? new Dictionary<string, long> { ["web"] = _pageViewCounts.Sum(kvp => kvp.Value) }
                 : new Dictionary<string, long>(),
@@ -329,7 +332,7 @@ public class AnalyticsService : IAnalyticsService
                 InstallationId = _installationId,
                 Events = events,
                 SystemInfo = _systemInfo,
-                BatchTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                BatchTimestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
                 SchemaVersion = "1.0",
             }
         );

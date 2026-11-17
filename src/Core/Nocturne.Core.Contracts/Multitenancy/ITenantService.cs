@@ -16,6 +16,14 @@ public interface ITenantService
     /// <summary>Creates a new tenant with the specified subject as its owner.</summary>
     Task<TenantCreatedDto> CreateAsync(string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Creates a tenant with <paramref name="ownerSubjectId"/> as its owner, under
+    /// <paramref name="ownerUsername"/> when one is given, in one transaction: the tenant is created
+    /// with its owner or not at all.
+    /// </summary>
+    Task<TenantCreatedDto> CreateWithOwnerAsync(
+        string slug, string displayName, Guid ownerSubjectId, string? ownerUsername = null, CancellationToken ct = default);
+
     /// <summary>Creates a new tenant without assigning an owner.</summary>
     Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, CancellationToken ct = default);
 
@@ -37,10 +45,23 @@ public interface ITenantService
     /// <summary>Renames the tenant, leaving its slug and active state as they are.</summary>
     Task<TenantSettingsDto> SetDisplayNameAsync(Guid id, string displayName, CancellationToken ct = default);
 
+    /// <summary>
+    /// Moves the tenant to the subdomain <paramref name="newSlug"/>, after the checks
+    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/> makes. The old subdomain stops
+    /// resolving at once: nothing redirects from it.
+    /// </summary>
+    /// <returns>The refusal, or a valid result once the tenant has moved.</returns>
+    Task<SlugValidationResult> ChangeSlugAsync(Guid id, string newSlug, CancellationToken ct = default);
+
     Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Records the onboarder's relationship to the patient, replacing any earlier answer.</summary>
-    Task SetPatientRelationshipAsync(Guid id, PatientRelationship relationship, CancellationToken ct = default);
+    /// <summary>
+    /// Records who the tenant is for, replacing any earlier answer. A caller other than the helper
+    /// replacing <see cref="PatientRelationship.Helper"/> is the recipient answering, which marks
+    /// the tenant handed over.
+    /// </summary>
+    Task SetPatientRelationshipAsync(
+        Guid id, PatientRelationship relationship, Guid? callerId, CancellationToken ct = default);
 
     /// <summary>The glucose units the owner chose for the tenant, or null when none was chosen.</summary>
     Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default);
@@ -51,7 +72,12 @@ public interface ITenantService
     /// <summary>Permanently deletes a tenant and all associated data.</summary>
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 
-    Task AddMemberAsync(Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null, string? label = null, bool limitTo24Hours = false, CancellationToken ct = default);
+    /// <summary>
+    /// Adds <paramref name="subjectId"/> to the tenant with its roles in one save. False when the
+    /// subject is already a member, including when another request made it one in the meantime;
+    /// any other failure throws.
+    /// </summary>
+    Task<bool> AddMemberAsync(Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null, string? label = null, bool limitTo24Hours = false, CancellationToken ct = default);
 
     /// <summary>
     /// Removes a subject's membership from the specified tenant. Refuses to remove a system
@@ -76,6 +102,14 @@ public interface ITenantService
 
     /// <summary>Checks whether a slug is valid and available for use.</summary>
     Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/>, except that a reserved name passes
+    /// when <paramref name="allowReserved"/> is set. Reserved names keep the platform's own subdomains
+    /// out of tenants' hands. Only the dev-only seed endpoint sets it (enabled in Development, or by
+    /// <c>NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS</c>), which already hands out owner sessions to anyone.
+    /// </summary>
+    Task<SlugValidationResult> ValidateSlugAsync(string slug, bool allowReserved, CancellationToken ct = default);
 
     /// <summary>Creates a new tenant and its owner subject in a single operation, using either a passkey credential or an OIDC identity.</summary>
     /// <exception cref="ProvisionConflictException">

@@ -3,8 +3,9 @@
  *
  * The API resolves it (`GET /patient-record/timezone`): the patient record's
  * zone, else the active therapy profile's. That endpoint answers any caller who
- * may read glucose, reports or therapy, so a member who sees reports but not
- * therapy settings still gets the patient's calendar.
+ * may read any category a report shows, a public share included, so a member
+ * who sees reports but not therapy settings, and a share, still get the
+ * patient's calendar.
  *
  * A zone the runtime cannot resolve is treated as unset.
  *
@@ -18,8 +19,8 @@ import { errorStatus } from "#lib/forms/submit-error.js";
 /**
  * Read `fetch`, treating a refusal as "not named here" and nothing else.
  *
- * The patient timezone is not a shareable data category, so an anonymous
- * public-share viewer is refused it, and their reports must still render.
+ * A caller that may read no category a report shows is refused the zone,
+ * and its reports must still render.
  *
  * Every other failure rethrows. A report that silently cut its days on UTC
  * because this lookup timed out would show a clinician the wrong day with
@@ -37,7 +38,7 @@ export async function readable<T>(fetch: () => Promise<T>): Promise<T | null> {
 
 async function resolve(apiClient: ApiClient): Promise<string | null> {
   const response = await readable(() =>
-    apiClient.patientRecord.getPatientTimezone()
+    apiClient.patientTimezone.getPatientTimezone()
   );
   return isTimeZone(response?.timezone) ? response.timezone : null;
 }

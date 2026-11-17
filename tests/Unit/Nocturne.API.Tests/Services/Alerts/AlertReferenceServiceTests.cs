@@ -11,6 +11,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
@@ -45,7 +46,7 @@ public class AlertReferenceServiceTests
         var tenantAccessor = MockTenantAccessor.Create(_tenantId);
 
         _sut = new AlertReferenceService(
-            new AlertRepository(_factory),
+            new AlertRepository(_factory.AsNocturneFactory()),
             tenantAccessor.Object,
             NullLogger<AlertReferenceService>.Instance);
     }

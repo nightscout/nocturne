@@ -71,6 +71,11 @@ export function useDialogHistory(
   //   stripping the param with replaceState instead.
   let pushed = false;
   let adopted = false;
+  // Whether the token has been seen in `page.state` / `page.url` since the push or adoption.
+  // SvelteKit applies a pushed state after the effect that pushed it, so the effect below can
+  // run in between and find the token absent; only a token that was present and then went is a
+  // pop.
+  let seen = false;
 
   // Whether the token that represents "this dialog is open" is currently present.
   const present = () =>
@@ -86,8 +91,12 @@ export function useDialogHistory(
 
     if (open && !pushed && !adopted) {
       if (here) {
+        // An opaque key is this instance's own, so a token already present is the entry the
+        // last close is still popping: push once it has gone, rather than adopt it.
+        if (!param) return;
         // Opened from a token already in the URL (deep link / reload).
         adopted = true;
+        seen = true;
       } else if (param) {
         pushed = true;
         // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL plus one param, already resolved
@@ -97,6 +106,7 @@ export function useDialogHistory(
         pushState("", { ...page.state, [key]: true });
       }
     } else if (!open && (pushed || adopted) && here) {
+      seen = false;
       if (pushed) {
         pushed = false;
         history.back();
@@ -112,7 +122,11 @@ export function useDialogHistory(
   // SvelteKit reverts `page.state` / `page.url`, dropping it.
   $effect(() => {
     const here = present();
-    if (!here && (pushed || adopted)) {
+    if (!(pushed || adopted)) return;
+    if (here) {
+      seen = true;
+    } else if (seen) {
+      seen = false;
       pushed = false;
       adopted = false;
       if (isOpen()) close();

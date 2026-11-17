@@ -4,18 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V3;
-using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts;
-using Nocturne.Core.Contracts.Effects;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models.Queries;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V3;
@@ -36,24 +32,14 @@ public class V3SearchTotalTests
     [Fact]
     public async Task DeviceStatusSearch_CountsNothing()
     {
-        var groups = new Mock<IDeviceStatusGroupRepository>();
-        groups
-            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses
+            .Setup(s => s.GetDeviceStatusesAsync(
+                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<ReadSortField>()))
+            .ReturnsAsync([]);
         var controller = new DeviceStatusController(
-            new DeviceStatusProjectionService(
-                groups.Object,
-                Mock.Of<IApsSnapshotRepository>(),
-                Mock.Of<IPumpSnapshotRepository>(),
-                Mock.Of<IUploaderSnapshotRepository>(),
-                Mock.Of<IStateSpanRepository>(),
-                Mock.Of<IDeviceStatusExtrasRepository>(),
-                TimeProvider.System,
-                NullLogger<DeviceStatusProjectionService>.Instance),
-            Mock.Of<IDeviceStatusDecomposer>(),
-            Mock.Of<IWriteSideEffects>(),
-            Mock.Of<IDataEventSink<DeviceStatus>>(),
+            deviceStatuses.Object,
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<DeviceStatusController>.Instance)
         {
@@ -62,9 +48,8 @@ public class V3SearchTotalTests
 
         await controller.GetDeviceStatus();
 
-        groups.Verify(
-            r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        deviceStatuses.Verify(
+            s => s.CountDeviceStatusesAsync(It.IsAny<FindQuery>(), It.IsAny<CancellationToken>()), Times.Never);
         controller.Response.Headers.Should().NotContainKey("X-Total-Count");
     }
 

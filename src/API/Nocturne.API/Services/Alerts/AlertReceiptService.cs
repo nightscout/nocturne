@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -45,7 +46,8 @@ public sealed record AlertReceipt(
 /// Records that someone saw an alarm, and reads those records back. A receipt changes nothing about
 /// the alert: it neither acknowledges nor mutes, for the viewer or anyone else.
 /// </summary>
-public sealed class AlertReceiptService(INocturneDbContextFactory contexts, TimeProvider timeProvider)
+public sealed class AlertReceiptService(
+    INocturneDbContextFactory contexts, IOAuthGrantRepository grants, TimeProvider timeProvider)
 {
     /// <summary>
     /// Records that <paramref name="actor"/> saw the excursion. Recording it twice keeps the first.
@@ -69,7 +71,7 @@ public sealed class AlertReceiptService(INocturneDbContextFactory contexts, Time
             return true;
 
         var label = actor.Kind == AlertReceiptActorKind.Guest
-            ? await db.OAuthGrants.Where(g => g.Id == actor.Id).Select(g => g.Label).FirstOrDefaultAsync(ct)
+            ? (await grants.GetAsync(actor.Id, ct))?.Label
             : actor.Label;
         var seenAt = timeProvider.GetUtcNow().UtcDateTime;
 

@@ -21,6 +21,7 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration;
 
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class InstanceKeyChangeIntegrationTests : ApiIntegrationTestBase
 {

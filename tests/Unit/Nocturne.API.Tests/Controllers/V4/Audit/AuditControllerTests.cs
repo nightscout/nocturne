@@ -13,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -47,6 +48,7 @@ public class AuditControllerTests : IDisposable
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _db.CreateContext());
+        var contexts = factoryMock.Object.AsNocturneFactory();
 
         // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default and
         // AuditRetentionPolicy to its 90-day default.
@@ -55,7 +57,8 @@ public class AuditControllerTests : IDisposable
             .Build();
 
         var controller = new AuditController(
-            factoryMock.Object.AsNocturneFactory(),
+            new AuditLogReader(contexts),
+            new AuditConfigRepository(contexts),
             _tenantAccessor.Object,
             _configCache.Object,
             configuration);
@@ -416,6 +419,147 @@ public class AuditControllerTests : IDisposable
         response.Pagination.Total.Should().Be(3);
     }
 
+    [Fact]
+    public async Task GetMutations_CarriesEveryColumnIntoItsOwnDtoField()
+    {
+        var actor = Guid.CreateVersion7();
+        var entityId = Guid.CreateVersion7();
+        var created = DateTime.UtcNow.AddMinutes(-5);
+        var id = Guid.CreateVersion7();
+        await using (var db = _db.CreateContext())
+        {
+            db.MutationAuditLog.Add(new MutationAuditLogEntity
+            {
+                Id = id, TenantId = TenantId, EntityType = "Bolus", EntityId = entityId, Action = "update",
+                ChangesJson = "{\"units\":2}", ActorSubjectId = actor, ActorName = "Ada", AuthType = "oauth",
+                IpAddress = "10.0.0.1", Endpoint = "/api/v4/boluses", CreatedAt = created,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetMutationAuditLog(
+            DateTime.UtcNow.AddHours(-1), DateTime.UtcNow);
+
+        var dto = ((PaginatedResponse<MutationAuditDto>)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Data.Single();
+        dto.Should().BeEquivalentTo(new MutationAuditDto
+        {
+            Id = id, CreatedAt = created, EntityType = "Bolus", EntityId = entityId, Action = "update",
+            Changes = "{\"units\":2}", ActorSubjectId = actor, ActorName = "Ada", AuthType = "oauth",
+            IpAddress = "10.0.0.1", Endpoint = "/api/v4/boluses",
+        });
+    }
+
+    [Fact]
+    public async Task GetReads_CarriesEveryColumnIntoItsOwnDtoField()
+    {
+        var actor = Guid.CreateVersion7();
+        var created = DateTime.UtcNow.AddMinutes(-5);
+        var id = Guid.CreateVersion7();
+        await using (var db = _db.CreateContext())
+        {
+            db.ReadAccessLog.Add(new ReadAccessLogEntity
+            {
+                Id = id, TenantId = TenantId, Endpoint = "GET /api/v4/boluses", EntityType = "Bolus", RecordCount = 17,
+                StatusCode = 403, QueryParametersJson = "{\"q\":1}", ActorSubjectId = actor, ActorName = "Ada",
+                AuthType = "oauth", IpAddress = "10.0.0.1", CredentialFingerprint = "fp-123", CreatedAt = created,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetReadAccessAuditLog(
+            DateTime.UtcNow.AddHours(-1), DateTime.UtcNow);
+
+        var dto = ((PaginatedResponse<ReadAccessAuditDto>)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Data.Single();
+        dto.Should().BeEquivalentTo(new ReadAccessAuditDto
+        {
+            Id = id, CreatedAt = created, Endpoint = "GET /api/v4/boluses", EntityType = "Bolus", RecordCount = 17,
+            StatusCode = 403, QueryParameters = "{\"q\":1}", ActorSubjectId = actor, ActorName = "Ada",
+            AuthType = "oauth", IpAddress = "10.0.0.1", CredentialFingerprint = "fp-123",
+        });
+    }
+
+    [Fact]
+    public async Task GetMutations_FiltersByActorSubjectIdAndReturnsTheActor()
+    {
+        var actor = Guid.CreateVersion7();
+        var now = DateTime.UtcNow;
+        await using (var db = _db.CreateContext())
+        {
+            db.MutationAuditLog.Add(new MutationAuditLogEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                EntityType = "Entry",
+                Action = "create",
+                ActorSubjectId = actor,
+                ActorName = "Alex",
+                CreatedAt = now.AddMinutes(-1),
+            });
+            db.MutationAuditLog.Add(new MutationAuditLogEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                EntityType = "Entry",
+                Action = "create",
+                ActorSubjectId = Guid.CreateVersion7(),
+                CreatedAt = now.AddMinutes(-2),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var controller = CreateController(Scopes(Scope.AuditRead));
+
+        var result = await controller.GetMutationAuditLog(
+            now.AddHours(-1), now, actorSubjectId: actor);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var row = ok.Value.Should().BeOfType<PaginatedResponse<MutationAuditDto>>().Subject
+            .Data.Should().ContainSingle().Subject;
+        row.ActorSubjectId.Should().Be(actor);
+        row.ActorName.Should().Be("Alex");
+    }
+
+    [Fact]
+    public async Task GetReads_FiltersByActorSubjectIdAndReturnsTheActor()
+    {
+        var actor = Guid.CreateVersion7();
+        var now = DateTime.UtcNow;
+        await using (var db = _db.CreateContext())
+        {
+            db.ReadAccessLog.Add(new ReadAccessLogEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Endpoint = "GET /api/v4/sensor-glucoses",
+                StatusCode = 200,
+                ActorSubjectId = actor,
+                ActorName = "Alex",
+                CreatedAt = now.AddMinutes(-1),
+            });
+            db.ReadAccessLog.Add(new ReadAccessLogEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Endpoint = "GET /api/v4/sensor-glucoses",
+                StatusCode = 200,
+                ActorSubjectId = Guid.CreateVersion7(),
+                CreatedAt = now.AddMinutes(-2),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var controller = CreateController(Scopes(Scope.AuditRead));
+
+        var result = await controller.GetReadAccessAuditLog(
+            now.AddHours(-1), now, actorSubjectId: actor);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var row = ok.Value.Should().BeOfType<PaginatedResponse<ReadAccessAuditDto>>().Subject
+            .Data.Should().ContainSingle().Subject;
+        row.ActorSubjectId.Should().Be(actor);
+        row.ActorName.Should().Be("Alex");
+    }
+
     // ── Config tests ────────────────────────────────────────────────
 
     [Fact]
@@ -518,7 +662,7 @@ public class AuditControllerTests : IDisposable
     // audit rows age out while the soft-deleted entities they describe still live,
     // losing user-delete attribution. The effective window is the tenant's configured
     // value, or the instance default (30d here, floored at 7d) when unset or when no
-    // retention row exists — matching SoftDeleteCleanupService. A null (infinite) audit
+    // retention row exists — matching SoftDeleteCleanupJob. A null (infinite) audit
     // retention always covers it. The symmetric direction (rejecting a soft-delete
     // retention bump that exceeds audit retention) will land when the
     // TenantDataRetentionConfig update endpoint exists.

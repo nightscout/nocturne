@@ -9,6 +9,7 @@
 // nocturne-api:e2e / nocturne-web:e2e already exist (CI builds them in an earlier step).
 
 import { clearCrashDumps, compose, config, E2E_DIR, ensureImages, reportFailure, run } from "./lib.ts";
+import { configureGoogleHealth } from "../src/helpers/google-health.ts";
 
 const PROJECT = process.env.E2E_PROJECT ?? "nocturne-e2e";
 const [command = "run", target = "all"] = process.argv.slice(2);
@@ -25,6 +26,8 @@ async function up() {
     reportFailure(PROJECT, { printLogs: true });
     throw new Error("the e2e stack did not become healthy; logs in e2e/docker-compose-logs.txt");
   }
+  // The instance Google Health client lives in instance administration, not in the compose environment.
+  await configureGoogleHealth();
 }
 
 async function down() {

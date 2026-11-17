@@ -42,13 +42,14 @@ public static class SystemTools
     [McpServerTool]
     [Description("Get recent system events (alarms, warnings, informational events).")]
     public static async Task<string> GetSystemEvents(
+        TimeProvider timeProvider,
         [Description("Number of hours to look back (default: 24)")] int hours = 24,
         [Description("Maximum number of events (default: 50)")] int limit = 50
     )
     {
         try
         {
-            var from = ToolBase.ToIso(DateTime.UtcNow.AddHours(-hours));
+            var from = ToolBase.ToIso(timeProvider.GetUtcNow().UtcDateTime.AddHours(-hours));
             var endpoint = ToolBase.BuildQuery("api/v4/system-events", new()
             {
                 ["from"] = from,

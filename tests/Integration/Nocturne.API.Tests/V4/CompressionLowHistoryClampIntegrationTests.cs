@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// A member or credential limited to the last 24 hours reads no older night of compression lows:
 /// neither the suggestions already saved, nor a detection it runs itself (#2156).
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
 {

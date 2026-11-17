@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
@@ -33,7 +34,7 @@ public class AlexaServiceTests
     private const string UnknownValueText =
         "That value is unknown at the moment. Please see your Nightscout site for more details.";
 
-    private readonly Mock<IEntryStore> _mockEntryStore = new();
+    private readonly Mock<IEntryService> _mockEntryService = new();
     private readonly Mock<IPropertiesService> _mockProperties = new();
     private readonly Mock<IDDataService> _mockDData = new();
     private readonly Mock<ITenantAppearanceReader> _mockAppearance = new();
@@ -50,12 +51,11 @@ public class AlexaServiceTests
             .ReturnsAsync(new DData());
         Units(null);
         _alexaService = new AlexaService(
-            _mockEntryStore.Object,
+            _mockEntryService.Object,
             _mockProperties.Object,
             _mockDData.Object,
             _httpContextAccessor,
-            _mockAppearance.Object,
-            Mock.Of<ITenantAccessor>(),
+            new TenantGlucoseUnits(Mock.Of<ITenantAccessor>(), _mockAppearance.Object, Mock.Of<ITenantService>()),
             new FakeTimeProvider(Now),
             Mock.Of<ILogger<AlexaService>>()
         );
@@ -73,9 +73,9 @@ public class AlexaServiceTests
         LatestEntry(sgv, direction, TimeSpan.FromMinutes(minutesAgo));
 
     private void LatestEntry(double sgv, string direction, TimeSpan ago) =>
-        _mockEntryStore
+        _mockEntryService
             .Setup(x =>
-                x.QueryAsync(
+                x.QueryEntriesAsync(
                     It.Is<EntryQuery>(q => q.Type == "sgv" && q.Count == 1),
                     It.IsAny<CancellationToken>()
                 )
@@ -314,8 +314,8 @@ public class AlexaServiceTests
     [Fact]
     public async Task MetricNow_Bg_WithoutReadings_SpeaksUnknownValue()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
 
         var result = await MetricNow(ResolvedMetric("bg", "bg"));
@@ -997,8 +997,8 @@ public class AlexaServiceTests
     [Fact]
     public async Task NSStatus_WithoutGlucoseOrBasal_SpeaksIobAsASentence()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
         Properties(("iob", Iob(0)));
 
@@ -1010,8 +1010,8 @@ public class AlexaServiceTests
     [Fact]
     public async Task NSStatus_WithoutGlucoseButWithBasalAndIob_JoinsThemInOneSentence()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
         Properties(("basal", Basal(0.9)), ("iob", Iob(1.25)));
 

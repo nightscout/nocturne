@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -106,6 +107,8 @@ public class ActivityService : IActivityService
         string? find = null,
         int? count = null,
         int? skip = null,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -122,12 +125,7 @@ public class ActivityService : IActivityService
             );
 
             var query = FindQuery.Parse(find);
-            var from = query.FromMills is { } fromMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
-                : (DateTime?)null;
-            var to = query.ToMills is { } toMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
-                : (DateTime?)null;
+            (from, to) = Window(query, from, to);
 
             // Over-fetch from each source so we can merge and re-paginate. Clamped into range: a
             // large skip overflows the sum, and a non-positive fetch count faults every source
@@ -174,7 +172,7 @@ public class ActivityService : IActivityService
             // The sleep read bounds by overlap; every other source bounds by start, as the find does.
             var sleepActivities = sleepSessions
                 .Select(ActivityStateSpanMapper.SleepSessionToActivity)
-                .Where(a => StartsWithin(a, query));
+                .Where(a => StartsWithin(a, from, to));
 
             var sources = stateSpanActivities
                 .Concat(heartRateActivities)
@@ -301,26 +299,25 @@ public class ActivityService : IActivityService
 
             // Only a user tombstone is skipped here. Any other failure of the sensor and sleep writes
             // reaches the outer handler, which logs and rethrows it, so the uploader gets an error and
-            // does not advance its sync marker past a record never stored.
-            foreach (var sensorActivity in sensorDataActivities)
+            // does not advance its sync marker past a record never stored. A re-send that changed
+            // nothing is answered as stored but not announced. A sleep activity is answered and
+            // announced as the session it was stored as, and always counts as written.
+            var announced = new List<Activity>();
+            if (sensorDataActivities.Count + sleepActivities.Count > 0)
             {
-                var decomposed = await _activityDecomposer.DecomposeAsync(sensorActivity, WriteOrigin.Live, cancellationToken);
-                if (decomposed.SkippedDeleted == 0)
-                    results.Add(sensorActivity);
-            }
-
-            foreach (var sleepActivity in sleepActivities)
-            {
-                try
-                {
-                    var session = ActivityStateSpanMapper.ToSleepSession(sleepActivity);
-                    var created = await _sleepService.UpsertSessionAsync(session, cancellationToken);
-                    results.Add(ActivityStateSpanMapper.SleepSessionToActivity(created));
-                }
-                catch (RecreationBlockedException)
-                {
-                    _logger.LogDebug("Skipped sleep activity {Id}: the user deleted it", sleepActivity.Id);
-                }
+                // Sensor activities come first, so their indexes in the batch are their own.
+                var decomposed = await _activityDecomposer.DecomposeBatchAsync(
+                    [.. sensorDataActivities, .. sleepActivities], WriteOrigin.Live, cancellationToken);
+                var wrote = decomposed.Wrote;
+                var sleepGroups = decomposed.Groups.Skip(sensorDataActivities.Count).ToHashSet();
+                var storedSleep = decomposed.CreatedRecords
+                    .Where(r => decomposed.GroupOf(r) is { } group && sleepGroups.Contains(group))
+                    .Cast<Activity>()
+                    .ToList();
+                results.AddRange(sensorDataActivities.Where((_, index) => !decomposed.IsDeletedByUser(index)));
+                results.AddRange(storedSleep);
+                announced.AddRange(sensorDataActivities.Where((_, index) => wrote[index]));
+                announced.AddRange(storedSleep);
             }
 
             // Process regular activities through existing StateSpan path
@@ -331,23 +328,24 @@ public class ActivityService : IActivityService
                     cancellationToken
                 );
                 results.AddRange(createdActivities);
+                announced.AddRange(createdActivities);
             }
 
-            // Broadcast WebSocket event for all created activities
-            if (results.Count > 0)
+            if (announced.Count > 0)
             {
                 await _signalRBroadcastService.BroadcastStorageCreateAsync(
                     "activity",
-                    new { collection = "activity", data = results, count = results.Count }
+                    new { collection = "activity", data = announced, count = announced.Count }
                 );
 
-                await _events.OnCreatedAsync(results, cancellationToken);
+                await _events.OnCreatedAsync(announced, cancellationToken);
             }
 
             _logger.LogDebug(
-                "Successfully created {Count} activity records ({SensorCount} sensor, {RegularCount} regular)",
+                "Successfully created {Count} activity records ({SensorCount} sensor, {SleepCount} sleep, {RegularCount} regular)",
                 results.Count,
                 sensorDataActivities.Count,
+                sleepActivities.Count,
                 regularActivities.Count
             );
             return results;
@@ -561,7 +559,7 @@ public class ActivityService : IActivityService
     )
     {
         var counts = await CountActivitiesByCategoryAsync(
-            CountableCategories, find, cancellationToken);
+            CountableCategories, find, cancellationToken: cancellationToken);
         return counts.Values.Sum();
     }
 
@@ -569,26 +567,21 @@ public class ActivityService : IActivityService
     public async Task<IReadOnlyDictionary<string, long>> CountActivitiesByCategoryAsync(
         IReadOnlySet<string> categories,
         string? find = null,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
         try
         {
-            var sanitizedFindForLog = find?.Replace("\r", string.Empty).Replace("\n", string.Empty);
-
             _logger.LogDebug(
                 "Counting activity records in {Categories} with find: {Find}",
                 string.Join(",", categories),
-                sanitizedFindForLog);
+                LogText.Sanitize(find));
 
             var query = FindQuery.Parse(find);
-            var structured = !query.IsEmpty;
-            var from = query.FromMills is { } fromMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
-                : (DateTime?)null;
-            var to = query.ToMills is { } toMills
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
-                : (DateTime?)null;
+            (from, to) = Window(query, from, to);
+            var structured = !query.IsEmpty || from is not null || to is not null;
 
             var fetchCount = query.HasFieldFilters ? MaxFilteredFetch : int.MaxValue;
 
@@ -602,7 +595,7 @@ public class ActivityService : IActivityService
                     from: from,
                     to: to,
                     cancellationToken: cancellationToken);
-                counts[Scope.TreatmentsRead] = Narrow(stateSpans, query).Count();
+                counts[Scope.TreatmentsRead] = Narrow(stateSpans, query, from, to).Count();
             }
 
             if (categories.Contains(Scope.HeartRateRead))
@@ -614,7 +607,7 @@ public class ActivityService : IActivityService
                     to: to,
                     cancellationToken: cancellationToken);
                 counts[Scope.HeartRateRead] = query.HasFieldFilters
-                    ? Narrow(heartRates.Select(ActivityDecomposer.HeartRateToActivity), query).Count()
+                    ? Narrow(heartRates.Select(ActivityDecomposer.HeartRateToActivity), query, from, to).Count()
                     : heartRates.Count();
             }
 
@@ -627,7 +620,7 @@ public class ActivityService : IActivityService
                     to: to,
                     cancellationToken: cancellationToken);
                 counts[Scope.StepCountRead] = query.HasFieldFilters
-                    ? Narrow(stepCounts.Select(ActivityDecomposer.StepCountToActivity), query).Count()
+                    ? Narrow(stepCounts.Select(ActivityDecomposer.StepCountToActivity), query, from, to).Count()
                     : stepCounts.Count();
             }
 
@@ -645,7 +638,7 @@ public class ActivityService : IActivityService
                         descending: true,
                         cancellationToken: cancellationToken);
                     counts[Scope.SleepRead] = Narrow(
-                        sessions.Select(ActivityStateSpanMapper.SleepSessionToActivity), query).Count();
+                        sessions.Select(ActivityStateSpanMapper.SleepSessionToActivity), query, from, to).Count();
                 }
             }
 
@@ -659,14 +652,28 @@ public class ActivityService : IActivityService
         }
     }
 
-    /// <summary>The find bounds every activity by its start, though the sleep read bounds by overlap.</summary>
-    private static bool StartsWithin(Activity activity, FindQuery query) =>
-        (query.FromMills is not { } lower || activity.Mills >= lower)
-        && (query.ToMills is not { } upper || activity.Mills <= upper);
-
-    private static IEnumerable<Activity> Narrow(IEnumerable<Activity> activities, FindQuery query)
+    /// <summary>
+    /// The window a read covers: the find's <c>created_at</c> bounds and the explicit ones, whichever
+    /// is narrower on each side.
+    /// </summary>
+    private static (DateTime? From, DateTime? To) Window(FindQuery query, DateTime? from, DateTime? to)
     {
-        var bounded = activities.Where(a => StartsWithin(a, query));
+        var findFrom = query.FromMills?.ToUtcDateTime();
+        var findTo = query.ToMills?.ToUtcDateTime();
+        return (
+            from is { } f && findFrom is { } ff ? (f > ff ? f : ff) : from ?? findFrom,
+            to is { } t && findTo is { } ft ? (t < ft ? t : ft) : to ?? findTo);
+    }
+
+    /// <summary>Every activity is bounded by its start, though the sleep read bounds by overlap.</summary>
+    private static bool StartsWithin(Activity activity, DateTime? from, DateTime? to) =>
+        (from is not { } lower || activity.Mills >= lower.ToMills())
+        && (to is not { } upper || activity.Mills <= upper.ToMills());
+
+    private static IEnumerable<Activity> Narrow(
+        IEnumerable<Activity> activities, FindQuery query, DateTime? from, DateTime? to)
+    {
+        var bounded = activities.Where(a => StartsWithin(a, from, to));
         return query.HasFieldFilters ? bounded.Where(a => query.MatchesResidual(a)) : bounded;
     }
 }

@@ -18,20 +18,10 @@
                 <td class="py-2 pr-4">1 core</td>
                 <td class="py-2">2 cores+</td>
             </tr>
-            <tr class="border-b border-border/50">
+            <tr>
                 <td class="py-2 pr-4">Storage</td>
                 <td class="py-2 pr-4">10 GB</td>
                 <td class="py-2">20 GB+</td>
-            </tr>
-            <tr class="border-b border-border/50">
-                <td class="py-2 pr-4">Docker</td>
-                <td class="py-2 pr-4">20.10+</td>
-                <td class="py-2">Latest</td>
-            </tr>
-            <tr>
-                <td class="py-2 pr-4">Docker Compose</td>
-                <td class="py-2 pr-4">2.23.1+</td>
-                <td class="py-2">Latest</td>
             </tr>
         </tbody>
     </table>

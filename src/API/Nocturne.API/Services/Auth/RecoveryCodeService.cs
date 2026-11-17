@@ -1,9 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
-using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Auth;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -11,7 +8,7 @@ namespace Nocturne.API.Services.Auth;
 /// Generates and verifies single-use recovery codes for break-glass account access.
 /// Each code consists of two 5-character segments from a reduced unambiguous alphabet,
 /// separated by a hyphen. Codes are stored as per-code salted PBKDF2-HMAC-SHA256 hashes, which
-/// depend on no instance secret.
+/// depend on no instance secret; only the hashes reach <see cref="IRecoveryCodeRepository"/>.
 /// </summary>
 /// <seealso cref="IRecoveryCodeService"/>
 public class RecoveryCodeService : IRecoveryCodeService
@@ -30,53 +27,34 @@ public class RecoveryCodeService : IRecoveryCodeService
     // empty slots derive against. Every row is parsed at the one iteration count for the same reason.
     private static readonly byte[] DummySalt = RandomNumberGenerator.GetBytes(SaltSize);
 
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IRecoveryCodeRepository _codes;
     private readonly Func<string, byte[], byte[]> _derive;
 
-    /// <summary>
-    /// Initialises a new <see cref="RecoveryCodeService"/>.
-    /// </summary>
-    public RecoveryCodeService(INocturneDbContextFactory contexts)
-        : this(contexts, Derive)
+    public RecoveryCodeService(IRecoveryCodeRepository codes)
+        : this(codes, Derive)
     {
     }
 
-    internal RecoveryCodeService(INocturneDbContextFactory contexts, Func<string, byte[], byte[]> derive)
+    internal RecoveryCodeService(IRecoveryCodeRepository codes, Func<string, byte[], byte[]> derive)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _codes = codes ?? throw new ArgumentNullException(nameof(codes));
         _derive = derive;
     }
 
     /// <inheritdoc />
     public async Task<List<string>> GenerateCodesAsync(Guid subjectId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var existing = await db.RecoveryCodes
-            .Where(r => r.SubjectId == subjectId)
-            .ToListAsync();
-
-        if (existing.Count > 0)
-        {
-            db.RecoveryCodes.RemoveRange(existing);
-        }
-
         var codes = new List<string>(CodeCount);
+        var hashes = new List<string>(CodeCount);
 
         for (var i = 0; i < CodeCount; i++)
         {
             var code = GenerateCode();
             codes.Add(code);
-
-            db.RecoveryCodes.Add(new RecoveryCodeEntity
-            {
-                Id = Guid.CreateVersion7(),
-                SubjectId = subjectId,
-                CodeHash = Hash(NormalizeCode(code)),
-                CreatedAt = DateTime.UtcNow,
-            });
+            hashes.Add(Hash(NormalizeCode(code)));
         }
 
-        await db.SaveChangesAsync();
+        await _codes.ReplaceAsync(subjectId, hashes, DateTime.UtcNow, CancellationToken.None);
 
         return codes;
     }
@@ -84,13 +62,7 @@ public class RecoveryCodeService : IRecoveryCodeService
     /// <inheritdoc />
     public async Task<bool> VerifyAndConsumeAsync(Guid? subjectId, string code)
     {
-        await using var db = await _contexts.CreateAsync();
-        var owner = subjectId ?? Guid.Empty;
-        var live = await db.RecoveryCodes
-            .AsNoTracking()
-            .Where(r => r.SubjectId == owner && r.UsedAt == null && r.InvalidatedAt == null)
-            .OrderBy(r => r.Id)
-            .ToListAsync();
+        var live = await _codes.GetLiveAsync(subjectId ?? Guid.Empty, CancellationToken.None);
 
         var normalized = NormalizeCode(code);
 
@@ -112,58 +84,35 @@ public class RecoveryCodeService : IRecoveryCodeService
             return false;
         }
 
-        var consumed = await db.RecoveryCodes
-            .Where(r => r.Id == matchedId && r.UsedAt == null && r.InvalidatedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.UsedAt, DateTime.UtcNow));
-
-        return consumed == 1;
+        return await _codes.TryConsumeAsync(matchedId.Value, DateTime.UtcNow, CancellationToken.None);
     }
 
     /// <inheritdoc />
-    public async Task InvalidateAllAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        await db.RecoveryCodes
-            .Where(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.InvalidatedAt, DateTime.UtcNow));
-    }
+    public Task InvalidateAllAsync(Guid subjectId) =>
+        _codes.InvalidateLiveAsync(subjectId, DateTime.UtcNow, CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<int> GetRemainingCountAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        return await db.RecoveryCodes
-            .CountAsync(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null);
-    }
+    public Task<int> GetRemainingCountAsync(Guid subjectId) =>
+        _codes.CountLiveAsync(subjectId, CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<bool> HasCodesAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        return await db.RecoveryCodes
-            .AnyAsync(r => r.SubjectId == subjectId && r.InvalidatedAt == null);
-    }
+    public Task<bool> HasCodesAsync(Guid subjectId) =>
+        _codes.HasCodesAsync(subjectId, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<bool> WereCodesResetAsync(Guid subjectId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var hasInvalidated = await db.RecoveryCodes
-            .AnyAsync(r => r.SubjectId == subjectId && r.InvalidatedAt != null);
-
-        if (!hasInvalidated)
+        if (!await _codes.AnyInvalidatedAsync(subjectId, CancellationToken.None))
         {
             return false;
         }
 
-        return !await db.RecoveryCodes
-            .AnyAsync(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null);
+        return await _codes.CountLiveAsync(subjectId, CancellationToken.None) == 0;
     }
 
     /// <summary>
     /// Generates a single recovery code in <c>XXXXX-XXXXX</c> format using <see cref="Alphabet"/>.
     /// </summary>
-    /// <returns>A formatted recovery code string.</returns>
     private static string GenerateCode()
     {
         var segment1 = GenerateSegment();
@@ -175,7 +124,6 @@ public class RecoveryCodeService : IRecoveryCodeService
     /// Generates a single segment of <see cref="SegmentLength"/> characters from <see cref="Alphabet"/>
     /// using a cryptographically secure RNG.
     /// </summary>
-    /// <returns>A random character segment string.</returns>
     private static string GenerateSegment()
     {
         var chars = new char[SegmentLength];
@@ -190,8 +138,6 @@ public class RecoveryCodeService : IRecoveryCodeService
     /// Normalises a code by converting to uppercase and stripping hyphens,
     /// ensuring consistent hashing regardless of user input formatting.
     /// </summary>
-    /// <param name="code">The raw recovery code string entered by the user.</param>
-    /// <returns>The normalised form suitable for hashing.</returns>
     private static string NormalizeCode(string code)
     {
         return code.ToUpperInvariant().Replace("-", "");

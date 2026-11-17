@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -50,14 +51,15 @@ public class ConnectorConfigurationCasingTests : IDisposable
             .Returns<Dictionary<string, string>>(d => d);
 
         _service = new ConnectorConfigurationService(
-            _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [],
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

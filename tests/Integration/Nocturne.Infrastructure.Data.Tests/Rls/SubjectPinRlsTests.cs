@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
@@ -164,16 +165,15 @@ public class SubjectPinRlsTests : IAsyncLifetime
         changed.Should().Be(0);
     }
 
+    /// <summary>
+    /// On the context pool, which skips the session reset, the next lessee's subject GUC is the empty
+    /// string the interceptor wrote rather than unset, and the policy must read it as unset.
+    /// </summary>
     [Fact]
     public async Task PooledConnection_AfterASubjectPin_IsUnrestricted()
     {
-        var connectionString = new NpgsqlConnectionStringBuilder(_fx.AppConnectionString)
-        {
-            MinPoolSize = 0,
-            MaxPoolSize = 1,
-        }.ConnectionString;
-
-        await using var dataSource = new NpgsqlDataSourceBuilder(connectionString).Build();
+        await using var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(
+            new PostgreSqlConfiguration { ConnectionString = _fx.AppConnectionString, MaxPoolSize = 1 });
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(dataSource)
             .AddInterceptors(new TenantConnectionInterceptor())
@@ -192,6 +192,12 @@ public class SubjectPinRlsTests : IAsyncLifetime
         await next.Database.OpenConnectionAsync();
         (await BackendPidAsync(next)).Should().Be(pinnedPid,
             "the pool must hand back the pinned physical connection for this to prove anything");
+
+        await using (var cmd = next.Database.GetDbConnection().CreateCommand())
+        {
+            cmd.CommandText = "SELECT current_setting('app.current_subject_id', true)";
+            (await cmd.ExecuteScalarAsync()).Should().Be("");
+        }
 
         (await MembershipsAsync(next)).Should().HaveCount(4,
             "the previous lessee's subject pin must not narrow the next one");

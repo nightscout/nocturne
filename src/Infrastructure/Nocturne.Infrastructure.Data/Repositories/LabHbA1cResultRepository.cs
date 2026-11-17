@@ -14,12 +14,15 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class LabHbA1cResultRepository : ILabHbA1cResultRepository
 {
     private readonly INocturneDbContextFactory _factory;
+    private readonly TimeProvider _time;
 
     /// <summary>Initializes a new instance of <see cref="LabHbA1cResultRepository"/>.</summary>
     /// <param name="factory">Tenant-scoped DbContext factory.</param>
-    public LabHbA1cResultRepository(INocturneDbContextFactory factory)
+    /// <param name="time">The clock; defaults to the system clock.</param>
+    public LabHbA1cResultRepository(INocturneDbContextFactory factory, TimeProvider? time = null)
     {
         _factory = factory;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -39,10 +42,10 @@ public class LabHbA1cResultRepository : ILabHbA1cResultRepository
         var entity = new LabHbA1cResultEntity
         {
             Id = Guid.CreateVersion7(),
-            MeasuredAt = result.MeasuredAt,
+            MeasuredAt = result.MeasuredAt.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
             ValuePercent = result.ValuePercent,
             Note = result.Note,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = _time.GetUtcNow().UtcDateTime,
         };
         context.LabHbA1cResults.Add(entity);
         await context.SaveChangesAsync(ct);
@@ -57,7 +60,7 @@ public class LabHbA1cResultRepository : ILabHbA1cResultRepository
         if (entity is null)
             return false;
 
-        entity.DeletedAt = DateTime.UtcNow;
+        entity.DeletedAt = _time.GetUtcNow().UtcDateTime;
         await context.SaveChangesAsync(ct);
         return true;
     }
@@ -65,7 +68,7 @@ public class LabHbA1cResultRepository : ILabHbA1cResultRepository
     private static LabHbA1cResult ToDomain(LabHbA1cResultEntity entity) => new()
     {
         Id = entity.Id,
-        MeasuredAt = entity.MeasuredAt,
+        MeasuredAt = DateOnly.FromDateTime(entity.MeasuredAt),
         ValuePercent = entity.ValuePercent,
         Note = entity.Note,
         CreatedAt = entity.CreatedAt,

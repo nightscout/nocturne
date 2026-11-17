@@ -58,7 +58,7 @@ public class ProfileController : ControllerBase
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
     [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfiles(
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -71,9 +71,9 @@ public class ProfileController : ControllerBase
         try
         {
             // Limit count to reasonable maximum to prevent abuse
-            count = Math.Max(1, Math.Min(count, 1000));
+            var pageSize = Math.Max(1, Math.Min(LegacyReadLimits.ZeroAsAbsent(count) ?? 10, 1000));
             var profiles = await _projectionService.GetProfilesAsync(
-                count: count,
+                count: pageSize,
                 skip: 0,
                 ct: cancellationToken
             );
@@ -141,7 +141,7 @@ public class ProfileController : ControllerBase
     [ProducesResponseType(typeof(Profile[]), 200)]
     [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfileHistory(
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -150,7 +150,7 @@ public class ProfileController : ControllerBase
             var queryString = HttpContext?.Request?.QueryString.ToString() ?? string.Empty;
             var find = FindQuery.Parse(queryString.TrimStart('?'));
 
-            count = Math.Max(1, Math.Min(count, 1000));
+            var pageSize = Math.Max(1, Math.Min(LegacyReadLimits.ZeroAsAbsent(count) ?? 10, 1000));
 
             // Filter before limiting: a find that excludes the newest documents must still
             // surface older matches. Profile history is small, so fetch the route's maximum.
@@ -160,7 +160,7 @@ public class ProfileController : ControllerBase
                 ct: cancellationToken
             );
 
-            return Ok(profiles.Where(find.Matches).Take(count).ToArray());
+            return Ok(profiles.Where(find.Matches).Take(pageSize).ToArray());
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -983,9 +983,6 @@ public enum TimeZoneUnavailableReason
     /// <summary>The tenant's stored timezone is not one this server recognises; the owner can correct it.</summary>
     Unrecognised,
 
-    /// <summary>The request came through a public share, which cannot read the tenant's settings.</summary>
-    Share,
-
     /// <summary>Looking the timezone up failed.</summary>
     LookupFailed,
 }
@@ -1723,6 +1720,16 @@ public class InsulinDeliveryStatistics
     public double TotalBasalPerDay { get; set; }
 
     /// <summary>
+    /// Units per day of <see cref="TotalBolus"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double TotalBolusPerDay { get; set; }
+
+    /// <summary>
+    /// Units per day of <see cref="ScheduledBasal"/>, over <see cref="WindowDays"/>
+    /// </summary>
+    public double ScheduledBasalPerDay { get; set; }
+
+    /// <summary>
     /// Average manual bolus size (units): <see cref="ManualBolus"/> over <see cref="ManualBolusCount"/>
     /// </summary>
     public double AvgBolus { get; set; }
@@ -1737,6 +1744,26 @@ public class InsulinDeliveryStatistics
     /// Number of manual boluses paired with no meal
     /// </summary>
     public int CorrectionBoluses { get; set; }
+
+    /// <summary>
+    /// <see cref="MealBoluses"/> per day, over <see cref="WindowDays"/>
+    /// </summary>
+    public double MealBolusesPerDay { get; set; }
+
+    /// <summary>
+    /// <see cref="CorrectionBoluses"/> per day, over <see cref="WindowDays"/>
+    /// </summary>
+    public double CorrectionBolusesPerDay { get; set; }
+
+    /// <summary>
+    /// <see cref="MealBoluses"/> as a percentage (0-100) of <see cref="ManualBolusCount"/>; 0 with no manual bolus
+    /// </summary>
+    public double MealBolusPercent { get; set; }
+
+    /// <summary>
+    /// <see cref="CorrectionBoluses"/> as a percentage (0-100) of <see cref="ManualBolusCount"/>; 0 with no manual bolus
+    /// </summary>
+    public double CorrectionBolusPercent { get; set; }
 
     /// <summary>
     /// Insulin-to-carb ratio as dosed: grams of the meals a manual bolus is paired with, per unit of
@@ -1984,6 +2011,11 @@ public class BasalStats
     /// Total basal insulin delivered in units, from temp basal records only
     /// </summary>
     public double TotalDelivered { get; set; }
+
+    /// <summary>
+    /// <see cref="TotalDelivered"/> per day, over <see cref="BasalAnalysisResponse.WindowDays"/>
+    /// </summary>
+    public double TotalDeliveredPerDay { get; set; }
 }
 
 public class BasalAnalysisResponse
@@ -2047,6 +2079,12 @@ public class HourlyInsulinDeliveryPoint
     /// Average insulin from user-initiated boluses
     /// </summary>
     public double ManualBolus { get; set; }
+
+    /// <summary>
+    /// Average number of user-initiated boluses given in this hour per day, over the same days as
+    /// <see cref="ManualBolus"/>
+    /// </summary>
+    public double ManualBolusesPerDay { get; set; }
 
     /// <summary>
     /// Average insulin from algorithm-delivered boluses (SMBs)

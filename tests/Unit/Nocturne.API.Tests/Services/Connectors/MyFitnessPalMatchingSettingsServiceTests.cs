@@ -5,6 +5,7 @@ using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -71,7 +72,7 @@ public class MyFitnessPalMatchingSettingsServiceTests
     private static IMyFitnessPalMatchingSettingsService NewService(NocturneDbContext context)
     {
         return new MyFitnessPalMatchingSettingsService(
-            context.AsFactory(),
+            new SettingsRepository(context.AsFactory()),
             TimeProvider.System,
             NullLogger<MyFitnessPalMatchingSettingsService>.Instance
         );

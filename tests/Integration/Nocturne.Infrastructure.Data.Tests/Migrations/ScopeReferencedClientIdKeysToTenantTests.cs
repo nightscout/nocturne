@@ -38,10 +38,9 @@ public class ScopeReferencedClientIdKeysToTenantFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("scope_referenced_keys");
+        var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "scope_referenced_keys");
         _migratorConnectionString = database.MigratorConnectionString;
 
-        await MigrateToAsync(PriorMigration);
         await SeedAsync();
         await RunAsync();
     }

@@ -317,7 +317,6 @@ public class IobCobComputeStageTests
             StartTime = startTime,
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
-            BufferStartTime = startTime - 8L * 60 * 60 * 1000,
             DefaultBasalRate = 1.0,
             BolusList = boluses,
             CarbIntakeList = carbs,
@@ -827,7 +826,6 @@ public class IobCobComputeStageTests
         // minutes old and nothing after: -(0.922216 + 0.94444) / 12 = -0.155555 on the DIA 3 h curve,
         // where a dose m minutes old keeps 1 - 0.001852 (m/5)(m/5 + 1). Built from the window start,
         // the timeline would put every chunk under the later 1 U/h profile.
-        var bufferStart = TestMills - 8L * 60 * Minute;
         var switchAt = TestMills - 20 * Minute;
         _mockTherapyTimelineResolver
             .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -843,7 +841,6 @@ public class IobCobComputeStageTests
         {
             StartTime = TestMills,
             EndTime = TestMills,
-            BufferStartTime = bufferStart,
             IntervalMinutes = 5,
             DefaultBasalRate = 1.0,
             TempBasalList = [Temp(TestMills - 30 * Minute, TestMills, rate: 1.0)],
@@ -870,7 +867,6 @@ public class IobCobComputeStageTests
         {
             StartTime = TestMills - 5 * Minute,
             EndTime = TestMills,
-            BufferStartTime = TestMills - 8L * 60 * Minute,
             IntervalMinutes = 5,
             DefaultBasalRate = 1.0,
             BolusList = [new Bolus

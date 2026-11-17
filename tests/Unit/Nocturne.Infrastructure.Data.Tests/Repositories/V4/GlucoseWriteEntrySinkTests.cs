@@ -43,7 +43,7 @@ public class GlucoseWriteEntrySinkTests : IDisposable
         var factory = new TestNocturneDbContextFactory(_context);
         _sensor = new SensorGlucoseRepository(
             factory,
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance,
             entrySink: _sink.Object);

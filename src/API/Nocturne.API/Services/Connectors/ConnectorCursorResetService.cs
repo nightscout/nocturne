@@ -1,8 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -107,7 +105,8 @@ public record TenantCursorResetResult(
 /// <inheritdoc cref="IConnectorCursorResetService"/>
 public class ConnectorCursorResetService : IConnectorCursorResetService
 {
-    private readonly INocturneDbContextFactory _dbFactory;
+    private readonly IConnectorConfigurationRepository _configurations;
+    private readonly ITenantRepository _tenants;
     private readonly IConnectorSyncService _syncService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly TimeProvider _time;
@@ -115,13 +114,15 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
 
     /// <summary>Initializes a new instance of <see cref="ConnectorCursorResetService"/>.</summary>
     public ConnectorCursorResetService(
-        INocturneDbContextFactory dbFactory,
+        IConnectorConfigurationRepository configurations,
+        ITenantRepository tenants,
         IConnectorSyncService syncService,
         ITenantAccessor tenantAccessor,
         TimeProvider timeProvider,
         ILogger<ConnectorCursorResetService> logger)
     {
-        _dbFactory = dbFactory;
+        _configurations = configurations;
+        _tenants = tenants;
         _syncService = syncService;
         _tenantAccessor = tenantAccessor;
         _time = timeProvider;
@@ -136,9 +137,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         IConnectorResetProgress? progress,
         CancellationToken ct)
     {
-        await using var db = await _dbFactory.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        var tenant = await _tenants.GetAsync(tenantId, ct);
 
         if (tenant is null)
         {
@@ -146,8 +145,8 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
             return null;
         }
 
-        // db and the executor scope IConnectorSyncService.TriggerSyncAsync opens both read the
-        // tenant from the accessor, so the caller opens this scope on the target tenant
+        // The configuration read and the executor scope IConnectorSyncService.TriggerSyncAsync opens
+        // both read the tenant from the accessor, so the caller opens this scope on the target tenant
         // (TenantJobScope.Open); moving the accessor here would move every context of the scope.
         if (_tenantAccessor.Context?.TenantId != tenantId)
         {
@@ -155,10 +154,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
                 $"A cursor reset for tenant {tenantId} must run in a scope opened on that tenant.");
         }
 
-        var configs = await db.ConnectorConfigurations.AsNoTracking()
-            .Where(c => c.TenantId == tenantId)
-            .OrderBy(c => c.ConnectorName)
-            .ToListAsync(ct);
+        var configs = await _configurations.ListAsync(ct);
 
         var results = new List<ConnectorCursorResetResult>(configs.Count);
 
@@ -218,25 +214,20 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
     /// <inheritdoc />
     public async Task<TenantConnectorsDto?> GetTenantConnectorsAsync(Guid tenantId, CancellationToken ct)
     {
-        await using var db = await _dbFactory.CreateAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        var tenant = await _tenants.GetAsync(tenantId, ct);
 
         if (tenant is null)
             return null;
 
         // The job service asks before it has opened the target tenant's scope.
-        await using var tenantDb = await _dbFactory.CreateForTenantAsync(tenantId, ct);
-        var connectors = await tenantDb.ConnectorConfigurations.AsNoTracking()
-            .Where(c => c.TenantId == tenantId)
-            .OrderBy(c => c.ConnectorName)
+        var connectors = (await _configurations.ListForTenantAsync(tenantId, ct))
             .Select(c => new TenantConnectorSummary(
                 c.ConnectorName,
                 c.IsHealthy,
                 c.LastSuccessfulSync,
                 c.LastSyncAttempt,
                 c.LastErrorMessage))
-            .ToListAsync(ct);
+            .ToList();
 
         return new TenantConnectorsDto(tenant.Id, tenant.Slug, connectors);
     }

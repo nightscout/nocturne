@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Tests.Services.Alerts.Conditions;
 
@@ -22,6 +23,6 @@ public class GlucoseBucketResolverTests
     [InlineData(251.0, GlucoseBucket.VeryHigh)]
     public void Boundaries_follow_the_default_thresholds(double glucose, GlucoseBucket expected)
     {
-        GlucoseBucketResolver.Compute((decimal)glucose, 70m, 180m, null, null, null).Should().Be(expected);
+        GlucoseBucketResolver.Compute(glucose.ToDecimal(), 70m, 180m, null, null, null).Should().Be(expected);
     }
 }

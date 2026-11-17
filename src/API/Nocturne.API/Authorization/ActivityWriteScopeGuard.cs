@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;

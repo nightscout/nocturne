@@ -19,6 +19,7 @@ namespace Nocturne.API.Tests.Integration;
 /// second must wait on the first and then replace its row; without the session locks it misses the
 /// uncommitted row, inserts, and fails a unique index once the first commits.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
 {

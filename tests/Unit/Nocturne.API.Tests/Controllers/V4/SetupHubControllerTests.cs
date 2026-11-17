@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 
 public class SetupHubControllerTests
 {
-    private static readonly SetupHubStatus Hub = new([], 0, 0, 0, "rev", false);
+    private static readonly SetupHubStatus Hub = new([], 0, 0, 0, "rev", false, null);
 
     private static (SetupHubController, Mock<ISetupHubService>) Build(params string[] grantedScopes)
     {
@@ -47,7 +47,7 @@ public class SetupHubControllerTests
     public async Task GetSetupHub_ReturnsTheOwnersHub()
     {
         var (controller, service) = Build(Scope.FullAccess);
-        service.Setup(s => s.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Hub);
+        service.Setup(s => s.GetAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>())).ReturnsAsync(Hub);
 
         var result = await controller.GetSetupHub(CancellationToken.None);
 
@@ -69,9 +69,9 @@ public class SetupHubControllerTests
     public async Task SetState_MapsAnUnlistedItemTo404_AndADoneItemTo409()
     {
         var (controller, service) = Build(Scope.FullAccess);
-        service.Setup(s => s.SetStateAsync(SetupHubItemKey.ConnectData, SetupHubItemState.NotForMe, It.IsAny<CancellationToken>()))
+        service.Setup(s => s.SetStateAsync(It.IsAny<Guid?>(), SetupHubItemKey.ConnectData, SetupHubItemState.NotForMe, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new KeyNotFoundException());
-        service.Setup(s => s.SetStateAsync(SetupHubItemKey.Devices, SetupHubItemState.NotForMe, It.IsAny<CancellationToken>()))
+        service.Setup(s => s.SetStateAsync(It.IsAny<Guid?>(), SetupHubItemKey.Devices, SetupHubItemState.NotForMe, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException());
         var notForMe = new SetSetupHubItemStateRequest { State = SetupHubItemState.NotForMe };
 

@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -22,7 +21,6 @@ namespace Nocturne.API.Services.Alerts;
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
     ISensorGlucoseRepository glucoseRepository,
-    ICanonicalGlucoseService canonicalGlucose,
     ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
     IOptions<AlertEvaluationOptions> evaluationOptions,
@@ -78,7 +76,7 @@ internal sealed class AlertReplayService(
             return new AlertReplayResult(now, now, []);
         }
 
-        var stored = await alertRepository.GetEnabledRulesAsync(tenantId, ct);
+        var stored = await alertRepository.GetEnabledRulesAsync(ct);
         var rules = ApplyOverride(stored, ruleOverride, tenantId);
         if (rules.Count == 0)
         {
@@ -97,7 +95,7 @@ internal sealed class AlertReplayService(
         // do_not_disturb leaf's ActiveDoNotDisturb snapshot re-source from these windows per
         // tick. Scheduled DND is not reconstructible historically (the schedule row keeps no
         // change history), so — as before D5 — replay considers windows only.
-        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(tenantId, windowEnd, ct);
+        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(windowEnd, ct);
 
         // Per-tick fact snapshots (site age, IOB, temp basal rate, etc.). Keyed by snake_case
         // fact name; same compression as the leaf log — emit baseline + on rounded-value flip.
@@ -120,9 +118,9 @@ internal sealed class AlertReplayService(
 
             var baseContext = new SensorContext
             {
-                LatestValue = hasReadingForTick ? (decimal)current!.Mgdl : null,
+                LatestValue = hasReadingForTick ? current!.Mgdl.ToDecimal() : null,
                 LatestTimestamp = hasReadingForTick ? current!.Timestamp : null,
-                TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? (decimal)tr : null,
+                TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? tr.ToDecimal() : null,
                 // A tick before the window's first reading reads as fresh rather than as never
                 // having had one (engine-semantics.md §8).
                 LastReadingAt = hasReadingForTick ? current!.Timestamp : tick,
@@ -137,7 +135,7 @@ internal sealed class AlertReplayService(
             // a recurring schedule's past state is not reconstructible from the settings row.
             var tickDnd = DndWindowResolver.Resolve(dndWindows, tickUtc, receiptGated: true);
             var enrichedBase = (await enricher.EnrichAsOfAsync(
-                baseContext, rules, tenantId, tickUtc, ct))
+                baseContext, rules, tickUtc, ct))
                 with
             {
                 ActiveDndScopes = tickDnd.Scopes,
@@ -188,20 +186,9 @@ internal sealed class AlertReplayService(
     };
 
     /// <summary>
-    /// Keyset-pages the window's glucose rows in ascending time order and yields the canonical
-    /// stream page by page.
+    /// Keyset-pages the window's canonical glucose rows in ascending time order, a page of
+    /// <see cref="Configuration.AlertEvaluationOptions.ReplayGlucosePageSize"/> at a time.
     /// </summary>
-    /// <remarks>
-    /// Canonical selection resolves a winner per aligned 5-minute bucket, so a bucket split
-    /// across a page boundary is held back and re-selected together with the next page's head.
-    /// Without that overlap two concurrent CGMs could each win their half of the same bucket and
-    /// the tick loop would see a reading whole-window selection drops. Selection is otherwise
-    /// bucket-local — a stream's priority relative to any other stream does not depend on which
-    /// further streams happen to be in the same batch — so per-page selection over complete
-    /// buckets yields exactly the whole-window result, provided each bucket fits within a page.
-    /// A bucket wider than a page is flushed and selected per page instead of held back (see
-    /// <see cref="Configuration.AlertEvaluationOptions.ReplayGlucosePageSize"/>).
-    /// </remarks>
     private async IAsyncEnumerable<SensorGlucose> StreamCanonicalReadingsAsync(
         DateTime windowStart,
         DateTime windowEnd,
@@ -210,7 +197,6 @@ internal sealed class AlertReplayService(
         var pageSize = Math.Max(1, evaluationOptions.Value.ReplayGlucosePageSize);
         DateTime? afterTimestamp = null;
         Guid? afterId = null;
-        var heldBack = new List<SensorGlucose>();
 
         while (true)
         {
@@ -219,10 +205,9 @@ internal sealed class AlertReplayService(
             var fetched = (await glucoseRepository.GetAsync(
                 from: windowStart, to: windowEnd, device: null, source: null,
                 limit: pageSize, offset: 0, descending: false,
-                afterTimestamp: afterTimestamp, afterId: afterId, ct: ct)).ToList();
+                afterTimestamp: afterTimestamp, afterId: afterId, ct: ct,
+                streams: GlucoseStreams.Canonical)).ToList();
 
-            // A short page is the last one.
-            var isFinalPage = fetched.Count < pageSize;
             if (fetched.Count > 0)
             {
                 var last = fetched[^1];
@@ -242,67 +227,14 @@ internal sealed class AlertReplayService(
                 afterId = last.Id;
             }
 
-            var batch = fetched;
-            if (heldBack.Count > 0)
-            {
-                // Held-back rows precede the fetched page: they came from the previous page's
-                // tail, and the keyset cursor only ever seeks forward.
-                heldBack.AddRange(fetched);
-                batch = heldBack;
-                heldBack = [];
-            }
-
-            if (isFinalPage)
-            {
-                foreach (var reading in await SelectCanonicalAsync(batch, ct))
-                {
-                    yield return reading;
-                }
-                yield break;
-            }
-
-            var trailingBucket = BucketOf(batch[^1]);
-            var completeCount = batch.Count;
-            while (completeCount > 0 && BucketOf(batch[completeCount - 1]) == trailingBucket)
-            {
-                completeCount--;
-            }
-
-            if (completeCount == 0)
-            {
-                // A single bucket holding more rows than one page. Holding it back until it ends
-                // would grow the resident set by a page per iteration, so it is flushed and
-                // selected per page instead — the memory bound wins over exact bucket-winner
-                // resolution on a shape only a bulk backfill or duplicate import produces.
-                foreach (var reading in await SelectCanonicalAsync(batch, ct))
-                {
-                    yield return reading;
-                }
-                continue;
-            }
-
-            heldBack.AddRange(batch.Skip(completeCount));
-            foreach (var reading in await SelectCanonicalAsync(batch.Take(completeCount).ToList(), ct))
-            {
+            foreach (var reading in fetched)
                 yield return reading;
-            }
+
+            // A short page is the last one.
+            if (fetched.Count < pageSize)
+                yield break;
         }
     }
-
-    /// <summary>
-    /// Canonical selection over one batch, re-sorted by timestamp. Selection preserves input
-    /// order and the repository returns ascending rows, so the sort is a no-op on well-ordered
-    /// input; it holds the ascending invariant the tick-loop fold depends on.
-    /// </summary>
-    private async Task<IEnumerable<SensorGlucose>> SelectCanonicalAsync(
-        IReadOnlyList<SensorGlucose> batch, CancellationToken ct)
-    {
-        if (batch.Count == 0) return [];
-        return (await canonicalGlucose.SelectAsync(batch, ct)).OrderBy(r => r.Timestamp);
-    }
-
-    private static long BucketOf(SensorGlucose reading) =>
-        reading.Timestamp.Ticks / CanonicalGlucoseStream.BucketSize.Ticks;
 
     /// <summary>
     /// One-reading-lookahead cursor over the paged canonical stream. The tick loop needs the most
@@ -425,9 +357,9 @@ internal sealed class AlertReplayService(
             {
                 // Direct takes decimal properties; bool flags are projected as 0/1.
                 ReplayFactConversion.Direct => raw is bool flag ? (flag ? 1m : 0m) : (decimal)raw,
-                ReplayFactConversion.MinutesSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalMinutes,
-                ReplayFactConversion.HoursSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalHours,
-                ReplayFactConversion.DaysSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalDays,
+                ReplayFactConversion.MinutesSinceNow => (tickUtc - (DateTime)raw).TotalMinutes.ToDecimal(),
+                ReplayFactConversion.HoursSinceNow => (tickUtc - (DateTime)raw).TotalHours.ToDecimal(),
+                ReplayFactConversion.DaysSinceNow => (tickUtc - (DateTime)raw).TotalDays.ToDecimal(),
                 _ => (decimal?)null,
             };
             if (projected is not { } value) continue;
@@ -475,8 +407,8 @@ internal sealed class AlertReplayService(
 
         var localStart = localDate.Value.ToDateTime(TimeOnly.MinValue);
         var localEnd = localStart.AddDays(1);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), tz);
+        var startUtc = TimeZoneHelper.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), tz);
+        var endUtc = TimeZoneHelper.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), tz);
         return (startUtc, endUtc);
     }
 

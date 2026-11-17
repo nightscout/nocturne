@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// - UPDATE: PUT /food/{id}
 /// - DELETE: DELETE /food/{id}
 /// </summary>
+[Collection(ParityShards.Two)]
 public class FoodParityTests : ParityTestBase
 {
     public FoodParityTests(ParityTestFixture fixture, ITestOutputHelper output)

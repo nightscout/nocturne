@@ -136,7 +136,7 @@ public class StateSpanLatestStartTests : IAsyncLifetime
         TenantReaderData.Resolve(scope.ServiceProvider, _tenant);
         return await read(new StateSpanRepository(
             scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<StateSpanRepository>.Instance));
     }

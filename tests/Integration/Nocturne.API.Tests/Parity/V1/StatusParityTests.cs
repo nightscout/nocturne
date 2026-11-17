@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/status endpoints.
 /// Verifies that Nocturne status responses match Nightscout 15.0.3 structure.
 /// </summary>
+[Collection(ParityShards.Two)]
 public class StatusParityTests : ParityTestBase
 {
     public StatusParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -22,7 +23,6 @@ public class StatusParityTests : ParityTestBase
             "bgnow",           // Current BG calculation
             "delta",           // Current delta calculation
             "upbat",           // Uploader battery
-            "version",         // Nocturne uses its own version number
             "name",            // Nocturne may be configured differently
             "head"             // Git commit hash will differ
         );

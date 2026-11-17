@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 using Nocturne.API.Services.Auth;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -66,7 +67,7 @@ public class HubTokenAuthorizerTests
     private HubTokenAuthorizer CreateAuthorizer(IConfiguration? configuration = null) => new(
         CreateCredentialValidator(),
         _memberService.Object,
-        _dbContextFactory.AsNocturneFactory(),
+        new OAuthGrantRepository(_dbContextFactory.AsNocturneFactory()),
         TimeProvider.System,
         configuration ?? new ConfigurationBuilder().Build(),
         NullLogger<HubTokenAuthorizer>.Instance);

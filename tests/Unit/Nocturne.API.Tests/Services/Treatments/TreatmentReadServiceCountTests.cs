@@ -20,7 +20,6 @@ public class TreatmentReadServiceCountTests
         _service = new TreatmentReadService(
             _projection.Object,
             Mock.Of<ITreatmentDecomposer>(),
-            Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(),
             Mock.Of<IBolusRepository>(),
             Mock.Of<ICarbIntakeRepository>(),

@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -56,7 +57,7 @@ public class AlertAcknowledgeEndpointTests
     }
 
     private AlertReceiptService Receipts =>
-        new(_contextFactoryMock.Object, TimeProvider.System);
+        new(_contextFactoryMock.Object, new OAuthGrantRepository(_contextFactoryMock.Object), TimeProvider.System);
 
     private AlertsController CreateController()
     {

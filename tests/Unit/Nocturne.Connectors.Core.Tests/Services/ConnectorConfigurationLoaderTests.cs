@@ -77,6 +77,26 @@ public class ConnectorConfigurationLoaderTests
     }
 
     [Fact]
+    public async Task LoadForTenantAsync_DisablesConnector_WhenTheRowHoldsOnlyAnEnabledKeyInAnotherCase()
+    {
+        var configService = new Mock<IConnectorConfigurationService>();
+        configService
+            .Setup(s => s.GetConfigurationAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = ConnectorName,
+                Configuration = JsonDocument.Parse("{\"Enabled\": false}")
+            });
+        configService
+            .Setup(s => s.GetSecretsAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+
+        var config = await CreateLoader(configService).LoadForTenantAsync(CancellationToken.None);
+
+        config.Enabled.Should().BeFalse("a disabled connector must not sync, whatever casing the flag was stored in");
+    }
+
+    [Fact]
     public async Task LoadForTenantAsync_DisablesConnector_WhenRequiredSecretMissing()
     {
         // The connector has an enabled config row (e.g. enabled via the UI toggle, or its

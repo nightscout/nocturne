@@ -60,7 +60,7 @@ public static class DemoLifestyleSeeds
         var dayNumber = (int)(localDay.Date.Ticks / TimeSpan.TicksPerDay);
         var drift = 1.2 * Math.Sin(dayNumber / 120.0 * 2 * Math.PI);
         var wobble = (DayScenarios.Roll(localDay, "weight", 13) - 6) * 0.1;
-        return Math.Round(77.5 + drift + wobble, 1);
+        return ScaledRounding.Round(77.5 + drift + wobble, 1);
     }
 
     /// <summary>

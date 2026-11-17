@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration;
 /// <c>/api/v1/entries</c> with the SHA1 of the secret in <c>api-secret</c>, and read with
 /// <c>fetchGlucose</c>'s <c>find[dateString]</c> range.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class LoopEntriesUploadIntegrationTests : ApiIntegrationTestBase
 {
