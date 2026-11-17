@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
+import { timeFormat } from "#lib/stores/appearance-store.svelte.js";
 import type { LoopPillData } from "#lib/types/status-pills.js";
 import LoopPill from "./LoopPill.svelte";
 
@@ -47,5 +48,25 @@ describe("LoopPill last enacted action", () => {
     await openPopover();
     await expect.element(page.getByText("Temp basal started")).toBeVisible();
     await expect.element(page.getByText(/1\.50U\/hour for 30m/)).toBeVisible();
+  });
+});
+
+describe("LoopPill loop time", () => {
+  const at = new Date(2026, 0, 15, 14, 30).getTime();
+
+  afterEach(() => timeFormat.hydrate("12"));
+
+  it("follows the 24-hour preference", async () => {
+    timeFormat.hydrate("24");
+    render(LoopPill, { data: { ...loop({}), lastLoopTime: at } });
+
+    await expect.element(page.getByText(/14:30/)).toBeVisible();
+  });
+
+  it("follows the 12-hour preference", async () => {
+    timeFormat.hydrate("12");
+    render(LoopPill, { data: { ...loop({}), lastLoopTime: at } });
+
+    await expect.element(page.getByText(/2:30\s?PM/i)).toBeVisible();
   });
 });
