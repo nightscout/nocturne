@@ -58,6 +58,13 @@ public interface IOAuthGrantRepository
     /// <summary>The unrevoked grants of <paramref name="subjectId"/>, of every type, newest first.</summary>
     Task<IReadOnlyList<OAuthGrantRecord>> GetActiveForSubjectAsync(Guid subjectId, CancellationToken ct);
 
+    /// <summary>
+    /// The unrevoked grants of <paramref name="subjectId"/> and, in any state and of any subject, the
+    /// grants <paramref name="writerIds"/> name, newest first.
+    /// </summary>
+    Task<IReadOnlyList<OAuthGrantRecord>> ListForConnectionsAsync(
+        Guid? subjectId, IReadOnlyCollection<Guid> writerIds, CancellationToken ct);
+
     /// <summary>The grant <paramref name="grantId"/> owned by <paramref name="ownerSubjectId"/>, in any state.</summary>
     Task<OAuthGrantRecord?> FindOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct);
 

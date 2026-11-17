@@ -164,8 +164,9 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
     {
         var store = StoreName();
         await PostAsync("/api/v1/profile", FlatProfile(store, 1.0, DaysAgo(20)));
-        var careportalAt = At(DaysAgo(15));
-        var aapsAt = At(DaysAgo(15).AddMinutes(1));
+        var start = DaysAgo(15);
+        var careportalAt = At(start);
+        var aapsAt = At(start.AddMinutes(1));
         await PostAsync("/api/v1/treatments", CareportalTemp(careportalAt, -50));
         await PostAsync("/api/v1/treatments", AapsTemp(aapsAt, -30, 0.7));
         (await StoredAtAsync(careportalAt)).Rate.Should().BeApproximately(0.5, 1e-9);
@@ -253,8 +254,9 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
     public async Task ARateWriteRacingAnEdit_LeavesTheEditStanding()
     {
         await PostAsync("/api/v1/profile", FlatProfile(StoreName(), 1.0, DaysAgo(3)));
-        var resolvedAt = At(DaysAgo(1));
-        var uploadedAt = At(DaysAgo(1).AddMinutes(1));
+        var start = DaysAgo(1);
+        var resolvedAt = At(start);
+        var uploadedAt = At(start.AddMinutes(1));
         await PostAsync("/api/v1/treatments", CareportalTemp(resolvedAt, -50));
         await PostAsync("/api/v1/treatments", AapsTemp(uploadedAt, -30, 0.7));
         var resolved = await StoredAtAsync(resolvedAt);

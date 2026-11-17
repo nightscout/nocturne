@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
 
@@ -61,21 +62,29 @@ public static class PreBolusSplit
     public static long OffsetMillis(double preBolus) => (long)Math.Round(preBolus * 60_000);
 
     public static bool IsMealEventType(string? eventType) =>
-        string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
+        string.Equals(eventType, TreatmentTypes.MealBolus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, TreatmentTypes.SnackBolus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase);
 
-    private static IReadOnlyList<Treatment> Split(Treatment treatment, Func<Treatment, string?> carbsIdOf)
+    /// <summary>Whether <see cref="Split"/> changes <paramref name="treatment"/> once it has an id.</summary>
+    public static bool Applies(Treatment treatment) => CarbsAt(treatment) is not null;
+
+    private static long? CarbsAt(Treatment treatment)
     {
         if (!IsMealEventType(treatment.EventType?.Trim())
             || treatment.Carbs is not > 0
             || treatment.PreBolus is not { } preBolus || preBolus == 0
             || !(Math.Abs(preBolus) <= MaxPreBolusMinutes)
             || treatment.Mills <= 0)
-            return [treatment];
+            return null;
 
         var carbsAt = treatment.Mills + OffsetMillis(preBolus);
-        if (carbsAt <= 0 || carbsAt > MaxMills || carbsIdOf(treatment) is not { } carbsId)
+        return carbsAt <= 0 || carbsAt > MaxMills ? null : carbsAt;
+    }
+
+    private static IReadOnlyList<Treatment> Split(Treatment treatment, Func<Treatment, string?> carbsIdOf)
+    {
+        if (CarbsAt(treatment) is not { } carbsAt || carbsIdOf(treatment) is not { } carbsId)
             return [treatment];
 
         if (treatment.Insulin is not > 0)

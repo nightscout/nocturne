@@ -6,10 +6,12 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Xunit.Abstractions;
 using V4Models = Nocturne.Core.Models.V4;
@@ -31,6 +33,7 @@ public class LegacyTreatmentIdWriteIntegrationTests : ApiIntegrationTestBase
 
     private static readonly DateTimeOffset TimeBase = DateTimeOffset.UtcNow.AddMinutes(-90);
     private static int _timeSlot;
+    private static int _mealHour;
 
     private static DateTimeOffset DistinctTime() => DateTimeOffset.FromUnixTimeMilliseconds(
         TimeBase.AddMilliseconds(-1_001L * Interlocked.Increment(ref _timeSlot)).ToUnixTimeMilliseconds());
@@ -57,6 +60,12 @@ public class LegacyTreatmentIdWriteIntegrationTests : ApiIntegrationTestBase
     {
         "Meal Bolus", "Correction Bolus", "Carb Correction", "BG Check", "Note", "Site Change",
         "Temp Basal", "Bolus Wizard", "Temporary Target", "Temporary Override", "Profile Switch",
+    };
+
+    /// <summary>The types whose stored records keep the sync identifier a client uploaded; a state span, a profile activation and a temp basal do not.</summary>
+    public static TheoryData<string> SyncKeyedTreatmentTypes => new()
+    {
+        "Meal Bolus", "Correction Bolus", "Carb Correction", "BG Check", "Note", "Site Change", "Bolus Wizard",
     };
 
     private static Dictionary<string, object> Upload(string eventType, DateTimeOffset at, string? syncIdentifier)
@@ -153,6 +162,84 @@ public class LegacyTreatmentIdWriteIntegrationTests : ApiIntegrationTestBase
 
         delete.IsSuccessStatusCode.Should().BeTrue(await delete.Content.ReadAsStringAsync());
         (await TreatmentsAtAsync(at)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [MemberData(nameof(SyncKeyedTreatmentTypes))]
+    public async Task Put_WithOnlyTheSyncIdentifierOfATreatmentTheUserDeleted_SavesNothing(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var at = DistinctTime();
+        var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var posted = Upload(eventType, at, syncIdentifier);
+        posted["_id"] = $"client-{Guid.NewGuid():N}";
+        var id = await PostForIdAsync(client, posted);
+        (await client.DeleteAsync($"/api/v1/treatments/{id}")).IsSuccessStatusCode.Should().BeTrue();
+        (await TreatmentsAtAsync(at)).Should().BeEmpty();
+
+        var put = await client.PutAsJsonAsync("/api/v1/treatments", Upload(eventType, at, syncIdentifier));
+
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        (await put.Content.ReadFromJsonAsync<JsonElement>()).GetArrayLength().Should().Be(0);
+        (await TreatmentsAtAsync(at)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [MemberData(nameof(SyncKeyedTreatmentTypes))]
+    public async Task Put_WithOnlyASyncIdentifierNoTreatmentWasStoredUnder_CreatesTheTreatment(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var at = DistinctTime();
+        var deletedAt = DistinctTime();
+        var deletedSyncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var id = await PostForIdAsync(client, Upload(eventType, deletedAt, deletedSyncIdentifier));
+        (await client.DeleteAsync($"/api/v1/treatments/{id}")).IsSuccessStatusCode.Should().BeTrue();
+
+        var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var put = await client.PutAsJsonAsync("/api/v1/treatments", Upload(eventType, at, syncIdentifier));
+
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        (await TreatmentsAtAsync(at)).Should().Contain(t => t.SyncIdentifier == syncIdentifier);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ASyncIdentifierIsHeldAgainstAResendOnlyByADeleteTheUserMade(bool systemDelete)
+    {
+        var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var stored = await WithTenantScopeAsync(sp => sp.GetRequiredService<ICarbIntakeRepository>().CreateAsync(
+            new V4Models.CarbIntake
+            {
+                Timestamp = DistinctTime().UtcDateTime,
+                LegacyId = $"client-{Guid.NewGuid():N}",
+                SyncIdentifier = syncIdentifier,
+                DataSource = "test",
+                Carbs = 12.0,
+            }, WriteOrigin.Live));
+
+        (await WithTenantScopeAsync(sp => sp.GetRequiredService<ICarbIntakeRepository>().IsDeletedByUserAsync(syncIdentifier)))
+            .Should().BeFalse("a live record holds nothing against a re-send");
+
+        if (systemDelete)
+        {
+            await using var scope = TenantJobScope.Open(
+                Fixture.Services,
+                new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false),
+                "test:sweep");
+            await scope.ServiceProvider.GetRequiredService<ICarbIntakeRepository>().DeleteAsync(stored.Id, WriteOrigin.Live);
+        }
+        else
+        {
+            await WithTenantScopeAsync(async sp =>
+            {
+                await sp.GetRequiredService<ICarbIntakeRepository>().DeleteAsync(stored.Id, WriteOrigin.Live);
+                return true;
+            });
+        }
+
+        (await WithTenantScopeAsync(sp => sp.GetRequiredService<ICarbIntakeRepository>().IsDeletedByUserAsync(syncIdentifier)))
+            .Should().Be(!systemDelete);
     }
 
     [Fact]
@@ -352,4 +439,39 @@ public class LegacyTreatmentIdWriteIntegrationTests : ApiIntegrationTestBase
     }
 
     #endregion
+
+    [Theory]
+    [InlineData("/api/v1/treatments", true)]
+    [InlineData("/api/v1/treatments", false)]
+    [InlineData("/api/v1/treatments/{id}", true)]
+    public async Task APreBolusMealPostedThenPutAsOneRecord_HoldsOneCarbIntakeAtTheOffset(string route, bool withId)
+    {
+        var client = CreateAuthenticatedClient();
+        var at = DistinctTime().AddHours(-3 - Interlocked.Increment(ref _mealHour));
+        var id = Guid.NewGuid().ToString("N")[..24];
+        var meal = new Dictionary<string, object>
+        {
+            ["eventType"] = "Meal Bolus",
+            ["created_at"] = Iso(at),
+            ["carbs"] = 30,
+            ["insulin"] = 2.0,
+            ["preBolus"] = 15,
+        };
+        if (withId)
+            meal["_id"] = id;
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", new[] { meal })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var put = await client.PutAsJsonAsync(route.Replace("{id}", id), meal);
+
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var (boluses, carbs) = await WithTenantScopeAsync(async sp => (
+            await sp.GetRequiredService<IBolusRepository>().GetAsync(
+                at.UtcDateTime.AddMinutes(-1), at.UtcDateTime.AddMinutes(30), device: null, source: null),
+            await sp.GetRequiredService<ICarbIntakeRepository>().GetAsync(
+                at.UtcDateTime.AddMinutes(-1), at.UtcDateTime.AddMinutes(30), device: null, source: null,
+                limit: 10, offset: 0, descending: true)));
+        boluses.Should().ContainSingle().Which.Timestamp.Should().Be(at.UtcDateTime);
+        var carb = carbs.Should().ContainSingle("one meal holds one carb intake").Which;
+        (carb.Timestamp, carb.Carbs).Should().Be((at.UtcDateTime.AddMinutes(15), 30.0));
+    }
 }

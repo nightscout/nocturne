@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -248,6 +249,37 @@ public class MemberInviteServiceTests : IDisposable
         result.ErrorCode.Should().Be("exhausted");
         (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _acceptorSubjectId))
             .Should().BeFalse("a refused claim writes no membership");
+    }
+
+    /// <summary>
+    /// Invite-complete accepts before the invitee has a session, so the scope names no caller: the
+    /// invitee is the actor and the invite the cause.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInviteAsync_AuditsTheRoleThePermissionsAndTheLimitAsTheInviteesOwnAct()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            directPermissions: [Scope.DevicesRead],
+            limitTo24Hours: true);
+        var inviteId = (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).Id;
+        _dbContext.ActingAs(new TestAuditActor { AuthType = nameof(AuthType.None) });
+
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+
+        result.Success.Should().BeTrue();
+        var rows = await _dbContext.AuthAuditLog.AsNoTracking().Where(a => a.TargetSubjectId == _acceptorSubjectId).ToListAsync();
+        rows.Should().OnlyContain(a => a.ActorSubjectId == _acceptorSubjectId && a.ActorCredential == null
+            && a.TenantId == _tenantId);
+        rows.Select(a => (a.EventType, a.DetailsJson)).Should().BeEquivalentTo(new[]
+        {
+            (AuthAuditEventType.RoleAssigned, $$"""{"role":"follower","kind":"tenant","invite":"{{inviteId}}"}"""),
+            (AuthAuditEventType.RoleAssigned, $$"""{"permission":"devices.read","kind":"tenant","invite":"{{inviteId}}"}"""),
+            (AuthAuditEventType.HistoryLimitChanged, $$"""{"history_limit":"24_hours","kind":"tenant","invite":"{{inviteId}}"}"""),
+        });
     }
 
     /// <summary>

@@ -24,7 +24,19 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>). A lifted statement may also be a read
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
-/// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>).
+/// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),
+/// and the restore's check of the unique keys a restored row would take
+/// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant.
+/// <para>
+/// A user's delete or restore of a record the clamp shows its caller reaches every copy in the
+/// record's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>), so the copies the clamp hides
+/// are read and written by id: tracked by <see cref="DuplicateGroupPrimaries.HiddenRowsAsync{TEntity}"/>
+/// and <see cref="DuplicateGroupPrimaries.SaveHiddenAsync{TEntity}"/>, and by statement in the bulk
+/// delete (<see cref="AuditedBulkDeleteExtensions"/>). The ids come from the links of the record the
+/// caller named, which it could read. What either gives back or broadcasts is only what the caller's
+/// clamped context reads. Each hidden copy written gets the audit row a shown one gets, in
+/// <c>mutation_audit_log</c>, which is read under its own permission and not clamped.
+/// </para>
 /// Its callers are pinned by <c>HistoryClampLiftAllowlistTests</c>.
 /// <para>
 /// The transaction it opens is retried with no <c>verifySucceeded</c>: a commit that reported failure

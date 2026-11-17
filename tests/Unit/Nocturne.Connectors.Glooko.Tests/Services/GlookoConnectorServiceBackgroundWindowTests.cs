@@ -23,6 +23,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
     private static readonly FakeTimeProvider Clock = new(Instant);
     private static readonly string Completed = GlookoConstants.FullWalkCursorResource;
     private static readonly string Attempted = GlookoConstants.FullWalkAttemptCursorResource;
+    private static readonly string LookbackRead = GlookoConstants.LookbackReadCursorResource;
 
     /// <summary>
     /// The harness serves the state-span, temp-basal, device-event and profile feeds; the rest of
@@ -77,7 +78,9 @@ public class GlookoConnectorServiceBackgroundWindowTests
         Parse(handler.Windows[0].Start).Should().Be(
             Instant.UtcDateTime.AddMonths(-GlookoConstants.FullWalkMonths).AddDays(-1));
 
-        store.Saved.Keys.Should().BeEquivalentTo([Completed, Attempted]);
+        store.Saved.Keys.Should().BeEquivalentTo([Completed, Attempted, LookbackRead]);
+        store.Saved[LookbackRead].LastUpdatedAt.Should().Be(
+            FullWalkSchedule.Stamp(Instant), "a completed walk covers the lookback too");
         store.Saved[Completed].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
         store.Saved[Attempted].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
         FullWalkSchedule.IsDue(store.Saved[Completed].LastUpdatedAt, GlookoConstants.FullWalkInterval, Instant)
@@ -87,27 +90,108 @@ public class GlookoConnectorServiceBackgroundWindowTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ScheduledRun_InsideTheInterval_ReachesBackOnlyTheLookback(bool useV3Api)
+    public async Task ScheduledRun_InsideTheLookbackInterval_ReachesBackOnlyTheShortWindow(bool useV3Api)
     {
         var handler = new GlookoEndpointHandler();
-        var seeded = StampAgo(TimeSpan.FromMinutes(30));
-        var store = StoreWith((Completed, seeded));
-        var config = ScheduledConfig(useV3Api);
+        var walked = StampAgo(TimeSpan.FromMinutes(30));
+        var read = StampAgo(TimeSpan.FromMinutes(5));
+        var store = StoreWith((Completed, walked), (LookbackRead, read));
         var service = Service(handler, cursorStore: store);
 
-        var result = await Scheduled(service, config);
+        var result = await Scheduled(service, ScheduledConfig(useV3Api));
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(1);
+        Parse(handler.Windows[0].Start).Should().Be(
+            Instant.UtcDateTime - GlookoConstants.ShortWindow - TimeSpan.FromDays(1));
+        store.Saved.Should().HaveCount(2);
+        store.Saved[Completed].Should().BeSameAs(walked, "a short run leaves the stamps alone");
+        store.Saved[LookbackRead].Should().BeSameAs(read, "a short run leaves the stamps alone");
+        service.Published.Should().Contain(PublishKind.StateSpans);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ScheduledRun_OnceTheLookbackIntervalHasElapsed_ReachesBackTheLookbackAndRecordsIt(bool useV3Api)
+    {
+        var handler = new GlookoEndpointHandler();
+        var walked = StampAgo(TimeSpan.FromMinutes(30));
+        var store = StoreWith(
+            (Completed, walked),
+            (LookbackRead, StampAgo(GlookoConstants.LookbackReadInterval + TimeSpan.FromMinutes(1))));
+        var config = ScheduledConfig(useV3Api);
+
+        var result = await Scheduled(Service(handler, cursorStore: store), config);
 
         result.Success.Should().BeTrue();
         // The lookback plus the day of padding on each side is one chunk.
         handler.WindowCount.Should().Be(1);
         Parse(handler.Windows[0].Start).Should().Be(Instant.UtcDateTime.AddDays(-config.LookbackDays - 1));
-        store.Saved.Should().HaveCount(1);
-        store.Saved[Completed].Should().BeSameAs(seeded, "an incremental run leaves the stamps alone");
-        service.Published.Should().Contain(PublishKind.StateSpans);
+        store.Saved[LookbackRead].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
+        store.Saved[Completed].Should().BeSameAs(walked, "a lookback read is not a walk");
+        store.Saved.Should().NotContainKey(Attempted);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task ScheduledRun_AtTheLookbackIntervalBoundary_ReadsTheLookbackOnlyOnceItHasElapsed(
+        long ticksShort, bool lookback)
+    {
+        var handler = new GlookoEndpointHandler();
+        var config = ScheduledConfig();
+        var store = StoreWith(
+            (Completed, StampAgo(TimeSpan.FromMinutes(30))),
+            (LookbackRead, StampAgo(GlookoConstants.LookbackReadInterval - TimeSpan.FromTicks(ticksShort))));
+
+        await Scheduled(Service(handler, cursorStore: store), config);
+
+        var reach = lookback ? TimeSpan.FromDays(config.LookbackDays) : GlookoConstants.ShortWindow;
+        Parse(handler.Windows[0].Start).Should().Be(Instant.UtcDateTime - reach - TimeSpan.FromDays(1));
+    }
+
+    /// <summary>
+    /// A lookback read whose chunk fails has not covered its window, so it is not recorded and the
+    /// next cycle reads the lookback again rather than waiting out the interval.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledRun_WhenTheLookbackReadFails_ReadsTheLookbackAgainNextCycle()
+    {
+        var config = ScheduledConfig();
+        var stale = StampAgo(GlookoConstants.LookbackReadInterval + TimeSpan.FromMinutes(1));
+        var store = StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))), (LookbackRead, stale));
+
+        var failed = await Scheduled(
+            Service(new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]), cursorStore: store),
+            config);
+
+        failed.Success.Should().BeFalse();
+        store.Saved[LookbackRead].Should().BeSameAs(stale);
+
+        var next = new GlookoEndpointHandler();
+        await Scheduled(Service(next, cursorStore: store), config);
+
+        Parse(next.Windows[0].Start).Should().Be(Instant.UtcDateTime.AddDays(-config.LookbackDays - 1));
+        store.Saved[LookbackRead].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
     }
 
     [Fact]
-    public async Task ScheduledRun_InsideTheInterval_HonoursAWiderLookback()
+    public async Task ScheduledRun_WhenTheLookbackReadIsCancelled_DoesNotRecordIt()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var store = StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))));
+        var service = Service(new GlookoEndpointHandler(), cursorStore: store);
+        await cancellation.CancelAsync();
+
+        var run = () => service.SyncDataAsync(ScheduledConfig(), cancellation.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+        store.Saved.Should().NotContainKey(LookbackRead);
+    }
+
+    [Fact]
+    public async Task ScheduledRun_OnTheLookbackTier_HonoursAWiderLookback()
     {
         var handler = new GlookoEndpointHandler();
         var config = ScheduledConfig();

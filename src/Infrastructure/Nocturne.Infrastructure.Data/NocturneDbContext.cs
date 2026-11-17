@@ -912,6 +912,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             StripNulCharacters(entry, isAdded, isRelational, ReportTruncation);
             ApplyUpstreamFingerprint(entry);
             ApplyWrittenLive(entry);
+            if (isAdded && entry.Entity is IWriterStamped { WriterGrantId: null } written)
+                written.WriterGrantId = AuditContext?.WriterGrantId;
 
             // Update timestamps are stamped on insert and on real modifications only. An
             // unchanged tracked row is left alone rather than rewritten on every save, and a row

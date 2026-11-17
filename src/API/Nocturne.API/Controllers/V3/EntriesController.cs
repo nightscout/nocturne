@@ -491,34 +491,20 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetEntryHistory(
+    public Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 entry history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var page = await _entryService.GetEntriesModifiedSinceAsync(
+        =>
+        CreateV3HistoryResponseAsync(
+            "entry",
             lastModified,
             limit,
-            cancellationToken
+            (since, take) =>
+                _entryService.GetEntriesModifiedSinceAsync(since, take, cancellationToken),
+            records => records.ToV3Responses().ToList()
         );
-
-        if (page.CursorMills is { } cursor)
-        {
-            SetHistoryCursorHeaders(cursor);
-        }
-
-        var v3Entries = page.Records.ToV3Responses().ToList();
-        return CreateV3SuccessResponse(v3Entries);
-    }
 
     #region Helper Methods
 

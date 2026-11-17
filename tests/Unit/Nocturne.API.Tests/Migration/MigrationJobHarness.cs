@@ -113,7 +113,9 @@ internal static class MigrationJobHarness
 
     /// <summary>
     /// <paramref name="onCreated"/> receives the job before it starts, so a test's stub source can
-    /// cancel it mid-fetch the way the user's Cancel button does.
+    /// cancel it mid-fetch the way the user's Cancel button does. The range is read as one part
+    /// unless <paramref name="readFirst"/> is given: most stub sources here ignore the date filter,
+    /// and what they test is how one part is paged.
     /// </summary>
     public static async Task<MigrationJobStatus> RunAsync(
         IServiceProvider provider,
@@ -125,7 +127,8 @@ internal static class MigrationJobHarness
         Guid? tenantId = null,
         TimeProvider? time = null,
         DateTime? startDate = null,
-        DateTime? endDate = null)
+        DateTime? endDate = null,
+        TimeSpan? readFirst = null)
     {
         var tenant = owner ?? NewTenant(tenantId);
 
@@ -149,7 +152,10 @@ internal static class MigrationJobHarness
             tenant,
             logger ?? NullLogger.Instance,
             provider,
-            time ?? TimeProvider.System);
+            time ?? TimeProvider.System)
+        {
+            ReadFirst = readFirst,
+        };
 
         onCreated?.Invoke(job);
 

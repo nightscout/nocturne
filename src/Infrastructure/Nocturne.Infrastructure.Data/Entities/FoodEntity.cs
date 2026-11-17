@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.Food
 /// </summary>
 [Table("foods")]
-public class FoodEntity : ITenantScoped, IAuditable, ISystemTimestamped, ISoftDeletable
+public class FoodEntity : ITenantScoped, IAuditable, ISystemTimestamped, ISoftDeletable, IOriginalIdentified
 {
     /// <summary>
     /// Identifier of the tenant this food belongs to

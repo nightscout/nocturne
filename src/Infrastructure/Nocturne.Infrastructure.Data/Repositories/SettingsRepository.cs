@@ -362,12 +362,10 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken
     )
     {
-        var entity = await settings.FirstOrDefaultAsync(s => s.OriginalId == id, cancellationToken);
-
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await settings.FirstOrDefaultAsync(s => s.Id == guid, cancellationToken);
-        }
+        var entity = await settings.FirstOrDefaultAsync(
+            RecordIdKey.Matching<SettingsEntity>(id),
+            cancellationToken
+        );
 
         return entity ?? await settings.FirstOrDefaultAsync(s => s.Key == id, cancellationToken);
     }

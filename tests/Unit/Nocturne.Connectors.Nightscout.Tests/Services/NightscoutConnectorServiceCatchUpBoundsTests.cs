@@ -184,6 +184,104 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
         handler.CrawlOf(collection).Should().Contain(LowerBound(newest - CatchUpOverlap));
     }
 
+    /// <summary>
+    /// A history limit bounds what an open-ended sync reads, the first crawl of a family with
+    /// nothing stored included: without it that crawl reads the whole source whatever was chosen.
+    /// </summary>
+    [Theory]
+    [InlineData(SyncDataType.Boluses, "treatments")]
+    [InlineData(SyncDataType.DeviceStatus, "devicestatus")]
+    [InlineData(SyncDataType.Activity, "activity")]
+    public async Task SyncDataAsync_WithAHistoryLimitAndNothingStored_CrawlsNoFurtherBackThanTheLimit(
+        SyncDataType dataType, string collection)
+    {
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: null);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [dataType] },
+            NewConfig(historyDays: 30),
+            CancellationToken.None);
+
+        LowerBoundOf(handler.CrawlOf(collection)).Should().BeCloseTo(
+            DateTime.UtcNow.AddDays(-30) - WallClockEnvelope, TimeSpan.FromMinutes(1));
+    }
+
+    /// <summary>A resume point inside the limit is the nearer bound, so the limit leaves it alone.</summary>
+    [Fact]
+    public async Task SyncDataAsync_WithAHistoryLimit_StillResumesFromANewerWatermark()
+    {
+        var watermark = DateTime.UtcNow.AddDays(-2);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.DeviceStatus] },
+            NewConfig(historyDays: 30),
+            CancellationToken.None);
+
+        handler.CrawlOf("devicestatus").Should().Contain(LowerBound(watermark - CatchUpOverlap));
+    }
+
+    /// <summary>
+    /// The limit shortens the first backfill, not a catch-up. A connector that was off for longer
+    /// than the limit resumes from its newest stored record, or the days between that record and
+    /// the limit are skipped with nothing recording them as owed.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WithAHistoryLimit_CatchesUpFromAWatermarkOlderThanTheLimit()
+    {
+        var watermark = DateTime.UtcNow.AddDays(-45);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.DeviceStatus] },
+            NewConfig(historyDays: 30),
+            CancellationToken.None);
+
+        handler.CrawlOf("devicestatus").Should().Contain(LowerBound(watermark - CatchUpOverlap));
+    }
+
+    /// <summary>A saved value outside the choices offered is no limit, not a date the calendar cannot hold.</summary>
+    [Fact]
+    public async Task SyncDataAsync_WithAHistoryLimitNoChoiceOffers_ReadsTheWholeHistory()
+    {
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: null);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.DeviceStatus] },
+            NewConfig(historyDays: 3_000_000),
+            CancellationToken.None);
+
+        handler.CrawlOf("devicestatus").Should().NotContain("$gte");
+    }
+
+    /// <summary>A range named at both ends is a deliberate re-import, so it reaches past the limit.</summary>
+    [Fact]
+    public async Task SyncDataAsync_WithAHistoryLimit_AnswersAnExplicitRangeAsGiven()
+    {
+        var askedFrom = DateTime.UtcNow.AddDays(-400);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: null);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = askedFrom, To = askedFrom.AddDays(7), DataTypes = [SyncDataType.DeviceStatus] },
+            NewConfig(historyDays: 30),
+            CancellationToken.None);
+
+        handler.CrawlOf("devicestatus").Should().Contain(LowerBound(askedFrom));
+    }
+
+    private static DateTime LowerBoundOf(string request)
+    {
+        const string marker = "find[created_at][$gte]=";
+        var value = request[(request.IndexOf(marker, StringComparison.Ordinal) + marker.Length)..].Split('&')[0];
+        return DateTime.Parse(
+            value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
+    }
+
     /// <summary>Overlap the shared catch-up calculation subtracts to absorb clock drift.</summary>
     private static readonly TimeSpan CatchUpOverlap = TimeSpan.FromMinutes(5);
 
@@ -196,10 +294,12 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     private static string LowerBound(DateTime from) =>
         $"find[created_at][$gte]={from - WallClockEnvelope:o}";
 
-    private static NightscoutConnectorConfiguration NewConfig() => new()
+    private static NightscoutConnectorConfiguration NewConfig(
+        int historyDays = NightscoutConnectorConfiguration.WholeHistory) => new()
     {
         Url = "https://ns.example",
         ApiSecret = "secret",
+        HistoryDays = historyDays,
     };
 
     private static NightscoutConnectorService NewService(

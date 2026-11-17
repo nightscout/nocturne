@@ -63,7 +63,7 @@ public class ActivityController : ControllerBase
     /// <remarks>
     /// Like Nightscout, <c>find[...]</c> filters narrow the result, a find that bounds neither
     /// <c>created_at</c> nor <c>dateString</c> reads only the last four days, and the result is
-    /// unlimited unless <paramref name="count"/> is given, up to the merged read cap.
+    /// unlimited unless a nonzero <paramref name="count"/> is given, up to the merged read cap.
     /// The scope requirement is an OR because the response merges four storages, each with its own
     /// read scope. Admission means the caller holds at least one of those categories;
     /// <see cref="ActivityReadScopeGuard"/> then removes the records whose category the caller does
@@ -92,10 +92,10 @@ public class ActivityController : ControllerBase
                 skip = 0; // Normalize to 0 for Nightscout compatibility
             }
 
-            // An empty array covers both a 0-or-negative count (Nightscout behavior) and a page
+            // An empty array covers both a negative count (Nightscout behavior) and a page
             // starting past the merged paging window.
             var pageCount = LegacyReadLimits.ClampMergedPage(
-                count ?? LegacyReadLimits.MaxMergedCount, skip);
+                LegacyReadLimits.ZeroAsAbsent(count) ?? LegacyReadLimits.MaxMergedCount, skip);
             if (pageCount <= 0)
             {
                 return Ok(Array.Empty<Activity>());

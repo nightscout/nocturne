@@ -25,6 +25,7 @@
   import { isGlucoseUnits } from "#lib/utils/formatting.js";
   import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import { startOrResumeMigration } from "./migration-session";
+  import { watchImport } from "#lib/migration/background-import.svelte.js";
   import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
   import type {
     UploaderApp,
@@ -412,6 +413,8 @@
       migrationJobId = undefined;
       importResult = null;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
+      // The app follows the run from here, whichever way setup is left.
+      if (migrationJobId) watchImport(migrationJobId);
     } catch (err) {
       // Every 400 from start-from-connector means the saved connector is missing or has no URL.
       migrationStartError =
@@ -419,6 +422,18 @@
           ? "Your Nightscout connection is not saved yet."
           : describeSubmitError(err, "Could not start the import. Try again.");
     }
+  }
+
+  // The recent data is in, so the app has something to show: setup ends on the dashboard, where
+  // the app's own notice follows the rest of the run. Where the server cannot record setup as
+  // finished, the finish step says the same and offers the retry.
+  async function handleRecentDataReady() {
+    const result = await markSetupComplete().catch(() => undefined);
+    if (!result?.completed) {
+      goToFinish();
+      return;
+    }
+    await goto(resolve(""), { refreshAll: true });
   }
 
   // Counts the runs this visit to the step has watched, so a retry mounts a fresh ImportProgress.
@@ -656,6 +671,7 @@
                   onProgressChange={(pct) => importProgress = pct}
                   onResult={(result) => importResult = result}
                   onSettled={() => importSettled = true}
+                  onRecentReady={handleRecentDataReady}
                   onComplete={goToFinish}
                 />
               {/key}

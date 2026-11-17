@@ -12,4 +12,15 @@ public static class V4ApiLimits
     /// usable. A range with only one bound set is not spanned and is left alone.
     /// </remarks>
     public const int MaxDateSpanDays = 366;
+
+    /// <summary>
+    /// Maximum records reachable across a V4 read that merges several sources in memory before it
+    /// paginates, counting both the page and everything skipped to reach it.
+    /// </summary>
+    /// <remarks>
+    /// Bounds the window rather than the page because such a read over-fetches
+    /// <c>limit + offset</c> records from every source it merges, so clamping <c>limit</c> alone
+    /// would leave the cost proportional to <c>offset</c>. Deeper pages come back empty.
+    /// </remarks>
+    public const int MaxMergedPageWindow = 10_000;
 }

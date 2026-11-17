@@ -620,6 +620,51 @@ public class TreatmentPublisherTests
     }
 
     [Fact]
+    public async Task PublishTempBasalsAsync_ReconcilesAndReclassifiesOnlyTheBatchsOwnSpan()
+    {
+        // A scheduled run that fetched a short window publishes only that window's records, so a
+        // record the full window would have kept, older than the batch, is outside both ranges.
+        DateTime? deleteFrom = null;
+        DateTime? deleteTo = null;
+        _mockTempBasalRepository
+            .Setup(r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, DateTime from, DateTime to, IReadOnlySet<string> _, CancellationToken _) =>
+            {
+                deleteFrom = from;
+                deleteTo = to;
+            })
+            .ReturnsAsync(0);
+
+        long? resolveFrom = null;
+        long? resolveTo = null;
+        _mockBasalRateResolver
+            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Callback((long from, long to, CancellationToken _) =>
+            {
+                resolveFrom = from;
+                resolveTo = to;
+            })
+            .ReturnsAsync((Func<long, double>)(_ => 1.0));
+
+        var first = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
+        var last = first.AddHours(6);
+        var records = new List<TempBasal>
+        {
+            new() { Id = Guid.NewGuid(), LegacyId = "a", StartTimestamp = first, Rate = 0.4, Origin = TempBasalOrigin.Scheduled, DataSource = "glooko-connector" },
+            new() { Id = Guid.NewGuid(), LegacyId = "b", StartTimestamp = last, Rate = 0.4, Origin = TempBasalOrigin.Scheduled, DataSource = "glooko-connector" },
+        };
+
+        await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
+
+        deleteFrom.Should().Be(first);
+        deleteTo.Should().Be(last);
+        resolveFrom.Should().Be(records[0].StartMills);
+        resolveTo.Should().Be(records[1].StartMills + 1);
+    }
+
+    [Fact]
     public async Task PublishTempBasalsAsync_NoOpResolverCall_WhenNoScheduledRecords()
     {
         var ts = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);

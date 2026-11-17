@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -70,16 +71,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private readonly RelativeTempBasalRates _relativeTempBasalRates;
     private readonly IAuditContext _auditContext;
     private readonly ILegacyReadCacheInvalidation? _legacyReads;
-
-    /// <summary>
-    /// Event types that indicate a temp basal treatment (case-insensitive comparison)
-    /// </summary>
-    private static readonly string[] TempBasalEventTypes =
-    [
-        "Temp Basal",
-        "Temp Basal Start",
-        "TempBasal"
-    ];
 
     public TreatmentDecomposer(
         INocturneDbContextFactory contexts,
@@ -262,7 +253,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, "Profile Switch", StringComparison.OrdinalIgnoreCase)
+        else if (string.Equals(eventType, TreatmentTypes.ProfileSwitch, StringComparison.OrdinalIgnoreCase)
               || EffectiveProfileSwitch.Is(treatment))
         {
             isProfileSwitch = true;
@@ -279,7 +270,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             isTemporaryTarget = true;
             delegateToStateSpan = true;
         }
-        else if (eventType != null && TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
+        else if (eventType != null && TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
         {
             produceDeviceEvent = true;
         }
@@ -292,10 +283,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             produceBolus = hasInsulin || !hasCarbs;
             produceCarbIntake = hasCarbs || !hasInsulin;
         }
-        else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
+        else if (string.Equals(eventType, TreatmentTypes.CorrectionBolus, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.Smb, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.AutomaticBolus, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.Bolus, StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
         {
             // As with a meal half, a dose type carrying only carbs is a carb intake, and a Carb
@@ -303,12 +294,12 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             produceBolus = hasInsulin || !hasCarbs;
             produceCarbIntake = hasCarbs;
         }
-        else if (string.Equals(eventType, "Carb Correction", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.CarbCorrection, StringComparison.OrdinalIgnoreCase))
         {
             produceBolus = hasInsulin;
             produceCarbIntake = hasCarbs || !hasInsulin;
         }
-        else if (string.Equals(eventType, "BG Check", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.BgCheck, StringComparison.OrdinalIgnoreCase))
         {
             produceBGCheck = true;
         }
@@ -322,7 +313,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             produceNote = true;
         }
-        else if (string.Equals(eventType, "Bolus Wizard", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.BolusWizard, StringComparison.OrdinalIgnoreCase))
         {
             produceBolusCalc = true;
             // Also produce a Bolus if insulin was delivered
@@ -494,9 +485,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static bool IsAlgorithmBolus(Treatment treatment) =>
         treatment.Automatic == true
         || (treatment.IsBasalInsulin == true && treatment.Insulin > 0)
-        || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
-        || string.Equals(treatment.EventType, "SMB", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(treatment.EventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase);
+        || (string.Equals(treatment.EventType, TreatmentTypes.CorrectionBolus, StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
+        || string.Equals(treatment.EventType, TreatmentTypes.Smb, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(treatment.EventType, TreatmentTypes.AutomaticBolus, StringComparison.OrdinalIgnoreCase);
 
     private static V4Models.TreatmentInsulinContext? ToInsulinContext(V4Models.PatientInsulin? insulin)
         => insulin is null
@@ -989,7 +980,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (string.IsNullOrEmpty(eventType))
             return false;
 
-        return TempBasalEventTypes.Any(
+        return TreatmentTypes.TempBasalEventTypes.Any(
             t => string.Equals(eventType, t, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -1008,7 +999,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// A treatment Nocturne does not store writes nothing and removes nothing, and a bolus or carbs
     /// under a temp basal's id leaves the temp basal (<see cref="Writing"/>).
     /// </remarks>
-    private async Task DropAbsentAsync(
+    /// <returns>The legacy ids that lost rows, whose treatments changed though the rows they keep may not have.</returns>
+    private async Task<HashSet<string>> DropAbsentAsync(
         IReadOnlyList<(Treatment Treatment, TreatmentClassification Classification)> written,
         IReadOnlyDictionary<string, HashSet<Type>> stored,
         IReadOnlyDictionary<string, HashSet<string>> storedSpans,
@@ -1041,7 +1033,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         }
 
         if (tableDrops.Count == 0 && spanDrops.Count == 0)
-            return;
+            return [];
 
         await using var db = await _contexts.CreateAsync(ct);
         List<Guid> deviceEventIds = [];
@@ -1091,6 +1083,27 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         if (origin == WriteOrigin.Live)
             await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
+
+        return [.. tableDrops.Values.SelectMany(ids => ids).Concat(spanDrops)];
+    }
+
+    /// <summary>
+    /// Reports a record whose row a write left as it was as updated when its treatment lost other
+    /// rows (<see cref="DropAbsentAsync"/>), so the treatment is announced as the edit it is.
+    /// </summary>
+    private static void ReportReclassifiedAsUpdated(V4Models.DecompositionResult result, HashSet<string> reclassified)
+    {
+        if (reclassified.Count == 0)
+            return;
+
+        var changed = result.UnchangedRecords
+            .Where(r => r is V4Models.IV4Record { LegacyId: { } id } && reclassified.Contains(id))
+            .ToList();
+        foreach (var record in changed)
+        {
+            result.UnchangedRecords.Remove(record);
+            result.UpdatedRecords.Add(record);
+        }
     }
 
     /// <summary>
@@ -1375,7 +1388,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         using (origin == WriteOrigin.Live ? null : SystemAttributedBatchWrites(_auditContext))
         {
-            await DropAbsentAsync(models.Classified, stored.Kinds(), stored.SpanKeys, origin, ct);
+            var reclassified = await DropAbsentAsync(models.Classified, stored.Kinds(), stored.SpanKeys, origin, ct);
             if (models.AbsentMealCarbs.Count > 0)
                 await DeleteByLegacyIdsAsync([.. models.AbsentMealCarbs.Distinct(StringComparer.Ordinal)], origin, ct);
             foreach (var meal in models.UnkeyedMealCarbs)
@@ -1399,6 +1412,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             await UpsertTableAsync(_deviceEventRepository, models.DeviceEvents, result, TreatmentOf, origin, ct);
             await UpsertTableAsync(_tempBasalRepository, models.TempBasals, result, TreatmentOf, origin, ct);
             await WriteFoodLinesAsync(carbs, models.FoodLines, result, TreatmentOf, ct);
+            ReportReclassifiedAsUpdated(result, reclassified);
 
             var sources = new Dictionary<StateSpan, BatchTreatment>(ReferenceEqualityComparer.Instance);
             FoldPumpSuspensions([.. models.Suspensions.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index))], spans, sources);
