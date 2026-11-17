@@ -1,0 +1,51 @@
+---
+title: Oura
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Oura
+
+Nocturne can import sleep, heart rate and steps from an Oura ring. The data comes from the data
+export that Oura gives every account. You do not need an Oura membership, and Nocturne does not
+connect to your Oura account.
+
+## Importing your Oura data
+
+1. Sign in at [membership.ouraring.com/data-export](https://membership.ouraring.com/data-export)
+   and request a data export. Oura can take some hours to prepare it.
+2. When the export is ready, download the ZIP file. Do not unpack it.
+3. In Nocturne, open **Site settings > Connectors & Apps** and choose **Oura**.
+4. Select the ZIP file and click **Import**.
+
+Nocturne shows how many sleep sessions, heart rate readings and days of steps it imported.
+
+<Callout type="info" title="The import is not automatic">
+
+  Nocturne has the data that was in the export when Oura made it. To add newer data, request a
+  new export and import it. Nocturne updates the records that it already has, so the same night
+  is not imported two times.
+
+</Callout>
+
+## What Nocturne imports
+
+| Data | From the export |
+| --- | --- |
+| Sleep | Each sleep period with its sleep stages, heart rate and heart rate variability, and the daily sleep score and blood oxygen average |
+| Heart rate | Each heart rate reading, day and night |
+| Steps | The step total for each day |
+
+If the export has two heart rate readings for the same instant, Nocturne keeps one.
+
+Nocturne does not import the readiness score, the activity score, skin temperature, stress,
+workouts or tags.
+
+The largest file that Nocturne accepts is 40 MB.
+
+## Deleting imported data
+
+Open **Oura** in **Connectors & Apps** and use the delete option at the bottom of the page. This
+removes the data that came from Oura exports. Your data at Oura does not change.

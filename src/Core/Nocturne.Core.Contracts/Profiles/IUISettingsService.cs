@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Contracts.Profiles;
@@ -29,37 +30,39 @@ public interface IUISettingsService
         where T : class;
 
     /// <summary>
-    /// Saves a specific section of the UI settings.
+    /// Applies an RFC 7386 merge-patch to a section: a present key replaces, <c>null</c> resets to
+    /// the default, an absent key is untouched and a nested object merges. Patches of one section
+    /// run one at a time, so two patches of different fields both land.
     /// </summary>
-    /// <param name="sectionName">
-    /// A <see cref="UISettingsSections"/> name, or <c>alarms</c>/<c>alarmConfiguration</c> for the
-    /// alarm configuration. Reads only ever look under those keys, so any other name would store a
-    /// row nothing can serve.
-    /// </param>
-    /// <returns>The saved section settings</returns>
+    /// <param name="sectionName">A <see cref="UISettingsSections"/> name.</param>
+    /// <param name="patch">A JSON object.</param>
+    /// <returns>The section as stored after the patch</returns>
     /// <exception cref="ArgumentException">
-    /// <paramref name="sectionName"/> names neither a section nor the alarm configuration.
+    /// <paramref name="sectionName"/> names no section, <typeparamref name="T"/> is not its type,
+    /// <paramref name="patch"/> is not an object, or it names a key that is not the JSON name of a
+    /// property of the section (at any depth, exact case) or gives a property a value of the wrong type.
     /// </exception>
-    Task<T> SaveSectionAsync<T>(
+    /// <exception cref="JsonException">The stored row does not fit the section's type.</exception>
+    Task<T> PatchSectionAsync<T>(
         string sectionName,
-        T sectionSettings,
+        JsonElement patch,
         CancellationToken cancellationToken = default
     )
+        where T : class;
+
+    /// <summary>
+    /// The section as <see cref="PatchSectionAsync{T}"/> would return it with <paramref name="patch"/>
+    /// merged over <paramref name="current"/>. Nothing is read or stored.
+    /// </summary>
+    /// <param name="current">The section to patch, or null for the section's defaults.</param>
+    /// <exception cref="ArgumentException">As <see cref="PatchSectionAsync{T}"/>.</exception>
+    T PreviewPatch<T>(string sectionName, T? current, JsonElement patch)
         where T : class;
 
     /// <summary>
     /// Gets the notification settings including alarm configuration.
     /// </summary>
     Task<NotificationSettings> GetNotificationSettingsAsync(
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
-    /// Saves the notification settings including alarm configuration.
-    /// </summary>
-    /// <returns>The saved notification settings</returns>
-    Task<NotificationSettings> SaveNotificationSettingsAsync(
-        NotificationSettings settings,
         CancellationToken cancellationToken = default
     );
 
@@ -78,6 +81,26 @@ public interface IUISettingsService
     /// <returns>The saved alarm configuration</returns>
     Task<UserAlarmConfiguration> SaveAlarmConfigurationAsync(
         UserAlarmConfiguration config,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Adds a profile to the alarm configuration, or replaces the one with the same id. A profile
+    /// with no id is given one. Changes of the alarm configuration run one at a time, so two
+    /// concurrent changes both land.
+    /// </summary>
+    /// <returns>The alarm configuration after the change</returns>
+    Task<UserAlarmConfiguration> AddOrUpdateAlarmProfileAsync(
+        AlarmProfileConfiguration profile,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Removes a profile from the alarm configuration.
+    /// </summary>
+    /// <returns>The alarm configuration after the change, or null if no profile has the id</returns>
+    Task<UserAlarmConfiguration?> DeleteAlarmProfileAsync(
+        string profileId,
         CancellationToken cancellationToken = default
     );
 }

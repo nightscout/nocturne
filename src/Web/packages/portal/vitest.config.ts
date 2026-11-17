@@ -1,17 +1,12 @@
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
-import { resolve } from 'node:path';
-import { appAliases } from './app-aliases';
 
-// Deliberately not the SvelteKit plugin: these suites cover plain modules. The alert simulator's
+// Deliberately not the SvelteKit plugin: these suites cover plain modules, and the Svelte plugin
+// is here only to compile the runes of a `.svelte.ts` module. The alert simulator's
 // adapter imports app modules, and with them the generated API client, which CI generates first.
-// `svelte-kit sync` still has to run first — the package tsconfig extends the one it writes.
+// `svelte-kit sync` still has to run first — the package tsconfig extends `$app/tsconfig`, which it writes.
 export default defineConfig({
-  plugins: [appAliases()],
-  resolve: {
-    alias: {
-      $lib: resolve(import.meta.dirname, 'src/lib'),
-    },
-  },
+  plugins: [svelte()],
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],

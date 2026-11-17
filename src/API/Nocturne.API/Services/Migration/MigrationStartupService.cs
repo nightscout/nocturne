@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -8,22 +10,28 @@ namespace Nocturne.API.Services.Migration;
 
 /// <summary>
 /// Hosted service that checks for a pending MongoDB migration on startup (via the
-/// <c>MIGRATION_MODE</c> environment variable) and creates an admin in-app notification if one is
-/// detected, prompting the admin to initiate the migration via the portal.
+/// <c>MIGRATION_MODE</c> environment variable) and gives each active tenant without a completed run
+/// from the configured source an admin in-app notification, prompting its admin to initiate the
+/// migration via the portal.
 /// </summary>
 /// <seealso cref="IMigrationJobService"/>
 public class MigrationStartupService : IHostedService
 {
+    private const string AuditEndpoint = "service:migration-startup";
+
     private readonly IServiceProvider _serviceProvider;
+    private readonly ActiveTenantSnapshot _activeTenants;
     private readonly IConfiguration _configuration;
     private readonly ILogger<MigrationStartupService> _logger;
 
     public MigrationStartupService(
         IServiceProvider serviceProvider,
+        ActiveTenantSnapshot activeTenants,
         IConfiguration configuration,
         ILogger<MigrationStartupService> logger)
     {
         _serviceProvider = serviceProvider;
+        _activeTenants = activeTenants;
         _configuration = configuration;
         _logger = logger;
     }
@@ -40,45 +48,75 @@ public class MigrationStartupService : IHostedService
 
         _logger.LogInformation("MIGRATION_MODE is set to {Mode}, checking for pending migration", migrationMode);
 
+        var (sourceIdentifier, legacyIdentifier) = GetSourceIdentifiers(migrationMode);
+        if (string.IsNullOrEmpty(sourceIdentifier))
+        {
+            _logger.LogWarning("Could not determine source identifier for migration mode {Mode}", migrationMode);
+            return;
+        }
+
+        IReadOnlyList<ActiveTenant> tenants;
         try
         {
-            using var scope = _serviceProvider.CreateScope();
-            await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
-            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationV1Service>();
-
-            // Get the source identifier based on mode
-            var (sourceIdentifier, legacyIdentifier) = GetSourceIdentifiers(migrationMode);
-            if (string.IsNullOrEmpty(sourceIdentifier))
-            {
-                _logger.LogWarning("Could not determine source identifier for migration mode {Mode}", migrationMode);
-                return;
-            }
-
-            // Check if any successful migration runs exist for this source
-            var hasCompletedRun = await dbContext.MigrationRuns
-                .AnyAsync(r => (r.Source.SourceIdentifier == sourceIdentifier || r.Source.SourceIdentifier == legacyIdentifier)
-                           && r.State == "Completed", cancellationToken);
-
-            if (hasCompletedRun)
-            {
-                _logger.LogDebug("Completed migration run found for source {Source}, no notification needed", sourceIdentifier);
-                return;
-            }
-
-            // Create admin notification for pending migration
-            _logger.LogInformation("No completed migration found for source {Source}, creating admin notification", sourceIdentifier);
-
-            await notificationService.AddAdminNotificationAsync(new AdminNotification
-            {
-                Title = "Migration Available",
-                Message = "Nightscout migration configured - click to import your data",
-                Persistent = false // Will auto-cleanup after 9 hours
-            }, cancellationToken);
+            tenants = await _activeTenants.GetAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking for pending migration on startup");
+            _logger.LogError(ex, "Error listing tenants for the pending migration check");
+            return;
         }
+
+        foreach (var tenant in tenants)
+        {
+            try
+            {
+                await NotifyIfPendingAsync(tenant, sourceIdentifier, legacyIdentifier, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking for pending migration for tenant {TenantId}", tenant.Id);
+            }
+        }
+    }
+
+    private async Task NotifyIfPendingAsync(
+        ActiveTenant tenant,
+        string sourceIdentifier,
+        string? legacyIdentifier,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = TenantJobScope.Open(
+            _serviceProvider,
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+            AuditEndpoint);
+
+        await using var dbContext = await scope.ServiceProvider
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreateAsync(cancellationToken);
+
+        var hasCompletedRun = await dbContext.MigrationRuns
+            .AnyAsync(r => r.TenantId == tenant.Id
+                       && (r.Source.SourceIdentifier == sourceIdentifier || r.Source.SourceIdentifier == legacyIdentifier)
+                       && r.State == "Completed", cancellationToken);
+
+        if (hasCompletedRun)
+        {
+            _logger.LogDebug(
+                "Completed migration run found for tenant {TenantId} and source {Source}, no notification needed",
+                tenant.Id, sourceIdentifier);
+            return;
+        }
+
+        _logger.LogInformation(
+            "No completed migration found for tenant {TenantId} and source {Source}, creating admin notification",
+            tenant.Id, sourceIdentifier);
+
+        await scope.ServiceProvider.GetRequiredService<INotificationV1Service>().AddAdminNotificationAsync(new AdminNotification
+        {
+            Title = "Migration Available",
+            Message = "Nightscout migration configured - click to import your data",
+            Persistent = false // Will auto-cleanup after 9 hours
+        }, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

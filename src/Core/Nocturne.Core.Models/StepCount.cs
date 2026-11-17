@@ -31,8 +31,8 @@ public class StepCount : ProcessableDocumentBase
     [JsonPropertyName("mills")]
     public override long Mills
     {
-        get => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        set => Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(value).UtcDateTime;
+        get => Timestamp.ToMills();
+        set => Timestamp = value.ToUtcDateTime();
     }
 
     /// <summary>

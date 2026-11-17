@@ -1,10 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
 import Harness from "./ChartTextLabelHarness.test.svelte";
-import BasalRateChart from "$lib/components/reports/BasalRateChart.svelte";
-import GlucoseResponseChart from "$lib/components/dashboard/glucose-chart/dialogs/GlucoseResponseChart.svelte";
-import type { PredictionData } from "$api/predictions.remote";
-import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
+import BasalRateChart from "#lib/components/reports/BasalRateChart.svelte";
+import GlucoseResponseChart from "#lib/components/dashboard/glucose-chart/dialogs/GlucoseResponseChart.svelte";
+import type { PredictionData } from "#lib/api/predictions.remote.js";
+import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
 
 /**
  * layerchart's <Text> renders its `value` prop and ignores snippet children, so

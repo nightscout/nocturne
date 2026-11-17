@@ -1,11 +1,11 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Separator } from "$lib/components/ui/separator";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Bug from "@lucide/svelte/icons/bug";
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import Database from "@lucide/svelte/icons/database";
@@ -19,12 +19,13 @@
   import Eye from "@lucide/svelte/icons/eye";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Copy from "@lucide/svelte/icons/copy";
-  import { submitIssue, getFallbackUrl, getSupportDiagnostics } from "$lib/api/support.remote";
-  import { readApiFailures, type ApiFailure } from "$lib/support/api-failure-log";
-  import { buildDiagnosticInfo } from "$lib/support/diagnostic-info";
+  import { submitIssue, getFallbackUrl, getSupportDiagnostics } from "#lib/api/support.remote.js";
+  import { readApiFailures, type ApiFailure } from "#lib/support/api-failure-log.js";
+  import { buildDiagnosticInfo } from "#lib/support/diagnostic-info.js";
   import { page } from "$app/state";
-  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "$api-clients";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "#lib/api/generated/nocturne-api-client.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     open: boolean;
@@ -39,22 +40,22 @@
     { label: string; icon: typeof Bug; description: string }
   > = {
     bug: {
-      label: "Bug Report",
+      label: "Bug report",
       icon: Bug,
-      description: "Report something that isn't working correctly",
+      description: "Report something that is not working correctly",
     },
     feature: {
-      label: "Feature Request",
+      label: "Feature request",
       icon: Lightbulb,
       description: "Suggest a new feature or improvement",
     },
     "data-issue": {
-      label: "Data Issue",
+      label: "Data issue",
       icon: Database,
       description: "Report a problem with CGM data or readings",
     },
     account: {
-      label: "Account / Billing",
+      label: "Account / billing",
       icon: CreditCard,
       description: "Get help with your account or billing",
     },
@@ -299,7 +300,7 @@
 
     lines.push("");
     lines.push("<details>");
-    lines.push("<summary>Diagnostic Info</summary>");
+    lines.push("<summary>Diagnostic info</summary>");
     lines.push("");
     lines.push("```json");
     lines.push(diagnosticInfo);
@@ -320,11 +321,11 @@
 
   async function openFallback() {
     try {
-      const fallback = await getFallbackUrl({
+      const fallback = await fresh(getFallbackUrl({
         template,
         title,
         body: generateBodyMarkdown(),
-      }).run();
+      }));
       if (fallback?.url) {
         window.open(fallback.url, "_blank");
       }
@@ -366,14 +367,14 @@
     {#if formState === "success"}
       <div class="flex flex-col items-center gap-4 py-8">
         <CheckCircle class="h-12 w-12 text-success" />
-        <h3 class="text-lg font-semibold">Issue Submitted!</h3>
+        <h3 class="text-lg font-semibold">Issue submitted</h3>
         {#if useOperatorSupport}
           <p class="text-sm text-muted-foreground text-center">
-            Your issue has been submitted to the support team.
+            Your issue was submitted to the support team.
           </p>
         {:else}
           <p class="text-sm text-muted-foreground text-center">
-            Your issue #{issueNumber} has been created successfully.
+            Your issue #{issueNumber} was created successfully.
           </p>
           <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute GitHub issue URL -->
           <a href={issueUrl} target="_blank" rel="noopener noreferrer">
@@ -388,11 +389,11 @@
     {:else if formState === "error"}
       <div class="flex flex-col items-center gap-4 py-8">
         <AlertTriangle class="h-12 w-12 text-warning" />
-        <h3 class="text-lg font-semibold">Couldn't Create Issue</h3>
+        <h3 class="text-lg font-semibold">Could not create issue</h3>
         <p class="text-sm text-muted-foreground text-center">
-          We've opened a pre-filled GitHub issue form in a new tab as a
-          fallback. You can paste your screenshots there manually. Your entries
-          are kept here if you'd like to try again.
+          A pre-filled GitHub issue form is open in a new tab as a fallback.
+          You can paste your screenshots there manually. Your entries stay here
+          if you want to try again.
         </p>
         <div class="flex items-center gap-2">
           <Button
@@ -443,7 +444,7 @@
         <input
           bind:this={fileInput}
           type="file"
-          name="images[]"
+          name={submitIssue.fields.images.as("file multiple").name}
           accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           class="hidden"
@@ -451,7 +452,7 @@
         />
 
         {#if formState === "idle"}
-          <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+          <div class="@container flex-1 overflow-y-auto space-y-4 pr-1">
             <!-- Title -->
             <div class="space-y-2">
               <Label for="issue-title">Title *</Label>
@@ -482,7 +483,7 @@
             <!-- Bug-specific fields -->
             {#if template === "bug"}
               <div class="space-y-2">
-                <Label for="issue-steps">Steps to Reproduce</Label>
+                <Label for="issue-steps">Steps to reproduce</Label>
                 <Textarea
                   id="issue-steps"
                   bind:value={stepsToReproduce}
@@ -491,18 +492,18 @@
                 />
               </div>
 
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid gap-4 @md:grid-cols-2">
                 <div class="space-y-2">
-                  <Label for="issue-expected">Expected Behavior</Label>
+                  <Label for="issue-expected">Expected behavior</Label>
                   <Textarea
                     id="issue-expected"
                     bind:value={expectedBehavior}
-                    placeholder="What should happen..."
+                    placeholder="What you expected to happen..."
                     rows={2}
                   />
                 </div>
                 <div class="space-y-2">
-                  <Label for="issue-actual">Actual Behavior</Label>
+                  <Label for="issue-actual">Actual behavior</Label>
                   <Textarea
                     id="issue-actual"
                     bind:value={actualBehavior}
@@ -515,9 +516,9 @@
 
             <!-- Data issue-specific fields -->
             {#if template === "data-issue"}
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid gap-4 @md:grid-cols-2">
                 <div class="space-y-2">
-                  <Label for="issue-cgm">CGM Source</Label>
+                  <Label for="issue-cgm">CGM source</Label>
                   <Input
                     id="issue-cgm"
                     bind:value={cgmSource}
@@ -525,7 +526,7 @@
                   />
                 </div>
                 <div class="space-y-2">
-                  <Label for="issue-timerange">Time Range Affected</Label>
+                  <Label for="issue-timerange">Time range affected</Label>
                   <Input
                     id="issue-timerange"
                     bind:value={timeRange}
@@ -553,7 +554,7 @@
               >
                 <Upload class="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                 <p class="text-sm text-muted-foreground">
-                  Drop images here or click to browse
+                  Drop images here or select to browse
                 </p>
                 <p class="text-xs text-muted-foreground mt-1">
                   PNG, JPEG, WebP, GIF - max 10 MB each
@@ -589,15 +590,13 @@
 
             <!-- Debug Info Toggles -->
             <div class="space-y-3">
-              <Label>Diagnostic Info (included automatically)</Label>
+              <Label>Diagnostic info (included automatically)</Label>
               <p class="text-xs text-muted-foreground">
                 Browser, screen size, route, and locale are always included. Toggle
                 additional info below:
               </p>
               <p class="text-xs text-muted-foreground">
-                Your report is filed as a public issue on GitHub. Anything you turn on
-                here is published with it and can be read by anyone — check the preview
-                before you send.
+                Your report is filed as a public issue on GitHub. Anything you enable here is published with it, and anyone can read it. Check the preview before you send.
               </p>
 
               <div class="space-y-3">
@@ -627,13 +626,13 @@
                     <p class="text-xs text-muted-foreground">
                       {recentFailureCount === 0
                         ? "No failed requests recorded this session"
-                        : `${recentFailureCount} failed ${recentFailureCount === 1 ? "request" : "requests"} — time, status, page and message`}
+                        : `${recentFailureCount} failed ${recentFailureCount === 1 ? "request" : "requests"}: time, status, page and message`}
                     </p>
                   </div>
                   <Switch bind:checked={includeRecentLogs} disabled={recentFailureCount === 0} />
                 </div>
 
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-3">
                   <div class="space-y-0.5">
                     <Label>Settings</Label>
                     <p class="text-xs text-muted-foreground">
@@ -656,27 +655,27 @@
               disabled={!isValid}
             >
               <Eye class="h-4 w-4 mr-2" />
-              Preview Issue
+              Preview issue
             </Button>
           </Dialog.Footer>
         {:else if formState === "preview" || formState === "submitting"}
           <!-- Named fields the form submits; mirrors the state edited in the idle step -->
-          <input type="hidden" name="channel" value={useOperatorSupport ? "operator" : "github"} />
-          <input type="hidden" name="template" value={template} />
-          <input type="hidden" name="title" value={title} />
-          <input type="hidden" name="description" value={description} />
+          <input {...submitIssue.fields.channel.as("hidden", useOperatorSupport ? "operator" : "github")} />
+          <input {...submitIssue.fields.template.as("hidden", template)} />
+          <input {...submitIssue.fields.title.as("hidden", title)} />
+          <input {...submitIssue.fields.description.as("hidden", description)} />
           {#if template === "bug"}
-            <input type="hidden" name="stepsToReproduce" value={stepsToReproduce} />
-            <input type="hidden" name="expectedBehavior" value={expectedBehavior} />
-            <input type="hidden" name="actualBehavior" value={actualBehavior} />
+            <input {...submitIssue.fields.stepsToReproduce.as("hidden", stepsToReproduce)} />
+            <input {...submitIssue.fields.expectedBehavior.as("hidden", expectedBehavior)} />
+            <input {...submitIssue.fields.actualBehavior.as("hidden", actualBehavior)} />
           {/if}
           {#if template === "data-issue"}
-            <input type="hidden" name="cgmSource" value={cgmSource} />
-            <input type="hidden" name="timeRange" value={timeRange} />
+            <input {...submitIssue.fields.cgmSource.as("hidden", cgmSource)} />
+            <input {...submitIssue.fields.timeRange.as("hidden", timeRange)} />
           {/if}
-          <input type="hidden" name="diagnosticInfo" value={diagnosticInfo} />
+          <input {...submitIssue.fields.diagnosticInfo.as("hidden", diagnosticInfo)} />
 
-          <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+          <div class="@container flex-1 overflow-y-auto space-y-4 pr-1">
             <div class="space-y-1">
               <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Title</p>
               <h3 class="text-lg font-semibold">{title}</h3>
@@ -693,23 +692,23 @@
               {#if stepsToReproduce.trim()}
                 <Separator />
                 <div class="space-y-1">
-                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Steps to Reproduce</p>
+                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Steps to reproduce</p>
                   <p class="text-sm whitespace-pre-wrap">{stepsToReproduce}</p>
                 </div>
               {/if}
 
               {#if expectedBehavior.trim() || actualBehavior.trim()}
                 <Separator />
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid gap-4 @md:grid-cols-2">
                   {#if expectedBehavior.trim()}
                     <div class="space-y-1">
-                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Expected Behavior</p>
+                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Expected behavior</p>
                       <p class="text-sm whitespace-pre-wrap">{expectedBehavior}</p>
                     </div>
                   {/if}
                   {#if actualBehavior.trim()}
                     <div class="space-y-1">
-                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actual Behavior</p>
+                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actual behavior</p>
                       <p class="text-sm whitespace-pre-wrap">{actualBehavior}</p>
                     </div>
                   {/if}
@@ -719,16 +718,16 @@
 
             {#if template === "data-issue" && (cgmSource.trim() || timeRange.trim())}
               <Separator />
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid gap-4 @md:grid-cols-2">
                 {#if cgmSource.trim()}
                   <div class="space-y-1">
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">CGM Source</p>
+                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">CGM source</p>
                     <p class="text-sm">{cgmSource}</p>
                   </div>
                 {/if}
                 {#if timeRange.trim()}
                   <div class="space-y-1">
-                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Time Range</p>
+                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Time range</p>
                     <p class="text-sm">{timeRange}</p>
                   </div>
                 {/if}
@@ -755,7 +754,7 @@
 
             <details class="group">
               <summary class="text-xs font-medium text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground transition-colors">
-                Diagnostic Info
+                Diagnostic info
               </summary>
               <pre class="mt-2 text-xs bg-muted rounded-md p-3 overflow-x-auto">{diagnosticInfo}</pre>
             </details>
@@ -787,9 +786,9 @@
             >
               {#if formState === "submitting"}
                 <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-                Creating Issue...
+                Creating issue...
               {:else}
-                Submit Issue
+                Submit issue
               {/if}
             </Button>
           </Dialog.Footer>

@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V3;
 /// Parity tests for /api/v3/lastModified endpoint.
 /// Returns last modification timestamps for each collection.
 /// </summary>
+[Collection(ParityShards.One)]
 public class LastModifiedParityTests : ParityTestBase
 {
     public LastModifiedParityTests(ParityTestFixture fixture, ITestOutputHelper output)

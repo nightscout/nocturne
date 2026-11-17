@@ -11,6 +11,7 @@ using Nocturne.Widget.Contracts;
 using Nocturne.Widget.Contracts.Helpers;
 using Windows.Graphics;
 using WinRT.Interop;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Desktop.Tray.Views;
 
@@ -18,7 +19,6 @@ public sealed partial class SettingsWindow : Window
 {
     private readonly SettingsService _settingsService;
     private readonly OidcAuthService _authService;
-    private readonly Dictionary<string, ToggleSwitch> _alarmToggles = [];
     private bool _isLoading;
 
     public event EventHandler? SettingsSaved;
@@ -69,8 +69,6 @@ public sealed partial class SettingsWindow : Window
         UrgentHighBox.Value = isMmol
             ? Round1(GlucoseFormatHelper.ToMmol(s.UrgentHighThreshold))
             : s.UrgentHighThreshold;
-
-        BuildAlarmToggles(s);
 
         _isLoading = false;
     }
@@ -129,25 +127,7 @@ public sealed partial class SettingsWindow : Window
         box.LargeChange = step * 10;
     }
 
-    private static double Round1(double value) => Math.Round(value, 1);
-
-    private void BuildAlarmToggles(TraySettings settings)
-    {
-        AlarmTypesPanel.Children.Clear();
-        _alarmToggles.Clear();
-
-        foreach (var (type, label) in TraySettings.KnownAlarmTypes)
-        {
-            var toggle = new ToggleSwitch
-            {
-                Header = label,
-                IsOn = !settings.DisabledAlarmTypes.Contains(type),
-            };
-
-            _alarmToggles[type] = toggle;
-            AlarmTypesPanel.Children.Add(toggle);
-        }
-    }
+    private static double Round1(double value) => ScaledRounding.Round(value, 1);
 
     private void UpdateAuthStatus()
     {
@@ -219,11 +199,6 @@ public sealed partial class SettingsWindow : Window
             s.HighThreshold = (int)HighBox.Value;
             s.UrgentHighThreshold = (int)UrgentHighBox.Value;
         }
-
-        s.DisabledAlarmTypes = _alarmToggles
-            .Where(kv => !kv.Value.IsOn)
-            .Select(kv => kv.Key)
-            .ToHashSet();
 
         s.StartOnLogin = StartOnLoginToggle.IsOn;
         StartupHelper.SetStartOnLogin(s.StartOnLogin);

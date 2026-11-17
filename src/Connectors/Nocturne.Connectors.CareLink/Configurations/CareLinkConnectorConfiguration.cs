@@ -44,11 +44,4 @@ public class CareLinkConnectorConfiguration : BaseConnectorConfiguration
 
     [ConnectorProperty(ConnectorPropertyKey.PatientId)]
     public string? PatientId { get; init; }
-
-    protected override void ValidateSourceSpecificConfiguration()
-    {
-        if (string.IsNullOrWhiteSpace(Password) && string.IsNullOrWhiteSpace(RefreshToken))
-            throw new ArgumentException(
-                "At least one of Password or RefreshToken must be provided.");
-    }
 }

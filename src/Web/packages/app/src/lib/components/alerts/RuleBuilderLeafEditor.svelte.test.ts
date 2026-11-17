@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
 import { buildBody, defaultPayload, parseRule } from "./types";
-import { AlertConditionType } from "$api-clients";
+import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
 
 describe("RuleBuilderLeafEditor is_active", () => {
 	it("shows a stored leaf missing is_active as off, as the engines read it", async () => {

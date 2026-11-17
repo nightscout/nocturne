@@ -13,7 +13,7 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 /// <remarks>
 /// It decomposes into an effective <see cref="Core.Models.V4.ProfileActivation"/> rather than a
-/// Note, read back as the Note document it was uploaded as (<see cref="LegacyProfileActivationTable"/>).
+/// Note, read back as the Note document it was uploaded as (<see cref="Treatments.LegacyProfileActivationTable"/>).
 /// The activation names the base profile with its percentage and timeshift, as a Profile Switch's
 /// does, and keeps the effective <c>profileJson</c>, which already has them applied, as its snapshot.
 /// </remarks>

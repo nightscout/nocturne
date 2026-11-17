@@ -131,6 +131,12 @@ public class NotificationsController : ControllerBase
     }
 
     /// <inheritdoc cref="IInAppNotificationService.ExecuteActionAsync"/>
+    /// <summary>
+    /// Run an action on one of the caller's own notifications; another user's notification is
+    /// refused. Also accepts <c>device.notify</c>, which every member holding a permission has, but
+    /// with it alone only <c>alert.firing</c> notifications can be acted on; other types need
+    /// <c>alerts.readwrite</c>.
+    /// </summary>
     /// <remarks>
     /// <para>
     /// Accepts <see cref="Scope.DeviceNotify"/> as well as

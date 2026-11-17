@@ -475,9 +475,7 @@ public class TenantIsolationTests
 
         await service.BroadcastTrackerUpdateAsync(
             TrackerRealtimeAction.Create,
-            new TrackerInstanceDto { Id = Guid.NewGuid() },
-            "owner-123",
-            TrackerVisibility.Public
+            new TrackerInstanceDto { Id = Guid.NewGuid() }
         );
 
         dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Once);
@@ -508,8 +506,10 @@ public class TenantIsolationTests
         var (serviceA, _, _, _, _, _, _) = CreateBroadcastService(TenantA, haClientsA);
         var (serviceB, _, _, _, _, _, _) = CreateBroadcastService(TenantB, haClientsB);
 
-        await serviceA.BroadcastDataUpdateAsync(new { from = "A" });
-        await serviceB.BroadcastDataUpdateAsync(new { from = "B" });
+        await serviceA.BroadcastHomeAssistantGlucoseAsync(
+            new Nocturne.Core.Models.V4.GlucoseReadingEvent { Readings = [] });
+        await serviceB.BroadcastHomeAssistantGlucoseAsync(
+            new Nocturne.Core.Models.V4.GlucoseReadingEvent { Readings = [] });
 
         haClientsA.Verify(c => c.Group($"{TenantAId}:ha-glucose"), Times.Once);
         haClientsA.Verify(c => c.Group($"{TenantBId}:ha-glucose"), Times.Never);

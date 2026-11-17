@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services;
 
@@ -65,7 +63,7 @@ public class SupportDiagnosticsService(
     IConnectorHealthService connectorHealth,
     IUISettingsService uiSettings,
     ITherapySettingsResolver therapySettings,
-    INocturneDbContextFactory contextFactory,
+    IAlertRepository alerts,
     ILogger<SupportDiagnosticsService> logger
 ) : ISupportDiagnosticsService
 {
@@ -82,8 +80,7 @@ public class SupportDiagnosticsService(
 
         var statuses = await connectorHealth.GetConnectorStatusesAsync(ct);
 
-        await using var db = await contextFactory.CreateAsync(ct);
-        var alertRuleCount = await db.AlertRules.CountAsync(ct);
+        var alertRuleCount = await alerts.CountRulesAsync(ct);
 
         // The timezone resolver reads the patient record and falls back to the legacy per-profile
         // value; a tenant that has set neither is not an error, so a failure here costs the field
@@ -103,7 +100,7 @@ public class SupportDiagnosticsService(
             GlucoseUnits = settings?.Features.Display.Units,
             TimeFormat = settings?.Features.Display.TimeFormat,
             PatientTimeZone = timeZone,
-            DataSourcePriority = settings?.Devices.CgmConfiguration.DataSourcePriority,
+            DataSourcePriority = settings?.Devices?.CgmConfiguration.DataSourcePriority,
             AlertRuleCount = alertRuleCount,
             Connectors = statuses
                 .Select(s => new SupportConnectorSummary

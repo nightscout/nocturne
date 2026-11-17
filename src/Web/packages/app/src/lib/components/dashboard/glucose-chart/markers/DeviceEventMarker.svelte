@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { DeviceEventIcon } from "$lib/components/icons";
-  import type { DeviceEventType } from "$lib/api";
+  import { DeviceEventIcon } from "#lib/components/icons/index.js";
+  import type { DeviceEventType } from "#lib/api/index.js";
   import { getGlucoseChartContext, markerInk } from "../chart-context.svelte";
 
   interface Props {
@@ -27,6 +27,7 @@
   );
 </script>
 
+<!-- Native g and circle: a layerchart component registers per marker (a day holds tens of device events, hundreds on multi-day views), which mark-registration.svelte.test.ts forbids; Rect measured ~5x slower per element (0.16 vs 0.03 ms). -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <g

@@ -1,17 +1,20 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Slider } from "bits-ui";
+  import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { cssColorToHex } from "#lib/utils/css-color.js";
+  import ColorSwatchInput from "./ColorSwatchInput.svelte";
   import {
     convertToDisplayUnits,
     convertFromDisplayUnits,
     formatGlucoseValue,
     getUnitLabel,
     type GlucoseUnits,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import {
     addColorBoundary,
     insertSliderSteps,
@@ -20,9 +23,10 @@
     resolveColorFocusRange,
     scaleGradient,
     type ColorBoundary,
+    type ColorEnds,
     type ColorFocusRange,
     type MetricScale,
-  } from "$lib/utils/metric-color-focus";
+  } from "#lib/utils/metric-color-focus.js";
 
   let {
     metricLabel,
@@ -33,9 +37,11 @@
     unit = "",
     onWindowChange,
     onBoundariesChange,
+    onEndsChange,
     onDimChange,
     onReset,
     leading,
+    trailing,
   }: {
     metricLabel: string;
     scale: MetricScale;
@@ -47,9 +53,11 @@
     unit?: string;
     onWindowChange: (window: ColorFocusRange | null) => void;
     onBoundariesChange: (boundaries: ColorBoundary[] | null) => void;
+    onEndsChange: (ends: ColorEnds) => void;
     onDimChange: (dim: number) => void;
     onReset: () => void;
     leading?: Snippet;
+    trailing?: Snippet;
   } = $props();
 
   const id = $props.id();
@@ -148,6 +156,19 @@
   /** Null when no boundary fits: at the cap, or the widest gap snaps onto an existing one. */
   const added = $derived(addColorBoundary(scale, snap));
 
+  const lowColor = $derived(rampColor(scale.ramp, 0));
+  const highColor = $derived(rampColor(scale.ramp, 1));
+
+  function colorBoundary(index: number, color: string) {
+    onBoundariesChange(scale.boundaries.map((b, i) => (i === index ? { ...b, color } : b)));
+  }
+
+  function swapEnds(event: MouseEvent) {
+    const host = event.currentTarget;
+    if (!(host instanceof Element)) return;
+    onEndsChange({ low: cssColorToHex(highColor, host), high: cssColorToHex(lowColor, host) });
+  }
+
   function removeBoundary(index: number) {
     const next = scale.boundaries.filter((_, i) => i !== index);
     onBoundariesChange(next.length ? next : null);
@@ -161,11 +182,11 @@
   <div
     class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 @3xl:grid-cols-[auto_minmax(0,1fr)_auto]"
   >
-    <div class="col-start-1 row-start-1 min-w-0">
+    <div class="col-start-1 row-start-1 min-w-0 @max-md:col-span-2">
       {@render leading?.()}
     </div>
 
-    <div class="col-start-2 row-start-1 flex items-center justify-end gap-1.5 @3xl:col-start-3">
+    <div class="col-start-2 row-start-1 flex items-center justify-end gap-1.5 @max-md:col-span-2 @max-md:col-start-1 @max-md:row-start-2 @max-md:justify-start @3xl:col-start-3">
       <label for={id + "-dim"} class="whitespace-nowrap">Dim outside</label>
       <Input
         id={id + "-dim"}
@@ -183,9 +204,10 @@
       <Button variant="outline" size="xs" aria-label={`Reset ${metricLabel} color scale`} onclick={onReset}>
         Reset
       </Button>
+      {@render trailing?.()}
     </div>
 
-    <div class="col-span-2 row-start-2 min-w-0 @3xl:col-span-1 @3xl:col-start-2 @3xl:row-start-1">
+    <div class="col-span-2 row-start-2 min-w-0 @max-md:row-start-3 @3xl:col-span-1 @3xl:col-start-2 @3xl:row-start-1">
       <div class="relative h-8">
         <!-- Each value sits beside its handle, on the outside, and gives way rather than overlap the other. -->
         {#each [0, 1] as const as index (index)}
@@ -267,21 +289,47 @@
         {/snippet}
       </Slider.Root>
 
-      <div class="flex justify-between tabular-nums" aria-hidden="true">
-        <span>{formatted(scale.axis[0])} {unitLabel}</span>
-        <span>{formatted(scale.axis[1])} {unitLabel}</span>
+      <div class="flex items-center justify-between gap-2 tabular-nums">
+        <span class="flex items-center gap-1.5">
+          <ColorSwatchInput
+            color={lowColor}
+            label={`${metricLabel} low end color`}
+            onChange={(low) => onEndsChange({ ...scale.ends, low })}
+          />
+          <span aria-hidden="true">{formatted(scale.axis[0])} {unitLabel}</span>
+        </span>
+        {#if !glucose}
+          <Button
+            variant="ghost-muted"
+            size="xs"
+            aria-label={`Swap ${metricLabel} end colors`}
+            onclick={swapEnds}
+          >
+            <ArrowLeftRight />
+            Swap colors
+          </Button>
+        {/if}
+        <span class="flex items-center gap-1.5">
+          <span aria-hidden="true">{formatted(scale.axis[1])} {unitLabel}</span>
+          <ColorSwatchInput
+            color={highColor}
+            label={`${metricLabel} high end color`}
+            onChange={(high) => onEndsChange({ ...scale.ends, high })}
+          />
+        </span>
       </div>
     </div>
 
     <div
-      class="col-span-2 row-start-3 flex flex-wrap items-center gap-1.5 @3xl:col-span-1 @3xl:col-start-2 @3xl:row-start-2"
+      class="col-span-2 row-start-3 flex @max-md:row-start-4 flex-wrap items-center gap-1.5 @3xl:col-span-1 @3xl:col-start-2 @3xl:row-start-2"
     >
       {#each scale.boundaries as boundary, index (boundary.position)}
         <div class="flex items-center gap-1">
-          <span
-            class="size-2.5 shrink-0 rounded-full bg-(--pin)"
-            style:--pin={rampColor(scale.ramp, boundary.position)}
-          ></span>
+          <ColorSwatchInput
+            color={rampColor(scale.ramp, boundary.position)}
+            label={`${metricLabel} color boundary ${index + 1} color`}
+            onChange={(color) => colorBoundary(index, color)}
+          />
           <Input
             type="number"
             inputmode="decimal"

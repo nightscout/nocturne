@@ -16,7 +16,7 @@ namespace Nocturne.API.Middleware.Handlers;
 /// </summary>
 public class GuestSessionHandler : IAuthHandler
 {
-    private const string CookieName = "nocturne-guest-session";
+    internal const string CookieName = "nocturne-guest-session";
     private const string ProtectorPurpose = "GuestSession";
     private const string InvalidSessionError = "Guest session expired or revoked";
 

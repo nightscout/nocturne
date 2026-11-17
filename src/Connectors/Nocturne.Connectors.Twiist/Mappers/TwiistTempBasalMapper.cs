@@ -22,13 +22,11 @@ public class TwiistTempBasalMapper(ILogger logger)
     /// each interval's delta into an absolute rate. All are <see cref="TempBasalOrigin.Algorithm"/>
     /// — a zero rate here is an algorithm low-temp, not a pump suspension.
     /// </summary>
-    public IEnumerable<TempBasal> MapTempBasals(string? insulinDeliveryBlob, double scheduledRate)
+    public IEnumerable<TempBasal> MapTempBasals(string? insulinDeliveryBlob, double scheduledRate, DateTime now)
     {
         var records = TwiistBlobDecoder.ParseInsulinDeliveryRecords(insulinDeliveryBlob);
         if (records.Count == 0)
             return [];
-
-        var now = DateTime.UtcNow;
 
         return records
             .Where(r => r.End > r.Start)
@@ -55,12 +53,10 @@ public class TwiistTempBasalMapper(ILogger logger)
     /// each Suspend opens a span that the next Resume closes. A Suspend with no following Resume is
     /// still active, so its span is left open (null end).
     /// </summary>
-    public IEnumerable<TempBasal> MapSuspensions(List<TwiistInsulinDose>? doses)
+    public IEnumerable<TempBasal> MapSuspensions(List<TwiistInsulinDose>? doses, DateTime now)
     {
         if (doses == null || doses.Count == 0)
             return [];
-
-        var now = DateTime.UtcNow;
         var spans = new List<TempBasal>();
         DateTime? suspendStart = null;
 

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
   import ChartPie from "@lucide/svelte/icons/chart-pie";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import type { SleepStageBreakdown } from "$lib/api";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import type { SleepStageBreakdown } from "#lib/api/index.js";
 
   interface Props {
     breakdown: SleepStageBreakdown | undefined;
@@ -82,7 +82,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <ChartPie class="h-5 w-5 text-muted-foreground" />
-      Stage Composition
+      Stage composition
     </CardTitle>
   </CardHeader>
   <CardContent class="space-y-4">

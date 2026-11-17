@@ -10,6 +10,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/iob/* endpoints.
 /// Covers IOB calculations: GET, GET/treatments, GET/hourly
 /// </summary>
+[Collection(ParityShards.Two)]
 public class IobParityTests : ParityTestBase
 {
     public IobParityTests(ParityTestFixture fixture, ITestOutputHelper output)

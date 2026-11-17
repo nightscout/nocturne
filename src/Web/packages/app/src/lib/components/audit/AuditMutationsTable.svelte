@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { MutationAuditDto } from "$lib/api/generated/nocturne-api-client";
+  import type { MutationAuditDto } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     Column,
     ColumnDef,
@@ -18,23 +18,23 @@
     createSvelteTable,
     FlexRender,
     renderSnippet,
-  } from "$lib/components/ui/data-table";
+  } from "#lib/components/ui/data-table/index.js";
 </script>
 
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Table from "$lib/components/ui/table";
+  import { formatLocale } from "#lib/utils/formatting.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { SvelteSet } from "svelte/reactivity";
-  import DataTableToolbar from "$lib/components/treatments/DataTableToolbar.svelte";
-  import DataTablePagination from "$lib/components/treatments/DataTablePagination.svelte";
-  import ColumnFilterPopover from "$lib/components/treatments/ColumnFilterPopover.svelte";
+  import DataTableToolbar from "#lib/components/treatments/DataTableToolbar.svelte";
+  import DataTablePagination from "#lib/components/treatments/DataTablePagination.svelte";
+  import ColumnFilterPopover from "#lib/components/treatments/ColumnFilterPopover.svelte";
 
   interface Props {
     rows: MutationAuditDto[];
@@ -197,15 +197,14 @@
         return a - b;
       },
     },
-    // Subject column
     {
-      id: "subject",
-      accessorFn: (row) => row.subjectName ?? row.subjectId ?? "system",
+      id: "changedBy",
+      accessorFn: (row) => row.actorName ?? row.actorSubjectId ?? "system",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "Subject" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Changed by" }),
       cell: ({ row }) => {
         const r = row.original;
-        return r.subjectName ?? truncateId(r.subjectId ?? "system");
+        return r.actorName ?? truncateId(r.actorSubjectId ?? "system");
       },
     },
     // Action column
@@ -265,7 +264,7 @@
     {
       id: "ipAddress",
       accessorFn: (row) => row.ipAddress,
-      header: "IP Address",
+      header: "IP address",
       cell: ({ row }) =>
         renderSnippet(mutedTextSnippet, { text: row.original.ipAddress }),
       enableSorting: false,
@@ -309,8 +308,8 @@
 
       if (r.action) values.push(r.action);
       if (r.entityType) values.push(r.entityType);
-      if (r.subjectName) values.push(r.subjectName);
-      if (r.subjectId) values.push(r.subjectId);
+      if (r.actorName) values.push(r.actorName);
+      if (r.actorSubjectId) values.push(r.actorSubjectId);
       if (r.endpoint) values.push(r.endpoint);
       if (r.ipAddress) values.push(r.ipAddress);
       if (r.entityId) values.push(r.entityId);
@@ -433,7 +432,7 @@
 
 {#snippet entityTypeFilterHeaderSnippet({ uniqueEntityTypes, selectedEntityTypes, toggleEntityTypeFilter, clearEntityTypeFilter }: EntityTypeFilterHeaderProps)}
   <ColumnFilterPopover
-    label="Entity Type"
+    label="Entity type"
     options={uniqueEntityTypes.map((type: string) => ({
       value: type,
       label: type,
@@ -531,13 +530,13 @@
                   {/if}
                   {#if row.original.authType}
                     <div>
-                      <span class="font-medium text-muted-foreground">Auth Type:</span>
+                      <span class="font-medium text-muted-foreground">Auth type:</span>
                       <span class="ml-2">{row.original.authType}</span>
                     </div>
                   {/if}
                   {#if row.original.entityId}
                     <div>
-                      <span class="font-medium text-muted-foreground">Full Entity ID:</span>
+                      <span class="font-medium text-muted-foreground">Full entity ID:</span>
                       <span class="ml-2 font-mono text-xs">{row.original.entityId}</span>
                     </div>
                   {/if}

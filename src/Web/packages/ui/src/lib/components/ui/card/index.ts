@@ -35,11 +35,18 @@ export const cardVariants = tv({
       true: "transition-colors hover:bg-accent/50",
       false: "",
     },
+    // A card that drops its chrome while its container is narrower than @2xl, so its content
+    // can use the full width, e.g. the glucose chart on a phone.
+    bareWhenNarrow: {
+      true: "@max-2xl:gap-0 @max-2xl:rounded-none @max-2xl:border-0 @max-2xl:bg-transparent @max-2xl:py-0 @max-2xl:shadow-none",
+      false: "",
+    },
   },
   defaultVariants: {
     variant: "default",
     size: "default",
     interactive: false,
+    bareWhenNarrow: false,
   },
 });
 

@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import ConfirmDialog from "./confirm-dialog.svelte";
-import { buttonVariants } from "$lib/components/ui/button";
+import { buttonVariants } from "#lib/components/ui/button/index.js";
 
 const base = { open: true, title: "Delete this entry?", confirmLabel: "Delete" };
 

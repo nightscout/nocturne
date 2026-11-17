@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GENERIC_SUBMIT_ERROR, RATE_LIMITED_ERROR } from "./submit-error";
+import { genericSubmitError, rateLimitedError } from "./submit-messages.svelte";
 
 const error = vi.fn();
 vi.mock("svelte-sonner", () => ({ toast: { error: (m: string) => error(m) } }));
@@ -25,6 +25,7 @@ describe("useToastSubmission", () => {
 
     await expect(submission.run(async () => {})).resolves.toBe(true);
     expect(error).not.toHaveBeenCalled();
+    expect(submission.saved).toBe(1);
   });
 
   it("shows the server's reason for a rejected action, not the fallback", async () => {
@@ -56,17 +57,17 @@ describe("useToastSubmission", () => {
       throw httpError(429);
     });
 
-    expect(error).toHaveBeenCalledWith(RATE_LIMITED_ERROR);
+    expect(error).toHaveBeenCalledWith(rateLimitedError());
   });
 
   it("keeps a thrown Error's message off the toast", async () => {
-    const submission = useToastSubmission(GENERIC_SUBMIT_ERROR);
+    const submission = useToastSubmission(genericSubmitError());
 
     await submission.run(async () => {
       throw new Error("connect ECONNREFUSED 127.0.0.1:5432");
     });
 
-    expect(error).toHaveBeenCalledWith(GENERIC_SUBMIT_ERROR);
+    expect(error).toHaveBeenCalledWith(genericSubmitError());
   });
 
   it("is busy only while the action runs", async () => {

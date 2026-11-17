@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// unless an AID system reports its pump, never on the v1 or v3 treatments feed, kept on the schedules
 /// they were recorded with, ended and deleted only by a writer of therapy, and only in their own tenant.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
 {

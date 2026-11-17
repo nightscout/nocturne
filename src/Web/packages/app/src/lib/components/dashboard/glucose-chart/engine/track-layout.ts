@@ -62,7 +62,8 @@ export function computeTrackLayout(
   maxBasalRate: number,
   maxIOB: number,
   visibility: TrackVisibility,
-  swimLaneData: SwimLaneData
+  swimLaneData: SwimLaneData,
+  minIOB = 0
 ): TrackLayout {
   const showBasalTrack = visibility.basal ?? false;
   const showIobTrack = (visibility.iob ?? false) || (visibility.cob ?? false);
@@ -123,19 +124,21 @@ export function computeTrackLayout(
     zero: pixelToGlucoseDomain(glucoseTrackBottom),
   };
 
+  const iobScale = (value: number) => {
+    const pixelY = iobTrackBottom - ((value - minIOB) / (maxIOB - minIOB)) * iobTrackHeight;
+    return pixelToGlucoseDomain(pixelY);
+  };
+
   const iobCob: TrackGeometry | null = showIobTrack
     ? {
         top: iobTrackTop,
         bottom: iobTrackBottom,
         height: iobTrackHeight,
-        scale: (value: number) => {
-          const pixelY = iobTrackBottom - (value / maxIOB) * iobTrackHeight;
-          return pixelToGlucoseDomain(pixelY);
-        },
+        scale: iobScale,
         axisScale: scaleLinear()
-          .domain([0, maxIOB])
+          .domain([minIOB, maxIOB])
           .range([iobTrackBottom, iobTrackTop]),
-        zero: pixelToGlucoseDomain(iobTrackBottom),
+        zero: iobScale(0),
       }
     : null;
 

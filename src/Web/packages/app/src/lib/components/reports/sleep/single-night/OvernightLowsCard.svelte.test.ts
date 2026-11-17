@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import { SleepHypoSeverity, SleepStageType } from "$lib/api";
-import { time } from "$lib/utils/formatting";
+import { SleepHypoSeverity, SleepStageType } from "#lib/api/index.js";
+import { time } from "#lib/utils/formatting.js";
 import OvernightLowsCard from "./OvernightLowsCard.svelte";
 
 const span = (start: string, end: string) => `${time(new Date(start))}–${time(new Date(end))}`;

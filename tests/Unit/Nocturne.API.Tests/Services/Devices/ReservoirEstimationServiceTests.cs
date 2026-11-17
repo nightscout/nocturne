@@ -221,7 +221,7 @@ public class ReservoirEstimationServiceTests
     private void SetupBoluses(params Bolus[] boluses) =>
         _boluses
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<bool>(), It.IsAny<BolusKind?>(),
+                It.IsAny<int>(), 0, false, It.IsAny<BolusKind?>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(boluses);
 

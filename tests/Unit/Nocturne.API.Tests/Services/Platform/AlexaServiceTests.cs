@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
@@ -33,7 +34,7 @@ public class AlexaServiceTests
     private const string UnknownValueText =
         "That value is unknown at the moment. Please see your Nightscout site for more details.";
 
-    private readonly Mock<IEntryStore> _mockEntryStore = new();
+    private readonly Mock<IEntryService> _mockEntryService = new();
     private readonly Mock<IPropertiesService> _mockProperties = new();
     private readonly Mock<IDDataService> _mockDData = new();
     private readonly Mock<ITenantAppearanceReader> _mockAppearance = new();
@@ -50,12 +51,11 @@ public class AlexaServiceTests
             .ReturnsAsync(new DData());
         Units(null);
         _alexaService = new AlexaService(
-            _mockEntryStore.Object,
+            _mockEntryService.Object,
             _mockProperties.Object,
             _mockDData.Object,
             _httpContextAccessor,
-            _mockAppearance.Object,
-            Mock.Of<ITenantAccessor>(),
+            new TenantGlucoseUnits(Mock.Of<ITenantAccessor>(), _mockAppearance.Object, Mock.Of<ITenantService>()),
             new FakeTimeProvider(Now),
             Mock.Of<ILogger<AlexaService>>()
         );
@@ -73,9 +73,9 @@ public class AlexaServiceTests
         LatestEntry(sgv, direction, TimeSpan.FromMinutes(minutesAgo));
 
     private void LatestEntry(double sgv, string direction, TimeSpan ago) =>
-        _mockEntryStore
+        _mockEntryService
             .Setup(x =>
-                x.QueryAsync(
+                x.QueryEntriesAsync(
                     It.Is<EntryQuery>(q => q.Type == "sgv" && q.Count == 1),
                     It.IsAny<CancellationToken>()
                 )
@@ -117,6 +117,9 @@ public class AlexaServiceTests
 
     private static Dictionary<string, object?> Reading(string key, double value) =>
         new() { [key] = value };
+
+    private static Dictionary<string, object?> Iob(double iob) =>
+        new() { ["iob"] = iob, ["display"] = new IobResult { Iob = iob }.Display };
 
     private static Dictionary<string, object> Basal(double totalBasal, Treatment? tempBasal = null) =>
         new()
@@ -301,7 +304,7 @@ public class AlexaServiceTests
     public async Task MetricNow_ResolutionWinsOverTheRawValue()
     {
         LatestEntry(120, "Flat", minutesAgo: 5);
-        Properties(("iob", Reading("iob", 1.25)));
+        Properties(("iob", Iob(1.25)));
 
         var result = await MetricNow(ResolvedMetric("bg", "iob"));
 
@@ -311,8 +314,8 @@ public class AlexaServiceTests
     [Fact]
     public async Task MetricNow_Bg_WithoutReadings_SpeaksUnknownValue()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
 
         var result = await MetricNow(ResolvedMetric("bg", "bg"));
@@ -323,7 +326,7 @@ public class AlexaServiceTests
     [Fact]
     public async Task MetricNow_Iob_SpeaksUnitsOnBoard()
     {
-        Properties(("iob", Reading("iob", 1.25)));
+        Properties(("iob", Iob(1.25)));
 
         var result = await MetricNow(ResolvedMetric("insulin on board", "iob"));
 
@@ -332,9 +335,19 @@ public class AlexaServiceTests
     }
 
     [Fact]
+    public async Task MetricNow_Iob_SpeaksTheIobDisplay()
+    {
+        Properties(("iob", Iob(0.125)));
+
+        var result = await MetricNow(ResolvedMetric("iob", "iob"));
+
+        Assert.Equal("You have 0.13 units of insulin on board", Speech(result));
+    }
+
+    [Fact]
     public async Task MetricNow_Iob_WithNoInsulin_SpeaksNo()
     {
-        Properties(("iob", Reading("iob", 0)));
+        Properties(("iob", Iob(0)));
 
         var result = await MetricNow(ResolvedMetric("iob", "iob"));
 
@@ -344,25 +357,25 @@ public class AlexaServiceTests
     [Fact]
     public async Task MetricNow_Cob_SpeaksCarbohydrates()
     {
-        Properties(("cob", Reading("cob", 24)));
+        Properties(("cob", Reading("display", 24.4)));
 
         var result = await MetricNow(ResolvedMetric("carbs on board", "cob"));
 
-        Assert.Equal("You have 24 carbohydrates on board", Speech(result));
+        Assert.Equal("You have 24.4 carbohydrates on board", Speech(result));
         Assert.Equal("Current COB", result.Response.Card?.Title);
     }
 
     [Fact]
     public async Task MetricNow_Cob_ForAnotherPerson_SpeaksThirdPerson()
     {
-        Properties(("cob", Reading("cob", 24)));
+        Properties(("cob", Reading("display", 24.4)));
 
         var result = await MetricNow(
             ResolvedMetric("cob", "cob"),
             new AlexaSlot { Name = "pwd", Value = "Sam's" }
         );
 
-        Assert.Equal("Sam has 24 carbohydrates on board", Speech(result));
+        Assert.Equal("Sam has 24.4 carbohydrates on board", Speech(result));
     }
 
     [Fact]
@@ -702,7 +715,7 @@ public class AlexaServiceTests
     {
         Grant(Scope.GlucoseRead, Scope.TreatmentsRead);
         LatestEntry(120, "Flat", minutesAgo: 5);
-        Properties(("basal", Basal(0.9)), ("iob", Reading("iob", 1.25)));
+        Properties(("basal", Basal(0.9)), ("iob", Iob(1.25)));
 
         var result = await Intent("NSStatus");
 
@@ -940,7 +953,7 @@ public class AlexaServiceTests
     public async Task NSStatus_SpeaksGlucoseThenBasalThenIob()
     {
         LatestEntry(120, "Flat", minutesAgo: 5);
-        Properties(("basal", Basal(0.9)), ("iob", Reading("iob", 1.25)));
+        Properties(("basal", Basal(0.9)), ("iob", Iob(1.25)));
 
         var result = await Intent("NSStatus");
 
@@ -957,7 +970,7 @@ public class AlexaServiceTests
     public async Task NSStatus_WithNoInsulinOnBoard_SpeaksNo()
     {
         LatestEntry(120, "Flat", minutesAgo: 5);
-        Properties(("basal", Basal(0.9)), ("iob", Reading("iob", 0)));
+        Properties(("basal", Basal(0.9)), ("iob", Iob(0)));
 
         var result = await Intent("NSStatus");
 
@@ -971,7 +984,7 @@ public class AlexaServiceTests
     public async Task NSStatus_WithoutTheBasalSentence_StartsIobAsANewSentence()
     {
         LatestEntry(120, "Flat", minutesAgo: 5);
-        Properties(("iob", Reading("iob", 1.25)));
+        Properties(("iob", Iob(1.25)));
 
         var result = await Intent("NSStatus");
 
@@ -984,10 +997,10 @@ public class AlexaServiceTests
     [Fact]
     public async Task NSStatus_WithoutGlucoseOrBasal_SpeaksIobAsASentence()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
-        Properties(("iob", Reading("iob", 0)));
+        Properties(("iob", Iob(0)));
 
         var result = await Intent("NSStatus");
 
@@ -997,10 +1010,10 @@ public class AlexaServiceTests
     [Fact]
     public async Task NSStatus_WithoutGlucoseButWithBasalAndIob_JoinsThemInOneSentence()
     {
-        _mockEntryStore
-            .Setup(x => x.QueryAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+        _mockEntryService
+            .Setup(x => x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
-        Properties(("basal", Basal(0.9)), ("iob", Reading("iob", 1.25)));
+        Properties(("basal", Basal(0.9)), ("iob", Iob(1.25)));
 
         var result = await Intent("NSStatus");
 
@@ -1039,8 +1052,8 @@ public class AlexaServiceTests
     {
         Grant(Scope.GlucoseRead);
         Properties(
-            ("iob", Reading("iob", 1.25)),
-            ("cob", Reading("cob", 24)),
+            ("iob", Iob(1.25)),
+            ("cob", Reading("display", 24.4)),
             ("basal", Basal(0.9)),
             ("upbat", new Dictionary<string, object> { ["display"] = "85%" })
         );

@@ -6,7 +6,7 @@ let status_current: unknown;
 let renew_args: unknown[];
 let end_args: unknown[];
 
-vi.mock("$api/generated/profileActivations.generated.remote", () => ({
+vi.mock("#lib/api/generated/profileActivations.generated.remote.js", () => ({
   getActivationStatus: () => ({
     current: status_current,
     loading: false,

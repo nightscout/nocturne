@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration;
 /// A v1 Temp Basal with no duration: stored as a cancel that ends where it starts, and read back
 /// as it was uploaded.
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class TempBasalCancelIntegrationTests : ApiIntegrationTestBase
 {

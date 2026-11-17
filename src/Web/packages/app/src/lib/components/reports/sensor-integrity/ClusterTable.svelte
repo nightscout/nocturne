@@ -1,11 +1,11 @@
 <script lang="ts">
   /** Sortable list of flagged windows with an explainable, factual "why flagged" description. */
-  import * as Table from "$lib/components/ui/table";
-  import type { GlucoseCluster } from "$lib/api";
-  import { bgRange, formatDateTimeCompact } from "$lib/utils/formatting";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import type { GlucoseCluster } from "#lib/api/index.js";
+  import { bgRange, formatDateTimeCompact } from "#lib/utils/formatting.js";
   import { describeCluster } from "./format";
   import ConfidenceBadge from "./ConfidenceBadge.svelte";
-  import { formatMinutesDuration } from "$lib/utils/duration";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
 
   interface Props {
     clusters: GlucoseCluster[];

@@ -54,7 +54,7 @@ public static class TandemProcessorPortTests
         public void Consecutive_run_spans_each_delivery_to_the_next()
         {
             // Window ends 5 minutes after the last event, like upstream's RUN_TIME_END.
-            var records = _mapper.Map(Run, Utc(2026, 5, 14, 4, 16, 0), ignoreZeroUnitBasal: false).Spans;
+            var records = _mapper.Map(Run, Utc(2026, 5, 14, 4, 16, 0), ignoreZeroUnitBasal: false, TandemTestClock.Now).Spans;
 
             records.Should().HaveCount(3);
             records[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
@@ -83,7 +83,7 @@ public static class TandemProcessorPortTests
                 _ => SrcTempAndAlgo,
             };
 
-            var records = _mapper.Map([ev], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: false).Spans;
+            var records = _mapper.Map([ev], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: false, TandemTestClock.Now).Spans;
 
             var basal = records.Should().ContainSingle().Subject;
             basal.Rate.Should().Be(rate);
@@ -94,7 +94,7 @@ public static class TandemProcessorPortTests
         public void Zero_rate_events_are_skipped_when_ignore_zero_unit_basal()
         {
             var records = _mapper.Map(
-                [SrcSuspended, SrcProfile], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: true).Spans;
+                [SrcSuspended, SrcProfile], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: true, TandemTestClock.Now).Spans;
 
             records.Should().ContainSingle().Which.PumpRecordId.Should().Be("447435");
         }
@@ -106,7 +106,7 @@ public static class TandemProcessorPortTests
             var start = Utc(2026, 5, 16, 0, 48, 27); // SrcProfile at 20:48:27-04:00
             var windowEnd = start.AddHours(25);
 
-            var records = _mapper.Map([SrcProfile], windowEnd, ignoreZeroUnitBasal: false).Spans;
+            var records = _mapper.Map([SrcProfile], windowEnd, ignoreZeroUnitBasal: false, TandemTestClock.Now).Spans;
 
             records.Should().ContainSingle().Which.EndTimestamp.Should().Be(windowEnd);
         }
@@ -155,7 +155,7 @@ public static class TandemProcessorPortTests
         [Fact]
         public void Regular_bolus_reassembles_with_carbs_and_calculation()
         {
-            var result = new TandemBolusMapper(NullLogger.Instance, Est).Map(Regular);
+            var result = new TandemBolusMapper(NullLogger.Instance, Est).Map(Regular, TandemTestClock.Now);
 
             var bolus = result.Boluses.Should().ContainSingle().Subject;
             bolus.Timestamp.Should().Be(Utc(2025, 11, 27, 17, 47, 18));
@@ -179,7 +179,7 @@ public static class TandemProcessorPortTests
             // Upstream posts the extended portion separately (2.08 + 4.69 = 6.77u delivered);
             // Nocturne's single dual-wave record must carry the same totals, with the programmed
             // amount covering both portions (2.083 + 6.247 = 8.33u requested).
-            var result = new TandemBolusMapper(NullLogger.Instance, Est).Map(Extended);
+            var result = new TandemBolusMapper(NullLogger.Instance, Est).Map(Extended, TandemTestClock.Now);
 
             var bolus = result.Boluses.Should().ContainSingle().Subject;
             bolus.Timestamp.Should().Be(Utc(2025, 12, 13, 1, 57, 51));
@@ -202,7 +202,7 @@ public static class TandemProcessorPortTests
             // with the full totals, so the record self-corrects via upsert.
             var withoutBolex = Extended.Where(e => e.Id != 21).ToArray();
 
-            var result = new TandemBolusMapper(NullLogger.Instance, Est).Map(withoutBolex);
+            var result = new TandemBolusMapper(NullLogger.Instance, Est).Map(withoutBolex, TandemTestClock.Now);
 
             var bolus = result.Boluses.Should().ContainSingle().Subject;
             bolus.Delivered.Should().Be(2.08);
@@ -215,7 +215,7 @@ public static class TandemProcessorPortTests
         [Fact]
         public void Canceled_bolus_records_delivered_not_requested()
         {
-            var result = new TandemBolusMapper(NullLogger.Instance, Edt).Map(Canceled);
+            var result = new TandemBolusMapper(NullLogger.Instance, Edt).Map(Canceled, TandemTestClock.Now);
 
             var bolus = result.Boluses.Should().ContainSingle().Subject;
             bolus.Timestamp.Should().Be(Utc(2026, 5, 18, 14, 15, 39));
@@ -251,7 +251,7 @@ public static class TandemProcessorPortTests
         public void Reading_uses_egv_timestamp_not_store_time()
         {
             // pumpDateTime is 00:01:04 local but the embedded EGV timestamp is 00:01:01.
-            var records = new TandemCgmMapper(NullLogger.Instance, Edt).Map([G7[0]]);
+            var records = new TandemCgmMapper(NullLogger.Instance, Edt).Map([G7[0]], TandemTestClock.Now);
 
             var sgv = records.Should().ContainSingle().Subject;
             sgv.Mgdl.Should().Be(249);
@@ -263,7 +263,7 @@ public static class TandemProcessorPortTests
         public void Diverse_glucose_range_reports_special_low_as_sentinel()
         {
             // The SpecialLow reading (raw display 38) is reported as the LOW sentinel 39.
-            var records = new TandemCgmMapper(NullLogger.Instance, Edt).Map(G7);
+            var records = new TandemCgmMapper(NullLogger.Instance, Edt).Map(G7, TandemTestClock.Now);
 
             records.Select(r => r.Mgdl).Should().Equal(249, 193, 118, 321, 39, 361);
         }
@@ -273,7 +273,7 @@ public static class TandemProcessorPortTests
         {
             // Pre-sentinel behavior skipped this reading entirely; upstream (and the Tandem
             // Source frontend) report LOW.
-            var records = new TandemCgmMapper(NullLogger.Instance, Est).Map([G6SpecialLowZero]);
+            var records = new TandemCgmMapper(NullLogger.Instance, Est).Map([G6SpecialLowZero], TandemTestClock.Now);
 
             records.Should().ContainSingle().Which.Mgdl.Should().Be(39);
         }
@@ -363,7 +363,7 @@ public static class TandemProcessorPortTests
         [Fact]
         public void Suspension_carries_the_suspend_reason()
         {
-            var records = _mapper.Map([Suspend]);
+            var records = _mapper.Map([Suspend], TandemTestClock.Now);
 
             var suspend = records.Should().ContainSingle().Subject;
             suspend.EventType.Should().Be(DeviceEventType.PumpSuspend);
@@ -375,7 +375,7 @@ public static class TandemProcessorPortTests
         [Fact]
         public void Resume_maps_to_pump_resume()
         {
-            var records = _mapper.Map([Resume]);
+            var records = _mapper.Map([Resume], TandemTestClock.Now);
 
             var resume = records.Should().ContainSingle().Subject;
             resume.EventType.Should().Be(DeviceEventType.PumpResume);

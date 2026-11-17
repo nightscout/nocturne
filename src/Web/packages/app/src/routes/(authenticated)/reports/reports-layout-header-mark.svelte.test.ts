@@ -2,12 +2,12 @@ import { render } from "vitest-browser-svelte";
 import { describe, expect, it, vi } from "vitest";
 import type { CoachMarkContext } from "@nocturne/coach";
 import { page as pageState } from "$app/state";
-import { sequences } from "$lib/coach-marks/sequences";
+import { sequences } from "#lib/coach-marks/sequences.js";
 import Harness from "./ReportsLayoutHarness.test.svelte";
 
 vi.mock("$app/state", async () => {
   const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
-  const { reactiveFields } = await import("$lib/test-stubs/reactive-fields.svelte");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
   return { ...stub, page: reactiveFields({ ...stub.page }) };
 });
 
@@ -32,7 +32,7 @@ describe("the reports layout header", () => {
     const [mark] = ctx.getMountedSteps(SWITCHER);
 
     expect(mark.element.matches(".sticky")).toBe(true);
-    expect(mark.element.querySelector("h1")?.textContent).toContain("Loop Analysis");
+    expect(mark.element.querySelector("h1")?.textContent).toContain("Loop analysis");
   });
 
   it("carries no mark on another report", async () => {

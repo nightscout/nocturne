@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Plus from "@lucide/svelte/icons/plus";
@@ -11,18 +11,19 @@
     type TreatmentFood,
     type TreatmentFoodBreakdown,
     type CarbIntakeFoodRequest,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
   import {
     addCarbIntakeFood,
     getCarbIntakeFoods as getCarbIntakeFoodBreakdown,
     deleteCarbIntakeFood,
-  } from "$api/generated/nutritions.generated.remote";
+  } from "#lib/api/generated/nutritions.generated.remote.js";
   import {
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
     CarbBreakdownBar,
     FoodEntryDetails,
-  } from "$lib/components/treatments";
+  } from "#lib/components/treatments/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     carbIntakeId?: string;
@@ -45,7 +46,7 @@
       breakdown = null;
       return;
     }
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     const id = carbIntakeId;
     queueMicrotask(() => loadBreakdown(id));
   });
@@ -54,10 +55,10 @@
     isLoading = true;
     loadError = null;
     try {
-      breakdown = await getCarbIntakeFoodBreakdown(id).run();
+      breakdown = await fresh(getCarbIntakeFoodBreakdown(id));
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
-      loadError = remoteErrorMessage(err, "Unable to load food breakdown.");
+      loadError = remoteErrorMessage(err, "Could not load food breakdown.");
     } finally {
       isLoading = false;
     }
@@ -112,7 +113,7 @@
 
 <div class="rounded-lg border p-4 space-y-4">
   <div class="space-y-1">
-    <div class="text-sm font-semibold">Food Breakdown</div>
+    <div class="text-sm font-semibold">Food breakdown</div>
     <div class="text-xs text-muted-foreground">
       Add foods to match carbs when it helps. Partial attribution is fine.
     </div>
@@ -130,13 +131,13 @@
         <div
           class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
         >
-          <span class="text-sm font-medium">Total Carbs</span>
+          <span class="text-sm font-medium">Total carbs</span>
           <span class="text-lg font-bold tabular-nums">{totalCarbs}g</span>
         </div>
       {/if}
 
       {#if totalCarbs > 0 && (foodCount > 1 || (foodCount >= 1 && hasUnattributed))}
-        <CarbBreakdownBar {totalCarbs} foods={breakdown.foods ?? []} />
+        <CarbBreakdownBar {totalCarbs} foods={breakdown.foods ?? []} seedKey={carbIntakeId} />
       {/if}
 
       <div class="flex flex-wrap gap-2 text-xs">

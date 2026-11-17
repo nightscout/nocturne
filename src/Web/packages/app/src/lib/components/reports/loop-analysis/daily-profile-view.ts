@@ -3,7 +3,7 @@ import type {
   DailyProfileDayCoverage,
   DailyProfileRange,
   LoopAnalysisAggregate,
-} from "$lib/api";
+} from "#lib/api/index.js";
 import { Key } from "@nocturne/ui/keys";
 
 export const SLOTS_PER_DAY = 288;
@@ -150,6 +150,12 @@ export function axisEnd(values: (number | null | undefined)[], floor: number): n
   const max = Math.max(floor, ...values.filter((v): v is number => v != null && Number.isFinite(v)));
   const step = max <= 1 ? 0.25 : max <= 5 ? 1 : max <= 20 ? 5 : max <= 100 ? 10 : 50;
   return Math.ceil((max * 1.05) / step) * step;
+}
+
+/** The lower end of an axis: 0, or below the lowest negative value, rounded as {@link axisEnd} rounds. */
+export function axisStart(values: (number | null | undefined)[]): number {
+  const below = values.filter((v): v is number => v != null && Number.isFinite(v) && v < 0);
+  return below.length === 0 ? 0 : -axisEnd(below.map((v) => -v), 0);
 }
 
 /** A wall-clock instant on an arbitrary date, for formatting a slot's time with the viewer's clock format. */

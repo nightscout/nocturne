@@ -7,15 +7,15 @@
     bgRange,
     formatLocale,
     formatWeekdayDate,
-    minutesAgo,
-  } from "$lib/utils/formatting";
+    relativeAge,
+  } from "#lib/utils/formatting.js";
   import {
     getEnergyUnit,
     preferredLanguage,
     timeFormat,
     yearOverviewColors,
   } from "./appearance-store.svelte";
-  import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
+  import { a1cLabel, formatA1c } from "#lib/utils/a1c-formatting.js";
 
   const derivedValue = $derived(bg(100));
 
@@ -30,7 +30,7 @@
 <span id="language">{preferredLanguage.current}</span>
 <span id="format-locale">{formatLocale()}</span>
 <span id="weekday-date">{formatWeekdayDate(SAMPLE_DATE)}</span>
-<span id="minutes-ago">{minutesAgo(SAMPLE_DATE.getTime() - 300000, SAMPLE_DATE.getTime())}</span>
+<span id="minutes-ago">{relativeAge(SAMPLE_DATE.getTime() - 300000, { now: SAMPLE_DATE.getTime() })}</span>
 
 <span id="energy-unit">energy:{getEnergyUnit()}</span>
 <span id="year-colors">{JSON.stringify(yearOverviewColors.current)}</span>

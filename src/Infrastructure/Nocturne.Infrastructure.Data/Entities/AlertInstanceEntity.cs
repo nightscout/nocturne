@@ -90,6 +90,13 @@ public class AlertInstanceEntity : ITenantScoped
     [Column("is_test")]
     public bool IsTest { get; set; }
 
+    /// <summary>
+    /// When the owner confirmed a test instance's alert reached them. Null until then, and
+    /// always null on a real instance.
+    /// </summary>
+    [Column("receipt_confirmed_at")]
+    public DateTime? ReceiptConfirmedAt { get; set; }
+
     // Navigation
 
     /// <summary>

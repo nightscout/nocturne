@@ -2,8 +2,8 @@
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
-import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
-import { errorStatus } from "$lib/forms/submit-error";
+import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 const getPredictionsSchema = z.object({
   profileId: z.string().optional(),

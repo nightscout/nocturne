@@ -1,16 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -71,18 +68,18 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// </summary>
     public string WriteScope => Scope.FoodReadWrite;
 
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IFoodRepository _foods;
     private readonly IUserFoodFavoriteService _favoriteService;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IFoodService _foodService;
 
     public FoodsController(
-        INocturneDbContextFactory contexts,
+        IFoodRepository foods,
         IUserFoodFavoriteService favoriteService,
         ITreatmentFoodService treatmentFoodService,
         IFoodService foodService)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _foods = foods ?? throw new ArgumentNullException(nameof(foods));
         _favoriteService = favoriteService;
         _treatmentFoodService = treatmentFoodService;
         _foodService = foodService;
@@ -93,6 +90,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// <summary>
     /// List foods with optional filtering and pagination.
     /// This is a V4 endpoint (not Nightscout-legacy) used by the meal attribution UI.
+    /// Without <c>count</c>, returns at most the maximum page size of records. <c>find</c> is free text matched against name, category and subcategory.
     /// </summary>
     /// <remarks>
     /// The picker and the food page ask for no <c>count</c> and render the whole catalog, so an
@@ -100,6 +98,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// every row. <c>find</c> is free text matched against name, category, and subcategory.
     /// </remarks>
     [HttpGet]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
@@ -121,6 +120,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// Get a single food by ID.
     /// </summary>
     [HttpGet("{foodId}")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(Food), StatusCodes.Status200OK)]
@@ -142,15 +142,15 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Food>> CreateFood([FromBody] Food food, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(food.Name))
-            return Problem(detail: "Name is required", statusCode: 400, title: "Bad Request");
-
-        var created = (await _foodService.CreateFoodAsync([food], ct)).ToArray();
-        var first = created.FirstOrDefault();
-        if (first is null)
-            return Problem(detail: "Failed to create food", statusCode: 500, title: "Internal Server Error");
-
-        return StatusCode(StatusCodes.Status201Created, first);
+        try
+        {
+            var created = await _foodService.CreateNativeFoodAsync(food, ct);
+            return StatusCode(StatusCodes.Status201Created, created);
+        }
+        catch (FoodNameRequiredException ex)
+        {
+            return NameRequired(ex);
+        }
     }
 
     /// <summary>
@@ -165,12 +165,19 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Food>> UpdateFood(string foodId, [FromBody] Food food, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(food.Name))
-            return Problem(detail: "Name is required", statusCode: 400, title: "Bad Request");
-
-        var updated = await _foodService.UpdateFoodAsync(foodId, food, ct);
-        return updated is null ? NotFound() : Ok(updated);
+        try
+        {
+            var updated = await _foodService.UpdateFoodAsync(foodId, food, FoodWriteMode.Native, ct);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (FoodNameRequiredException ex)
+        {
+            return NameRequired(ex);
+        }
     }
+
+    private ActionResult NameRequired(FoodNameRequiredException ex) =>
+        Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
 
     #endregion
 
@@ -209,22 +216,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> AddFavorite(string foodId)
     {
-        await using var db = await _contexts.CreateAsync();
         var userId = HttpContext.GetSubjectIdString();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
         }
 
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
 
         await _favoriteService.AddFavoriteAsync(
             userId,
-            food.Id,
+            key,
             HttpContext.RequestAborted
         );
 
@@ -243,22 +249,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> RemoveFavorite(string foodId)
     {
-        await using var db = await _contexts.CreateAsync();
         var userId = HttpContext.GetSubjectIdString();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
         }
 
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
 
         await _favoriteService.RemoveFavoriteAsync(
             userId,
-            food.Id,
+            key,
             HttpContext.RequestAborted
         );
 
@@ -269,6 +274,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// Get recently used foods (excluding favorites).
     /// </summary>
     [HttpGet("recent")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
@@ -292,21 +298,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// Get how many meal attributions reference a specific food.
     /// </summary>
     [HttpGet("{foodId}/attribution-count")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(FoodAttributionCount), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<FoodAttributionCount>> GetFoodAttributionCount(string foodId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
 
         var count = await _treatmentFoodService.CountByFoodIdAsync(
-            food.Id,
+            key,
             HttpContext.RequestAborted
         );
 
@@ -332,9 +338,8 @@ public class FoodsController : ControllerBase, IWriteScopedController
         string foodId,
         [FromQuery] string attributionMode = "clear")
     {
-        await using var db = await _contexts.CreateAsync();
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
@@ -343,45 +348,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
         if (attributionMode == "remove")
         {
             await _treatmentFoodService.DeleteByFoodIdAsync(
-                food.Id,
+                key,
                 HttpContext.RequestAborted
             );
         }
         else
         {
             await _treatmentFoodService.ClearFoodReferencesByFoodIdAsync(
-                food.Id,
+                key,
                 HttpContext.RequestAborted
             );
         }
 
         // Delete the food itself
-        var id = food.OriginalId ?? food.Id.ToString();
-        await _foodService.DeleteFoodAsync(id, HttpContext.RequestAborted);
+        await _foodService.DeleteFoodAsync(key.ToString(), HttpContext.RequestAborted);
 
         return NoContent();
-    }
-
-    private async Task<FoodEntity?> ResolveFoodEntityAsync(
-        NocturneDbContext db,
-        string id,
-        CancellationToken cancellationToken
-    )
-    {
-        var entity = await db
-            .Foods.AsNoTracking()
-            .FirstOrDefaultAsync(f => f.OriginalId == id, cancellationToken);
-
-        if (entity != null)
-        {
-            return entity;
-        }
-
-        return Guid.TryParse(id, out var guid)
-            ? await db.Foods.AsNoTracking().FirstOrDefaultAsync(
-                f => f.Id == guid,
-                cancellationToken
-            )
-            : null;
     }
 }

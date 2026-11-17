@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
-  import { MediaQuery } from "svelte/reactivity";
-  import { Button } from "$lib/components/ui/button";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import { getMultiPeriodStatistics } from "#lib/api/generated/statistics.generated.remote.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
@@ -22,15 +21,12 @@
     statsPromise = getMultiPeriodStatistics();
   });
 
-  // Responsive breakpoint - use horizontal for larger screens (>= 640px / sm breakpoint)
-  const isLargeScreen = new MediaQuery("(min-width: 640px)");
-
   function toggleView() {
     showAverage = !showAverage;
   }
 </script>
 
-<WidgetCard title="Time in Range">
+<WidgetCard title="Time in range">
   {#snippet subtitleSnippet()}
     <Button
       variant="ghost-muted"
@@ -71,15 +67,13 @@
         ? (stats?.last90Days?.entryCount ?? 0)
         : (stats?.lastDay?.entryCount ?? 0)}
 
-      <!-- Stacked bar chart - horizontal on larger screens, vertical on mobile -->
-      <div class={isLargeScreen.current ? "h-6 mb-2" : "h-32 mb-2"}>
-        <TIRStackedChart
-          {percentages}
-          orientation={isLargeScreen.current ? "horizontal" : "vertical"}
-          showLabels={!isLargeScreen.current}
-          showThresholds={false}
-          compact
-        />
+      <!-- Sized by WidgetGrid's @container: vertical while the widgets stack, a bar once they
+           share a row. -->
+      <div class="mb-2 h-32 @2xl:hidden">
+        <TIRStackedChart {percentages} orientation="vertical" showLabels compact />
+      </div>
+      <div class="mb-2 hidden h-6 @2xl:block">
+        <TIRStackedChart {percentages} orientation="horizontal" showLabels={false} compact />
       </div>
 
       <div class="flex items-baseline justify-between gap-2">
@@ -103,7 +97,12 @@
         <span>Below {(veryLow + low).toFixed(0)}%</span>
         <span>Above {(high + veryHigh).toFixed(0)}%</span>
       </div>
-      <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />
+      {@const period = showAverage ? stats?.last90Days : stats?.lastDay}
+      <ReliabilityBadge
+        compact
+        reliability={period?.reliability}
+        timeZoneUnavailableReason={period?.analytics?.timeZoneUnavailableReason}
+      />
     {:else}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">{showAverage ? "No 90-day data available" : "No data available"}</p>
@@ -112,7 +111,7 @@
     {:catch err}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">Failed to load data</p>
-        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Please try again.")}</p>
+        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Try again.")}</p>
       </div>
     {/await}
   {/if}

@@ -16,8 +16,8 @@ namespace Nocturne.API.Services.Alerts;
 /// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
 /// those repeats to one pass per reading per
 /// <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. Hysteresis closure, snooze expiry,
-/// auto-resolve and rules containing a <see cref="WallClockConditions"/> kind are also driven by
-/// the timer in <see cref="AlertSweepService"/>.
+/// auto-resolve and wall-clock rules (<see cref="Engines.RuleTrees.ReferencesWallClock"/>) are also driven by
+/// the timer in <see cref="AlertSweepJob"/>.
 /// </remarks>
 internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 {
@@ -47,9 +47,9 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     /// </summary>
     internal static SensorContext ContextFor(SensorGlucose latest) => new()
     {
-        LatestValue = (decimal)latest.Mgdl,
+        LatestValue = latest.Mgdl.ToDecimal(),
         LatestTimestamp = latest.Timestamp,
-        TrendRate = (decimal?)latest.TrendRate,
+        TrendRate = latest.TrendRate?.ToDecimal(),
         LastReadingAt = latest.Timestamp,
     };
 

@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCustomSounds } from "$lib/audio/alarm-sounds";
+import { getCustomSounds } from "#lib/audio/alarm-sounds.js";
 import CustomSoundUpload from "./CustomSoundUpload.svelte";
 
 /** The playability probe's own load timeout in alarm-sounds.ts. */
@@ -32,8 +32,8 @@ function silentWav(): Uint8Array<ArrayBuffer> {
 
 async function upload(file: File) {
   render(CustomSoundUpload);
-  await page.getByRole("button", { name: "Upload Sound" }).click();
-  await page.getByLabelText("Audio File").upload(file);
+  await page.getByRole("button", { name: "Upload sound" }).click();
+  await page.getByLabelText("Audio file").upload(file);
   await page.getByRole("button", { name: "Upload", exact: true }).click();
 }
 

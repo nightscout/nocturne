@@ -7,7 +7,7 @@
     import ConnectorsDemo from "./ConnectorsDemo.svelte";
     import AlarmsDemo from "./AlarmsDemo.svelte";
     import AuthDemo from "./AuthDemo.svelte";
-    import { PILLARS } from "$lib/data/pillars";
+    import { PILLARS } from "#lib/data/pillars.js";
 
     interface Props {
         demoHeight?: number;

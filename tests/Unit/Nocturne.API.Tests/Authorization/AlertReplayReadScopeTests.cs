@@ -67,17 +67,16 @@ public class AlertReplayReadScopeTests
     }
 
     /// <summary>
-    /// A public share is anonymous, and <see cref="Scope.AlertsRead"/> is outside
-    /// <see cref="Scope.PublicShareScopes"/>, so no share can hold it however the
-    /// owner configures the link. Requiring the single alerts scope is therefore not the
-    /// share-breaking <c>requireAll</c> shape — a share was never admitted here to begin with.
+    /// A public share may hold <see cref="Scope.AlertsRead"/> to show a firing alarm, and replay is
+    /// alert configuration, so <see cref="Nocturne.API.Authorization.DenyNoAccountViewerAttribute"/>
+    /// refuses it whatever the link shares.
     /// </summary>
     [Theory]
     [InlineData(nameof(AlertReplayController.Replay))]
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
     public void AnonymousShareLink_IsRefused(string action)
     {
-        Scope.PublicShareScopes.Should().NotContain(Scope.AlertsRead);
+        Scope.PublicShareScopes.Should().Contain(Scope.AlertsRead);
 
         Evaluate(action, authenticated: false, [.. Scope.PublicShareScopes])
             .Should().BeOfType<ForbidResult>();
@@ -239,5 +238,5 @@ public class AlertReplayReadScopeTests
             typeof(AlertReplayController),
             actionName,
             new HashSet<string>(grantedScopes, StringComparer.Ordinal),
-            authenticated ? new AuthContext { IsAuthenticated = true } : null);
+            new AuthContext { IsAuthenticated = authenticated });
 }

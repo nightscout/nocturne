@@ -1,15 +1,15 @@
 <script lang="ts">
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ReportsSkeleton from "./ReportsSkeleton.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import type { Snippet } from "svelte";
 
   interface Props {
@@ -21,10 +21,12 @@
     hasData?: boolean;
     /** Whether a new value is loading while the previous one is still shown */
     refreshing?: boolean;
-    /** Title for error card */
+    /** Title for error card. Not shown when `compact`. */
     errorTitle?: string;
     /** Function to call for retry */
     onRetry?: () => void;
+    /** Accessible name of the retry button, for a page with more than one guard or retry */
+    retryLabel?: string;
     /** Use compact inline error display instead of full-page card */
     compact?: boolean;
     /** Content to render when loaded successfully */
@@ -40,8 +42,9 @@
     error,
     hasData = false,
     refreshing = false,
-    errorTitle = "Error Loading Data",
+    errorTitle = "Error loading data",
     onRetry,
+    retryLabel,
     compact = false,
     children,
     loadingSnippet,
@@ -54,7 +57,7 @@
         ? error.message
         : typeof error === "string"
           ? error
-          : remoteErrorMessage(error, "Something went wrong. Please try again.")
+          : remoteErrorMessage(error, "Could not load the data. Try again.")
       : null
   );
 
@@ -109,6 +112,7 @@
             variant="outline"
             size="sm"
             class="mt-3"
+            aria-label={retryLabel}
             onclick={onRetry}
           >
             <RefreshCw class="mr-2 h-4 w-4" />
@@ -132,6 +136,7 @@
             <Button
               variant="outline"
               class="mt-4"
+              aria-label={retryLabel}
               onclick={onRetry}
             >
               Try again

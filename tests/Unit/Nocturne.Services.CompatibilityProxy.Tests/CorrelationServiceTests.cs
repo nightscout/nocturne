@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Core.Models;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Compatibility;
@@ -18,7 +19,7 @@ public class CorrelationServiceTests
         var config = Options.Create(
             new CompatibilityProxyConfiguration { EnableCorrelationTracking = true }
         );
-        _service = new CorrelationService(config, _logger);
+        _service = new CorrelationService(config, TimeProvider.System, _logger);
     }
 
     [Fact]
@@ -40,13 +41,28 @@ public class CorrelationServiceTests
         var config = Options.Create(
             new CompatibilityProxyConfiguration { EnableCorrelationTracking = false }
         );
-        var service = new CorrelationService(config, _logger);
+        var service = new CorrelationService(config, TimeProvider.System, _logger);
 
         // Act
         var correlationId = service.GenerateCorrelationId();
 
         // Assert
         Assert.Empty(correlationId);
+    }
+
+    [Fact]
+    public void GenerateCorrelationId_StampsTheIdFromTheClock()
+    {
+        var config = Options.Create(
+            new CompatibilityProxyConfiguration { EnableCorrelationTracking = true }
+        );
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 29, 3, 4, 5, TimeSpan.Zero));
+        var service = new CorrelationService(config, clock, _logger);
+
+        Assert.StartsWith("INT-20261029-030405-", service.GenerateCorrelationId());
+
+        clock.Advance(TimeSpan.FromHours(21));
+        Assert.StartsWith("INT-20261030-000405-", service.GenerateCorrelationId());
     }
 
     [Fact]

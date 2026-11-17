@@ -3,10 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Models.OAuth;
+using Nocturne.API.Services.Platform.InstanceKey;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers;
 
@@ -67,7 +72,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
-            ValidationIssue = new RustValidationIssue("condition", "root", "conditions_empty", null),
+            ValidationIssue = new RustValidationIssue("condition", "composite", "list_empty", "conditions"),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
     }
@@ -114,6 +119,57 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// The ceilings the V4 API puts on a read, so a client can keep its requests inside them.
+    /// </summary>
+    /// <returns>The V4 read limits</returns>
+    [HttpGet("v4-api-limits")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(V4ApiLimitsMetadata), 200)]
+    public ActionResult<V4ApiLimitsMetadata> GetV4ApiLimits()
+    {
+        return Ok(new V4ApiLimitsMetadata { MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays });
+    }
+
+    /// <summary>
+    /// Exposes the phases a connector sync reports in the <c>phase</c> of every <c>syncProgress</c>
+    /// event, which the web app validates against
+    /// </summary>
+    /// <returns>Sync phase metadata</returns>
+    [HttpGet("sync-phases")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(SyncPhasesMetadata), 200)]
+    public ActionResult<SyncPhasesMetadata> GetSyncPhases()
+    {
+        return Ok(
+            new SyncPhasesMetadata
+            {
+                AvailablePhases = Enum.GetValues<SyncPhase>(),
+                Description = "Phases a syncProgress realtime event can carry",
+            }
+        );
+    }
+
+    /// <summary>
+    /// Get the Home Assistant hub's message shapes. Exists so the OpenAPI document, and every SDK
+    /// generated from it, carries the payload of each message <c>/hubs/home-assistant</c> sends.
+    /// </summary>
+    [HttpGet("home-assistant-hub-messages")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(HomeAssistantHubMessagesMetadata), 200)]
+    public ActionResult<HomeAssistantHubMessagesMetadata> GetHomeAssistantHubMessages()
+    {
+        return Ok(
+            new HomeAssistantHubMessagesMetadata
+            {
+                AcknowledgeOutcomes = Enum.GetValues<AlertAcknowledgementOutcome>(),
+                Description = "Payloads of the messages the Home Assistant hub sends, keyed by message name",
+            }
+        );
+    }
+
+    /// <summary>
     /// Get TOTP setup failure codes metadata
     /// This endpoint ensures NSwag generates TypeScript types for TotpSetupFailure, which the
     /// verify-setup endpoint returns as the <c>detail</c> of its 400 and the web app turns into copy
@@ -130,6 +186,23 @@ public class MetadataController : ControllerBase
             {
                 AvailableFailures = Enum.GetValues<TotpSetupFailure>(),
                 Description = "Reasons a TOTP setup attempt can be refused",
+            }
+        );
+    }
+
+    /// <summary>
+    /// Get the shapes the instance key change notice carries in its metadata. Exists so the
+    /// generated client has <see cref="UndecryptableAlertChannel"/>, which the notice lists.
+    /// </summary>
+    [HttpGet("instance-key-notice")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(InstanceKeyNoticeMetadata), 200)]
+    public ActionResult<InstanceKeyNoticeMetadata> GetInstanceKeyNotice()
+    {
+        return Ok(
+            new InstanceKeyNoticeMetadata
+            {
+                Description = "Shapes in the metadata of the instance key change notice",
             }
         );
     }
@@ -208,6 +281,41 @@ public class AuthErrorCodesMetadata
 }
 
 /// <summary>
+/// The messages <see cref="Hubs.HomeAssistantHub"/> sends, one property per message, named for it.
+/// Each property is null in the response; it exists for its type.
+/// </summary>
+public class HomeAssistantHubMessagesMetadata
+{
+    /// <summary>
+    /// <c>glucose_reading</c>, to an instance whose credential may read glucose: a live sensor glucose
+    /// write on the canonical stream.
+    /// </summary>
+    public GlucoseReadingEvent? GlucoseReading { get; set; }
+
+    /// <summary>
+    /// <c>alert_dispatch</c>, to the instance an alert is addressed to: an alert fired, or a delivery
+    /// that failed while the instance was offline, replayed on <c>Subscribe</c>.
+    /// </summary>
+    public AlertPayload? AlertDispatch { get; set; }
+
+    /// <summary><c>alert_resolved</c>, to every instance of the tenant: an excursion closed.</summary>
+    public AlertResolvedEvent? AlertResolved { get; set; }
+
+    /// <summary>
+    /// <c>alert_acknowledged</c>, to every instance of the tenant: excursions were acknowledged for everyone.
+    /// </summary>
+    public AlertAcknowledgedEvent? AlertAcknowledged { get; set; }
+
+    /// <summary>All values the hub's <c>Acknowledge</c> method can return.</summary>
+    public AlertAcknowledgementOutcome[] AcknowledgeOutcomes { get; set; } = [];
+
+    /// <summary>
+    /// Description of the messages
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Metadata about TOTP setup failure codes for NSwag generation
 /// </summary>
 public class TotpSetupFailuresMetadata
@@ -252,5 +360,41 @@ public class TrackerRealtimeActionsMetadata
     /// <summary>
     /// Description of the tracker realtime actions
     /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The ceilings the V4 API puts on a read
+/// </summary>
+public class V4ApiLimitsMetadata
+{
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public int MaxDateSpanDays { get; set; }
+}
+
+/// <summary>
+/// Metadata about connector sync phases for NSwag generation
+/// </summary>
+public class SyncPhasesMetadata
+{
+    /// <summary>
+    /// Array of all phases a sync progress event can carry
+    /// </summary>
+    public SyncPhase[] AvailablePhases { get; set; } = [];
+
+    /// <summary>
+    /// Description of the sync phases
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The metadata shapes of the <c>system.instance_key_changed</c> notice.
+/// </summary>
+public class InstanceKeyNoticeMetadata
+{
+    /// <summary>One entry of the notice's <c>AlertChannels</c> list.</summary>
+    public UndecryptableAlertChannel? AlertChannel { get; set; }
+
     public string Description { get; set; } = string.Empty;
 }

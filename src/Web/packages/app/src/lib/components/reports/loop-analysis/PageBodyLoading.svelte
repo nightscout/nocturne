@@ -3,7 +3,7 @@
   The shared filters and page links above it stay on screen.
 -->
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
 </script>
 
 <div class="space-y-6" role="status" aria-label="Loading">

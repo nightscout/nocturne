@@ -1,9 +1,7 @@
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
-using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
@@ -15,20 +13,17 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
 
 /// <summary>
-/// The <see cref="IExcursionTracker"/> seam over one persistence path. Every scenario runs once
-/// with the managed decider and once with the Rust one, and both must leave the same excursion
-/// rows and tracker state.
+/// The <see cref="IExcursionTracker"/> seam over the Rust decider: the excursion rows and tracker
+/// state each transition leaves.
 /// </summary>
 public class ExcursionTrackerSeamTests
 {
     private static readonly Guid RuleId = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
     private static readonly DateTime T0 = new(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
 
-    public enum Engine { Managed, Rust }
-
     private sealed class Fixture
     {
-        public Fixture(Engine engine, int confirmationReadings = 1, int hysteresisMinutes = 0)
+        public Fixture(int confirmationReadings = 1, int hysteresisMinutes = 0)
         {
             Time.SetUtcNow(T0);
             Repository = new RecordingTrackerRepository(new AlertRule
@@ -38,11 +33,7 @@ public class ExcursionTrackerSeamTests
                 ConfirmationReadings = confirmationReadings,
                 HysteresisMinutes = hysteresisMinutes,
             });
-            IExcursionDecider decider = engine == Engine.Managed
-                ? ManagedExcursionDecider.Instance
-                : new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), Time), AlertEngineErrors.RustEngine);
-            Tracker = new ExcursionTracker(
-                Repository, new AlertRuleEvaluationGate(), Time, NullLogger<ExcursionTracker>.Instance, decider);
+            Tracker = EngineTestHarness.BuildRustTracker(Time, Repository);
         }
 
         public ManualTimeProvider Time { get; } = new();
@@ -59,12 +50,10 @@ public class ExcursionTrackerSeamTests
         public void At(TimeSpan offset) => Time.SetUtcNow(T0 + offset);
     }
 
-    [Fact] public Task Opens_an_excursion_managed() => Opens_an_excursion(Engine.Managed);
-    [NativeFact] public Task Opens_an_excursion_rust() => Opens_an_excursion(Engine.Rust);
-
-    private static async Task Opens_an_excursion(Engine engine)
+    [NativeFact]
+    public async Task Opens_an_excursion()
     {
-        var f = new Fixture(engine);
+        var f = new Fixture();
 
         var opened = await f.Process(true);
 
@@ -75,12 +64,10 @@ public class ExcursionTrackerSeamTests
         f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, ActiveExcursionId = excursion.Id, UpdatedAt = T0 });
     }
 
-    [Fact] public Task Confirms_before_opening_managed() => Confirms_before_opening(Engine.Managed);
-    [NativeFact] public Task Confirms_before_opening_rust() => Confirms_before_opening(Engine.Rust);
-
-    private static async Task Confirms_before_opening(Engine engine)
+    [NativeFact]
+    public async Task Confirms_before_opening()
     {
-        var f = new Fixture(engine, confirmationReadings: 2);
+        var f = new Fixture(confirmationReadings: 2);
 
         (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.None);
         f.State!.State.Should().Be("confirming");
@@ -91,12 +78,10 @@ public class ExcursionTrackerSeamTests
         f.Repository.Excursions.Should().ContainSingle();
     }
 
-    [Fact] public Task Continues_the_open_excursion_managed() => Continues_the_open_excursion(Engine.Managed);
-    [NativeFact] public Task Continues_the_open_excursion_rust() => Continues_the_open_excursion(Engine.Rust);
-
-    private static async Task Continues_the_open_excursion(Engine engine)
+    [NativeFact]
+    public async Task Continues_the_open_excursion()
     {
-        var f = new Fixture(engine);
+        var f = new Fixture();
         var opened = await f.Process(true);
         f.At(TimeSpan.FromMinutes(5));
 
@@ -107,12 +92,10 @@ public class ExcursionTrackerSeamTests
         f.State!.UpdatedAt.Should().Be(T0, "a continuing excursion changes no stored row");
     }
 
-    [Fact] public Task Starts_and_resumes_hysteresis_managed() => Starts_and_resumes_hysteresis(Engine.Managed);
-    [NativeFact] public Task Starts_and_resumes_hysteresis_rust() => Starts_and_resumes_hysteresis(Engine.Rust);
-
-    private static async Task Starts_and_resumes_hysteresis(Engine engine)
+    [NativeFact]
+    public async Task Starts_and_resumes_hysteresis()
     {
-        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var f = new Fixture(hysteresisMinutes: 10);
         var opened = await f.Process(true);
         var excursion = f.Repository.Excursions[opened.ExcursionId!.Value];
         f.At(TimeSpan.FromMinutes(1));
@@ -134,14 +117,10 @@ public class ExcursionTrackerSeamTests
         f.State.ActiveExcursionId.Should().Be(opened.ExcursionId);
     }
 
-    [Fact] public Task Closes_elapsed_hysteresis_only_once_the_window_has_passed_managed() =>
-        Closes_elapsed_hysteresis_only_once_the_window_has_passed(Engine.Managed);
-    [NativeFact] public Task Closes_elapsed_hysteresis_only_once_the_window_has_passed_rust() =>
-        Closes_elapsed_hysteresis_only_once_the_window_has_passed(Engine.Rust);
-
-    private static async Task Closes_elapsed_hysteresis_only_once_the_window_has_passed(Engine engine)
+    [NativeFact]
+    public async Task Closes_elapsed_hysteresis_only_once_the_window_has_passed()
     {
-        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var f = new Fixture(hysteresisMinutes: 10);
         var opened = await f.Process(true);
         await f.Process(false);
         var writes = f.Repository.Writes.Count;
@@ -164,14 +143,10 @@ public class ExcursionTrackerSeamTests
         });
     }
 
-    [Fact] public Task Close_elapsed_hysteresis_persists_an_adopted_start_managed() =>
-        Close_elapsed_hysteresis_persists_an_adopted_start(Engine.Managed);
-    [NativeFact] public Task Close_elapsed_hysteresis_persists_an_adopted_start_rust() =>
-        Close_elapsed_hysteresis_persists_an_adopted_start(Engine.Rust);
-
-    private static async Task Close_elapsed_hysteresis_persists_an_adopted_start(Engine engine)
+    [NativeFact]
+    public async Task Close_elapsed_hysteresis_persists_an_adopted_start()
     {
-        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var f = new Fixture(hysteresisMinutes: 10);
         var opened = await f.Process(true);
         var legacy = f.State!;
         f.Repository.States[RuleId] = new AlertTrackerState
@@ -193,14 +168,10 @@ public class ExcursionTrackerSeamTests
         });
     }
 
-    [Fact] public Task An_unknown_stored_state_reads_as_idle_or_active_managed() =>
-        An_unknown_stored_state_reads_as_idle_or_active(Engine.Managed);
-    [NativeFact] public Task An_unknown_stored_state_reads_as_idle_or_active_rust() =>
-        An_unknown_stored_state_reads_as_idle_or_active(Engine.Rust);
-
-    private static async Task An_unknown_stored_state_reads_as_idle_or_active(Engine engine)
+    [NativeFact]
+    public async Task An_unknown_stored_state_reads_as_idle_or_active()
     {
-        var f = new Fixture(engine, confirmationReadings: 1, hysteresisMinutes: 10);
+        var f = new Fixture(confirmationReadings: 1, hysteresisMinutes: 10);
         var opened = await f.Process(true);
         AlertTrackerState Unknown(Guid? excursion) => new()
         {
@@ -230,14 +201,10 @@ public class ExcursionTrackerSeamTests
         f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, AwaitingRearm = false });
     }
 
-    [Fact] public Task An_auto_resolved_rule_holds_while_both_trees_hold_managed() =>
-        An_auto_resolved_rule_holds_while_both_trees_hold(Engine.Managed);
-    [NativeFact] public Task An_auto_resolved_rule_holds_while_both_trees_hold_rust() =>
-        An_auto_resolved_rule_holds_while_both_trees_hold(Engine.Rust);
-
-    private static async Task An_auto_resolved_rule_holds_while_both_trees_hold(Engine engine)
+    [NativeFact]
+    public async Task An_auto_resolved_rule_holds_while_both_trees_hold()
     {
-        var f = new Fixture(engine);
+        var f = new Fixture();
         await f.Process(true);
         await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.AutoResolve, CancellationToken.None);
 
@@ -250,23 +217,13 @@ public class ExcursionTrackerSeamTests
         f.State.Should().BeEquivalentTo(new { State = "active", AwaitingRearm = false });
     }
 
-    [Theory]
-    [InlineData(ExcursionCloseReason.Manual)]
-    [InlineData(ExcursionCloseReason.AutoResolve)]
-    [InlineData(ExcursionCloseReason.RuleDisabled)]
-    public Task Force_close_closes_from_any_open_state_managed(ExcursionCloseReason reason) =>
-        Force_close_closes_from_any_open_state(Engine.Managed, reason);
-
     [NativeTheory]
     [InlineData(ExcursionCloseReason.Manual)]
     [InlineData(ExcursionCloseReason.AutoResolve)]
     [InlineData(ExcursionCloseReason.RuleDisabled)]
-    public Task Force_close_closes_from_any_open_state_rust(ExcursionCloseReason reason) =>
-        Force_close_closes_from_any_open_state(Engine.Rust, reason);
-
-    private static async Task Force_close_closes_from_any_open_state(Engine engine, ExcursionCloseReason reason)
+    public async Task Force_close_closes_from_any_open_state(ExcursionCloseReason reason)
     {
-        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var f = new Fixture(hysteresisMinutes: 10);
         var first = await f.Process(true);
         f.At(TimeSpan.FromMinutes(1));
 
@@ -298,14 +255,10 @@ public class ExcursionTrackerSeamTests
             .Should().Be(ExcursionCloseReason.RuleDisabled);
     }
 
-    [Fact] public Task Force_close_without_an_excursion_writes_nothing_managed() =>
-        Force_close_without_an_excursion_writes_nothing(Engine.Managed);
-    [NativeFact] public Task Force_close_without_an_excursion_writes_nothing_rust() =>
-        Force_close_without_an_excursion_writes_nothing(Engine.Rust);
-
-    private static async Task Force_close_without_an_excursion_writes_nothing(Engine engine)
+    [NativeFact]
+    public async Task Force_close_without_an_excursion_writes_nothing()
     {
-        var f = new Fixture(engine, confirmationReadings: 3);
+        var f = new Fixture(confirmationReadings: 3);
         (await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.Manual, CancellationToken.None))
             .Type.Should().Be(ExcursionTransitionType.None);
         await f.Process(true);
@@ -318,14 +271,10 @@ public class ExcursionTrackerSeamTests
         f.State!.State.Should().Be("confirming");
     }
 
-    [Fact] public Task A_state_changed_only_in_its_timestamp_is_not_written_managed() =>
-        A_state_changed_only_in_its_timestamp_is_not_written(Engine.Managed);
-    [NativeFact] public Task A_state_changed_only_in_its_timestamp_is_not_written_rust() =>
-        A_state_changed_only_in_its_timestamp_is_not_written(Engine.Rust);
-
-    private static async Task A_state_changed_only_in_its_timestamp_is_not_written(Engine engine)
+    [NativeFact]
+    public async Task A_state_changed_only_in_its_timestamp_is_not_written()
     {
-        var f = new Fixture(engine);
+        var f = new Fixture();
         await f.Process(false);
         f.Repository.Writes.Should().Equal("upsert");
 
@@ -348,14 +297,10 @@ public class ExcursionTrackerSeamTests
         f.State!.UpdatedAt.Should().Be(T0 + TimeSpan.FromMinutes(2));
     }
 
-    [Fact] public Task Each_transition_writes_in_one_transaction_managed() =>
-        Each_transition_writes_in_one_transaction(Engine.Managed);
-    [NativeFact] public Task Each_transition_writes_in_one_transaction_rust() =>
-        Each_transition_writes_in_one_transaction(Engine.Rust);
-
-    private static async Task Each_transition_writes_in_one_transaction(Engine engine)
+    [NativeFact]
+    public async Task Each_transition_writes_in_one_transaction()
     {
-        var f = new Fixture(engine);
+        var f = new Fixture();
 
         await f.Process(true);
         await f.Process(false);
@@ -388,6 +333,8 @@ internal sealed class RecordingTrackerRepository(params AlertRule[] rules) : IAl
     public int Transactions { get; private set; }
 
     public int WritesOutsideTransaction { get; private set; }
+
+    public IConditionTimerStore Timers { get; } = new RecordingTimerStore();
 
     public Task<AlertTrackerState?> GetTrackerStateAsync(Guid alertRuleId, CancellationToken ct = default) =>
         Task.FromResult(States.GetValueOrDefault(alertRuleId));

@@ -5,7 +5,7 @@
  * for the clock face builder UI.
  */
 
-import type { ClockElement, ClockSettings } from "$lib/api";
+import type { ClockElement, ClockSettings } from "#lib/api/index.js";
 
 // Element type for the clock face builder
 export type ClockElementType =
@@ -270,6 +270,7 @@ export const TRACKER_SHOW_OPTIONS: SelectOption[] = [
 export const TRACKER_CATEGORIES = [
   "Sensor",
   "Cannula",
+  "Pod",
   "Reservoir",
   "Battery",
   "Consumable",

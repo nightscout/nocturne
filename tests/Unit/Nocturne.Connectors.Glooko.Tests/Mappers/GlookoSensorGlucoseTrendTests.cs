@@ -30,7 +30,7 @@ public class GlookoSensorGlucoseTrendTests
     {
         var config = new GlookoConnectorConfiguration { TimezoneOffset = 0 };
         return new GlookoSensorGlucoseMapper(
-            config, ConnectorSource, new GlookoTimeMapper(config, NullLogger.Instance), logger);
+            config, ConnectorSource, new GlookoTimeMapper(config, NullLogger.Instance), logger, TimeProvider.System);
     }
 
     private static GlookoBatchData BatchOf(params string?[] trends) =>

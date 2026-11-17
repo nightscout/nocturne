@@ -1,15 +1,16 @@
-import { a1cLabel } from "$lib/utils/a1c-formatting";
+import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 import {
 	estimatedA1cTitle,
 	reportTitle,
 	visibleReportCategories,
 	type ReportViewer,
-} from "$lib/navigation/report-navigation.svelte";
+} from "#lib/navigation/report-navigation.svelte.js";
 import type { Component } from "svelte";
 import Activity from "@lucide/svelte/icons/activity";
 import Apple from "@lucide/svelte/icons/apple";
 import Bell from "@lucide/svelte/icons/bell";
 import Building from "@lucide/svelte/icons/building";
+import MailPlus from "@lucide/svelte/icons/mail-plus";
 import CalendarDays from "@lucide/svelte/icons/calendar-days";
 import CirclePlus from "@lucide/svelte/icons/circle-plus";
 import Clock from "@lucide/svelte/icons/clock";
@@ -25,6 +26,8 @@ import Plug from "@lucide/svelte/icons/plug";
 import Plus from "@lucide/svelte/icons/plus";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Ruler from "@lucide/svelte/icons/ruler";
+import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+import Languages from "@lucide/svelte/icons/languages";
 import Shield from "@lucide/svelte/icons/shield";
 import Stethoscope from "@lucide/svelte/icons/stethoscope";
 import Sun from "@lucide/svelte/icons/sun";
@@ -37,7 +40,7 @@ import Users from "@lucide/svelte/icons/users";
 import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
 import Wrench from "@lucide/svelte/icons/wrench";
 import ZoomIn from "@lucide/svelte/icons/zoom-in";
-import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
+import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
 
 export type CommandPaletteGroup =
 	| "stats"
@@ -68,7 +71,7 @@ export const groupMeta: Record<CommandPaletteGroup, { label: string; order: numb
 	reports: { label: "Reports", order: 1 },
 	pages: { label: "Pages", order: 2 },
 	settings: { label: "Settings", order: 3 },
-	"quick-settings": { label: "Quick Settings", order: 4 },
+	"quick-settings": { label: "Quick settings", order: 4 },
 	actions: { label: "Actions", order: 5 },
 };
 
@@ -180,15 +183,24 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-time-spans",
-		label: "Time Spans",
+		label: "Therapy timeline",
 		group: "pages",
-		keywords: ["time spans", "ranges", "periods"],
+		keywords: ["therapy timeline", "time spans", "profile history", "profile changes"],
 		icon: Clock,
 		href: "/time-spans",
 	},
 	{
+		id: "page-trackers",
+		label: "Trackers",
+		group: "pages",
+		keywords: ["trackers", "consumables", "sensor", "site change", "reminders", "appointments"],
+		icon: Timer,
+		href: "/trackers",
+		scope: "alerts.read",
+	},
+	{
 		id: "page-tenants",
-		label: "Tenant Management",
+		label: "All tenants",
 		group: "settings",
 		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
@@ -196,8 +208,26 @@ export const items: CommandPaletteItem[] = [
 		platformAdmin: true,
 	},
 	{
+		id: "page-invite-people",
+		label: "Invite people",
+		group: "settings",
+		keywords: ["invite", "sign up", "new site", "new tenant", "platform admin"],
+		icon: MailPlus,
+		href: "/settings/admin/invites",
+		platformAdmin: true,
+	},
+	{
+		id: "page-administration",
+		label: "Administration",
+		group: "settings",
+		keywords: ["administration", "identity providers", "oidc", "sso", "bots", "telegram"],
+		icon: Shield,
+		href: "/settings/admin",
+		platformAdmin: true,
+	},
+	{
 		id: "page-access-requests",
-		label: "Access Requests",
+		label: "Access requests",
 		group: "settings",
 		keywords: ["access requests", "join", "approve", "pending users"],
 		icon: UserPlus,
@@ -237,6 +267,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["alerts", "alarms", "urgent", "warnings", "notifications"],
 		icon: TriangleAlert,
 		href: "/alerts",
+		scope: "alerts.read",
 	},
 	{
 		id: "settings-grants",
@@ -256,6 +287,24 @@ export const items: CommandPaletteItem[] = [
 		href: "/settings/connectors",
 	},
 	{
+		id: "settings-migration",
+		label: "Move from Nightscout",
+		group: "settings",
+		keywords: ["nightscout", "migration", "import", "transition", "mongodb"],
+		icon: RefreshCw,
+		href: "/settings/migration",
+		scope: "*",
+	},
+	{
+		id: "settings-site",
+		label: "Site details",
+		group: "settings",
+		keywords: ["site", "tenant", "name", "display name", "address"],
+		icon: Building,
+		href: "/settings/site",
+		scope: "tenant.settings",
+	},
+	{
 		// Kept while the label and href moved on: pinned and recent ids persist in local storage,
 		// and one that no longer matches an item is dropped from a user's pins without a word.
 		id: "settings-integrations",
@@ -268,7 +317,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "settings-data-quality",
-		label: "Data Quality",
+		label: "Data quality",
 		group: "settings",
 		keywords: ["data quality", "gaps", "thresholds"],
 		icon: Shield,
@@ -292,7 +341,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "settings-sharing-privacy",
-		label: "Sharing & Privacy",
+		label: "Sharing & privacy",
 		group: "settings",
 		keywords: [
 			"sharing",
@@ -327,11 +376,27 @@ export const items: CommandPaletteItem[] = [
 		icon: LifeBuoy,
 		href: "/settings/support",
 	},
+	{
+		id: "page-community",
+		label: "Community",
+		group: "pages",
+		keywords: ["community", "github", "discord", "documentation", "foundation"],
+		icon: HeartHandshake,
+		href: "/community",
+	},
+	{
+		id: "page-translations",
+		label: "Translations",
+		group: "pages",
+		keywords: ["translations", "translate", "language", "locale"],
+		icon: Languages,
+		href: "/community",
+	},
 
 	// ─── Quick Settings ──────────────────────────────────────────────────
 	{
 		id: "qs-dark-mode",
-		label: "Toggle Dark Mode",
+		label: "Toggle dark mode",
 		group: "quick-settings",
 		description: "Switch between light and dark themes",
 		keywords: ["dark mode", "light mode", "theme", "toggle"],
@@ -339,7 +404,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "qs-glucose-units",
-		label: "Switch Glucose Units",
+		label: "Switch glucose units",
 		group: "quick-settings",
 		description: "Toggle between mg/dL and mmol/L",
 		keywords: ["glucose units", "mg/dl", "mmol/l", "units"],
@@ -347,7 +412,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "qs-chart-lookback",
-		label: "Change Chart Lookback",
+		label: "Change chart lookback",
 		group: "quick-settings",
 		description: "Adjust the time window for charts",
 		keywords: ["lookback", "time range", "chart period", "hours"],
@@ -357,7 +422,7 @@ export const items: CommandPaletteItem[] = [
 	// ─── Actions ─────────────────────────────────────────────────────────
 	{
 		id: "action-add-treatment",
-		label: "Add Treatment",
+		label: "Add treatment",
 		group: "actions",
 		description: "Log a new treatment entry",
 		keywords: ["add treatment", "log", "bolus", "carbs"],
@@ -365,7 +430,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "action-add-food",
-		label: "Add Food Entry",
+		label: "Add food entry",
 		group: "actions",
 		description: "Add a food item to the database",
 		keywords: ["add food", "nutrition", "new food"],
@@ -373,7 +438,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "action-manual-sync",
-		label: "Manual Sync",
+		label: "Manual sync",
 		group: "actions",
 		description: "Trigger a manual data sync",
 		keywords: ["sync", "refresh", "fetch", "update"],

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SensorGlucose, GlucoseCluster } from "$lib/api";
+import type { SensorGlucose, GlucoseCluster } from "#lib/api/index.js";
 import { buildDayBuckets } from "./buckets";
 
 const entry = (

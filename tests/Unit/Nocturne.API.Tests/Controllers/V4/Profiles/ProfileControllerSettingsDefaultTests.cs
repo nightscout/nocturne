@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -63,7 +64,9 @@ public class ProfileControllerSettingsDefaultTests
             Mock.Of<ISensitivityScheduleRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IProfileProjectionService>(),
-            TempBasalTestDeps.NoReresolution()
+            Mock.Of<IProfileDeletionService>(),
+            TempBasalTestDeps.NoReresolution(),
+            Mock.Of<ILoopClosedLoopStamper>()
         );
     }
 

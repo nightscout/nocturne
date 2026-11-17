@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { enumValue } from "$lib/components/ui/enum-value";
-  import type { Bolus } from "$lib/api";
-  import { BolusType } from "$lib/api";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
-  import * as Select from "$lib/components/ui/select";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { enumValue } from "#lib/components/ui/enum-value.js";
+  import type { Bolus } from "#lib/api/index.js";
+  import { BolusType } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import X from "@lucide/svelte/icons/x";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -33,8 +33,8 @@
 
   const bolusTypeLabels: Record<BolusType, string> = {
     [BolusType.Normal]: "Normal",
-    [BolusType.Square]: "Square Wave",
-    [BolusType.Dual]: "Dual Wave",
+    [BolusType.Square]: "Square wave",
+    [BolusType.Dual]: "Dual wave",
   };
 </script>
 
@@ -65,7 +65,7 @@
     </div>
 
     <div class="space-y-1.5">
-      <Label for="bolus-type">Bolus Type</Label>
+      <Label for="bolus-type">Bolus type</Label>
       <Select.Root
         type="single"
         value={bolus.bolusType ?? BolusType.Normal}
@@ -148,7 +148,7 @@
         </div>
 
         <div class="space-y-1.5">
-          <Label for="bolus-insulin-type">Insulin Type</Label>
+          <Label for="bolus-insulin-type">Insulin type</Label>
           <Input
             id="bolus-insulin-type"
             type="text"

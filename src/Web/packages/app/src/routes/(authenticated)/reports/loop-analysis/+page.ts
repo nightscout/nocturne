@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { loopAnalysisPath } from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
+import { loopAnalysisPath } from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
 import type { PageLoad } from "./$types";
 
 /** The report opens on its first page, under the filters it was linked with. */

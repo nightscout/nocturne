@@ -2,6 +2,7 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -20,8 +21,8 @@ public class AuthTokenProviderBaseRetryTests
     [Fact]
     public async Task ExecuteWithRetryAsync_ZeroMaxRetries_AttemptsExactlyOnce()
     {
-        using var provider = BuildProvider();
         var delays = new RecordingRetryDelayStrategy();
+        using var provider = BuildProvider(delays);
         var attempts = 0;
 
         var token = await provider.InvokeExecuteWithRetryAsync(
@@ -30,7 +31,6 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 return Task.FromResult<(string? Result, bool ShouldRetry)>((null, true));
             },
-            delays,
             maxRetries: 0);
 
         token.Should().BeNull();
@@ -41,8 +41,8 @@ public class AuthTokenProviderBaseRetryTests
     [Fact]
     public async Task ExecuteWithRetryAsync_RetryableFailure_AttemptsUpToMaxRetries()
     {
-        using var provider = BuildProvider();
         var delays = new RecordingRetryDelayStrategy();
+        using var provider = BuildProvider(delays);
         var attempts = 0;
 
         var token = await provider.InvokeExecuteWithRetryAsync(
@@ -51,7 +51,6 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 return Task.FromResult<(string? Result, bool ShouldRetry)>((null, true));
             },
-            delays,
             maxRetries: 3);
 
         token.Should().BeNull();
@@ -70,8 +69,8 @@ public class AuthTokenProviderBaseRetryTests
     public async Task ExecuteWithRetryAsync_HttpFailureCarryingARejection_AttemptsExactlyOnce(
         HttpStatusCode status)
     {
-        using var provider = BuildProvider();
         var delays = new RecordingRetryDelayStrategy();
+        using var provider = BuildProvider(delays);
         var attempts = 0;
 
         var token = await provider.InvokeExecuteWithRetryAsync(
@@ -80,7 +79,6 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 throw new HttpRequestException("rejected", null, status);
             },
-            delays,
             maxRetries: 3);
 
         token.Should().BeNull();
@@ -103,7 +101,6 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 throw new HttpRequestException("busy", null, status);
             },
-            new RecordingRetryDelayStrategy(),
             maxRetries: 3);
 
         token.Should().BeNull();
@@ -126,7 +123,6 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 throw new HttpRequestException("connection reset");
             },
-            new RecordingRetryDelayStrategy(),
             maxRetries: 3);
 
         token.Should().BeNull();
@@ -363,7 +359,8 @@ public class AuthTokenProviderBaseRetryTests
         ITenantAccessor tenantAccessor,
         ILogger logger,
         Func<int, Task<(string? Result, bool ShouldRetry)>> login)
-        : AuthTokenProviderBase<TestConnectorConfig>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+        : AuthTokenProviderBase<TestConnectorConfig>(
+            httpClient, tokenCache, serverResolver, tenantAccessor, logger, new RecordingRetryDelayStrategy())
     {
         internal const string Name = "SignIn";
 
@@ -374,7 +371,6 @@ public class AuthTokenProviderBaseRetryTests
         {
             var token = await ExecuteWithRetryAsync(
                 login,
-                new RecordingRetryDelayStrategy(),
                 LoginAttempts(config),
                 "sign-in",
                 cancellationToken);
@@ -385,31 +381,32 @@ public class AuthTokenProviderBaseRetryTests
 
     private static readonly ConnectorServerResolver<TestConnectorConfig> NoOpResolver = new(null, null, null);
 
-    private static RetryTokenProvider BuildProvider() => new(
+    private static RetryTokenProvider BuildProvider(IRetryDelayStrategy? delays = null) => new(
         new HttpClient(),
         new ConnectorTokenCache(),
         NoOpResolver,
         Mock.Of<ITenantAccessor>(),
-        NullLogger<RetryTokenProvider>.Instance);
+        NullLogger<RetryTokenProvider>.Instance,
+        delays ?? new RecordingRetryDelayStrategy());
 
     private sealed class RetryTokenProvider(
         HttpClient httpClient,
         IConnectorTokenCache tokenCache,
         IConnectorServerResolver<TestConnectorConfig> serverResolver,
         ITenantAccessor tenantAccessor,
-        ILogger logger)
-        : AuthTokenProviderBase<TestConnectorConfig>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+        ILogger logger,
+        IRetryDelayStrategy retryDelayStrategy)
+        : AuthTokenProviderBase<TestConnectorConfig>(
+            httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
     {
         protected override string ConnectorName => "Test";
 
         // Exposes the protected retry helper so its attempt-count behaviour can be tested directly.
         public Task<string?> InvokeExecuteWithRetryAsync(
             Func<int, Task<(string? Result, bool ShouldRetry)>> operation,
-            IRetryDelayStrategy retryDelayStrategy,
             int maxRetries)
             => ExecuteWithRetryAsync(
                 operation,
-                retryDelayStrategy,
                 maxRetries,
                 "test token acquisition",
                 CancellationToken.None);
@@ -426,13 +423,76 @@ public class AuthTokenProviderBaseRetryTests
             new ConnectorTokenCache(),
             NoOpResolver,
             Mock.Of<ITenantAccessor>(),
-            NullLogger<ThrowingTokenProvider>.Instance)
+            NullLogger<ThrowingTokenProvider>.Instance,
+            new RecordingRetryDelayStrategy())
     {
         protected override string ConnectorName => "Throwing";
 
         protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
             TestConnectorConfig config, CancellationToken cancellationToken)
             => Task.FromException<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>(loginFailure);
+    }
+
+    /// <summary>
+    ///     A token is refetched <see cref="AuthTokenProviderBase{TConfig}.TokenLifetimeBufferMinutes"/>
+    ///     before the source says it expires, so a request never carries a token about to lapse.
+    /// </summary>
+    [Fact]
+    public async Task GetValidTokenAsync_RefetchesFromTheRefreshMargin()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        using var provider = new LifetimeTokenProvider(
+            new HttpClient(),
+            new ConnectorTokenCache(clock),
+            NoOpResolver,
+            tenantAccessor.Object,
+            NullLogger<LifetimeTokenProvider>.Instance,
+            clock,
+            TimeSpan.FromMinutes(30));
+        var config = new TestConnectorConfig();
+
+        await provider.GetValidTokenAsync(config);
+        provider.AcquireCalls.Should().Be(1);
+
+        clock.Advance(TimeSpan.FromMinutes(25) - TimeSpan.FromSeconds(1));
+        await provider.GetValidTokenAsync(config);
+        provider.AcquireCalls.Should().Be(1, "one second before the 5 minute margin the cached token still serves");
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await provider.GetValidTokenAsync(config);
+        provider.AcquireCalls.Should().Be(2, "at the margin the token is refetched");
+
+        clock.Advance(TimeSpan.FromMinutes(25) + TimeSpan.FromSeconds(1));
+        await provider.GetValidTokenAsync(config);
+        provider.AcquireCalls.Should().Be(3, "after the margin the token is refetched");
+    }
+
+    /// <summary>Hands out a token living <paramref name="lifetime"/> from the injected clock.</summary>
+    private sealed class LifetimeTokenProvider(
+        HttpClient httpClient,
+        IConnectorTokenCache tokenCache,
+        IConnectorServerResolver<TestConnectorConfig> serverResolver,
+        ITenantAccessor tenantAccessor,
+        ILogger logger,
+        TimeProvider clock,
+        TimeSpan lifetime)
+        : AuthTokenProviderBase<TestConnectorConfig>(
+            httpClient, tokenCache, serverResolver, tenantAccessor, logger, new RecordingRetryDelayStrategy())
+    {
+        internal int AcquireCalls { get; private set; }
+
+        protected override string ConnectorName => "Lifetime";
+
+        protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+            TestConnectorConfig config, CancellationToken cancellationToken)
+        {
+            AcquireCalls++;
+            return Task.FromResult<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>(
+                ($"token-{AcquireCalls}", clock.GetUtcNow().UtcDateTime + lifetime, null));
+        }
     }
 
     /// <summary>Fails every login, recording how many times it was asked to try.</summary>
@@ -443,7 +503,8 @@ public class AuthTokenProviderBaseRetryTests
         ITenantAccessor tenantAccessor,
         ILogger logger,
         IRetryDelayStrategy retryDelayStrategy)
-        : AuthTokenProviderBase<TestConnectorConfig>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+        : AuthTokenProviderBase<TestConnectorConfig>(
+            httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
     {
         internal int LoginCalls { get; private set; }
 
@@ -458,7 +519,6 @@ public class AuthTokenProviderBaseRetryTests
                     LoginCalls++;
                     return Task.FromResult<(string? Result, bool ShouldRetry)>((null, true));
                 },
-                retryDelayStrategy,
                 LoginAttempts(config),
                 "counting login",
                 cancellationToken);

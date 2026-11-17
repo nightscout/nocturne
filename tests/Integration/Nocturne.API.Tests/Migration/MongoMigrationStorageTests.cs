@@ -17,7 +17,7 @@ namespace Nocturne.API.Tests.Integration.Migration;
 /// a count with no rows behind it shows a history that looks complete and has no glucose or
 /// insulin in it.
 /// </summary>
-[Collection("ApiIntegration")]
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class MongoMigrationStorageTests : ApiIntegrationTestBase, IClassFixture<MigrationTestFixture>
 {

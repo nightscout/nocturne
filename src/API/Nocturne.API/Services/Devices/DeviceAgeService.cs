@@ -1,3 +1,5 @@
+using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -14,12 +16,22 @@ namespace Nocturne.API.Services.Devices;
 public class DeviceAgeService : IDeviceAgeService
 {
     private readonly IDeviceEventRepository _repository;
+    private readonly TimeProvider _time;
     private readonly ILogger<DeviceAgeService> _logger;
 
-    private static readonly DeviceEventType[] CannulaEventTypes = [DeviceEventType.SiteChange, DeviceEventType.CannulaChange];
+    // NIGHTSCOUT-COMPAT: upstream CAGE reads Site Change alone. A pod change, however it is reported,
+    // is a new site, so a pod user's CAGE follows it.
+    private static readonly DeviceEventType[] CannulaEventTypes = [.. ConsumableTrackerSpecs.EventTypes(LegacyConsumableKind.Site)];
     private static readonly DeviceEventType[] SensorStartEventTypes = [DeviceEventType.SensorStart];
     private static readonly DeviceEventType[] SensorChangeEventTypes = [DeviceEventType.SensorChange];
-    private static readonly DeviceEventType[] InsulinEventTypes = [DeviceEventType.InsulinChange, DeviceEventType.ReservoirChange];
+    // NIGHTSCOUT-COMPAT: upstream IAGE reads Insulin Change alone. A pod holds the insulin, so a new
+    // pod is a new reservoir and a pod user's IAGE follows it.
+    private static readonly DeviceEventType[] InsulinEventTypes =
+    [
+        .. ConsumableTrackerSpecs.EventTypes(LegacyConsumableKind.Reservoir),
+        DeviceEventType.PodChange,
+        DeviceEventType.PodActivated,
+    ];
     private static readonly DeviceEventType[] BatteryEventTypes = [DeviceEventType.PumpBatteryChange];
 
     // Default thresholds matching legacy Nightscout values
@@ -28,9 +40,13 @@ public class DeviceAgeService : IDeviceAgeService
     private static readonly DeviceAgePreferences DefaultInsulinPrefs = new() { Info = 44, Warn = 48, Urgent = 72 };
     private static readonly DeviceAgePreferences DefaultBatteryPrefs = new() { Info = 312, Warn = 336, Urgent = 360 };
 
-    public DeviceAgeService(IDeviceEventRepository repository, ILogger<DeviceAgeService> logger)
+    public DeviceAgeService(
+        IDeviceEventRepository repository,
+        TimeProvider timeProvider,
+        ILogger<DeviceAgeService> logger)
     {
         _repository = repository;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -52,19 +68,19 @@ public class DeviceAgeService : IDeviceAgeService
         var sensorChange = CreateDeviceAgeInfo(sensorChangeEvent, effectivePrefs, "SAGE", "Sensor");
 
         // Determine which is more recent (min = most recent valid one)
-        var min = "Sensor Start";
+        var min = TreatmentTypes.SensorStart;
         if (sensorChange.Found && sensorStart.Found)
         {
-            if (sensorChange.TreatmentDate > sensorStart.TreatmentDate)
+            if (sensorChange.TreatmentDate >= sensorStart.TreatmentDate)
             {
-                min = "Sensor Change";
+                min = TreatmentTypes.SensorChange;
                 // Legacy behavior: if Sensor Change is more recent, hide Sensor Start
                 sensorStart.Found = false;
             }
         }
         else if (sensorChange.Found && !sensorStart.Found)
         {
-            min = "Sensor Change";
+            min = TreatmentTypes.SensorChange;
         }
 
         return new SensorAgeInfo
@@ -89,7 +105,7 @@ public class DeviceAgeService : IDeviceAgeService
         return CreateDeviceAgeInfo(latestEvent, effectivePrefs, "BAGE", "Pump battery");
     }
 
-    private static DeviceAgeInfo CreateDeviceAgeInfo(
+    private DeviceAgeInfo CreateDeviceAgeInfo(
         DeviceEvent? deviceEvent,
         DeviceAgePreferences prefs,
         string group,
@@ -103,18 +119,18 @@ public class DeviceAgeService : IDeviceAgeService
                 Age = 0,
                 Days = 0,
                 Hours = 0,
-                Level = 0,
+                Level = DeviceAgeLevel.None,
                 Display = "n/a"
             };
         }
 
-        var ageSpan = DateTime.UtcNow - deviceEvent.Timestamp;
+        var ageSpan = _time.GetUtcNow().UtcDateTime - deviceEvent.Timestamp;
         var totalHours = ageSpan.TotalHours;
         var age = (int)totalHours;
         var days = age / 24;
         var hours = age % 24;
         var minFractions = (int)((totalHours - age) * 60);
-        var treatmentDate = new DateTimeOffset(deviceEvent.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var treatmentDate = deviceEvent.Timestamp.ToMills();
 
         var level = CalculateLevel(age, prefs);
 
@@ -134,7 +150,7 @@ public class DeviceAgeService : IDeviceAgeService
         };
 
         // Add notification if alerts enabled and threshold reached
-        if (prefs.EnableAlerts && level > 0 && minFractions <= 20)
+        if (prefs.EnableAlerts && level >= DeviceAgeLevel.Info && minFractions <= 20)
         {
             info.Notification = CreateNotification(age, days, hours, level, group, deviceLabel);
         }
@@ -145,13 +161,13 @@ public class DeviceAgeService : IDeviceAgeService
     private static int CalculateLevel(int age, DeviceAgePreferences prefs)
     {
         if (age >= prefs.Urgent)
-            return 2; // URGENT
+            return DeviceAgeLevel.Urgent;
         if (age >= prefs.Warn)
-            return 1; // WARN
+            return DeviceAgeLevel.Warn;
         if (age >= prefs.Info)
-            return 1; // INFO (maps to WARN display in legacy)
+            return DeviceAgeLevel.Info;
 
-        return 0; // NONE
+        return DeviceAgeLevel.None;
     }
 
     private static string FormatDisplay(int age, int days, int hours, string displayMode)
@@ -169,11 +185,11 @@ public class DeviceAgeService : IDeviceAgeService
 
     private static DeviceAgeNotification CreateNotification(int age, int days, int hours, int level, string group, string deviceLabel)
     {
-        var sound = level >= 2 ? "persistent" : "incoming";
+        var sound = level >= DeviceAgeLevel.Urgent ? "persistent" : "incoming";
         var (title, message) = level switch
         {
-            2 => ($"{deviceLabel} age {age} hours", $"{deviceLabel} change overdue!"),
-            1 => ($"{deviceLabel} age {age} hours", $"Time to change {deviceLabel.ToLower()}"),
+            DeviceAgeLevel.Urgent => ($"{deviceLabel} age {age} hours", $"{deviceLabel} change overdue!"),
+            DeviceAgeLevel.Warn => ($"{deviceLabel} age {age} hours", $"Time to change {deviceLabel.ToLower()}"),
             _ => ($"{deviceLabel} age {age} hours", $"Change {deviceLabel.ToLower()} soon")
         };
 

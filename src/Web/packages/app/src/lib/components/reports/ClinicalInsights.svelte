@@ -40,8 +40,8 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -53,7 +53,7 @@
     formatInsight,
     getInsightTypeFromKey,
     type FormattedInsight,
-  } from "$lib/utils/insight-localization";
+  } from "#lib/utils/insight-localization.js";
 
   // Local types for glucose analytics and insights
   interface ClinicalAssessment {
@@ -163,13 +163,13 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Lightbulb class="h-5 w-5" />
-      What Your Data is Telling Us
+      What your data is telling us
     </CardTitle>
   </CardHeader>
   <CardContent class="space-y-3">
     {#if insights.length === 0}
       <p class="py-4 text-center text-sm text-muted-foreground">
-        Not enough data yet to generate insights. Keep tracking!
+        Not enough data yet to generate insights. Keep tracking.
       </p>
     {:else}
       {#each insights as insight, i (i)}

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('$app/environment', () => ({ browser: false, dev: false }));
+vi.mock('$app/env', () => ({ browser: false, dev: false }));
 vi.mock('$app/navigation', () => ({}));
 vi.mock('$app/state', () => ({}));
 vi.mock('$app/server', () => ({
@@ -17,12 +17,14 @@ vi.mock('@sveltejs/kit', () => ({
 const {
 	thresholdLineStops,
 	continuousLineStops,
+	lineStopsFor,
 	fillStopsFromLineStops,
 	singleColorFillStops,
 	solidFillStopsFromLineStops,
 	solidSingleColorFillStops,
 	areaY0Accessor
 } = await import('./glucose-gradient-stops');
+const { glucoseRangeStops } = await import('#lib/utils/chart-colors.js');
 
 const thresholds = { veryLow: 55, low: 70, high: 180, veryHigh: 250 };
 // axisScale: glucose value → chart pixel y. Chart top = small y, bottom = large y.
@@ -94,6 +96,56 @@ describe('continuousLineStops', () => {
 		// axisScale(320) = 80 → offset 0.2; axisScale(40) = 360 → offset 0.9
 		expect(stops[0][0]).toBeCloseTo(0.2);
 		expect(stops[stops.length - 1][0]).toBeCloseTo(0.9);
+	});
+});
+
+describe('continuousLineStops with the distinct range palette', () => {
+	const stops = continuousLineStops(axisScale, chartHeight, glucoseRangeStops(thresholds));
+
+	it('draws the range colours and no spectrum colour', () => {
+		for (const [, color] of stops) expect(color).toMatch(/--glucose-/);
+		expect(stops.some(([, color]) => color.startsWith('oklch('))).toBe(false);
+	});
+
+	it('puts each range colour at its threshold', () => {
+		const at = (mgdl: number) => stops.find(([o]) => Math.abs(o - axisScale(mgdl) / chartHeight) < 1e-9)?.[1];
+		expect(at(250)).toBe('var(--glucose-very-high)');
+		expect(at(180)).toBe('var(--glucose-high)');
+		expect(at(125)).toBe('var(--glucose-in-range)');
+		expect(at(70)).toBe('var(--glucose-low)');
+		expect(at(55)).toBe('var(--glucose-very-low)');
+	});
+
+	it('ascends and ends at the very-high and very-low anchors', () => {
+		for (let i = 1; i < stops.length; i++) expect(stops[i][0]).toBeGreaterThan(stops[i - 1][0]);
+		expect(stops[0][1]).toBe('var(--glucose-very-high)');
+		expect(stops[stops.length - 1][1]).toBe('var(--glucose-very-low)');
+	});
+
+	it('blends between anchors in oklch', () => {
+		expect(stops.some(([, color]) => color.startsWith('color-mix(in oklch'))).toBe(true);
+	});
+
+	it('moves the anchors with the thresholds', () => {
+		const moved = continuousLineStops(axisScale, chartHeight, glucoseRangeStops({ ...thresholds, high: 140 }));
+		const high = moved.find(([, color]) => color === 'var(--glucose-high)')!;
+		expect(high[0]).toBeCloseTo(axisScale(140) / chartHeight);
+	});
+
+	it('is the same offsets as the stops lineStopsFor returns', () => {
+		expect(lineStopsFor('continuous', thresholds, axisScale, chartHeight, glucoseRangeStops(thresholds))).toEqual(stops);
+	});
+
+	it('keeps offsets ascending when the thresholds are out of order', () => {
+		const odd = continuousLineStops(axisScale, chartHeight, glucoseRangeStops({ veryLow: 80, low: 70, high: 180, veryHigh: 100 }));
+		for (let i = 1; i < odd.length; i++) expect(odd[i][0]).toBeGreaterThanOrEqual(odd[i - 1][0]);
+	});
+
+	it('leaves the default spectrum stops unchanged without a range', () => {
+		const defaults = continuousLineStops(axisScale, chartHeight);
+		expect(defaults).toEqual(continuousLineStops(axisScale, chartHeight, undefined));
+		expect(defaults[0][1]).toBe('oklch(0.580 0.220 340.00)');
+		expect(defaults[0][0]).toBeCloseTo(0.2);
 	});
 });
 

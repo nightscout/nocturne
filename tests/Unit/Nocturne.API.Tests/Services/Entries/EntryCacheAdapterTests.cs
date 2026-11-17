@@ -5,6 +5,7 @@ using Nocturne.API.Services.Entries;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Tests.Services.Entries;
 
@@ -18,7 +19,7 @@ public class EntryCacheAdapterTests
     private static readonly EntryQuery CacheableQuery = new() { Count = 10, Skip = 0 };
 
     private static EntryCacheAdapter Adapter(ITenantCache cache) =>
-        new(cache, NullLogger<EntryCacheAdapter>.Instance);
+        new(cache);
 
     [Fact]
     public async Task GetOrComputeAsync_CacheableQuery_ServesTheTenantCache()
@@ -49,15 +50,53 @@ public class EntryCacheAdapterTests
         cache.Invocations.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GetOrComputeCurrentAsync_ConcurrentColdReads_ComputeOnce()
+    {
+        var cache = TestTenantCache.Create();
+        var runs = 0;
+        var held = new TaskCompletionSource<Entry?>();
+
+        var reads = Enumerable.Range(0, 8)
+            .Select(_ => Adapter(cache).GetOrComputeCurrentAsync(async () =>
+            {
+                Interlocked.Increment(ref runs);
+                return await held.Task;
+            }))
+            .ToList();
+        held.SetResult(new Entry { Id = "current" });
+
+        (await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().AllSatisfy(entry => entry!.Id.Should().Be("current"));
+        runs.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetOrComputeCurrentAsync_NoEntry_IsNotCached()
+    {
+        var adapter = Adapter(TestTenantCache.Create());
+        var computes = 0;
+
+        var none = await adapter.GetOrComputeCurrentAsync(() => { computes++; return Task.FromResult<Entry?>(null); });
+        var later = await adapter.GetOrComputeCurrentAsync(
+            () => { computes++; return Task.FromResult<Entry?>(new Entry { Id = "later" }); });
+
+        none.Should().BeNull();
+        later!.Id.Should().Be("later");
+        computes.Should().Be(2);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task InvalidateAsync_ClearsTheCurrentEntry_InEitherDemoSegment(bool demo)
+    public async Task AGlucoseWrite_ClearsTheCurrentEntry_InEitherDemoSegment(bool demo)
     {
-        var adapter = Adapter(TestTenantCache.Create(demo: demo));
+        var cache = TestTenantCache.Create(demo: demo);
+        var adapter = Adapter(cache);
         await adapter.GetOrComputeCurrentAsync(() => Task.FromResult<Entry?>(new Entry { Id = "stale" }));
 
-        await adapter.InvalidateAsync();
+        await new LegacyReadCacheInvalidation(cache, NullLogger<LegacyReadCacheInvalidation>.Instance)
+            .WrittenAsync([typeof(SensorGlucose)]);
         var result = await adapter.GetOrComputeCurrentAsync(() => Task.FromResult<Entry?>(new Entry { Id = "fresh" }));
 
         result!.Id.Should().Be("fresh");

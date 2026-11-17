@@ -24,12 +24,10 @@ namespace Nocturne.API.Tests.Services.Seeding;
 /// pump mode, override, temporary target and illness spans the seeder writes.
 /// </summary>
 /// <remarks>
-/// The wiring is a copy of <c>LoopAnalysisService</c>'s loading, simpler in five ways, none of which
+/// The wiring is a copy of <c>LoopAnalysisService</c>'s loading, simpler in four ways, none of which
 /// the sample's data reaches today: the series are not padded past the range; the scheduled baseline
-/// carries no override scale factor; open loop comes from Manual pump mode spans alone, not Off;
-/// <see cref="TargetAt"/> reads the profile's targets without temporary targets; and the IOB is
-/// the Settings evidence page's <see cref="BasalIobModel.Carried"/> model, where the Daily profile
-/// page reads <see cref="BasalIobModel.Displayed"/>.
+/// carries no override scale factor; open loop comes from Manual pump mode spans alone, not Off; and
+/// <see cref="TargetAt"/> reads the profile's targets without temporary targets.
 /// </remarks>
 public class DemoLoopAnalysisTests(ITestOutputHelper output)
 {
@@ -38,10 +36,10 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.Local;
 
     /// <summary>
-    /// A week with a sick day and every kind of loop interruption, manual mode among them, so the
+    /// A week with a sick day and a day in manual mode, so the
     /// insulin totals test sees the days the masks take out and the days they leave in.
     /// </summary>
-    private static readonly DateTime End = new(2026, 9, 7, 20, 0, 0);
+    private static readonly DateTime End = new(2026, 8, 7, 20, 0, 0);
 
     private static readonly Lazy<(SettingsEvidenceInputs Inputs, long From, long To)> Week = new(Load);
 
@@ -71,17 +69,18 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
         therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var builder = new BasalSeriesBuilder(therapy.Object, segments.Object, NullLogger<BasalSeriesBuilder>.Instance);
 
-        var profile = DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow).Store[DemoTherapyProfile.ProfileName];
+        var profile = DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow, "Pacific/Auckland").Store[DemoTherapyProfile.ProfileName];
         static List<ScheduleEntry> Entries(IEnumerable<TimeValue> values) =>
             [.. values.Select(v => new ScheduleEntry { Time = v.Time, Value = v.Value, TimeAsSeconds = v.TimeAsSeconds })];
         var snapshot = new TherapySnapshot(
-            profile.Dia, (int)config.InsulinPeakMinutes, profile.CarbsHr, Zone, null, 0,
+            profile.Dia, profile.CarbsHr, Zone, null, 0,
             Entries(profile.Sens), Entries(profile.CarbRatio), Entries(profile.Basal));
         var timeline = new TherapyTimeline([new TherapySegment(from - DailyProfileCalculator.ActingMs, to + 1, snapshot)]);
 
         var (clipped, evidence) = NetInsulinAboveSchedule.ClipTempBasals(temps, to);
-        var series = builder.BuildAsync(clipped, from, to, snapshot.BasalRateAt(from)).GetAwaiter().GetResult();
-        var iob = new IobCalculator(null!, null!, null!, null!, null!);
+        var scheduled = new ScheduledBasal(timeline.BasalSegments(), []);
+        var series = builder.BuildAsync(clipped, from, to, snapshot.BasalRateAt(from), []).GetAwaiter().GetResult();
+        var iob = new IobCalculator(null!, null!, null!, null!, null!, null!);
         var cob = new CobCalculator(NullLogger<CobCalculator>.Instance, iob, null!, null!, null!, null!);
 
         var spans = DemoLifestyleSeeds.BuildSpans(End.Date, DemoLoopHealthTests.Days, End);
@@ -99,13 +98,13 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
                 Glucose = [.. run.Readings.Select(r => new GlucoseSample(r.Mills, r.Mgdl))],
                 Insulin = new NetInsulinAboveSchedule(
                     NetInsulinAboveSchedule.DeliveredFromSeries(series, to, evidence),
-                    NetInsulinAboveSchedule.ScheduledBaseline(schedule, []),
+                    scheduled.Segments(clipped),
                     boluses.Select(b => new InsulinDose(b.Mills, b.Insulin, b.Kind == BolusKind.Algorithm))),
                 Carbs = [.. carbs.Select(c => new CarbEvent(c.Mills, c.Carbs))],
                 IobCob = IobCobSeries.Build(
-                    iob, cob, boluses, carbs, temps, timeline,
-                    run.Snapshots.Select(s => new ApsIobCobPoint(s.Timestamp, s.Iob, s.Cob)),
-                    from, to - 1, to - 1, 5 * Minute, BasalIobModel.Carried),
+                    iob, cob, boluses, carbs, temps, timeline, scheduled,
+                    DeviceReadings.Of(run.Snapshots.Select(s => new ApsIobCobPoint(s.Timestamp, s.Iob, s.Cob, null)), null),
+                    from, to - 1, to - 1, 5 * Minute),
                 CalculatedIobCobTime = DailyProfileCalculator.CalculableIobCobTime(
                     evidence, boluses.Select(b => b.Mills).Concat(carbs.Select(c => c.Mills))),
                 TargetAt = mills => TargetAt(profile, mills),
@@ -116,7 +115,7 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
                 TemporaryTargets = SpansOf(StateSpanCategory.TemporaryTarget),
                 Illness = SpansOf(StateSpanCategory.Illness),
                 OpenLoop = LoopAnalysisMask.OpenLoop(
-                    SpansOf(StateSpanCategory.PumpMode, nameof(PumpModeState.Manual)), [], [], run.Cycles.Select(c => c.Mills)).Intervals,
+                    SpansOf(StateSpanCategory.PumpMode, nameof(PumpModeState.Manual)), [], [], run.Cycles.Select(c => new ApsLoopState(c.Mills, c.LoopClosed))).Intervals,
             },
             Therapy = timeline,
         };

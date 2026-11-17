@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Scale from "@lucide/svelte/icons/scale";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -11,12 +11,12 @@
     CarbIntakeFoodInputMode,
     type TreatmentFood,
     type Food,
-  } from "$lib/api";
-  import { updateCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
-  import { getFood as getFoodById, getFoods as getAllFoods } from "$api/generated/foods.generated.remote";
+  } from "#lib/api/index.js";
+  import { updateCarbIntakeFood } from "#lib/api/generated/nutritions.generated.remote.js";
+  import { getFood as getFoodById, getFoods as getAllFoods } from "#lib/api/generated/foods.generated.remote.js";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
-  import { AddFoodDialog, foodCategoryMap, type FoodCategoryMap } from "$lib/components/food";
+  import { toastSaved, useToastSubmission } from "#lib/forms/index.js";
+  import { AddFoodDialog, foodCategoryMap, type FoodCategoryMap } from "#lib/components/food/index.js";
 
   interface Props {
     /** Whether the dialog is open */
@@ -193,7 +193,7 @@
         },
       });
 
-      toast.success("Food entry updated");
+      toastSaved("Food entry updated");
       onSave?.();
       resetAndClose();
     });
@@ -203,7 +203,7 @@
 <Dialog.Root bind:open onOpenChange={(value) => !value && resetAndClose()}>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Edit Food Entry</Dialog.Title>
+      <Dialog.Title>Edit food entry</Dialog.Title>
     </Dialog.Header>
 
     <form class="@container space-y-4" onsubmit={handleSubmit}>

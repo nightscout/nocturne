@@ -1,5 +1,6 @@
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -82,7 +83,7 @@ public static class DirectionService
         var recent = sortedEntries[0];
         var previous = sortedEntries[1];
 
-        return BuildDelta(MgdlOf(recent), MgdlOf(previous), recent, previous, units);
+        return BuildDelta(recent.GlucoseMgdl(), previous.GlucoseMgdl(), recent, previous, units);
     }
 
     /// <summary>
@@ -106,8 +107,8 @@ public static class DirectionService
                 new BgNowBucket(
                     fromMills,
                     inBucket,
-                    inBucket.Where(e => MgdlOf(e) > ErrorCodeCeiling).ToList(),
-                    inBucket.Where(e => MgdlOf(e) < ErrorCodeCeiling).ToList()
+                    inBucket.Where(e => e.GlucoseMgdl() > ErrorCodeCeiling).ToList(),
+                    inBucket.Where(e => e.GlucoseMgdl() < ErrorCodeCeiling).ToList()
                 )
             );
         }
@@ -142,11 +143,6 @@ public static class DirectionService
         return info == null ? null : new BucketDelta(info, previous);
     }
 
-    /// <summary>
-    /// Glucose in mg/dL, preferring <see cref="Entry.Mgdl"/> and falling back to <see cref="Entry.Sgv"/>.
-    /// </summary>
-    public static double MgdlOf(Entry entry) => entry.Mgdl != 0 ? entry.Mgdl : entry.Sgv ?? 0;
-
     private static Core.Models.DeltaInfo? BuildDelta(
         double recentMean,
         double previousMean,
@@ -167,12 +163,13 @@ public static class DirectionService
 
         var mgdl = (int)Math.Floor(recentMean - mean5MinsAgo + 0.5);
 
+        var useMmol = GlucoseUnits.Parse(units) == GlucoseUnit.Mmol;
         var scaled =
-            units == "mmol"
+            useMmol
                 ? RoundBGToDisplayFormat(ScaleMgdl(recentMean) - ScaleMgdl(mean5MinsAgo))
                 : mgdl;
         var display =
-            units == "mmol"
+            useMmol
                 ? (scaled >= 0 ? $"+{scaled:F1}" : $"{scaled:F1}")
                 : (scaled >= 0 ? $"+{scaled}" : scaled.ToString());
         return new Core.Models.DeltaInfo
@@ -245,7 +242,7 @@ public static class DirectionService
     /// </summary>
     private static double RoundBGToDisplayFormat(double value)
     {
-        return Math.Round(value, 1);
+        return ScaledRounding.Round(value, 1);
     }
 }
 
@@ -263,7 +260,7 @@ public sealed record BgNowBucket(
 {
     public Entry? Last => Valid.Count > 0 ? Valid[^1] : null;
 
-    public double? Mean => Valid.Count > 0 ? Valid.Average(DirectionService.MgdlOf) : null;
+    public double? Mean => Valid.Count > 0 ? Valid.Average(e => e.GlucoseMgdl()) : null;
 }
 
 /// <summary>

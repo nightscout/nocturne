@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render } from "svelte/server";
-import type { UserDisplayPreferences } from "$lib/api";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
 import Harness from "./appearance-ssr-harness.svelte";
 import {
   glucoseUnits,
@@ -10,6 +10,14 @@ import {
 } from "./appearance-store.svelte";
 
 const mmol: UserDisplayPreferences = { glucoseUnits: "mmol", timeFormat: "24" };
+
+/** Five minutes ago as the narrow relative-time format writes it in `locale`. */
+function narrowAgo(locale: string): string {
+  return new Intl.RelativeTimeFormat(locale, {
+    style: "narrow",
+    numeric: "auto",
+  }).format(-5, "minute");
+}
 
 async function ssr(
   layers: UserDisplayPreferences[],
@@ -24,8 +32,8 @@ describe("appearance-store SSR resolution", () => {
       ssr([{ a1cName: "A1c", a1cUnits: "mmol/mol" }]),
       ssr([]),
     ]);
-    expect(custom).toContain("A1c / eA1c: 53 mmol/mol");
-    expect(defaults).toContain("HbA1c / eHbA1c: 7.0%");
+    expect(custom).toContain("A1c / eA1c: 53.0 mmol/mol");
+    expect(defaults).toContain("HbA1c / eHbA1c: 7.00%");
   });
   it("renders the request's units, not the module default", async () => {
     const body = await ssr([mmol]);
@@ -87,7 +95,7 @@ describe("language SSR resolution", () => {
     const body = await ssr([], "de");
 
     expect(body).toContain("Do., 31. Dez.");
-    expect(body).toContain("vor 5 Min.");
+    expect(body).toContain(narrowAgo("de"));
     expect(body).not.toContain("Thu, Dec 31");
   });
 
@@ -95,7 +103,7 @@ describe("language SSR resolution", () => {
     const body = await ssr([]);
 
     expect(body).toContain("Thu, Dec 31");
-    expect(body).toContain("5 min. ago");
+    expect(body).toContain(narrowAgo("en"));
   });
 
   it("keeps concurrent requests isolated", async () => {

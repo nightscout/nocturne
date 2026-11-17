@@ -41,7 +41,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single
     /// registered <see cref="PatientDevice"/>.</param>
     Task<IEnumerable<DeviceEvent>> GetAsync(
@@ -52,7 +51,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         Guid? patientDeviceId = null,
         CancellationToken ct = default
     );
@@ -61,7 +59,7 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<IEnumerable<DeviceEvent>> IV4Repository<DeviceEvent>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, patientDeviceId: null, ct: ct);
 
     /// <summary>Delete <see cref="DeviceEvent"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
@@ -83,6 +81,9 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// </summary>
     Task<IReadOnlyList<DeviceEvent>> GetAllCopiesAsync(
         DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
+
+    /// <summary>The events with <paramref name="ids"/>, deleted ones included, in no particular order.</summary>
+    Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
 
     /// <summary>
     /// The events of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>)
@@ -121,6 +122,13 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
         => GetLatestByEventTypeAsync(eventType, asOf: null, ct);
 
     /// <summary>
+    /// As <see cref="GetLatestByEventTypeAsync(DeviceEventType, DateTime?, CancellationToken)"/>, for the
+    /// most recent event of any of <paramref name="eventTypes"/>.
+    /// </summary>
+    Task<DeviceEvent?> GetLatestOfAnyTypeAsync(
+        IReadOnlyCollection<DeviceEventType> eventTypes, DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
     /// Retrieve the most recent <see cref="DeviceEvent"/> matching any of the specified <see cref="DeviceEventType"/> values.
     /// </summary>
     /// <param name="eventTypes">Array of <see cref="DeviceEventType"/> values to search for.</param>
@@ -130,6 +138,16 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<DeviceEvent?> GetLatestByEventTypesAsync(
         DeviceEventType[] eventTypes,
         Guid? patientDeviceId = null,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// The number of <see cref="DeviceEvent"/> records of any of <paramref name="eventTypes"/> dated at or
+    /// after <paramref name="since"/>, counted as <see cref="GetLatestByEventTypesAsync"/> reads them.
+    /// </summary>
+    Task<int> CountByEventTypesSinceAsync(
+        DeviceEventType[] eventTypes,
+        DateTime since,
         CancellationToken ct = default
     );
 }

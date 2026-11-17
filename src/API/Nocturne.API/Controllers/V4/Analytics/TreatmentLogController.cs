@@ -46,6 +46,7 @@ public class TreatmentLogController(
 
     /// <summary>
     /// Record counts per kind and the treatment summary over the records the log's filter keeps.
+    /// The response is never cached, so a just-entered record counts at once.
     /// </summary>
     /// <param name="from">Inclusive start of the range.</param>
     /// <param name="to">End of the range.</param>

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TherapySettings
 /// </summary>
 [Table("therapy_settings")]
-public class TherapySettingsEntity : V4TimeSeriesEntityBase
+public class TherapySettingsEntity : V4TimeSeriesEntityBase, IProfileScopedEntity
 {
     /// <summary>
     /// Profile name this therapy settings record belongs to

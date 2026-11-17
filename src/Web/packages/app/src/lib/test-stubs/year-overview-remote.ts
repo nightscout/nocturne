@@ -1,6 +1,6 @@
 import { vi } from "vitest";
-import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
-import { effectAwareQuery } from "./effect-aware-query.svelte";
+import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import { createQueryResource } from "./remote-resource";
 
 export const yearOverviewMocks = {
   years:
@@ -15,18 +15,18 @@ export const yearOverviewMocks = {
 };
 
 export const getAvailableYears = () =>
-  effectAwareQuery(yearOverviewMocks.years);
+  createQueryResource(yearOverviewMocks.years);
 export const getDailySummary = (request: {
   year: number;
   dataSources?: string[];
-}) => effectAwareQuery(() => yearOverviewMocks.days(request));
-export const getGriTimeline = () => effectAwareQuery(yearOverviewMocks.gri);
+}) => createQueryResource(() => yearOverviewMocks.days(request));
+export const getGriTimeline = () => createQueryResource(yearOverviewMocks.gri);
 
 export const getYearSummary = (request: {
   year: number;
   dataSources?: string[];
 }) =>
-  effectAwareQuery(async () => ({
+  createQueryResource(async () => ({
     dailySummary: await yearOverviewMocks.days(request),
     griTimeline: await yearOverviewMocks.gri(),
   }));

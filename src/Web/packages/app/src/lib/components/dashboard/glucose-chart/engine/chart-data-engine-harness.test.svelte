@@ -2,8 +2,8 @@
   // Test-only harness: the engine reads the realtime store out of context and
   // registers effects, both of which need a real component lifecycle. Hands the
   // engine back to the test.
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import type { Entry } from "$lib/websocket/types";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import type { Entry } from "#lib/websocket/types.js";
   import { createChartDataEngine } from "./chart-data-engine.svelte";
   import type {
     ChartDataEngine,

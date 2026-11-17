@@ -113,17 +113,8 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        return new RefreshTokenSession(record.SubjectId, record.OidcSessionId);
+        return new RefreshTokenSession(record.SubjectId, SessionKeyOf(record));
     }
-
-    /// <summary>
-    /// Window during which reuse of a just-rotated refresh token is treated as a benign
-    /// concurrent-request race rather than token theft. An SSR web app fans out several
-    /// parallel requests per navigation (page load, preload, proxied API and remote-function
-    /// calls) that all carry the same refresh-token cookie, so a client can legitimately
-    /// present a token that another in-flight request rotated moments earlier.
-    /// </summary>
-    private static readonly TimeSpan RotationGracePeriod = TimeSpan.FromSeconds(60);
 
     /// <inheritdoc />
     public async Task<string?> RotateRefreshTokenAsync(
@@ -159,9 +150,9 @@ public class RefreshTokenService : IRefreshTokenService
             Id: Guid.CreateVersion7(),
             TokenHash: newTokenHash,
             SubjectId: oldRecord.SubjectId,
-            // A chain issued before sessions were tagged takes an id here, so its next access token
-            // can name its session (sid).
-            OidcSessionId: oldRecord.OidcSessionId ?? Guid.CreateVersion7().ToString("N"),
+            // A chain issued before sessions were tagged takes its session key here, so its next
+            // access token can name its session (sid) and the owner read before rotation agrees.
+            OidcSessionId: SessionKeyOf(oldRecord),
             DeviceDescription: oldRecord.DeviceDescription,
             IpAddress: ipAddress ?? oldRecord.IpAddress,
             UserAgent: userAgent ?? oldRecord.UserAgent,
@@ -172,7 +163,7 @@ public class RefreshTokenService : IRefreshTokenService
             ReplacedByTokenId: null,
             LastUsedAt: null);
 
-        var claimed = await _repository.TryMarkRotatedAsync(oldRecord.Id, newRecord.Id);
+        var claimed = await _repository.TryRotateAsync(oldRecord.Id, newRecord);
         if (!claimed)
         {
             // A concurrent request rotated this token between our read and our claim. Treat
@@ -185,7 +176,7 @@ public class RefreshTokenService : IRefreshTokenService
                 _logger.LogDebug(
                     "Lost refresh-token rotation race for subject {SubjectId} — replaying the winner's successor.",
                     oldRecord.SubjectId);
-                return racedSuccessor;
+                return await LiveOrNullAsync(racedSuccessor);
             }
 
             _logger.LogDebug(
@@ -194,11 +185,9 @@ public class RefreshTokenService : IRefreshTokenService
             throw new TokenRotationRaceException();
         }
 
-        await _repository.CreateAsync(newRecord);
-
         // Publish the successor for the grace window so concurrent requests still carrying
         // the old cookie receive this same token instead of failing authentication.
-        await _successorCache.StoreAsync(tokenHash, newRefreshToken, RotationGracePeriod);
+        await _successorCache.StoreAsync(tokenHash, newRefreshToken, RefreshTokenRotation.GracePeriod);
 
         _logger.LogDebug(
             "Rotated refresh token for subject {SubjectId}. Old: {OldTokenId}, New: {NewTokenId}",
@@ -209,7 +198,7 @@ public class RefreshTokenService : IRefreshTokenService
 
     /// <summary>
     /// Handles presentation of an already-revoked refresh token. Reuse of a rotated token
-    /// within <see cref="RotationGracePeriod"/> is a concurrent-request race (the client had
+    /// within <see cref="RefreshTokenRotation.GracePeriod"/> is a concurrent-request race (the client had
     /// not yet received the rotated cookie) — when the successor is still cached, it is
     /// replayed so the request authenticates like the one that won the rotation. Beyond the
     /// grace period, reuse signals the token leaked and the
@@ -225,7 +214,7 @@ public class RefreshTokenService : IRefreshTokenService
         }
 
         var timeSinceRevocation = DateTime.UtcNow - oldRecord.RevokedAt!.Value;
-        if (timeSinceRevocation < RotationGracePeriod)
+        if (timeSinceRevocation < RefreshTokenRotation.GracePeriod)
         {
             var successor = await _successorCache.GetAsync(oldRecord.TokenHash);
             if (successor != null)
@@ -234,7 +223,7 @@ public class RefreshTokenService : IRefreshTokenService
                     "Refresh token reuse within grace period ({Elapsed:F1}s) for subject {SubjectId} — " +
                     "concurrent request, replaying the rotation's successor.",
                     timeSinceRevocation.TotalSeconds, oldRecord.SubjectId);
-                return successor;
+                return await LiveOrNullAsync(successor);
             }
 
             _logger.LogDebug(
@@ -270,6 +259,17 @@ public class RefreshTokenService : IRefreshTokenService
         return null;
     }
 
+    /// <summary>
+    /// A cached successor outlives its row's revocation: logout, a device revoke or reuse
+    /// detection can revoke it inside the grace period, and replaying it then would sign the
+    /// caller back into a revoked session.
+    /// </summary>
+    private async Task<string?> LiveOrNullAsync(string successor)
+    {
+        var record = await _repository.FindByHashAsync(_jwtService.HashRefreshToken(successor));
+        return record is { RevokedAt: null } && record.ExpiresAt >= DateTime.UtcNow ? successor : null;
+    }
+
     /// <inheritdoc />
     public async Task<bool> RevokeRefreshTokenAsync(string refreshToken, string reason)
     {
@@ -301,10 +301,8 @@ public class RefreshTokenService : IRefreshTokenService
     {
         var tokens = await _repository.GetActiveSessionsAsync(subjectId);
 
-        // A rotation chain shares one OIDC session ID, and the rotation grace window means a
-        // session briefly has several live tokens. Group per session so each login/device
-        // appears once. Legacy tokens without a session ID each stand as their own session,
-        // keyed by token ID.
+        // The rotation grace window means a session briefly has several live tokens. Group per
+        // session (keyed as SessionKeyOf keys it) so each login/device appears once.
         return tokens
             .GroupBy(t => t.OidcSessionId ?? t.Id.ToString())
             .Select(g =>
@@ -327,7 +325,7 @@ public class RefreshTokenService : IRefreshTokenService
     }
 
     /// <inheritdoc />
-    public async Task<string?> GetSessionIdForTokenAsync(string refreshToken)
+    public async Task<RefreshTokenSession?> FindOwnerAsync(string refreshToken)
     {
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
@@ -337,8 +335,16 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        return record.OidcSessionId ?? record.Id.ToString();
+        return new RefreshTokenSession(record.SubjectId, SessionKeyOf(record));
     }
+
+    /// <summary>
+    /// The session a token's chain belongs to: its OIDC session id, or for a legacy token issued
+    /// before sessions were tagged, the token's own id. The key
+    /// <see cref="IFirstPartyTokenRepository.RevokeSessionForSubjectAsync"/> matches.
+    /// </summary>
+    private static string SessionKeyOf(RefreshTokenRecord record) =>
+        record.OidcSessionId ?? record.Id.ToString();
 
     /// <inheritdoc />
     public async Task<int> RevokeSessionForSubjectAsync(Guid subjectId, string sessionId, string reason)

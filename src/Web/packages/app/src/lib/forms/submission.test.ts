@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { useSubmission } from "./submission.svelte";
-import { GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { genericSubmitError } from "./submit-messages.svelte";
 
 describe("useSubmission", () => {
   it("starts with no error", () => {
@@ -37,7 +37,7 @@ describe("useSubmission", () => {
       })
     ).resolves.toBe(false);
 
-    expect(submission.error).toBe(GENERIC_SUBMIT_ERROR);
+    expect(submission.error).toBe(genericSubmitError());
   });
 
   it("uses the handler's message for a 4xx rejection", async () => {
@@ -76,6 +76,46 @@ describe("useSubmission", () => {
     fail = false;
     await submission.run(async () => true);
     expect(submission.error).toBeNull();
+  });
+
+  it("counts only the submissions that succeeded, after onSuccess", async () => {
+    const submission = useSubmission();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await submission.run(async () => false);
+    await submission.run(async () => {
+      throw new Error("offline");
+    });
+    await submission.run(
+      async () => true,
+      () => {
+        throw new Error("follow-up failed");
+      }
+    );
+    await submission.run(async () => true, async () => false);
+    expect(submission.saved).toBe(0);
+
+    await submission.run(async () => true);
+    await submission.run(async () => true);
+    expect(submission.saved).toBe(2);
+  });
+
+  it("reports a failed follow-up apart from a failed submission", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const submission = useSubmission({
+      fallback: "Couldn't save.",
+      followUpFallback: "Saved, but the follow-up failed.",
+    });
+
+    await expect(
+      submission.run(
+        async () => true,
+        () => {
+          throw new Error("offline");
+        }
+      )
+    ).resolves.toBe(true);
+    expect(submission.error).toBe("Saved, but the follow-up failed.");
   });
 
   it("clears on demand", async () => {

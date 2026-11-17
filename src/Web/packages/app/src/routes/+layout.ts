@@ -1,5 +1,5 @@
 import locales from '../../../../supportedLocales.json'
-import { browser } from '$app/environment'
+import { browser } from '$app/env'
 import { loadLocale } from 'wuchale/load-utils'
 import {
     preferredLanguage,
@@ -7,12 +7,13 @@ import {
     registerPreferenceCookieDomain,
     registerPreferencesWriteThrough,
     reconcilePreferences,
+    showTenantDefaultUnits,
     presentOwnerPreferences,
     applyTenantPresentation,
     setLanguage,
     type SupportedLocale,
-} from '$lib/stores/appearance-store.svelte'
-import { updateDisplayPreferences } from '$lib/api/user-preferences.remote'
+} from '#lib/stores/appearance-store.svelte.js'
+import { updateDisplayPreferences } from '#lib/api/user-preferences.remote.js'
 // so that the loaders are registered, only here, not required in nested ones (below)
 import '../../../../locales/main.loader.svelte.js'
 import '../../../../locales/js.loader.js'
@@ -64,6 +65,7 @@ export const load: LayoutLoad = async ({ url, data }) => {
     } else if (browser && data?.hasAccount) {
         // Server preferences win across devices; an empty server blob seeds from local once.
         reconcilePreferences(data?.serverPreferences)
+        showTenantDefaultUnits(data?.user?.defaultGlucoseUnits)
     }
 
     applyTenantPresentation(data?.tenantPreferences)

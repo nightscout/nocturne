@@ -66,12 +66,12 @@ public class Device
     /// <summary>
     /// When this device was first seen in Unix milliseconds, computed from <see cref="FirstSeenTimestamp"/>.
     /// </summary>
-    public long FirstSeenMills => new DateTimeOffset(FirstSeenTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long FirstSeenMills => FirstSeenTimestamp.ToMills();
 
     /// <summary>
     /// When this device was last seen in Unix milliseconds, computed from <see cref="LastSeenTimestamp"/>.
     /// </summary>
-    public long LastSeenMills => new DateTimeOffset(LastSeenTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long LastSeenMills => LastSeenTimestamp.ToMills();
 
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns

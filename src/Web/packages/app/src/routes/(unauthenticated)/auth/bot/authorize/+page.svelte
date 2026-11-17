@@ -3,12 +3,12 @@
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
-	import { Button } from "$lib/components/ui/button";
-	import { Input } from "$lib/components/ui/input";
+	import { Button } from "#lib/components/ui/button/index.js";
+	import { Input } from "#lib/components/ui/input/index.js";
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";
-	import { getPending, claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
-	import { retainQuery } from "$lib/api/retain-query.svelte";
-	import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+	import { getPending, claimLink } from "#lib/api/generated/chatIdentities.generated.remote.js";
+	import { retainQuery } from "#lib/api/retain-query.svelte.js";
+	import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
 
 	// Read state token from URL
 	const stateToken = $derived(page.url.searchParams.get("state") ?? "");
@@ -37,7 +37,7 @@
 
 	const errorMessage = $derived.by(() => {
 		if (!stateToken) return "Missing state token.";
-		if (pendingError) return "This link is expired or invalid. Please run /connect in your chat app again.";
+		if (pendingError) return "This link is expired or invalid. Run /connect in your chat app again.";
 		return "";
 	});
 
@@ -76,15 +76,15 @@
 		claimError = null;
 		try {
 			await claimLink({ token: stateToken });
-			goto(resolve("/auth/bot/authorize/done"));
-		} catch (err) {
+			goto(resolve('auth/bot/authorize/done'));
+		} catch(err) {
 			const status = errorStatus(err);
 			claimError =
 				status === 409
 					? "This chat account is already linked to another member."
 					: status === 400
-						? "This link is expired or invalid. Please run /connect in your chat app again."
-						: describeSubmitError(err, "Failed to link account. Please try again.");
+						? "This link is expired or invalid. Run /connect in your chat app again."
+						: describeSubmitError(err, "Failed to link account. Try again.");
 			isClaiming = false;
 		}
 	}
@@ -96,14 +96,14 @@
 	</div>
 {:else if mode === "error"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6 text-center">
-		<h1 class="text-2xl font-bold">Can't Complete This Link</h1>
+		<h1 class="text-2xl font-bold">Cannot complete this link</h1>
 		<p class="text-destructive max-w-md">{errorMessage}</p>
 	</div>
 {:else if mode === "slug-prompt"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
-		<h1 class="text-2xl font-bold">Which Nocturne Instance?</h1>
+		<h1 class="text-2xl font-bold">Which Nocturne instance?</h1>
 		<p class="text-muted-foreground max-w-md text-center">
-			Enter the slug of the Nocturne instance you'd like to link your chat account to.
+			Enter the slug of the Nocturne instance that you want to link your chat account to.
 		</p>
 		{#if slugError}
 			<p class="text-destructive">{slugError}</p>
@@ -118,7 +118,7 @@
 					type="text"
 					bind:value={slug}
 					required
-					pattern="[a-z0-9][a-z0-9\-]{'{ 0,62}'}[a-z0-9]?"
+					pattern={"[a-z0-9][a-z0-9\\-]{0,61}[a-z0-9]?"}
 					placeholder="e.g. myfamily"
 				/>
 			</label>
@@ -132,13 +132,13 @@
 	</div>
 {:else if mode === "confirm"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
-		<h1 class="text-2xl font-bold">Connect Chat Account</h1>
+		<h1 class="text-2xl font-bold">Connect chat account</h1>
 		{#if !context?.isAuthenticated}
 			<p class="text-muted-foreground max-w-md text-center">
 				Sign in to your Nocturne account to finish connecting your chat account.
 			</p>
 			<a
-				href={resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`)}
+				href={resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`)}
 				class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 			>
 				Sign in

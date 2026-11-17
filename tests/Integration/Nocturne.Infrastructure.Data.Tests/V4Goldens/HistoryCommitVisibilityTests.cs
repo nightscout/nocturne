@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -410,7 +411,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
 
     /// <summary>The cursor a v3 client keeps: the newest <c>srvModified</c> it was sent.</summary>
     private static long HistoryCursor(IReadOnlyList<HistoryRecord<SensorGlucose>> page, long cursor) =>
-        page.Count == 0 ? cursor : page.Max(h => HistoryPage.ToMilliseconds(h.Record.ModifiedAt));
+        page.Count == 0 ? cursor : page.Max(h => h.Record.ModifiedAt.ToMills());
 
     /// <summary>Opens a transaction holding a row lock on <paramref name="id"/>, which stalls a delete of it.</summary>
     private static async Task<NpgsqlTransaction> HoldRowAsync(NpgsqlConnection connection, Guid tenant, Guid id)

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -17,9 +17,6 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// </remarks>
 internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertReplayEngine
 {
-    /// <summary>The <see cref="AlertEngineErrors"/> engine tag calls are recorded under.</summary>
-    public string EngineTag { get; init; } = AlertEngineErrors.RustEngine;
-
     /// <exception cref="RustAlertEngineException">The native call failed.</exception>
     public Task<AlertReplayRun> ReplayAsync(AlertReplayInput input, CancellationToken ct)
     {
@@ -37,48 +34,22 @@ internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertRe
             }).ToList(),
             IncludeTicks = input.IncludeTicks,
         };
-        var response = errors.Track("replay", EngineTag, () => RustAlertEngine.Replay(request));
+        var response = errors.Track("replay", () => RustAlertEngine.Replay(request));
         return Task.FromResult(ToRun(response));
     }
 
     /// <summary>
-    /// A body whose JSON does not parse goes as a JSON string. The engine cannot read a string as a
-    /// payload, so it skips the rule on every tick, as the managed replay does.
+    /// A body whose JSON does not parse goes as a JSON string (<see cref="RuleTrees.Body"/>). The
+    /// engine cannot read a string as a payload, so it skips the rule on every tick.
     /// </summary>
     private static RustAlertRule BuildRule(AlertRuleSnapshot rule) => new()
     {
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-        ConditionParams = ParseBody(rule),
+        ConditionParams = RuleTrees.Body(rule.ConditionType, rule.ConditionParams),
         AutoResolveEnabled = rule.AutoResolveEnabled,
-        AutoResolveParams = rule.AutoResolveEnabled ? ParseAutoResolve(rule.AutoResolveParams) : null,
+        AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
     };
-
-    private static JsonElement ParseBody(AlertRuleSnapshot rule)
-    {
-        try
-        {
-            return RustEnvelopeMapper.ParseJson(ConditionTimeZones.CanonicaliseRule(rule.ConditionType, rule.ConditionParams));
-        }
-        catch (JsonException)
-        {
-            return JsonSerializer.SerializeToElement(rule.ConditionParams);
-        }
-    }
-
-    private static JsonElement? ParseAutoResolve(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
-        try
-        {
-            return RustEnvelopeMapper.ParseNode(json);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
 
     private static AlertReplayRun ToRun(RustReplayResponse response) => new(
         response.Order!,

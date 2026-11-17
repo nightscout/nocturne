@@ -10,20 +10,31 @@
  */
 
 import { getContext, setContext } from "svelte";
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { resolve } from "$app/paths";
-import { toDate } from "$lib/utils/formatting";
-import { toIsoString } from "$lib/utils/api-date";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { toDate } from "#lib/utils/formatting.js";
+import { toIsoString } from "#lib/utils/api-date.js";
 import {
   getSessionInfo,
   refreshSession as refreshSessionRemote,
   logoutSession as logoutSessionRemote,
 } from "../../routes/(unauthenticated)/auth/auth.remote";
-import { remoteErrorMessage } from "$lib/api/remote-error";
-import { whenIdle } from "$lib/utils/when-idle";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
+import { whenIdle } from "#lib/utils/when-idle.js";
+import { fresh } from "#lib/api/fresh-query.js";
 
 const AUTH_STORE_KEY = "nocturne:app:auth-store";
+
+const EXPIRY_CHECK_INTERVAL_MS = 30_000;
+
+/**
+ * How far ahead of expiry the session is refreshed. Kept well above the check
+ * interval so a throttled background tab (Chrome clamps timers to once a
+ * minute) still refreshes before the session lapses.
+ */
+const REFRESH_LEAD_MS = 3 * 60_000;
 
 /**
  * User information from the current session
@@ -79,29 +90,11 @@ export class AuthStore {
 
   // Session expiry tracking
   private _expiresAt = $state<Date | null>(null);
-  private _expiryWarningShown = $state(false);
   private expiryCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private refreshInFlight: Promise<boolean> | null = null;
   private cancelSessionLoad: (() => void) | null = null;
 
   expiresAt = $derived(this._expiresAt);
-  expiryWarningShown = $derived(this._expiryWarningShown);
-
-  /**
-   * Time until session expires in seconds (null if not authenticated)
-   */
-  timeUntilExpiry = $derived.by(() => {
-    if (!this._expiresAt) return null;
-    const diff = this._expiresAt.getTime() - Date.now();
-    return Math.max(0, Math.floor(diff / 1000));
-  });
-
-  /**
-   * Whether the session is about to expire (within 5 minutes)
-   */
-  isSessionExpiringSoon = $derived.by(() => {
-    const timeLeft = this.timeUntilExpiry;
-    return timeLeft !== null && timeLeft > 0 && timeLeft < 300;
-  });
 
   constructor() {
     if (browser) {
@@ -120,12 +113,11 @@ export class AuthStore {
     if (!browser) return;
 
     const cookies = document.cookie.split(";");
-    const authCookie = cookies.find((c) => c.trim().startsWith("IsAuthenticated="));
+    const authCookie = cookies.find((c) => c.trim().startsWith(`${AUTH_COOKIE_NAMES.isAuthenticated}=`));
 
     if (authCookie) {
       // Nothing on first paint reads the session (the layout's server data carries the user and
-      // permissions), so it loads once the page is idle. That is also out of the render that
-      // constructs the store, where `getSessionInfo().run()` would reject.
+      // permissions), so it loads once the page is idle.
       this._state = "loading";
       this.cancelSessionLoad = whenIdle(() => {
         this.cancelSessionLoad = null;
@@ -142,17 +134,8 @@ export class AuthStore {
   private startExpiryCheck(): void {
     if (!browser || this.expiryCheckInterval) return;
 
-    this.expiryCheckInterval = setInterval(() => {
-      if (this._expiresAt && this._state === "authenticated") {
-        if (Date.now() >= this._expiresAt.getTime()) {
-          // Session expired, trigger refresh
-          this.refreshSession();
-        } else if (!this._expiryWarningShown && this.isSessionExpiringSoon) {
-          this._expiryWarningShown = true;
-          // Session expiring soon, could trigger a notification here
-        }
-      }
-    }, 30000); // Check every 30 seconds
+    this.expiryCheckInterval = setInterval(this.refreshIfExpiring, EXPIRY_CHECK_INTERVAL_MS);
+    document.addEventListener("visibilitychange", this.refreshIfExpiring);
   }
 
   /**
@@ -163,7 +146,17 @@ export class AuthStore {
       clearInterval(this.expiryCheckInterval);
       this.expiryCheckInterval = null;
     }
+    if (browser) {
+      document.removeEventListener("visibilitychange", this.refreshIfExpiring);
+    }
   }
+
+  private refreshIfExpiring = (): void => {
+    if (!this._expiresAt || this._state !== "authenticated") return;
+    if (document.visibilityState === "hidden") return;
+    if (this._expiresAt.getTime() - Date.now() > REFRESH_LEAD_MS) return;
+    void this.refreshSession();
+  };
 
   /**
    * Load the current session from the API
@@ -175,7 +168,7 @@ export class AuthStore {
     this._error = null;
 
     try {
-      const session = await getSessionInfo().run();
+      const session = await fresh(getSessionInfo());
 
       if (session.isAuthenticated && session.subjectId) {
         this._user = {
@@ -189,7 +182,6 @@ export class AuthStore {
         };
         this._expiresAt = toDate(session.expiresAt);
         this._state = "authenticated";
-        this._expiryWarningShown = false;
       } else {
         this._user = null;
         this._expiresAt = null;
@@ -220,7 +212,6 @@ export class AuthStore {
       this._user = null;
       this._expiresAt = null;
       this._state = "unauthenticated";
-      this._expiryWarningShown = false;
 
       if (!result.success) {
         console.warn("Logout API call failed, but local state cleared");
@@ -235,7 +226,7 @@ export class AuthStore {
     this._state = "unauthenticated";
 
     // Redirect to home
-    goto(resolve("/"));
+    goto(resolve(""));
   }
 
   /**
@@ -243,16 +234,20 @@ export class AuthStore {
    */
   async refreshSession(): Promise<boolean> {
     if (!browser) return false;
+    this.refreshInFlight ??= this.performRefresh().finally(() => {
+      this.refreshInFlight = null;
+    });
+    return this.refreshInFlight;
+  }
 
+  private async performRefresh(): Promise<boolean> {
     try {
       const result = await refreshSessionRemote();
 
       if (result.success) {
+        // Only the expiry moves. Reloading the session would pass through the
+        // "loading" state and briefly unmount everything gated on isAuthenticated.
         this._expiresAt = toDate(result.expiresAt);
-        this._expiryWarningShown = false;
-
-        // Reload session to get updated user info
-        await this.loadSession();
         return true;
       } else {
         // Refresh failed, user needs to re-login
@@ -268,13 +263,6 @@ export class AuthStore {
       this._state = "unauthenticated";
       return false;
     }
-  }
-
-  /**
-   * Dismiss the session expiry warning
-   */
-  dismissExpiryWarning(): void {
-    this._expiryWarningShown = false;
   }
 
   /**

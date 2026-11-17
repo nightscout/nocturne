@@ -11,8 +11,8 @@
   } from "layerchart";
   import { curveStepAfter } from "d3";
   import { scaleLinear } from "d3-scale";
-  import { PumpModeIcon } from "$lib/components/icons";
-  import { BasalDeliveryOrigin } from "$lib/api";
+  import { PumpModeIcon } from "#lib/components/icons/index.js";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
 
   interface StateSpanChartData {
     id: string;
@@ -95,6 +95,9 @@
     showLabel = true,
   }: Props = $props();
 
+  // Width the "Last pump sync" label needs to its right; the stale span runs to the chart's end.
+  const LAST_SYNC_LABEL_ROOM = 100;
+
   // Group basal delivery spans by origin for layered rendering
   const scheduledDeliverySpans = $derived(
     basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Scheduled)
@@ -107,6 +110,9 @@
   );
   const suspendedDeliverySpans = $derived(
     basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Suspended)
+  );
+  const inferredDeliverySpans = $derived(
+    basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Inferred)
   );
 
   // Check if we're using new StateSpans-based basal data
@@ -175,7 +181,7 @@
     x={staleBasalData.start.getTime()}
     y={basalScale(maxBasalRate)}
     label="Last pump sync"
-    labelPlacement="bottom-right"
+    labelPlacement={context.xScale(staleBasalData.end) - context.xScale(staleBasalData.start) < LAST_SYNC_LABEL_ROOM ? "bottom-left" : "bottom-right"}
     fill="var(--warning)"
     class="hover:bg-background hover:text-foreground"
   />
@@ -246,6 +252,16 @@
       y={[basalScale(span.rate), basalZero]}
       fill={span.color}
       class="opacity-90"
+    />
+  {/each}
+
+  <!-- Render inferred basal (profile-derived, no pump data) -->
+  {#each inferredDeliverySpans as span (span.id)}
+    <AnnotationRange
+      x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+      y={[basalScale(span.rate), basalZero]}
+      fill={span.color}
+      class="opacity-40"
     />
   {/each}
 

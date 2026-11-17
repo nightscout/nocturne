@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TargetRangeSchedule
 /// </summary>
 [Table("target_range_schedules")]
-public class TargetRangeScheduleEntity : V4TimeSeriesEntityBase
+public class TargetRangeScheduleEntity : V4TimeSeriesEntityBase, IProfileScopedEntity
 {
     /// <summary>
     /// Profile name this target range schedule belongs to

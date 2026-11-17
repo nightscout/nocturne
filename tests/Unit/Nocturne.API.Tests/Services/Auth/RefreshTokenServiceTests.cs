@@ -75,6 +75,22 @@ public class RefreshTokenServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task ValidateRefreshTokenAsync_LegacyToken_NamesTheSameSessionAsFindOwner()
+    {
+        var tokenId = Guid.CreateVersion7();
+        _jwtService.Setup(j => j.HashRefreshToken("legacy")).Returns("hash-legacy");
+        _repository.Setup(r => r.FindByHashAsync("hash-legacy", default))
+            .ReturnsAsync(MakeRecord(id: tokenId, oidcSessionId: null));
+        var service = CreateService();
+
+        var validated = await service.ValidateRefreshTokenAsync("legacy");
+
+        validated.Should().Be(new RefreshTokenSession(_subjectId, tokenId.ToString()));
+        validated.Should().Be(await service.FindOwnerAsync("legacy"));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task ValidateRefreshTokenAsync_ExpiredToken_ReturnsNull()
     {
         // Arrange
@@ -148,7 +164,7 @@ public class RefreshTokenServiceTests
                 expiresAt: DateTime.UtcNow.AddHours(1)));
 
         // This caller wins the atomic rotation claim.
-        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+        _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(true);
 
         var service = CreateService();
@@ -159,20 +175,17 @@ public class RefreshTokenServiceTests
         // Assert
         result.Should().Be("new-token");
 
-        // Rotation is claimed atomically (not via the unconditional RevokeAsync).
-        _repository.Verify(r => r.TryMarkRotatedAsync(
+        // Rotation is claimed atomically with the successor (not via the unconditional RevokeAsync).
+        _repository.Verify(r => r.TryRotateAsync(
             oldTokenId,
-            It.IsAny<Guid>(),
-            default));
-        _repository.Verify(
-            r => r.RevokeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), default),
-            Times.Never);
-
-        _repository.Verify(r => r.CreateAsync(
             It.Is<RefreshTokenRecord>(rec =>
                 rec.TokenHash == "hash-new" &&
                 rec.SubjectId == _subjectId),
             default));
+        _repository.Verify(
+            r => r.RevokeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), default),
+            Times.Never);
+        _repository.Verify(r => r.CreateAsync(It.IsAny<RefreshTokenRecord>(), default), Times.Never);
 
         // The successor is published for the grace window so concurrent requests still
         // carrying the old cookie can converge on the same token.
@@ -187,7 +200,7 @@ public class RefreshTokenServiceTests
     [Trait("Category", "Unit")]
     [InlineData("session-a")]
     [InlineData(null)]
-    public async Task RotateRefreshTokenAsync_SuccessorBelongsToANamedSession(string? oldSession)
+    public async Task RotateRefreshTokenAsync_SuccessorKeepsThePresentedTokensSession(string? oldSession)
     {
         var oldTokenId = Guid.CreateVersion7();
         _jwtService.Setup(j => j.HashRefreshToken("old-token")).Returns("hash-old");
@@ -195,15 +208,18 @@ public class RefreshTokenServiceTests
         _jwtService.Setup(j => j.HashRefreshToken("new-token")).Returns("hash-new");
         _repository.Setup(r => r.FindByHashAsync("hash-old", default))
             .ReturnsAsync(MakeRecord(id: oldTokenId, oidcSessionId: oldSession));
-        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+        _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(true);
 
-        await CreateService().RotateRefreshTokenAsync("old-token");
+        var service = CreateService();
+        var owner = await service.FindOwnerAsync("old-token");
 
-        _repository.Verify(r => r.CreateAsync(
-            It.Is<RefreshTokenRecord>(rec =>
-                !string.IsNullOrEmpty(rec.OidcSessionId)
-                && (oldSession == null || rec.OidcSessionId == oldSession)),
+        await service.RotateRefreshTokenAsync("old-token");
+
+        owner!.SessionId.Should().Be(oldSession ?? oldTokenId.ToString());
+        _repository.Verify(r => r.TryRotateAsync(
+            oldTokenId,
+            It.Is<RefreshTokenRecord>(rec => rec.OidcSessionId == owner.SessionId),
             default));
     }
 
@@ -212,7 +228,7 @@ public class RefreshTokenServiceTests
     public async Task RotateRefreshTokenAsync_LostAtomicClaim_ThrowsRaceWithoutForkingOrNuking()
     {
         // Arrange — token reads as active, but a concurrent request wins the atomic claim,
-        // so TryMarkRotatedAsync reports we lost the race. This is the SSR fan-out case
+        // so TryRotateAsync reports we lost the race. This is the SSR fan-out case
         // (many parallel requests carrying the same cookie) that previously forked the
         // token family into many siblings.
         var oldTokenId = Guid.CreateVersion7();
@@ -226,7 +242,7 @@ public class RefreshTokenServiceTests
                 revokedAt: null,
                 expiresAt: DateTime.UtcNow.AddHours(1)));
 
-        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+        _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(false);
 
         var service = CreateService();
@@ -363,6 +379,7 @@ public class RefreshTokenServiceTests
 
         _successorCache.Setup(c => c.GetAsync("hash", default))
             .ReturnsAsync("winners-token");
+        SetupSuccessor("winners-token", revokedAt: null, expiresAt: DateTime.UtcNow.AddDays(7));
 
         var service = CreateService();
 
@@ -399,11 +416,12 @@ public class RefreshTokenServiceTests
                 revokedAt: null,
                 expiresAt: DateTime.UtcNow.AddHours(1)));
 
-        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+        _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(false);
 
         _successorCache.Setup(c => c.GetAsync("hash-old", default))
             .ReturnsAsync("winners-token");
+        SetupSuccessor("winners-token", revokedAt: null, expiresAt: DateTime.UtcNow.AddDays(7));
 
         var service = CreateService();
 
@@ -413,6 +431,48 @@ public class RefreshTokenServiceTests
         // Assert — converges on the winner's token instead of throwing.
         result.Should().Be("winners-token");
         _repository.Verify(r => r.CreateAsync(It.IsAny<RefreshTokenRecord>(), default), Times.Never);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task RotateRefreshTokenAsync_ReuseWithinGracePeriod_DeadSuccessor_ReturnsNull(bool revoked, bool expired)
+    {
+        _jwtService.Setup(j => j.HashRefreshToken("raced")).Returns("hash-raced");
+        _repository.Setup(r => r.FindByHashAsync("hash-raced", default))
+            .ReturnsAsync(MakeRecord(
+                revokedAt: DateTime.UtcNow.AddSeconds(-2),
+                expiresAt: DateTime.UtcNow.AddHours(1),
+                replacedByTokenId: Guid.CreateVersion7()));
+        _successorCache.Setup(c => c.GetAsync("hash", default)).ReturnsAsync("winners-token");
+        SetupSuccessor(
+            "winners-token",
+            revokedAt: revoked ? DateTime.UtcNow.AddSeconds(-1) : null,
+            expiresAt: expired ? DateTime.UtcNow.AddSeconds(-1) : DateTime.UtcNow.AddDays(7));
+
+        var result = await CreateService().RotateRefreshTokenAsync("raced");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RotateRefreshTokenAsync_LostAtomicClaim_RevokedSuccessor_ReturnsNull()
+    {
+        var oldTokenId = Guid.CreateVersion7();
+        _jwtService.Setup(j => j.HashRefreshToken("old-token")).Returns("hash-old");
+        _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("would-be-fork");
+        _repository.Setup(r => r.FindByHashAsync("hash-old", default))
+            .ReturnsAsync(MakeRecord(id: oldTokenId, revokedAt: null, expiresAt: DateTime.UtcNow.AddHours(1)));
+        _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
+            .ReturnsAsync(false);
+        _successorCache.Setup(c => c.GetAsync("hash-old", default)).ReturnsAsync("winners-token");
+        SetupSuccessor("winners-token", revokedAt: DateTime.UtcNow, expiresAt: DateTime.UtcNow.AddDays(7));
+
+        var result = await CreateService().RotateRefreshTokenAsync("old-token");
+
+        result.Should().BeNull();
     }
 
     [Fact]
@@ -545,11 +605,11 @@ public class RefreshTokenServiceTests
 
     #endregion
 
-    #region GetSessionIdForTokenAsync
+    #region FindOwnerAsync
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetSessionIdForTokenAsync_ReturnsOidcSessionId()
+    public async Task FindOwnerAsync_ReturnsSubjectAndOidcSessionId()
     {
         // Arrange
         _jwtService.Setup(j => j.HashRefreshToken("token")).Returns("hash-token");
@@ -559,12 +619,12 @@ public class RefreshTokenServiceTests
         var service = CreateService();
 
         // Act & Assert
-        (await service.GetSessionIdForTokenAsync("token")).Should().Be("session-a");
+        (await service.FindOwnerAsync("token")).Should().Be(new RefreshTokenSession(_subjectId, "session-a"));
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetSessionIdForTokenAsync_LegacyToken_FallsBackToTokenId()
+    public async Task FindOwnerAsync_LegacyToken_FallsBackToTokenId()
     {
         // Arrange
         var tokenId = Guid.CreateVersion7();
@@ -575,12 +635,27 @@ public class RefreshTokenServiceTests
         var service = CreateService();
 
         // Act & Assert
-        (await service.GetSessionIdForTokenAsync("legacy")).Should().Be(tokenId.ToString());
+        (await service.FindOwnerAsync("legacy"))!.SessionId.Should().Be(tokenId.ToString());
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetSessionIdForTokenAsync_UnknownToken_ReturnsNull()
+    public async Task FindOwnerAsync_RevokedToken_StillNamesItsOwner()
+    {
+        _jwtService.Setup(j => j.HashRefreshToken("rotated")).Returns("hash-rotated");
+        _repository.Setup(r => r.FindByHashAsync("hash-rotated", default))
+            .ReturnsAsync(MakeRecord(
+                oidcSessionId: "session-a",
+                revokedAt: DateTime.UtcNow.AddSeconds(-5),
+                replacedByTokenId: Guid.CreateVersion7()));
+
+        (await CreateService().FindOwnerAsync("rotated"))
+            .Should().Be(new RefreshTokenSession(_subjectId, "session-a"));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task FindOwnerAsync_UnknownToken_ReturnsNull()
     {
         // Arrange
         _jwtService.Setup(j => j.HashRefreshToken("missing")).Returns("hash-missing");
@@ -590,10 +665,17 @@ public class RefreshTokenServiceTests
         var service = CreateService();
 
         // Act & Assert
-        (await service.GetSessionIdForTokenAsync("missing")).Should().BeNull();
+        (await service.FindOwnerAsync("missing")).Should().BeNull();
     }
 
     #endregion
+
+    private void SetupSuccessor(string successor, DateTime? revokedAt, DateTime expiresAt)
+    {
+        _jwtService.Setup(j => j.HashRefreshToken(successor)).Returns($"hash-{successor}");
+        _repository.Setup(r => r.FindByHashAsync($"hash-{successor}", default))
+            .ReturnsAsync(MakeRecord(revokedAt: revokedAt, expiresAt: expiresAt));
+    }
 
     /// <summary>
     /// Helper to build a <see cref="RefreshTokenRecord"/> with sensible defaults.

@@ -16,14 +16,12 @@ namespace Nocturne.API.Tests.Services.Profiles;
 
 /// <summary>
 /// Coverage for the storage layout of <see cref="UISettingsService"/>: one owning row per value, the
-/// aggregate assembled on read, and rows written by the earlier layout (a whole-document
-/// <c>ui:settings:complete</c> blob plus a mirrored copy of the alarm configuration) still read
-/// correctly.
+/// aggregate assembled on read, and alarm configuration copies an earlier layout left in the
+/// notifications row.
 /// </summary>
 [Trait("Category", "Unit")]
 public class UISettingsServiceTests
 {
-    private const string LegacyAggregateKey = "ui:settings:complete";
     private const string NotificationsKey = "ui:settings:notifications";
     private const string AlarmsKey = "ui:settings:notifications:alarms";
     private const string ServicesKey = "ui:settings:services";
@@ -78,7 +76,6 @@ public class UISettingsServiceTests
     {
         var context = NewContext();
         var stale = AlarmConfiguration("stale", 55);
-        Seed(context, LegacyAggregateKey, LegacyAggregate(stale));
         Seed(context, NotificationsKey, new NotificationSettings { AlarmConfiguration = stale });
         Seed(context, AlarmsKey, stale);
         await context.SaveChangesAsync();
@@ -93,14 +90,18 @@ public class UISettingsServiceTests
     }
 
     [Fact]
-    public async Task SaveNotificationSettingsAsync_replacesTheAlarmConfigurationForEveryReadPath()
+    public async Task PatchSectionAsync_ofNotificationsReplacesTheAlarmProfilesForEveryReadPath()
     {
         var context = NewContext();
         var service = NewService(context);
 
         await service.SaveAlarmConfigurationAsync(AlarmConfiguration("first", 55));
-        await service.SaveNotificationSettingsAsync(
-            new NotificationSettings { AlarmConfiguration = AlarmConfiguration("second", 123) }
+        await service.PatchSectionAsync<NotificationSettings>(
+            UISettingsSections.Notifications,
+            Json(JsonSerializer.Serialize(
+                new NotificationSettings { AlarmConfiguration = AlarmConfiguration("second", 123) },
+                JsonOptions
+            ))
         );
 
         foreach (var config in await EveryAlarmReadPath(service))
@@ -118,7 +119,7 @@ public class UISettingsServiceTests
         await service.SaveAlarmConfigurationAsync(AlarmConfiguration("first", 55));
 
         var settings = (await service.GetSettingsAsync())!;
-        settings.Notifications.AlarmConfiguration = AlarmConfiguration("second", 123);
+        settings.Notifications!.AlarmConfiguration = AlarmConfiguration("second", 123);
         await service.SaveSettingsAsync(settings);
 
         foreach (var config in await EveryAlarmReadPath(service))
@@ -163,7 +164,6 @@ public class UISettingsServiceTests
             .Should()
             .BeEmpty();
         StoredRows(context).Select(r => r.Key).Should().Contain(AlarmsKey);
-        StoredRows(context).Select(r => r.Key).Should().NotContain(LegacyAggregateKey);
     }
 
     [Fact]
@@ -201,42 +201,19 @@ public class UISettingsServiceTests
 
         var stored = (await service.GetSettingsAsync())!;
 
-        stored.Devices.AutoConnect.Should().BeFalse();
+        stored.Devices!.AutoConnect.Should().BeFalse();
         stored.Algorithm.Prediction.Minutes.Should().Be(45);
         stored.Features.Display.Units.Should().Be("mmol/L");
-        stored.Notifications.AlarmConfiguration.Profiles.Should().ContainSingle()
+        stored.Notifications!.AlarmConfiguration.Profiles.Should().ContainSingle()
             .Which.Threshold.Should().Be(123);
-        stored.Services.SyncSettings.AutoSync.Should().BeFalse();
+        stored.Services!.SyncSettings.AutoSync.Should().BeFalse();
         stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task GetSettingsAsync_readsSectionsWrittenByTheEarlierLayout()
-    {
-        var context = NewContext();
-        var legacy = LegacyAggregate(AlarmConfiguration("legacy", 88));
-        legacy.Devices.AutoConnect = false;
-        legacy.DataQuality.SleepSchedule.BedtimeHour = 1;
-        Seed(context, LegacyAggregateKey, legacy);
-        await context.SaveChangesAsync();
-
-        var service = NewService(context);
-        var stored = (await service.GetSettingsAsync())!;
-
-        stored.Devices.AutoConnect.Should().BeFalse();
-        stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
-
-        foreach (var config in await EveryAlarmReadPath(service))
-        {
-            config.Profiles.Should().ContainSingle().Which.Threshold.Should().Be(88);
-        }
     }
 
     [Fact]
     public async Task GetAlarmConfigurationAsync_prefersTheOwningRowOverTheEarlierLayoutsCopies()
     {
         var context = NewContext();
-        Seed(context, LegacyAggregateKey, LegacyAggregate(AlarmConfiguration("aggregate", 44)));
         Seed(
             context,
             NotificationsKey,
@@ -254,63 +231,227 @@ public class UISettingsServiceTests
     }
 
     [Fact]
-    public async Task SaveSectionAsync_leavesTheOtherSectionsOfTheEarlierLayoutReadable()
+    public async Task No_read_returns_pushover_credentials_a_stored_configuration_carries()
     {
         var context = NewContext();
-        var legacy = LegacyAggregate(AlarmConfiguration("legacy", 88));
-        legacy.Devices.AutoConnect = false;
-        legacy.DataQuality.SleepSchedule.BedtimeHour = 1;
-        Seed(context, LegacyAggregateKey, legacy);
+        Seed(context, AlarmsKey, new
+        {
+            profiles = new[] { new { id = "low", name = "low", alarmType = "Low", threshold = 70 } },
+            channels = new { pushover = new { enabled = true, userKey = "u-secret", apiToken = "a-secret" } },
+        });
         await context.SaveChangesAsync();
 
         var service = NewService(context);
-        await service.SaveSectionAsync(
-            "features",
-            new FeatureSettings { Display = new DisplaySettings { Units = "mmol/L" } }
-        );
 
-        var stored = (await service.GetSettingsAsync())!;
-        stored.Features.Display.Units.Should().Be("mmol/L");
-        stored.Devices.AutoConnect.Should().BeFalse();
-        stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
+        var reads = (await EveryAlarmReadPath(service)).Select(c => JsonSerializer.Serialize(c, JsonOptions))
+            .Append(JsonSerializer.Serialize(await service.GetSettingsAsync(), JsonOptions));
+        foreach (var json in reads)
+        {
+            json.Should().NotContain("secret").And.NotContain("apiToken").And.NotContain("userKey");
+        }
     }
 
     [Fact]
-    public async Task SaveSectionAsync_refusesANameNoSectionOwns()
+    public async Task PatchSectionAsync_changesOnlyTheNamedField()
     {
         var context = NewContext();
         var service = NewService(context);
+        Seed(
+            context,
+            FeaturesKey,
+            new FeatureSettings { Display = { FocusHours = 3 }, TrackerPills = { Enabled = false } }
+        );
+        await context.SaveChangesAsync();
 
-        var save = () => service.SaveSectionAsync("dataQaulity", new DataQualitySettings());
+        var patched = await service.PatchSectionAsync<FeatureSettings>(
+            UISettingsSections.Features,
+            Json("""{"display":{"focusHours":6}}""")
+        );
 
-        await save.Should().ThrowAsync<ArgumentException>();
+        patched.Display.FocusHours.Should().Be(6);
+        patched.TrackerPills.Enabled.Should().BeFalse();
+        var stored = (await service.GetSettingsAsync())!.Features;
+        stored.Display.FocusHours.Should().Be(6);
+        stored.TrackerPills.Enabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_aNullResetsTheFieldToItsDefault()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+        Seed(
+            context,
+            FeaturesKey,
+            new FeatureSettings { Display = { FocusHours = 3 }, TrackerPills = { Enabled = false } }
+        );
+        await context.SaveChangesAsync();
+
+        var patched = await service.PatchSectionAsync<FeatureSettings>(
+            UISettingsSections.Features,
+            Json("""{"display":{"focusHours":null}}""")
+        );
+
+        patched.Display.FocusHours.Should().Be(new FeatureSettings().Display.FocusHours);
+        patched.TrackerPills.Enabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_aSectionNobodyHasSavedPatchesTheDefaults()
+    {
+        var context = NewContext();
+
+        var patched = await NewService(context).PatchSectionAsync<DataQualitySettings>(
+            UISettingsSections.DataQuality,
+            Json("""{"sleepSchedule":{"bedtimeHour":1}}""")
+        );
+
+        patched.SleepSchedule.BedtimeHour.Should().Be(1);
+        patched.SleepSchedule.WakeTimeHour.Should().Be(new DataQualitySettings().SleepSchedule.WakeTimeHour);
+        StoredRows(context).Select(r => r.Key).Should().BeEquivalentTo(["ui:settings:dataquality"]);
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_omitsWhatTheSectionsRowDoesNotCarry()
+    {
+        var context = NewContext();
+
+        await NewService(context).PatchSectionAsync<NotificationSettings>(
+            UISettingsSections.Notifications,
+            Json("""{"alarmConfiguration":{"globalVolume":10}}""")
+        );
+
+        var rows = StoredRows(context).ToDictionary(r => r.Key, r => r.Value);
+        rows[NotificationsKey].Should().NotContain("alarmConfiguration");
+        rows[AlarmsKey].Should().Contain("\"globalVolume\":10");
+    }
+
+    [Theory]
+    [InlineData("dataQaulity")]
+    [InlineData("alarms")]
+    public async Task PatchSectionAsync_refusesANameNoSectionOwns(string name)
+    {
+        var context = NewContext();
+
+        var patch = () => NewService(context).PatchSectionAsync<DataQualitySettings>(name, Json("{}"));
+
+        await patch.Should().ThrowAsync<ArgumentException>();
         StoredRows(context).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SaveSectionAsync_acceptsEveryRegisteredSection()
+    public async Task PatchSectionAsync_refusesATypeThatIsNotTheSections()
+    {
+        var context = NewContext();
+
+        var patch = () => NewService(context)
+            .PatchSectionAsync<FeatureSettings>(UISettingsSections.DataQuality, Json("{}"));
+
+        await patch.Should().ThrowAsync<ArgumentException>();
+        StoredRows(context).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_refusesAPatchThatIsNotAnObject()
+    {
+        var context = NewContext();
+
+        var patch = () => NewService(context)
+            .PatchSectionAsync<FeatureSettings>(UISettingsSections.Features, Json("[1]"));
+
+        await patch.Should().ThrowAsync<ArgumentException>();
+        StoredRows(context).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_aValueOfTheWrongTypeChangesNothing()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+        Seed(context, FeaturesKey, new FeatureSettings { Display = { FocusHours = 3 } });
+        await context.SaveChangesAsync();
+
+        var patch = () => service.PatchSectionAsync<FeatureSettings>(
+            UISettingsSections.Features,
+            Json("""{"display":{"focusHours":"soon"}}""")
+        );
+
+        await patch.Should().ThrowAsync<ArgumentException>();
+        (await service.GetSettingsAsync())!.Features.Display.FocusHours.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_aStoredRowThatDoesNotReadIsNotThePatchsFault()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+        context.Settings.Add(
+            new SettingsEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Key = FeaturesKey,
+                Value = """{"display":{"focusHours":"soon"}}""",
+                IsActive = true,
+            });
+        await context.SaveChangesAsync();
+
+        var patch = () => service.PatchSectionAsync<FeatureSettings>(
+            UISettingsSections.Features,
+            Json("""{"trackerPills":{"enabled":false}}""")
+        );
+
+        await patch.Should().ThrowAsync<JsonException>();
+    }
+
+    [Theory]
+    [InlineData("""{"Display":{"FocusHours":6}}""")]
+    [InlineData("""{"display":{"focushours":6}}""")]
+    [InlineData("""{"display":{"noSuchField":6}}""")]
+    public async Task PatchSectionAsync_refusesAKeyThatIsNotAPropertyNameAndChangesNothing(string body)
     {
         var context = NewContext();
         var service = NewService(context);
 
+        var patch = () => service.PatchSectionAsync<FeatureSettings>(UISettingsSections.Features, Json(body));
+
+        await patch.Should().ThrowAsync<ArgumentException>();
+        StoredRows(context).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_appliesAnExactCamelCaseKeyNestedInTheSection()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+
+        var patched = await service.PatchSectionAsync<FeatureSettings>(
+            UISettingsSections.Features,
+            Json("""{"display":{"focusHours":6}}""")
+        );
+
+        patched.Display.FocusHours.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task PatchSectionAsync_acceptsEveryRegisteredSection()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+        var patchSection = typeof(UISettingsService).GetMethod(nameof(UISettingsService.PatchSectionAsync))!;
+
         foreach (var section in UISettingsSections.All)
         {
-            var save = () =>
-                service.SaveSectionAsync(
-                    section.Name,
-                    Activator.CreateInstance(section.Type)!,
-                    CancellationToken.None
-                );
+            var patch = () =>
+                (Task)patchSection
+                    .MakeGenericMethod(section.Type)
+                    .Invoke(service, [section.Name, Json("{}"), CancellationToken.None])!;
 
-            await save.Should().NotThrowAsync($"section {section.Name} should be writable");
+            await patch.Should().NotThrowAsync($"section {section.Name} should be writable");
         }
 
-        await service.SaveSectionAsync(
+        await service.PatchSectionAsync<DataQualitySettings>(
             "DATAQUALITY",
-            new DataQualitySettings
-            {
-                SleepSchedule = new SleepScheduleSettings { BedtimeHour = 1 },
-            }
+            Json("""{"sleepSchedule":{"bedtimeHour":1}}""")
         );
 
         (await service.GetSettingsAsync())!.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
@@ -321,18 +462,15 @@ public class UISettingsServiceTests
     [InlineData("alarmConfiguration")]
     [InlineData("AlarmConfiguration")]
     [InlineData("ALARMS")]
-    public async Task SaveSectionAsync_routesEveryAlarmAliasToTheOwningRow(string alias)
+    public async Task GetSectionAsync_readsEveryAlarmAliasFromTheOwningRow(string alias)
     {
         var context = NewContext();
         var service = NewService(context);
 
-        await service.SaveSectionAsync(alias, AlarmConfiguration("aliased", 123));
+        await service.SaveAlarmConfigurationAsync(AlarmConfiguration("aliased", 123));
 
-        foreach (var config in await EveryAlarmReadPath(service))
-        {
-            config.Profiles.Should().ContainSingle().Which.Threshold.Should().Be(123);
-        }
-
+        (await service.GetSectionAsync<UserAlarmConfiguration>(alias))!
+            .Profiles.Should().ContainSingle().Which.Threshold.Should().Be(123);
         StoredRows(context).Select(r => r.Key).Should().Equal([AlarmsKey]);
     }
 
@@ -392,19 +530,22 @@ public class UISettingsServiceTests
             .BeEmpty();
 
         var stored = (await service.GetSettingsAsync())!;
-        stored.Services.AvailableServices.Should().BeEmpty();
+        stored.Services!.AvailableServices.Should().BeEmpty();
         stored.Services.SyncSettings.AutoSync.Should().BeFalse();
     }
 
     [Fact]
-    public async Task SaveSectionAsync_doesNotStoreTheConnectorCatalog()
+    public async Task PatchSectionAsync_doesNotStoreTheConnectorCatalog()
     {
         var context = NewContext();
         var service = NewService(context);
 
-        await service.SaveSectionAsync(
+        await service.PatchSectionAsync<ServicesSettings>(
             "services",
-            new ServicesSettings { AvailableServices = [Catalogued("dexcom-connector")] }
+            Json(JsonSerializer.Serialize(
+                new ServicesSettings { AvailableServices = [Catalogued("dexcom-connector")] },
+                JsonOptions
+            ))
         );
 
         StoredRows(context).Select(r => r.Key).Should().Contain(ServicesKey);
@@ -487,7 +628,7 @@ public class UISettingsServiceTests
         var stored = (await NewService(context).GetSettingsAsync())!;
 
         stored.Features.Widgets.Should().BeEmpty();
-        stored.Devices.AutoConnect.Should().BeFalse();
+        stored.Devices!.AutoConnect.Should().BeFalse();
     }
 
     [Fact]
@@ -546,7 +687,7 @@ public class UISettingsServiceTests
         return
         [
             (await service.GetAlarmConfigurationAsync())!,
-            (await service.GetSettingsAsync())!.Notifications.AlarmConfiguration,
+            (await service.GetSettingsAsync())!.Notifications!.AlarmConfiguration,
             (await service.GetNotificationSettingsAsync()).AlarmConfiguration,
             (await service.GetSectionAsync<NotificationSettings>("notifications"))!
                 .AlarmConfiguration,
@@ -571,14 +712,6 @@ public class UISettingsServiceTests
         };
     }
 
-    private static UISettingsConfiguration LegacyAggregate(UserAlarmConfiguration alarms)
-    {
-        return new UISettingsConfiguration
-        {
-            Notifications = new NotificationSettings { AlarmConfiguration = alarms },
-        };
-    }
-
     private static SettingsEntity Seed(NocturneDbContext context, string key, object value)
     {
         var entity = new SettingsEntity
@@ -598,6 +731,8 @@ public class UISettingsServiceTests
         return context.Settings.AsNoTracking().Where(s => s.Value != null).ToList();
     }
 
+    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
     private static NocturneDbContext NewContext()
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
@@ -609,6 +744,6 @@ public class UISettingsServiceTests
 
     private static UISettingsService NewService(NocturneDbContext context)
     {
-        return new UISettingsService(context.AsFactory(), NullLogger<UISettingsService>.Instance);
+        return new UISettingsService(context.AsFactory(), TimeProvider.System, NullLogger<UISettingsService>.Instance);
     }
 }

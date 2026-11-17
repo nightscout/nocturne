@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { render } from "vitest-browser-svelte";
-import type { SleepNightSummary, SleepWeekSummary } from "$lib/api";
-import { regionFormat, type RegionFormat } from "$lib/stores/appearance-store.svelte";
+import type { SleepNightSummary, SleepWeekSummary } from "#lib/api/index.js";
+import { regionFormat, type RegionFormat } from "#lib/stores/appearance-store.svelte.js";
 import SleepWeeklyBreakdown from "./SleepWeeklyBreakdown.svelte";
 
 const SUNDAY_NIGHT = "2026-01-04";

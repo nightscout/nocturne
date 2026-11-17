@@ -56,7 +56,7 @@ build context holding only `src/Web/packages`, so a member outside it breaks the
 
 | Service | Image | Limits | Notes |
 |---|---|---|---|
-| `postgres` | `postgres:17.6-alpine` | 256 MB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
+| `postgres` | `postgres:17.6-alpine` | 1 GB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
 | `mocks` | `node:24-alpine` + `e2e/mocks` | 96 MB | fake third-party vendors |
 | `api` | `nocturne-api:e2e` | 512 MB, 2 CPUs | the SDK container build, as released; `NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS=true` |
 | `web` | `nocturne-web:e2e` | 320 MB, 1 CPU | `Dockerfile.web`, as released |
@@ -71,8 +71,10 @@ uncommitted change under `src/`, or under `src/Web` and the generated client for
 and rebuilds only when that hash has no image. CI passes `E2E_BUILDX_CACHE=type=gha,...` for a
 buildx layer cache. `E2E_SKIP_BUILD=1` uses whatever `:e2e` images exist; `E2E_KEEP_STACK=1`
 leaves the stack running after `pnpm e2e`. On failure the compose logs are written to
-`e2e/docker-compose-logs.txt`; Playwright keeps traces, screenshots and video for failed tests
-only.
+`e2e/docker-compose-logs.txt` and every container's exit state is printed (with the logs too when
+the stack never came up). A crash in the API writes a minidump and a JSON crash report with every
+thread's stack to `e2e/crash-dumps/`, which CI uploads with the logs. Playwright keeps traces,
+screenshots and video for failed tests only.
 
 **The dev-only endpoints.** Specs seed tenants and mint sessions through
 `/api/v4/dev-only/admin/seed-tenant` and `/api/v4/dev-only/auth/login`. They exist in
@@ -103,7 +105,7 @@ To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
 redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
 steps, heart rate, weight and sleep. The stack configures one instance client
-(`GOOGLE_HEALTH_CLIENT_ID`/`_SECRET`) whose redirect URI is the apex of the TLS proxy, so every
+(configured by global setup through the platform-admin settings API) whose redirect URI is the apex of the TLS proxy, so every
 tenant shares it; each consent picks a fake Google account named after the tenant
 (`mock_account`), which keeps tenants' data apart. The browser spec intercepts only Google's
 external consent navigation; the apex callback, its relay to the tenant host, the web callback,
@@ -136,7 +138,13 @@ tmpfs. It migrates a template database once (with the share-RLS and storage-para
 reconcilers the API runs at startup) and hands each fixture a `CREATE DATABASE … TEMPLATE` clone,
 reachable as `nocturne_migrator`, `nocturne_app` or the bootstrap superuser.
 `CreateEmptyDatabaseAsync` clones the bootstrapped, unmigrated database for tests that walk the
-migration chain themselves.
+migration chain themselves. A migration test that seeds part-way along the chain asks
+`CreateDatabaseAtMigrationAsync(migration, prefix)` for a database migrated up to that migration:
+it clones the nearest checkpoint at or below it and migrates the rest (at most 24 migrations). The
+checkpoints are template databases every 25 migrations, each built once per process on first use by
+cloning the one before it and migrating forward; the fully migrated template is built apart from
+them. A migration name not in the chain throws. The chain starts at the squashed baseline (see
+"Migration baseline" in `CLAUDE.md`), so a test can seed no earlier than it.
 
 **`ApiIntegrationTestFixture`** runs the API with `WebApplicationFactory` on a real Kestrel port
 (so HttpClient and SignalR connect over sockets) as Development, against its own `SharedPostgres`
@@ -149,6 +157,29 @@ the seeded tenant (active, owner with a passkey) and re-seeds the `api-secret` g
 fixture seeds its own tenant the same way, with Nightscout's `API_SECRET` as a legacy-secret grant. Use `ApiFactory` for any `WebApplicationFactory`
 over the API: the API's entry point also carries NSwag's static `CreateHostBuilder`, which
 `WebApplicationFactory` otherwise prefers, and that host has no endpoints.
+
+**API integration shards.** The classes deriving `ApiIntegrationTestBase` are split across four
+xUnit collections, `ApiIntegrationShards.One` to `Four` (`Infrastructure/IntegrationTestCollection.cs`).
+Each has its own `ApiIntegrationTestFixture`, so its own API host on its own port and its own
+database. The shards run in parallel; the tests inside one run one after another. A class names its
+shard on itself, `[Collection(ApiIntegrationShards.Two)]`; the remarks on `ApiIntegrationShards`
+give the rules and `ApiIntegrationShardTests` holds them. The shards are balanced by measured
+duration, so put a new class in the shortest. To find it or to rebalance, run the suite with
+`--logger "trx;LogFileName=api.trx"`. Within a shard the classes run one after another, so order a
+shard's results by start time and charge each class from the previous class's last test end to its
+own last test end. That charge includes the cleanup before each test and the class's own fixtures,
+such as the MongoDB container of the migration classes. Total the classes of each shard.
+
+**Parity shards.** The parity classes are split the same way across `ParityShards.One` and `Two`
+(`Infrastructure/ParityTestFixture.cs`), each with its own `ParityTestFixture`: a Nightscout 15.0.3
+container, its MongoDB, and an API host on its own database. The same rules apply, held by
+`ParityShardTests`, and they are balanced and measured the same way. Nightscout serves summary,
+properties and `ddata` reads from memory that it reloads from Mongo 5 seconds after the last write
+(a constant in its source, with no setting), and that wait is most of a parity shard's time. A test
+that reads that memory waits once, after its last write, for a reload that started after the wait
+began to have finished (`ParityTestBase.WaitForNightscoutBodyAsync`, whose remarks say how it tells);
+a test that compares Nightscout's in-memory data without writing calls `WaitForNightscoutEmptyAsync`
+first.
 
 **SQLite unit databases.** `TestDbContextFactory.CreateSqlite*` copies a schema built once per
 process into each test's in-memory database with SQLite's backup API instead of running
@@ -215,7 +246,8 @@ node .github/scripts/coverage-report.mjs --base origin/main \
 - .NET: `dotnet test` over a solution builds and runs the test assemblies in parallel (MSBuild
   nodes); xUnit runs collections in parallel on one thread per core, which measured faster than a
   lower cap for the same memory. Integration fixtures each get their own cloned database, so their
-  collections run in parallel too.
+  collections run in parallel too, the four API integration shards and the two parity shards among
+  them.
 - vitest: the app unit suite uses half the cores, between two and four; the browser suite two pages,
   always headless; the other packages run their default pool.
 - e2e: vitest and Playwright use half the cores, at least two (`E2E_API_WORKERS`,

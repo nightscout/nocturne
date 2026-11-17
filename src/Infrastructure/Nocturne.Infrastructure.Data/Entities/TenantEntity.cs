@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -55,6 +56,42 @@ public class TenantEntity : ISystemTimestamped
     [Column("onboarding_completed_at")]
     public DateTime? OnboardingCompletedAt { get; set; }
 
+    /// <summary>
+    /// When the tenant finished an onboarding core that ends on the setup hub. Tenants onboarded
+    /// before the hub existed have none, so the dashboard never offers them the hub unasked.
+    /// </summary>
+    [Column("setup_hub_enrolled_at")]
+    public DateTime? SetupHubEnrolledAt { get; set; }
+
+    /// <summary>The setup hub revision at which the owner dismissed the dashboard strip.</summary>
+    [Column("setup_strip_dismissed_revision")]
+    [MaxLength(64)]
+    public string? SetupStripDismissedRevision { get; set; }
+
+    /// <summary>
+    /// The onboarder's answer to "who is Nocturne for". Null until answered.
+    /// </summary>
+    [Column("patient_relationship")]
+    [MaxLength(16)]
+    public PatientRelationship? PatientRelationship { get; set; }
+
+    /// <summary>
+    /// When the person a helper set the tenant up for answered who it is for, replacing the
+    /// helper's <see cref="Nocturne.Core.Models.V4.PatientRelationship.Helper"/>. It is all that is left
+    /// of the handover once the answer is overwritten, and the helper may still need to step down.
+    /// </summary>
+    [Column("handed_over_at")]
+    public DateTime? HandedOverAt { get; set; }
+
+    /// <summary>
+    /// Glucose units ("mg/dl" or "mmol") the owner chose for the tenant, which members who have
+    /// not chosen their own and Nightscout clients reading status see. Null until chosen; only an
+    /// explicit choice is ever written here.
+    /// </summary>
+    [Column("default_glucose_units")]
+    [MaxLength(8)]
+    public string? DefaultGlucoseUnits { get; set; }
+
     /// <summary>Whether this tenant is a demo instance with synthetic data.</summary>
     [Column("is_demo")]
     public bool IsDemo { get; set; }
@@ -80,23 +117,9 @@ public class TenantEntity : ISystemTimestamped
 
     /// <summary>
     /// The same token again, AES-256-GCM ciphertext under the instance key
-    /// (<c>ISecretEncryptionService</c>), so the owner can be shown the link they are already
-    /// handing out instead of rotating it, which would break it for everyone holding it.
-    /// Nothing authenticates against this column; <see cref="ShareToken"/> remains the only
-    /// resolution path.
+    /// (<c>ISecretEncryptionService</c>); why it is kept and when a live link is still unshowable is
+    /// on <see cref="Nocturne.Core.Models.Identity.TenantRecord.ShareTokenEncrypted"/>.
     /// </summary>
-    /// <remarks>
-    /// The single site for why a live link can still be unshowable. Three ways that happens, and
-    /// all three must leave the link itself working, because resolution reads the digest:
-    /// <list type="bullet">
-    /// <item>the link was minted before this column existed, so nothing was kept;</item>
-    /// <item>the instance has no key, so nothing could be kept;</item>
-    /// <item>the key changed since, so what was kept no longer decrypts.</item>
-    /// </list>
-    /// Only the third is invisible in the columns, so it is knowable only by attempting the
-    /// decrypt. All three fall back to "regenerate to see a link", the behaviour every tenant had
-    /// before this column existed.
-    /// </remarks>
     [Column("share_token_encrypted")]
     public string? ShareTokenEncrypted { get; set; }
 

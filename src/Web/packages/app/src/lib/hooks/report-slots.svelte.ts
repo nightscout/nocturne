@@ -1,4 +1,5 @@
 import { getContext, onDestroy, setContext, type Snippet } from "svelte";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 /**
  * Filters a report adds to the reports layout's Filters panel, below the date range. The fields
@@ -11,9 +12,9 @@ export interface ReportFilterExtension {
   /** Copy the filters in force into the draft. */
   begin: () => void;
   /** `search` with the draft written in, every other parameter kept. */
-  apply: (search: URLSearchParams) => URLSearchParams;
+  apply: (search: ReadonlyURLSearchParams) => URLSearchParams;
   /** `search` without the report's filters, every other parameter kept. */
-  reset: (search: URLSearchParams) => URLSearchParams;
+  reset: (search: ReadonlyURLSearchParams) => URLSearchParams;
 }
 
 /** What a report adds to the reports layout. */

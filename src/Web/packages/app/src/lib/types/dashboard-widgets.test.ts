@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
 import { isMainSectionEnabled } from "./dashboard-widgets";
 
 describe("isMainSectionEnabled", () => {

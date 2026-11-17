@@ -17,7 +17,8 @@ public class GlookoFoodEnergyTests
     private readonly GlookoV4TreatmentMapper _mapper = new(
         "glooko-connector",
         new GlookoTimeMapper(new GlookoConnectorConfiguration(), NullLogger.Instance),
-        NullLogger.Instance);
+        NullLogger.Instance,
+        TimeProvider.System);
 
     [Fact]
     public void A_v2_food_is_stored_in_kilojoules()

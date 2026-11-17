@@ -1,14 +1,14 @@
 <script lang="ts">
   import { AreaChart, Spline, Tooltip } from "layerchart";
   import { curveStep } from "d3";
-  import type { HourlyInsulinDeliveryPoint, HourlyInsulinDeliveryResponse } from "$lib/api";
-  import Syringe from "@lucide/svelte/icons/syringe";
+  import type { HourlyInsulinDeliveryPoint, HourlyInsulinDeliveryResponse } from "#lib/api/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     dashOf,
     patternClass,
     type TextureKey,
-  } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
     /** Backend-computed hourly delivery averages (24 entries, hour 0-23) and period totals */
@@ -71,7 +71,7 @@
         key: "scheduledBasal",
         value: (d) => d.scheduledBasal ?? 0,
         color: "var(--insulin-scheduled-basal)",
-        label: "Scheduled Basal",
+        label: "Scheduled basal",
         texture: "insulin-scheduled-basal",
       });
     if (hasTempBasalData)
@@ -79,7 +79,7 @@
         key: "tempBasal",
         value: (d) => d.tempBasal ?? 0,
         color: "var(--insulin-additional-basal)",
-        label: "Temp Basal",
+        label: "Temp basal",
         texture: "insulin-temp-basal",
       });
     if (basal.length === 0)
@@ -95,7 +95,7 @@
         key: "manualBolus",
         value: (d) => d.manualBolus ?? 0,
         color: "var(--insulin-bolus)",
-        label: "Manual Bolus",
+        label: "Manual bolus",
         texture: "insulin-bolus",
       },
     ];
@@ -104,7 +104,7 @@
         key: "automaticBolus",
         value: (d) => d.automaticBolus ?? 0,
         color: "var(--iob-temporary)",
-        label: "Automatic Bolus",
+        label: "Automatic bolus",
         texture: "insulin-automatic-bolus",
       });
     return [...basal, ...bolus];
@@ -121,7 +121,7 @@
             key: "basal",
             value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
             color: "var(--basal)",
-            label: "Basal Insulin",
+            label: "Basal insulin",
           },
         ]
   );
@@ -142,9 +142,10 @@
         props={{
           xAxis: {
             format: formatHour,
+            tickOcclusion: true,
           },
           yAxis: {
-            label: "Avg Insulin (U)",
+            label: "Avg insulin (U)",
           },
         }}
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
@@ -228,20 +229,15 @@
       </p>
     {/if}
   {:else}
-    <div
-      class="flex h-[350px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <Syringe class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">
-          {showStacked ? "No insulin delivery data" : "No basal delivery data"}
-        </p>
-        <p class="text-sm">
-          {showStacked
-            ? "No treatments found in this period"
-            : "No basal records found in this period"}
-        </p>
-      </div>
+    <div class="flex h-[350px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title={showStacked ? "No insulin delivery data" : "No basal delivery data"}
+        body={showStacked
+          ? "No treatments found in this period"
+          : "No basal records found in this period"}
+      />
     </div>
   {/if}
 </div>

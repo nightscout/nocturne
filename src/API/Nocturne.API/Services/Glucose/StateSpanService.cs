@@ -59,13 +59,31 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
-    public Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
-        StateSpanCategory category,
+    public Task<IEnumerable<StateSpan>> GetStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
         string? source,
-        DateTime from,
+        bool? active,
         int count,
+        int skip,
+        bool descending,
         CancellationToken cancellationToken = default)
-        => _repository.GetStateSpansStartingFromAsync(category, source, from, count, cancellationToken);
+        => _repository.GetStateSpansInCategoriesAsync(
+            categories, state, from, to, source, active, count, skip, descending, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> CountStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        CancellationToken cancellationToken = default)
+        => _repository.CountStateSpansInCategoriesAsync(
+            categories, state, from, to, source, active, cancellationToken);
 
     /// <inheritdoc />
     public Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
@@ -106,6 +124,30 @@ public class StateSpanService : IStateSpanService
 
         return await _repository.UpsertStateSpanAsync(stateSpan, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpanUpsert>> UpsertStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => stateSpans.Count == 0
+            ? Task.FromResult<IReadOnlyList<StateSpanUpsert>>([])
+            : _repository.BulkUpsertAsync(stateSpans, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan?>> UpdateStateSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => _repository.UpdateStateSpansAsync(stateSpans, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan>> GetStateSpansAroundAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime through,
+        IReadOnlyCollection<string?> followingSources,
+        int following,
+        CancellationToken cancellationToken = default)
+        => _repository.GetStateSpansAroundAsync(category, from, through, followingSources, following, cancellationToken);
 
     /// <inheritdoc />
     public async Task<bool> DeleteStateSpanAsync(

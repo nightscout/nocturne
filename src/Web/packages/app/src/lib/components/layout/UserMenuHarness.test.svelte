@@ -1,10 +1,10 @@
 <script lang="ts">
-  import * as Sidebar from "$lib/components/ui/sidebar";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import UserMenu from "./UserMenu.svelte";
 </script>
 
 <Sidebar.Provider>
   <Sidebar.Menu>
-    <UserMenu user={{ subjectId: "guest-1", name: "Guest User", roles: [], permissions: [] }} isGuestSession />
+    <UserMenu user={{ subjectId: "guest-1", name: "Guest user", roles: [], permissions: [] }} isGuestSession />
   </Sidebar.Menu>
 </Sidebar.Provider>

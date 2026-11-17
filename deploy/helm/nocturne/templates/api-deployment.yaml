@@ -102,6 +102,11 @@ spec:
             - name: BASE_DOMAIN
               value: {{ .Values.baseDomain | quote }}
             {{- end }}
+            # WEB_URL is required for chat-bot alert dispatch and must name the web
+            # app's in-cluster Service; the public BASE_DOMAIN origin is deliberately
+            # not used (rationale: API Services/Alerts/Providers/ChatBotProvider.cs).
+            - name: WEB_URL
+              value: {{ include "nocturne.web.internalUrl" . | quote }}
             - name: INSTANCE_KEY
               valueFrom:
                 secretKeyRef:

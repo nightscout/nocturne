@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <Description>Realistic CGM/treatment data generation (oref pharmacokinetic models) shared by the demo service and the dev-only sample-data seeder</Description>
         <Company>Nocturne</Company>
         <Product>Nocturne Services</Product>
+        <!-- Demo data is laid out in a tenant's zone through a DemoClock, never the host's clock or
+             zone; the BannedSymbols files hold it there. -->
+        <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
     </PropertyGroup>
     <ItemGroup>
         <!-- The generator sources were extracted from the Web-SDK demo service,
@@ -16,10 +19,15 @@
         <InternalsVisibleTo Include="Nocturne.Services.Demo"/>
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-        <PackageReference Include="Microsoft.Extensions.Options"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <AdditionalFiles Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\BannedSymbols.txt"/>
+        <AdditionalFiles Include="BannedSymbols.Zone.txt"/>
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Clinical\Nocturne.Core.Clinical.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>

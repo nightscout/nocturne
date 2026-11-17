@@ -141,6 +141,10 @@ back to `<registry>/<repository>:<tag>`.
 {{- define "nocturne.api.internalUrl" -}}
 {{- printf "http://%s.%s.svc.cluster.local:%d" (include "nocturne.api.fullname" .) .Release.Namespace (int .Values.api.service.port) -}}
 {{- end -}}
+{{/* Internal web URL the API uses for chat-bot dispatch (rationale: ChatBotProvider) */}}
+{{- define "nocturne.web.internalUrl" -}}
+{{- printf "http://%s.%s.svc.cluster.local:%d" (include "nocturne.web.fullname" .) .Release.Namespace (int .Values.web.service.port) -}}
+{{- end -}}
 
 {{/* ============================================================
      Database helpers

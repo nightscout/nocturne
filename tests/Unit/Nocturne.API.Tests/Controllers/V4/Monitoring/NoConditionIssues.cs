@@ -13,13 +13,4 @@ internal sealed class NoConditionIssues : IAlertRuleConditionValidator
         bool autoResolveEnabled,
         string? autoResolveParamsJson,
         string? clientConfigurationJson) => [];
-
-    public ConditionUpdateCheck ValidateUpdate(
-        AlertConditionType conditionType,
-        string conditionParamsJson,
-        bool autoResolveEnabled,
-        string? autoResolveParamsJson,
-        string? clientConfigurationJson,
-        StoredConditionTrees stored) =>
-        new([], conditionParamsJson, autoResolveParamsJson, clientConfigurationJson, []);
 }

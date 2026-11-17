@@ -203,7 +203,7 @@ The portal renders dark only (`app.html` pins `.dark`), so the `brand` and `sunk
 - **Display** (700, `clamp(2.5rem, 7vw, 4.8rem)`, 1.06, −0.025em): portal hero only (`--text-display`).
 - **Headline** (700, `clamp(1.6rem, 3.5vw, 2.5rem)`, 1.2, −0.02em): portal section headings (`--text-section`). The portal also has `--text-headline` and `--text-subsection` steps.
 - **Reading** (700, 36px, `text-4xl`, in the `lg` tile): the current glucose value and the largest type in a standard app view. Clock faces scale it further.
-- **Title** (600, 16px, leading-none): card titles such as "Time in Range" and "Blood Glucose".
+- **Title** (600, 16px, leading-none): card titles such as "Time in range" and "Blood glucose". Titles use sentence case.
 - **Body** (400, 14px, 1.43): the UI default (`text-sm`). Inputs are 16px on mobile to prevent iOS zoom and 14px from `md` up.
 - **Label** (500, 12px): badges, captions, and units.
 - **Eyebrow** (Montserrat 700, 12px, 0.14em, uppercase): portal section kickers, for example "01 · Why this exists".

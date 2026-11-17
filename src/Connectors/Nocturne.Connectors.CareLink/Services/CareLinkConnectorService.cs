@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Timezones;
@@ -20,9 +21,9 @@ namespace Nocturne.Connectors.CareLink.Services;
 ///     Supports both patient and care-partner roles, tries BLE/SIMPLERA monitor path
 ///     before falling back to the legacy connect endpoint.
 /// </summary>
-public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorConfiguration>
+public class CareLinkConnectorService
+    : TokenConnectorService<CareLinkConnectorConfiguration, CareLinkAuthTokenProvider>
 {
-    private readonly CareLinkAuthTokenProvider _tokenProvider;
     private readonly IConnectorConfigurationService _configService;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly CareLinkSensorGlucoseMapper _sgMapper;
@@ -38,21 +39,22 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkAuthTokenProvider tokenProvider,
         IConnectorConfigurationService configService,
         ILogger<CareLinkConnectorService> logger,
+        IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null,
-        ITimezoneTimelineService? timezoneTimelineService = null
+        ITimezoneTimelineService? timezoneTimelineService = null,
+        TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _configService = configService ?? throw new ArgumentNullException(nameof(configService));
         _timezoneTimelineService = timezoneTimelineService;
         _sgMapper = new CareLinkSensorGlucoseMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.CareLinkConnector;
     public override string ServiceName => ServiceNames.CareLinkConnector;
 
-    private async Task<bool> AuthenticateWithConfigAsync(CareLinkConnectorConfiguration config)
+    private async Task<bool> AuthenticateWithConfigAsync(
+        CareLinkConnectorConfiguration config, CancellationToken cancellationToken)
     {
         // Seed the token provider with persisted secrets so refresh is available immediately
         var secrets = await _configService.GetSecretsAsync("CareLink");
@@ -61,19 +63,16 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         secrets.TryGetValue("token_url", out var savedTokenUrl);
         secrets.TryGetValue("audience", out var savedAudience);
 
-        _tokenProvider.InitializeFromSecrets(
+        TokenProvider.InitializeFromSecrets(
             savedRefreshToken,
             savedClientId,
             savedTokenUrl,
             savedAudience);
-        _initialRefreshToken = _tokenProvider.CurrentRefreshToken;
+        _initialRefreshToken = TokenProvider.CurrentRefreshToken;
 
-        var token = await _tokenProvider.GetValidTokenAsync(config);
-        if (string.IsNullOrEmpty(token))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+        var token = await ValidTokenAsync(config, cancellationToken);
+        if (token is null)
             return false;
-        }
 
         // Store the token for per-request use; never mutate DefaultRequestHeaders
         _accessToken = token;
@@ -90,7 +89,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         var result = new SyncResult { Success = true };
 
         // Authenticate with per-tenant config
-        if (!await AuthenticateWithConfigAsync(config))
+        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
             return AuthenticationFailedResult();
 
         if (string.IsNullOrEmpty(_accessToken))
@@ -115,11 +114,12 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         var activeTypes = ResolveActiveTypes(request, config);
         var isStale = IsDataStale(data);
+        var now = Clock.GetUtcNow().UtcDateTime;
 
-        await PublishSensorGlucoseStepAsync(data, config, activeTypes, isStale, result, cancellationToken);
-        await PublishDeviceStatusStepAsync(data, config, activeTypes, result, cancellationToken);
-        await PublishAlarmStepAsync(data, config, activeTypes, result, cancellationToken);
-        await PublishTreatmentsStepAsync(data, config, activeTypes, result, cancellationToken);
+        await PublishSensorGlucoseStepAsync(data, config, activeTypes, isStale, now, result, cancellationToken);
+        await PublishDeviceStatusStepAsync(data, config, activeTypes, now, result, cancellationToken);
+        await PublishAlarmStepAsync(data, config, activeTypes, now, result, cancellationToken);
+        await PublishTreatmentsStepAsync(data, config, activeTypes, now, result, cancellationToken);
 
         // Persist refresh token if it changed during sync
         await PersistRefreshTokenIfChangedAsync(cancellationToken);
@@ -144,7 +144,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             if (response.IsSuccessStatusCode)
                 return await DeserializeResponseAsync<CareLinkUserInfo>(response, cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to fetch user info", ConnectorSource);
@@ -180,7 +179,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 ? await FetchAsCarePartnerAsync(config, cancellationToken)
                 : await FetchAsPatientAsync(config, userInfo, cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "[{ConnectorSource}] Failed to fetch CareLink data", ConnectorSource);
@@ -224,6 +222,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
         bool isStale,
+        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -242,10 +241,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         try
         {
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                _sgMapper.Map(data), PublishSensorGlucoseDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                _sgMapper.Map(data, now), config, cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "[{ConnectorSource}] Error publishing SensorGlucose", ConnectorSource);
@@ -267,6 +265,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkData data,
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
+        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -277,12 +276,11 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         try
         {
             List<Nocturne.Core.Models.DeviceStatus> deviceStatuses =
-                CareLinkDeviceStatusMapper.Map(data) is { } deviceStatus ? [deviceStatus] : [];
+                CareLinkDeviceStatusMapper.Map(data, now) is { } deviceStatus ? [deviceStatus] : [];
 
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
-                deviceStatuses, PublishDeviceStatusAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                deviceStatuses, config, cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "[{ConnectorSource}] Error publishing DeviceStatus", ConnectorSource);
@@ -301,12 +299,13 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. An alarm that did
     ///     not reach the tenant leaves the dedup key behind so the next cycle retries it;
     ///     a transport exception is only logged, matching the pre-existing policy for this step.
-    ///     Gating and counting follow <see cref="PublishSystemEventDataAsync"/>.
+    ///     System events gate and count under <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
     private async Task PublishAlarmStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
+        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -320,15 +319,14 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             {
                 var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                     data.MedicalDeviceTime ?? "", data.CurrentServerTime);
-                var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime);
+                var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime, now);
                 if (systemEvent != null
-                    && await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                        [systemEvent], PublishSystemEventDataAsync, config, cancellationToken,
+                    && await PublishRecordTypeAsync(result, activeTypes,
+                        [systemEvent], config, cancellationToken,
                         context: "from the last alarm"))
                     _lastAlarmKey = alarmKey;
             }
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Error publishing alarm event", ConnectorSource);
@@ -348,6 +346,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkData data,
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
+        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -356,24 +355,20 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                 data.MedicalDeviceTime ?? "", data.CurrentServerTime);
 
-            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs), PublishBolusDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs, now), config, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs), PublishCarbIntakeDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs, now), config, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs), PublishTempBasalDataAsync,
-                config, cancellationToken);
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs, now), config, cancellationToken);
 
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs),
-                PublishSystemEventDataAsync, config, cancellationToken,
+            await PublishRecordTypeAsync(result, activeTypes,
+                CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs, now),
+                config, cancellationToken,
                 context: "from notification history");
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "[{ConnectorSource}] Error publishing treatments", ConnectorSource);
@@ -414,7 +409,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             if (seeded)
                 _logger.LogInformation("[{ConnectorSource}] Seeded timezone timeline origin: {Zone}", ConnectorSource, iana);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, ct))
         {
             // Never fail a sync over timeline setup.
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to configure timezone timeline", ConnectorSource);
@@ -496,7 +491,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             if (monitorResponse.IsSuccessStatusCode)
                 return await DeserializeResponseAsync<CareLinkData>(monitorResponse, ct);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogDebug(ex, "[{ConnectorSource}] Monitor endpoint unavailable", ConnectorSource);
@@ -558,7 +552,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
             return await DeserializeResponseAsync<CareLinkData>(response, ct);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogDebug(ex, "[{ConnectorSource}] BLE endpoint fetch failed", ConnectorSource);
@@ -583,7 +576,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var timestamp = Clock.GetUtcNow().ToUnixTimeMilliseconds();
             var url = $"https://{host}{CareLinkConstants.Endpoints.ConnectData}" +
                       $"?cpSerialNumber=NONE&msgType=last24hours&requestTime={timestamp}";
 
@@ -593,7 +586,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
             return await DeserializeResponseAsync<CareLinkData>(response, ct);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Connect endpoint failed", ConnectorSource);
@@ -642,7 +634,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                     return await DeserializeResponseAsync<CareLinkData>(response, ct);
                 }
             }
-            catch (OperationCanceledException) { throw; }
             catch (HttpRequestException ex)
             {
                 _logger.LogDebug(ex, "[{ConnectorSource}] Versioned endpoint {Version} failed", ConnectorSource, version);
@@ -700,7 +691,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 string.Join(", ", patients.Select(p => p.Username)));
             return null;
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Error resolving patient ID", ConnectorSource);
@@ -723,7 +713,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     /// </summary>
     private async Task PersistRefreshTokenIfChangedAsync(CancellationToken ct)
     {
-        var cached = await _tokenProvider.GetCachedSessionAsync();
+        var cached = await TokenProvider.GetCachedSessionAsync();
         var currentRefreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken");
         if (string.IsNullOrEmpty(currentRefreshToken) || currentRefreshToken == _initialRefreshToken)
             return;
@@ -744,14 +734,12 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             foreach (var key in updates.Where(u => string.IsNullOrEmpty(u.Value)).Select(u => u.Key).ToList())
                 updates.Remove(key);
 
-            if (!await _configService.MergeSecretsAsync(
-                    "CareLink", updates, "connector-runtime", _logger, ct))
+            if (!await _configService.MergeSecretsAsync("CareLink", updates, _logger, ct))
                 return;
 
             _logger.LogInformation("[{ConnectorSource}] Persisted updated refresh token", ConnectorSource);
             _initialRefreshToken = currentRefreshToken;
         }
-        catch (OperationCanceledException) { throw; }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to persist refresh token", ConnectorSource);
@@ -788,7 +776,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private void DropTokenIfRejected(HttpResponseMessage response)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)
-            _tokenProvider.InvalidateToken();
+            TokenProvider.InvalidateToken();
     }
 
     /// <summary>

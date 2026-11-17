@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { indexBy } from "$lib/utils/collections";
   import {
     Card,
     CardAction,
@@ -7,34 +6,35 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Select from "$lib/components/ui/select";
+  } from "#lib/components/ui/card/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Moon from "@lucide/svelte/icons/moon";
   import CalendarRange from "@lucide/svelte/icons/calendar-range";
   import {
     Actogram,
-    buildDayRange,
+    formatActogramDay,
     type ActogramRowContext,
-  } from "$lib/components/actogram";
-  import { MS_PER_HOUR, HOURS_PER_ROW, type ActogramPoint } from "$lib/components/actogram/actogram";
-  import { getTrends } from "$api/generated/sleepReports.generated.remote";
-  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  } from "#lib/components/actogram/index.js";
+  import { MS_PER_HOUR, HOURS_PER_ROW, type ActogramPoint } from "#lib/components/actogram/actogram.js";
+  import { getSleepTrends } from "#lib/api/reports.remote.js";
+  import { useActogramReport } from "#lib/hooks/actogram-report.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { resolve } from "$app/paths";
-  import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
-  import { bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
-  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
-  import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
-  import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
-  import { SleepSource } from "$api";
-  import { laneForStage, laneTexture } from "$lib/utils/sleep-stages";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { bgDelta, bgLabel } from "#lib/utils/formatting.js";
+  import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
+  import SleepCompositionChart from "#lib/components/reports/sleep/SleepCompositionChart.svelte";
+  import SleepWeeklyBreakdown from "#lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { SleepSource } from "#lib/api/index.js";
+  import { laneForStage, laneTexture } from "#lib/utils/sleep-stages.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
   const VISIBLE_DAYS = 14;
 
-  const report = useActogramReport("Error Loading Sleep Report");
+  const report = useActogramReport("Error loading sleep report");
   const { params: reportsParams, resource: actogramResource } = report;
 
   /**
@@ -68,18 +68,11 @@
   // padded window for double-plot context.
   const trendsResource = contextResource(
     () =>
-      getTrends({
-        from: new Date(reportsParams.dateRangeMillis.from).toISOString(),
-        to: new Date(reportsParams.dateRangeMillis.to).toISOString(),
+      getSleepTrends({
+        ...reportsParams.dateRangeInput,
         source: sourceFilter === "all" ? undefined : sourceFilter,
       }),
-    { errorTitle: "Error Loading Sleep Report" }
-  );
-
-  // Unpadded, user-selected day range for the composition chart — includes
-  // gap days with no recorded night so tracking gaps stay visible.
-  const selectedRangeDays = $derived(
-    buildDayRange(reportsParams.dateRangeMillis.from, reportsParams.dateRangeMillis.to)
+    { errorTitle: "Error loading sleep report" }
   );
 
   // Convert sleep spans into ActogramPoints (use midpoint of each span)
@@ -124,22 +117,9 @@
   const sleepNights = $derived(trendsResource.current?.nights ?? []);
   const sleepWeeks = $derived(trendsResource.current?.weeks ?? []);
 
-  // Maps each display day to the night's authoritative display date, for actogram row links.
-  const nightDateByDayKey = $derived(
-    indexBy(
-      buildNightsByDayKey(sleepNights),
-      ([key, night]) => (night.displayDate ? key : null),
-      ([, night]) => night.displayDate ?? ""
-    )
-  );
-
   function formatHoursMinutes(hours: number): string {
     const totalMinutes = Math.round(hours * 60);
     return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-  }
-
-  function formatRowLabelDate(day: Date): string {
-    return formatShortDate(day);
   }
 
   const hasActogramSleep = $derived(sleepPoints.length > 0);
@@ -169,16 +149,13 @@
     priorWeek?.dawnRiseDelta == null ? null : `${bgDelta(priorWeek.dawnRiseDelta)} ${bgLabel()}`
   );
 
-  const scoredNightsCount = $derived(sleepNights.filter((n) => n.sleepScore != null).length);
-  const hasComputedScore = $derived(
-    sleepNights.some((n) => n.sleepScore != null && n.scoreSource === "Computed")
-  );
+  const scoredNightsCount = $derived(sleepSummary?.scoredNightCount ?? 0);
   const scoreCaption = $derived.by(() => {
     const base = `avg of ${scoredNightsCount} scored night${scoredNightsCount === 1 ? "" : "s"}`;
-    return hasComputedScore ? `${base} · includes estimated` : base;
+    return sleepSummary?.includesEstimatedScore ? `${base} · includes estimated` : base;
   });
 
-  const tirNightsCount = $derived(sleepNights.filter((n) => n.overnightTirPct != null).length);
+  const tirNightsCount = $derived(sleepSummary?.tirNightCount ?? 0);
   const tirCaption = $derived(
     `${tirNightsCount} night${tirNightsCount === 1 ? "" : "s"} with CGM`
   );
@@ -257,14 +234,6 @@
   });
 </script>
 
-<svelte:head>
-  <title>Sleep & Overnight - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Sleep pattern actogram with glucose overlay"
-  />
-</svelte:head>
-
 <div class="@container space-y-6">
   <div class="print:hidden">
     <p class="text-muted-foreground">
@@ -272,22 +241,26 @@
     </p>
   </div>
 
+
   {#if fullyEmpty}
-    <Card>
-      <CardContent class="p-12 text-center">
-        <Moon class="mx-auto mb-4 size-8 text-muted-foreground" />
-        <h2 class="mb-2 text-xl font-semibold">No sleep data</h2>
-        <p class="mx-auto max-w-md text-muted-foreground">
-          Sleep sessions arrive from connected sources (Apple Health, Health
-          Connect, Fitbit, Oura, Garmin, Samsung) or manual entries. If
-          tracking started recently, try a larger date range.
-        </p>
-      </CardContent>
-    </Card>
+    <EmptyState
+      art="crescent-moon"
+      variant="card"
+      title="No sleep data"
+      headingLevel={2}
+      body="Sleep sessions arrive from connected sources (Apple Health, Health Connect, Fitbit, Oura, Garmin, Samsung) or manual entries. If tracking started recently, try a larger date range."
+    />
   {:else}
     <FigureStrip figures={sleepFigures} />
     {#if overnightFigures.length > 0}
       <FigureStrip figures={overnightFigures} />
+    {/if}
+    {#if trendsResource.current?.timeZoneUnavailableReason}
+      <p class="text-sm text-muted-foreground">
+        <TimeZoneNote reason={trendsResource.current.timeZoneUnavailableReason}>
+          Days in range, the weekly breakdown, the composition chart and the actogram rows use UTC days.
+        </TimeZoneNote>
+      </p>
     {/if}
 
     {#if hasTrendsNights && sleepWeeks.length > 0}
@@ -295,7 +268,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <CalendarRange class="h-5 w-5 text-report-lifestyle" />
-            Weekly Breakdown
+            Weekly breakdown
           </CardTitle>
           <CardDescription class="print:hidden">Each tracked night links to its full report.</CardDescription>
         </CardHeader>
@@ -310,11 +283,11 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Moon class="h-5 w-5 text-report-lifestyle" />
-            Sleep Composition
+            Sleep composition
           </CardTitle>
           {#if sourceFilter !== "all"}
             <CardDescription>
-              Showing all {sourceLabel} sessions — nights aren't deduplicated across devices.
+              Showing all {sourceLabel} sessions. Nights are not deduplicated across devices.
             </CardDescription>
           {:else}
             <CardDescription class="hidden print:block">Source: {sourceLabel}</CardDescription>
@@ -326,7 +299,7 @@
               onValueChange={(v) =>
                 (viewParams.source = Object.values(SleepSource).find((s) => s === v) ?? null)}
             >
-              <Select.Trigger class="w-44">
+              <Select.Trigger class="w-36 @sm/card-header:w-44">
                 {sourceLabel}
               </Select.Trigger>
               <Select.Content>
@@ -340,7 +313,7 @@
         <CardContent>
           <SleepCompositionChart
             nights={sleepNights}
-            days={selectedRangeDays}
+            days={trendsResource.current?.days ?? []}
             meanDeepPct={sleepSummary?.meanDeepPct}
             meanRemPct={sleepSummary?.meanRemPct}
             referenceRanges={sleepSummary?.referenceRanges}
@@ -354,7 +327,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Moon class="h-5 w-5 text-report-lifestyle" />
-          Sleep Actogram
+          Sleep actogram
         </CardTitle>
       </CardHeader>
       <CardContent class="w-full overflow-x-auto print:overflow-visible">
@@ -376,17 +349,16 @@
             <span class="ml-auto font-medium capitalize">{span.state.toLowerCase()}</span>
           {/snippet}
           {#snippet rowLabel({ day })}
-            {@const linkDate = nightDateByDayKey.get(dayKeyFor(day))}
-            {#if linkDate}
+            {#if sleepNights.some((night) => night.displayDate === day.date)}
               <a
-                href={resolve("/(authenticated)/reports/sleep/[date]", { date: linkDate })}
+                href={resolve("/(authenticated)/reports/sleep/[date]", { date: day.date })}
                 class="block text-xs text-muted-foreground text-right pr-2 hover:text-foreground hover:underline"
               >
-                {formatRowLabelDate(day)}
+                {formatActogramDay(day)}
               </a>
             {:else}
               <span class="block text-xs text-muted-foreground text-right pr-2">
-                {formatRowLabelDate(day)}
+                {formatActogramDay(day)}
               </span>
             {/if}
           {/snippet}
@@ -394,10 +366,10 @@
             {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
               {@const span = sleepSpanOf(point)}
               {@const durationHours = (span.endMills - span.startMills) / MS_PER_HOUR}
-              {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+              {@const x = ctx.xScale(new Date(ctx.day.startMills + hoursFromStart * MS_PER_HOUR))}
               {@const endHours = hoursFromStart + durationHours}
               {@const clampedEnd = Math.min(endHours, HOURS_PER_ROW)}
-              {@const x2 = ctx.xScale(new Date(ctx.day.getTime() + clampedEnd * MS_PER_HOUR))}
+              {@const x2 = ctx.xScale(new Date(ctx.day.startMills + clampedEnd * MS_PER_HOUR))}
               {@const rectWidth = Math.max(x2 - x, 1)}
               <rect
                 {x}

@@ -492,4 +492,20 @@ public class BolusControllerTests
         context.ExceptionHandled.Should().BeTrue();
         return context.Result.Should().BeOfType<ObjectResult>().Subject;
     }
+
+    [Fact]
+    public async Task GetAll_FullPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Bolus()]);
+
+        var result = await CreateController().GetAll(from: null, to: null, limit: 1);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<Bolus>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

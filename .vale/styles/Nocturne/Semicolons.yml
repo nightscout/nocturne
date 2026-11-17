@@ -1,0 +1,7 @@
+extends: existence
+message: "Rule 8.1: do not use a semicolon. Write two sentences instead."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+nonword: true
+tokens:
+  - ';'

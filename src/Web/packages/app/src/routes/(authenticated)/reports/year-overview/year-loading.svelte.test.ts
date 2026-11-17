@@ -4,50 +4,48 @@ import { page } from "vitest/browser";
 import type {
   DailySummaryResponse,
   GriTimelineResponse,
-} from "$api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 const requests = vi.hoisted(() => ({
   metadata: vi.fn(),
   daily: vi.fn(),
   gri: vi.fn(),
 }));
-vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
-  getAvailableYears: () => ({
-    run: () => requests.metadata(),
-  }),
-  getYearSummary: (params: { year: number }) => ({
-    run: async () => {
+vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
+  getAvailableYears: () => createQueryResource(() => requests.metadata()),
+  getYearSummary: (params: { year: number }) =>
+    createQueryResource(async () => {
       const [dailySummary, griTimeline] = await Promise.all([
         requests.daily(params),
         requests.gri(params),
       ]);
       return { dailySummary, griTimeline };
-    },
-  }),
+    }),
 }));
 vi.mock(
-  "$lib/components/reports/year-overview/YearHeatmap.svelte",
+  "#lib/components/reports/year-overview/YearHeatmap.svelte",
   async () => ({
     default: (
-      await import("$lib/components/reports/year-overview/YearHeatmap.test-stub.svelte")
+      await import("#lib/components/reports/year-overview/YearHeatmap.test-stub.svelte")
     ).default,
   })
 );
 vi.mock(
-  "$lib/components/reports/year-overview/HeatmapLegend.svelte",
+  "#lib/components/reports/year-overview/HeatmapLegend.svelte",
   async () => ({
     default: (
-      await import("$lib/components/reports/year-overview/Empty.test-stub.svelte")
+      await import("#lib/components/reports/year-overview/Empty.test-stub.svelte")
     ).default,
   })
 );
-vi.mock("$lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
+vi.mock("#lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
   default: (
-    await import("$lib/components/reports/year-overview/Empty.test-stub.svelte")
+    await import("#lib/components/reports/year-overview/Empty.test-stub.svelte")
   ).default,
 }));
 
 import Harness from "./YearOverview.test-harness.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 let intersect: IntersectionObserverCallback;
 beforeEach(() => {
@@ -80,6 +78,17 @@ function enter(...years: number[]) {
 }
 
 describe("year overview page loading", () => {
+  it("colours the heatmaps on the band edges the API served", async () => {
+    requests.metadata.mockResolvedValue({
+      years: [2025],
+      availableDataSources: [],
+      thresholds: { veryLow: 50, low: 63, high: 140, veryHigh: 260 },
+    });
+    render(Harness);
+
+    await expect.element(page.getByTestId("bands-2025")).toHaveTextContent("50,63,140,260");
+  });
+
   it("waits for metadata when Print is clicked before discovery finishes", async () => {
     let discover!: (response: {
       years: number[];
@@ -116,7 +125,7 @@ describe("year overview page loading", () => {
           }),
       },
     });
-    const sources = page.getByRole("button", { name: "All Data Sources" });
+    const sources = page.getByRole("button", { name: "All data sources" });
     await expect.element(sources).not.toBeDisabled();
     await page.getByRole("button", { name: "Prepare print" }).click();
     await vi.waitFor(() => expect(settle).toBeDefined());

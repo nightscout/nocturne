@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cookies } from "@sveltejs/kit";
-import type { UserDisplayPreferences } from "$lib/api";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { PREFS_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import {
+  PREFS_COOKIE_NAME,
+  UNITS_COOKIE_NAME,
+  colorTheme,
+  glucoseUnits,
+} from "#lib/stores/appearance-store.svelte.js";
 import { load } from "./+layout.server";
 
 /**
@@ -16,6 +21,7 @@ import { load } from "./+layout.server";
 type LoadEvent = Parameters<typeof load>[0];
 
 interface Situation {
+  tenantDefaultUnits?: string;
   host: string;
   /** Scopes the API reports for the caller; a thrown value stands for a refused call. */
   reported?: string[] | Error;
@@ -31,8 +37,10 @@ interface Situation {
   ownerAppearance?: UserDisplayPreferences | Error;
   /** A signed-in member's own saved preferences. */
   memberPreferences?: UserDisplayPreferences;
-  /** What the viewer's own `nocturne-prefs` cookie holds. */
+  /** What the viewer's own `nocturne-prefs` cookie holds. It spans every tenant on the base domain. */
   prefsCookie?: UserDisplayPreferences;
+  /** The units this device chose on the requested host, the only units cookie that host is sent. */
+  unitsCookie?: string;
 }
 
 /** The page data the load returned. */
@@ -57,7 +65,7 @@ function runLoad(situation: Situation) {
 
   const locals = {
     user: situation.memberPreferences
-      ? { preferences: situation.memberPreferences }
+      ? { preferences: situation.memberPreferences, defaultGlucoseUnits: situation.tenantDefaultUnits }
       : situation.isGuestSession
         ? { subjectId: "guest", name: "Guest" }
         : null,
@@ -75,10 +83,12 @@ function runLoad(situation: Situation) {
   };
 
   const cookies = {
-    get: (name: string) =>
-      name === PREFS_COOKIE_NAME && situation.prefsCookie
-        ? encodeURIComponent(JSON.stringify(situation.prefsCookie))
-        : undefined,
+    get: (name: string) => {
+      if (name === PREFS_COOKIE_NAME && situation.prefsCookie)
+        return encodeURIComponent(JSON.stringify(situation.prefsCookie));
+      if (name === UNITS_COOKIE_NAME) return situation.unitsCookie;
+      return undefined;
+    },
   } as unknown as Cookies;
 
   const depends = vi.fn();
@@ -268,12 +278,13 @@ describe("root layout load", () => {
       host: TENANT_HOST,
       isGuestSession: true,
       ownerAppearance: { glucoseUnits: "mmol", timeFormat: "24" },
-      prefsCookie: { glucoseUnits: "mg/dl" },
+      prefsCookie: { colorTheme: "trio" },
+      unitsCookie: "mg/dl",
     });
 
     const loaded = await data;
     expect(loaded.displayPreferences).toEqual([
-      { glucoseUnits: "mg/dl" },
+      { colorTheme: "trio", glucoseUnits: "mg/dl" },
       { glucoseUnits: "mmol", timeFormat: "24" },
     ]);
   });
@@ -300,6 +311,47 @@ describe("root layout load", () => {
       serverPreferences: { glucoseUnits: "mg/dl" },
     });
     expect(getTenantAppearance).not.toHaveBeenCalled();
+  });
+
+  // The tenant default renders a member's units until they choose, but only beneath anything
+  // they saved, and it is never reported back as their own server preferences.
+  it("renders a member with the tenant default units beneath their own", async () => {
+    const { data } = runLoad({
+      host: TENANT_HOST,
+      memberPreferences: { timeFormat: "24" },
+      tenantDefaultUnits: "mmol",
+    });
+
+    const loaded = await data;
+    expect(loaded.displayPreferences).toEqual([{ timeFormat: "24" }, { glucoseUnits: "mmol" }]);
+    expect(loaded.serverPreferences).toEqual({ timeFormat: "24" });
+  });
+
+  // A device shared across tenants carries the base-domain cookie onto every one, so units chosen
+  // on another tenant must not hide this tenant's default.
+  it("renders a new member with the tenant default, not units this device chose on another tenant", async () => {
+    const { data } = runLoad({
+      host: TENANT_HOST,
+      memberPreferences: {},
+      tenantDefaultUnits: "mmol",
+      prefsCookie: { glucoseUnits: "mg/dl", colorTheme: "trio" },
+    });
+
+    const { displayPreferences } = await data;
+    expect(glucoseUnits.resolve(displayPreferences)).toBe("mmol");
+    expect(colorTheme.resolve(displayPreferences)).toBe("trio");
+  });
+
+  it("renders a member with the units this device chose on this tenant over its default", async () => {
+    const { data } = runLoad({
+      host: TENANT_HOST,
+      memberPreferences: {},
+      tenantDefaultUnits: "mmol",
+      unitsCookie: "mg/dl",
+    });
+
+    const { displayPreferences } = await data;
+    expect(glucoseUnits.resolve(displayPreferences)).toBe("mg/dl");
   });
 
   it("asks for no owner's appearance on behalf of an anonymous tenant-host visitor, who can read no data", async () => {

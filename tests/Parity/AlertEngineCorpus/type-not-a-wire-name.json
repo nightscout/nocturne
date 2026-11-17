@@ -1,0 +1,375 @@
+{
+  "schema_version": 1,
+  "name": "type-not-a-wire-name",
+  "description": "a node whose type is not exactly a kind's wire name (member name, other case, ordinal, no kind at all) cannot be evaluated, so its rule is skipped; the wire-spelled control rule fires",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "TimeOfDay",
+            "time_of_day": {
+              "from": "11:00",
+              "to": "13:00",
+              "timezone": "UTC"
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "AlertState",
+            "alert_state": {
+              "alert_id": "00000000-0000-0000-0000-000000000900",
+              "state": "firing",
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "GlucoseBucket",
+            "glucose_bucket": {
+              "buckets": [
+                "low"
+              ]
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "StateSpanActive",
+            "state_span_active": {
+              "category": "Illness",
+              "state": null,
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "TimeSinceLastCarb",
+            "time_since_last_carb": {
+              "operator": ">",
+              "minutes": 120
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "PumpState",
+            "pump_state": {
+              "mode": "Automatic",
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "PumpSuspended",
+            "pump_suspended": {
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "rule-8",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "OverrideActive",
+            "override_active": {
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000009",
+      "name": "rule-9",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "DoNotDisturb",
+            "do_not_disturb": {
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "rule-10",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "TimeSinceLastBolus",
+            "time_since_last_bolus": {
+              "operator": ">",
+              "minutes": 120
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "rule-11",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "Threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "rule-12",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "THRESHOLD",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "rule-13",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "0",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000014",
+      "name": "rule-14",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "warp_drive",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000015",
+      "name": "rule-15",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "warp_drive",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000016",
+      "name": "rule-16",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "glucose_bucket": "low",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-01-05T11:50:00Z"
+          }
+        ],
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "started_at": "2026-01-05T11:20:00Z"
+          }
+        ],
+        "sleep_session_active": false,
+        "last_carb_at": "2026-01-05T11:30:00Z",
+        "last_bolus_at": "2026-01-05T11:30:00Z",
+        "active_pump_state": {
+          "mode": "Manual",
+          "started_at": "2026-01-05T11:50:00Z"
+        },
+        "active_pump_suspension": {
+          "started_at": "2026-01-05T11:50:00Z"
+        },
+        "active_override": {
+          "started_at": "2026-01-05T11:50:00Z"
+        },
+        "active_do_not_disturb": {
+          "started_at": "2026-01-05T11:50:00Z"
+        }
+      }
+    }
+  ]
+}

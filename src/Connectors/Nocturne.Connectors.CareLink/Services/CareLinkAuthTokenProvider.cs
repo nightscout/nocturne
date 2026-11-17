@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Core.Contracts.Multitenancy;
 
@@ -20,11 +21,13 @@ public class CareLinkAuthTokenProvider(
     IConnectorServerResolver<CareLinkConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<CareLinkAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<CareLinkConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider timeProvider)
+    : AuthTokenProviderBase<CareLinkConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider =
+        timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
     /// <summary>
     ///     Per-tenant state seeded by <see cref="InitializeFromSecrets"/>.
@@ -132,7 +135,7 @@ public class CareLinkAuthTokenProvider(
                 var login = await authFlow.LoginAsync(config.Username, config.Password!, config.Server, cancellationToken);
                 return (login.Result, login.ShouldRetry);
             },
-            _retryDelayStrategy, maxRetries, "CareLink credential login", cancellationToken);
+            maxRetries, "CareLink credential login", cancellationToken);
 
         if (result == null) return (null, DateTime.MinValue, null);
 
@@ -203,7 +206,7 @@ public class CareLinkAuthTokenProvider(
                     ? RetryStep<RefreshResult>.RetryAfterDelay
                     : RetryStep<RefreshResult>.Complete(attempt);
             },
-            _retryDelayStrategy,
+            RetryDelayStrategy,
             maxAttempts,
             _ => new RefreshResult(RefreshOutcome.Unavailable, null, DateTime.MinValue, null),
             ct);
@@ -228,7 +231,7 @@ public class CareLinkAuthTokenProvider(
         }
         // A HttpClient timeout arrives as a cancellation that the caller did not ask for, so it is a
         // transient failure; a real cancellation is left to propagate.
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
         {
             _logger.LogWarning("CareLink token refresh timed out");
             return new RefreshResult(RefreshOutcome.Transient, null, DateTime.MinValue, null);
@@ -277,12 +280,12 @@ public class CareLinkAuthTokenProvider(
         }
     }
 
-    private static DateTime GetTokenExpiry(string jwt)
+    private DateTime GetTokenExpiry(string jwt)
     {
         try
         {
             var parts = jwt.Split('.');
-            if (parts.Length != 3) return DateTime.UtcNow.AddHours(1);
+            if (parts.Length != 3) return _timeProvider.GetUtcNow().UtcDateTime.AddHours(1);
 
             var payload = parts[1].Replace('-', '+').Replace('_', '/');
             switch (payload.Length % 4)
@@ -301,6 +304,6 @@ public class CareLinkAuthTokenProvider(
         catch (InvalidOperationException) { /* fall through */ }
         catch (ArgumentException) { /* fall through */ }
 
-        return DateTime.UtcNow.AddHours(1);
+        return _timeProvider.GetUtcNow().UtcDateTime.AddHours(1);
     }
 }

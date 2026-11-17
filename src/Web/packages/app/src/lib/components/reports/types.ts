@@ -1,6 +1,6 @@
 // Store common type definitions for report components
 
-import type { Entry, GlucoseAnalytics, Treatment, TreatmentSummary } from '$lib/api';
+import type { Entry, GlucoseAnalytics, Treatment, TreatmentSummary } from '#lib/api/index.js';
 
 export interface DayToDayDailyData {
   date: string; // YYYY-MM-DD format

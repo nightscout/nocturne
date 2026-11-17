@@ -459,4 +459,22 @@ public class SensorGlucoseControllerTests
 
         updated!.SyncIdentifier.Should().Be("sg-1");
     }
+
+    [Fact]
+    public async Task GetAll_FullPageWithoutIncludeTotal_LeavesTotalNullWithoutCounting()
+    {
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync([new SensorGlucose()]);
+
+        var result = await CreateController().GetAll(from: null, to: null, limit: 1);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<SensorGlucose>>().Subject;
+        response.Pagination.Total.Should().BeNull();
+        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

@@ -13,7 +13,7 @@ test.describe("eHbA1c report", () => {
     const measuredAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
     measuredAt.setUTCHours(0, 0, 0, 0);
     await tenant.api.ok("POST", "/api/v4/lab-results/hba1c", {
-      measuredAt: measuredAt.toISOString(),
+      measuredAt: measuredAt.toISOString().slice(0, 10),
       valuePercent: 6.4,
       note: "E2E lab draw",
     });

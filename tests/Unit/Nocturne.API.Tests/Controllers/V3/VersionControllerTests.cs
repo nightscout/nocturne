@@ -77,7 +77,7 @@ public class VersionControllerTests
 
         body.GetProperty("status").GetInt32().Should().Be(200);
         var result = body.GetProperty("result");
-        result.GetProperty("version").GetString().Should().Be(AppVersion.Current);
+        result.GetProperty("version").GetString().Should().Be("15.0.3");
         result.GetProperty("apiVersion").GetString().Should().Be("3.0.5");
         result.GetProperty("srvDate").GetInt64().Should().BePositive();
         result.GetProperty("storage").GetProperty("storage").GetString().Should().NotBeNull();

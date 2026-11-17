@@ -8,6 +8,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 /// Parity tests for /api/v1/treatments endpoints.
 /// Covers: GET, GET/{id}, POST, PUT/{id}, DELETE/{id}, DELETE (bulk)
 /// </summary>
+[Collection(ParityShards.One)]
 public class TreatmentsParityTests : ParityTestBase
 {
     public TreatmentsParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -179,6 +180,19 @@ public class TreatmentsParityTests : ParityTestBase
     public async Task GetTreatments_InvalidCount_ReturnsSameShape()
     {
         await AssertGetParityAsync("/api/v1/treatments?count=-1");
+    }
+
+    [Fact]
+    public async Task GetTreatments_ZeroCount_ReturnsSameShape()
+    {
+        var treatments = Enumerable.Range(0, 12)
+            .Select(i => TestDataFactory.CreateTreatment(
+                timestamp: TestTimeProvider.GetTestTime().AddMinutes(-i * 15),
+                insulin: 1.0 + i * 0.5))
+            .ToArray();
+        await SeedTreatmentsAsync(treatments);
+
+        await AssertGetParityAsync("/api/v1/treatments?count=0");
     }
 
     [Fact]

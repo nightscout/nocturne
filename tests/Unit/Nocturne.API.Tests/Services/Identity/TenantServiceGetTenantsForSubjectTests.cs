@@ -12,6 +12,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -36,20 +37,26 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
 
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
+        new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        TimeProvider.System,
         Mock.Of<ILogger<TenantService>>());
 
     /// <param name="role">A role seed slug, as every membership an invite creates carries one.</param>
-    private void SeedMembership(string slug, DateTime joinedAt, string? role = null)
+    private void SeedMembership(
+        string slug, DateTime joinedAt, string? role = null, bool isActive = true)
     {
         var tenantId = Guid.CreateVersion7();
         using var db = _db.CreateContext(tenantId);
 
-        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, DisplayName = slug });
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, DisplayName = slug, IsActive = isActive });
         var member = new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
@@ -125,6 +132,33 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         var tenants = await Service().GetTenantsForSubjectAsync(_subjectId);
 
         tenants.Select(t => t.Slug).Should().Equal("alpha", "zulu");
+    }
+
+    [Fact]
+    public async Task GetReachableTenantsForSubjectAsync_leavesOutAnInactiveTenant()
+    {
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            isActive: false);
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var reachable = await Service().GetReachableTenantsForSubjectAsync(_subjectId);
+        var all = await Service().GetTenantsForSubjectAsync(_subjectId);
+
+        reachable.Select(t => t.Slug).Should().Equal("zulu");
+        all.Select(t => t.Slug).Should().Equal("alpha", "zulu");
+    }
+
+    [Fact]
+    public async Task GetReachableTenantsForSubjectAsync_keepsTheOwnedFirstOrder()
+    {
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            RoleSeeds.Viewer);
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            RoleSeeds.Owner);
+
+        var tenants = await Service().GetReachableTenantsForSubjectAsync(_subjectId);
+
+        tenants.Select(t => t.Slug).Should().Equal("zulu", "alpha");
     }
 
     public void Dispose() => _db.Dispose();

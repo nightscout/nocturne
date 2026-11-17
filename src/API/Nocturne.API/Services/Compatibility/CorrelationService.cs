@@ -39,19 +39,23 @@ public class CorrelationService : ICorrelationService
 {
     private static readonly AsyncLocal<string?> _correlationId = new();
     private readonly IOptions<CompatibilityProxyConfiguration> _configuration;
+    private readonly TimeProvider _time;
     private readonly ILogger<CorrelationService> _logger;
 
     /// <summary>
     /// Initializes a new instance of the CorrelationService class
     /// </summary>
     /// <param name="configuration">Compatibility proxy configuration settings</param>
+    /// <param name="timeProvider">Clock the generated IDs are stamped from</param>
     /// <param name="logger">Logger instance for this service</param>
     public CorrelationService(
         IOptions<CompatibilityProxyConfiguration> configuration,
+        TimeProvider timeProvider,
         ILogger<CorrelationService> logger
     )
     {
         _configuration = configuration;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -63,7 +67,7 @@ public class CorrelationService : ICorrelationService
             return string.Empty;
         }
 
-        var correlationId = $"INT-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{Guid.CreateVersion7():N}";
+        var correlationId = $"INT-{_time.GetUtcNow():yyyyMMdd-HHmmss}-{Guid.CreateVersion7():N}";
 
         _logger.LogDebug("Generated correlation ID: {CorrelationId}", correlationId);
 

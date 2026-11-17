@@ -1,4 +1,4 @@
-import type { SupportConfigResponse } from "$api/generated/nocturne-api-client";
+import type { SupportConfigResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 /**
  * The operator's account address as a link, or null when there is nothing to link to.

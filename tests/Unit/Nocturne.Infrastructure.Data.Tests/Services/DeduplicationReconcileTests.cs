@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -15,7 +16,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
 /// <summary>
-/// Tests for dedup reconciliation in <see cref="DeduplicationService"/>: the reusable
+/// Tests for dedup reconciliation in <see cref="DuplicateReconciler"/>: the reusable
 /// per-record criteria + deleted-status loader (<see cref="MatchCriteria"/> plus soft-deleted
 /// status keyed by record id), merging duplicate canonical groups (full and candidate-bounded,
 /// including transitive chains), the per-tenant reconciliation cursor round-trip, and the
@@ -33,7 +34,7 @@ public class DeduplicationReconcileTests : IDisposable
     private static readonly ReadCounter Reads = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly DeduplicationService _service;
+    private readonly DuplicateReconciler _service;
 
     public DeduplicationReconcileTests()
     {
@@ -43,22 +44,19 @@ public class DeduplicationReconcileTests : IDisposable
         _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
-        _service = new DeduplicationService(
-            _context.AsFactory(),
-            new Mock<IServiceScopeFactory>().Object,
-            NullLogger<DeduplicationService>.Instance);
+        _service = DeduplicationModules.Reconciler(_context.AsFactory());
     }
 
     private async Task<ReconcileCursor?> CursorAsync()
     {
         await using var db = await _context.AsFactory().CreateAsync();
-        return await DeduplicationService.GetCursorAsync(db, CancellationToken.None);
+        return await DuplicateReconciler.GetCursorAsync(db, CancellationToken.None);
     }
 
     private async Task SetCursorAsync(ReconcileCursor cursor)
     {
         await using var db = await _context.AsFactory().CreateAsync();
-        await DeduplicationService.SetCursorAsync(db, cursor, CancellationToken.None);
+        await DuplicateReconciler.SetCursorAsync(db, cursor, CancellationToken.None);
     }
 
     public void Dispose()
@@ -77,7 +75,7 @@ public class DeduplicationReconcileTests : IDisposable
         _context.CarbIntakes.Add(new CarbIntakeEntity { Id = gone, TenantId = TestTenantId, Carbs = 42, Timestamp = DateTime.UtcNow, DeletedAt = DateTime.UtcNow });
         await _context.SaveChangesAsync();
 
-        var info = await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { live, gone });
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { live, gone }, default);
 
         info[live].Criteria.Carbs.Should().Be(42);
         info[live].IsDeleted.Should().BeFalse();
@@ -102,7 +100,7 @@ public class DeduplicationReconcileTests : IDisposable
         });
         await _context.SaveChangesAsync();
 
-        var info = await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.StateSpan, new HashSet<Guid> { live, gone });
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.StateSpan, new HashSet<Guid> { live, gone }, default);
 
         info[live].Criteria.Category.Should().Be(StateSpanCategory.Exercise);
         info[live].Criteria.State.Should().Be("Running");
@@ -121,7 +119,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { id });
+        await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { id }, default);
 
         _context.ChangeTracker.Entries<CarbIntakeEntity>().Should().BeEmpty(
             "dedup reads are read-only and must not change-track loaded entities");
@@ -150,7 +148,7 @@ public class DeduplicationReconcileTests : IDisposable
         _context.CarbIntakes.Add(new CarbIntakeEntity { Id = theirs, TenantId = otherTenant, Carbs = 99, Timestamp = DateTime.UtcNow });
         await _context.SaveChangesAsync();
 
-        var info = await DeduplicationService.LoadRecordInfoForTestAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { mine, theirs });
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(_context, RecordType.CarbIntake, new HashSet<Guid> { mine, theirs }, default);
 
         info.Should().ContainKey(mine);
         info.Should().NotContainKey(theirs);
@@ -162,8 +160,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -184,8 +182,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var first = await AddCarb(t, source, 20);
         var second = await AddCarb(t.AddSeconds(20), source, 20);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), source);
-        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(20)), source);
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), source);
+        AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(20).ToMills(), source);
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -215,8 +213,8 @@ public class DeduplicationReconcileTests : IDisposable
 
         foreach (var span in inputs)
         {
-            await _service.DeduplicateBatchAsync(RecordType.StateSpan,
-                [new DeduplicationInput(span.Id, ToMills(span.StartTimestamp), span.Source!, MatchCriteriaMapper.From(span))]);
+            await DeduplicationModules.Linker(_context.AsFactory()).DeduplicateBatchAsync(RecordType.StateSpan,
+                [new DeduplicationInput(span.Id, span.StartTimestamp.ToMills(), span.Source!, MatchCriteriaMapper.From(span))]);
         }
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.StateSpan, null, CancellationToken.None);
 
@@ -232,8 +230,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var first = await AddCarb(t, "tidepool-connector", 20);
         var twin = await AddCarb(t, "tidepool-connector", 20);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "tidepool-connector");
-        AddPrimaryLink(RecordType.CarbIntake, twin, ToMills(t), "tidepool-connector");
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), "tidepool-connector");
+        AddPrimaryLink(RecordType.CarbIntake, twin, t.ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -248,9 +246,9 @@ public class DeduplicationReconcileTests : IDisposable
         var first = await AddCarb(t, "unknown", 20);
         var copy = await AddCarb(t.AddSeconds(10), "tidepool-connector", 20);
         var second = await AddCarb(t.AddSeconds(20), "unknown", 20);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "unknown");
-        AddPrimaryLink(RecordType.CarbIntake, copy, ToMills(t.AddSeconds(10)), "tidepool-connector");
-        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(20)), "unknown");
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), "unknown");
+        AddPrimaryLink(RecordType.CarbIntake, copy, t.AddSeconds(10).ToMills(), "tidepool-connector");
+        AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(20).ToMills(), "unknown");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -266,8 +264,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 80);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -291,8 +289,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddSensorGlucose(t, "mylife-connector", firstMgdl);
         var glooko = await AddSensorGlucose(t.AddSeconds(20), "glooko-connector", secondMgdl);
-        AddPrimaryLink(RecordType.SensorGlucose, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.SensorGlucose, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.SensorGlucose, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.SensorGlucose, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, null, CancellationToken.None);
@@ -310,8 +308,8 @@ public class DeduplicationReconcileTests : IDisposable
         // 15 minutes apart: past the wide window, so neither pass can reach across.
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddMinutes(15), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddMinutes(15)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddMinutes(15).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -328,8 +326,8 @@ public class DeduplicationReconcileTests : IDisposable
         // Earliest record is soft-deleted; the later non-deleted record must become the surviving primary.
         var deleted = await AddCarb(t, "mylife-connector", 50, deletedAt: DateTime.UtcNow);
         var live = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, deleted, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, live, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, deleted, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, live, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -355,9 +353,9 @@ public class DeduplicationReconcileTests : IDisposable
         // the choice must not fall out of whichever row the database returned first.
         var info = Promotable(LowerRecordId, HigherRecordId);
 
-        DeduplicationService.PickSurvivor(TiedRows(LowerRecordId, HigherRecordId), info)
+        DuplicateMatching.PickSurvivor(TiedRows(LowerRecordId, HigherRecordId), info)
             .RecordId.Should().Be(LowerRecordId);
-        DeduplicationService.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), info)
+        DuplicateMatching.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), info)
             .RecordId.Should().Be(LowerRecordId);
     }
 
@@ -366,7 +364,7 @@ public class DeduplicationReconcileTests : IDisposable
     {
         // An orphaned link reads exactly as a deleted record, so promoting it would render the
         // whole canonical group as nothing.
-        DeduplicationService.PickSurvivor(
+        DuplicateMatching.PickSurvivor(
                 TiedRows(LowerRecordId, HigherRecordId), Promotable(HigherRecordId))
             .RecordId.Should().Be(HigherRecordId);
     }
@@ -374,13 +372,13 @@ public class DeduplicationReconcileTests : IDisposable
     [Fact]
     public void PickSurvivor_FallsBackToTheEarliestWhenNothingIsPromotable()
     {
-        var deleted = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var deleted = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: true),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
         };
 
-        DeduplicationService.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), deleted)
+        DuplicateMatching.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), deleted)
             .RecordId.Should().Be(LowerRecordId);
     }
 
@@ -393,13 +391,13 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
         ];
-        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var info = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(outsider, Closed.AddHours(1)))
         };
 
-        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(HigherRecordId);
+        DuplicateMatching.PickSurvivor(rows, info).RecordId.Should().Be(HigherRecordId);
     }
 
     [Fact]
@@ -410,19 +408,19 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
         ];
-        var endedFirst = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var endedFirst = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed)),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed.AddHours(1)))
         };
-        var stillRunning = new Dictionary<Guid, DeduplicationService.RecordInfo>(endedFirst)
+        var stillRunning = new Dictionary<Guid, DuplicateMatching.RecordInfo>(endedFirst)
         {
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, null))
         };
 
-        DeduplicationService.PickSurvivor(rows, endedFirst).RecordId.Should().Be(
+        DuplicateMatching.PickSurvivor(rows, endedFirst).RecordId.Should().Be(
             LowerRecordId, "a later planned end must not displace an earlier observed one");
-        DeduplicationService.PickSurvivor(rows, stillRunning).RecordId.Should().Be(HigherRecordId);
+        DuplicateMatching.PickSurvivor(rows, stillRunning).RecordId.Should().Be(HigherRecordId);
     }
 
     [Fact]
@@ -435,14 +433,14 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = middle, SourceTimestamp = 1_700_000_005_000 },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
         ];
-        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var info = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
             [middle] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed.AddHours(1))),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
         };
 
-        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
+        DuplicateMatching.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
     }
 
     private static readonly DateTime Closed = new(2023, 11, 14, 23, 0, 0, DateTimeKind.Utc);
@@ -455,13 +453,13 @@ public class DeduplicationReconcileTests : IDisposable
             new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000 },
             new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000, IsPrimary = true }
         ];
-        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        var info = new Dictionary<Guid, DuplicateMatching.RecordInfo>
         {
             [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
             [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
         };
 
-        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
+        DuplicateMatching.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
     }
 
     /// <summary>
@@ -476,8 +474,8 @@ public class DeduplicationReconcileTests : IDisposable
     /// <summary>
     /// Record info marking every listed id as present and not deleted.
     /// </summary>
-    private static Dictionary<Guid, DeduplicationService.RecordInfo> Promotable(params Guid[] ids) =>
-        ids.ToDictionary(id => id, _ => new DeduplicationService.RecordInfo(new MatchCriteria(), IsDeleted: false));
+    private static Dictionary<Guid, DuplicateMatching.RecordInfo> Promotable(params Guid[] ids) =>
+        ids.ToDictionary(id => id, _ => new DuplicateMatching.RecordInfo(new MatchCriteria(), IsDeleted: false));
 
     [Fact]
     public async Task MergeDuplicateGroupsAsync_MergesTransitiveThreeGroupChain()
@@ -488,9 +486,9 @@ public class DeduplicationReconcileTests : IDisposable
         var a = await AddCarb(t, "mylife-connector", 50);
         var b = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
         var c = await AddCarb(t.AddSeconds(40), "libre-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, a, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, b, ToMills(t.AddSeconds(20)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, c, ToMills(t.AddSeconds(40)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, a, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, b, t.AddSeconds(20).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, c, t.AddSeconds(40).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -507,8 +505,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        var glookoCanonical = AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        var glookoCanonical = AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(
@@ -528,15 +526,15 @@ public class DeduplicationReconcileTests : IDisposable
         // Candidate group plus its in-window neighbour (these should merge).
         var candA = await AddCarb(t, "mylife-connector", 50);
         var candB = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        var candCanonical = AddPrimaryLink(RecordType.CarbIntake, candA, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, candB, ToMills(t.AddSeconds(20)), "glooko-connector");
+        var candCanonical = AddPrimaryLink(RecordType.CarbIntake, candA, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, candB, t.AddSeconds(20).ToMills(), "glooko-connector");
 
         // A SEPARATE unrelated matching pair far away in time — must NOT be touched.
         var farT = t.AddHours(5);
         var farA = await AddCarb(farT, "mylife-connector", 80);
         var farB = await AddCarb(farT.AddSeconds(20), "glooko-connector", 80);
-        AddPrimaryLink(RecordType.CarbIntake, farA, ToMills(farT), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, farB, ToMills(farT.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, farA, farT.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, farB, farT.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(
@@ -561,8 +559,8 @@ public class DeduplicationReconcileTests : IDisposable
         // A pair the ingest path missed because the connectors' clocks drifted 64 seconds apart.
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(64), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(64)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(64).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -582,9 +580,9 @@ public class DeduplicationReconcileTests : IDisposable
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(64), "glooko-connector", 50);
         var libre = await AddCarb(t.AddSeconds(128), "libre-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(64)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, libre, ToMills(t.AddSeconds(128)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(64).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, libre, t.AddSeconds(128).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -601,8 +599,8 @@ public class DeduplicationReconcileTests : IDisposable
         // One connector reporting 50g twice inside the wide window is two real meals.
         var first = await AddCarb(t, "mylife-connector", 50);
         var second = await AddCarb(t.AddSeconds(64), "mylife-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(64)), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(64).ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -624,11 +622,11 @@ public class DeduplicationReconcileTests : IDisposable
         var spanningMember = await AddCarb(WideBase.AddMinutes(20), "libre-connector", 50);
 
         var candidateCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+            RecordType.CarbIntake, candidate, WideBase.ToMills(), "mylife-connector");
         var spanningCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase.AddMinutes(10)), "glooko-connector");
+            RecordType.CarbIntake, spanningPrimary, WideBase.AddMinutes(10).ToMills(), "glooko-connector");
         AddLink(
-            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(20)), "libre-connector",
+            RecordType.CarbIntake, spanningMember, WideBase.AddMinutes(20).ToMills(), "libre-connector",
             spanningCanonical, isPrimary: false);
         await _context.SaveChangesAsync();
 
@@ -660,13 +658,13 @@ public class DeduplicationReconcileTests : IDisposable
         var beyond = await AddCarb(WideBase.AddMinutes(30), "mylife-connector", 50);
 
         var candidateCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+            RecordType.CarbIntake, candidate, WideBase.ToMills(), "mylife-connector");
         var spanningCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase.AddMinutes(10)), "glooko-connector");
+            RecordType.CarbIntake, spanningPrimary, WideBase.AddMinutes(10).ToMills(), "glooko-connector");
         AddLink(
-            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(20)), "libre-connector",
+            RecordType.CarbIntake, spanningMember, WideBase.AddMinutes(20).ToMills(), "libre-connector",
             spanningCanonical, isPrimary: false);
-        AddPrimaryLink(RecordType.CarbIntake, beyond, ToMills(WideBase.AddMinutes(30)), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, beyond, WideBase.AddMinutes(30).ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
         var deferred = await _service.MergeDuplicateGroupsAsync(
@@ -694,10 +692,10 @@ public class DeduplicationReconcileTests : IDisposable
         var pairA = await AddCarb(WideBase.AddMinutes(2), "libre-connector", 50.5);
         var pairB = await AddCarb(WideBase.AddMinutes(3), "dexcom-connector", 50.5);
 
-        AddPrimaryLink(RecordType.CarbIntake, tightA, ToMills(WideBase), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, tightB, ToMills(WideBase.AddSeconds(10)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(2)), "libre-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(3)), "dexcom-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightA, WideBase.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightB, WideBase.AddSeconds(10).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairA, WideBase.AddMinutes(2).ToMills(), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(3).ToMills(), "dexcom-connector");
         await _context.SaveChangesAsync();
 
         await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -717,9 +715,9 @@ public class DeduplicationReconcileTests : IDisposable
         var tightB = await AddCarb(WideBase.AddSeconds(10), "glooko-connector", 50.5);
         var partner = await AddCarb(WideBase.AddMinutes(2), "libre-connector", 50.5);
 
-        AddPrimaryLink(RecordType.CarbIntake, tightA, ToMills(WideBase), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, tightB, ToMills(WideBase.AddSeconds(10)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, partner, ToMills(WideBase.AddMinutes(2)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightA, WideBase.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightB, WideBase.AddSeconds(10).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, partner, WideBase.AddMinutes(2).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -739,11 +737,11 @@ public class DeduplicationReconcileTests : IDisposable
         var other = await AddCarb(WideBase.AddSeconds(50), "glooko-connector", 50);
 
         var liveCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, live, ToMills(WideBase.AddSeconds(30)), "mylife-connector");
+            RecordType.CarbIntake, live, WideBase.AddSeconds(30).ToMills(), "mylife-connector");
         AddLink(
-            RecordType.CarbIntake, Guid.CreateVersion7(), ToMills(WideBase), "libre-connector",
+            RecordType.CarbIntake, Guid.CreateVersion7(), WideBase.ToMills(), "libre-connector",
             liveCanonical, isPrimary: false);
-        AddPrimaryLink(RecordType.CarbIntake, other, ToMills(WideBase.AddSeconds(50)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, other, WideBase.AddSeconds(50).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -769,12 +767,12 @@ public class DeduplicationReconcileTests : IDisposable
         var pairB = await AddCarb(WideBase.AddMinutes(30), "glooko-connector", 50);
 
         var spanningCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase), "mylife-connector");
+            RecordType.CarbIntake, spanningPrimary, WideBase.ToMills(), "mylife-connector");
         AddLink(
-            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(19)), "glooko-connector",
+            RecordType.CarbIntake, spanningMember, WideBase.AddMinutes(19).ToMills(), "glooko-connector",
             spanningCanonical, isPrimary: false);
-        AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(25)), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(30)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairA, WideBase.AddMinutes(25).ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(30).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -791,8 +789,8 @@ public class DeduplicationReconcileTests : IDisposable
     {
         var mylife = await AddCarb(WideBase, "mylife-connector", 50);
         var glooko = await AddCarb(WideBase.AddMilliseconds(offsetMillis), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(WideBase), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(WideBase.AddMilliseconds(offsetMillis)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, WideBase.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, WideBase.AddMilliseconds(offsetMillis).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -816,9 +814,9 @@ public class DeduplicationReconcileTests : IDisposable
         var third = await AddCarb(WideBase.AddMinutes(18), "mylife-connector", 50);
         var canonicals = new[]
         {
-            AddPrimaryLink(RecordType.CarbIntake, first, ToMills(WideBase), "mylife-connector"),
-            AddPrimaryLink(RecordType.CarbIntake, second, ToMills(WideBase.AddMinutes(9)), "glooko-connector"),
-            AddPrimaryLink(RecordType.CarbIntake, third, ToMills(WideBase.AddMinutes(18)), "mylife-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, first, WideBase.ToMills(), "mylife-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, second, WideBase.AddMinutes(9).ToMills(), "glooko-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, third, WideBase.AddMinutes(18).ToMills(), "mylife-connector"),
         };
         await _context.SaveChangesAsync();
 
@@ -841,9 +839,9 @@ public class DeduplicationReconcileTests : IDisposable
         var candidate = await AddCarb(WideBase, "mylife-connector", 99);
         var pairA = await AddCarb(WideBase.AddMinutes(15), "mylife-connector", 50);
         var pairB = await AddCarb(WideBase.AddMinutes(16), "glooko-connector", 50);
-        var candidateCanonical = AddPrimaryLink(RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
-        var pairACanonical = AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(15)), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(16)), "glooko-connector");
+        var candidateCanonical = AddPrimaryLink(RecordType.CarbIntake, candidate, WideBase.ToMills(), "mylife-connector");
+        var pairACanonical = AddPrimaryLink(RecordType.CarbIntake, pairA, WideBase.AddMinutes(15).ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(16).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var deferred = await _service.MergeDuplicateGroupsAsync(
@@ -880,11 +878,11 @@ public class DeduplicationReconcileTests : IDisposable
         var betweenId = await AddReading(recordType, between, "mylife-connector");
         var lateA = await AddReading(recordType, late, "mylife-connector");
         var lateB = await AddReading(recordType, late.AddSeconds(20), "glooko-connector");
-        var earlyCanonical = AddPrimaryLink(recordType, earlyA, ToMills(early), "mylife-connector");
-        AddPrimaryLink(recordType, earlyB, ToMills(early.AddSeconds(20)), "glooko-connector");
-        AddPrimaryLink(recordType, betweenId, ToMills(between), "mylife-connector");
-        var lateCanonical = AddPrimaryLink(recordType, lateA, ToMills(late), "mylife-connector");
-        AddPrimaryLink(recordType, lateB, ToMills(late.AddSeconds(20)), "glooko-connector");
+        var earlyCanonical = AddPrimaryLink(recordType, earlyA, early.ToMills(), "mylife-connector");
+        AddPrimaryLink(recordType, earlyB, early.AddSeconds(20).ToMills(), "glooko-connector");
+        AddPrimaryLink(recordType, betweenId, between.ToMills(), "mylife-connector");
+        var lateCanonical = AddPrimaryLink(recordType, lateA, late.ToMills(), "mylife-connector");
+        AddPrimaryLink(recordType, lateB, late.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         LoadedLinks.Clear();
 
@@ -936,11 +934,11 @@ public class DeduplicationReconcileTests : IDisposable
         var pairA = await AddSensorGlucose(t.AddMinutes(20), "dexcom-connector", 150);
         var pairB = await AddSensorGlucose(t.AddMinutes(20).AddSeconds(10), "glooko-connector", 150);
         var late = await AddSensorGlucose(t.AddMinutes(40), "dexcom-connector", 200);
-        var earlyCanonical = AddPrimaryLink(RecordType.SensorGlucose, early, ToMills(t), "dexcom-connector");
-        var pairACanonical = AddPrimaryLink(RecordType.SensorGlucose, pairA, ToMills(t.AddMinutes(20)), "dexcom-connector");
+        var earlyCanonical = AddPrimaryLink(RecordType.SensorGlucose, early, t.ToMills(), "dexcom-connector");
+        var pairACanonical = AddPrimaryLink(RecordType.SensorGlucose, pairA, t.AddMinutes(20).ToMills(), "dexcom-connector");
         var pairBCanonical = AddPrimaryLink(
-            RecordType.SensorGlucose, pairB, ToMills(t.AddMinutes(20).AddSeconds(10)), "glooko-connector");
-        var lateCanonical = AddPrimaryLink(RecordType.SensorGlucose, late, ToMills(t.AddMinutes(40)), "dexcom-connector");
+            RecordType.SensorGlucose, pairB, (t.AddMinutes(20).AddSeconds(10)).ToMills(), "glooko-connector");
+        var lateCanonical = AddPrimaryLink(RecordType.SensorGlucose, late, t.AddMinutes(40).ToMills(), "dexcom-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(
@@ -982,17 +980,17 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
-        var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(_context.AsFactory(), new Mock<IServiceScopeFactory>().Object, logger.Object);
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
         FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
         try
         {
-            var act = () => service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+            var act = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
             await act.Should().ThrowAsync<InvalidOperationException>();
         }
@@ -1006,13 +1004,247 @@ public class DeduplicationReconcileTests : IDisposable
                 LogLevel.Error,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((v, _) =>
-                    v.ToString()!.Contains(TestTenantId.ToString())
+                    v!.ToString()!.Contains(TestTenantId.ToString())
                     && v.ToString()!.Contains(nameof(RecordType.CarbIntake))
                     && v.ToString()!.Contains(cursor.Id.ToString())),
                 It.IsAny<InvalidOperationException>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
     }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ABatchThatKeepsFailing_IsSkippedOnlyOnItsThresholdFailure()
+    {
+        var now = DateTime.UtcNow;
+        var cursor = new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7());
+        await SetCursorAsync(cursor);
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var lastLink = (await _context.LinkedRecords.AsNoTracking().ToListAsync())
+            .OrderBy(l => l.SysCreatedAt).ThenBy(l => l.Id).Last();
+
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
+        ReconcileResult skipped;
+        try
+        {
+            for (var pass = 1; pass < 3; pass++)
+            {
+                var failing = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 3, CancellationToken.None);
+                await failing.Should().ThrowAsync<InvalidOperationException>("pass {0} is below the threshold", pass);
+                (await CursorAsync()).Should().Be(cursor);
+                (await FailedBatchAsync()).Should().Be((cursor.CreatedAt, cursor.Id, pass));
+            }
+
+            skipped = await service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 3, CancellationToken.None);
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailWhen = null;
+        }
+
+        skipped.Should().Be(new ReconcileResult(0, true));
+        (await CursorAsync()).Should().Be(new ReconcileCursor(lastLink.SysCreatedAt, lastLink.Id));
+        (await FailedBatchAsync()).Should().Be(((DateTime?)null, (Guid?)null, 0), "moving the cursor clears the failure record");
+        VerifySkipLogged(logger, Times.Once(), lastLink.Id);
+
+        var later = await service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 3, CancellationToken.None);
+
+        later.GroupsMerged.Should().Be(0, "the skipped batch is left to a full deduplication run");
+        (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_SkippingAtTheFirstFailure_StillMergesAHealthyBatch()
+    {
+        var now = DateTime.UtcNow;
+        await SetCursorAsync(new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7()));
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+
+        var result = await service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 1, CancellationToken.None);
+
+        result.Should().Be(new ReconcileResult(1, true));
+        (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(1);
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ALaterBatchFailingOnce_IsRetriedByTheNextPassNotSkipped()
+    {
+        var created = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        await AddThreePairsCreatedAt(created.AddHours(-6), created);
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        var middle = await MiddlePairIdsAsync();
+        var failures = 0;
+        FailingReadsInterceptor.FailCommandWhen = command =>
+            ReadsAny(command, "carb_intakes", middle) && failures++ == 0;
+        ReconcileResult retried;
+        try
+        {
+            var first = () => service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+            await first.Should().ThrowAsync<InvalidOperationException>();
+            (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(5, "the batch before the failing one merged");
+
+            retried = await service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailCommandWhen = null;
+        }
+
+        retried.Should().Be(new ReconcileResult(2, true));
+        (await AllCanonicals(RecordType.CarbIntake)).Should().HaveCount(3);
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ALaterBatchThatKeepsFailing_IsSkippedAndTheBatchAfterItMerges()
+    {
+        var created = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        await AddThreePairsCreatedAt(created.AddHours(-6), created);
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        var middle = await MiddlePairIdsAsync();
+        FailingReadsInterceptor.FailCommandWhen = command => ReadsAny(command, "carb_intakes", middle);
+        ReconcileResult skipping;
+        try
+        {
+            var first = () => service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+            await first.Should().ThrowAsync<InvalidOperationException>();
+
+            skipping = await service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 10, skipBatchAfterFailures: 2, CancellationToken.None);
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailCommandWhen = null;
+        }
+
+        skipping.Should().Be(new ReconcileResult(1, true));
+        var carbs = await _context.CarbIntakes.AsNoTracking().ToListAsync();
+        var canonicalOf = (await _context.LinkedRecords.AsNoTracking().Where(l => l.RecordType == "carbintake").ToListAsync())
+            .ToDictionary(l => l.RecordId, l => l.CanonicalId);
+        foreach (var pair in carbs.GroupBy(c => c.Carbs))
+        {
+            pair.Select(c => canonicalOf[c.Id]).Distinct().Should().HaveCount(
+                pair.Key == 60 ? 2 : 1, "only the skipped pair stays apart");
+        }
+        VerifySkipLogged(logger, Times.Once());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_CancelledDuringAFailingBatch_ThrowsAndNeitherSkipsNorCounts()
+    {
+        var now = DateTime.UtcNow;
+        var cursor = new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7());
+        await SetCursorAsync(cursor);
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+        using var cts = new CancellationTokenSource();
+        FailingReadsInterceptor.FailCommandWhen = command =>
+        {
+            if (!command.CommandText.Contains("carb_intakes"))
+                return false;
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        };
+        try
+        {
+            var act = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 1, cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailCommandWhen = null;
+        }
+
+        (await CursorAsync()).Should().Be(cursor);
+        (await FailedBatchAsync()).Should().Be(((DateTime?)null, (Guid?)null, 0));
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_FailedPrunes_DoNotCountTowardsTheSkip()
+    {
+        var now = DateTime.UtcNow;
+        var cursor = new ReconcileCursor(now.AddHours(-1), Guid.CreateVersion7());
+        await SetCursorAsync(cursor);
+        await AddOnePairCreatedAt(now.AddMinutes(-5));
+        var logger = new Mock<ILogger<DuplicateReconciler>>();
+        var service = DeduplicationModules.Reconciler(_context.AsFactory(), logger.Object);
+
+        FailingReadsInterceptor.FailWhen = sql => sql.Contains("dedup_reconcile_state");
+        try
+        {
+            for (var pass = 0; pass < 3; pass++)
+            {
+                var prune = () => service.PruneSingletonLinksAsync(100, 10, CancellationToken.None);
+                await prune.Should().ThrowAsync<InvalidOperationException>();
+            }
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailWhen = null;
+        }
+
+        FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
+        try
+        {
+            var act = () => service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: 2, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidOperationException>("the batch has failed once, below the threshold");
+        }
+        finally
+        {
+            FailingReadsInterceptor.FailWhen = null;
+        }
+
+        (await CursorAsync()).Should().Be(cursor);
+        (await FailedBatchAsync()).Should().Be(((DateTime?)cursor.CreatedAt, (Guid?)cursor.Id, 1));
+        VerifySkipLogged(logger, Times.Never());
+    }
+
+    private async Task AddOnePairCreatedAt(DateTime at)
+    {
+        var mylife = await AddCarb(at, "mylife-connector", 50);
+        var glooko = await AddCarb(at.AddSeconds(20), "glooko-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, mylife, at.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, at.AddSeconds(20).ToMills(), "glooko-connector");
+        await _context.SaveChangesAsync();
+        await SetAllLinkSysCreatedAt(at);
+    }
+
+    private async Task<string[]> MiddlePairIdsAsync() =>
+        (await _context.CarbIntakes.AsNoTracking().Where(c => c.Carbs == 60).Select(c => c.Id).ToListAsync())
+        .Select(id => id.ToString())
+        .ToArray();
+
+    private static bool ReadsAny(DbCommand command, string table, string[] ids) =>
+        command.CommandText.Contains(table)
+        && command.Parameters.Cast<DbParameter>().Any(p => ids.Any(id =>
+            (p.Value?.ToString() ?? "").Contains(id, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task<(DateTime? CreatedAt, Guid? Id, int Attempts)> FailedBatchAsync()
+    {
+        var state = await _context.DedupReconcileState.AsNoTracking().SingleAsync();
+        return (state.FailedBatchCursorCreatedAt, state.FailedBatchCursorId, state.FailedBatchAttempts);
+    }
+
+    private static void VerifySkipLogged(Mock<ILogger<DuplicateReconciler>> logger, Times times, Guid? lastLinkId = null) =>
+        logger.Verify(l => l.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) =>
+                    v!.ToString()!.Contains("skipped")
+                    && v.ToString()!.Contains("carbintake")
+                    && (lastLinkId == null || v.ToString()!.Contains(lastLinkId.Value.ToString()))),
+                It.IsAny<InvalidOperationException>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
 
     [Fact]
     public async Task ReconcileNewLinksAsync_MergesGroupsWithRecentLinks()
@@ -1023,13 +1255,13 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         var created = now.AddMinutes(-5);
         await SetAllLinkSysCreatedAt(created);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(1);
         result.CaughtUp.Should().BeTrue();
@@ -1051,14 +1283,14 @@ public class DeduplicationReconcileTests : IDisposable
         var ns2 = await AddBolus(t.AddSeconds(20), "nightscout", 2);
         var tp1 = await AddBolus(t, "tidepool-connector", 2);
         var tp2 = await AddBolus(t.AddSeconds(20), "tidepool-connector", 2);
-        var first = AddPrimaryLink(RecordType.Bolus, ns1, ToMills(t), "nightscout");
-        AddPrimaryLink(RecordType.Bolus, ns2, ToMills(t.AddSeconds(20)), "nightscout");
-        AddLink(RecordType.Bolus, tp1, ToMills(t), "tidepool-connector", first, isPrimary: false);
-        AddPrimaryLink(RecordType.Bolus, tp2, ToMills(t.AddSeconds(20)), "tidepool-connector");
+        var first = AddPrimaryLink(RecordType.Bolus, ns1, t.ToMills(), "nightscout");
+        AddPrimaryLink(RecordType.Bolus, ns2, t.AddSeconds(20).ToMills(), "nightscout");
+        AddLink(RecordType.Bolus, tp1, t.ToMills(), "tidepool-connector", first, isPrimary: false);
+        AddPrimaryLink(RecordType.Bolus, tp2, t.AddSeconds(20).ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
         await RestampOnePastTheCursor(tp2, now);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().Where(l => l.RecordType == "bolus").ToListAsync();
@@ -1075,12 +1307,12 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddHours(-2);
         var tp1 = await AddBolus(t, "tidepool-connector", 2);
         var tp2 = await AddBolus(t, "tidepool-connector", 2);
-        AddPrimaryLink(RecordType.Bolus, tp1, ToMills(t), "tidepool-connector");
-        AddPrimaryLink(RecordType.Bolus, tp2, ToMills(t), "tidepool-connector");
+        AddPrimaryLink(RecordType.Bolus, tp1, t.ToMills(), "tidepool-connector");
+        AddPrimaryLink(RecordType.Bolus, tp2, t.ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
         await RestampOnePastTheCursor(tp2, now);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(0);
         (await _context.LinkedRecords.CountAsync(l => l.RecordType == "bolus" && l.IsPrimary)).Should().Be(2,
@@ -1097,12 +1329,12 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddHours(-1);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddHours(-1));
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -1119,8 +1351,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
 
         // A linked_records row whose free-form RecordType is not a member of the RecordType enum.
         // Enum.Parse on this string would throw and take down the whole reconcile batch loop.
@@ -1131,7 +1363,7 @@ public class DeduplicationReconcileTests : IDisposable
             CanonicalId = Guid.CreateVersion7(),
             RecordType = "bogustype",
             RecordId = Guid.CreateVersion7(),
-            SourceTimestamp = ToMills(t),
+            SourceTimestamp = t.ToMills(),
             DataSource = "mylife-connector",
             IsPrimary = true,
             SysCreatedAt = DateTime.UtcNow
@@ -1139,7 +1371,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
-        var act = async () => await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var act = async () => await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         var result = await act.Should().NotThrowAsync();
         // The valid pair still merges, and the call returns normally.
@@ -1157,13 +1389,13 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         var created = now.AddMinutes(-5);
         await SetAllLinkSysCreatedAt(created);
 
-        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -1185,7 +1417,7 @@ public class DeduplicationReconcileTests : IDisposable
         var created = now.AddMinutes(-5);
         await AddThreePairsCreatedAt(now.AddHours(-6), created);
 
-        var result = await _service.ReconcileNewLinksAsync(batchSize: 3, maxBatches: 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(batchSize: 3, maxBatches: 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         result.GroupsMerged.Should().Be(3);
         result.CaughtUp.Should().BeTrue();
@@ -1212,7 +1444,7 @@ public class DeduplicationReconcileTests : IDisposable
         ReconcileResult result;
         do
         {
-            result = await _service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 1, CancellationToken.None);
+            result = await _service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 1, skipBatchAfterFailures: null, CancellationToken.None);
             merged += result.GroupsMerged;
             passes++;
         } while (!result.CaughtUp && passes < 10);
@@ -1233,12 +1465,12 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddHours(-1);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now);
 
-        var young = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var young = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         young.GroupsMerged.Should().Be(0);
         young.CaughtUp.Should().BeTrue();
@@ -1246,7 +1478,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         await SetAllLinkSysCreatedAt(now.AddMinutes(-3));
 
-        var aged = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var aged = await _service.ReconcileNewLinksAsync(5000, 10, skipBatchAfterFailures: null, CancellationToken.None);
 
         aged.GroupsMerged.Should().Be(1);
     }
@@ -1260,7 +1492,7 @@ public class DeduplicationReconcileTests : IDisposable
         using var context = OfflineDbContext.Create();
         var cursor = new ReconcileCursor(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), Guid.CreateVersion7());
 
-        var sql = DeduplicationService.LinksAfter(context, cursor, cursor.CreatedAt.AddHours(1)).Take(5000).ToQueryString();
+        var sql = DuplicateReconciler.LinksAfter(context, cursor, cursor.CreatedAt.AddHours(1)).Take(5000).ToQueryString();
 
         sql.Should().MatchRegex(@"l\.sys_created_at >= @\w+ AND \(l\.sys_created_at > @\w+ OR l\.id > @\w+\)",
             "the lower bound ranges the creation index and the keyset continues inside an instant");
@@ -1274,7 +1506,7 @@ public class DeduplicationReconcileTests : IDisposable
         using var context = OfflineDbContext.Create();
         IReadOnlySet<Guid> candidates = new HashSet<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
 
-        var sql = DeduplicationService.PrimariesOf(context, "carbintake", candidates).ToQueryString();
+        var sql = DuplicateReconciler.PrimariesOf(context, "carbintake", candidates).ToQueryString();
 
         sql.Should().MatchRegex(@"l\.canonical_id = ANY \(@\w+\)",
             "one uuid[] parameter keeps one statement for every candidate count");
@@ -1336,15 +1568,24 @@ public class DeduplicationReconcileTests : IDisposable
             var carbs = 50 + i * 10;
             var mylife = await AddCarb(t, "mylife-connector", carbs);
             var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", carbs);
-            AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-            AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+            AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector", LinkIdInOrder(createdAt, 2 * i));
+            AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector", LinkIdInOrder(createdAt, 2 * i + 1));
         }
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(createdAt);
     }
 
+    /// <summary>
+    /// A link id that sorts after every lower <paramref name="position"/>. Ids minted in one
+    /// millisecond sort at random, and the ids break the tie between links sharing one
+    /// <c>sys_created_at</c>, so without this a batch boundary would fall between different pairs
+    /// from run to run.
+    /// </summary>
+    private static Guid LinkIdInOrder(DateTime createdAt, int position) =>
+        Guid.CreateVersion7(new DateTimeOffset(DateTime.SpecifyKind(createdAt, DateTimeKind.Utc)).AddMilliseconds(position));
+
     [Fact]
-    public async Task DeduplicateAllAsync_PagesPastTheBatchSizeWithoutSkippingOrRereadingARow()
+    public async Task AFullRun_PagesPastTheBatchSizeWithoutSkippingOrRereadingARow()
     {
         // 503 readings in 251 groups, spaced far enough apart that only same-timestamp readings
         // match. The 250th group holds three, so the 500-row page boundary lands inside it and the
@@ -1371,7 +1612,7 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        var result = await _service.DeduplicateAllAsync();
+        var result = await DeduplicationModules.Admin(_context.AsFactory(), TestTenantId).RunFullAsync();
 
         result.Success.Should().BeTrue();
         result.SensorGlucoseProcessed.Should().Be(readings.Count);
@@ -1385,11 +1626,11 @@ public class DeduplicationReconcileTests : IDisposable
     [MemberData(nameof(DeduplicatedRecordTypes))]
     public async Task DeleteOrphanedLinksAsync_SweepsAnOrphanOfEveryDeduplicatedType(RecordType recordType)
     {
-        AddLink(recordType, Guid.CreateVersion7(), ToMills(WideBase), "glooko-connector",
+        AddLink(recordType, Guid.CreateVersion7(), WideBase.ToMills(), "glooko-connector",
             Guid.CreateVersion7(), isPrimary: true);
         await _context.SaveChangesAsync();
 
-        var deleted = await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        var deleted = await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         deleted.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
@@ -1402,7 +1643,7 @@ public class DeduplicationReconcileTests : IDisposable
     {
         using var context = OfflineDbContext.Create();
 
-        var sql = DeduplicationService.OrphanedLinksOf(context, recordType).ToQueryString();
+        var sql = LinkedRecordTypes.OrphanedLinksOf(context, recordType).ToQueryString();
 
         sql.Should().MatchRegex(
             @"NOT EXISTS \(\s*SELECT 1\s*FROM \w+ AS (\w+)\s*WHERE \1\.tenant_id = @ef_filter__TenantId AND \1\.id = l\.record_id\)",
@@ -1416,7 +1657,7 @@ public class DeduplicationReconcileTests : IDisposable
     /// <see cref="AddRecord"/> fails these theories rather than going untested.
     /// </summary>
     public static TheoryData<RecordType> DeduplicatedRecordTypes =>
-        [.. DeduplicationService.DeduplicatedRecordTypes];
+        [.. LinkedRecordTypes.DeduplicatedRecordTypes];
 
     [Theory]
     [MemberData(nameof(DeduplicatedRecordTypes))]
@@ -1426,10 +1667,10 @@ public class DeduplicationReconcileTests : IDisposable
         // A type the sweep does not recognise has every one of its links swept, live record or not,
         // so this is what separates the nine from an unknown key.
         var recordId = AddRecord(recordType);
-        AddPrimaryLink(recordType, recordId, ToMills(WideBase), "glooko-connector");
+        AddPrimaryLink(recordType, recordId, WideBase.ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.RecordId.Should().Be(recordId);
@@ -1478,7 +1719,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddRawLink(recordType, TestTenantId);
         await _context.SaveChangesAsync();
 
-        var deleted = await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        var deleted = await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         deleted.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
@@ -1499,7 +1740,7 @@ public class DeduplicationReconcileTests : IDisposable
             CanonicalId = Guid.CreateVersion7(),
             RecordType = recordType,
             RecordId = Guid.CreateVersion7(),
-            SourceTimestamp = ToMills(WideBase),
+            SourceTimestamp = WideBase.ToMills(),
             DataSource = "glooko-connector",
             IsPrimary = true
         });
@@ -1515,10 +1756,10 @@ public class DeduplicationReconcileTests : IDisposable
         // back to it when every member is deleted.
         var recordId = await AddCarb(WideBase, "glooko-connector", 50,
             deletedAt: softDeleted ? WideBase.AddHours(1) : null);
-        AddPrimaryLink(RecordType.CarbIntake, recordId, ToMills(WideBase), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, recordId, WideBase.ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.RecordId.Should().Be(recordId);
@@ -1539,14 +1780,14 @@ public class DeduplicationReconcileTests : IDisposable
                 CanonicalId = Guid.CreateVersion7(),
                 RecordType = "carbintake",
                 RecordId = Guid.CreateVersion7(),
-                SourceTimestamp = ToMills(WideBase),
+                SourceTimestamp = WideBase.ToMills(),
                 DataSource = "glooko-connector",
                 IsPrimary = true
             });
             await seedContext.SaveChangesAsync();
         }
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.TenantId.Should().Be(otherTenant);
@@ -1577,7 +1818,7 @@ public class DeduplicationReconcileTests : IDisposable
                 CanonicalId = Guid.CreateVersion7(),
                 RecordType = "carbintake",
                 RecordId = theirRecordId,
-                SourceTimestamp = ToMills(WideBase),
+                SourceTimestamp = WideBase.ToMills(),
                 DataSource = "glooko-connector",
                 IsPrimary = true
             });
@@ -1585,10 +1826,10 @@ public class DeduplicationReconcileTests : IDisposable
         }
 
         // The test tenant's link points at the other tenant's record, so it is an orphan here.
-        AddPrimaryLink(RecordType.CarbIntake, theirRecordId, ToMills(WideBase), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, theirRecordId, WideBase.ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
-        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+        await LinkedRecordTypes.DeleteOrphanedLinksAsync(_context);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         links.Should().ContainSingle().Which.Id.Should().Be(theirLinkId);
@@ -1618,20 +1859,20 @@ public class DeduplicationReconcileTests : IDisposable
             var at = first + step * i;
             var mgdl = 60 + 5 * i % 300;
             var reading = await AddSensorGlucose(at, "dexcom-connector", mgdl);
-            AddPrimaryLink(RecordType.SensorGlucose, reading, ToMills(at), "dexcom-connector");
+            AddPrimaryLink(RecordType.SensorGlucose, reading, at.ToMills(), "dexcom-connector");
 
             Guid? copy = null;
             if (copyEvery > 0 && (i % copyEvery == 0 || i == count - 1))
             {
                 copy = await AddSensorGlucose(at.AddSeconds(10), "glooko-connector", mgdl);
-                AddPrimaryLink(RecordType.SensorGlucose, copy.Value, ToMills(at.AddSeconds(10)), "glooko-connector");
+                AddPrimaryLink(RecordType.SensorGlucose, copy.Value, at.AddSeconds(10).ToMills(), "glooko-connector");
             }
 
             Guid? lateCopy = null;
             if (lateCopyEvery > 0 && i % lateCopyEvery == 0)
             {
                 lateCopy = await AddSensorGlucose(at.AddSeconds(45), "libre-connector", mgdl);
-                AddPrimaryLink(RecordType.SensorGlucose, lateCopy.Value, ToMills(at.AddSeconds(45)), "libre-connector");
+                AddPrimaryLink(RecordType.SensorGlucose, lateCopy.Value, at.AddSeconds(45).ToMills(), "libre-connector");
             }
 
             readings.Add(new GlucoseWithCopies(reading, copy, lateCopy));
@@ -1738,10 +1979,10 @@ public class DeduplicationReconcileTests : IDisposable
     /// Adds a primary <see cref="LinkedRecordEntity"/> with a fresh canonical id for the test tenant
     /// and returns that canonical id (handy for candidate-bounded reconcile tests).
     /// </summary>
-    private Guid AddPrimaryLink(RecordType recordType, Guid recordId, long mills, string source)
+    private Guid AddPrimaryLink(RecordType recordType, Guid recordId, long mills, string source, Guid? linkId = null)
     {
         var canonicalId = Guid.CreateVersion7();
-        AddLink(recordType, recordId, mills, source, canonicalId, isPrimary: true);
+        AddLink(recordType, recordId, mills, source, canonicalId, isPrimary: true, linkId);
         return canonicalId;
     }
 
@@ -1750,10 +1991,11 @@ public class DeduplicationReconcileTests : IDisposable
     /// collapsed — the case where a group spans far more than its primary's timestamp suggests.
     /// </summary>
     private void AddLink(
-        RecordType recordType, Guid recordId, long mills, string source, Guid canonicalId, bool isPrimary) =>
+        RecordType recordType, Guid recordId, long mills, string source, Guid canonicalId, bool isPrimary,
+        Guid? linkId = null) =>
         _context.LinkedRecords.Add(new LinkedRecordEntity
         {
-            Id = Guid.CreateVersion7(),
+            Id = linkId ?? Guid.CreateVersion7(),
             TenantId = TestTenantId,
             CanonicalId = canonicalId,
             RecordType = recordType.ToString().ToLowerInvariant(),
@@ -1796,12 +2038,6 @@ public class DeduplicationReconcileTests : IDisposable
         await _context.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Converts a UTC <see cref="DateTime"/> to Unix milliseconds, matching the link source timestamp.
-    /// </summary>
-    private static long ToMills(DateTime d) =>
-        new DateTimeOffset(d, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
     private sealed class LinkLoadRecorder : IMaterializationInterceptor
     {
         private readonly List<Guid> _recordIds = [];
@@ -1822,6 +2058,8 @@ public class DeduplicationReconcileTests : IDisposable
     {
         public Func<string, bool>? FailWhen { get; set; }
 
+        public Func<DbCommand, bool>? FailCommandWhen { get; set; }
+
         public override InterceptionResult<DbDataReader> ReaderExecuting(
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
         {
@@ -1839,7 +2077,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         private void ThrowIfArmed(DbCommand command)
         {
-            if (FailWhen?.Invoke(command.CommandText) == true)
+            if (FailWhen?.Invoke(command.CommandText) == true || FailCommandWhen?.Invoke(command) == true)
                 throw new InvalidOperationException("Simulated read failure");
         }
     }

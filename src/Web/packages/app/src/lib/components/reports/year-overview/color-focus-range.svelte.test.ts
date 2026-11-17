@@ -25,7 +25,12 @@ const boundaryInput = (n: number, metric = "TDD") =>
 const boundarySlider = (n: number, metric = "TDD") =>
   page.getByRole("slider", { name: `${metric} color boundary ${n}`, exact: true });
 const addBoundary = () => page.getByRole("button", { name: "Color boundary", exact: true });
-const selected = (what: "window" | "boundaries") => page.getByTestId(`selected-${what}`);
+const selected = (what: "window" | "boundaries" | "ends") => page.getByTestId(`selected-${what}`);
+function pick(label: string, hex: string) {
+  const input = elementOf(page.getByLabelText(label, { exact: true }), HTMLInputElement);
+  input.value = hex;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 const gradient = (id = "color-focus-track") =>
   elementOf(page.getByTestId(id), HTMLElement).style.getPropertyValue("--scale-gradient");
 
@@ -250,5 +255,39 @@ describe("year overview color focus", () => {
     await expect.element(boundaryInput(1, "Avg Glucose")).toHaveValue(11.7);
     await expect.element(selected("window")).toHaveTextContent("[70,350]");
     await expect.element(boundaryInput(1, "Avg Glucose")).toHaveAttribute("step", "0.1");
+  });
+
+  it("colors a boundary and an end from the picker", async () => {
+    render(Harness);
+    await addBoundary().click();
+    pick("TDD color boundary 1 color", "#ff0000");
+    await expect.element(selected("boundaries")).toHaveTextContent('"color":"#ff0000"');
+    expect(gradient()).toContain("#ff0000");
+
+    pick("TDD high end color", "#00ff00");
+    await expect.element(selected("ends")).toHaveTextContent('{"high":"#00ff00"}');
+    expect(gradient()).toContain("#00ff00");
+  });
+
+  it("swaps the end colors of a dose scale", async () => {
+    render(Harness);
+    pick("TDD low end color", "#000000");
+    pick("TDD high end color", "#ffffff");
+    await page.getByRole("button", { name: "Swap TDD end colors" }).click();
+    await expect.element(selected("ends")).toHaveTextContent('{"low":"#ffffff","high":"#000000"}');
+  });
+
+  it("offers no swap on the glucose ramp", async () => {
+    render(Harness, { glucose: true, metricLabel: "Avg Glucose" });
+    await expect.element(minimumInput("Avg Glucose")).toBeInTheDocument();
+    expect(page.getByRole("button", { name: /Swap/ }).elements()).toHaveLength(0);
+  });
+
+  it("clears chosen colors on reset", async () => {
+    render(Harness);
+    pick("TDD low end color", "#123456");
+    await expect.element(selected("ends")).toHaveTextContent("#123456");
+    await page.getByRole("button", { name: "Reset TDD color scale" }).click();
+    await expect.element(selected("ends")).toHaveTextContent("{}");
   });
 });

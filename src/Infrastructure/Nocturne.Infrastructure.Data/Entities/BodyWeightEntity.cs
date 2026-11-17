@@ -8,14 +8,13 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// </summary>
 [Table("body_weights")]
 public class BodyWeightEntity
-    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified
+    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified, IWriterStamped
 {
     /// <summary>Owning tenant for RLS isolation.</summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
-    /// <summary>Primary key (UUID v7).</summary>
-    [Key]
+    /// <summary>Row id, unique within its tenant: the primary key is <c>(TenantId, Id)</c>.</summary>
     public Guid Id { get; set; }
 
     /// <summary>Legacy MongoDB ObjectId preserved during migration.</summary>
@@ -62,6 +61,11 @@ public class BodyWeightEntity
     [Column("data_source")]
     [MaxLength(256)]
     public string? DataSource { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("writer_grant_id")]
+    public Guid? WriterGrantId { get; set; }
 
     /// <summary>
     /// Stable per-source identifier; second half of the sync-dedup key. A create

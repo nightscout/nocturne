@@ -17,9 +17,8 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public List<DeviceEvent> Map(IEnumerable<TandemPumpEvent> events)
+    public List<DeviceEvent> Map(IEnumerable<TandemPumpEvent> events, DateTime now)
     {
-        var now = DateTime.UtcNow;
         var records = new List<DeviceEvent>();
 
         foreach (var ev in events)

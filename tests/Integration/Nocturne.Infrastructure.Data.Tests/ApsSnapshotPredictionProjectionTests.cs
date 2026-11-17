@@ -28,7 +28,8 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
         string? Default = null,
         bool Deleted = false,
         DateTime? PredictedStart = null,
-        bool NoPredictedStart = false);
+        bool NoPredictedStart = false,
+        bool? ClosedLoop = null);
 
     [Fact]
     public async Task Thins_to_one_per_device_per_five_minutes_preferring_the_enacted()
@@ -119,6 +120,19 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
             .And.NotContain("additional_properties").And.NotContain("*");
     }
 
+    [Fact]
+    public async Task Iob_cob_points_carry_each_snapshots_closed_loop_state()
+    {
+        var tenant = await SeedAsync(
+            new Row(Start.AddMinutes(1), ClosedLoop: false),
+            new Row(Start.AddMinutes(2), ClosedLoop: true),
+            new Row(Start.AddMinutes(3), ClosedLoop: null));
+
+        var points = await ReadAsync(tenant, (repository, from, to) => repository.GetIobCobPointsAsync(from, to));
+
+        points.Select(p => p.ClosedLoop).Should().Equal(false, true, null);
+    }
+
     private async Task<Guid> SeedAsync(params Row[] rows)
     {
         var tenant = Guid.NewGuid();
@@ -141,10 +155,10 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
             cmd.CommandText = """
                 INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted,
                     predicted_start_timestamp, predicted_default_json, predicted_iob_json,
-                    suggested_json, enacted_json, loop_json, deleted_at, sys_created_at, sys_updated_at)
+                    suggested_json, enacted_json, loop_json, closed_loop, deleted_at, sys_created_at, sys_updated_at)
                 VALUES (gen_random_uuid(), @tid, @at, @device, 'AndroidAps', @enacted,
                     @predictedStart, @default::jsonb, @iob::jsonb,
-                    @blob::jsonb, @blob::jsonb, @blob::jsonb, @deleted, now(), now())
+                    @blob::jsonb, @blob::jsonb, @blob::jsonb, @closedLoop, @deleted, now(), now())
                 """;
             cmd.Parameters.AddWithValue("tid", tenant);
             cmd.Parameters.AddWithValue("at", row.At);
@@ -154,6 +168,7 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
             cmd.Parameters.AddWithValue("default", (object?)row.Default ?? DBNull.Value);
             cmd.Parameters.AddWithValue("iob", (object?)row.Iob ?? DBNull.Value);
             cmd.Parameters.AddWithValue("blob", Blob);
+            cmd.Parameters.AddWithValue("closedLoop", (object?)row.ClosedLoop ?? DBNull.Value);
             cmd.Parameters.AddWithValue("deleted", row.Deleted ? DateTime.UtcNow : DBNull.Value);
             await cmd.ExecuteNonQueryAsync();
         }
@@ -163,6 +178,14 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
 
     private async Task<(IReadOnlyList<ApsPredictionPoint> Points, IReadOnlyList<string> Statements)> ReadAsync(Guid tenant)
     {
+        var recorder = new StatementRecorder();
+        var points = await ReadAsync(tenant, (repository, from, to) => repository.GetPredictionsAsync(from, to), recorder);
+        return (points, recorder.All);
+    }
+
+    private async Task<T> ReadAsync<T>(
+        Guid tenant, Func<ApsSnapshotRepository, DateTime, DateTime, Task<T>> read, StatementRecorder? recorder = null)
+    {
         await using var conn = await fx.OpenAppConnectionAsync();
         await using (var cmd = conn.CreateCommand())
         {
@@ -171,15 +194,13 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var recorder = new StatementRecorder();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
-            .AddInterceptors(recorder)
+            .AddInterceptors(recorder ?? new StatementRecorder())
             .Options) { TenantId = tenant };
         var repository = new ApsSnapshotRepository(
             new TestNocturneDbContextFactory(ctx), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
 
-        var points = await repository.GetPredictionsAsync(Start, Start.AddHours(1));
-        return (points, recorder.All);
+        return await read(repository, Start, Start.AddHours(1));
     }
 }

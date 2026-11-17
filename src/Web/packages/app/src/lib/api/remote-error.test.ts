@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MISSING_ITEM_ERROR, RATE_LIMITED_ERROR } from "../forms/submit-error";
+import { missingItemError, rateLimitedError } from "../forms/submit-messages.svelte";
 import { remoteErrorMessage } from "./remote-error";
 
 const NEEDS_ALERTS_READWRITE =
@@ -26,14 +26,14 @@ describe("remoteErrorMessage", () => {
 
   it("answers a throttled read as throttled", () => {
     expect(remoteErrorMessage({ status: 429 }, NEEDS_ALERTS_READWRITE)).toBe(
-      RATE_LIMITED_ERROR
+      rateLimitedError()
     );
   });
 
   it("answers a stale id as a missing item, not a missing permission", () => {
     expect(
       remoteErrorMessage({ status: 404, body: { message: "Not found" } }, NEEDS_ALERTS_READWRITE)
-    ).toBe(MISSING_ITEM_ERROR);
+    ).toBe(missingItemError());
   });
 
   it("forwards the reason a rejected read carried", () => {

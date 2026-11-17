@@ -57,7 +57,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 {
     private readonly IJwtCredentialValidator _credentialValidator;
     private readonly ITenantMemberService _memberService;
-    private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly IOAuthGrantRepository _grants;
     private readonly TimeProvider _timeProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<HubTokenAuthorizer> _logger;
@@ -65,14 +65,14 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     public HubTokenAuthorizer(
         IJwtCredentialValidator credentialValidator,
         ITenantMemberService memberService,
-        INocturneDbContextFactory dbContextFactory,
+        IOAuthGrantRepository grants,
         TimeProvider timeProvider,
         IConfiguration configuration,
         ILogger<HubTokenAuthorizer> logger)
     {
         _credentialValidator = credentialValidator;
         _memberService = memberService;
-        _dbContextFactory = dbContextFactory;
+        _grants = grants;
         _timeProvider = timeProvider;
         _configuration = configuration;
         _logger = logger;
@@ -223,10 +223,9 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     private async Task<HubAuthorization?> AuthorizeDirectGrantAsync(
         string token, Guid connectionTenantId, string requiredScope)
     {
-        var grant = await DirectGrantTokenHandler.FindActiveGrantAsync(
-            _dbContextFactory, token, connectionTenantId, _timeProvider.GetUtcNow().UtcDateTime);
-
-        if (grant is null)
+        if (await DirectGrantTokenHandler.FindActiveGrantAsync(
+                _grants, token, connectionTenantId, _timeProvider.GetUtcNow().UtcDateTime)
+            is not var (grant, facts))
         {
             _logger.LogDebug(
                 "No active direct grant on tenant {ConnectionTenant} matches the hub token",
@@ -234,10 +233,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             return null;
         }
 
-        var membership = await _memberService.GetMemberAccessAsync(
-            grant.SubjectId, connectionTenantId);
-
-        if (membership is null)
+        if (facts?.Access is not { } membership)
         {
             _logger.LogWarning(
                 "Hub direct grant {GrantId} belongs to subject {SubjectId}, who is not a member of connection tenant {ConnectionTenant}",

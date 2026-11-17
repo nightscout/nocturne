@@ -1,0 +1,105 @@
+---
+title: API key permissions for AID apps
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# API key permissions for AID apps
+
+Loop and AAPS upload to Nocturne with an API key. This page lists the permissions to give that key.
+A key with too few permissions fails some uploads. A key with too many can do more than the app needs.
+
+To connect an app that signs in with OAuth, see [Connecting your app](/docs/connecting-apps).
+
+## Create the key
+
+1. Open **Settings**, then **Connectors & apps**.
+2. In the **Connections** card, select **Add a connection**.
+3. Select **An app on your phone or computer**.
+   If Nocturne does not show this choice, go to the next step.
+4. Below **Set up manually**, select **Create API token**.
+5. Enter a label that names the app and the phone, for example `Loop on my phone`.
+6. Set the permissions as the section for your app says.
+7. Leave **Only last 24 hours** off. That option limits what the key can read to the last 24 hours.
+8. Select **Create token**, and copy the token. Nocturne shows it one time.
+
+Enter the token in the app, in the field for the API secret or the access token.
+Nocturne accepts the same token in both places.
+
+The dialog opens with **All health data** set to **Read & write**.
+That is more than Loop or AAPS needs.
+To narrow it, set **All health data** to **No access**.
+Then set the rows that your app needs.
+
+A key you moved from Nightscout keeps the access it had there.
+The Nightscout API secret becomes a key with **All health data** set to **Read & write**.
+That is more than Loop or AAPS needs.
+Make a new key for each app with the permissions on this page, then revoke the old key.
+
+## Loop
+
+Set these rows to **Read & write**:
+
+| Permission | What Loop does with it |
+| --- | --- |
+| Blood glucose | Uploads glucose readings to `/api/v1/entries`. |
+| Treatments | Uploads and deletes treatments, such as carbs and overrides, on `/api/v1/treatments`. |
+| Device status | Uploads the loop status on `/api/v1/devicestatus`. |
+| Treatment profile | Uploads the Loop settings as a profile. |
+
+Leave all other rows at **No access**.
+
+When you add the Nightscout service, Loop calls `/api/v1/experiments/test` to check the key.
+That call needs read access to at least one of **Blood glucose**, **Treatments**, or **Device status**.
+The permissions above include it.
+
+## AAPS
+
+This section is for AAPS with the **NSClientV3** plugin. That plugin uses the v3 API.
+It takes the key as its access token. Set these rows:
+
+| Permission | Level | What AAPS does with it |
+| --- | --- | --- |
+| Blood glucose | Read & write | Uploads and updates entries. |
+| Treatments | Read & write | Uploads treatments. Updates them, for example the end of a temporary basal. |
+| Device status | Read & write | Uploads device status. |
+| Treatment profile | Read & write | Reads and uploads profiles. Updates the `aaps` settings document. |
+| Food & meals | Read & write | Syncs the food list and its changes. |
+
+Leave all other rows at **No access**.
+
+AAPS also calls `/api/v3/status` and `/api/v3/lastModified`.
+Any valid key can call both.
+The last-modified answer lists only the collections that the key can read.
+
+## Trio, iAPS, and xDrip+
+
+Set **All health data** to **Read & write**. The dialog opens with this setting.
+That covers every area these apps upload.
+This page does not yet give a narrower list for these apps.
+
+## All permissions
+
+Do not set **All permissions** on a key for an app.
+No upload needs it. It also lets the key delete all records of a data type at once.
+
+## If the key has too few permissions
+
+When the key lacks a permission, Nocturne answers the request with `403 Forbidden`.
+The app cannot upload or read that data type.
+
+If the token is wrong, revoked, or expired, Nocturne answers with `401 Unauthorized`.
+Loop reports `401` as a wrong secret.
+
+To fix a `403`, make a new key with the missing row.
+Nocturne does not change the permissions of an existing key.
+
+<Callout type="info" title="Check what a key can do">
+
+  In the **Connections** card, select the key. A key that an app did not use recently is in the **Not in use** group.
+  Nocturne lists the permissions of the key and the time of last use.
+  If the time is **Never**, the app has not reached Nocturne with that key.
+
+</Callout>

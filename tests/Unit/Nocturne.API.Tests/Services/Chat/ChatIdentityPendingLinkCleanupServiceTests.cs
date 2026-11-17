@@ -29,6 +29,7 @@ public class ChatIdentityPendingLinkCleanupServiceTests : IDisposable
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(
             _db.ContextFactory);
         services.AddSingleton(_db.ContextFactory.AsNocturneFactory());
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<ChatIdentityPendingLinkService>();
         _serviceProvider = services.BuildServiceProvider();
 
@@ -126,6 +127,7 @@ public class ChatIdentityPendingLinkCleanupServiceTests : IDisposable
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(
             new SignallingDbContextFactory(_db.Options, () => swept.TrySetResult()));
         services.AddSingleton(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<ChatIdentityPendingLinkService>();
         var provider = services.BuildServiceProvider();
 

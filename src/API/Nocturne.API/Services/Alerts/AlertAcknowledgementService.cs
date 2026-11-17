@@ -27,7 +27,8 @@ internal sealed class AlertAcknowledgementService(
     ISignalRBroadcastService broadcastService,
     ITenantMemberService memberService,
     IEngineAlarmRelay alarmRelay,
-    ILogger<AlertAcknowledgementService> logger)
+    ILogger<AlertAcknowledgementService> logger,
+    TimeProvider timeProvider)
     : IAlertAcknowledgementService
 {
     /// <summary>
@@ -44,14 +45,14 @@ internal sealed class AlertAcknowledgementService(
     /// test fires carry a short future <c>EndedAt</c> so they surface in the active-intents
     /// snapshot; see <see cref="AlertDeliveryService.TestFireAsync"/>), applies the
     /// per-excursion mutation via <see cref="ApplyAcknowledgement"/>, saves once,
-    /// and broadcasts a single roll-up <c>alert_acknowledged</c> event via
-    /// <see cref="ISignalRBroadcastService"/>. Broadcast failures are swallowed
-    /// and logged so the acknowledgement is not rolled back.
+    /// and broadcasts one <c>alert_acknowledged</c> event, naming every excursion it acknowledged,
+    /// through <see cref="ISignalRBroadcastService.BroadcastAlertAcknowledgedAsync"/>. Broadcast
+    /// failures are swallowed and logged so the acknowledgement is not rolled back.
     /// </remarks>
     public async Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct)
     {
         await using var db = await CreateContextForAsync(tenantId, ct);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // EndedAt > now matches the active-intents snapshot filter: a device_action test fire
         // keeps the tray flashing for its window, so it must be acknowledgeable during it.
@@ -84,12 +85,12 @@ internal sealed class AlertAcknowledgementService(
 
         try
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
             {
-                tenantId,
-                acknowledgedBy,
-                acknowledgedAt = now,
-                excursionCount = excursions.Count,
+                TenantId = tenantId,
+                ExcursionIds = excursions.Select(e => e.Id).ToList(),
+                AcknowledgedBy = acknowledgedBy,
+                AcknowledgedAt = now,
             });
         }
         catch (Exception ex)
@@ -114,7 +115,7 @@ internal sealed class AlertAcknowledgementService(
         CancellationToken ct)
     {
         await using var db = await CreateContextForAsync(tenantId, ct);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // Tenant filter is implicit via db.TenantId; the explicit TenantId == tenantId clause is
         // defence-in-depth so a passed tenantId of Guid.Empty (never matches a real row) cannot
@@ -156,12 +157,12 @@ internal sealed class AlertAcknowledgementService(
         {
             try
             {
-                await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+                await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
                 {
-                    tenantId = excursion.TenantId,
-                    excursionId,
-                    acknowledgedBy,
-                    acknowledgedAt = now,
+                    TenantId = excursion.TenantId,
+                    ExcursionIds = [excursionId],
+                    AcknowledgedBy = acknowledgedBy,
+                    AcknowledgedAt = now,
                 });
             }
             catch (Exception ex)

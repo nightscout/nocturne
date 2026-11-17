@@ -89,8 +89,5 @@ public class GlobalConnectorSettingsTests
         return config;
     }
 
-    private sealed class TestConnectorConfiguration : BaseConnectorConfiguration
-    {
-        protected override void ValidateSourceSpecificConfiguration() { }
-    }
+    private sealed class TestConnectorConfiguration : BaseConnectorConfiguration;
 }

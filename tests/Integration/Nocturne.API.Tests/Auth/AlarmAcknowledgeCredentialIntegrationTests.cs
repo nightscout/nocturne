@@ -16,6 +16,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Nightscout token whose role held only <c>notifications:*:ack</c>, which the import stores as a
 /// migrated direct grant of the translated scopes on the tenant's membership.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class AlarmAcknowledgeCredentialIntegrationTests : ApiIntegrationTestBase
 {
@@ -138,8 +139,6 @@ public class AlarmAcknowledgeCredentialIntegrationTests : ApiIntegrationTestBase
         (await key.DeleteAsync($"/api/v4/alert-rules/{rule}"))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await key.PostAsJsonAsync($"/api/v4/alerts/excursions/{Guid.CreateVersion7()}/acknowledge", new { }))
-            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await key.PostAsJsonAsync("/api/v1/notifications/pushover", new { title = "t", message = "m" }))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await key.PostAsJsonAsync("/api/v1/adminnotifies", new { title = "t", message = "m" }))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);

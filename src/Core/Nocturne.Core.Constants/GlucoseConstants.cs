@@ -12,6 +12,11 @@ public static class GlucoseConstants
     public const double MgdlPerMmol = 18.0182;
 
     /// <summary>
+    /// <see cref="MgdlPerMmol"/> for decimal arithmetic. A cast of the double is a different number.
+    /// </summary>
+    public const decimal MgdlPerMmolDecimal = 18.0182m;
+
+    /// <summary>
     /// Bottom of the consensus in-range band in mg/dL — the boundary time-in-range is measured
     /// against and below which a reading is drawn as low, before any tenant threshold overrides it.
     /// Not the legacy Nightscout <c>bgTargetBottom</c> alarm setting, which ships 80; that one is
@@ -57,6 +62,12 @@ public static class GlucoseConstants
     /// Coefficient of variation in percent at or below which glucose counts as stable.
     /// </summary>
     public const double CoefficientOfVariationTargetPercent = 36;
+
+    /// <summary>
+    /// Coefficient of variation in percent above which glucose counts as variable. Between this and
+    /// <see cref="CoefficientOfVariationTargetPercent"/> it counts as moderate.
+    /// </summary>
+    public const double CoefficientOfVariationVariablePercent = 50;
 
     /// <summary>
     /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading

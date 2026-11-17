@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SettingsEvidenceConfidenceReason } from "$lib/api";
+import { SettingsEvidenceConfidenceReason } from "#lib/api/index.js";
 import { reasonText } from "./settings-evidence-labels.svelte";
 
 describe("reasonText", () => {

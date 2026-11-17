@@ -10,20 +10,24 @@ public class GlookoTempBasalMapper
 {
     private readonly string _connectorSource;
     private readonly ILogger _logger;
+    private readonly TimeProvider _clock;
     private readonly GlookoTimeMapper _timeMapper;
 
     public GlookoTempBasalMapper(
         string connectorSource,
         GlookoTimeMapper timeMapper,
-        ILogger logger)
+        ILogger logger,
+        TimeProvider clock)
     {
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public List<TempBasal> TransformV3ToTempBasals(GlookoV3GraphResponse graphData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var tempBasals = new List<TempBasal>();
 
         if (graphData?.Series == null)
@@ -55,8 +59,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_suspend_basal_{suspend.X}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }
@@ -89,8 +93,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_lgsplgs_basal_{lgsEvent.X}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }
@@ -121,8 +125,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_tempbasal_{tempBasal.X}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }
@@ -159,8 +163,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_scheduledbasal_{basal.X}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }
@@ -176,6 +180,7 @@ public class GlookoTempBasalMapper
 
     public List<TempBasal> TransformV2ToTempBasals(GlookoBatchData batchData)
     {
+        var now = _clock.GetUtcNow().UtcDateTime;
         var tempBasals = new List<TempBasal>();
 
         if (batchData == null)
@@ -223,8 +228,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_v2_tempbasal_{rawTimestamp.Ticks}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }
@@ -273,8 +278,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_v2_scheduledbasal_{rawTimestamp.Ticks}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }
@@ -319,8 +324,8 @@ public class GlookoTempBasalMapper
                         App = null,
                         DataSource = _connectorSource,
                         LegacyId = $"glooko_v2_suspend_basal_{rawTimestamp.Ticks}",
-                        CreatedAt = DateTime.UtcNow,
-                        ModifiedAt = DateTime.UtcNow,
+                        CreatedAt = now,
+                        ModifiedAt = now,
                     }
                 );
             }

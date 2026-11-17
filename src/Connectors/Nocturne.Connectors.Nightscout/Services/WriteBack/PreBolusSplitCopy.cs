@@ -27,12 +27,12 @@ internal static class PreBolusSplitCopy
     /// </summary>
     public static string? CreatedAt(Treatment treatment)
     {
-        if (treatment.PreBolus is not { } preBolus || Math.Round(preBolus) == 0 || treatment.EventType is null)
+        if (treatment.PreBolus is not { } preBolus || preBolus == 0 || treatment.EventType is null)
             return null;
 
         // prepareData times the document by eventTime when it parses, else by created_at.
         var basis = Parse(treatment.EventTime) ?? Parse(treatment.CreatedAt);
-        return basis is { } at ? Iso(at.AddMinutes(Math.Round(preBolus))) : null;
+        return basis is { } at ? Iso(at.AddMilliseconds(PreBolusSplit.OffsetMillis(preBolus))) : null;
     }
 
     public static string Query(string endpoint, Treatment treatment, string createdAt)

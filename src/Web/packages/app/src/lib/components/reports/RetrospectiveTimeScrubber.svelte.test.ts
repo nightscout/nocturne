@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import RetrospectiveTimeScrubber from "./RetrospectiveTimeScrubber.svelte";
-import { startOfDay, timeOnDay } from "$lib/utils/date-range";
+import { startOfDay, timeOnDay } from "#lib/utils/date-range.js";
 
 // A zone well away from any the test browser is likely to run in, so a browser-zone reading shows.
 const ZONE = "Pacific/Kiritimati";

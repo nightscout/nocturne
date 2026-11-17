@@ -1,6 +1,6 @@
 // Dashboard Widgets - Individual configurable widget components
 export { default as WidgetCard } from "./WidgetCard.svelte";
-export { default as BgDeltaWidget } from "./BgDeltaWidget.svelte";
+export { default as CurrentGlucoseWidget } from "./CurrentGlucoseWidget.svelte";
 export { default as LastUpdatedWidget } from "./LastUpdatedWidget.svelte";
 export { default as ConnectionStatusWidget } from "./ConnectionStatusWidget.svelte";
 export { default as MealsWidget } from "./MealsWidget.svelte";

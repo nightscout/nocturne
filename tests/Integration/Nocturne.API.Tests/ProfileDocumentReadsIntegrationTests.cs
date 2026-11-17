@@ -21,6 +21,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Every legacy profile read serves one document per stored profile document, carrying all of its
 /// stores, and never serves the snapshot a Profile Switch treatment stored, on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
 {
@@ -320,7 +321,6 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
             Row("plain", "Day", at.AddHours(-2)),
             Row("colon:b:c", "b:c", at.AddHours(-3)),
             Row(null, "V4Only", at.AddHours(-4)),
-            Row($"snap:Exercise{TherapySettings.ProfileSwitchStoreMarker}1", $"Exercise{TherapySettings.ProfileSwitchStoreMarker}1", at.AddHours(1)),
         };
 
         var (stored, ranked) = await WithTenantScopeAsync(async services =>

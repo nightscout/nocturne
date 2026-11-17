@@ -56,6 +56,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptions<CompatibilityProxyConfiguration> _configuration;
+    private readonly TimeProvider _time;
     private readonly ILogger<DiscrepancyForwardingService> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -74,11 +75,13 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
     public DiscrepancyForwardingService(
         IHttpClientFactory httpClientFactory,
         IOptions<CompatibilityProxyConfiguration> configuration,
+        TimeProvider timeProvider,
         ILogger<DiscrepancyForwardingService> logger
     )
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -150,7 +153,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
             Directory.CreateDirectory(directory);
 
-            var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
+            var timestamp = _time.GetUtcNow().ToString("yyyy-MM-dd_HH-mm-ss");
             var traceId = payload.Analysis.TraceId.Replace(":", "-").Replace("/", "-");
             var filename = $"discrepancy_{timestamp}_{traceId}.json";
             var filePath = Path.Combine(directory, filename);
@@ -226,7 +229,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
         return new ForwardedDiscrepancyDto
         {
             SourceId = string.IsNullOrEmpty(sourceId) ? Environment.MachineName : sourceId,
-            ReceivedAt = DateTimeOffset.UtcNow,
+            ReceivedAt = _time.GetUtcNow(),
             Analysis = new DiscrepancyAnalysisDto
             {
                 Id = Guid.NewGuid(),
@@ -252,7 +255,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
                     NightscoutValue = d.NightscoutValue,
                     NocturneValue = d.NocturneValue,
                     Description = d.Description,
-                    RecordedAt = DateTimeOffset.UtcNow,
+                    RecordedAt = _time.GetUtcNow(),
                 }).ToList(),
             }
         };

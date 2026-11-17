@@ -1,19 +1,25 @@
 name: Build and Publish with Aspire
 
-# Every merge to main publishes :develop (and an immutable :main-<sha7>); a v* tag publishes the
+# Every merge to main publishes :develop and :main-<sha7>; a v* tag publishes the
 # version and, unless it is a pre-release, moves :latest to it (.github/scripts/image-tags.sh).
+# The dotnet images are pushed to an unpolled build tag and promoted once verified; a release
+# leaves :release-<sha7> behind on nocturne-api, nocturne-demo and nocturne-selfhost-setup.
 # Pull requests publish nothing: the images job in tests.yml builds the same images on its runner.
-# A manual dispatch from main or a v* tag re-publishes that ref.
+# A manual dispatch from main or a v* tag re-publishes that ref. A weekly schedule rebuilds main
+# the same way as a merge, so the floating base images are picked up between merges; that
+# re-points :main-<sha7> at a rebuild of the same commit.
 on:
   push:
     branches: [main]
     tags: ["v*"]
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_REPOSITORY: ${{ github.repository }}
-  DOTNET_VERSION: "10.0.x"
+  DOTNET_VERSION: "11.0.x"
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
 
@@ -28,7 +34,7 @@ jobs:
   dotnet-images:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     # The native library is built on the runner and links against its glibc, which must be
-    # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:10.0, Ubuntu 24.04).
+    # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:11.0, Ubuntu 26.04).
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -75,6 +81,12 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
 
+      # crates/rust-toolchain.toml pins the toolchain cargo runs there, and the target above went to
+      # stable, so the pinned one needs it too.
+      - name: Add the aarch64 target to the pinned toolchain
+        working-directory: crates
+        run: rustup target add aarch64-unknown-linux-gnu
+
       - name: Install aarch64 cross-linker
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
 
@@ -117,7 +129,7 @@ jobs:
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
             -p:GenerateNSwagClient=false \
             "${version_args[@]}" \
-            "-p:ContainerImageTags=${{ steps.tags.outputs.version }}" \
+            "-p:ContainerImageTags=${{ steps.tags.outputs.build_tag }}" \
             "-p:ContainerGitCommit=${GITHUB_SHA}" \
             "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -130,7 +142,7 @@ jobs:
             '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
-            "-p:ContainerImageTags=${{ steps.tags.outputs.version }}"
+            "-p:ContainerImageTags=${{ steps.tags.outputs.build_tag }}"
 
       - name: Build and push Nocturne.Services.SelfHostSetup container
         working-directory: src/Services/Nocturne.Services.SelfHostSetup
@@ -141,29 +153,17 @@ jobs:
             '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-selfhost-setup \
-            "-p:ContainerImageTags=${{ steps.tags.outputs.version }}"
+            "-p:ContainerImageTags=${{ steps.tags.outputs.build_tag }}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # latest on a release, main-<sha7> on main; see .github/scripts/image-tags.sh.
-      - name: Add the extra tags to the dotnet containers
-        if: steps.tags.outputs.extra_tags != ''
-        run: |
-          for image in nocturne-api nocturne-demo nocturne-selfhost-setup; do
-            for tag in ${{ steps.tags.outputs.extra_tags }}; do
-              docker buildx imagetools create \
-                --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${tag} \
-                ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}
-            done
-          done
-
-      # The API csproj silently skips packing the cdylib when it is missing, and
-      # Alerts:Engine=rust refuses to start without it, so load it in every platform's image.
+      # The API csproj silently skips packing the cdylib when it is missing, and the API
+      # refuses to start without it, so load it in every platform's image.
       - name: Verify the API image loads the nocturne_alerts native library
         run: |
           set -euo pipefail
-          ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}"
+          ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.build_tag }}"
           probe="$RUNNER_TEMP/alerts-native-probe"
           dotnet publish scripts/alerts-native-probe.cs -o "$probe"
           find "$probe" -name '*nocturne_alerts*' -delete
@@ -180,6 +180,18 @@ jobs:
             fi
           done
 
+      # Each polled tag moves in one manifest write, to an index that already holds every
+      # platform; see build_tag in .github/scripts/image-tags.sh.
+      - name: Promote the dotnet containers
+        run: |
+          for image in nocturne-api nocturne-demo nocturne-selfhost-setup; do
+            for tag in ${{ steps.tags.outputs.promote_tags }}; do
+              docker buildx imagetools create \
+                --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${tag} \
+                ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.build_tag }}
+            done
+          done
+
   web-image:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
@@ -189,6 +201,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          submodules: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -213,6 +227,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
+          check-latest: true
           cache: "pnpm"
           cache-dependency-path: src/Web/pnpm-lock.yaml
 
@@ -267,6 +282,33 @@ jobs:
             echo "::error::Expected at least 40 generated remote files but found only $REMOTE_COUNT"
             exit 1
           fi
+
+      # The web image bundles water-ui, whose wasm is built from the src/Web/vendor/water-ui submodule.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src/Web/vendor/water-ui/target
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('src/Web/vendor/water-ui/Cargo.lock', 'src/Web/vendor/water-ui/crates/**/*.rs', 'src/Web/vendor/water-ui/crates/**/Cargo.toml') }}
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.128
+
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen
+
+      - name: Build watercolour wasm
+        working-directory: src/Web
+        run: pnpm --filter water-ui build:wasm
 
       - name: Build and push Nocturne.Web container
         run: |
@@ -393,10 +435,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      # deploy/docker-compose/ is a tracked, committed bundle — regenerated by
-      # scripts/publish-release.cs and committed ahead of tagging a release
-      # (see that script's header comment), not produced fresh in CI. Attach
-      # whatever is checked out at the tag.
+      # deploy/ holds tracked, committed bundles and install scripts, regenerated by
+      # scripts/publish-release.cs. The compose-bundle-drift job in tests.yml fails a pull
+      # request whose bundle differs from a fresh regeneration. Attach whatever is checked out
+      # at the tag.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -406,5 +448,6 @@ jobs:
             --generate-notes \
             deploy/docker-compose/*.yaml \
             deploy/docker-compose/.env.example \
+            deploy/install/install.sh \
             deploy/oracle-cloud/oracle-cloud-install.sh
 

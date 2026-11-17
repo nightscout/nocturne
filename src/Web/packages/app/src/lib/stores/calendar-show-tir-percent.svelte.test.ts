@@ -1,6 +1,6 @@
 import type {} from "@vitest/browser-playwright";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { UserDisplayPreferences } from "$api";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
 import {
   calendarShowTirPercent,
   collectPreferences,

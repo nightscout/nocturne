@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.Services.BackgroundServices;
@@ -12,17 +12,15 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
 
 /// <summary>
-/// An evaluation that loaded a rule before an edit writes nothing decided on the old rule, for
-/// each engine: the edit lands after the evaluation read the rule and the tracker state, and
-/// before it takes the rule's transition lock, as an edit on another replica can
+/// An evaluation that loaded a rule before an edit writes nothing decided on the old rule: the
+/// edit lands after the evaluation read the rule and the tracker state, and before it takes the
+/// rule's transition lock, as an edit on another replica can
 /// (docs/alerts/engine-semantics.md §6.3).
 /// </summary>
 public class StaleRuleDecisionSeamTests
 {
     private static readonly Guid RuleId = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
     private static readonly DateTime T0 = new(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
-
-    public enum Engine { Managed, Rust }
 
     /// <summary>Both trees hold at 60 mg/dL, so an auto-resolve closes an active excursion and holds.</summary>
     private static AlertRule Rule() => new()
@@ -52,14 +50,13 @@ public class StaleRuleDecisionSeamTests
         rule.AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":50}}""";
 
     private sealed record Fixture(
-        IAlertEvaluationEngine Engine, InMemoryTrackerRepository Store, Guid ExcursionId, IAsyncDisposable Scope);
+        IAlertEvaluationEngine Engine, InMemoryTrackerRepository Store, Guid ExcursionId);
 
     /// <summary>An engine over a rule with an active excursion, whose edit lands at the first transition lock.</summary>
-    private static async Task<Fixture> BuildAsync(Engine kind, AlertRule rule, Action<AlertRule> edit)
+    private static async Task<Fixture> BuildAsync(AlertRule rule, Action<AlertRule> edit)
     {
         var time = new ManualTimeProvider();
         time.SetUtcNow(T0);
-        var timers = new RecordingTimerStore();
         var store = new InMemoryTrackerRepository([rule]);
         var excursion = await store.CreateExcursionAsync(RuleId, T0.AddMinutes(-5));
         await store.UpsertTrackerStateAsync(new AlertTrackerState
@@ -76,24 +73,15 @@ public class StaleRuleDecisionSeamTests
             if (await store.GetTrackerStateAsync(RuleId) is { AwaitingRearm: true } held)
                 held.AwaitingRearm = false;
         });
-        if (kind == Engine.Rust)
-            return new Fixture(EngineTestHarness.BuildRustEngine(time, timers, repository), store, excursion.Id, NoScope.Instance);
-
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timers, repository);
-        return new Fixture(managed, store, excursion.Id, provider);
+        return new Fixture(EngineTestHarness.BuildRustEngine(time, repository), store, excursion.Id);
     }
 
-    [Fact] public Task A_pre_edit_evaluation_sets_no_hold_managed() =>
-        A_pre_edit_evaluation_sets_no_hold(Engine.Managed);
-    [NativeFact] public Task A_pre_edit_evaluation_sets_no_hold_rust() =>
-        A_pre_edit_evaluation_sets_no_hold(Engine.Rust);
-
-    private static async Task A_pre_edit_evaluation_sets_no_hold(Engine kind)
+    [NativeFact]
+    public async Task A_pre_edit_evaluation_sets_no_hold()
     {
         var rule = Rule();
         var preEdit = Snapshot(rule);
-        var fixture = await BuildAsync(kind, rule, EditAutoResolve);
-        await using var _ = fixture.Scope;
+        var fixture = await BuildAsync(rule, EditAutoResolve);
 
         var evaluation = await fixture.Engine.EvaluateRuleAsync(
             preEdit, Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
@@ -102,17 +90,12 @@ public class StaleRuleDecisionSeamTests
         await ShouldStayActiveAsync(fixture);
     }
 
-    [Fact] public Task A_pre_edit_sweep_auto_resolve_sets_no_hold_managed() =>
-        A_pre_edit_sweep_auto_resolve_sets_no_hold(Engine.Managed);
-    [NativeFact] public Task A_pre_edit_sweep_auto_resolve_sets_no_hold_rust() =>
-        A_pre_edit_sweep_auto_resolve_sets_no_hold(Engine.Rust);
-
-    private static async Task A_pre_edit_sweep_auto_resolve_sets_no_hold(Engine kind)
+    [NativeFact]
+    public async Task A_pre_edit_sweep_auto_resolve_sets_no_hold()
     {
         var rule = Rule();
         var preEdit = Snapshot(rule);
-        var fixture = await BuildAsync(kind, rule, EditAutoResolve);
-        await using var _ = fixture.Scope;
+        var fixture = await BuildAsync(rule, EditAutoResolve);
 
         var resolved = await fixture.Engine.EvaluateAutoResolveAsync(preEdit, Glucose(60), CancellationToken.None);
 
@@ -120,17 +103,12 @@ public class StaleRuleDecisionSeamTests
         await ShouldStayActiveAsync(fixture);
     }
 
-    [Fact] public Task A_close_before_a_disable_is_dropped_managed() =>
-        A_close_before_a_disable_is_dropped(Engine.Managed);
-    [NativeFact] public Task A_close_before_a_disable_is_dropped_rust() =>
-        A_close_before_a_disable_is_dropped(Engine.Rust);
-
-    private static async Task A_close_before_a_disable_is_dropped(Engine kind)
+    [NativeFact]
+    public async Task A_close_before_a_disable_is_dropped()
     {
         var rule = Rule();
         var preEdit = Snapshot(rule);
-        var fixture = await BuildAsync(kind, rule, r => r.IsEnabled = false);
-        await using var _ = fixture.Scope;
+        var fixture = await BuildAsync(rule, r => r.IsEnabled = false);
 
         var resolved = await fixture.Engine.EvaluateAutoResolveAsync(preEdit, Glucose(60), CancellationToken.None);
 
@@ -138,16 +116,11 @@ public class StaleRuleDecisionSeamTests
         await ShouldStayActiveAsync(fixture);
     }
 
-    [Fact] public Task An_evaluation_of_the_current_rule_sets_the_hold_managed() =>
-        An_evaluation_of_the_current_rule_sets_the_hold(Engine.Managed);
-    [NativeFact] public Task An_evaluation_of_the_current_rule_sets_the_hold_rust() =>
-        An_evaluation_of_the_current_rule_sets_the_hold(Engine.Rust);
-
-    private static async Task An_evaluation_of_the_current_rule_sets_the_hold(Engine kind)
+    [NativeFact]
+    public async Task An_evaluation_of_the_current_rule_sets_the_hold()
     {
         var rule = Rule();
-        var fixture = await BuildAsync(kind, rule, _ => { });
-        await using var _ = fixture.Scope;
+        var fixture = await BuildAsync(rule, _ => { });
 
         var evaluation = await fixture.Engine.EvaluateRuleAsync(
             Snapshot(rule), Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
@@ -159,17 +132,16 @@ public class StaleRuleDecisionSeamTests
     }
 
     /// <summary>
-    /// The edit lands after the snapshot was loaded and before the Rust-backed engine reads the rule
+    /// The edit lands after the snapshot was loaded and before the engine reads the rule
     /// row under the lease. The engine decides on the edited row, so its decision stands.
     /// </summary>
     [NativeFact]
-    public async Task A_decision_on_a_row_edited_after_the_snapshot_is_written_rust()
+    public async Task A_decision_on_a_row_edited_after_the_snapshot_is_written()
     {
         var rule = Rule();
         rule.AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":50}}""";
         var preEdit = Snapshot(rule);
-        var fixture = await BuildAsync(Engine.Rust, rule, _ => { });
-        await using var _ = fixture.Scope;
+        var fixture = await BuildAsync(rule, _ => { });
         rule.AutoResolveParams = Rule().AutoResolveParams;
 
         var evaluation = await fixture.Engine.EvaluateRuleAsync(
@@ -183,12 +155,11 @@ public class StaleRuleDecisionSeamTests
 
     /// <summary>A disable that lands before the row read leaves nothing for the decision to land on.</summary>
     [NativeFact]
-    public async Task A_decision_on_a_row_disabled_after_the_snapshot_is_dropped_rust()
+    public async Task A_decision_on_a_row_disabled_after_the_snapshot_is_dropped()
     {
         var rule = Rule();
         var preEdit = Snapshot(rule);
-        var fixture = await BuildAsync(Engine.Rust, rule, _ => { });
-        await using var _ = fixture.Scope;
+        var fixture = await BuildAsync(rule, _ => { });
         rule.IsEnabled = false;
 
         var evaluation = await fixture.Engine.EvaluateRuleAsync(
@@ -209,36 +180,20 @@ public class StaleRuleDecisionSeamTests
         AlertRuleConditions.Of(rule).HeldBy(rule).Should().Be(held);
     }
 
-    [Fact] public Task A_tree_with_a_repeated_key_opens_managed() =>
-        A_tree_with_a_repeated_key_opens(Engine.Managed);
-    [NativeFact] public Task A_tree_with_a_repeated_key_opens_rust() =>
-        A_tree_with_a_repeated_key_opens(Engine.Rust);
-
     /// <summary>
     /// A stored tree that repeats a key binds its last occurrence, and still equals itself, so its
     /// decisions are written.
     /// </summary>
-    private static async Task A_tree_with_a_repeated_key_opens(Engine kind)
+    [NativeFact]
+    public async Task A_tree_with_a_repeated_key_opens()
     {
         var rule = Rule();
         rule.ConditionParams = """{"direction":"below","value":50,"value":70}""";
         rule.AutoResolveEnabled = false;
         var time = new ManualTimeProvider();
         time.SetUtcNow(T0);
-        var timers = new RecordingTimerStore();
         var store = new InMemoryTrackerRepository([rule]);
-        IAlertEvaluationEngine engine;
-        IAsyncDisposable scope = NoScope.Instance;
-        if (kind == Engine.Rust)
-        {
-            engine = EngineTestHarness.BuildRustEngine(time, timers, store);
-        }
-        else
-        {
-            var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timers, store);
-            (engine, scope) = (managed, provider);
-        }
-        await using var _ = scope;
+        var engine = EngineTestHarness.BuildRustEngine(time, store);
 
         var evaluation = await engine.EvaluateRuleAsync(
             Snapshot(rule), Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
@@ -262,6 +217,8 @@ public class StaleRuleDecisionSeamTests
     private sealed class EditAtLockRepository(InMemoryTrackerRepository inner, Func<Task> edit) : IAlertTrackerRepository
     {
         private Func<Task>? _edit = edit;
+
+        public IConditionTimerStore Timers => inner.Timers;
 
         public async Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default)
         {
@@ -293,12 +250,5 @@ public class StaleRuleDecisionSeamTests
 
         public Task ClearHysteresisAsync(Guid excursionId, CancellationToken ct = default) =>
             inner.ClearHysteresisAsync(excursionId, ct);
-    }
-
-    private sealed class NoScope : IAsyncDisposable
-    {
-        public static readonly NoScope Instance = new();
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

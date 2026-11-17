@@ -1,8 +1,13 @@
+using Nocturne.Core.Constants;
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.ProfileActivations;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -17,10 +22,7 @@ using Nocturne.Core.Models.Serializers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -45,11 +47,11 @@ namespace Nocturne.API.Services.V4;
 /// Supports idempotent create-or-update via <c>LegacyId</c> matching.
 /// </summary>
 /// <seealso cref="ITreatmentDecomposer"/>
-/// <seealso cref="IDecomposer{T}"/>
 /// <seealso cref="IStateSpanService"/>
-public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomposer<Treatment>
+internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IDecomposedTreatmentKeys _keys;
     private readonly IBolusRepository _bolusRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
@@ -64,24 +66,15 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDeviceService _deviceService;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
-    private readonly IProfileDecomposer _profileDecomposer;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly RelativeTempBasalRates _relativeTempBasalRates;
     private readonly IAuditContext _auditContext;
-
-    /// <summary>
-    /// Event types that indicate a temp basal treatment (case-insensitive comparison)
-    /// </summary>
-    private static readonly string[] TempBasalEventTypes =
-    [
-        "Temp Basal",
-        "Temp Basal Start",
-        "TempBasal"
-    ];
+    private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     public TreatmentDecomposer(
         INocturneDbContextFactory contexts,
+        IDecomposedTreatmentKeys keys,
         IBolusRepository bolusRepository,
         ITempBasalRepository tempBasalRepository,
         ICarbIntakeRepository carbIntakeRepository,
@@ -95,17 +88,19 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         ITreatmentFoodService treatmentFoodService,
         IDeviceService deviceService,
         IPatientDeviceStamper patientDeviceStamper,
-        IProfileDecomposer profileDecomposer,
         IActiveProfileResolver activeProfileResolver,
         IPatientInsulinRepository insulinRepo,
         RelativeTempBasalRates relativeTempBasalRates,
         IAuditContext auditContext,
         ILogger<TreatmentDecomposer> logger,
-        IDeviceEventReactor? deviceEventReactor = null)
+        IDeviceEventReactor? deviceEventReactor = null,
+        ILegacyReadCacheInvalidation? legacyReads = null)
         : base(logger)
     {
+        _legacyReads = legacyReads;
         _deviceEventReactor = deviceEventReactor;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _keys = keys;
         _bolusRepository = bolusRepository;
         _tempBasalRepository = tempBasalRepository;
         _carbIntakeRepository = carbIntakeRepository;
@@ -119,7 +114,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         _treatmentFoodService = treatmentFoodService;
         _deviceService = deviceService;
         _patientDeviceStamper = patientDeviceStamper;
-        _profileDecomposer = profileDecomposer;
         _activeProfileResolver = activeProfileResolver;
         _insulinRepo = insulinRepo;
         _relativeTempBasalRates = relativeTempBasalRates;
@@ -201,8 +195,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
     /// <summary>
     /// The set of v4 records a treatment decomposes into, plus the state-span sub-kind flags
-    /// and the parsed device-event type. Computed once by <see cref="ClassifyTreatment"/> and
-    /// consumed by both the single and batch decomposition paths.
+    /// and the parsed device-event type, as <see cref="ClassifyTreatment"/> reads them.
     /// </summary>
     private readonly record struct TreatmentClassification(
         bool ProduceBolus,
@@ -226,25 +219,20 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         public bool ProducesNothing =>
             !ProduceBolus && !ProduceCarbIntake && !ProduceBGCheck
             && !ProduceNote && !ProduceBolusCalc && !ProduceDeviceEvent && !DelegateToStateSpan;
-    }
 
-    private static string? SanitizeForLog(string? value)
-    {
-        return value?
-            .Replace("\r", string.Empty)
-            .Replace("\n", string.Empty);
+        public bool WritesTempBasal => DelegateToStateSpan && !IsProfileSwitch && !IsOverride && !IsTemporaryTarget;
     }
 
     /// <summary>
     /// Classifies which v4 records a legacy <see cref="Treatment"/> decomposes into, based on its
     /// <see cref="Treatment.EventType"/> and the insulin/carb data present. This mapping is shared
-    /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
+    /// by <see cref="DecomposeBatchAsync"/> and <see cref="CanRepublish"/> so it lives in exactly
     /// one place.
     /// </summary>
     private TreatmentClassification ClassifyTreatment(Treatment treatment)
     {
         var eventType = treatment.EventType?.Trim();
-        var sanitizedEventTypeForLog = SanitizeForLog(treatment.EventType);
+        var sanitizedEventTypeForLog = LogText.Sanitize(treatment.EventType);
         var hasInsulin = treatment.Insulin is > 0;
         var hasCarbs = treatment.Carbs is > 0;
 
@@ -265,7 +253,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, "Profile Switch", StringComparison.OrdinalIgnoreCase)
+        else if (string.Equals(eventType, TreatmentTypes.ProfileSwitch, StringComparison.OrdinalIgnoreCase)
               || EffectiveProfileSwitch.Is(treatment))
         {
             isProfileSwitch = true;
@@ -282,11 +270,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             isTemporaryTarget = true;
             delegateToStateSpan = true;
         }
-        else if (eventType != null && TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
+        else if (eventType != null && TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
         {
             produceDeviceEvent = true;
         }
-        else if (IsMealEventType(eventType))
+        else if (PreBolusSplit.IsMealEventType(eventType))
         {
             // AAPS uploads one meal as two of these, one carrying only the carbs and one only the
             // insulin (CarbsExtension.kt, BolusExtension.kt); each half decomposes into what it
@@ -295,10 +283,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             produceBolus = hasInsulin || !hasCarbs;
             produceCarbIntake = hasCarbs || !hasInsulin;
         }
-        else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
+        else if (string.Equals(eventType, TreatmentTypes.CorrectionBolus, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.Smb, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.AutomaticBolus, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.Bolus, StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
         {
             // As with a meal half, a dose type carrying only carbs is a carb intake, and a Carb
@@ -306,12 +294,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             produceBolus = hasInsulin || !hasCarbs;
             produceCarbIntake = hasCarbs;
         }
-        else if (string.Equals(eventType, "Carb Correction", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.CarbCorrection, StringComparison.OrdinalIgnoreCase))
         {
             produceBolus = hasInsulin;
             produceCarbIntake = hasCarbs || !hasInsulin;
         }
-        else if (string.Equals(eventType, "BG Check", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.BgCheck, StringComparison.OrdinalIgnoreCase))
         {
             produceBGCheck = true;
         }
@@ -325,7 +313,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             produceNote = true;
         }
-        else if (string.Equals(eventType, "Bolus Wizard", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.BolusWizard, StringComparison.OrdinalIgnoreCase))
         {
             produceBolusCalc = true;
             // Also produce a Bolus if insulin was delivered
@@ -401,119 +389,89 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         return UpstreamFingerprintScope.Open(cleared);
     }
 
-    /// <summary>The tables a treatment decomposes into that carry its legacy id.</summary>
-    private StoredCorrelationLookup[] TreatmentTables =>
+    /// <summary>
+    /// The treatment tables, for <see cref="DecomposerBase.PlanStoredIdentitiesAsync"/>. Write-back
+    /// sends a treatment under <see cref="MongoObjectId.Coerce"/> of its key, so a uuid-shaped
+    /// legacy id comes back as its prefix and any other non-ObjectId one as its hash; earlier
+    /// write-backs sent the record's served id, its own uuid or that uuid's prefix, whatever its
+    /// legacy id. A meal's bolus and carbs share a correlation id, so an adoption carries to both.
+    /// </summary>
+    private IReadOnlyList<KeyedTable> TreatmentTables =>
     [
-        _bolusRepository.GetCorrelationIdsByLegacyIdAsync,
-        _carbIntakeRepository.GetCorrelationIdsByLegacyIdAsync,
-        _bgCheckRepository.GetCorrelationIdsByLegacyIdAsync,
-        _noteRepository.GetCorrelationIdsByLegacyIdAsync,
-        _bolusCalculationRepository.GetCorrelationIdsByLegacyIdAsync,
-        _deviceEventRepository.GetCorrelationIdsByLegacyIdAsync,
-        _tempBasalRepository.GetCorrelationIdsByLegacyIdAsync,
-        _profileActivationRepository.GetCorrelationIdsByLegacyIdAsync,
+        Table(_bolusRepository, TreatmentWireForms),
+        Table(_carbIntakeRepository, TreatmentWireForms | WireForms.PreBolusCarbs),
+        Table(_bgCheckRepository, TreatmentWireForms),
+        Table(_noteRepository, TreatmentWireForms),
+        Table(_deviceEventRepository, TreatmentWireForms),
+        Table(_bolusCalculationRepository, TreatmentWireForms),
+        Table(_tempBasalRepository, TreatmentWireForms),
+        Table(_profileActivationRepository, TreatmentWireForms),
     ];
 
-    /// <inheritdoc />
-    public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default)
+    private const WireForms TreatmentWireForms = WireForms.UuidPrefix | WireForms.Hashed | WireForms.KeyedOwnId;
+
+    private static bool PulledFromNightscout(Treatment treatment)
+        => treatment.DataSource == Nocturne.Core.Constants.DataSources.NightscoutConnector;
+
+    /// <summary>
+    /// Where each treatment this scope has already planned or pointed stands, so a connector sync
+    /// resolves a treatment once across <see cref="SelectForRepublishAsync"/>,
+    /// <see cref="ResolveStoredIdentitiesAsync"/> and the decomposition that follows.
+    /// </summary>
+    private readonly ConditionalWeakTable<Treatment, StoredIdentity> _identities = new();
+
+    private sealed class StoredIdentity(PlannedIdentity planned)
     {
-        NormalizeIdentity(treatment);
-        using var restated = OpenRestatedScope([treatment]);
+        public PlannedIdentity Planned { get; } = planned;
+        public bool Applied { get; init; }
+    }
 
-        var result = new V4Models.DecompositionResult
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the treatment tables, applying a
+    /// plan <see cref="SelectForRepublishAsync"/> already made rather than making it again, and
+    /// skipping the treatments already pointed.
+    /// </summary>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private async Task<HashSet<Treatment>> PointAtStoredTreatmentsAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        var echoes = new HashSet<Treatment>(ReferenceEqualityComparer.Instance);
+        var pending = new Dictionary<Treatment, PlannedIdentity>(ReferenceEqualityComparer.Instance);
+        var unplanned = new List<Treatment>();
+        foreach (var treatment in treatments)
         {
-            CorrelationId = CorrelationIdFor(
-                treatment.Id, await GetStoredCorrelationIdsAsync([treatment.Id], TreatmentTables, ct))
-        };
-
-        var c = ClassifyTreatment(treatment);
-        if (c.ProducesNothing)
-        {
-            result.SkippedUnsupported++;
-            Logger.LogWarning(
-                "Skipped a treatment whose event type Nocturne does not store: {EventType}",
-                SanitizeForLog(treatment.EventType));
+            if (!_identities.TryGetValue(treatment, out var identity))
+                unplanned.Add(treatment);
+            else if (!identity.Applied)
+                pending[treatment] = identity.Planned;
+            else if (identity.Planned.Echo)
+                echoes.Add(treatment);
         }
 
-        // Handle StateSpan delegation
-        if (c.DelegateToStateSpan)
+        foreach (var (treatment, planned) in await PlanStoredIdentitiesAsync(unplanned, TreatmentTables, PulledFromNightscout, ct))
+            pending[treatment] = planned;
+
+        if (pending.Count == 0)
+            return echoes;
+
+        var applied = await ApplyStoredIdentitiesAsync(pending, TreatmentTables, ct);
+        foreach (var (treatment, planned) in pending)
         {
-            if (c.IsProfileSwitch)
-            {
-                await DecomposeProfileSwitchAsync(treatment, result, origin, ct);
-            }
-            else if (c.IsOverride)
-            {
-                await DecomposeOverrideAsync(treatment, result, origin, ct);
-            }
-            else if (c.IsTemporaryTarget)
-            {
-                await DecomposeTemporaryTargetAsync(treatment, result, origin, ct);
-            }
-            else
-            {
-                await DecomposeTempBasalAsync(treatment, result, origin, ct);
-            }
+            var echo = applied.Contains(treatment);
+            _identities.AddOrUpdate(treatment, new StoredIdentity(planned with { Echo = echo }) { Applied = true });
+            if (echo)
+                echoes.Add(treatment);
         }
 
-        if ((c.ProduceBolus || c.ProduceCarbIntake) && await IsHeldByTempBasalAsync(treatment, ct))
-        {
-            result.SkippedUnsupported++;
-            return result;
-        }
+        return echoes;
+    }
 
-        // Produce v4 records
-        if (c.ProduceBolus)
-        {
-            await DecomposeBolusAsync(treatment, result, c.KeepsUploadedEventType, origin, ct);
-        }
-
-        if (c.ProduceCarbIntake)
-        {
-            await DecomposeCarbIntakeAsync(treatment, result, c.KeepsUploadedEventType, origin, ct);
-        }
-
-        await DropAbsentProjectionsAsync([(treatment, c)], origin, ct);
-
-        if (c.ProduceBGCheck)
-        {
-            await DecomposeBGCheckAsync(treatment, result, origin, ct);
-        }
-
-        if (c.ProduceNote)
-        {
-            await DecomposeNoteAsync(treatment, result, c.IsAnnouncement, origin, ct);
-        }
-
-        if (c.ProduceBolusCalc)
-        {
-            await DecomposeBolusCalculationAsync(treatment, result, origin, ct);
-        }
-
-        if (c.ProduceDeviceEvent)
-        {
-            await DecomposeDeviceEventAsync(treatment, result, c.ParsedDeviceEventType, origin, ct);
-
-            if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
-            {
-                await DecomposePumpSuspensionFromTreatmentAsync(treatment, c.ParsedDeviceEventType, result, origin, ct);
-            }
-        }
-
-        // After all decompositions, link records via FKs
-        var bolusCalc = result.CreatedRecords.OfType<V4Models.BolusCalculation>().FirstOrDefault()
-            ?? result.UpdatedRecords.OfType<V4Models.BolusCalculation>().FirstOrDefault();
-        var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().FirstOrDefault()
-            ?? result.UpdatedRecords.OfType<V4Models.Bolus>().FirstOrDefault();
-
-        // Link Bolus -> BolusCalculation
-        if (bolus != null && bolusCalc != null && bolus.BolusCalculationId != bolusCalc.Id)
-        {
-            bolus.BolusCalculationId = bolusCalc.Id;
-            await _bolusRepository.UpdateAsync(bolus.Id, bolus, origin, ct);
-        }
-
-        return result;
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
+    {
+        foreach (var treatment in treatments)
+            NormalizeIdentity(treatment);
+        return await PointAtStoredTreatmentsAsync(treatments, ct);
     }
 
     #region Decomposition Methods
@@ -527,193 +485,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private static bool IsAlgorithmBolus(Treatment treatment) =>
         treatment.Automatic == true
         || (treatment.IsBasalInsulin == true && treatment.Insulin > 0)
-        || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
-        || string.Equals(treatment.EventType, "SMB", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(treatment.EventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>The pump named by the upload's pump fields, created in the device registry if new.</summary>
-    private Task<Guid?> ResolvePumpDeviceAsync(Treatment treatment, CancellationToken ct) =>
-        _deviceService.ResolveAsync(
-            V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
-
-    private async Task<V4Models.Bolus> BuildBolusAsync(
-        Treatment treatment, Guid? correlationId, bool keepEventType, CancellationToken ct)
-    {
-        var model = Mapped(() => MapToBolus(treatment, correlationId, keepEventType));
-
-        if (IsAlgorithmBolus(treatment))
-        {
-            model.Kind = V4Models.BolusKind.Algorithm;
-            model.Automatic = true;
-        }
-
-        model.DeviceId = await ResolvePumpDeviceAsync(treatment, ct);
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
-
-        return model;
-    }
-
-    private async Task DecomposeBolusAsync(
-        Treatment treatment, V4Models.DecompositionResult result, bool keepEventType, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = await BuildBolusAsync(treatment, result.CorrelationId, keepEventType, ct);
-
-        await UpsertByLegacyIdAsync(
-            _bolusRepository, treatment.Id, model, result, origin, ct,
-            beforeWrite: existing => StampAttributionAsync(
-                _patientDeviceStamper, model, existing, V4Models.DeviceAttributionCategories.Bolus, ct));
-    }
-
-    /// <summary>
-    /// Preserves a legacy <see cref="Treatment.FoodType"/> as the carb intake's one
-    /// <see cref="TreatmentFood"/> line. No-op unless the treatment names a food and carries carbs,
-    /// and no-op when the carb intake already has any food line.
-    /// </summary>
-    /// <remarks>
-    /// These rows are also the user-editable food-breakdown surface
-    /// (<see cref="ITreatmentFoodService"/>, <c>/carbs/{id}/foods</c>), so re-decomposing a
-    /// treatment must neither duplicate the line nor overwrite what a user has since attributed to
-    /// it. A stored carb intake can still reach this: a single-path create that matches on the
-    /// sync key upserts the stored row in place through <c>CreateAsync</c> and reports as created.
-    /// The existence check is what makes this write idempotent there, and there is no
-    /// unique index to lean on because a carb intake legitimately holds many lines once a user has
-    /// attributed several foods to it.
-    /// </remarks>
-    private async Task WriteLegacyFoodLineAsync(Guid carbIntakeId, Treatment treatment, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(treatment.FoodType) || treatment.Carbs is not > 0)
-            return;
-
-        var existingLines = await _treatmentFoodService.GetByCarbIntakeIdsAsync([carbIntakeId], ct);
-        if (existingLines.Any())
-            return;
-
-        await _treatmentFoodService.AddAsync(new TreatmentFood
-        {
-            CarbIntakeId = carbIntakeId,
-            Portions = 0m,
-            Carbs = (decimal)treatment.Carbs.Value,
-            TimeOffsetMinutes = 0,
-            Note = treatment.FoodType,
-        }, ct);
-    }
-
-    private async Task DecomposeCarbIntakeAsync(
-        Treatment treatment, V4Models.DecompositionResult result, bool keepEventType, WriteOrigin origin, CancellationToken ct)
-    {
-        var upserted = await UpsertByLegacyIdAsync(
-            _carbIntakeRepository, treatment.Id, Mapped(() => MapToCarbIntake(treatment, result.CorrelationId, keepEventType)),
-            result, origin, ct);
-
-        if (upserted is ({ } carbIntake, true))
-            await WriteLegacyFoodLineAsync(carbIntake.Id, treatment, ct);
-    }
-
-    private async Task DecomposeBGCheckAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-        => await UpsertByLegacyIdAsync(
-            _bgCheckRepository, treatment.Id, Mapped(() => MapToBGCheck(treatment, result.CorrelationId)), result, origin, ct);
-
-    private async Task DecomposeNoteAsync(Treatment treatment, V4Models.DecompositionResult result, bool isAnnouncement, WriteOrigin origin, CancellationToken ct)
-        => await UpsertByLegacyIdAsync(
-            _noteRepository, treatment.Id, Mapped(() => MapToNote(treatment, result.CorrelationId, isAnnouncement)), result, origin, ct);
-
-    private async Task<V4Models.DeviceEvent> BuildDeviceEventAsync(
-        Treatment treatment, Guid? correlationId, DeviceEventType deviceEventType, CancellationToken ct)
-    {
-        var model = Mapped(() => MapToDeviceEvent(treatment, correlationId, deviceEventType));
-        model.DeviceId = await ResolvePumpDeviceAsync(treatment, ct);
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
-
-        return model;
-    }
-
-    private async Task DecomposeDeviceEventAsync(Treatment treatment, V4Models.DecompositionResult result, DeviceEventType deviceEventType, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = await BuildDeviceEventAsync(treatment, result.CorrelationId, deviceEventType, ct);
-
-        await UpsertByLegacyIdAsync(
-            _deviceEventRepository, treatment.Id, model, result, origin, ct,
-            beforeWrite: existing => StampAttributionAsync(
-                _patientDeviceStamper, model, existing,
-                V4Models.DeviceAttributionCategories.DeviceEvent(model.EventType), ct));
-    }
-
-    /// <summary>
-    /// Opens or closes a <see cref="StateSpanCategory.PumpMode"/> /
-    /// <see cref="PumpModeState.Suspended"/> state span when a treatment-sourced
-    /// PumpSuspend or PumpResume device event is decomposed.
-    /// </summary>
-    private async Task DecomposePumpSuspensionFromTreatmentAsync(
-        Treatment treatment,
-        DeviceEventType deviceEventType,
-        V4Models.DecompositionResult result,
-        WriteOrigin origin, CancellationToken ct)
-    {
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
-
-        if (deviceEventType == DeviceEventType.PumpSuspend)
-        {
-            var span = new StateSpan
-            {
-                Category = StateSpanCategory.PumpMode,
-                State = PumpModeState.Suspended.ToString(),
-                StartTimestamp = timestamp,
-                EndTimestamp = null,
-                Source = SpanSource(treatment),
-                OriginalId = $"pump-suspended-tx:{treatment.Id}",
-            };
-
-            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
-            result.CreatedRecords.Add(upserted);
-            Logger.LogDebug(
-                "Opened PumpMode/Suspended StateSpan from treatment {LegacyId}",
-                treatment.Id);
-        }
-        else if (deviceEventType == DeviceEventType.PumpResume)
-        {
-            var openSpans = await _stateSpanService.GetStateSpansAsync(
-                category: StateSpanCategory.PumpMode,
-                state: PumpModeState.Suspended.ToString(),
-                active: true,
-                count: 1,
-                descending: true,
-                cancellationToken: ct);
-
-            var openSpan = openSpans.FirstOrDefault();
-            if (openSpan is null)
-            {
-                Logger.LogWarning(
-                    "PumpResume treatment {LegacyId} but no open PumpMode/Suspended StateSpan to close",
-                    treatment.Id);
-                return;
-            }
-
-            openSpan.EndTimestamp = timestamp;
-            var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
-            result.UpdatedRecords.Add(closed);
-            Logger.LogDebug(
-                "Closed PumpMode/Suspended StateSpan {SpanId} from treatment {LegacyId}",
-                openSpan.Id, treatment.Id);
-        }
-    }
-
-    private async Task DecomposeBolusCalculationAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-        => await UpsertByLegacyIdAsync(
-            _bolusCalculationRepository, treatment.Id, Mapped(() => MapToBolusCalculation(treatment, result.CorrelationId)), result, origin, ct);
-
-    /// <summary>
-    /// The insulin context is left to the caller: the batch path resolves it against a
-    /// batch-local profile-switch timeline the single path cannot see.
-    /// </summary>
-    private async Task<V4Models.TempBasal> BuildTempBasalAsync(
-        Treatment treatment, Guid? correlationId, CancellationToken ct)
-    {
-        var model = Mapped(() => MapToTempBasal(treatment, correlationId));
-        model.DeviceId = await ResolvePumpDeviceAsync(treatment, ct);
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
-
-        return model;
-    }
+        || (string.Equals(treatment.EventType, TreatmentTypes.CorrectionBolus, StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
+        || string.Equals(treatment.EventType, TreatmentTypes.Smb, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(treatment.EventType, TreatmentTypes.AutomaticBolus, StringComparison.OrdinalIgnoreCase);
 
     private static V4Models.TreatmentInsulinContext? ToInsulinContext(V4Models.PatientInsulin? insulin)
         => insulin is null
@@ -728,53 +502,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 Concentration = insulin.Concentration,
             };
 
-    private async Task DecomposeTempBasalAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = await BuildTempBasalAsync(treatment, result.CorrelationId, ct);
-
-        // Resolve insulin context: active profile switch → primary insulin → null
-        model.InsulinContext = await _activeProfileResolver.GetActiveInsulinContextAsync(treatment.Mills, ct)
-            ?? ToInsulinContext(await _insulinRepo.GetPrimaryBolusInsulinAsync(ct));
-
-        await UpsertByLegacyIdAsync(
-            _tempBasalRepository, treatment.Id, model, result, origin, ct,
-            beforeWrite: async existing =>
-            {
-                SettleAgainstStored(model, treatment, existing);
-                await _relativeTempBasalRates.ResolveAsync([model], ct);
-                await StampAttributionAsync(
-                    _patientDeviceStamper, model, existing, V4Models.DeviceAttributionCategories.TempBasal, ct);
-            });
-    }
-
-    private async Task DecomposeProfileSwitchAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = await BuildProfileActivationAsync(treatment, result.CorrelationId, ct);
-        var stored = treatment.Id is null ? null : await _profileActivationRepository.GetByLegacyIdAsync(treatment.Id, ct);
-
-        await _profileActivationWriter.WriteAsync(model, stored, async settled =>
-        {
-            var upserted = await UpsertByLegacyIdAsync(
-                _profileActivationRepository, treatment.Id, settled, result, origin, ct,
-                beforeWrite: existing => StampAttributionAsync(
-                    _patientDeviceStamper, settled, existing, V4Models.DeviceAttributionCategories.ProfileActivation, ct),
-                findStored: () => Task.FromResult(stored));
-            return upserted?.Record;
-        }, ct);
-    }
-
-    /// <summary>
-    /// The activation a Profile Switch or an AAPS effective profile switch decomposes into: its span
-    /// metadata as <see cref="BuildProfileMetadata"/> and <see cref="EffectiveProfileSwitch.Metadata"/>
-    /// read the upload, converted by <see cref="ProfileActivationLegacyFields.FromSpanMetadata"/>.
-    /// A requested switch carries the end its own length gives it; the writer settles the rest.
-    /// </summary>
-    private async Task<V4Models.ProfileActivation> BuildProfileActivationAsync(
-        Treatment treatment, Guid? correlationId, CancellationToken ct)
+    private static V4Models.ProfileActivation BuildProfileActivation(Treatment treatment, Guid? correlationId)
     {
         var isEffective = EffectiveProfileSwitch.Is(treatment);
         var metadata = (isEffective ? BuildEffectiveProfileMetadata(treatment) : BuildProfileMetadata(treatment)) ?? [];
-        var start = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
+        var start = treatment.Mills.ToUtcDateTime();
 
         var model = ProfileActivationLegacyFields.FromSpanMetadata(metadata, start);
         model.Id = Guid.CreateVersion7();
@@ -785,83 +517,41 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         model.Origin = ProfileActivationSource.OriginOf(model.App, treatment.EnteredBy, treatment.OriginalProfileName);
         if (!isEffective && model.RequestedDurationMs is > 0 and var duration)
             model.EndTimestamp = start.AddMilliseconds(duration);
-
-        model.DeviceId = await ResolvePumpDeviceAsync(treatment, ct);
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
         return model;
     }
 
-    private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    private static StateSpan BuildOverrideSpan(Treatment treatment) => new()
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var stateSpan = new StateSpan
-        {
-            Category = StateSpanCategory.Override,
-            State = OverrideState.Custom.ToString(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
-            EndTimestamp = treatment.Duration is > 0
-                ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
-                : null,
-            Source = SpanSource(treatment),
-            OriginalId = treatment.Id,
-            Metadata = BuildOverrideMetadata(treatment)
-        };
+        Category = StateSpanCategory.Override,
+        State = OverrideState.Custom.ToString(),
+        StartTimestamp = treatment.Mills.ToUtcDateTime(),
+        EndTimestamp = treatment.Duration is > 0
+            ? (treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).ToUtcDateTime()
+            : null,
+        Source = SpanSource(treatment),
+        OriginalId = treatment.Id,
+        Metadata = BuildOverrideMetadata(treatment)
+    };
 
-        if (await UpsertTreatmentSpanAsync(db, stateSpan, result, ct))
-            Logger.LogDebug("Delegated Temporary Override treatment {LegacyId} to IStateSpanService", SanitizeForLog(treatment.Id));
-    }
-
-    private async Task DecomposeTemporaryTargetAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    private static StateSpan BuildTemporaryTargetSpan(Treatment treatment)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var isCancelled = treatment.Duration is null or 0
             || string.Equals(treatment.EventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase);
 
-        var stateSpan = new StateSpan
+        return new StateSpan
         {
             Category = StateSpanCategory.TemporaryTarget,
             State = isCancelled
                 ? TemporaryTargetState.Cancelled.ToString()
                 : TemporaryTargetState.Active.ToString(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            StartTimestamp = treatment.Mills.ToUtcDateTime(),
             EndTimestamp = !isCancelled && treatment.Duration is > 0
-                ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
+                ? (treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).ToUtcDateTime()
                 : null,
             Source = SpanSource(treatment),
             OriginalId = treatment.Id,
             Metadata = BuildTemporaryTargetMetadata(treatment)
         };
-
-        if (await UpsertTreatmentSpanAsync(db, stateSpan, result, ct))
-            Logger.LogDebug("Delegated Temporary Target treatment {LegacyId} to IStateSpanService", SanitizeForLog(treatment.Id));
-    }
-
-    /// <summary>
-    /// Writes the span a treatment decomposes into, upserted on the treatment id it carries as its
-    /// <c>OriginalId</c>, unless the user deleted the span written under that id: a re-upload does
-    /// not bring back a deleted treatment, as for the records keyed by <c>LegacyId</c>.
-    /// </summary>
-    /// <returns>Whether the span was written.</returns>
-    private async Task<bool> UpsertTreatmentSpanAsync(
-        NocturneDbContext db,
-        StateSpan stateSpan, V4Models.DecompositionResult result, CancellationToken ct)
-    {
-        if (stateSpan.OriginalId is { Length: > 0 } originalId)
-        {
-            var governing = await TreatmentSpans(db.StateSpans.IgnoreQueryFilters()).AsNoTracking()
-                .Where(s => s.TenantId == db.TenantId && s.OriginalId == originalId)
-                .WhereBlocksRecreation()
-                .Select(s => s.DeletedAt == null)
-                .ToListAsync(ct);
-            if (governing.Count > 0 && !governing.Contains(true))
-            {
-                result.SkippedDeleted++;
-                return false;
-            }
-        }
-
-        result.CreatedRecords.Add(await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct));
-        return true;
     }
 
     /// <summary>
@@ -901,7 +591,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// </summary>
     internal static V4Models.TempBasal MapToTempBasal(Treatment treatment, Guid? correlationId)
     {
-        var startTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
+        var startTimestamp = treatment.Mills.ToUtcDateTime();
         var durationMs = (treatment.DurationInMilliseconds ?? (long?)((treatment.Duration ?? 0) * 60 * 1000)) ?? 0;
         var percent = treatment.Absolute is null ? treatment.Percent : null;
         var (origin, evidence) = MapTempBasalOrigin(treatment);
@@ -917,7 +607,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                     ?? (evidence is V4Models.TempBasalOriginEvidence.Reported ? TempBasalAutomaticFlag.Of(origin) : null)),
                 treatment),
             StartTimestamp = startTimestamp,
-            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + Math.Max(durationMs, 0)).UtcDateTime,
+            EndTimestamp = (treatment.Mills + Math.Max(durationMs, 0)).ToUtcDateTime(),
             UtcOffset = treatment.UtcOffset,
             Device = UploadedDevice(treatment),
             App = treatment.EnteredBy,
@@ -1035,7 +725,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                     TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                     treatment, keepEventType, TreatmentTypes.CorrectionBolus),
                 treatment, keepEventType),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Insulin = treatment.Insulin ?? 0,
             Programmed = treatment.Programmed,
             Delivered = treatment.InsulinDelivered,
@@ -1063,7 +753,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             AdditionalProperties = UploadedEventType(
                 TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                 treatment, keepEventType, TreatmentTypes.CarbCorrection),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Carbs = treatment.Carbs ?? 0,
             Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
@@ -1090,10 +780,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Glucose = treatment.Glucose ?? 0,
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
-            Units = ParseGlucoseUnit(treatment.Units),
+            Units = V4Models.GlucoseUnits.Parse(treatment.Units),
             Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
@@ -1108,7 +798,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             Text = treatment.Notes ?? string.Empty,
             EventType = treatment.EventType,
             IsAnnouncement = isAnnouncement || (treatment.IsAnnouncement ?? false),
@@ -1126,7 +816,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             EventType = deviceEventType,
             Notes = treatment.Notes,
             Device = UploadedDevice(treatment),
@@ -1143,7 +833,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             LegacyId = treatment.Id,
             AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
+            Timestamp = treatment.Mills.ToUtcDateTime(),
             BloodGlucoseInput = treatment.BloodGlucoseInput,
             BloodGlucoseInputSource = treatment.BloodGlucoseInputSource,
             CarbInput = treatment.Carbs,
@@ -1192,19 +882,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             "finger" => V4Models.GlucoseType.Finger,
             "sensor" => V4Models.GlucoseType.Sensor,
             _ => TryParseDefinedName<V4Models.GlucoseType>(glucoseType, out var parsed) ? parsed : null
-        };
-    }
-
-    internal static V4Models.GlucoseUnit? ParseGlucoseUnit(string? units)
-    {
-        if (string.IsNullOrEmpty(units))
-            return null;
-
-        return units.ToLowerInvariant() switch
-        {
-            "mg/dl" or "mgdl" or "mg" => V4Models.GlucoseUnit.MgDl,
-            "mmol" or "mmol/l" => V4Models.GlucoseUnit.Mmol,
-            _ => TryParseDefinedName<V4Models.GlucoseUnit>(units, out var parsed) ? parsed : null
         };
     }
 
@@ -1282,7 +959,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             {
                 PatientInsulinId = Guid.Empty,
                 InsulinName = label,
-                Dia = Math.Round(endTimeMs / 3_600_000.0, 1),
+                Dia = ScaledRounding.Round(endTimeMs / 3_600_000.0, 1),
                 Peak = (int)(peakTimeMs / 60_000),
                 Concentration = (int)Math.Round(concentrationRatio * 100),
                 Curve = "rapid-acting",
@@ -1303,31 +980,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         if (string.IsNullOrEmpty(eventType))
             return false;
 
-        return TempBasalEventTypes.Any(
+        return TreatmentTypes.TempBasalEventTypes.Any(
             t => string.Equals(eventType, t, StringComparison.OrdinalIgnoreCase));
-    }
-
-    internal static bool IsMealEventType(string? eventType) =>
-        string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Whether a bolus or carb intake would be written under a temp basal's legacy id. An AAPS that
-    /// read a temp basal served with insulin holds it as a bolus under the temp basal's identifier
-    /// (see <see cref="Treatment.Insulin"/>) and edits it as one; writing that edit would put a
-    /// bolus beside every temp basal it touches.
-    /// </summary>
-    private async Task<bool> IsHeldByTempBasalAsync(Treatment treatment, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(treatment.Id)
-            || await _tempBasalRepository.GetByLegacyIdAsync(treatment.Id, ct) is null)
-            return false;
-
-        Logger.LogWarning(
-            "Refused to write a {EventType} under temp basal {LegacyId}",
-            SanitizeForLog(treatment.EventType), SanitizeForLog(treatment.Id));
-        return true;
     }
 
     /// <summary>
@@ -1336,49 +990,25 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// to insulin alone, the span of a switch re-sent as a note. Only the tables the treatment no
     /// longer writes lose rows, so a re-upload of the same kind removes nothing, and every record a
     /// treatment writes beside another (a wizard's bolus, a meal's two halves, a note) is kept.
+    /// <paramref name="stored"/> and <paramref name="storedSpans"/> are the tables and span categories
+    /// each legacy id's live rows are in.
     /// </summary>
     /// <remarks>
     /// The removal is system-attributed: a user tombstone would stop a later upload that writes the
     /// table again from re-creating the row (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
     /// A treatment Nocturne does not store writes nothing and removes nothing, and a bolus or carbs
-    /// under a temp basal's id leaves the temp basal (<see cref="IsHeldByTempBasalAsync"/>).
+    /// under a temp basal's id leaves the temp basal (<see cref="Writing"/>).
     /// </remarks>
-    private async Task DropAbsentProjectionsAsync(
+    /// <returns>The legacy ids that lost rows, whose treatments changed though the rows they keep may not have.</returns>
+    private async Task<HashSet<string>> DropAbsentAsync(
         IReadOnlyList<(Treatment Treatment, TreatmentClassification Classification)> written,
+        IReadOnlyDictionary<string, HashSet<Type>> stored,
+        IReadOnlyDictionary<string, HashSet<string>> storedSpans,
         WriteOrigin origin,
         CancellationToken ct)
     {
-        var ids = written
-            .Where(w => !string.IsNullOrEmpty(w.Treatment.Id) && !w.Classification.ProducesNothing)
-            .Select(w => w.Treatment.Id!)
-            .Distinct()
-            .ToArray();
-        if (ids.Length == 0)
-            return;
-
-        await using var db = await _contexts.CreateAsync(ct);
-        var stored = new Dictionary<string, HashSet<DecomposedKind>>(StringComparer.Ordinal);
-        foreach (var table in DecomposedTables)
-        {
-            foreach (var id in await table.LiveLegacyIdsAsync(db, ids, ct))
-            {
-                if (!stored.TryGetValue(id, out var tables))
-                    stored[id] = tables = [];
-                tables.Add(table.Kind);
-            }
-        }
-
-        var spanCategories = TreatmentSpanCategories;
-        var storedSpans = (await db.StateSpans.AsNoTracking()
-                .Where(s => s.OriginalId != null && ids.Contains(s.OriginalId) && spanCategories.Contains(s.Category))
-                .Select(s => new { s.OriginalId, s.Category })
-                .ToListAsync(ct))
-            .GroupBy(s => s.OriginalId!)
-            .ToDictionary(g => g.Key, g => g.Select(s => s.Category).ToHashSet(), StringComparer.Ordinal);
-
-        var tableDrops = new Dictionary<DecomposedKind, List<string>>();
+        var tableDrops = new Dictionary<Type, List<string>>();
         var spanDrops = new List<string>();
-        var snapshotDrops = new List<string>();
         foreach (var (treatment, c) in written)
         {
             if (string.IsNullOrEmpty(treatment.Id) || c.ProducesNothing)
@@ -1387,7 +1017,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             var id = treatment.Id;
             var writes = TablesWrittenBy(c);
             var held = stored.GetValueOrDefault(id) ?? [];
-            if (held.Contains(DecomposedKind.TempBasal) && !writes.Contains(DecomposedKind.TempBasal)
+            if (held.Contains(typeof(V4Models.TempBasal)) && !writes.Contains(typeof(V4Models.TempBasal))
                 && (c.ProduceBolus || c.ProduceCarbIntake))
                 continue;
 
@@ -1398,51 +1028,87 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 dropIds.Add(id);
             }
 
-            if (held.Contains(DecomposedKind.ProfileActivation) && !writes.Contains(DecomposedKind.ProfileActivation))
-                snapshotDrops.Add(id);
-
             if (storedSpans.ContainsKey(id) && !c.IsOverride && !c.IsTemporaryTarget)
                 spanDrops.Add(id);
         }
 
-        if (tableDrops.Count == 0 && spanDrops.Count == 0 && snapshotDrops.Count == 0)
-            return;
+        if (tableDrops.Count == 0 && spanDrops.Count == 0)
+            return [];
 
+        await using var db = await _contexts.CreateAsync(ct);
         List<Guid> deviceEventIds = [];
         List<Guid> activationIds = [];
-        using (SystemAttributedBatchWrites(_auditContext))
+        // Each table's drop commits on its own, so what committed is reported even when a later drop fails.
+        List<Type> committed = [];
+        try
         {
-            await DeleteProfileSwitchSnapshotsAsync(db, snapshotDrops, origin, ct);
-            foreach (var table in DecomposedTables)
+            using (SystemAttributedBatchWrites(_auditContext))
             {
-                if (!tableDrops.TryGetValue(table.Kind, out var dropIds))
-                    continue;
+                foreach (var table in DecomposedTreatmentTables.All)
+                {
+                    if (!tableDrops.TryGetValue(table.Model, out var dropIds))
+                        continue;
 
-                var dropped = await table.SoftDeleteAsync(
-                    db, [.. dropIds], source: null, "treatment_reclassified", DuplicateDelete.EveryCopy, ct);
-                if (table.Kind == DecomposedKind.DeviceEvent)
-                    deviceEventIds = dropped.Entities;
-                if (table.Kind == DecomposedKind.ProfileActivation)
-                    activationIds = dropped.Entities;
-                Logger.LogDebug(
-                    "Removed {Count} {RecordType} rows a reclassified treatment no longer writes",
-                    dropped.Count, table.Kind);
+                    var dropped = await table.SoftDeleteAsync(
+                        db, [.. dropIds], source: null, _auditContext, "treatment_reclassified", DuplicateDelete.EveryCopy, ct);
+                    committed.Add(table.Model);
+                    if (table.Model == typeof(V4Models.DeviceEvent))
+                        deviceEventIds = dropped.Entities;
+                    if (table.Model == typeof(V4Models.ProfileActivation))
+                        activationIds = dropped.Entities;
+                    Logger.LogDebug(
+                        "Removed {Count} {RecordType} rows a reclassified treatment no longer writes",
+                        dropped.Count, table.Model.Name);
+                }
+
+                if (spanDrops.Count > 0)
+                {
+                    var droppedSpans = await db.AuditedSoftDeleteAsync(
+                        StoredTreatmentSpans(db, [.. spanDrops]), _auditContext, "treatment_reclassified", ct,
+                        DuplicateDelete.EveryCopy);
+                    committed.Add(typeof(StateSpan));
+                    Logger.LogDebug(
+                        "Removed {Count} {RecordType} rows a reclassified treatment no longer writes",
+                        droppedSpans, nameof(StateSpan));
+                }
             }
-
-            foreach (var id in spanDrops)
-                await _stateSpanService.DeleteStateSpanAsync(id, ct);
+        }
+        finally
+        {
+            await ReportWrittenAsync(committed);
         }
 
-        if (tableDrops.ContainsKey(DecomposedKind.ProfileActivation))
+        if (tableDrops.ContainsKey(typeof(V4Models.ProfileActivation)))
             await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
 
         if (origin == WriteOrigin.Live)
-            await ReactToDeletedDeviceEventsAsync(db, deviceEventIds, ct);
+            await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
+
+        return [.. tableDrops.Values.SelectMany(ids => ids).Concat(spanDrops)];
+    }
+
+    /// <summary>
+    /// Reports a record whose row a write left as it was as updated when its treatment lost other
+    /// rows (<see cref="DropAbsentAsync"/>), so the treatment is announced as the edit it is.
+    /// </summary>
+    private static void ReportReclassifiedAsUpdated(V4Models.DecompositionResult result, HashSet<string> reclassified)
+    {
+        if (reclassified.Count == 0)
+            return;
+
+        var changed = result.UnchangedRecords
+            .Where(r => r is V4Models.IV4Record { LegacyId: { } id } && reclassified.Contains(id))
+            .ToList();
+        foreach (var record in changed)
+        {
+            result.UnchangedRecords.Remove(record);
+            result.UpdatedRecords.Add(record);
+        }
     }
 
     /// <summary>
     /// The categories of the spans a treatment writes in place of a table row. A switch is a
-    /// <see cref="V4Models.ProfileActivation"/>; the Profile spans written before it are read by nothing.
+    /// <see cref="V4Models.ProfileActivation"/>.
     /// </summary>
     private static readonly string[] TreatmentSpanCategories =
     [
@@ -1450,25 +1116,27 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         nameof(StateSpanCategory.TemporaryTarget),
     ];
 
-    private static readonly string ProfileCategory = nameof(StateSpanCategory.Profile);
-
-    /// <summary>The spans a treatment's write or delete can find, leaving out the Profile spans no reader reads.</summary>
-    private static IQueryable<StateSpanEntity> TreatmentSpans(IQueryable<StateSpanEntity> spans) =>
-        spans.Where(s => s.Category != ProfileCategory);
-
-    /// <summary>The tables of <see cref="DecomposedTables"/> a classification writes to.</summary>
-    private static HashSet<DecomposedKind> TablesWrittenBy(TreatmentClassification c)
+    /// <summary>The live spans of <see cref="TreatmentSpanCategories"/> stored under <paramref name="legacyIds"/>.</summary>
+    private static IQueryable<StateSpanEntity> StoredTreatmentSpans(NocturneDbContext db, string[] legacyIds)
     {
-        var tables = new HashSet<DecomposedKind>();
-        if (c.ProduceBolus) tables.Add(DecomposedKind.Bolus);
-        if (c.ProduceCarbIntake) tables.Add(DecomposedKind.CarbIntake);
-        if (c.ProduceBGCheck) tables.Add(DecomposedKind.BGCheck);
-        if (c.ProduceNote) tables.Add(DecomposedKind.Note);
-        if (c.ProduceBolusCalc) tables.Add(DecomposedKind.BolusCalculation);
-        if (c.ProduceDeviceEvent) tables.Add(DecomposedKind.DeviceEvent);
-        if (c.IsProfileSwitch) tables.Add(DecomposedKind.ProfileActivation);
+        var categories = TreatmentSpanCategories;
+        return db.StateSpans.Where(s =>
+            s.LegacyId != null && legacyIds.Contains(s.LegacyId) && categories.Contains(s.Category));
+    }
+
+    /// <summary>The models of <see cref="DecomposedTreatmentTables"/> a classification writes.</summary>
+    private static HashSet<Type> TablesWrittenBy(TreatmentClassification c)
+    {
+        var tables = new HashSet<Type>();
+        if (c.ProduceBolus) tables.Add(typeof(V4Models.Bolus));
+        if (c.ProduceCarbIntake) tables.Add(typeof(V4Models.CarbIntake));
+        if (c.ProduceBGCheck) tables.Add(typeof(V4Models.BGCheck));
+        if (c.ProduceNote) tables.Add(typeof(V4Models.Note));
+        if (c.ProduceBolusCalc) tables.Add(typeof(V4Models.BolusCalculation));
+        if (c.ProduceDeviceEvent) tables.Add(typeof(V4Models.DeviceEvent));
+        if (c.IsProfileSwitch) tables.Add(typeof(V4Models.ProfileActivation));
         if (c.DelegateToStateSpan && !c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
-            tables.Add(DecomposedKind.TempBasal);
+            tables.Add(typeof(V4Models.TempBasal));
         return tables;
     }
 
@@ -1505,7 +1173,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             metadata[ProfileSpanMetadata.OriginalDurationKey] = originalDuration;
 
         if (treatment.Duration is { } duration)
-            metadata[LegacyTreatmentTables.UploadedDurationKey] = duration;
+            metadata[StateSpanMetadataExtensions.UploadedDurationKey] = duration;
 
         if (treatment.DurationInMilliseconds is { } durationMs)
             metadata[ProfileSpanMetadata.DurationInMillisecondsKey] = durationMs;
@@ -1583,7 +1251,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             metadata["durationType"] = treatment.DurationType;
 
         if (treatment.Duration is { } duration)
-            metadata[LegacyTreatmentTables.UploadedDurationKey] = duration;
+            metadata[StateSpanMetadataExtensions.UploadedDurationKey] = duration;
 
         var uploaded = LegacyTreatmentTables.UploadedOverrideFields
             .Select(key => (Key: key, Value: treatment.AdditionalProperties?.GetValueOrDefault(key)))
@@ -1606,7 +1274,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             metadata[LegacyTreatmentTables.UploadedEventTypeKey] = eventType;
 
         if (treatment.Duration is { } duration)
-            metadata[LegacyTreatmentTables.UploadedDurationKey] = duration;
+            metadata[StateSpanMetadataExtensions.UploadedDurationKey] = duration;
 
         if (treatment.TargetTop.HasValue)
             metadata["targetTop"] = treatment.TargetTop.Value;
@@ -1652,262 +1320,785 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
     #endregion
 
+    #region Batch Decomposition
+
     /// <inheritdoc />
-    public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default)
+    /// <remarks>
+    /// Four phases, each a fixed number of queries whatever the batch's size: the preload (the rows
+    /// stored under the batch's legacy ids, its pumps and their patient-device links, the meal carbs
+    /// paired with its stored boluses, and the pump-mode spans around its window), the models built in
+    /// memory, one bulk upsert per table (profile activations settled in memory first), then the pump
+    /// suspension fold over the preloaded spans and the span writes in bulk. A legacy id the batch sends
+    /// more than once is written as its last version that writes anything, which is what one at a time
+    /// leaves.
+    /// </remarks>
+    public async Task<TreatmentDecomposition> DecomposeBatchAsync(
+        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default,
+        TreatmentDecomposition? into = null)
     {
+        var result = into ?? new TreatmentDecomposition();
         if (treatments.Count == 0)
-            return new V4Models.DecompositionResult();
+            return result;
 
         foreach (var treatment in treatments)
             NormalizeIdentity(treatment);
+        var echoes = await PointAtStoredTreatmentsAsync(treatments, ct);
         using var restated = OpenRestatedScope(treatments);
 
-        var result = new V4Models.DecompositionResult();
-
-        // Typed collection lists for bulk insert
-        var estimatedPerType = Math.Max(1, treatments.Count / 4);
-        var bolusList = new List<V4Models.Bolus>(estimatedPerType);
-        var carbList = new List<V4Models.CarbIntake>(estimatedPerType);
-        var bgCheckList = new List<V4Models.BGCheck>(estimatedPerType);
-        var noteList = new List<V4Models.Note>(estimatedPerType);
-        var bolusCalcList = new List<V4Models.BolusCalculation>(estimatedPerType);
-        var deviceEventList = new List<V4Models.DeviceEvent>(estimatedPerType);
-        var tempBasalSources = new List<(Treatment Treatment, V4Models.TempBasal Model)>(estimatedPerType);
-
-        // State span treatments are upserted individually (idempotent semantics)
-        var stateSpanTreatments = new List<(Treatment Treatment, Guid CorrelationId, bool IsProfileSwitch, bool IsOverride, bool IsTemporaryTarget)>();
-
-        // Track treatments that produce both bolus AND bolusCalculation for post-insert linking
-        var bolusCalcLinkTreatmentIds = new HashSet<string>();
-
-        // Carb-producing treatments by correlation id, for the post-insert TreatmentFood pass
-        var foodLineTreatments = new Dictionary<Guid, Treatment>();
-
-        var pumpSuspendResumeTreatments = new List<(Treatment Treatment, DeviceEventType EventType)>();
-        var classified = new List<(Treatment Treatment, TreatmentClassification Classification)>(treatments.Count);
-        var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
-        var correlationIds = await GetStoredCorrelationIdsAsync(treatments.Select(t => t.Id), TreatmentTables, ct);
-
-        await DeferLastSeenAsync(_deviceService, async () =>
-        {
-            foreach (var treatment in treatments)
-            {
-                NormalizeIdentity(treatment);
-
-                var correlationId = CorrelationIdFor(treatment.Id, correlationIds);
-                var c = ClassifyTreatment(treatment);
-                if (c.ProducesNothing)
-                {
-                    result.SkippedUnsupported++;
-                    unsupportedTypes.Add(treatment.EventType ?? "(none)");
-                }
-                else
-                {
-                    result.CorrelationId ??= correlationId;
-                }
-
-                // Collect state span treatments for individual upsert
-                if (c.DelegateToStateSpan)
-                {
-                    // TempBasal treatments can also be bulk-inserted
-                    if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
-                    {
-                        tempBasalSources.Add((treatment, await BuildTempBasalAsync(treatment, correlationId, ct)));
-                    }
-                    else
-                    {
-                        stateSpanTreatments.Add((treatment, correlationId, c.IsProfileSwitch, c.IsOverride, c.IsTemporaryTarget));
-                    }
-                }
-
-                if (c.ProduceBolus)
-                    bolusList.Add(await BuildBolusAsync(treatment, correlationId, c.KeepsUploadedEventType, ct));
-
-                if (c.ProduceCarbIntake)
-                {
-                    carbList.Add(MapToCarbIntake(treatment, correlationId, c.KeepsUploadedEventType));
-                    // Keyed by the per-record correlation id, so the line describes whichever duplicate
-                    // of a legacy id the bulk write kept.
-                    foodLineTreatments[correlationId] = treatment;
-                }
-
-                if (c.ProduceBGCheck)
-                    bgCheckList.Add(MapToBGCheck(treatment, correlationId));
-
-                if (c.ProduceNote)
-                    noteList.Add(MapToNote(treatment, correlationId, c.IsAnnouncement));
-
-                if (c.ProduceBolusCalc)
-                    bolusCalcList.Add(MapToBolusCalculation(treatment, correlationId));
-
-                if (c.ProduceDeviceEvent)
-                {
-                    deviceEventList.Add(
-                        await BuildDeviceEventAsync(treatment, correlationId, c.ParsedDeviceEventType, ct));
-
-                    if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
-                    {
-                        pumpSuspendResumeTreatments.Add((treatment, c.ParsedDeviceEventType));
-                    }
-                }
-
-                // Track for post-insert linking
-                if (c.ProduceBolus && c.ProduceBolusCalc && treatment.Id != null)
-                    bolusCalcLinkTreatmentIds.Add(treatment.Id);
-
-                classified.Add((treatment, c));
-            }
-        }, ct);
-
-        await DropAbsentProjectionsAsync(classified, origin, ct);
-
-        if (result.SkippedUnsupported > 0)
-        {
-            Logger.LogWarning(
-                "Skipped {Count} treatments whose event type Nocturne does not store: {EventTypes}",
-                result.SkippedUnsupported, string.Join(", ", unsupportedTypes));
-        }
-
-        var tempBasalList = tempBasalSources.ConvertAll(s => s.Model);
-
-        // Fallback attribution for records the serial-based DeviceId resolution left unattributed.
-        if (bolusList.Count > 0)
-            await _patientDeviceStamper.StampAsync(bolusList, V4Models.DeviceAttributionCategories.Bolus, batchSource: null, ct);
-        if (tempBasalList.Count > 0)
-            await _patientDeviceStamper.StampAsync(tempBasalList, V4Models.DeviceAttributionCategories.TempBasal, batchSource: null, ct);
-        await _patientDeviceStamper.StampDeviceEventsAsync(deviceEventList, batchSource: null, ct);
-
-        // Pre-pass: write the profile activations first (temp basals depend on them for insulin context)
-        var batchInsulinTimeline = new SortedDictionary<long, V4Models.TreatmentInsulinContext>();
-        foreach (var (treatment, correlationId, _, _, _) in stateSpanTreatments.Where(t => t.IsProfileSwitch))
-        {
-            var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
-            await DecomposeProfileSwitchAsync(treatment, spanResult, origin, ct);
-            result.CreatedRecords.AddRange(spanResult.CreatedRecords);
-            result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
-            result.SkippedDeleted += spanResult.SkippedDeleted;
-
-            var icfg = ExtractAapsIcfg(treatment);
-            if (icfg is not null)
-                batchInsulinTimeline[treatment.Mills] = icfg;
-        }
-
-        var echoingStored = tempBasalSources
-            .Where(s => s.Model.LegacyId is not null
-                && (s.Model is { Percent: not null, Rate: not null }
-                    || s.Model.OriginEvidence is not V4Models.TempBasalOriginEvidence.Reported
-                    && TryEchoedOrigin(s.Treatment, out _, out _)))
-            .Select(s => s.Model.LegacyId!)
-            .Distinct(StringComparer.Ordinal)
+        var stored = await LoadStoredAsync(treatments, ct);
+        var storedCorrelations = stored.CorrelationIds();
+        var correlationIds = new Dictionary<string, Guid>(storedCorrelations, StringComparer.Ordinal);
+        var batch = treatments
+            .Select((t, i) => new BatchTreatment(i, t, ClassifyTreatment(t), CorrelationIdFor(t.Id, correlationIds)))
             .ToList();
-        var stored = (echoingStored.Count == 0 ? [] : await _tempBasalRepository.GetByLegacyIdsAsync(echoingStored, ct))
-            .GroupBy(t => t.LegacyId!, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var (treatment, model) in tempBasalSources)
-            SettleAgainstStored(model, treatment, model.LegacyId is { } legacyId ? stored.GetValueOrDefault(legacyId) : null);
-        await _relativeTempBasalRates.ResolveAsync(tempBasalList, ct);
+        result.Begin([.. batch.Select(b => b.CorrelationId)]);
+        result.CorrelationId = (batch.FirstOrDefault(b => !b.Classification.ProducesNothing) ?? batch[0]).CorrelationId;
 
-        // Resolve insulin context for each temp basal
-        // primaryInsulin is fetched at most once lazily if the third tier is ever needed.
-        V4Models.PatientInsulin? primaryInsulin = null;
-        var primaryInsulinFetched = false;
+        var writing = Writing(batch, stored, echoes, result);
+        var devices = await ResolvePumpsAsync(writing, ct);
+        var links = await _deviceService.GetPatientDeviceLinksAsync(devices.Values, ct);
+        var mealCarbs = await LoadMealCarbsAsync(writing, stored, storedCorrelations, ct);
+        var spans = await PreloadSpansAsync(writing, ct);
 
-        foreach (var tb in tempBasalList)
+        var models = new BatchModels();
+        foreach (var treatment in writing)
         {
-            // Tier 1: batch-local profile switch timeline (avoids cache staleness).
-            // Walk the sorted keys in reverse to find the most-recent switch at or before StartMills.
-            V4Models.TreatmentInsulinContext? icfg = null;
-            var matchingKey = batchInsulinTimeline.Keys
-                .Reverse()
-                .FirstOrDefault(key => key <= tb.StartMills);
-            if (matchingKey != 0 || batchInsulinTimeline.ContainsKey(0))
-                icfg = batchInsulinTimeline[matchingKey];
-
-            // Tier 2: ActiveProfileResolver (covers profile switches from previous batches)
-            if (icfg is null)
-                icfg = await _activeProfileResolver.GetActiveInsulinContextAsync(tb.StartMills, ct);
-
-            // Tier 3: primary configured insulin — fetched once per batch, not per record
-            if (icfg is null)
+            try
             {
-                if (!primaryInsulinFetched)
-                {
-                    primaryInsulin = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
-                    primaryInsulinFetched = true;
-                }
-                icfg = ToInsulinContext(primaryInsulin);
+                Build(treatment, devices, links, stored, storedCorrelations, mealCarbs, models);
             }
-
-            tb.InsulinContext = icfg;
-        }
-
-        using (SystemAttributedBatchWrites(_auditContext))
-        {
-            await BulkUpsertAsync(_bolusRepository, bolusList, result, origin, ct);
-            await BulkUpsertAsync(_carbIntakeRepository, carbList, result, origin, ct);
-            await BulkUpsertAsync(_bgCheckRepository, bgCheckList, result, origin, ct);
-            await BulkUpsertAsync(_noteRepository, noteList, result, origin, ct);
-            await BulkUpsertAsync(_bolusCalculationRepository, bolusCalcList, result, origin, ct);
-            await BulkUpsertAsync(_deviceEventRepository, deviceEventList, result, origin, ct);
-            await BulkUpsertAsync(_tempBasalRepository, tempBasalList, result, origin, ct);
-        }
-
-        // Post-insert food pass: the carb intake's id is only known once it is persisted. Created
-        // only, as on the single path: a carb intake that updated a stored row keeps whatever food
-        // lines it has, including none if the user deleted the seeded one.
-        foreach (var carbIntake in result.CreatedRecords.OfType<V4Models.CarbIntake>())
-        {
-            if (carbIntake.CorrelationId is { } correlationId && foodLineTreatments.TryGetValue(correlationId, out var treatment))
-                await WriteLegacyFoodLineAsync(carbIntake.Id, treatment, ct);
-        }
-
-        // Post-insert pump suspend/resume pass: sequential, order-dependent
-        foreach (var (treatment, eventType) in pumpSuspendResumeTreatments.OrderBy(t => t.Treatment.Mills))
-        {
-            await DecomposePumpSuspensionFromTreatmentAsync(treatment, eventType, result, origin, ct);
-        }
-
-        // Upsert remaining state spans (Override, TemporaryTarget — ProfileSwitch already done in pre-pass)
-        foreach (var (treatment, correlationId, _, isOv, isTt) in stateSpanTreatments.Where(t => !t.IsProfileSwitch))
-        {
-            // Use a temporary result to collect records from helper methods
-            var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
-
-            if (isOv)
-                await DecomposeOverrideAsync(treatment, spanResult, origin, ct);
-            else if (isTt)
-                await DecomposeTemporaryTargetAsync(treatment, spanResult, origin, ct);
-
-            result.CreatedRecords.AddRange(spanResult.CreatedRecords);
-            result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
-            result.SkippedDeleted += spanResult.SkippedDeleted;
-        }
-
-        // Post-insert linking: Bolus → BolusCalculation by matching LegacyId
-        if (bolusCalcLinkTreatmentIds.Count > 0)
-        {
-            var persisted = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
-            var persistedBoluses = persisted.OfType<V4Models.Bolus>()
-                .Where(b => b.LegacyId != null && bolusCalcLinkTreatmentIds.Contains(b.LegacyId))
-                .ToList();
-            var persistedCalcs = persisted.OfType<V4Models.BolusCalculation>()
-                .Where(c => c.LegacyId != null && bolusCalcLinkTreatmentIds.Contains(c.LegacyId))
-                .ToDictionary(c => c.LegacyId!);
-
-            foreach (var bolus in persistedBoluses)
+            catch (TreatmentMappingException ex)
             {
-                if (persistedCalcs.TryGetValue(bolus.LegacyId!, out var calc)
-                    && bolus.BolusCalculationId != calc.Id)
-                {
-                    bolus.BolusCalculationId = calc.Id;
-                    await _bolusRepository.UpdateAsync(bolus.Id, bolus, origin, ct);
-                }
+                result.Reject(treatment.Index, ex);
             }
+        }
+
+        // A record belongs to the treatment its legacy id names, not to its group: a meal's bolus and
+        // its separately keyed carbs share a group. A record whose legacy id names no treatment of the
+        // batch belongs to its group's: one of a treatment sent without an id, whose group is its own,
+        // or carbs written under the key of their stored meal half (Build).
+        var byLegacyId = writing.Where(w => w.Treatment.Id is not null)
+            .ToDictionary(w => w.Treatment.Id!, w => w.Index, StringComparer.Ordinal);
+        var groups = writing.Where(w => !result.Rejected.ContainsKey(w.Index))
+            .GroupBy(w => w.CorrelationId).ToDictionary(g => g.Key, g => g.Last().Index);
+        int? TreatmentOf(V4Models.IV4Record record) =>
+            record.LegacyId is { } id && byLegacyId.TryGetValue(id, out var index) ? index
+            : record.CorrelationId is { } group && groups.TryGetValue(group, out index) ? index
+            : null;
+
+        using (origin == WriteOrigin.Live ? null : SystemAttributedBatchWrites(_auditContext))
+        {
+            var reclassified = await DropAbsentAsync(models.Classified, stored.Kinds(), stored.SpanKeys, origin, ct);
+            if (models.AbsentMealCarbs.Count > 0)
+                await DeleteByLegacyIdsAsync([.. models.AbsentMealCarbs.Distinct(StringComparer.Ordinal)], origin, ct);
+            foreach (var meal in models.UnkeyedMealCarbs)
+                await _carbIntakeRepository.UpdateAsync(meal.Id, meal, origin, ct);
+            await WriteActivationsAsync(models.Activations, stored, result, TreatmentOf, origin, ct);
+            await SettleTempBasalsAsync(models.TempBasals, ct);
+
+            if (models.Boluses.Count > 0)
+                await _patientDeviceStamper.StampAsync(models.Boluses, V4Models.DeviceAttributionCategories.Bolus, batchSource: null, ct);
+            if (models.TempBasals.Count > 0)
+                await _patientDeviceStamper.StampAsync(models.TempBasals, V4Models.DeviceAttributionCategories.TempBasal, batchSource: null, ct);
+            if (models.DeviceEvents.Count > 0)
+                await _patientDeviceStamper.StampDeviceEventsAsync(models.DeviceEvents, batchSource: null, ct);
+
+            var calculations = await UpsertTableAsync(_bolusCalculationRepository, models.BolusCalculations, result, TreatmentOf, origin, ct);
+            LinkCalculations(models, calculations);
+            await UpsertTableAsync(_bolusRepository, models.Boluses, result, TreatmentOf, origin, ct);
+            var carbs = await UpsertTableAsync(_carbIntakeRepository, models.CarbIntakes, result, TreatmentOf, origin, ct);
+            await UpsertTableAsync(_bgCheckRepository, models.BGChecks, result, TreatmentOf, origin, ct);
+            await UpsertTableAsync(_noteRepository, models.Notes, result, TreatmentOf, origin, ct);
+            await UpsertTableAsync(_deviceEventRepository, models.DeviceEvents, result, TreatmentOf, origin, ct);
+            await UpsertTableAsync(_tempBasalRepository, models.TempBasals, result, TreatmentOf, origin, ct);
+            await WriteFoodLinesAsync(carbs, models.FoodLines, result, TreatmentOf, ct);
+            ReportReclassifiedAsUpdated(result, reclassified);
+
+            var sources = new Dictionary<StateSpan, BatchTreatment>(ReferenceEqualityComparer.Instance);
+            FoldPumpSuspensions([.. models.Suspensions.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index))], spans, sources);
+            foreach (var (treatment, span) in models.Spans.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index)))
+            {
+                spans.Open(span);
+                sources[span] = treatment;
+            }
+            foreach (var (span, source) in sources)
+                result.SpanOwners[span] = source.CorrelationId;
+
+            await spans.WriteAsync(_stateSpanService, result, result.SpanOwners, ct, (span, refusal) =>
+            {
+                if (sources.TryGetValue(span, out var source))
+                    result.Reject(source.Index, refusal);
+                else
+                    ExceptionDispatchInfo.Capture(refusal).Throw();
+            });
         }
 
         return result;
     }
+
+    /// <summary>A treatment of a batch, with the classification and the correlation id its records are written under.</summary>
+    private sealed record BatchTreatment(int Index, Treatment Treatment, TreatmentClassification Classification, Guid CorrelationId)
+    {
+        public DateTime Start => Treatment.Mills.ToUtcDateTime();
+    }
+
+    /// <summary>The models a batch builds, before any is written.</summary>
+    private sealed class BatchModels
+    {
+        public List<V4Models.Bolus> Boluses { get; } = [];
+        public List<V4Models.CarbIntake> CarbIntakes { get; } = [];
+        public List<V4Models.BGCheck> BGChecks { get; } = [];
+        public List<V4Models.Note> Notes { get; } = [];
+        public List<V4Models.BolusCalculation> BolusCalculations { get; } = [];
+        public List<V4Models.DeviceEvent> DeviceEvents { get; } = [];
+        public List<V4Models.TempBasal> TempBasals { get; } = [];
+        public List<(BatchTreatment Treatment, V4Models.ProfileActivation Model)> Activations { get; } = [];
+        public List<(BatchTreatment Treatment, StateSpan Span)> Spans { get; } = [];
+        public List<(BatchTreatment Treatment, DeviceEventType Type)> Suspensions { get; } = [];
+
+        /// <summary>The treatments whose carbs keep their food as a line, by the group their carb intake is written under.</summary>
+        public Dictionary<Guid, Treatment> FoodLines { get; } = [];
+
+        /// <summary>The legacy ids whose bolus is linked to the calculation written beside it.</summary>
+        public HashSet<string> CalculationLinks { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The legacy ids of meal carbs a connector keyed apart from a bolus whose treatment no longer carries carbs.</summary>
+        public List<string> AbsentMealCarbs { get; } = [];
+
+        /// <summary>
+        /// Meal carbs stored with no legacy id beside a bolus the batch updates, keyed to the bolus's
+        /// legacy id so the batch's carbs update them in place.
+        /// </summary>
+        public List<V4Models.CarbIntake> UnkeyedMealCarbs { get; } = [];
+
+        public List<(Treatment Treatment, TreatmentClassification Classification)> Classified { get; } = [];
+    }
+
+    /// <summary>
+    /// The treatments of the batch that write: per legacy id the last version that writes anything,
+    /// and every treatment with no legacy id. One that Nocturne does not store writes nothing and keeps
+    /// nothing from being written. A bolus or carbs under a temp basal's legacy id writes nothing,
+    /// whether the temp basal is stored or an earlier version in the batch: an AAPS that read a temp
+    /// basal served with insulin holds it as a bolus under the temp basal's identifier (see
+    /// <see cref="Treatment.Insulin"/>) and edits it as one, and writing that edit would put a bolus
+    /// beside every temp basal it touches.
+    /// </summary>
+    private List<BatchTreatment> Writing(
+        IReadOnlyList<BatchTreatment> batch, StoredRows stored, IReadOnlySet<Treatment> echoes, TreatmentDecomposition result)
+    {
+        var heldByTempBasal = stored.TempBasals.Select(t => t.LegacyId!).ToHashSet(StringComparer.Ordinal);
+        var last = new Dictionary<string, BatchTreatment>(StringComparer.Ordinal);
+        var writing = new List<BatchTreatment>();
+        var unsupported = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var treatment in batch)
+        {
+            if (echoes.Contains(treatment.Treatment))
+            {
+                result.WritesNothing(treatment.Index);
+                continue;
+            }
+
+            var c = treatment.Classification;
+            if (c.ProducesNothing)
+            {
+                result.SkippedUnsupported++;
+                result.WritesNothing(treatment.Index);
+                unsupported.Add(treatment.Treatment.EventType ?? "(none)");
+                continue;
+            }
+
+            if (treatment.Treatment.Id is not { } id)
+            {
+                writing.Add(treatment);
+                continue;
+            }
+
+            if ((c.ProduceBolus || c.ProduceCarbIntake) && heldByTempBasal.Contains(id))
+            {
+                Logger.LogWarning(
+                    "Refused to write a {EventType} under temp basal {LegacyId}",
+                    LogText.Sanitize(treatment.Treatment.EventType), LogText.Sanitize(id));
+                result.SkippedUnsupported++;
+                result.WritesNothing(treatment.Index);
+                continue;
+            }
+
+            last[id] = treatment;
+            if (c.WritesTempBasal)
+                heldByTempBasal.Add(id);
+            else
+                heldByTempBasal.Remove(id);
+        }
+
+        if (unsupported.Count > 0)
+            Logger.LogWarning(
+                "Skipped {Count} treatments whose event type Nocturne does not store: {EventTypes}",
+                result.SkippedUnsupported, string.Join(", ", unsupported.Select(LogText.Sanitize)));
+
+        return [.. writing.Concat(last.Values).OrderBy(t => t.Index)];
+    }
+
+    /// <summary>The live rows stored under the batch's legacy ids, one query per table, and the span keys among them.</summary>
+    private sealed record StoredRows(
+        IReadOnlyList<V4Models.Bolus> Boluses,
+        IReadOnlyList<V4Models.CarbIntake> CarbIntakes,
+        IReadOnlyList<V4Models.BGCheck> BGChecks,
+        IReadOnlyList<V4Models.Note> Notes,
+        IReadOnlyList<V4Models.BolusCalculation> BolusCalculations,
+        IReadOnlyList<V4Models.DeviceEvent> DeviceEvents,
+        IReadOnlyList<V4Models.TempBasal> TempBasals,
+        IReadOnlyList<V4Models.ProfileActivation> ProfileActivations,
+        IReadOnlyDictionary<string, HashSet<string>> SpanKeys)
+    {
+        /// <summary>
+        /// The correlation id each legacy id's rows carry, from the first table holding a non-empty one,
+        /// in the order the tables are listed here.
+        /// </summary>
+        public Dictionary<string, Guid> CorrelationIds()
+        {
+            var ids = new Dictionary<string, Guid>(StringComparer.Ordinal);
+            IEnumerable<V4Models.IV4Record>[] tables =
+                [Boluses, CarbIntakes, BGChecks, Notes, BolusCalculations, DeviceEvents, TempBasals, ProfileActivations];
+            foreach (var row in tables.SelectMany(t => t))
+            {
+                if (row.LegacyId is { } legacyId && row.CorrelationId is { } correlationId && correlationId != Guid.Empty)
+                    ids.TryAdd(legacyId, correlationId);
+            }
+
+            return ids;
+        }
+
+        /// <summary>The models of <see cref="DecomposedTreatmentTables"/> a live row of each legacy id is stored as.</summary>
+        public Dictionary<string, HashSet<Type>> Kinds()
+        {
+            var kinds = new Dictionary<string, HashSet<Type>>(StringComparer.Ordinal);
+            void Add<T>(IEnumerable<T> rows) where T : V4Models.IV4Record
+            {
+                foreach (var legacyId in rows.Select(r => r.LegacyId).OfType<string>())
+                {
+                    if (!kinds.TryGetValue(legacyId, out var held))
+                        kinds[legacyId] = held = [];
+                    held.Add(typeof(T));
+                }
+            }
+
+            Add(Boluses);
+            Add(TempBasals);
+            Add(CarbIntakes);
+            Add(BGChecks);
+            Add(Notes);
+            Add(DeviceEvents);
+            Add(BolusCalculations);
+            Add(ProfileActivations);
+            return kinds;
+        }
+    }
+
+    private static T? StoredUnder<T>(IEnumerable<T> rows, string? legacyId) where T : V4Models.IV4Record =>
+        legacyId is null ? default : rows.FirstOrDefault(r => r.LegacyId == legacyId);
+
+    private async Task<StoredRows> LoadStoredAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        var ids = treatments.Select(t => t.Id).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0)
+            return new StoredRows([], [], [], [], [], [], [], [], new Dictionary<string, HashSet<string>>());
+
+        Dictionary<string, HashSet<string>> spanKeys;
+        await using (var db = await _contexts.CreateAsync(ct))
+        {
+            spanKeys = (await StoredTreatmentSpans(db, ids).AsNoTracking()
+                    .Select(s => new { s.LegacyId, s.Category })
+                    .ToListAsync(ct))
+                .GroupBy(s => s.LegacyId!)
+                .ToDictionary(g => g.Key, g => g.Select(s => s.Category).ToHashSet(), StringComparer.Ordinal);
+        }
+
+        return new StoredRows(
+            [.. await _bolusRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _carbIntakeRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _bgCheckRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _noteRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _bolusCalculationRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _deviceEventRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _tempBasalRepository.GetByLegacyIdsAsync(ids, ct)],
+            [.. await _profileActivationRepository.GetByLegacyIdsAsync(ids, ct)],
+            spanKeys);
+    }
+
+    /// <summary>
+    /// The pump each writing treatment that attributes a record to one names, created in the device
+    /// registry if new, in one call.
+    /// </summary>
+    private async Task<Dictionary<int, Guid?>> ResolvePumpsAsync(IReadOnlyList<BatchTreatment> writing, CancellationToken ct)
+    {
+        var attributed = writing
+            .Where(w => w.Classification is { ProduceBolus: true } or { ProduceDeviceEvent: true } or { IsProfileSwitch: true }
+                || w.Classification.WritesTempBasal)
+            .ToList();
+        if (attributed.Count == 0)
+            return [];
+
+        var ids = await _deviceService.ResolveManyAsync(
+            [.. attributed.Select(w => new DeviceSighting(
+                V4Models.DeviceCategory.InsulinPump, w.Treatment.PumpType, w.Treatment.PumpSerial, w.Treatment.Mills))],
+            ct);
+        return attributed.Zip(ids).ToDictionary(p => p.First.Index, p => p.Second);
+    }
+
+    /// <summary>
+    /// Per stored legacy id whose bolus is stored under it in its group, the carb intake served with that
+    /// bolus as a Meal Bolus, in one query. The treatment's carbs update that carb intake, which keeps
+    /// the legacy and sync ids its source re-syncs it by, since a connector keys a meal's halves apart.
+    /// </summary>
+    private async Task<Dictionary<string, V4Models.CarbIntake>> LoadMealCarbsAsync(
+        IReadOnlyList<BatchTreatment> writing, StoredRows stored, IReadOnlyDictionary<string, Guid> storedCorrelations,
+        CancellationToken ct)
+    {
+        var paired = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        foreach (var treatment in writing)
+        {
+            if (treatment.Treatment.Id is { } id
+                && storedCorrelations.TryGetValue(id, out var correlationId)
+                && StoredUnder(stored.Boluses, id) is { CorrelationId: { } bolusGroup }
+                && bolusGroup == correlationId)
+                paired[id] = correlationId;
+        }
+
+        if (paired.Count == 0)
+            return [];
+
+        var carbs = (await _carbIntakeRepository.GetByCorrelationIdsAsync(paired.Values.Distinct(), ct)).ToList();
+        var meals = new Dictionary<string, V4Models.CarbIntake>(StringComparer.Ordinal);
+        foreach (var (id, correlationId) in paired)
+        {
+            if (LegacyTreatmentTables.MealHalf(carbs.Where(c => c.CorrelationId == correlationId)) is { } meal)
+                meals[id] = meal;
+        }
+
+        return meals;
+    }
+
+    /// <summary>
+    /// The pump-mode spans the suspension fold reads, in one query when the batch carries a pump suspend
+    /// or resume: every open one, those overlapping the batch's window, and the first after it.
+    /// </summary>
+    private async Task<SpanState> PreloadSpansAsync(IReadOnlyList<BatchTreatment> writing, CancellationToken ct)
+    {
+        var at = writing.Where(w => w.Classification is { ProduceDeviceEvent: true, ParsedDeviceEventType: DeviceEventType.PumpSuspend or DeviceEventType.PumpResume })
+            .Select(w => w.Start)
+            .ToList();
+        return new SpanState(at.Count == 0
+            ? []
+            : await _stateSpanService.GetStateSpansAroundAsync(
+                StateSpanCategory.PumpMode, at.Min(), at.Max(), [null], SuspensionSuccessorReach, ct));
+    }
+
+    /// <summary>How many pump-mode spans after the batch's window the suspension fold reads.</summary>
+    private const int SuspensionSuccessorReach = 10;
+
+    /// <summary>
+    /// Builds every model one treatment decomposes into, adding them to <paramref name="models"/> only
+    /// once all are built, so a treatment refused for its data adds none.
+    /// </summary>
+    private void Build(
+        BatchTreatment batched,
+        IReadOnlyDictionary<int, Guid?> devices,
+        IPatientDeviceLinks links,
+        StoredRows stored,
+        IReadOnlyDictionary<string, Guid> storedCorrelations,
+        IReadOnlyDictionary<string, V4Models.CarbIntake> mealCarbs,
+        BatchModels models)
+    {
+        var (_, treatment, c, correlationId) = batched;
+        var id = treatment.Id;
+        var isStored = id is not null && storedCorrelations.ContainsKey(id);
+        var deviceId = devices.GetValueOrDefault(batched.Index);
+        var patientDeviceId = links.Resolve(deviceId, treatment.Mills);
+
+        // A re-resolution that has since become ambiguous cannot displace the stored link.
+        T Attributed<T>(T model, IEnumerable<T> storedRows, Action<T, Guid?> setDevice)
+            where T : V4Models.IV4Record, V4Models.IDeviceAttributed
+        {
+            setDevice(model, deviceId);
+            model.PatientDeviceId = patientDeviceId ?? StoredUnder(storedRows, id)?.PatientDeviceId;
+            return model;
+        }
+
+        V4Models.Bolus? bolus = null;
+        if (c.ProduceBolus)
+        {
+            bolus = Mapped(() => MapToBolus(treatment, correlationId, c.KeepsUploadedEventType));
+            if (IsAlgorithmBolus(treatment))
+            {
+                bolus.Kind = V4Models.BolusKind.Algorithm;
+                bolus.Automatic = true;
+            }
+            Attributed(bolus, stored.Boluses, (m, d) => m.DeviceId = d);
+        }
+
+        V4Models.CarbIntake? carbs = null;
+        V4Models.CarbIntake? unkeyedMeal = null;
+        if (c.ProduceCarbIntake)
+        {
+            carbs = Mapped(() => MapToCarbIntake(treatment, correlationId, c.KeepsUploadedEventType));
+            if (isStored && StoredUnder(stored.CarbIntakes, id) is null && mealCarbs.GetValueOrDefault(id!) is { } meal)
+            {
+                if (string.IsNullOrEmpty(meal.LegacyId))
+                    unkeyedMeal = meal;
+                carbs.LegacyId = string.IsNullOrEmpty(meal.LegacyId) ? id : meal.LegacyId;
+                if (!string.IsNullOrEmpty(meal.SyncIdentifier))
+                    carbs.SyncIdentifier = meal.SyncIdentifier;
+            }
+        }
+
+        var bgCheck = c.ProduceBGCheck ? Mapped(() => MapToBGCheck(treatment, correlationId)) : null;
+        var note = c.ProduceNote ? Mapped(() => MapToNote(treatment, correlationId, c.IsAnnouncement)) : null;
+        var calculation = c.ProduceBolusCalc ? Mapped(() => MapToBolusCalculation(treatment, correlationId)) : null;
+        var deviceEvent = c.ProduceDeviceEvent
+            ? Attributed(Mapped(() => MapToDeviceEvent(treatment, correlationId, c.ParsedDeviceEventType)), stored.DeviceEvents, (m, d) => m.DeviceId = d)
+            : null;
+
+        V4Models.TempBasal? tempBasal = null;
+        if (c.WritesTempBasal)
+        {
+            tempBasal = Attributed(Mapped(() => MapToTempBasal(treatment, correlationId)), stored.TempBasals, (m, d) => m.DeviceId = d);
+            SettleAgainstStored(tempBasal, treatment, StoredUnder(stored.TempBasals, id));
+        }
+
+        var activation = c.IsProfileSwitch
+            ? Attributed(Mapped(() => BuildProfileActivation(treatment, correlationId)), stored.ProfileActivations, (m, d) => m.DeviceId = d)
+            : null;
+        var span = c.IsOverride ? Mapped(() => BuildOverrideSpan(treatment))
+            : c.IsTemporaryTarget ? Mapped(() => BuildTemporaryTargetSpan(treatment))
+            : null;
+
+        if (bolus is not null) models.Boluses.Add(bolus);
+        if (carbs is not null)
+        {
+            models.CarbIntakes.Add(carbs);
+            models.FoodLines[correlationId] = treatment;
+        }
+        if (unkeyedMeal is not null)
+        {
+            unkeyedMeal.LegacyId = id;
+            models.UnkeyedMealCarbs.Add(unkeyedMeal);
+        }
+        if (bgCheck is not null) models.BGChecks.Add(bgCheck);
+        if (note is not null) models.Notes.Add(note);
+        if (calculation is not null) models.BolusCalculations.Add(calculation);
+        if (deviceEvent is not null)
+        {
+            models.DeviceEvents.Add(deviceEvent);
+            if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+                models.Suspensions.Add((batched, c.ParsedDeviceEventType));
+        }
+        if (tempBasal is not null) models.TempBasals.Add(tempBasal);
+        if (activation is not null) models.Activations.Add((batched, activation));
+        if (span is not null) models.Spans.Add((batched, span));
+        if (bolus is not null && calculation is not null && id is not null) models.CalculationLinks.Add(id);
+        if (!c.ProduceCarbIntake && isStored
+            && mealCarbs.GetValueOrDefault(id!) is { LegacyId: { Length: > 0 } carbsKey } && carbsKey != id)
+            models.AbsentMealCarbs.Add(carbsKey);
+        models.Classified.Add((treatment, c));
+    }
+
+    /// <summary>
+    /// Writes the batch's profile activations through <see cref="ProfileActivationWriter.WriteBatchAsync"/>,
+    /// withholding those whose legacy id the user deleted, which the store would refuse.
+    /// </summary>
+    private async Task WriteActivationsAsync(
+        List<(BatchTreatment Treatment, V4Models.ProfileActivation Model)> activations, StoredRows stored,
+        TreatmentDecomposition result, Func<V4Models.IV4Record, int?> treatmentOf, WriteOrigin origin, CancellationToken ct)
+    {
+        if (activations.Count == 0)
+            return;
+
+        var unstored = activations
+            .Select(a => a.Model.LegacyId)
+            .OfType<string>()
+            .Where(id => StoredUnder(stored.ProfileActivations, id) is null)
+            .ToList();
+        var deleted = unstored.Count == 0
+            ? new HashSet<string>()
+            : await _profileActivationRepository.GetHeldLegacyIdsAsync(unstored, ct);
+
+        var writes = new List<ProfileActivationWrite>();
+        foreach (var (_, model) in activations)
+        {
+            if (model.LegacyId is { } legacyId && deleted.Contains(legacyId))
+            {
+                result.SkippedDeleted++;
+                continue;
+            }
+
+            writes.Add(new ProfileActivationWrite(model, StoredUnder(stored.ProfileActivations, model.LegacyId)));
+        }
+
+        if (writes.Count == 0)
+            return;
+
+        await _patientDeviceStamper.StampAsync(
+            [.. writes.Select(w => w.Activation)], V4Models.DeviceAttributionCategories.ProfileActivation, batchSource: null, ct);
+        await _profileActivationWriter.WriteBatchAsync(writes, async settled =>
+        {
+            var written = await UpsertTableAsync(_profileActivationRepository, [.. settled], result, treatmentOf, origin, ct);
+            var byId = written.GroupBy(a => a.Id).ToDictionary(g => g.Key, g => g.First());
+            return [.. settled.Select(a => byId.GetValueOrDefault(a.Id))];
+        }, ct);
+    }
+
+    /// <summary>
+    /// Gives each temp basal the insulin of the activation running at its start, else the primary bolus
+    /// insulin, then resolves the rates of those uploaded as a percent. Runs after the batch's
+    /// activations are written, so a temp basal sees the switches before it in the batch.
+    /// </summary>
+    private async Task SettleTempBasalsAsync(List<V4Models.TempBasal> tempBasals, CancellationToken ct)
+    {
+        if (tempBasals.Count == 0)
+            return;
+
+        var contexts = await _activeProfileResolver.GetActiveInsulinContextsAsync(
+            [.. tempBasals.Select(t => t.StartMills)], ct);
+        V4Models.TreatmentInsulinContext? primary = null;
+        var primaryRead = false;
+        foreach (var (tempBasal, context) in tempBasals.Zip(contexts))
+        {
+            if (context is null && !primaryRead)
+            {
+                primary = ToInsulinContext(await _insulinRepo.GetPrimaryBolusInsulinAsync(ct));
+                primaryRead = true;
+            }
+
+            tempBasal.InsulinContext = context ?? primary;
+        }
+
+        await _relativeTempBasalRates.ResolveAsync(tempBasals, ct);
+    }
+
+    /// <summary>Links each bolus to the calculation written beside it under its legacy id.</summary>
+    private static void LinkCalculations(BatchModels models, IReadOnlyList<V4Models.BolusCalculation> written)
+    {
+        if (models.CalculationLinks.Count == 0)
+            return;
+
+        var calculations = written
+            .Where(c => c.LegacyId is { } id && models.CalculationLinks.Contains(id))
+            .GroupBy(c => c.LegacyId!)
+            .ToDictionary(g => g.Key, g => g.Last().Id, StringComparer.Ordinal);
+        foreach (var bolus in models.Boluses)
+        {
+            if (bolus.LegacyId is { } id && calculations.TryGetValue(id, out var calculationId))
+                bolus.BolusCalculationId = calculationId;
+        }
+    }
+
+    /// <summary>
+    /// Keeps a legacy <see cref="Treatment.FoodType"/> as its carb intake's one <see cref="TreatmentFood"/>
+    /// line, for the carb intakes the batch inserted that hold no line yet, in one read and one write.
+    /// </summary>
+    /// <remarks>
+    /// These rows are also the user-editable food-breakdown surface (<see cref="ITreatmentFoodService"/>,
+    /// <c>/carbs/{id}/foods</c>), so a carb intake that updated a stored row keeps whatever lines it has,
+    /// including none if the user deleted the seeded one. One upserted in place on its sync key reports
+    /// as inserted, so the existence check is what keeps the write idempotent there; no unique index
+    /// can, since a carb intake legitimately holds many lines. A line the store refuses
+    /// (<see cref="StoreRefusal"/>) rejects its treatment, as <see cref="UpsertTableAsync{TRecord}"/>
+    /// does a record, and the batch's other lines are written.
+    /// </remarks>
+    private async Task WriteFoodLinesAsync(
+        BulkWrite<V4Models.CarbIntake> carbs, IReadOnlyDictionary<Guid, Treatment> foodLines,
+        TreatmentDecomposition result, Func<V4Models.IV4Record, int?> treatmentOf, CancellationToken ct)
+    {
+        var created = carbs.Created
+            .Select(c => (Carbs: c, Treatment: c.CorrelationId is { } group ? foodLines.GetValueOrDefault(group) : null))
+            .Where(c => c.Treatment is { Carbs: > 0, FoodType: { } food } && !string.IsNullOrWhiteSpace(food))
+            .Where(c => !OfRejected(c.Carbs, treatmentOf, result))
+            .ToList();
+        if (created.Count == 0)
+            return;
+
+        var lined = (await _treatmentFoodService.GetByCarbIntakeIdsAsync([.. created.Select(c => c.Carbs.Id)], ct))
+            .Select(l => l.CarbIntakeId)
+            .ToHashSet();
+        List<TreatmentFood> lines = [.. created.Where(c => !lined.Contains(c.Carbs.Id)).Select(c => new TreatmentFood
+        {
+            CarbIntakeId = c.Carbs.Id,
+            Portions = 0m,
+            Carbs = c.Treatment!.Carbs!.Value.ToDecimal(),
+            TimeOffsetMinutes = 0,
+            Note = c.Treatment.FoodType,
+        })];
+        if (lines.Count == 0)
+            return;
+
+        try
+        {
+            await _treatmentFoodService.AddManyAsync(lines, ct);
+        }
+        catch (DbUpdateException ex) when (StoreRefusal.ReasonFor(ex) is not null)
+        {
+            if (lines.Count == 1)
+            {
+                Reject(lines[0], ex);
+                return;
+            }
+
+            foreach (var line in lines)
+            {
+                try
+                {
+                    await _treatmentFoodService.AddManyAsync([line], ct);
+                }
+                catch (DbUpdateException refused) when (StoreRefusal.ReasonFor(refused) is not null)
+                {
+                    Reject(line, refused);
+                }
+            }
+        }
+
+        void Reject(TreatmentFood line, Exception refusal)
+        {
+            if (treatmentOf(created.First(c => c.Carbs.Id == line.CarbIntakeId).Carbs) is { } index)
+                result.Reject(index, refusal);
+        }
+    }
+
+    /// <summary>
+    /// One table's bulk upsert. A value the store refuses fails the whole statement, so the table's
+    /// records are then written one at a time, once, and each one refused rejects its treatment; the
+    /// records of other tables already written for it stay written.
+    /// Nothing more of a rejected treatment is written: the records of one rejected by an earlier write
+    /// are dropped (<see cref="OfRejected"/>).
+    /// </summary>
+    private static async Task<BulkWrite<TRecord>> UpsertTableAsync<TRecord>(
+        IBulkUpsertRepository<TRecord> repository, List<TRecord> records, TreatmentDecomposition result,
+        Func<V4Models.IV4Record, int?> treatmentOf, WriteOrigin origin, CancellationToken ct)
+        where TRecord : class, V4Models.IV4Record
+    {
+        records = [.. records.Where(r => !OfRejected(r, treatmentOf, result))];
+        try
+        {
+            return await BulkUpsertAsync(repository, records, result, origin, ct);
+        }
+        catch (DbUpdateException ex) when (StoreRefusal.ReasonFor(ex) is not null)
+        {
+            if (records.Count == 1)
+            {
+                Reject(records[0], ex);
+                return [];
+            }
+
+            List<TRecord> written = [], updated = [], unchanged = [];
+            foreach (var record in records)
+            {
+                try
+                {
+                    var one = await BulkUpsertAsync(repository, [record], result, origin, ct);
+                    written.AddRange(one);
+                    updated.AddRange(one.Updated);
+                    unchanged.AddRange(one.Unchanged);
+                }
+                catch (DbUpdateException refused) when (StoreRefusal.ReasonFor(refused) is not null)
+                {
+                    Reject(record, refused);
+                }
+            }
+
+            return new BulkWrite<TRecord>(written, 0) { Updated = updated, Unchanged = unchanged };
+        }
+
+        void Reject(TRecord record, Exception refusal)
+        {
+            if (treatmentOf(record) is { } index)
+                result.Reject(index, refusal);
+        }
+    }
+
+    /// <summary>Whether <paramref name="record"/> belongs to a treatment the batch has rejected.</summary>
+    private static bool OfRejected(
+        V4Models.IV4Record record, Func<V4Models.IV4Record, int?> treatmentOf, TreatmentDecomposition result) =>
+        treatmentOf(record) is { } index && result.Rejected.ContainsKey(index);
+
+    /// <summary>
+    /// Opens or closes a <see cref="StateSpanCategory.PumpMode"/> / <see cref="PumpModeState.Suspended"/>
+    /// span for each treatment PumpSuspend or PumpResume device event, oldest first, over the spans the
+    /// batch read.
+    /// </summary>
+    /// <remarks>
+    /// A suspend opens a span keyed to it, which the store ends at the next suspension after it and
+    /// which ends every open suspension before it; a suspend whose span a resume has already ended does
+    /// not open it again. A resume ends the newest open suspension that started at or before it; one
+    /// a suspension already ends at was folded before, and a suspension that starts after it is not its
+    /// to end.
+    /// </remarks>
+    private void FoldPumpSuspensions(
+        List<(BatchTreatment Treatment, DeviceEventType Type)> events, SpanState spans, Dictionary<StateSpan, BatchTreatment> sources)
+    {
+        var suspended = PumpModeState.Suspended.ToString();
+        var pumpModes = spans[StateSpanCategory.PumpMode];
+
+        // The ends the store gives a suspension it inserts, which the folds after it read but this one
+        // must not write: the store records which span ended each one only when it sets the end itself.
+        var storeEnds = new Dictionary<StateSpan, DateTime?>(ReferenceEqualityComparer.Instance);
+        DateTime? EndOf(StateSpan span) => storeEnds.TryGetValue(span, out var end) ? end : span.EndTimestamp;
+
+        foreach (var (batched, type) in events.OrderBy(e => e.Treatment.Treatment.Mills).ThenBy(e => e.Treatment.Index))
+        {
+            var treatment = batched.Treatment;
+            var at = batched.Start;
+            if (type == DeviceEventType.PumpSuspend)
+            {
+                var key = $"pump-suspended-tx:{treatment.Id}";
+                var keyed = pumpModes.FirstOrDefault(s => s.OriginalId == key);
+                if (keyed is not null && EndOf(keyed) is not null)
+                    continue;
+
+                var span = new StateSpan
+                {
+                    Category = StateSpanCategory.PumpMode,
+                    State = suspended,
+                    StartTimestamp = at,
+                    EndTimestamp = null,
+                    Source = SpanSource(treatment),
+                    OriginalId = key,
+                };
+
+                if (keyed is null)
+                {
+                    foreach (var open in pumpModes.Where(s => s.State == suspended && EndOf(s) == null && s.StartTimestamp < at))
+                        storeEnds[open] = at;
+                    storeEnds[span] = pumpModes
+                        .Where(s => s.State == suspended && s.StartTimestamp > at)
+                        .MinBy(s => s.StartTimestamp)?.StartTimestamp;
+                }
+
+                spans.Open(span);
+                sources[span] = batched;
+                continue;
+            }
+
+            if (pumpModes.Any(s => s.State == suspended && s.EndTimestamp == at))
+                continue;
+
+            var closable = pumpModes
+                .Where(s => s.State == suspended && EndOf(s) == null && s.StartTimestamp <= at)
+                .MaxBy(s => s.StartTimestamp);
+            if (closable is null)
+            {
+                Logger.LogWarning(
+                    "PumpResume treatment {LegacyId} but no open PumpMode/Suspended StateSpan to close",
+                    LogText.Sanitize(treatment.Id));
+                continue;
+            }
+
+            closable.EndTimestamp = at;
+            storeEnds.Remove(closable);
+            spans.Change(closable);
+            sources.TryAdd(closable, batched);
+        }
+    }
+
+    #endregion
 
     /// <inheritdoc />
     /// <remarks>
@@ -1915,25 +2106,26 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// delete takes every copy in each row's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>),
     /// and a failure on a later table must not leave the treatment half deleted.
     /// </remarks>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
+    public Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default) =>
+        DeleteByLegacyIdsAsync([legacyId], origin, ct);
+
+    private async Task<int> DeleteByLegacyIdsAsync(string[] legacyIds, WriteOrigin origin, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        await DeleteProfileSwitchSnapshotsAsync(db, [legacyId], origin, ct);
-
         // These deletes bypass the repository chokepoint. Its device-event reaction is run below; the v4-native delete broadcast is deferred to the glucose-unification follow-up.
         var (deleted, deviceEventIds, activationIds) = await db.ExecuteInTransactionAsync(async token =>
         {
             var count = 0;
             List<Guid> deviceEvents = [];
             List<Guid> activations = [];
-            foreach (var table in DecomposedTables)
+            foreach (var table in DecomposedTreatmentTables.All)
             {
                 var result = await table.SoftDeleteAsync(
-                    db, [legacyId], source: null, $"legacy_id={legacyId}", DuplicateDelete.EveryCopy, token);
+                    db, legacyIds, source: null, _auditContext, $"legacy_id={string.Join(",", legacyIds)}", DuplicateDelete.EveryCopy, token);
                 count += result.Count;
-                if (table.Kind == DecomposedKind.DeviceEvent)
+                if (table.Model == typeof(V4Models.DeviceEvent))
                     deviceEvents = result.Entities;
-                if (table.Kind == DecomposedKind.ProfileActivation)
+                if (table.Model == typeof(V4Models.ProfileActivation))
                     activations = result.Entities;
             }
             return (count, deviceEvents, activations);
@@ -1941,52 +2133,15 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         if (deleted > 0)
         {
-            Logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
+            Logger.LogDebug("Soft-deleted {Count} v4 records for {Treatments} legacy treatment(s)", deleted, legacyIds.Length);
+            await ReportWrittenAsync(DecomposedTreatmentTables.All.Select(t => t.Model));
             await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
         }
 
         if (origin == WriteOrigin.Live)
-            await ReactToDeletedDeviceEventsAsync(db, deviceEventIds, ct);
+            await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
 
         return deleted;
-    }
-
-    /// <summary>
-    /// Deletes the <c>@@@@@</c> profile rows a Profile Switch that carried <c>profileJson</c>
-    /// decomposed into before its base profile was kept on its <see cref="V4Models.ProfileActivation"/>,
-    /// which sit under the treatment's id. The activation is looked up with its tombstone: a caller
-    /// may have deleted it already. Runs ahead of the deletes that follow it, because the profile
-    /// repositories cannot join their transaction and rows left behind by an activation already gone
-    /// could never be reached again.
-    /// </summary>
-    private async Task DeleteProfileSwitchSnapshotsAsync(
-        NocturneDbContext db, IReadOnlyCollection<string> legacyIds, WriteOrigin origin, CancellationToken ct)
-    {
-        var ids = legacyIds.ToArray();
-        var activations = db.ProfileActivations.IgnoreQueryFilters()
-            .Where(a => a.TenantId == db.TenantId && a.LegacyId != null && ids.Contains(a.LegacyId));
-        await DeleteSnapshotRowsAsync(await ProfileSwitchIdsAsync(activations, ct), origin, ct);
-    }
-
-    private static async Task<List<string>> ProfileSwitchIdsAsync(
-        IQueryable<ProfileActivationEntity> activations, CancellationToken ct)
-    {
-        var requested = nameof(V4Models.ProfileActivationPhase.Requested);
-        return await activations.AsNoTracking()
-            .Where(a => a.Phase == requested && a.LegacyId != null)
-            .Select(a => a.LegacyId!)
-            .Distinct()
-            .ToListAsync(ct);
-    }
-
-    private static IQueryable<ProfileActivationEntity> ActivationsFromSource(NocturneDbContext db, string source) =>
-        db.ProfileActivations.Where(a => a.DataSource == source && a.LegacyId != null);
-
-    private async Task DeleteSnapshotRowsAsync(
-        IEnumerable<string> profileSwitchIds, WriteOrigin origin, CancellationToken ct)
-    {
-        foreach (var id in profileSwitchIds)
-            await _profileDecomposer.DeleteByLegacyIdAsync(id, origin, ct);
     }
 
     /// <inheritdoc />
@@ -2001,28 +2156,25 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var scope = $"data_source={source}";
 
         var spans = LegacyTreatmentTables.ServedStateSpansFromSource(db, source)
-            .Where(s => ids.Contains(s.OriginalId!));
-        await DeleteSnapshotRowsAsync(
-            await ProfileSwitchIdsAsync(ActivationsFromSource(db, source).Where(a => ids.Contains(a.LegacyId!)), ct),
-            WriteOrigin.Live, ct);
+            .Where(s => ids.Contains(s.LegacyId!));
 
         var (deleted, deviceEventIds, activationIds) = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-            var spanKeys = spans.Select(s => s.OriginalId!);
+            var spanKeys = spans.Select(s => s.LegacyId!);
             var count = -await db.Notes
                 .Where(n => n.DataSource == source && n.LegacyId != null && spanKeys.Contains(n.LegacyId))
                 .CountAsync(ct);
             List<Guid> deviceEvents = [];
             List<Guid> activations = [];
-            foreach (var table in DecomposedTables)
+            foreach (var table in DecomposedTreatmentTables.All)
             {
-                var result = await table.SoftDeleteAsync(db, ids, source, scope, DuplicateDelete.PromoteSurvivor, ct);
+                var result = await table.SoftDeleteAsync(db, ids, source, _auditContext, scope, DuplicateDelete.PromoteSurvivor, ct);
                 count += result.Count;
-                if (table.Kind == DecomposedKind.DeviceEvent)
+                if (table.Model == typeof(V4Models.DeviceEvent))
                     deviceEvents = result.Entities;
-                if (table.Kind == DecomposedKind.ProfileActivation)
+                if (table.Model == typeof(V4Models.ProfileActivation))
                     activations = result.Entities;
             }
 
@@ -2032,8 +2184,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             return (count, deviceEvents, activations);
         });
 
+        await ReportWrittenAsync([.. DecomposedTreatmentTables.All.Select(t => t.Model), typeof(StateSpan)]);
         await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
-        await ReactToDeletedDeviceEventsAsync(db, deviceEventIds, ct);
+        await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
         return deleted;
     }
 
@@ -2042,17 +2195,14 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// events these deletes took out around it. Failures are swallowed for the reason
     /// <see cref="DeviceEventRepository"/> swallows its own.
     /// </summary>
-    private async Task ReactToDeletedDeviceEventsAsync(NocturneDbContext db, IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    private async Task ReactToDeletedDeviceEventsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct)
     {
         if (_deviceEventReactor is null || ids.Count == 0)
             return;
 
         try
         {
-            var entities = await db.DeviceEvents.IgnoreQueryFilters().AsNoTracking()
-                .Where(e => e.TenantId == db.TenantId && ids.Contains(e.Id))
-                .ToListAsync(ct);
-            await _deviceEventReactor.OnDeletedAsync(entities.Select(DeviceEventMapper.ToDomainModel).ToList(), ct);
+            await _deviceEventReactor.OnDeletedAsync(await _deviceEventRepository.GetIncludingDeletedAsync(ids, ct), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2066,7 +2216,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     {
         await using var db = await _contexts.CreateAsync(ct);
         var stored = new Dictionary<string, DateTime>();
-        foreach (var table in DecomposedTables)
+        foreach (var table in DecomposedTreatmentTables.All)
         {
             foreach (var row in await table.StoredFromSourceAsync(db, source, from, to, ct))
                 stored.TryAdd(row.LegacyId, row.At);
@@ -2075,7 +2225,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         foreach (var span in await LegacyTreatmentTables.ServedStateSpansFromSource(db, source)
                      .AsNoTracking()
                      .Where(s => s.StartTimestamp >= from && s.StartTimestamp <= to)
-                     .Select(s => new { Id = s.OriginalId!, At = s.StartTimestamp })
+                     .Select(s => new { Id = s.LegacyId!, At = s.StartTimestamp })
                      .ToListAsync(ct))
             stored.TryAdd(span.Id, span.At);
 
@@ -2083,141 +2233,32 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     }
 
     /// <inheritdoc />
-    public async Task DeleteProfileSwitchSnapshotsFromSourceAsync(
-        string source, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var db = await _contexts.CreateAsync(ct);
-        await DeleteSnapshotRowsAsync(await ProfileSwitchIdsAsync(ActivationsFromSource(db, source), ct), origin, ct);
-    }
-
-    /// <inheritdoc />
     /// <remarks>
     /// A connector's rows can sit under an uploader's <c>id</c> where its <c>_id</c> belongs (see
-    /// <see cref="UploaderIdJsonModifier"/>); read by <c>_id</c>, the same treatments would otherwise be
+    /// <see cref="IgnoredBasePropertyModifier"/>); read by <c>_id</c>, the same treatments would otherwise be
     /// stored a second time beside them. Equivalents sharing that <c>id</c> were merged into the row of
-    /// the last one written, so the row moves to the equivalent at its time. A row the user deleted
-    /// stays under the client id and its tombstone is copied onto every equivalent, because
-    /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/> blocks only the id a
-    /// tombstone carries; left in place, it still reaches an equivalent a later publish delivers.
-    /// An id something already holds is left alone rather than merged into.
+    /// the last one written, so the row moves to the equivalent at its time
+    /// (<see cref="IDecomposedTreatmentKeys.RekeyClientIdsAsync"/>).
     /// </remarks>
     public async Task<int> RekeyClientIdRecordsAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var equivalents = new Dictionary<string, List<Treatment>>(StringComparer.Ordinal);
+        List<ClientIdEquivalent> equivalents = [];
         foreach (var treatment in treatments)
         {
             if (treatment.Id is { Length: > 0 } id && TreatmentClientId.Of(treatment) is { Length: > 0 } clientId
                 && clientId != id)
-            {
-                if (!equivalents.TryGetValue(clientId, out var group))
-                    equivalents[clientId] = group = [];
-                group.Add(treatment);
-            }
+                equivalents.Add(new ClientIdEquivalent(clientId, id, treatment.Mills));
         }
 
         if (equivalents.Count == 0)
             return 0;
 
-        string[] clientIds = [.. equivalents.Keys];
-        var stored = new List<ClientIdRow>();
-        foreach (var table in DecomposedTables)
-            stored.AddRange(await table.ClientIdRowsAsync(db, source, clientIds, ct));
-        stored.AddRange((await StateSpansFromSource(db, source, clientIds).AsNoTracking()
-                .Select(s => new { Key = s.OriginalId!, s.StartTimestamp, Live = s.DeletedAt == null })
-                .ToListAsync(ct))
-            .Select(s => new ClientIdRow(s.Key, s.StartTimestamp, s.Live)));
-        if (stored.Count == 0)
-            return 0;
-
-        var (held, _) = await GetHeldLegacyIdsAsync(
-            db,
-            equivalents.Values.SelectMany(g => g).Select(t => t.Id!).ToHashSet(), ct);
-        var moves = new List<(string From, string To)>();
-        var copies = new List<(string From, string[] To)>();
-        foreach (var rows in stored.GroupBy(r => r.LegacyId, StringComparer.Ordinal))
-        {
-            var group = equivalents[rows.Key];
-            if (!rows.Any(r => r.Live))
-            {
-                string[] unheld = [.. group.Select(t => t.Id!).Where(id => !held.Contains(id)).Distinct()];
-                if (unheld.Length > 0)
-                    copies.Add((rows.Key, unheld));
-                continue;
-            }
-
-            var storedAt = rows.Select(r => ToMills(r.At)).ToHashSet();
-            var target = group.FirstOrDefault(t => storedAt.Contains(t.Mills)) ?? group[0];
-            if (!held.Contains(target.Id!))
-                moves.Add((rows.Key, target.Id!));
-        }
-
-        if (moves.Count == 0 && copies.Count == 0)
-            return 0;
-
-        var rekeyed = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-
-            var moved = 0;
-            foreach (var (from, to) in moves)
-            {
-                foreach (var table in DecomposedTables)
-                    moved += await table.RekeyAsync(db, source, from, to, ct);
-
-                moved += await StateSpansFromSource(db, source, [from])
-                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.OriginalId, to), ct);
-            }
-
-            foreach (var (from, to) in copies)
-            {
-                foreach (var table in DecomposedTables)
-                    await table.AddTombstoneCopiesAsync(db, source, from, to, ct);
-
-                var spanTombstones = await StateSpansFromSource(db, source, [from]).AsNoTracking()
-                    .Where(s => s.DeletedAt != null).ToListAsync(ct);
-                AddTombstoneCopies(db, spanTombstones, to, (s, id) => s.OriginalId = id);
-            }
-
-            await db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-            return moved;
-        });
-
-        await _profileActivationWriter.InvalidateAsync(ct);
-        return rekeyed;
+        var rekey = await _keys.RekeyClientIdsAsync(source, equivalents, ct);
+        if (rekey.Written)
+            await ReportWrittenAsync([.. DecomposedTreatmentTables.All.Select(t => t.Model), typeof(StateSpan)]);
+        return rekey.Moved;
     }
-
-    private static long ToMills(DateTime at) =>
-        new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-
-    /// <summary>Stages a user tombstone like each of <paramref name="tombstones"/> under each of <paramref name="keys"/>.</summary>
-    private static void AddTombstoneCopies<T>(
-        NocturneDbContext context, IEnumerable<T> tombstones, string[] keys, Action<T, string> setKey)
-        where T : class, IIdentified
-    {
-        foreach (var row in tombstones)
-        {
-            foreach (var key in keys)
-            {
-                var copy = (T)context.Entry(row).CurrentValues.ToObject();
-                copy.Id = Guid.CreateVersion7();
-                setKey(copy, key);
-                context.Add(copy);
-                context.Entry(copy).Property("DeletedByUser").CurrentValue = true;
-            }
-        }
-    }
-
-    private sealed record ClientIdRow(string LegacyId, DateTime At, bool Live);
-
-    private static IQueryable<StateSpanEntity> StateSpansFromSource(
-        NocturneDbContext db, string source, string[] originalIds) =>
-        TreatmentSpans(db.StateSpans.IgnoreQueryFilters())
-            .Where(s => s.TenantId == db.TenantId && s.Source == source
-                     && s.OriginalId != null && originalIds.Contains(s.OriginalId))
-            .WhereBlocksRecreation();
 
     /// <inheritdoc />
     /// <remarks>
@@ -2228,27 +2269,21 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// source wins. When none of the rows carries a fingerprint, the record is taken as it stands:
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
     /// uploader restated. A treatment the user deleted stays deleted.
+    /// <para>
+    /// All of this is keyed by the id each treatment is stored under, which for a copy Nightscout
+    /// re-keyed is not the <c>_id</c> it came back with, so each is first planned onto the record it
+    /// names (<see cref="PlanForRepublishAsync"/>). A write-back echo is never selected.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var identified = treatments.Where(t => t.Id is { Length: > 0 }).ToList();
+        var identified = (await PlanForRepublishAsync(treatments, ct)).Where(t => t.Id is { Length: > 0 }).ToList();
         if (identified.Count == 0)
             return [];
 
-        var (held, deletedByUser) = await GetHeldLegacyIdsAsync(db, identified.Select(t => t.Id!).ToHashSet(), ct);
-        var stamped = new Dictionary<string, List<string?>>();
-        var heldIds = held.ToArray();
-        foreach (var table in DecomposedTables)
-        {
-            foreach (var (legacyId, fingerprint) in await table.FingerprintsFromSourceAsync(db, source, heldIds, ct))
-            {
-                if (!stamped.TryGetValue(legacyId, out var rowFingerprints))
-                    stamped[legacyId] = rowFingerprints = [];
-                rowFingerprints.Add(fingerprint);
-            }
-        }
+        var (held, deletedByUser) = await _keys.GetHeldLegacyIdsAsync(identified.Select(t => t.Id!).ToHashSet(), ct);
+        var stamped = await _keys.GetFingerprintsFromSourceAsync(source, held, ct);
 
         var republish = new List<Treatment>();
         var baselines = new Dictionary<string, string>();
@@ -2270,17 +2305,31 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         }
 
         if (baselines.Count > 0)
-        {
-            await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-            {
-                await using var transaction = await db.Database.BeginTransactionAsync(ct);
-                foreach (var table in DecomposedTables)
-                    await table.StampUnfingerprintedAsync(db, source, baselines, ct);
-                await transaction.CommitAsync(ct);
-            });
-        }
+            await _keys.StampUnfingerprintedAsync(source, baselines, ct);
 
         return republish;
+    }
+
+    /// <summary>
+    /// Plans each treatment onto the record it names and rewrites its id to that record's id, without
+    /// writing anything: a record with no legacy id is only given the id it is named by when the
+    /// treatment is published (<see cref="ResolveStoredIdentitiesAsync"/>), which carries the plan
+    /// out rather than making it again.
+    /// </summary>
+    /// <returns>The treatments that are not write-back echoes.</returns>
+    private async Task<IReadOnlyList<Treatment>> PlanForRepublishAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        foreach (var treatment in treatments)
+            NormalizeIdentity(treatment);
+
+        var unplanned = treatments.Where(t => !_identities.TryGetValue(t, out _)).ToList();
+        foreach (var (treatment, planned) in await PlanStoredIdentitiesAsync(unplanned, TreatmentTables, PulledFromNightscout, ct))
+        {
+            treatment.Id = planned.Id;
+            _identities.AddOrUpdate(treatment, new StoredIdentity(planned));
+        }
+
+        return [.. treatments.Where(t => !(_identities.TryGetValue(t, out var identity) && identity.Planned.Echo))];
     }
 
     /// <summary>
@@ -2308,33 +2357,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         if (legacyIds.Count == 0)
             return new HashSet<string>();
 
-        await using var db = await _contexts.CreateAsync(ct);
-        return (await GetHeldLegacyIdsAsync(db, [.. legacyIds], ct)).DeletedByUser;
-    }
-
-    /// <summary>
-    /// The subset of <paramref name="legacyIds"/> a re-upload would find stored, from any source,
-    /// and of those the ones held only by a row the user deleted.
-    /// </summary>
-    private async Task<(IReadOnlySet<string> Held, IReadOnlySet<string> DeletedByUser)> GetHeldLegacyIdsAsync(
-        NocturneDbContext db,
-        HashSet<string> legacyIds, CancellationToken ct)
-    {
-        var rows = new List<(string Key, bool Live)>();
-        foreach (var table in DecomposedTables)
-            rows.AddRange(await table.BlockingAsync(db, legacyIds, ct));
-
-        // Overrides and temporary targets land as state spans keyed by OriginalId.
-        var ids = legacyIds.ToArray();
-        rows.AddRange((await TreatmentSpans(db.StateSpans.IgnoreQueryFilters()).AsNoTracking()
-                .Where(s => s.TenantId == db.TenantId && s.OriginalId != null && ids.Contains(s.OriginalId))
-                .WhereBlocksRecreation()
-                .Select(s => new { Key = s.OriginalId!, Live = s.DeletedAt == null })
-                .ToListAsync(ct))
-            .Select(s => (s.Key, s.Live)));
-
-        var blocks = RecreationBlocks<string>.From(rows);
-        return (blocks.Held, blocks.DeletedByUser);
+        return (await _keys.GetHeldLegacyIdsAsync(legacyIds, ct)).DeletedByUser;
     }
 
     /// <summary>
@@ -2387,234 +2410,43 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         }
 
         DateTime? from = fromMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            ? fromMills.Value.ToUtcDateTime()
             : null;
         DateTime? to = toMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            ? toMills.Value.ToUtcDateTime()
             : null;
 
         var scope = $"timestamp={from:O}..{to:O}";
 
-        var profileSwitchIds = await ProfileSwitchIdsAsync(
-            ByTimeRange(db.ProfileActivations.Where(a => a.LegacyId != null), from, to), ct);
-        await DeleteSnapshotRowsAsync(profileSwitchIds, origin, ct);
-        var activationIds = await ServedInRange(db.ProfileActivations, from, to)
-            .AsNoTracking()
-            .Select(a => a.Id)
-            .ToListAsync(ct);
+        var activationIds = await DecomposedTreatmentTables.All
+            .Single(t => t.Model == typeof(V4Models.ProfileActivation))
+            .IdsInWindowAsync(db, from, to, ct);
 
         // The served state spans go with the records: a window read serves them, so a window
         // delete that left them would leave them served.
         var total = await db.ExecuteInTransactionAsync(async token =>
         {
             // A Note written beside another record is served as part of it, so it is not counted apart.
-            long deleted = -await ByTimeRange(
+            long deleted = -await DecomposedTreatmentTables.InWindow(
                     LegacyTreatmentTables.NotesServedWithAnotherRecord(db), from, to)
                 .LongCountAsync(token);
-            foreach (var table in DecomposedTables)
-                deleted += await table.SoftDeleteInRangeAsync(db, from, to, scope, token);
+            foreach (var table in DecomposedTreatmentTables.All)
+                deleted += await table.SoftDeleteInWindowAsync(db, from, to, _auditContext, scope, token);
             deleted += await db.AuditedSoftDeleteAsync(
                 LegacyTreatmentTables.ServedStateSpansInWindow(db, from, to), _auditContext, scope, token);
             return deleted;
         }, ct: ct);
 
+        await ReportWrittenAsync([.. DecomposedTreatmentTables.All.Select(t => t.Model), typeof(StateSpan)]);
         await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
         Logger.LogInformation("BulkDelete: removed {Total} v4 treatment records from={From} to={To}", total, from, to);
         return total;
     }
 
     /// <summary>
-    /// The tables a legacy treatment decomposes into, each row keyed by the treatment's id as its
-    /// <see cref="IV4Entity.LegacyId"/>. Deletes go through the audited soft-delete path: a
-    /// user-issued one is attributed, and blocks a later connector resync from re-creating the row
-    /// (<see cref="SoftDeleteDedupExtensions"/>).
+    /// Tells <see cref="ILegacyReadCacheInvalidation"/> what a write here made around the
+    /// repositories, which report their own writes.
     /// </summary>
-    private IDecomposedTable[] DecomposedTables => _decomposedTables ??=
-    [
-        Table(DecomposedKind.Bolus, db => db.Boluses, ByTimeRange, StoredAt),
-        Table(DecomposedKind.TempBasal, db => db.TempBasals, ByTimeRange, StoredAt),
-        Table(DecomposedKind.CarbIntake, db => db.CarbIntakes, ByTimeRange, StoredAt),
-        Table(DecomposedKind.BGCheck, db => db.BGChecks, ByTimeRange, StoredAt),
-        Table(DecomposedKind.Note, db => db.Notes, ByTimeRange, StoredAt),
-        Table(DecomposedKind.DeviceEvent, db => db.DeviceEvents, ByTimeRange, StoredAt),
-        Table(DecomposedKind.BolusCalculation, db => db.BolusCalculations, ByTimeRange, StoredAt),
-        Table(DecomposedKind.ProfileActivation, db => db.ProfileActivations, ServedInRange, StoredAt),
-    ];
-
-    private IDecomposedTable[]? _decomposedTables;
-
-    /// <summary>The tables of <see cref="DecomposedTables"/>.</summary>
-    private enum DecomposedKind
-    {
-        Bolus,
-        TempBasal,
-        CarbIntake,
-        BGCheck,
-        Note,
-        DeviceEvent,
-        BolusCalculation,
-        ProfileActivation,
-    }
-
-    private DecomposedTable<T> Table<T>(
-        DecomposedKind kind,
-        Func<NocturneDbContext, DbSet<T>> rows,
-        Func<IQueryable<T>, DateTime?, DateTime?, IQueryable<T>> inRange,
-        Func<IQueryable<T>, IQueryable<StoredRow>> storedAt)
-        where T : class, IV4Entity, ISourcedEntity, IAuditable, IUpstreamFingerprinted
-        => new(_auditContext, kind, rows, inRange, storedAt);
-
-    private static IQueryable<StoredRow> StoredAt<T>(IQueryable<T> rows) where T : IV4TimeSeriesEntity
-        => rows.Select(e => new StoredRow(e.LegacyId!, e.Timestamp));
-
-    private sealed record StoredRow(string LegacyId, DateTime At);
-
-    private interface IDecomposedTable
-    {
-        DecomposedKind Kind { get; }
-
-        /// <param name="source">Only this data source's rows, or every source's when null.</param>
-        /// <remarks>
-        /// A legacy id fans out to a handful of correlated rows, never a set. The per-record audit
-        /// rows <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteWithEntitiesAsync{T}"/>
-        /// writes below its cap are the right shape for that.
-        /// </remarks>
-        Task<AuditedSoftDeleteResult<Guid>> SoftDeleteAsync(
-            NocturneDbContext db, string[] legacyIds, string? source, string scope, DuplicateDelete duplicates, CancellationToken ct);
-
-        Task<int> SoftDeleteInRangeAsync(NocturneDbContext db, DateTime? from, DateTime? to, string scope, CancellationToken ct);
-
-        /// <summary>The ids of <paramref name="legacyIds"/> a live row of this table is stored under.</summary>
-        Task<List<string>> LiveLegacyIdsAsync(NocturneDbContext db, string[] legacyIds, CancellationToken ct);
-
-        Task<List<StoredRow>> StoredFromSourceAsync(NocturneDbContext db, string source, DateTime from, DateTime to, CancellationToken ct);
-
-        /// <summary>The ids of <paramref name="legacyIds"/> that block re-creation, and whether a live row holds each.</summary>
-        Task<IEnumerable<(string Key, bool Live)>> BlockingAsync(NocturneDbContext db, HashSet<string> legacyIds, CancellationToken ct);
-
-        Task<List<(string LegacyId, string? Fingerprint)>> FingerprintsFromSourceAsync(
-            NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct);
-
-        /// <summary>Stamps this source's rows that carry no fingerprint yet.</summary>
-        Task StampUnfingerprintedAsync(
-            NocturneDbContext db, string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct);
-
-        /// <summary>This source's live rows and user tombstones under <paramref name="legacyIds"/>.</summary>
-        Task<List<ClientIdRow>> ClientIdRowsAsync(NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct);
-
-        /// <summary>Moves this source's live rows and user tombstones from one legacy id to another.</summary>
-        Task<int> RekeyAsync(NocturneDbContext db, string source, string from, string to, CancellationToken ct);
-
-        /// <summary>Stages a copy of this source's user tombstones under <paramref name="legacyId"/> for each of <paramref name="copyTo"/>.</summary>
-        Task AddTombstoneCopiesAsync(NocturneDbContext db, string source, string legacyId, string[] copyTo, CancellationToken ct);
-    }
-
-    private sealed class DecomposedTable<T>(
-        IAuditContext auditContext,
-        DecomposedKind kind,
-        Func<NocturneDbContext, DbSet<T>> rowsOf,
-        Func<IQueryable<T>, DateTime?, DateTime?, IQueryable<T>> inRange,
-        Func<IQueryable<T>, IQueryable<StoredRow>> storedAt) : IDecomposedTable
-        where T : class, IV4Entity, ISourcedEntity, IAuditable, IUpstreamFingerprinted
-    {
-        public DecomposedKind Kind => kind;
-
-        public Task<AuditedSoftDeleteResult<Guid>> SoftDeleteAsync(
-            NocturneDbContext db, string[] legacyIds, string? source, string scope, DuplicateDelete duplicates, CancellationToken ct)
-            => db.AuditedSoftDeleteWithIdsAsync(
-                rowsOf(db).Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId)
-                             && (source == null || e.DataSource == source)),
-                auditContext, scope, ct, duplicates);
-
-        public Task<int> SoftDeleteInRangeAsync(NocturneDbContext db, DateTime? from, DateTime? to, string scope, CancellationToken ct)
-            => db.AuditedSoftDeleteAsync(inRange(rowsOf(db), from, to), auditContext, scope, ct);
-
-        public Task<List<string>> LiveLegacyIdsAsync(NocturneDbContext db, string[] legacyIds, CancellationToken ct)
-            => rowsOf(db).AsNoTracking()
-                .Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId))
-                .Select(e => e.LegacyId!)
-                .Distinct()
-                .ToListAsync(ct);
-
-        public Task<List<StoredRow>> StoredFromSourceAsync(
-            NocturneDbContext db, string source, DateTime from, DateTime to, CancellationToken ct)
-            => storedAt(inRange(rowsOf(db).AsNoTracking(), from, to)
-                    .Where(e => e.DataSource == source && e.LegacyId != null))
-                .ToListAsync(ct);
-
-        public async Task<IEnumerable<(string Key, bool Live)>> BlockingAsync(
-            NocturneDbContext db, HashSet<string> legacyIds, CancellationToken ct)
-        {
-            var blocks = await db.GetBlockingLegacyIdsAsync<T>(legacyIds, ct);
-            return blocks.Held.Select(id => (id, !blocks.DeletedByUser.Contains(id)));
-        }
-
-        public async Task<List<(string LegacyId, string? Fingerprint)>> FingerprintsFromSourceAsync(
-            NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct)
-            => (await FromSource(rowsOf(db).AsNoTracking(), source, legacyIds)
-                    .Select(e => new { LegacyId = e.LegacyId!, e.UpstreamFingerprint })
-                    .ToListAsync(ct))
-                .Select(e => (e.LegacyId, e.UpstreamFingerprint))
-                .ToList();
-
-        public async Task StampUnfingerprintedAsync(
-            NocturneDbContext db, string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct)
-        {
-            foreach (var (legacyId, fingerprint) in fingerprints)
-            {
-                await FromSource(rowsOf(db), source, [legacyId])
-                    .Where(e => e.UpstreamFingerprint == null)
-                    .ExecuteUpdateAsync(u => u.SetProperty(e => e.UpstreamFingerprint, fingerprint), ct);
-            }
-        }
-
-        public async Task<List<ClientIdRow>> ClientIdRowsAsync(NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct)
-        {
-            var stored = FromSource(BlockingRows(db).AsNoTracking(), source, legacyIds);
-            var live = await storedAt(stored.Where(e => e.DeletedAt == null)).ToListAsync(ct);
-            var deleted = await storedAt(stored.Where(e => e.DeletedAt != null)).ToListAsync(ct);
-            return
-            [
-                .. live.Select(r => new ClientIdRow(r.LegacyId, r.At, Live: true)),
-                .. deleted.Select(r => new ClientIdRow(r.LegacyId, r.At, Live: false)),
-            ];
-        }
-
-        public Task<int> RekeyAsync(NocturneDbContext db, string source, string from, string to, CancellationToken ct)
-            => FromSource(BlockingRows(db), source, [from]).ExecuteUpdateAsync(u => u.SetProperty(e => e.LegacyId, to), ct);
-
-        public async Task AddTombstoneCopiesAsync(NocturneDbContext db, string source, string legacyId, string[] copyTo, CancellationToken ct)
-        {
-            if (copyTo.Length == 0)
-                return;
-
-            var tombstones = await FromSource(BlockingRows(db).AsNoTracking(), source, [legacyId])
-                .Where(e => e.DeletedAt != null).ToListAsync(ct);
-            AddTombstoneCopies(db, tombstones, copyTo, (e, id) => e.LegacyId = id);
-        }
-
-        private IQueryable<T> BlockingRows(NocturneDbContext db) =>
-            rowsOf(db).IgnoreQueryFilters().Where(e => e.TenantId == db.TenantId).WhereBlocksRecreation();
-
-        private static IQueryable<T> FromSource(IQueryable<T> query, string source, string[] legacyIds)
-            => query.Where(e => e.DataSource == source && e.LegacyId != null && legacyIds.Contains(e.LegacyId));
-    }
-
-    /// <summary>
-    /// The activations a window delete takes: those decomposed from a treatment, which every window
-    /// read serves. A connector's are not treatments.
-    /// </summary>
-    private static IQueryable<ProfileActivationEntity> ServedInRange(
-        IQueryable<ProfileActivationEntity> rows, DateTime? from, DateTime? to) =>
-        ByTimeRange(rows, from, to).Where(a => a.LegacyId != null);
-
-    private static IQueryable<T> ByTimeRange<T>(IQueryable<T> rows, DateTime? from, DateTime? to)
-        where T : IV4TimeSeriesEntity
-    {
-        if (from.HasValue)
-            rows = rows.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            rows = rows.Where(e => e.Timestamp <= to.Value);
-        return rows;
-    }
+    private Task ReportWrittenAsync(IEnumerable<Type> models) =>
+        _legacyReads?.WrittenAsync([.. models]) ?? Task.CompletedTask;
 }

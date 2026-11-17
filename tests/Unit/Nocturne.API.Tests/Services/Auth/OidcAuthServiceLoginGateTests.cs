@@ -97,7 +97,7 @@ public class OidcAuthServiceLoginGateTests
         _subjectService.Setup(s => s.GetSubjectRolesAsync(It.IsAny<Guid>())).ReturnsAsync(new List<string>());
         _sessionService
             .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 3600));
+            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 3600, Guid.Empty));
     }
 
     [Fact]

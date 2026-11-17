@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import type { ComponentProps } from "svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let expiresAt: string | undefined;
 
@@ -13,8 +13,8 @@ const navigation = vi.hoisted(() => ({
 
 const shell = vi.hoisted(() => ({ probe: vi.fn() }));
 
-vi.mock("$lib/api/shell-session.remote", () => ({
-  getShellSession: () => ({ run: shell.probe }),
+vi.mock("#lib/api/shell-session.remote.js", () => ({
+  getShellSession: () => createQueryResource(shell.probe),
 }));
 
 vi.mock("$app/navigation", async (importOriginal) => ({
@@ -22,7 +22,7 @@ vi.mock("$app/navigation", async (importOriginal) => ({
   ...navigation,
 }));
 
-vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
+vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", () => ({
   getSessionInfo: () =>
     remoteQuery(() => ({
       isAuthenticated: true,
@@ -39,20 +39,26 @@ vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
 import AuthenticatedLayoutHarness from "./AuthenticatedLayoutHarness.test.svelte";
 import SettingsLayout from "./settings/+layout.svelte";
 import InitOrderProbe, { probe } from "./InitOrderProbe.test.svelte";
+import StickyBarProbe from "./StickyBarProbe.test.svelte";
 import NavigationProbe, { navigationProbe } from "./NavigationProbe.test.svelte";
-import type { ShellSession } from "$lib/utils/shell-session";
-import { AuthStore } from "$lib/stores/auth-store.svelte";
-import { RealtimeStore } from "$lib/stores/realtime-store.svelte";
+import type { ShellSession } from "#lib/utils/shell-session.js";
+import { AuthStore } from "#lib/stores/auth-store.svelte.js";
+import { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 import ToolsLayout from "./tools/+layout.svelte";
-import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
+import { EngineHost } from "water-ui";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
+import * as appState from "$app/state";
+import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "#lib/constants/shell-data.js";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 
-const warning = () => page.getByText("Session Expiring");
+// The navigation stub's `pushState` adds no history entry, so the `back()` that takes a coach
+// overlay's entry off again would leave the test page.
+window.history.back = () => {};
 
 // A tenantless host keeps the tenant-scoped surfaces (alerts, membership
-// requests, the backup sign-in prompt) unmounted, leaving the shell and the
-// session-expiry watcher, which is not tenant-scoped.
+// requests, the backup sign-in prompt) unmounted, leaving only the shell.
 type LayoutData = ComponentProps<typeof AuthenticatedLayoutHarness>["data"];
 
 function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
@@ -63,6 +69,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     isShareHost: false,
     canViewRealtimeData: false,
     showBackupSignInPrompt: false,
+    tenantTargets: [],
     isDemo: false,
     isGuestSession: false,
     isPlatformAdmin: false,
@@ -76,6 +83,8 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     effectivePermissions: [],
     limitTo24Hours: false,
     refusedAsDemoSubject: false,
+    onboardingComplete: true,
+    pillRows: { desktop: 1, mobile: 1 },
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,
@@ -101,6 +110,7 @@ function changeVisibility(hidden: boolean) {
 
 describe("authenticated layout", () => {
   beforeEach(() => {
+    vi.spyOn(EngineHost.prototype, "warm").mockResolvedValue(true);
     document.cookie = "IsAuthenticated=true; path=/";
     expiresAt = new Date(BASE + 2 * 60 * 1000).toISOString();
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
@@ -116,13 +126,7 @@ describe("authenticated layout", () => {
     vi.restoreAllMocks();
   });
 
-  it("mounts the session expiry warning for a signed-in user", async () => {
-    render(AuthenticatedLayoutHarness, { props: { data: layoutData() } });
-
-    await expect.element(warning()).toBeVisible();
-  });
-
-  it("leaves a guest session to its own countdown", async () => {
+  it("shows a guest session its own countdown", async () => {
     render(AuthenticatedLayoutHarness, {
       props: {
         data: layoutData({
@@ -133,7 +137,20 @@ describe("authenticated layout", () => {
     });
 
     await expect.element(page.getByText("Guest access")).toBeVisible();
-    await expect.element(warning()).not.toBeInTheDocument();
+  });
+
+  it("opens a guest's visit with the guest tour, on the countdown", async () => {
+    localStorage.clear();
+    render(AuthenticatedLayoutHarness, {
+      props: {
+        data: layoutData({
+          isGuestSession: true,
+          guestExpiresAt: new Date(BASE + 2 * 60 * 1000).toISOString(),
+        }),
+      },
+    });
+
+    await expect.element(page.getByRole("dialog", { name: "Read-only access" })).toBeVisible();
   });
 
   it.each([
@@ -151,6 +168,55 @@ describe("authenticated layout", () => {
     expect(page.getByRole("main").elements()).toHaveLength(1);
   });
 
+  describe("banner strip", () => {
+    const stripOf = () =>
+      document.querySelector<HTMLElement>("[data-slot=banner]")!.parentElement!;
+    const barTop = () => page.getByTestId("sticky-bar").element().getBoundingClientRect().top;
+
+    async function renderWithBackupPrompt() {
+      render(AuthenticatedLayoutHarness, {
+        props: {
+          data: layoutData({ tenantless: false, showBackupSignInPrompt: true }),
+          section: StickyBarProbe,
+        },
+      });
+      await expect.element(page.getByText("Add a backup way to sign in")).toBeVisible();
+    }
+
+    const original = [window.innerWidth, window.innerHeight] as const;
+
+    afterEach(async () => {
+      window.scrollTo(0, 0);
+      await page.viewport(original[0], original[1]);
+    });
+
+    it("scrolls away on a phone and leaves a sticky bar under the mobile header", async () => {
+      await page.viewport(360, 640);
+      await renderWithBackupPrompt();
+      const headerBottom = 3.5 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+
+      expect(getComputedStyle(stripOf()).position).toBe("static");
+
+      window.scrollTo(0, 1000);
+      await vi.waitFor(() => expect(window.scrollY).toBeGreaterThan(500));
+
+      expect(barTop()).toBeCloseTo(headerBottom, 0);
+    });
+
+    it("pins above a sticky bar from the md breakpoint", async () => {
+      await page.viewport(1024, 768);
+      await renderWithBackupPrompt();
+
+      expect(getComputedStyle(stripOf()).position).toBe("sticky");
+
+      window.scrollTo(0, 1000);
+      await vi.waitFor(() => expect(window.scrollY).toBeGreaterThan(500));
+
+      expect(stripOf().getBoundingClientRect().top).toBe(0);
+      expect(barTop()).toBeCloseTo(stripOf().getBoundingClientRect().height, 0);
+    });
+  });
+
   it("loads the command palette on its first toggle", async () => {
     render(AuthenticatedLayoutHarness, { props: { data: layoutData() } });
     await expect.element(page.getByText("page content")).toBeVisible();
@@ -161,6 +227,26 @@ describe("authenticated layout", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
 
     await expect.element(search).toBeVisible();
+
+    // Closed before teardown: left open, its command list throws once the next test mounts.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+    await expect.element(search).not.toBeInTheDocument();
+  });
+
+  it("loads the join welcome only for an arrival carrying its marker", async () => {
+    appState.page.url = new URL("http://localhost/") as typeof appState.page.url;
+    const { unmount } = render(AuthenticatedLayoutHarness, { props: { data: layoutData({ tenantless: false }) } });
+    await expect.element(page.getByText("page content")).toBeVisible();
+    expect(page.getByTestId("join-welcome").elements()).toHaveLength(0);
+    unmount();
+
+    appState.page.url = new URL("http://localhost/?welcome=1") as typeof appState.page.url;
+    Object.assign(appState.page.data, { effectivePermissions: ["glucose.read"] });
+    render(AuthenticatedLayoutHarness, { props: { data: layoutData({ tenantless: false }) } });
+
+    await expect.element(page.getByTestId("join-welcome")).toBeVisible();
+    appState.page.url = new URL("http://localhost") as typeof appState.page.url;
+    delete appState.page.data.effectivePermissions;
   });
 
   it("starts the realtime store before the page beneath it initialises", async () => {
@@ -182,6 +268,53 @@ describe("authenticated layout", () => {
     await expect.element(page.getByText("page content")).toBeVisible();
     expect(probe.seenAtInit).toBe(1);
     initialize.mockRestore();
+  });
+
+  describe("engine warm-up", () => {
+    const warm = () => vi.mocked(EngineHost.prototype.warm);
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+      vi.setSystemTime(BASE);
+      vi.spyOn(performance, "now").mockImplementation(() => Date.now() - BASE);
+    });
+
+    afterEach(() => {
+      illustrations.current = "animated";
+    });
+
+    it("holds the warm-up off for five seconds from navigation", async () => {
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData() } });
+
+      await vi.advanceTimersByTimeAsync(4900);
+      expect(warm()).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.waitFor(() => expect(warm()).toHaveBeenCalledOnce());
+    });
+
+    it("waits for the current reading when the page has one", async () => {
+      const initialize = vi.spyOn(RealtimeStore.prototype, "initialize").mockResolvedValue();
+
+      render(AuthenticatedLayoutHarness, {
+        props: { data: layoutData({ tenantless: false, canViewRealtimeData: true }) },
+      });
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(warm()).not.toHaveBeenCalled();
+
+      (initialize.mock.contexts[0] as RealtimeStore).currentReadingLoaded = true;
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.waitFor(() => expect(warm()).toHaveBeenCalledOnce());
+    });
+
+    it("does not warm with illustrations off", async () => {
+      illustrations.current = "off";
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData() } });
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(warm()).not.toHaveBeenCalled();
+    });
   });
 
   describe("revalidating the shell data", () => {

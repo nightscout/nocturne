@@ -1,35 +1,36 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
   import { page } from "$app/state";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import { TrackerCategory } from "$lib/api";
-  import { Badge } from "$lib/components/ui/badge";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import { RailItemId, TrackerCategory } from "#lib/api/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import StatusRail from "#lib/components/status-pills/StatusRail.svelte";
+  import { effectiveRail } from "#lib/components/status-pills/rail.js";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
-    COBPill,
-    BasalPill,
-    IOBPill,
-    LoopPill,
-    ReservoirPill,
-    TrackerPillBar,
-  } from "$lib/components/status-pills";
-  import { GlucoseValueIndicator } from "$lib/components/shared";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUiSettings } from "$api/ui-settings.remote";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+    dashboardRail,
+    dashboardTopWidgets,
+    glucoseUnits,
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { getUiSettings } from "#lib/api/ui-settings.remote.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
     formatLocale,
-    minutesAgo,
+    relativeAge,
     prefersHour12,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import Clock from "@lucide/svelte/icons/clock";
-  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
-  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
+  import { trackUnwashedFill } from "./glucose-tile-wash-state.svelte";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { showsCurrentGlucoseWidget } from "./top-widget-ids";
+  import LogEventButton from "#lib/components/entries/LogEventButton.svelte";
 
   interface ComponentProps {
-    /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
+    /** Show the status pills besides the tracker pills. */
     showPills?: boolean;
   }
 
@@ -38,10 +39,18 @@
   const realtimeStore = getRealtimeStore();
   const uiSettingsQuery = getUiSettings();
 
-  // Tracker pills global enable setting (visibility is now per-tracker-definition)
+  // Trackers show only while the tenant's tracker pill switch is on.
   const trackerPillsEnabled = $derived(
     uiSettingsQuery.current?.features?.trackerPills?.enabled ?? true
   );
+  const rail = $derived(effectiveRail(dashboardRail.current, trackerPillsEnabled));
+  const railItems = $derived(
+    showPills ? rail : rail.filter((item) => item === RailItemId.Trackers)
+  );
+
+  // The widget carries the reading (and its wash) when it is showing, which frees this row for
+  // the pills; otherwise the tile stays here so the reading never leaves the desktop dashboard.
+  const readingInWidget = $derived(showsCurrentGlucoseWidget(dashboardTopWidgets.current));
 
   const glucose = displayedGlucose(realtimeStore);
   const rawCurrentBG = $derived(glucose.currentBG);
@@ -70,14 +79,26 @@
   const isLoading = $derived(
     rawCurrentBG === 0 && realtimeStore.entries.length === 0
   );
+  // Over the flat range fill, so the tile reads the same until it arrives.
+  const tileWash = stillArtwork(() => import("./GlucoseTileWash.svelte"));
+  trackUnwashedFill(() => ({
+    loading: isLoading,
+    stale: isStale,
+    disconnected: isDisconnected,
+    variant: tileVariant,
+    washed: tileWash.component !== null,
+  }));
 
   function formatTimeSinceLastReading(): string {
-    return minutesAgo(lastUpdated, currentTime.getTime());
+    return relativeAge(lastUpdated, {
+      now: currentTime.getTime(),
+      fallback: "Unknown",
+    });
   }
 
-  // Status text - show "Connection Error" when disconnected
+  // Status text - show "Connection error" when disconnected
   const statusText = $derived.by(() =>
-    isDisconnected ? "Connection Error" : formatTimeSinceLastReading()
+    isDisconnected ? "Connection error" : formatTimeSinceLastReading()
   );
 
   const statusTooltip = $derived.by(
@@ -92,76 +113,27 @@
     })
   );
 
-  // The pills arrive after the page paints and can wrap onto more rows than the one the row
-  // starts with, so the rows last rendered for this tenant are held until they do. Until then
-  // the pills are empty placeholders, whose row count says nothing about the loaded ones.
-  // StatusPill is 2.75rem tall (text-xs label, text-sm value, py-1) and rows sit gap-y-1 apart.
-  const pillRowsKey = $derived(`nocturne:status-pill-rows:${page.data.tenantSlug ?? ""}`);
-
-  const MAX_PILL_ROWS = 4;
-
-  function storedPillRows(): number {
-    try {
-      const rows = Number(localStorage.getItem(pillRowsKey));
-      return Number.isInteger(rows) && rows > 1 ? Math.min(rows, MAX_PILL_ROWS) : 1;
-    } catch {
-      return 1;
-    }
-  }
-
-  let reservedPillRows = $state(browser ? storedPillRows() : 1);
-  let pillsEl = $state<HTMLElement>();
-
-  function renderedPillRows(el: HTMLElement): number {
-    const items = [...el.children].flatMap((child) =>
-      getComputedStyle(child).display === "contents" ? [...child.children] : [child]
-    );
-    const centres = items
-      .map((item) => item.getBoundingClientRect())
-      .filter((rect) => rect.height > 0)
-      .map((rect) => Math.round(rect.top + rect.height / 2));
-    return new Set(centres).size;
-  }
-
-  $effect(() => {
-    const el = pillsEl;
-    if (!el || !realtimeStore.isReady) return;
-    const observer = new ResizeObserver(() => {
-      const rows = renderedPillRows(el);
-      if (rows === 0) return;
-      reservedPillRows = rows;
-      try {
-        localStorage.setItem(pillRowsKey, String(rows));
-      } catch {
-        // Storage is unavailable; the next load reserves one row.
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  });
+  const pillRows = $derived(page.data.pillRows);
 
   // Tracker Completion Dialog State
   const trackerCompletionDialog = lazyComponent(
-    () => import("$lib/components/trackers/TrackerCompletionDialog.svelte"),
+    () => import("#lib/components/trackers/TrackerCompletionDialog.svelte"),
   );
   let completingInstanceId = $state<string | null>(null);
   let completingInstanceName = $state("");
   let completingCategory = $state<TrackerCategory | undefined>(undefined);
   let completingDefinitionId = $state<string | undefined>(undefined);
-  let completingCompletionEventType = $state<string | undefined>(undefined);
 
   function handleTrackerComplete(
     instanceId: string,
     instanceName: string,
     category: TrackerCategory,
-    definitionId: string,
-    completionEventType?: string
+    definitionId: string
   ) {
     completingInstanceId = instanceId;
     completingInstanceName = instanceName;
     completingCategory = category;
     completingDefinitionId = definitionId;
-    completingCompletionEventType = completionEventType;
     trackerCompletionDialog.open = true;
   }
 
@@ -171,79 +143,75 @@
     completingInstanceName = "";
     completingCategory = undefined;
     completingDefinitionId = undefined;
-    completingCompletionEventType = undefined;
   }
 </script>
+
+{#snippet rangeWash()}
+  {#if tileWash.component}
+    <tileWash.component mills={glucose.mills} variant={tileVariant} delta={rawBgDelta} />
+  {/if}
+{/snippet}
 
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->
 <div class="@container">
   <h1 class="sr-only">Nocturne</h1>
-  <div class="hidden @md:flex items-center gap-6">
-    <div class="flex shrink-0 items-center gap-3">
-      <GlucoseValueIndicator
-        displayValue={displayCurrentBG}
-        variant={tileVariant}
-        {isLoading}
-        {isStale}
-        {isDisconnected}
-        {statusText}
-        {statusTooltip}
-        size="lg"
-      />
-      <div class="text-sm text-muted-foreground tabular-nums">
-        {displayBgDelta}
+  <div class="hidden @md:flex flex-wrap items-center gap-x-6 gap-y-3">
+    {#if !readingInWidget}
+      <div class="flex shrink-0 items-center gap-3">
+        <GlucoseValueIndicator
+          displayValue={displayCurrentBG}
+          variant={tileVariant}
+          {isLoading}
+          {isStale}
+          {isDisconnected}
+          {statusText}
+          {statusTooltip}
+          size="lg"
+          background={tileWash.component ? rangeWash : undefined}
+        />
+        <div class="text-sm text-muted-foreground tabular-nums">
+          {displayBgDelta}
+        </div>
       </div>
-    </div>
+    {/if}
 
-    <div
-      class="min-h-[calc(var(--pill-rows)*2.75rem+(var(--pill-rows)-1)*0.25rem)] min-w-0 flex-1"
-      style:--pill-rows={reservedPillRows}
-      data-testid="status-pills"
+    <StatusRail
+      items={railItems}
+      rail="desktop"
+      initialRows={pillRows?.desktop}
+      onTrackerComplete={handleTrackerComplete}
+      class="flex-1 @max-xl:order-last @max-xl:basis-full"
+      testid="status-pills"
     >
-      <div bind:this={pillsEl} class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {#snippet leading()}
         {#if displayDemoMode}
           <Badge variant="demo">
             <span class="size-2 rounded-full bg-demo animate-pulse" aria-hidden="true"></span>
-            Demo Mode
+            Demo mode
           </Badge>
         {/if}
-        {#if showPills}
-          <COBPill data={realtimeStore.pillsData.cob} />
-          <BasalPill data={realtimeStore.pillsData.basal} />
-          <IOBPill data={realtimeStore.pillsData.iob} />
-          <LoopPill data={realtimeStore.pillsData.loop} />
-          <!-- Many pumps and pods report no numeric reservoir (e.g. Omnipod above 50 U). -->
-          {#if realtimeStore.currentReservoir !== null}
-            <ReservoirPill reservoir={realtimeStore.currentReservoir} />
-          {/if}
-        {/if}
-        {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
-          <TrackerPillBar
-            instances={realtimeStore.trackerInstances}
-            definitions={realtimeStore.trackerDefinitions}
-            now={realtimeStore.now}
-            onComplete={handleTrackerComplete}
-            class="contents"
-          />
-        {/if}
-      </div>
-    </div>
+      {/snippet}
+    </StatusRail>
 
-    <div class="flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
-      <Clock class="size-4" aria-hidden="true" />
-      {formattedLocalTime}
+    <div class="ml-auto flex shrink-0 items-center gap-4">
+      <LogEventButton />
+      <div class="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+        <Clock class="size-4" aria-hidden="true" />
+        {formattedLocalTime}
+      </div>
     </div>
   </div>
 </div>
 
-{#if showPills}
-  <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 @md:hidden">
-    <COBPill data={realtimeStore.pillsData.cob} />
-    <BasalPill data={realtimeStore.pillsData.basal} />
-    <IOBPill data={realtimeStore.pillsData.iob} />
-    <LoopPill data={realtimeStore.pillsData.loop} />
-  </div>
-{/if}
+<StatusRail
+  items={railItems}
+  rail="mobile"
+  initialRows={pillRows?.mobile}
+  onTrackerComplete={handleTrackerComplete}
+  hideWhenEmpty
+  class="mt-2 @md:hidden"
+  testid="status-pills-mobile"
+/>
 
 {#if trackerCompletionDialog.component}
   <trackerCompletionDialog.component
@@ -252,7 +220,6 @@
     instanceName={completingInstanceName}
     category={completingCategory}
     definitionId={completingDefinitionId}
-    completionEventType={completingCompletionEventType}
     onClose={handleCompletionDialogClose}
   />
 {/if}

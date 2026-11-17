@@ -21,6 +21,10 @@ public sealed record LoopAnalysisMaskSources
 
 public readonly record struct ProfileInterval(string ProfileName, long Start, long End);
 
+/// <summary>An APS snapshot as the open-loop mask reads it.</summary>
+/// <param name="LoopClosed"><see cref="Nocturne.Core.Models.V4.ApsLoopCycle.IsLoopClosed"/> of the snapshot.</param>
+public readonly record struct ApsLoopState(long Mills, bool LoopClosed);
+
 /// <summary>
 /// The time a range is analysed over once its <see cref="LoopAnalysisMasks"/> are applied, which every
 /// Loop Analysis calculator consumes.
@@ -55,20 +59,39 @@ public sealed record LoopAnalysisMask(IntervalSet Analysed, IntervalSet Glucose)
     }
 
     /// <summary>
-    /// Time not in closed loop: a pump mode of manual or off, and the time a pump registered with
-    /// no AID algorithm was in use, except where AID evidence exists. A registered pump's window is
-    /// a span of calendar dates and often outlives the pump's use, so an AID pump's window or an
-    /// APS snapshot no older than <see cref="DeviceReportedValues.RecencyThresholdMs"/> wins over it.
+    /// Time not in closed loop: a pump mode of manual or off, the time an APS snapshot says the loop
+    /// was open, and the time a pump registered with no AID algorithm was in use, except where AID
+    /// evidence exists. A registered pump's window is a span of calendar dates and often outlives the
+    /// pump's use, so an AID pump's window or a snapshot with the loop closed wins over it.
     /// </summary>
+    /// <remarks>
+    /// A snapshot's state holds until the next snapshot, for at most
+    /// <see cref="DeviceReportedValues.RecencyThresholdMs"/>. So a snapshot with the loop open is open
+    /// loop even on an AID pump, until a snapshot with it closed. Of snapshots at one instant the
+    /// closed one holds.
+    /// </remarks>
     public static IntervalSet OpenLoop(
         IEnumerable<MillsInterval> manualPumpModes,
         IEnumerable<MillsInterval> nonAidPumps,
         IEnumerable<MillsInterval> aidPumps,
-        IEnumerable<long> apsSnapshotMills)
+        IEnumerable<ApsLoopState> apsSnapshots)
     {
-        var aidEvidence = IntervalSet.Of(aidPumps.Concat(
-            apsSnapshotMills.Select(s => new MillsInterval(s, s + DeviceReportedValues.RecencyThresholdMs))));
-        return IntervalSet.Of(manualPumpModes).Union(IntervalSet.Of(nonAidPumps).Subtract(aidEvidence));
+        var snapshots = apsSnapshots.OrderBy(s => s.Mills).ThenBy(s => s.LoopClosed).ToList();
+        var closed = new List<MillsInterval>();
+        var open = new List<MillsInterval>();
+        for (var i = 0; i < snapshots.Count; i++)
+        {
+            var start = snapshots[i].Mills;
+            var end = start + DeviceReportedValues.RecencyThresholdMs;
+            if (i + 1 < snapshots.Count)
+                end = Math.Min(end, snapshots[i + 1].Mills);
+            (snapshots[i].LoopClosed ? closed : open).Add(new MillsInterval(start, end));
+        }
+
+        var aidEvidence = IntervalSet.Of(aidPumps.Concat(closed));
+        return IntervalSet.Of(manualPumpModes)
+            .Union(IntervalSet.Of(nonAidPumps).Subtract(aidEvidence))
+            .Union(IntervalSet.Of(open));
     }
 
     private static IntervalSet LocalWeekdays(long from, long to, TimeZoneInfo tz, HashSet<DayOfWeek> days)

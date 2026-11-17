@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { env } from "$env/dynamic/private";
+import { INSTANCE_KEY } from "$app/env/private";
 
 /**
  * Carriage of the end user's address across the SSR hop to the API.
@@ -53,7 +53,7 @@ export function getClientAddress(event: ClientAddressSource): string | null {
 export function clientAddressHeaders(
   event: ClientAddressSource,
 ): Record<string, string> {
-  const instanceKey = env.INSTANCE_KEY;
+  const instanceKey = INSTANCE_KEY;
   const clientAddress = getClientAddress(event);
   if (!instanceKey || !clientAddress) return {};
 

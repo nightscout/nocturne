@@ -1,5 +1,5 @@
 using System.Reflection;
-using Microsoft.EntityFrameworkCore.Infrastructure;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -18,10 +18,7 @@ public static class NocturneMigrationsAssembly
     private static readonly Lazy<Assembly> Assembly = new(Load);
 
     /// <summary>Points EF at the migrations assembly. Every context that migrates needs it.</summary>
-    public static TBuilder UseNocturneMigrations<TBuilder, TExtension>(
-        this RelationalDbContextOptionsBuilder<TBuilder, TExtension> builder)
-        where TBuilder : RelationalDbContextOptionsBuilder<TBuilder, TExtension>
-        where TExtension : RelationalOptionsExtension, new()
+    public static NpgsqlDbContextOptionsBuilder UseNocturneMigrations(this NpgsqlDbContextOptionsBuilder builder)
         => builder.MigrationsAssembly(Assembly.Value);
 
     private static Assembly Load()

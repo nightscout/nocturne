@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const modeWatcher = vi.hoisted(() => ({ preferred: "system" }));
 
@@ -31,6 +31,11 @@ describe("color scheme cookie mirroring", () => {
     modeWatcher.preferred = "system";
   });
 
+  afterEach(() => {
+    glucoseUnits.current = "mg/dl";
+    document.cookie = `${PREFS_COOKIE_NAME}=;path=/;max-age=0`;
+  });
+
   it.each(["light", "dark", "system"] as const)(
     "writes %s into the prefs cookie when set",
     (scheme) => {
@@ -45,10 +50,10 @@ describe("color scheme cookie mirroring", () => {
     expect(parsePrefsCookie(storedCookie())).toMatchObject({
       colorScheme: "light",
     });
-    document.cookie = `${PREFS_COOKIE_NAME}=${encodeURIComponent(JSON.stringify({ glucoseUnits: "mmol" }))};path=/`;
+    document.cookie = `${PREFS_COOKIE_NAME}=${encodeURIComponent(JSON.stringify({ timeFormat: "24" }))};path=/`;
     setColorScheme("dark");
     expect(parsePrefsCookie(storedCookie())).toMatchObject({
-      glucoseUnits: "mmol",
+      timeFormat: "24",
       colorScheme: "dark",
     });
   });

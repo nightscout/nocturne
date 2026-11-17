@@ -1,8 +1,9 @@
 import {
 	GLUCOSE_SPECTRUM_ANCHORS,
 	getGlucoseColorContinuous,
+	type GlucoseColorStop,
 	type GlucoseThresholds
-} from '$lib/utils/chart-colors';
+} from '#lib/utils/chart-colors.js';
 
 export type GradientStop = [offset: number, color: string];
 
@@ -48,18 +49,38 @@ export function thresholdLineStops(
 	];
 }
 
+/** Gradient samples per segment between two neighbouring range anchors, the lower anchor included. */
+const BLEND_STEPS_PER_SEGMENT = 4;
+
 export function continuousLineStops(
 	axisScale: (mgdl: number) => number,
-	chartHeight: number
+	chartHeight: number,
+	range?: ReadonlyArray<GlucoseColorStop>
 ): GradientStop[] {
 	// SVG clamps each stop's offset up to the largest before it, so stops must
 	// ascend: the anchors run low to high glucose, which is bottom to top.
-	return GLUCOSE_SPECTRUM_ANCHORS.map(
-		(mgdl): GradientStop => [
-			offsetFor(mgdl, axisScale, chartHeight),
-			getGlucoseColorContinuous(mgdl)
-		]
-	).reverse();
+	const samples = range ? rangeSamples(range) : [...GLUCOSE_SPECTRUM_ANCHORS];
+	return samples
+		.map(
+			(mgdl): GradientStop => [
+				offsetFor(mgdl, axisScale, chartHeight),
+				getGlucoseColorContinuous(mgdl, range)
+			]
+		)
+		.reverse();
+}
+
+/** The range anchors and the points that carry the oklch blend between them. */
+function rangeSamples(range: ReadonlyArray<GlucoseColorStop>): number[] {
+	const anchors = range.map((s) => s.mgdl);
+	return anchors.flatMap((from, i) => {
+		const to = anchors[i + 1];
+		if (to === undefined) return [from];
+		return Array.from(
+			{ length: BLEND_STEPS_PER_SEGMENT },
+			(_, step) => from + ((to - from) * step) / BLEND_STEPS_PER_SEGMENT
+		);
+	});
 }
 
 export function fillStopsFromLineStops(
@@ -110,16 +131,20 @@ export function areaY0Accessor(
 export type LineColorMode = 'single' | 'threshold' | 'continuous';
 export type AreaMode = 'off' | 'full' | 'baseline' | 'deviation';
 
-/** Line stops for a colour mode; `undefined` in single mode, which strokes flat. */
+/**
+ * Line stops for a colour mode; `undefined` in single mode, which strokes flat. `range` is
+ * `distinctRangeStops`' answer and applies to continuous mode only.
+ */
 export function lineStopsFor(
 	mode: LineColorMode,
 	thresholds: GlucoseThresholds,
 	axisScale: (mgdl: number) => number,
-	chartHeight: number
+	chartHeight: number,
+	range?: ReadonlyArray<GlucoseColorStop>
 ): GradientStop[] | undefined {
 	if (mode === 'single') return undefined;
 	if (mode === 'threshold') return thresholdLineStops(thresholds, axisScale, chartHeight);
-	return continuousLineStops(axisScale, chartHeight);
+	return continuousLineStops(axisScale, chartHeight, range);
 }
 
 /**

@@ -49,7 +49,6 @@ public record ExcursionTransition(
 /// so that excursions survive process restarts.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
-/// <seealso cref="IConditionEvaluator"/>
 public interface IExcursionTracker
 {
     /// <summary>

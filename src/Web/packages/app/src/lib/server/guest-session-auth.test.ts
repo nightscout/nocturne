@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
+// The tests set process.env per case; the getter reads it at each access.
+vi.mock("$app/env/private", () => ({
+  get INSTANCE_KEY() {
+    return process.env.INSTANCE_KEY;
+  },
+}));
+
 
 const { authenticateGuestSession } = await import("./guest-session-auth");
-const { AUTH_COOKIE_NAMES } = await import("$lib/config/auth-cookies");
+const { AUTH_COOKIE_NAMES } = await import("#lib/config/auth-cookies.js");
 
 /**
  * Answers `/api/auth/oidc/session` the way the API's handler chain does: a

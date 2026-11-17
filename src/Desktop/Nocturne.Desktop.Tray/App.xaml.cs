@@ -94,7 +94,7 @@ public partial class App : Application
                 _authService,
                 NullLogger<NocturneClient>.Instance
             );
-            _alarmService = new AlarmService(_settingsService);
+            _alarmService = new AlarmService();
             _alarmService.Initialize();
             Log("Services initialized");
 

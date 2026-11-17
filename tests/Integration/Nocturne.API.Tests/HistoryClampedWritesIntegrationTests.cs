@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration;
 /// to write when that is dated earlier: a lab result from last quarter, a weight from last week, a
 /// sensor change logged late, which completes the run it replaces at that earlier time.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class HistoryClampedWritesIntegrationTests : ApiIntegrationTestBase
 {
@@ -25,11 +26,11 @@ public class HistoryClampedWritesIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_clamped_credential_records_a_lab_result_from_last_quarter()
     {
-        using var clamped = await CreateHistoryClampedClientAsync();
+        using var clamped = await CreateHistoryClampedClientAsync("Clamped Writer");
 
         var response = await clamped.PostAsJsonAsync("/api/v4/lab-results/hba1c", new
         {
-            measuredAt = DateTime.UtcNow.AddDays(-90), valuePercent = 6.8,
+            measuredAt = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90)), valuePercent = 6.8,
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
@@ -40,7 +41,7 @@ public class HistoryClampedWritesIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_clamped_credential_records_last_weeks_weight()
     {
-        using var clamped = await CreateHistoryClampedClientAsync();
+        using var clamped = await CreateHistoryClampedClientAsync("Clamped Writer");
 
         var response = await clamped.PostAsJsonAsync("/api/v4/body-weight", new
         {
@@ -53,7 +54,7 @@ public class HistoryClampedWritesIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_clamped_credential_starts_and_completes_backdated_tracker_runs()
     {
-        using var clamped = await CreateHistoryClampedClientAsync();
+        using var clamped = await CreateHistoryClampedClientAsync("Clamped Writer");
         var definition = await clamped.PostAsJsonAsync("/api/v4/trackers/definitions", new
         {
             name = "Sensor", lifespanHours = 240,
@@ -80,26 +81,5 @@ public class HistoryClampedWritesIntegrationTests : ApiIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/trackers/instances", new { definitionId, startedAt });
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return (await response.Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
-    }
-
-    private async Task<HttpClient> CreateHistoryClampedClientAsync()
-    {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
-            conn, Fixture.TenantId, "Clamped Writer");
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
     }
 }

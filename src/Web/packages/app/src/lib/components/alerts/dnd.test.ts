@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { TenantAlertSettingsResponse } from "$api-clients";
+import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 import {
   isDndInEffect,
   isDndManualActive,

@@ -7,11 +7,12 @@
 // below bails out when `browser` is false. Keep that guard on anything new — a
 // server-side write here would show one tenant's alarm to whoever else was
 // mid-render.
-import { browser } from '$app/environment';
-import { playAlarmSound, stopAlarmSound } from '$lib/audio/alarm-sounds';
-import type { AlarmEvent } from '$lib/websocket/types';
-import type { AlarmProfileConfiguration } from '$lib/types/alarm-profile';
-import { createDefaultAlarmProfile } from '$lib/types/alarm-profile';
+import { browser } from '$app/env';
+import { playAlarmSound, stopAlarmSound } from '#lib/audio/alarm-sounds.js';
+import type { AlarmEvent } from '#lib/websocket/types.js';
+import type { AlarmProfileConfiguration } from '#lib/types/alarm-profile.js';
+import { createDefaultAlarmProfile } from '#lib/types/alarm-profile.js';
+import { AlarmTriggerType } from '#lib/api/index.js';
 
 export interface ActiveAlarm {
 	event: AlarmEvent;
@@ -45,7 +46,7 @@ function resolveProfile(
 
 	// Fall back to a sensible default profile
 	const isUrgent = event.level === 'urgent';
-	return createDefaultAlarmProfile(isUrgent ? 'UrgentLow' : 'Low');
+	return createDefaultAlarmProfile(isUrgent ? AlarmTriggerType.UrgentLow : AlarmTriggerType.Low);
 }
 
 /**

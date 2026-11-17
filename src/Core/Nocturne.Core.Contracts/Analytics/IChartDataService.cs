@@ -1,4 +1,4 @@
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 
@@ -38,6 +38,19 @@ public interface IChartDataService
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
     /// <returns>Basal delivery points covering the requested window</returns>
     Task<List<BasalPoint>> GetBasalSeriesAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Build the basal delivery spans overlapping a time range, as the dashboard chart draws them,
+    /// without running the full IOB/COB compute pipeline.
+    /// </summary>
+    /// <param name="startTime">Start of the time range in Unix milliseconds</param>
+    /// <param name="endTime">End of the time range in Unix milliseconds</param>
+    /// <returns>Unclipped delivery spans: one that began before the range is returned whole</returns>
+    Task<List<BasalDeliverySpanDto>> GetBasalDeliverySpansAsync(
         long startTime,
         long endTime,
         CancellationToken cancellationToken = default

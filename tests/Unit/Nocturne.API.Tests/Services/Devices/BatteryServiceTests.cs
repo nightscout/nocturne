@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -14,6 +15,7 @@ public class BatteryServiceTests
 
     private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshots = new();
     private readonly Mock<IPumpSnapshotRepository> _pumpSnapshots = new();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 4, 12, 6, 0, 0, TimeSpan.Zero));
     private readonly BatteryService _service;
 
     public BatteryServiceTests()
@@ -33,6 +35,7 @@ public class BatteryServiceTests
         _service = new BatteryService(
             _uploaderSnapshots.Object,
             _pumpSnapshots.Object,
+            _clock,
             NullLogger<BatteryService>.Instance);
     }
 
@@ -110,6 +113,34 @@ public class BatteryServiceTests
         var cycles = (await _service.GetChargeCyclesAsync()).ToList();
 
         cycles.Should().HaveCount(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetCurrentBatteryStatus_ReadsTheRecentWindowEndingAtTheClock()
+    {
+        GivenUploaderReadings();
+
+        await _service.GetCurrentBatteryStatusAsync(recentMinutes: 45);
+
+        var expectedFrom = _clock.GetUtcNow().UtcDateTime.AddMinutes(-45);
+        _uploaderSnapshots.Verify(r => r.GetAsync(
+            expectedFrom, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+        _pumpSnapshots.Verify(r => r.GetAsync(
+            expectedFrom, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetBatteryStatistics_WithoutABound_ReadsTheLastSevenDaysEndingAtTheClock()
+    {
+        GivenUploaderReadings();
+        var now = _clock.GetUtcNow().UtcDateTime;
+
+        await _service.GetBatteryStatisticsAsync();
+
+        _uploaderSnapshots.Verify(r => r.GetAsync(
+            now.AddDays(-7), now, null, null, 10000, 0, false, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     private void GivenUploaderReadings(params UploaderSnapshot[] snapshots) =>

@@ -136,7 +136,7 @@ describe("CalendarHeader", () => {
 			setShowTirPercent: () => {},
 		});
 
-		for (const label of ["Very High", "High", "In Range", "Low", "Very Low"]) {
+		for (const label of ["Very high", "High", "In range", "Low", "Very low"]) {
 			await expect.element(page.getByText(label, { exact: true })).toBeVisible();
 		}
 	});
@@ -189,7 +189,7 @@ describe("CalendarHeader", () => {
 			});
 
 			await expect
-				.element(page.getByText("Click any day to view detailed report"))
+				.element(page.getByText("Select any day to view detailed report"))
 				.toBeVisible();
 		});
 	});
@@ -212,7 +212,7 @@ describe("CalendarHeader", () => {
 			await expect.element(page.getByText("Calendar")).toBeVisible();
 			await expect.element(page.getByText("Daily glucose profile")).not.toBeVisible();
 			await expect
-				.element(page.getByText("Click any day to view detailed report"))
+				.element(page.getByText("Select any day to view detailed report"))
 				.not.toBeVisible();
 		});
 	});

@@ -2,15 +2,15 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import AmbulatoryGlucoseProfile from "./AmbulatoryGlucoseProfile.svelte";
-import type { AveragedStats } from "$lib/api";
-import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
+import type { AveragedStats } from "#lib/api/index.js";
+import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
 
 const realtime = vi.hoisted(() => ({
 	chartThresholds: null as ChartThresholdsDto | null,
 }));
 
-vi.mock("$lib/stores/realtime-store.svelte", async () => {
-	const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
+	const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
 	return {
 		tenantChartThresholds: () => ({
 			get current() {
@@ -68,7 +68,10 @@ describe("AmbulatoryGlucoseProfile", () => {
 	it("renders chart when data is provided", async () => {
 		const stats = makeStats([0, 6, 12, 18]);
 
-		render(AmbulatoryGlucoseProfile, { averagedStats: stats });
+		render(AmbulatoryGlucoseProfile, {
+			averagedStats: stats,
+			thresholds: { targetBottom: 70, targetTop: 180 },
+		});
 
 		await expect.element(page.getByTestId("agp-chart")).toBeVisible();
 		await expect
@@ -81,18 +84,17 @@ describe("AmbulatoryGlucoseProfile", () => {
 			realtime.chartThresholds = null;
 		});
 
-		it("draws the shared fallback range and axis ceiling when the store has none", async () => {
+		it("draws no target range when none is served", async () => {
 			render(AmbulatoryGlucoseProfile, { averagedStats: makeStats([0, 6, 12, 18]) });
 
-			await expect.element(page.getByText("Low 70")).toBeVisible();
-			await expect.element(page.getByText("High 180")).toBeVisible();
-			await expect.element(page.getByText(/Target range 70\D+180/)).toBeVisible();
+			await expect.element(page.getByText(/Target range/)).not.toBeInTheDocument();
+			await expect.element(page.getByText(/^Low \d/)).not.toBeInTheDocument();
 			await expect
 				.element(page.getByTestId("agp-chart"))
 				.toHaveAttribute("data-y-max", "400");
 		});
 
-		it("draws the tenant's range and axis ceiling from the store", async () => {
+		it("draws the served range, not the tenant's chart thresholds", async () => {
 			realtime.chartThresholds = {
 				veryLow: 60,
 				low: 80,
@@ -101,11 +103,14 @@ describe("AmbulatoryGlucoseProfile", () => {
 				glucoseYMax: 300,
 			};
 
-			render(AmbulatoryGlucoseProfile, { averagedStats: makeStats([0, 6, 12, 18]) });
+			render(AmbulatoryGlucoseProfile, {
+				averagedStats: makeStats([0, 6, 12, 18]),
+				thresholds: { targetBottom: 63, targetTop: 140 },
+			});
 
-			await expect.element(page.getByText("Low 80")).toBeVisible();
-			await expect.element(page.getByText("High 160")).toBeVisible();
-			await expect.element(page.getByText(/Target range 80\D+160/)).toBeVisible();
+			await expect.element(page.getByText("Low 63")).toBeVisible();
+			await expect.element(page.getByText("High 140")).toBeVisible();
+			await expect.element(page.getByText(/Consensus target range 63\D+140/)).toBeVisible();
 			await expect
 				.element(page.getByTestId("agp-chart"))
 				.toHaveAttribute("data-y-max", "300");

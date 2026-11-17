@@ -1,9 +1,9 @@
-import { toDayString } from "$lib/utils/date-range";
+import { toDayString } from "#lib/utils/date-range.js";
 
 /**
  * A wall clock for text that ages on screen ("3m ago", "today").
  *
- * `timeAgo(t)` and `new Date()` read the clock once, so a value derived from
+ * `relativeAge(t)` and `new Date()` read the clock once, so a value derived from
  * them freezes at first render. Reading `now.current` instead re-derives on
  * every tick.
  *

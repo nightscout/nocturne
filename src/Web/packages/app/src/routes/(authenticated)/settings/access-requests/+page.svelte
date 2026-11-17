@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import XCircle from "@lucide/svelte/icons/circle-x";
@@ -17,16 +19,17 @@
     getPendingRequests,
     approve,
     deny,
-  } from "$lib/api/generated/accessRequests.generated.remote";
-  import { getRoles } from "$lib/api/generated/roles.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import FormError from "$lib/forms/FormError.svelte";
+  } from "#lib/api/generated/accessRequests.generated.remote.js";
+  import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
+  import FormError from "#lib/forms/FormError.svelte";
 
   // Queries
   const requestsQuery = getPendingRequests();
   const requests = $derived(requestsQuery.current ?? []);
   const rolesQuery = getRoles();
-  const allRoles = $derived(rolesQuery.current ?? []);
+  const grantableRoles = $derived((rolesQuery.current ?? []).filter((r) => r.canGrant));
 
   // Per-request role/permission selection
   let selectedRoleIds = $state<Record<string, string[]>>({});
@@ -58,22 +61,9 @@
   // Loading states
   let approvingId = $state<string | null>(null);
   let denyingId = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
   let errorMessage = $state<string | null>(null);
   let approveFailure = $state<{ subjectId: string; message: string } | null>(null);
-
-  function formatRelativeTime(dateInput: string | Date): string {
-    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  }
 
   function clearMessages() {
     setTimeout(() => {
@@ -96,12 +86,12 @@
           limitTo24Hours: limitTo24Hours[subjectId] ?? false,
         },
       });
-      successMessage = "Access request approved.";
+      successMessage = { text: "Access request approved.", wash: true };
       clearMessages();
     } catch (err) {
       approveFailure = {
         subjectId,
-        message: describeSubmitError(err, "Failed to approve request. Please try again."),
+        message: describeSubmitError(err, "Failed to approve request. Try again."),
       };
     } finally {
       approvingId = null;
@@ -113,10 +103,10 @@
     errorMessage = null;
     try {
       await deny(subjectId);
-      successMessage = "Access request denied.";
+      successMessage = { text: "Access request denied.", wash: false };
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to deny request. Try again.");
       clearMessages();
     } finally {
       denyingId = null;
@@ -125,16 +115,16 @@
 </script>
 
 <svelte:head>
-  <title>Access Requests - Settings - Nocturne</title>
+  <title>Access requests - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container w-full py-6 space-y-6">
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
       <UserPlus class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Access Requests</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Access requests</h1>
       <p class="text-muted-foreground">
         Review and manage pending requests to access your data
       </p>
@@ -151,34 +141,16 @@
   {/if}
 
   {#if successMessage}
-    <div
-      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-    >
-      <CheckCircle2
-        class="mt-0.5 h-4 w-4 shrink-0 text-success"
-      />
-      <p class="text-sm text-success">
-        {successMessage}
-      </p>
-    </div>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   {#if requests.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <UserPlus class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No pending access requests. When someone requests access to your data,
-          they will appear here.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState
+      art="people-group"
+      variant="card"
+      title="No pending access requests"
+      body="When someone requests access to your data, they will appear here."
+    />
   {:else}
     <div class="space-y-4">
       {#each requests as request (request.subjectId)}
@@ -202,9 +174,7 @@
                 class="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0"
               >
                 <Clock class="h-3 w-3" />
-                {request.createdAt
-                  ? formatRelativeTime(request.createdAt)
-                  : "Unknown"}
+                {relativeAge(request.createdAt, { fallback: "Unknown" })}
               </div>
             </div>
           </Card.Header>
@@ -213,7 +183,7 @@
             <div class="space-y-2">
               <Label>Roles</Label>
               <div class="grid gap-2 @sm:grid-cols-2">
-                {#each allRoles as role (role.id)}
+                {#each grantableRoles as role (role.id)}
                   <div class="flex items-center gap-2">
                     <Checkbox
                       id="ar-role-{subjectId}-{role.id}"
@@ -245,7 +215,7 @@
                     {:else}
                       <ChevronDown class="h-4 w-4" />
                     {/if}
-                    Direct Permissions (optional)
+                    Direct permissions (optional)
                   </Button>
                 {/snippet}
               </Collapsible.Trigger>

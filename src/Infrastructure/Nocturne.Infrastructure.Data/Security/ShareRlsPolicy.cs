@@ -157,7 +157,7 @@ public static class ShareRlsPolicy
                 ? $"p.\"{parentRecencyColumn}\" >= now() - {ClampInterval}"
                 : $"(p.\"{parentSpanEndColumn}\" IS NULL OR p.\"{parentSpanEndColumn}\" >= now() - {ClampInterval})";
             usingExpr += $" AND (NOT ({clamped}) OR EXISTS (SELECT 1 FROM {parent.Table} p" +
-                $" WHERE p.id = {table}.\"{parent.ForeignKeyColumn}\" AND {parentShown}))";
+                $" WHERE p.tenant_id = {table}.tenant_id AND p.id = {table}.\"{parent.ForeignKeyColumn}\" AND {parentShown}))";
         }
 
         return $"""

@@ -1,18 +1,24 @@
 <script lang="ts">
-  import { formatShortDate } from "$lib/utils/formatting";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { formatShortDate } from "#lib/utils/formatting.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
-  import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
+  import { useToastSubmission } from "#lib/forms/index.js";
+  import {
+    getFoodEntry,
+    getSuggestions,
+    acceptMatch,
+    dismissMatch,
+  } from "#lib/api/generated/mealMatchings.generated.remote.js";
+  import { getMeals } from "#lib/api/generated/nutritions.generated.remote.js";
   import type {
     InAppNotificationDto,
     ConnectorFoodEntry,
     SuggestedMealMatch,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   interface Props {
     open: boolean;
@@ -20,6 +26,11 @@
     notification?: InAppNotificationDto | null;
     match?: SuggestedMealMatch | null;
     onComplete?: () => void;
+    /**
+     * Set when the host marks the matched meal itself; the dialog then leaves
+     * out its own "accepted" toast.
+     */
+    onAccepted?: (carbIntakeId: string) => void;
   }
 
   let {
@@ -28,6 +39,7 @@
     notification = null,
     match = null,
     onComplete,
+    onAccepted,
   }: Props = $props();
 
   // Form state
@@ -148,8 +160,9 @@
         carbIntakeId,
         carbs,
         timeOffsetMinutes,
-      });
-      toast.success("Meal match accepted");
+      }).updates(getSuggestions, getMeals);
+      if (onAccepted) onAccepted(carbIntakeId);
+      else toast.success("Meal match accepted");
       onComplete?.();
       resetAndClose();
     });
@@ -162,7 +175,7 @@
     }
 
     await dismiss.run(async () => {
-      await dismissMatch({ foodEntryId });
+      await dismissMatch({ foodEntryId }).updates(getSuggestions);
       toast.success("Meal match dismissed");
       onComplete?.();
       resetAndClose();

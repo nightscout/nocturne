@@ -1,6 +1,5 @@
 import { svelteConfig, RAW_COLOR_ALLOW } from "@nocturne/eslint-config";
 
-import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
 
 // Width stays layout the caller owns; height comes only from a control's size.
 const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
@@ -92,7 +91,7 @@ export default [
           deny: HEIGHT_CLASSES,
           message: {
             color: "\"{{className}}\" is not allowed on <Button>: pick a variant: subtle for muted text with no fill (a disclosure toggle), ghost-muted for a quiet action, overlay over a full-screen display such as a clock face. For a colour the theme does not own (an OIDC provider's brand), use variant=\"brand\" and pass brand with its background and foreground, the foreground picked for contrast by the API.",
-            layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), or inline (h-auto, no padding) for a link in running text, inline-xs beside text-xs copy. Width stays yours.",
+            layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), touch, touch-sm or icon-touch (44px until the nearest @container reaches @md, then default, sm or icon; they need an @container ancestor), or inline (h-auto, no padding) for a link in running text, inline-xs beside text-xs copy. Width stays yours.",
             typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" and \"inline-xs\" give text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium. A combobox or date-picker trigger is variant=\"combobox\".",
             effects: "\"{{className}}\" is not allowed on <Button>: it owns its effects. For a remove that shows on hover, set reveal: it stays hidden until its `group` is hovered or holds focus."
           }
@@ -169,7 +168,7 @@ export default [
   },
   {
     // ApiClient constructs every generated sub-client, so one browser-reachable import ships all
-    // of them. Browser code takes the specific clients from $lib/api/browser-clients.
+    // of them. Browser code takes the specific clients from #lib/api/browser-clients.
     files: ["src/**/*.{ts,js,svelte}"],
     ignores: [
       "src/lib/server/**",
@@ -184,26 +183,12 @@ export default [
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", {
         patterns: [{
-          regex: "^([$]lib/api|[$]api|([.]{1,2}/)+api)(/index)?/?$|(^|/)api-client[.]generated([.]ts)?$",
+          regex: "^(#lib/api|([.]{1,2}/)+api)(/index([.]js)?)?/?$|(^|/)api-client[.]generated([.](ts|js))?$",
           importNames: ["ApiClient"],
           allowTypeImports: true,
-          message: "ApiClient pulls every generated sub-client into the browser bundle. Import the specific client from $lib/api/browser-clients."
+          message: "ApiClient pulls every generated sub-client into the browser bundle. Import the specific client from #lib/api/browser-clients."
         }]
       }]
     }
   },
-  {
-    // Guard against the year-overview/alerts-polling regression class: a remote
-    // query() awaited or `.then()`-chained imperatively (outside a reactive
-    // context) throws "not created in a reactive context ... Use .run()".
-    files: ["**/*.svelte", "**/*.svelte.ts"],
-    plugins: {
-      nocturne: {
-        rules: { "no-imperative-remote-query": noImperativeRemoteQuery }
-      }
-    },
-    rules: {
-      "nocturne/no-imperative-remote-query": "error"
-    }
-  }
 ];

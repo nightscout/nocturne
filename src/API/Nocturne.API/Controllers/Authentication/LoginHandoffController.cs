@@ -52,6 +52,7 @@ public class LoginHandoffController : ControllerBase
 
     /// <summary>
     /// Redeems a login code, issues the session cookies, and answers with where to go next.
+    /// Expired, already-redeemed, unknown and other-tenant codes all fail identically.
     /// </summary>
     /// <remarks>
     /// Expired, already-redeemed, unknown and other-tenant codes all fail identically: telling a

@@ -22,6 +22,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// cannot read or write against another tenant, and that a tenant member without
 /// the platform_admin role cannot reach the platform-admin API.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 {
@@ -71,6 +72,57 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         _baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
 
         Log($"Tenant A: {_tenantAId} (slug={_slugA}), Tenant B: {_tenantBId} (slug={_slugB}), baseDomain={_baseDomain}");
+    }
+
+    [Fact]
+    public async Task TenantA_CannotReview_TenantB_CompressionLowSuggestions()
+    {
+        var suggestionId = Guid.NewGuid();
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @tenant, false);
+                INSERT INTO compression_low_suggestions
+                    (id, tenant_id, start_mills, end_mills, confidence, status, night_of, created_at)
+                VALUES (@id, @tenant::uuid, 1760000000000, 1760000900000, 0.8, 'Pending', '2026-03-03', 1760000900000);
+                """;
+            cmd.Parameters.AddWithValue("tenant", _tenantBId.ToString());
+            cmd.Parameters.AddWithValue("id", suggestionId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        async Task<string?> StatusAsync()
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT status FROM compression_low_suggestions WHERE id = @id;";
+            cmd.Parameters.AddWithValue("id", suggestionId);
+            return (string?)await cmd.ExecuteScalarAsync();
+        }
+
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        foreach (var action in new[] { "Accept", "Dismiss" })
+        {
+            var refused = await clientA.PostAsJsonAsync(
+                "/api/v4/compression-lows/suggestions/review",
+                new { action, items = new[] { new { id = suggestionId } } });
+            refused.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+                $"tenant A cannot see tenant B's suggestion, so it cannot {action}");
+        }
+
+        var deleted = await clientA.PostAsJsonAsync(
+            "/api/v4/compression-lows/suggestions/review",
+            new { action = "Delete", items = new[] { new { id = suggestionId } } });
+        deleted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await StatusAsync()).Should().Be("Pending", "no review from tenant A touched the row");
+
+        using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
+        var dismissed = await clientB.PostAsJsonAsync(
+            "/api/v4/compression-lows/suggestions/review",
+            new { action = "Dismiss", items = new[] { new { id = suggestionId } } });
+        dismissed.StatusCode.Should().Be(HttpStatusCode.NoContent, await dismissed.Content.ReadAsStringAsync());
+        (await StatusAsync()).Should().Be("Dismissed", "the refusals above were the tenant boundary, not a bad request");
     }
 
     [Fact]
@@ -533,6 +585,34 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a tenant member without the platform_admin role must not access the platform-admin API");
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/v4/admin/platform-settings")]
+    [InlineData("GET", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("PUT", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("DELETE", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("GET", "/api/v4/admin/platform-settings/decrypted")]
+    public async Task Tenant_admin_cannot_read_or_change_instance_google_health_settings(string method, string path)
+    {
+        using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        if (method == "PUT")
+            request.Content = new StringContent("{\"enabled\":true,\"fields\":{}}", System.Text.Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task TenantOwner_WithoutPlatformAdmin_CannotReadTheDatabaseCapacity()
+    {
+        using var client = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugA, _baseDomain, _accessTokenA);
+
+        var response = await client.GetAsync("/api/v4/admin/database-capacity");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "whole-database and other tenants' sizes are for platform administrators only");
     }
 
     [Fact]

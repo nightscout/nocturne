@@ -16,7 +16,7 @@ async function scrollTo(y: number) {
 describe("Headroom", () => {
   afterEach(() => window.scrollTo(0, 0));
 
-  it("scrolls away with the page, slides back in on the way up, and settles into the flow at the top", async () => {
+  it("scrolls away with the page and settles into the flow at the top", async () => {
     render(Harness);
     const start = panel().top;
 
@@ -27,18 +27,44 @@ describe("Headroom", () => {
     await scrollTo(1000);
     expect(panel().bottom).toBeLessThanOrEqual(0);
 
+    await scrollTo(0);
+    await expect.poll(() => panel().top, { timeout: 1000 }).toBeCloseTo(start, 0);
+  });
+
+  it("stays hidden on a small scroll up and slides in once the page has gone up 50px", async () => {
+    render(Harness);
+    await scrollTo(1000);
+
+    await scrollTo(980);
     await scrollTo(970);
-    expect(panel().bottom).toBeCloseTo(30, 0);
-    // Stopped partway up, it finishes coming back.
+    expect(panel().bottom).toBeLessThanOrEqual(0);
+
+    await scrollTo(950);
     await expect.poll(() => panel().top, { timeout: 1000 }).toBeCloseTo(pinnedTop, 0);
 
-    await scrollTo(1010);
-    expect(panel().top).toBeCloseTo(pinnedTop - 40, 0);
-    // Stopped partway down, it finishes leaving, however little it had moved.
-    await expect.poll(() => panel().bottom, { timeout: 1000 }).toBeLessThanOrEqual(pinnedTop + 0.5);
+    // Scrolling on up keeps it pinned.
+    await scrollTo(800);
+    expect(panel().top).toBeCloseTo(pinnedTop, 0);
+  });
 
-    await scrollTo(0);
-    expect(panel().top).toBeCloseTo(start, 0);
+  it("starts counting again after any scroll down", async () => {
+    render(Harness);
+    await scrollTo(1000);
+    await scrollTo(960);
+    await scrollTo(970);
+    await scrollTo(930);
+    expect(panel().bottom).toBeLessThanOrEqual(0);
+    await scrollTo(920);
+    await expect.poll(() => panel().top, { timeout: 1000 }).toBeCloseTo(pinnedTop, 0);
+  });
+
+  it("slides away on the next scroll down", async () => {
+    render(Harness);
+    await scrollTo(1000);
+    await scrollTo(900);
+    await expect.poll(() => panel().top, { timeout: 1000 }).toBeCloseTo(pinnedTop, 0);
+    await scrollTo(910);
+    await expect.poll(() => panel().bottom, { timeout: 1000 }).toBeLessThanOrEqual(0);
   });
 
   it("reveals itself when focus moves into it", async () => {

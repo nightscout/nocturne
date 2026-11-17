@@ -6,7 +6,7 @@
     predictionEnabled,
     predictionDisplayMode,
     type PredictionDisplayMode,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
 
   interface Props {
     displayMode?: PredictionDisplayMode;

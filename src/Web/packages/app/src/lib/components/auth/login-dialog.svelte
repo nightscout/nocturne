@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { invalidateAll } from "$app/navigation";
   import LoginForm from "./LoginForm.svelte";
 
@@ -43,8 +43,8 @@
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
   <Dialog.Content class="sm:max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Sign In Required</Dialog.Title>
-      <Dialog.Description>Please sign in to continue</Dialog.Description>
+      <Dialog.Title>Sign in required</Dialog.Title>
+      <Dialog.Description>Sign in to continue</Dialog.Description>
     </Dialog.Header>
 
     <LoginForm

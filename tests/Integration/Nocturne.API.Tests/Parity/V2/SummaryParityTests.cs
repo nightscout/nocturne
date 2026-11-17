@@ -10,6 +10,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// V2 Summary API provides aggregated data:
 /// - GET /api/v2/summary - Get summary data for time window
 /// </summary>
+[Collection(ParityShards.Two)]
 public class SummaryParityTests : ParityTestBase
 {
     public SummaryParityTests(ParityTestFixture fixture, ITestOutputHelper output)
@@ -23,7 +24,7 @@ public class SummaryParityTests : ParityTestBase
             "serverTimeEpoch",
             "lastUpdated",
             "now"
-        );
+        ).WithReloadLagTolerance();
     }
 
     #region Helper Methods
@@ -51,7 +52,7 @@ public class SummaryParityTests : ParityTestBase
     [Fact]
     public async Task GetSummary_Empty_ReturnsSameShape()
     {
-        await WaitForNightscoutReloadAsync("/api/v2/summary", sgvs: 0);
+        await WaitForNightscoutEmptyAsync();
         await AssertGetParityAsync("/api/v2/summary");
     }
 

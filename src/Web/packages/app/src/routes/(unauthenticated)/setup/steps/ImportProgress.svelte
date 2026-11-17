@@ -1,31 +1,49 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
-  import Database from "@lucide/svelte/icons/database";
-  import Upload from "@lucide/svelte/icons/upload";
-  import Users from "@lucide/svelte/icons/users";
-  import ChartLine from "@lucide/svelte/icons/chart-line";
-  import BookOpen from "@lucide/svelte/icons/book-open";
-  import Check from "@lucide/svelte/icons/check";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import * as migrationRemote from "$api/generated/migrations.generated.remote";
-  import { MigrationJobState } from "$api";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
+  import { MigrationJobState, MigrationPhase } from "#lib/api/index.js";
+  import type { CollectionProgress } from "#lib/api/index.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { findSessionJob } from "../migration-session";
+  import CollectionLanes from "#lib/components/migration/CollectionLanes.svelte";
+  import TimeRemaining from "#lib/components/migration/TimeRemaining.svelte";
+  import type { ImportResult } from "./Finish.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let {
     jobId,
+    startError,
+    voice,
     onProgressChange,
+    onResult,
+    onSettled,
+    onRecentReady,
     onComplete,
   }: {
     jobId?: string;
+    /** Why the run could not be started, when that was attempted and failed. */
+    startError?: string;
+    voice: PatientVoice;
     onProgressChange?: (pct: number) => void;
+    /** Fires once the server reports the run ended, including a run that ended before this mounted. */
+    onResult?: (result: Exclude<ImportResult, null>) => void;
+    /** Fires once there is nothing left to wait for here: the run ended, none exists, or status polling was lost. */
+    onSettled?: () => void;
+    /**
+     * Fires once a live run has its recent data in and only older history left. Watching ends
+     * here: the app follows the rest of the run.
+     */
+    onRecentReady?: (jobId: string) => void;
     onComplete: () => void;
   } = $props();
 
   let progress = $state(0); // displayed progress (smoothed)
   let realProgress = $state(0); // actual backend progress
   let error = $state<string | null>(null);
+  let startReason = $state<string | null>(null);
   let failed = $state(false);
   // A run can complete having imported only part of what was asked for; the server says which
   // collections did not arrive. Without this the wizard shows that run as an unqualified success.
@@ -37,57 +55,18 @@
   let loading = $state(true);
   let done = $state(false); // backend says completed
   let wasAlreadyDone = $state(false); // migration was already complete when we mounted
-  let collections = $state<
-    {
-      key: string;
-      icon: typeof Database;
-      label: string;
-      total: number;
-      migrated: number;
-      pct: number;
-      isComplete: boolean;
-      skippedDeleted: number;
-      skippedUnsupported: number;
-    }[]
-  >([]);
-  let etaText = $state<string | null>(null);
+  let collections = $state<Record<string, CollectionProgress>>({});
+  let currentCollection = $state<string | undefined>(undefined);
+  let phase = $state<MigrationPhase | undefined>(undefined);
+  let remaining = $state<string | undefined>(undefined);
   let totalMigrated = $state(0);
-  let currentOperation = $state<string | null>(null);
 
   const circumference = 2 * Math.PI * 88; // ≈ 553.0
   const MIN_DURATION_MS = 3000; // minimum time the progress animation takes
   let startedAt = $state(0);
 
-  const COLLECTION_META: Record<
-    string,
-    { icon: typeof Database; label: string }
-  > = {
-    entries: { icon: Database, label: "Entries" },
-    treatments: { icon: Upload, label: "Treatments" },
-    profile: { icon: Users, label: "Profiles" },
-    devicestatus: { icon: ChartLine, label: "Device statuses" },
-    food: { icon: BookOpen, label: "Food library" },
-    activity: { icon: ChartLine, label: "Activities" },
-  };
-
-  function formatTimeSpan(ts: string | undefined): string | null {
-    if (!ts) return null;
-    // .NET TimeSpan format: "HH:MM:SS.fff" or "D.HH:MM:SS.fff"
-    const dotSplit = ts.split(".");
-    let timePart = dotSplit.length > 2 ? dotSplit[1] : dotSplit[0];
-    const parts = timePart.split(":");
-    if (parts.length < 2) return ts;
-    const hours = parseInt(parts[0] ?? "0");
-    const minutes = parseInt(parts[1] ?? "0");
-    const seconds = parseInt(parts[2]?.split(".")[0] ?? "0");
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    if (minutes > 0) return `${minutes} min ${seconds} sec`;
-    return `${seconds} sec`;
-  }
-
-  function formatCount(n: number): string {
-    return formatNumber(n);
-  }
+  const hasCollections = $derived(Object.keys(collections).length > 0);
+  const nothingToShow = $derived(error !== null && !hasCollections);
 
   $effect(() => {
     let active = true;
@@ -95,29 +74,15 @@
     async function poll() {
       let resolvedJobId = jobId;
 
-      // If no jobId provided, find an active migration job
       if (!resolvedJobId) {
         try {
-          const history = await migrationRemote.getHistory().run();
-          const activeJob = history?.find(
-            (j) =>
-              j.state === MigrationJobState.Running ||
-              j.state === MigrationJobState.Pending
+          resolvedJobId = findSessionJob(
+            await fresh(migrationRemote.getHistory())
           );
-          if (activeJob?.id) {
-            resolvedJobId = activeJob.id;
-          } else {
-            // Check for recently completed job
-            const completed = history?.find(
-              (j) => j.state === MigrationJobState.Completed
-            );
-            if (completed?.id) {
-              resolvedJobId = completed.id;
-            }
-          }
         } catch (err) {
-          error = remoteErrorMessage(err, "Failed to find active migration");
+          error = remoteErrorMessage(err, "Could not look for the import.");
           loading = false;
+          onSettled?.();
           return;
         }
       }
@@ -127,7 +92,12 @@
       // (see the setup page's handleMigrationConnected), so a job should already
       // exist by now. If none is found there is nothing to monitor.
       if (!resolvedJobId) {
+        error = startError
+          ? "We could not start the import from Nightscout. You can continue and run it later from Settings."
+          : "No import from Nightscout is running. You can continue and start one later from Settings.";
+        startReason = startError ?? null;
         loading = false;
+        onSettled?.();
         return;
       }
 
@@ -144,35 +114,19 @@
       // startedAt is set after the first successful poll of a live (non-complete) migration
       while (active) {
         try {
-          const status = await migrationRemote.getStatus(resolvedJobId).run();
+          const status = await fresh(migrationRemote.getStatus(resolvedJobId));
           if (!active) break;
           consecutiveFailures = 0; // a successful poll clears the transient-failure streak
 
           realProgress = status.progressPercentage ?? 0;
-          currentOperation = status.currentOperation ?? null;
-          etaText = formatTimeSpan(status.estimatedTimeRemaining);
-
-          // Build collection lanes from real data
-          const cp = status.collectionProgress ?? {};
-          collections = Object.entries(cp).map(([key, col]) => {
-            const meta = COLLECTION_META[key] ?? { icon: Database, label: key };
-            const total = col.totalDocuments ?? 0;
-            const migrated = col.documentsMigrated ?? 0;
-            const pct = Math.round(col.progressPercentage ?? 0);
-            return {
-              key,
-              icon: meta.icon,
-              label: meta.label,
-              total,
-              migrated,
-              pct,
-              isComplete: col.isComplete ?? false,
-              skippedDeleted: col.recordsSkippedDeleted ?? 0,
-              skippedUnsupported: col.documentsSkippedUnsupported ?? 0,
-            };
-          });
-
-          totalMigrated = collections.reduce((sum, c) => sum + c.migrated, 0);
+          phase = status.phase;
+          currentCollection = status.currentCollection;
+          remaining = status.estimatedTimeRemaining;
+          collections = status.collectionProgress ?? {};
+          totalMigrated = Object.values(collections).reduce(
+            (sum, c) => sum + (c.documentsMigrated ?? 0),
+            0
+          );
 
           // Check terminal states
           if (status.state === MigrationJobState.Completed) {
@@ -180,8 +134,10 @@
             if (firstPoll) wasAlreadyDone = true;
             done = true;
             caveat = status.errorMessage ?? null;
-            caveatIsFault = Object.values(cp).some((col) => col.failureReason);
+            caveatIsFault = status.hasFailures ?? false;
             realProgress = 100;
+            onResult?.(caveatIsFault ? "partial" : "complete");
+            onSettled?.();
             break;
           }
           if (
@@ -191,7 +147,13 @@
           ) {
             failed = true;
             error =
-              status.errorMessage ?? `Migration ${String(status.state).toLowerCase()}`;
+              status.state === MigrationJobState.Cancelled
+                ? "The import was canceled."
+                : status.state === MigrationJobState.Interrupted
+                  ? "The import stopped because the server restarted. Start it again from Settings."
+                  : (status.errorMessage ?? "The import stopped because of an error.");
+            onResult?.("failed");
+            onSettled?.();
             break;
           }
 
@@ -199,6 +161,14 @@
           if (firstPoll) {
             firstPoll = false;
             startedAt = Date.now();
+            onResult?.("running");
+          }
+
+          if (status.recentDataReady && onRecentReady) {
+            onResult?.("background");
+            onSettled?.();
+            onRecentReady(resolvedJobId);
+            break;
           }
 
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -210,7 +180,10 @@
           // Only give up — and tell the user — once polling has failed repeatedly. The import
           // itself keeps running on the server regardless of what we show here.
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            error = "Lost connection to migration status";
+            error =
+              "We lost track of the import's progress. It may still be running. Check Settings to see how it ended.";
+            onResult?.("running");
+            onSettled?.();
             break;
           }
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -218,7 +191,7 @@
       }
     }
 
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     queueMicrotask(() => {
       if (active) poll();
     });
@@ -244,6 +217,11 @@
     let completedAt = 0;
 
     const interval = setInterval(() => {
+      if (failed || error) {
+        clearInterval(interval);
+        return;
+      }
+
       const elapsed = Date.now() - startedAt;
       const timeCap = Math.min(100, (elapsed / MIN_DURATION_MS) * 100);
       const smoothed = Math.min(realProgress, timeCap);
@@ -253,9 +231,12 @@
         onProgressChange?.(progress);
       }
 
-      // Pause at 100% before advancing to next step
+      // Pause at 100% before advancing to next step. A run that left something out stays, so
+      // its summary can be read; the wizard offers Continue.
       if (done && progress >= 100) {
-        if (completedAt === 0) {
+        if (caveatIsFault) {
+          clearInterval(interval);
+        } else if (completedAt === 0) {
           completedAt = Date.now();
         } else if (Date.now() - completedAt >= 1500) {
           clearInterval(interval);
@@ -268,88 +249,91 @@
   });
 </script>
 
-<div class="flex flex-col gap-8 px-4 py-8">
+<div class="@container flex flex-col gap-8 px-4 py-8">
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl @lg:text-4xl @min-[40rem]:text-5xl"
     >
-      Bringing your <em
-        class="not-italic font-light text-(--onb-accent)"
-      >
-        history
-      </em>
-      across.
+      {#if voice.kind === "self"}
+        Bringing your <em class="not-italic font-light text-primary">history</em> across.
+      {:else if voice.kind === "named"}
+        Bringing {voice.name}'s <em class="not-italic font-light text-primary">history</em> across.
+      {:else}
+        Bringing the <em class="not-italic font-light text-primary">history</em> across.
+      {/if}
     </h1>
-    <p class="max-w-140 text-base leading-relaxed text-white/50">
-      We're streaming entries, treatments, and profiles from your Nightscout
-      into Nocturne's store. You can navigate away &mdash; this continues in the
-      background.
-    </p>
+    {#if !nothingToShow}
+      <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
+        Nocturne is copying entries, treatments, and profiles from Nightscout.
+        The import continues on the server if you close this page.
+      </p>
+    {/if}
   </div>
 
   {#if loading}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <Loader2
-        class="h-12 w-12 animate-spin text-(--onb-accent)"
+        class="h-12 w-12 animate-spin text-primary"
       />
-      <p class="text-sm text-white/40">Finding active migration...</p>
+      <p class="text-sm text-muted-foreground">Looking for the import...</p>
     </div>
-  {:else if error && !collections.length}
+  {:else if nothingToShow}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <AlertTriangle class="h-12 w-12 text-warning" />
-      <p class="text-sm text-white/60">{error}</p>
+      <p class="text-sm text-muted-foreground">{error}</p>
+      {#if startReason}
+        <p class="text-xs text-muted-foreground">{startReason}</p>
+      {/if}
     </div>
   {:else}
     <!-- Import hero card -->
     <div
-      class="grid grid-cols-[1fr_260px] max-sm:grid-cols-1 max-sm:justify-items-center gap-6 p-7 rounded-2xl border overflow-hidden relative border-(--onb-border) bg-linear-135 from-white/4 to-white/2"
+      class="grid grid-cols-1 justify-items-center @xl:grid-cols-[1fr_260px] @xl:justify-items-stretch gap-6 p-5 @lg:p-7 rounded-2xl border overflow-hidden relative bg-card"
     >
       <!-- Left side -->
       <div class="flex flex-col gap-3">
         <span
-          class="font-mono text-xs uppercase tracking-widest text-white/40"
+          class="font-mono text-xs uppercase tracking-widest text-muted-foreground"
         >
           Overall progress
         </span>
         <div class="flex items-baseline gap-1">
           <span
-            class="font-brand font-hairline tabular-nums text-5xl md:text-6xl xl:text-7xl text-(--onb-accent)"
+            class="font-brand font-hairline tabular-nums text-5xl @lg:text-6xl @min-[40rem]:text-7xl text-primary"
           >
             {Math.round(progress)}
           </span>
           <span
-            class="text-3xl font-brand font-hairline tabular-nums text-white/40"
+            class="text-3xl font-brand font-hairline tabular-nums text-muted-foreground"
           >
             %
           </span>
         </div>
-        <p class="text-sm text-white/40">
-          {#if failed}
+        <p class="text-sm text-muted-foreground">
+          {#if error}
             <span class="text-warning">{error}</span>
           {:else if caveat}
             <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>
-          {:else if etaText}
-            About <span class="font-semibold text-white/60">{etaText}</span>
-            remaining &middot; {formatCount(totalMigrated)} records
+          {:else if phase === MigrationPhase.Connecting}
+            Connecting to Nightscout
+          {:else if phase === MigrationPhase.Counting}
+            Counting the records in Nightscout
+          {:else if remaining && !done}
+            <TimeRemaining {remaining} /> &middot; {formatNumber(totalMigrated)} records
           {:else}
-            {formatCount(totalMigrated)} records migrated
+            {formatNumber(totalMigrated)} records imported
           {/if}
         </p>
-        {#if currentOperation}
-          <p class="font-mono text-xs text-white/30">{currentOperation}</p>
-        {/if}
       </div>
 
       <!-- Right side — Progress ring -->
       <div
-        class="relative flex items-center justify-center w-[200px] h-[200px]"
+        class="relative flex items-center justify-center w-full max-w-50 aspect-square"
       >
         <svg
-          width="200"
-          height="200"
           viewBox="0 0 200 200"
-          class="-rotate-90"
+          class="-rotate-90 size-full"
         >
           <!-- Track -->
           <circle
@@ -357,7 +341,7 @@
             cy="100"
             r="88"
             fill="none"
-            stroke="var(--onb-border)"
+            class="stroke-border"
             stroke-width="6"
           />
           <!-- Progress arc -->
@@ -367,7 +351,7 @@
             r="88"
             fill="none"
             stroke="currentColor"
-            class="progress-arc {failed ? 'text-(--onb-warn)' : 'text-(--onb-accent)'}"
+            class="progress-arc {failed ? 'text-warning' : 'text-primary'}"
             stroke-width="6"
             stroke-linecap="round"
             stroke-dasharray={circumference}
@@ -376,83 +360,15 @@
         </svg>
         <!-- Center overlay -->
         <span
-          class="absolute font-brand text-4xl font-light tabular-nums text-white"
+          class="absolute font-brand text-4xl font-light tabular-nums text-foreground"
         >
           {Math.round(progress)}%
         </span>
       </div>
     </div>
 
-    <!-- Import lanes -->
-    {#if collections.length > 0}
-      <div class="flex flex-col gap-2.5">
-        {#each collections as col (col.key)}
-          <div
-            class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border border-white/6 bg-white/2"
-          >
-            <div class="grid grid-cols-[36px_1fr_auto] gap-3 items-center">
-              <!-- Icon box -->
-              <div
-                class="flex h-9 w-9 items-center justify-center rounded-lg {col.isComplete ||
-                col.pct > 0
-                  ? 'bg-(--onb-accent-dim)'
-                  : 'bg-white/3'}"
-              >
-                <col.icon
-                  class="h-[18px] w-[18px] {col.isComplete || col.pct > 0
-                    ? 'text-(--onb-accent)'
-                    : 'text-white/40'}"
-                />
-              </div>
-
-              <!-- Name & meta -->
-              <div class="flex flex-col">
-                <span class="text-sm font-medium">{col.label}</span>
-                <span class="font-mono text-xs text-white/40">
-                  {#if col.total > 0}
-                    {formatCount(col.migrated)} / {formatCount(col.total)} records
-                  {:else if col.migrated > 0}
-                    {formatCount(col.migrated)} records
-                  {:else if col.isComplete}
-                    no records
-                  {:else}
-                    pending
-                  {/if}
-                </span>
-              </div>
-
-              <!-- Percentage or checkmark -->
-              <div class="flex items-center justify-end">
-                {#if col.isComplete}
-                  <Check class="h-4 w-4 text-(--onb-accent)" />
-                {:else}
-                  <span class="font-mono text-xs text-white/40">
-                    {col.pct}%
-                  </span>
-                {/if}
-              </div>
-            </div>
-
-            <SkippedRecordsNote
-              deleted={col.skippedDeleted}
-              unsupported={col.skippedUnsupported}
-              class="text-xs text-white/60"
-            />
-
-            <!-- Progress bar -->
-            <div
-              class="h-1 w-full overflow-hidden rounded-full bg-(--onb-border)"
-            >
-              <div
-                class="h-full w-(--progress) rounded-full transition-all duration-500 ease-out {col.isComplete
-                  ? 'bg-(--onb-ok)'
-                  : 'bg-(--onb-accent)'}"
-                style:--progress="{col.isComplete ? 100 : col.pct}%"
-              ></div>
-            </div>
-          </div>
-        {/each}
-      </div>
+    {#if hasCollections}
+      <CollectionLanes {collections} {currentCollection} />
     {/if}
   {/if}
 </div>

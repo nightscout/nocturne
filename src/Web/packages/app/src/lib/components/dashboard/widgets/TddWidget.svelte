@@ -3,10 +3,10 @@
   import WidgetCard from "./WidgetCard.svelte";
   import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
   import { PieChart } from "layerchart";
-  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
-  import { Button } from "$lib/components/ui/button";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { getMultiPeriodStatistics } from "#lib/api/generated/statistics.generated.remote.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   // Toggle between the last 24 hours and the 90-day average
   let showAverage = $state(false);
@@ -25,7 +25,7 @@
   }
 </script>
 
-<WidgetCard title="Total Daily Dose">
+<WidgetCard title="Total daily dose">
   {#snippet subtitleSnippet()}
     <Button
       variant="ghost-muted"
@@ -100,7 +100,11 @@
           </div>
         {/if}
       </div>
-      <ReliabilityBadge reliability={view?.reliability} />
+      <ReliabilityBadge
+        compact
+        reliability={view?.reliability}
+        timeZoneUnavailableReason={view?.analytics?.timeZoneUnavailableReason}
+      />
     {:else}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">{showAverage ? "No data for 90-day average" : "No data in the last 24h"}</p>
@@ -109,7 +113,7 @@
     {:catch err}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">Failed to load data</p>
-        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Please try again.")}</p>
+        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Try again.")}</p>
       </div>
     {/await}
   {/if}

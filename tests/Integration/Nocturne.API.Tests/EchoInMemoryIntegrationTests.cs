@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for Echo endpoints using in-memory MongoDB
 /// Tests the complete request/response cycle for debugging and preview functionality
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class EchoInMemoryIntegrationTests : ApiIntegrationTestBase
 {

@@ -5,21 +5,26 @@
   import { partialEngine, setGlucoseChartContext } from "../chart-context.svelte";
   import { computeTrackLayout } from "../engine/track-layout";
   import type { GlucoseChartContext } from "../chart-context.svelte";
-  import type { CarbMarkerData } from "../engine/chart-data-view.svelte";
+  import type { CarbMarkerData, SeriesPoint } from "../engine/chart-data-view.svelte";
 
   interface Props {
-    carbMarkers: CarbMarkerData[];
+    carbMarkers?: CarbMarkerData[];
+    iobData?: SeriesPoint[];
+    minIob?: number;
+    maxIob?: number;
     onMarkerClick?: (treatmentId: string) => void;
   }
 
-  let { carbMarkers, onMarkerClick }: Props = $props();
+  let { carbMarkers = [], iobData = [], minIob = 0, maxIob = 1, onMarkerClick }: Props = $props();
 
   const baseTime = new Date("2026-01-01T12:00:00Z").getTime();
   const height = 300;
   const xDomain: [Date, Date] = [new Date(baseTime), new Date(baseTime + 3 * 60 * 60 * 1000)];
 
   const engineStub = partialEngine({
-    iobData: [],
+    get iobData() {
+      return iobData;
+    },
     cobData: [],
     bolusMarkers: [],
     get carbMarkers() {
@@ -27,13 +32,16 @@
     },
   });
 
-  const layout = computeTrackLayout(
-    height,
-    400,
-    1,
-    1,
-    { basal: false, iob: true, cob: true },
-    { pumpMode: false, override: false, profile: false, activity: false },
+  const layout = $derived(
+    computeTrackLayout(
+      height,
+      400,
+      1,
+      maxIob,
+      { basal: false, iob: true, cob: true },
+      { pumpMode: false, override: false, profile: false, activity: false },
+      minIob,
+    )
   );
 
   const ctx: GlucoseChartContext = {

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { base } from "$app/paths";
+    import { syncedAsset } from "#lib/synced-asset.js";
     import manifest from "@nocturne/screenshots/manifest.json";
     import type { Manifest, Theme } from "@nocturne/screenshots";
 
@@ -53,7 +53,7 @@
         {#each themes as theme (theme)}
             {@const variant = entry.variants[theme]}
             <img
-                src="{base}/screenshots/{variant.file}"
+                src={syncedAsset(`screenshots/${variant.file}`)}
                 alt={entry.alt}
                 width={variant.width}
                 height={variant.height}

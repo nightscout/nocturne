@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { flushIdle, resetIdle } from "$lib/test-stubs/when-idle";
+import { flushIdle, resetIdle } from "#lib/test-stubs/when-idle.js";
 
 const load = vi.hoisted(() => vi.fn());
 
-vi.mock("$lib/utils/when-idle", () => import("$lib/test-stubs/when-idle"));
+vi.mock("#lib/utils/when-idle.js", () => import("#lib/test-stubs/when-idle.js"));
 
-vi.mock("$lib/api/generated/coachMarks.generated.remote", async () => {
-  const { createQueryResource } = await import("$lib/test-stubs/remote-resource");
+vi.mock("#lib/api/generated/coachMarks.generated.remote.js", async () => {
+  const { createQueryResource } = await import("#lib/test-stubs/remote-resource.js");
   return {
     getAll: () => createQueryResource(() => load()),
     updateStatus: vi.fn(() => Promise.resolve()),

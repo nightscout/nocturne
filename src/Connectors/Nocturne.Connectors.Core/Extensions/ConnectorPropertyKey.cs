@@ -54,6 +54,7 @@ public enum ConnectorPropertyKey
     RealtimeUrl,
     ApiSecret,
     MaxCount,
+    HistoryDays,
 
     // Glooko-specific
     UseV3Api,

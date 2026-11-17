@@ -1,17 +1,17 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import * as Card from "$lib/components/ui/card";
-  import { Switch } from "$lib/components/ui/switch";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import UserPlus from "@lucide/svelte/icons/user-plus";
   import Info from "@lucide/svelte/icons/info";
   import {
     getMembershipRequestSettings,
     setMembershipRequestSettings,
     getPendingRequests,
-  } from "$api/generated/membershipRequests.generated.remote";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/membershipRequests.generated.remote.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   const canManage = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "members.manage"),
@@ -38,7 +38,7 @@
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
-        "Couldn't update membership requests. Please try again."
+        "Could not update membership requests. Try again."
       );
     } finally {
       busy = false;
@@ -60,9 +60,9 @@
       <div class="min-w-0 flex-1">
         <h2 class="text-lg font-semibold">Membership requests</h2>
         <p class="mt-0.5 max-w-prose text-sm text-muted-foreground">
-          Let anyone who reaches your profile ask to become a member — this works
-          whether public access is on or off. Requests never grant access
-          automatically; each one waits in your queue for approval.
+          Let anyone who reaches your profile ask to become a member. This works
+          when public access is on or off. Requests never grant access
+          automatically. Each request waits in your queue for approval.
         </p>
         {#if errorMessage}
           <p class="mt-2 text-sm text-destructive">{errorMessage}</p>

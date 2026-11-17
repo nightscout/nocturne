@@ -20,11 +20,12 @@ public class TidepoolAuthTokenProvider(
     IConnectorServerResolver<TidepoolConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<TidepoolAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<TidepoolConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider? timeProvider = null)
+    : AuthTokenProviderBase<TidepoolConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>
     ///     Tidepool sessions last ~24 hours. Refresh at 23 hours.
@@ -53,7 +54,6 @@ public class TidepoolAuthTokenProvider(
                 authUserId = userId;
                 return (token, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Tidepool authentication",
             cancellationToken
@@ -63,7 +63,7 @@ public class TidepoolAuthTokenProvider(
             return (null, DateTime.MinValue, null);
 
         var resolvedUserId = !string.IsNullOrEmpty(config.UserId) ? config.UserId : authUserId;
-        var expiresAt = DateTime.UtcNow.AddHours(24);
+        var expiresAt = _timeProvider.GetUtcNow().UtcDateTime.AddHours(24);
         _logger.LogInformation(
             "Tidepool authentication successful for user {UserId}, session expires at {ExpiresAt}",
             resolvedUserId,

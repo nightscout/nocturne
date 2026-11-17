@@ -1,4 +1,5 @@
-import { a1cLabel } from "$lib/utils/a1c-formatting";
+import { resolve } from "$app/paths";
+import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
 import Activity from "@lucide/svelte/icons/activity";
@@ -24,8 +25,8 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import Utensils from "@lucide/svelte/icons/utensils";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Target from "@lucide/svelte/icons/target";
-import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
-import { satisfiesAllScopes } from "$lib/authorization/scopes";
+import SiteChangeIcon from "#lib/components/icons/SiteChangeIcon.svelte";
+import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
 
 export interface ReportItem {
   /** Title for the reports overview page */
@@ -100,13 +101,13 @@ export function reportCategories(): ReportCategory[] {
   return [
     {
       id: "overview",
-      title: "The Big Picture",
+      title: "The big picture",
       subtitle: "Your key metrics at a glance",
       icon: Gauge,
       reports: [
         {
-          title: "Executive Summary",
-          description: "All your important numbers in one place",
+          title: "Executive summary",
+          description: "Time in range, average glucose and data completeness",
           href: "/reports/executive-summary",
           keywords: ["overview", "summary", "report card", "snapshot"],
           scopes: [READ.glucose, READ.reports],
@@ -114,9 +115,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Glucose Profile (AGP)",
+          title: "Glucose profile (AGP)",
           sidebarTitle: "AGP",
-          description: "Your typical day's glucose pattern",
+          description: "Your typical day of glucose, with percentile bands and time in range",
           href: "/reports/agp",
           keywords: ["ambulatory glucose profile", "percentiles", "target range"],
           scopes: [READ.glucose, READ.reports],
@@ -124,19 +125,19 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Glucose Distribution",
+          title: "Glucose distribution",
           description: "Time spent in each glucose zone",
           href: "/reports/glucose-distribution",
-          keywords: ["box chart", "box plot", "whisker", "percentiles", "quartiles", "spread"],
+          keywords: ["spread"],
           scopes: [READ.reports],
           icon: PieChart,
           status: "available",
         },
         {
-          title: "Data Quality",
-          description: "Assess the reliability of your data",
+          title: "Data quality",
+          description: "Compression lows, signal integrity, CGM comparison and rejected uploads",
           href: "/reports/data-quality",
-          keywords: ["gaps", "missing", "coverage", "reliability"],
+          keywords: ["compression", "signal", "sensor", "rejected uploads"],
           scopes: [READ.glucose, READ.reports],
           icon: Layers,
           status: "available",
@@ -155,13 +156,13 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "patterns",
-      title: "Patterns & Trends",
+      title: "Patterns & trends",
       subtitle: "Discover what affects your glucose",
       icon: CalendarDays,
       reports: [
         {
-          title: "Year Overview",
-          description: "Multi-year heatmap of all your data",
+          title: "Year overview",
+          description: "Multi-year heatmap of your diabetes data",
           href: "/reports/year-overview",
           keywords: ["annual", "yearly", "12 month", "heatmap"],
           scopes: [READ.glucose],
@@ -169,9 +170,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Day-by-Day View",
+          title: "Day-by-day view",
           sidebarTitle: "Readings",
-          description: "Review each day individually",
+          description: "Your glucose readings, one day at a time",
           href: "/reports/readings",
           keywords: ["glucose readings", "blood sugar", "log", "history"],
           scopes: [READ.glucose],
@@ -179,8 +180,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Day in Review",
-          description: "Detailed breakdown of a single day",
+          title: "Day in review",
+          description: "Glucose and treatments for one day",
           href: "/reports/day-in-review",
           keywords: ["daily", "today", "yesterday"],
           scopes: [READ.glucose, READ.treatments, READ.reports],
@@ -188,8 +189,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Week to Week",
-          description: "Compare patterns across days",
+          title: "Week to week",
+          description: "Compare your glucose patterns from week to week",
           href: "/reports/week-to-week",
           keywords: ["comparison", "trend", "weekly"],
           scopes: [READ.glucose, READ.reports],
@@ -198,7 +199,7 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Comparison",
-          description: "Diff two date ranges side-by-side",
+          description: "Compare two date ranges side by side",
           href: "/reports/comparison",
           keywords: ["compare", "date ranges", "diff"],
           scopes: [READ.reports],
@@ -206,8 +207,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Hourly Patterns",
-          description: "Find your best and worst hours",
+          title: "Hourly patterns",
+          description: "Which hours of the day spend the most and least time in range",
           href: "/reports/hourly-stats",
           keywords: ["hourly", "time of day", "best hours", "worst hours"],
           scopes: [READ.reports],
@@ -218,14 +219,14 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "lifestyle",
-      title: "Lifestyle Impact",
+      title: "Lifestyle impact",
       subtitle: "How food, exercise & sleep affect you",
       icon: HeartPulse,
       reports: [
         {
-          title: "Step Count",
+          title: "Step count",
           sidebarTitle: "Steps",
-          description: "Daily step patterns and activity levels",
+          description: "Step count patterns with a glucose overlay",
           href: "/reports/steps",
           keywords: ["activity", "walking", "exercise", "movement"],
           scopes: [READ.glucose, READ.stepCount],
@@ -233,8 +234,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Heart Rate",
-          description: "Heart rate patterns and resting estimates",
+          title: "Heart rate",
+          description: "Heart rate patterns with a glucose overlay",
           href: "/reports/heart-rate",
           keywords: ["pulse", "bpm", "cardio"],
           scopes: [READ.glucose, READ.heartRate],
@@ -242,9 +243,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Sleep & Overnight",
+          title: "Sleep & overnight",
           sidebarTitle: "Sleep",
-          description: "Understand your overnight patterns",
+          description: "Sleep patterns with a glucose overlay",
           href: "/reports/sleep",
           keywords: ["overnight", "night time", "sleeping"],
           scopes: [READ.glucose, READ.sleep],
@@ -252,7 +253,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Meal Analysis",
+          title: "Meal analysis",
           description: "See how different meals affect you",
           href: "/reports/meals",
           scopes: [READ.treatments, READ.food],
@@ -260,7 +261,7 @@ export function reportCategories(): ReportCategory[] {
           status: "coming-soon",
         },
         {
-          title: "Exercise Impact",
+          title: "Exercise impact",
           description: "Track activity's effect on glucose",
           href: "/reports/exercise",
           scopes: [READ.glucose, READ.stepCount],
@@ -271,14 +272,14 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "treatment",
-      title: "Treatment Insights",
+      title: "Treatment insights",
       subtitle: "Is your treatment working?",
       icon: Syringe,
       reports: [
         {
-          title: "Treatment Log",
+          title: "Treatment log",
           sidebarTitle: "Treatments",
-          description: "Your insulin and carb history",
+          description: "View and edit your insulin doses and carb entries",
           href: "/reports/treatments",
           keywords: ["bolus", "carbs", "corrections", "insulin"],
           scopes: [READ.glucose, READ.treatments, READ.devices, READ.reports],
@@ -286,9 +287,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Basal Rate Analysis",
-          sidebarTitle: "Basal Analysis",
-          description: "How your basal rates vary",
+          title: "Basal rate analysis",
+          sidebarTitle: "Basal analysis",
+          description: "Basal insulin delivery by time of day, with percentile bands",
           href: "/reports/basal-analysis",
           keywords: ["basal rate", "background insulin", "temp basal"],
           scopes: [READ.reports],
@@ -296,8 +297,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Insulin Delivery",
-          description: "Basal vs bolus breakdown",
+          title: "Insulin delivery",
+          description: "Basal and bolus split, and total daily dose trends",
           href: "/reports/insulin-delivery",
           keywords: ["tdd", "total daily dose", "basal bolus ratio"],
           scopes: [READ.reports],
@@ -305,8 +306,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Site Change Impact",
-          description: "How site changes affect control",
+          title: "Site change impact",
+          description: "How pump site changes affect your glucose",
           href: "/reports/site-change-impact",
           keywords: ["infusion site", "cannula", "rotation", "set change"],
           scopes: [READ.devices, READ.reports],
@@ -314,9 +315,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Insulin Dosing Profile",
+          title: "Insulin dosing profile",
           sidebarTitle: "IDP",
-          description: "Standardised insulin and glucose summary",
+          description: "Standardized insulin and glucose summary",
           href: "/reports/idp",
           keywords: ["insulin dosing profile", "daily insulin", "dose adjustment"],
           scopes: [READ.treatments, READ.reports],
@@ -326,7 +327,7 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Battery",
-          description: "Pump battery trends and longevity",
+          description: "Device battery levels and charge cycles",
           href: "/reports/battery",
           keywords: ["pump battery", "phone battery", "charge"],
           scopes: [READ.devices],
@@ -337,14 +338,14 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "loop",
-      title: "Loop Analysis",
+      title: "Loop analysis",
       subtitle: "What your automated insulin delivery does",
       icon: Repeat,
       pages: { href: "/reports/loop-analysis" },
       reports: [
         {
           title: "Daily profile",
-          description: "Glucose, insulin and carbs at each time of day",
+          description: "Glucose, basal, loop corrections, IOB and COB at each time of day",
           href: "/reports/loop-analysis/daily-profile",
           keywords: ["loop analysis", "loopalyzer", "closed loop", "aid", "smb", "temp basal", "iob", "cob"],
           scopes: [READ.glucose, READ.treatments, READ.reports],
@@ -354,7 +355,7 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Meals and events",
-          description: "Glucose and insulin before and after each event",
+          description: "Glucose and insulin before and after meals, corrections and other events",
           href: "/reports/loop-analysis/meals-and-events",
           keywords: ["loop analysis", "meal response", "corrections", "unannounced meals"],
           scopes: [READ.glucose, READ.treatments, READ.reports],
@@ -364,7 +365,7 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Prediction accuracy",
-          description: "The loop's predictions compared with the readings that followed",
+          description: "The loop's glucose predictions compared with the readings that followed",
           href: "/reports/loop-analysis/prediction-accuracy",
           keywords: ["loop analysis", "predictions", "forecast", "uam", "zt"],
           scopes: [READ.glucose, READ.treatments, READ.devices, READ.reports],
@@ -374,7 +375,7 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Loop health",
-          description: "How much of the time the loop was closed",
+          description: "How long the loop was closed, why it stopped and when it hit its limits",
           href: "/reports/loop-analysis/loop-health",
           keywords: ["loop analysis", "closed loop", "open loop", "limits", "sensitivity ratio"],
           scopes: [READ.glucose, READ.treatments, READ.reports],
@@ -384,7 +385,7 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Settings evidence",
-          description: "Your profile settings compared with your data",
+          description: "Your profile settings compared with what your data shows",
           href: "/reports/loop-analysis/settings-evidence",
           keywords: ["loop analysis", "basal", "isf", "carb ratio", "profile settings"],
           scopes: [READ.glucose, READ.treatments, READ.therapy, READ.reports],
@@ -397,9 +398,67 @@ export function reportCategories(): ReportCategory[] {
   ];
 }
 
+/**
+ * The path of a report page under the app's base, with the query string it is shown with. `resolve`
+ * takes only the route ids and pathnames SvelteKit generated, not a registry's runtime `href`.
+ */
+export function reportPagePath(href: string, search: { toString(): string } = "", hash = ""): string {
+  const query = search.toString().replace(/^\?/, "");
+  return `${resolve("").replace(/\/$/, "")}${href}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+}
+
 /** A report's full title: a page of a report made of several is named with that report. */
 export function reportTitle(category: ReportCategory, report: ReportItem): string {
   return category.pages ? `${category.title}: ${report.title}` : report.title;
+}
+
+function reportSubRoutes(): Record<string, { title: string; description: string }> {
+  return {
+    "/reports/data-quality/compression-lows": {
+      title: "Compression lows",
+      description: "Glucose drops during sleep that can come from pressure on the sensor",
+    },
+    "/reports/data-quality/sensor-integrity": {
+      title: "Signal integrity",
+      description: "Days and windows where the sensor signal was unreliable",
+    },
+    "/reports/data-quality/cgm-comparison": {
+      title: "CGM comparison",
+      description: "Two CGM devices compared against each other",
+    },
+    "/reports/data-quality/rejected-uploads": {
+      title: "Rejected uploads",
+      description: "Records an uploader sent that Nocturne could not store",
+    },
+    "/reports/sleep/[date]": {
+      title: "Sleep night report",
+      description: "Sleep stages and overnight glucose for one night",
+    },
+  };
+}
+
+function subRouteKey(pathname: string): string {
+  return /^\/reports\/sleep\/[^/]+$/.test(pathname) ? "/reports/sleep/[date]" : pathname;
+}
+
+/**
+ * The name of a report route the registry does not list, resolvable on the
+ * server where a page's own effects do not run.
+ */
+export function reportSubRouteTitle(pathname: string): string | undefined {
+  return reportSubRoutes()[subRouteKey(pathname)]?.title;
+}
+
+/**
+ * The one meta description of a report page: the registry entry's description, the sub-route's, or
+ * the reports index's. A path with none has no description.
+ */
+export function reportDescription(pathname: string): string | undefined {
+  if (pathname === "/reports") return "Your glucose summary for the chosen period and every report you can open";
+  const listed = reportCategories()
+    .flatMap((c) => c.reports)
+    .find((r) => r.href === pathname);
+  return listed?.description ?? reportSubRoutes()[subRouteKey(pathname)]?.description;
 }
 
 /** The viewer a report list is built for. */

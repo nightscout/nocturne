@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -51,36 +51,20 @@ internal static class RustEnvelopeMapper
 
     /// <summary>
     /// Builds the FFI rule object from the stored rule row. Malformed stored condition JSON
-    /// throws <see cref="JsonException"/>, matching the managed path, where the evaluator's
-    /// payload deserialisation would throw into the per-rule catch. Auto-resolve params are sent
-    /// only when auto-resolve is enabled, and unparseable ones as null. They only gate
-    /// auto-resolve, which neither engine fires for a tree that does not parse. Timezone ids go
-    /// through <see cref="ConditionTimeZones"/>.
+    /// throws <see cref="JsonException"/> into the orchestrator's per-rule catch. Auto-resolve
+    /// params are sent only when auto-resolve is enabled, and unparseable ones as null. They only
+    /// gate auto-resolve, which the engine never fires for a tree that does not parse.
     /// </summary>
     public static RustAlertRule BuildRule(AlertRule rule) => new()
     {
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-        ConditionParams = ParseJson(ConditionTimeZones.CanonicaliseRule(rule.ConditionType, rule.ConditionParams)),
+        ConditionParams = ParseJson(rule.ConditionParams),
         ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
-        AutoResolveParams = rule.AutoResolveEnabled ? TryParseJson(rule.AutoResolveParams) : null,
+        AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
     };
-
-    private static JsonElement? TryParseJson(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
-        try
-        {
-            return ParseNode(json);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
 
     /// <summary>
     /// Maps persisted tracker state into the envelope's tracker object. The stored GUID
@@ -107,9 +91,6 @@ internal static class RustEnvelopeMapper
         return doc.RootElement.Clone();
     }
 
-    /// <summary>A stored full condition node, with timezone ids through <see cref="ConditionTimeZones"/>.</summary>
-    public static JsonElement ParseNode(string nodeJson) => ParseJson(ConditionTimeZones.CanonicaliseNode(nodeJson));
-
     /// <summary>
     /// The full node <c>{"type": wire, wire: payload}</c> for a stored payload-only body, the payload
     /// copied verbatim; a blank body is JSON <c>null</c>.
@@ -133,10 +114,9 @@ internal static class RustEnvelopeMapper
     }
 
     /// <summary>
-    /// Per-instance memo for <see cref="BuildContext"/>: the orchestrator (and the shadow
-    /// evaluator) pass the same enriched immutable <see cref="SensorContext"/> to every
-    /// rule of a tick, so the wire element is built and serialised once per context
-    /// instance. Keyed by reference; <see cref="ConditionalWeakTable{TKey,TValue}.GetValue"/>
+    /// Per-instance memo for <see cref="BuildContext"/>: the orchestrator passes the same
+    /// enriched immutable <see cref="SensorContext"/> to every rule of a tick, so the wire element
+    /// is built and serialised once per context instance. Keyed by reference; <see cref="ConditionalWeakTable{TKey,TValue}.GetValue"/>
     /// is thread-safe and entries are collected with their context.
     /// </summary>
     private static readonly ConditionalWeakTable<SensorContext, object> ContextElementCache = new();
@@ -160,7 +140,7 @@ internal static class RustEnvelopeMapper
 
     /// <summary>
     /// Projects a <see cref="SensorContext"/> onto the corpus <c>ScenarioContext</c> wire
-    /// shape. Field-by-field total against the generator's <c>ScenarioModels.cs</c>
+    /// shape. Field-by-field total against the corpus's <c>ScenarioModels.cs</c>
     /// (its <c>ToSensorContext</c> is the inverse of this mapping).
     /// </summary>
     public static JsonElement BuildContext(SensorContext ctx) => (JsonElement)BuildContextBoxed(ctx);
@@ -235,20 +215,14 @@ internal static class RustEnvelopeMapper
             ActiveTrackers = ctx.ActiveTrackers.Count == 0
                 ? null
                 : ctx.ActiveTrackers
-                    .Select(kv => new WireTrackerReference(kv.Key, Utc(kv.Value)!.Value))
+                    .Select(kv => new WireTrackerReference(
+                        kv.Key, Utc(kv.Value.ReferenceAt)!.Value, Utc(kv.Value.RecordedAt), kv.Value.IsScheduled))
                     .ToList(),
             SleepSessionActive = ctx.SleepSessionActive,
         };
 
         return JsonSerializer.SerializeToElement(wire, AlertEnvelopeJson.Options);
     }
-
-    /// <summary>
-    /// Serialises a <see cref="ConditionNode"/> tree into the full-node JSON the FFI
-    /// expects (child <c>type</c> strings preserved verbatim).
-    /// </summary>
-    public static JsonElement BuildNode(ConditionNode node) =>
-        ConditionTimeZones.CanonicaliseNode(JsonSerializer.SerializeToElement(node, EvaluatorJson.Options));
 
     // -----------------------------------------------------------------------
     // Response mapping
@@ -297,29 +271,6 @@ internal static class RustEnvelopeMapper
                 tracker.UpdatedAt!.Value,
                 tracker.HysteresisStartedAt,
                 tracker.AwaitingRearm);
-
-    /// <summary>Wire form of a managed transition type (for shadow comparison logging).</summary>
-    public static string TransitionToWire(ExcursionTransitionType type) => type switch
-    {
-        ExcursionTransitionType.None => "none",
-        ExcursionTransitionType.ExcursionOpened => "opened",
-        ExcursionTransitionType.ExcursionContinues => "continues",
-        ExcursionTransitionType.HysteresisStarted => "hysteresis_started",
-        ExcursionTransitionType.HysteresisResumed => "hysteresis_resumed",
-        ExcursionTransitionType.ExcursionClosed => "closed",
-        _ => type.ToString().ToLowerInvariant(),
-    };
-
-    /// <summary>Wire form of a managed close reason (for shadow comparison logging).</summary>
-    public static string? CloseReasonToWire(ExcursionCloseReason? reason) => reason switch
-    {
-        null => null,
-        ExcursionCloseReason.Hysteresis => "hysteresis",
-        ExcursionCloseReason.AutoResolve => "auto",
-        ExcursionCloseReason.Manual => "manual",
-        ExcursionCloseReason.RuleDisabled => "rule-disabled",
-        _ => reason.ToString()!.ToLowerInvariant(),
-    };
 
     private static DateTime? Utc(DateTime? value) =>
         value is { } v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;
@@ -402,5 +353,7 @@ internal static class RustEnvelopeMapper
 
     private sealed record WireTrackerReference(
         [property: JsonPropertyName("tracker_definition_id")] Guid TrackerDefinitionId,
-        [property: JsonPropertyName("reference_at")] DateTime ReferenceAt);
+        [property: JsonPropertyName("reference_at")] DateTime ReferenceAt,
+        [property: JsonPropertyName("recorded_at")] DateTime? RecordedAt,
+        [property: JsonPropertyName("scheduled")] bool Scheduled);
 }

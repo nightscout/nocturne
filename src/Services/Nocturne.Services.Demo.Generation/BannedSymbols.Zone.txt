@@ -1,0 +1,8 @@
+P:System.TimeProvider.System;Take the DemoClock the caller builds from its injected TimeProvider.
+P:System.TimeZoneInfo.Local;Lay demo days out in DemoClock.Zone, the tenant's zone, not the host's.
+M:System.DateTime.ToLocalTime;Convert with DemoClock.ToLocal, in the tenant's zone.
+M:System.DateTime.ToUniversalTime;Convert with DemoClock.ToUtc, from the tenant's zone.
+M:System.DateTimeOffset.#ctor(System.DateTime);Reads an Unspecified value as host-local; convert with DemoClock.ToUtc.
+M:System.DateTimeOffset.op_Implicit(System.DateTime)~System.DateTimeOffset;Reads an Unspecified value as host-local; convert with DemoClock.ToUtc.
+M:System.TimeZoneInfo.ConvertTimeToUtc(System.DateTime);Reads an Unspecified value as host-local; convert with DemoClock.ToUtc.
+M:System.DateTimeOffset.ToLocalTime;Convert with DemoClock.ToLocal, in the tenant's zone.

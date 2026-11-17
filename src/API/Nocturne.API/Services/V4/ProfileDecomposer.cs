@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -20,8 +22,7 @@ namespace Nocturne.API.Services.V4;
 /// create-or-update round per table for the whole batch.
 /// </summary>
 /// <seealso cref="IProfileDecomposer"/>
-/// <seealso cref="IDecomposer{T}"/>
-public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer<Profile>
+public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 {
     private readonly ITherapySettingsRepository _therapySettingsRepo;
     private readonly IBasalScheduleRepository _basalScheduleRepo;
@@ -29,6 +30,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     private readonly ISensitivityScheduleRepository _sensitivityScheduleRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
     private readonly ITempBasalRateReresolver _tempBasalRates;
+    private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly IAuditContext _auditContext;
 
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
@@ -36,6 +39,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <param name="sensitivityScheduleRepo">Repository for <see cref="V4Models.SensitivitySchedule"/> records.</param>
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
+    /// <param name="closedLoop">Restamps the Loop snapshots written Loop settings govern.</param>
+    /// <param name="auditContext">Mutation audit context used for reconciliation deletes.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
         ITherapySettingsRepository therapySettingsRepo,
@@ -44,6 +49,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         ISensitivityScheduleRepository sensitivityScheduleRepo,
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
         ITempBasalRateReresolver tempBasalRates,
+        ILoopClosedLoopStamper closedLoop,
+        IAuditContext auditContext,
         ILogger<ProfileDecomposer> logger)
         : base(logger)
     {
@@ -53,15 +60,43 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         _sensitivityScheduleRepo = sensitivityScheduleRepo;
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
         _tempBasalRates = tempBasalRates;
+        _closedLoop = closedLoop;
+        _auditContext = auditContext;
     }
 
     /// <inheritdoc />
-    public Task<V4Models.DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
-        => DecomposeBatchAsync([profile], origin, ct);
+    public Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
+        => DecomposeBatchAsync(profiles, origin, into: null, ct);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// The versions a decomposition created, moved or removed, which the schedule-derived temp basal
+    /// rates (<see cref="ITempBasalRateReresolver"/>) and the Loop snapshots their settings govern
+    /// (<see cref="ILoopClosedLoopStamper"/>) follow once it has committed.
+    /// </summary>
+    private sealed class ScheduleChanges
+    {
+        public List<(string ProfileName, DateTime Start)> Versions { get; } = [];
+
+        /// <summary>The starts of settings versions, any of which may carry or drop <c>dosingEnabled</c>.</summary>
+        public List<DateTime> LoopSettings { get; } = [];
+    }
+
+    private async Task FollowAsync(ScheduleChanges changes, CancellationToken ct)
+    {
+        await _tempBasalRates.AfterSchedulesWrittenAsync(changes.Versions, ct);
+        await _closedLoop.AfterLoopSettingsWrittenAsync(changes.LoopSettings, ct);
+    }
+
+    /// <summary>
+    /// Four phases with a fixed set of queries whatever the batch's size: the stored default and
+    /// newest document are read; every store of every document is mapped; the therapy settings
+    /// anchors and then each schedule table are written in one bulk upsert each; and the changed
+    /// versions are followed (<see cref="ScheduleChanges"/>), unless the caller passed
+    /// <paramref name="into"/> to follow them itself with what else it changed.
+    /// </summary>
     /// <remarks>
-    /// No system attribution here (see <see cref="DecomposerBase.SystemAttributedBatchWrites"/>).
+    /// Store removal during document replacement is system-attributed; ordinary writes retain the caller's attribution.
     /// <para>
     /// The therapy settings row anchors each group's correlation id, and the four schedules are
     /// stamped with whatever it resolves to. Reading it back rather than reusing the minted id is
@@ -73,24 +108,37 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// id they would fork off the settings row they belong to rather than join it.
     /// </para>
     /// </remarks>
-    public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
+    private async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, ScheduleChanges? into, CancellationToken ct)
     {
-        var changed = new List<(string ProfileName, DateTime Start)>();
-        var result = await DecomposeCoreAsync(profiles, origin, changed, ct);
-        await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+        var changes = into ?? new ScheduleChanges();
+        var result = new V4Models.DecompositionResult();
+        await WriteStoresAsync(profiles, origin, result, changes, ct);
+        if (into is null)
+            await FollowAsync(changes, ct);
         return result;
     }
 
-    /// <param name="changed">Receives the store versions whose basal schedule or settings changed.</param>
-    private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
+    /// <summary>
+    /// Whether <paramref name="storeName"/> has the <c>{name}@@@@@{mills}</c> shape of a Profile
+    /// Switch's inline profile. Nightscout only ever builds such a store in memory
+    /// (lib/profilefunctions.js); one arriving stored is a pre-activation instance's switch snapshot,
+    /// which is the switch's <see cref="V4Models.ProfileActivation"/> snapshot here and no profile.
+    /// </summary>
+    internal static bool IsProfileSwitchStoreName(string storeName) => ProfileSwitchStoreName.IsMatch(storeName);
+
+    private static readonly Regex ProfileSwitchStoreName = new("@@@@@[0-9]+$", RegexOptions.Compiled);
+
+    /// <summary>The write phases of <see cref="DecomposeBatchAsync(IReadOnlyList{Profile}, WriteOrigin, ScheduleChanges?, CancellationToken)"/>.</summary>
+    private async Task WriteStoresAsync(
         IReadOnlyList<Profile> profiles,
         WriteOrigin origin,
-        List<(string ProfileName, DateTime Start)> changed,
+        V4Models.DecompositionResult result,
+        ScheduleChanges changes,
         CancellationToken ct)
     {
         var firstMinted = Guid.CreateVersion7();
-        var result = new V4Models.DecompositionResult { CorrelationId = firstMinted };
+        result.CorrelationId = firstMinted;
 
         var entries = new List<StoreEntry>();
         var first = true;
@@ -107,11 +155,19 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             var minted = first ? firstMinted : Guid.CreateVersion7();
             first = false;
             foreach (var (storeName, profileData) in profile.Store)
+            {
+                if (IsProfileSwitchStoreName(storeName))
+                {
+                    Logger.LogDebug("Skipped profile switch store {StoreName} of profile {Id}", storeName, profile.Id);
+                    continue;
+                }
+
                 entries.Add(new StoreEntry(profile, storeName, profileData, $"{profile.Id}:{storeName}", minted));
+            }
         }
 
         if (entries.Count == 0)
-            return result;
+            return;
 
         var claim = await ResolveDefaultClaimAsync(entries, ct);
         var storedDefaults = claim.Claims
@@ -119,7 +175,6 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             : (await _therapySettingsRepo.GetDefaultsAsync(ct))
                 .Select(d => d.LegacyId).OfType<string>().ToHashSet(StringComparer.Ordinal);
 
-        var writtenSince = DateTime.UtcNow;
         var anchors = await _therapySettingsRepo.BulkUpsertByLegacyIdAsync(
             entries.Select(e => MapToTherapySettings(
                 e.Profile, e.Data, e.StoreName, e.LegacyId,
@@ -127,7 +182,9 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
                 e.MintedCorrelationId)).ToList(),
             origin, preserveStoredCorrelationId: true, ct);
         Record(result, anchors);
-        changed.AddRange(ChangedSince(anchors, writtenSince));
+        var changedSettings = Changed(anchors).ToList();
+        changes.Versions.AddRange(changedSettings.Select(VersionKey));
+        changes.LoopSettings.AddRange(changedSettings.Select(s => s.Timestamp));
 
         if (claim.Claims)
         {
@@ -149,7 +206,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         }
 
         if (groups.Count == 0)
-            return result;
+            return;
 
         var basal = await _basalScheduleRepo.BulkUpsertByLegacyIdAsync(
             groups.Select(g => MapToBasalSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
@@ -165,9 +222,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             groups.Select(g => MapToTargetRangeSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId, Logger)).ToList(),
             origin, ct: ct));
 
-        changed.AddRange(ChangedSince(basal, writtenSince));
-
-        return result;
+        changes.Versions.AddRange(Changed(basal).Select(VersionKey));
     }
 
     /// <summary>
@@ -182,13 +237,15 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// Nightscout finds none, and so does a claim whose store row was not written. A batch that does
     /// not claim keeps the stored flags as they are, so re-syncing an older document neither takes
     /// the default nor drops a user's choice.
-    /// Profile-switch snapshots are not documents, so they neither claim nor count as stored newer.
+    /// A document sent more than once in the batch claims as its last version, the one the bulk upsert
+    /// writes.
     /// </remarks>
     private async Task<DefaultClaim> ResolveDefaultClaimAsync(List<StoreEntry> entries, CancellationToken ct)
     {
         var newest = entries
             .Select(e => e.Profile)
-            .Distinct()
+            .GroupBy(p => p.Id, StringComparer.Ordinal)
+            .Select(versions => versions.Last())
             .OrderByDescending(VersionStart)
             .ThenByDescending(p => p.Id, StringComparer.Ordinal)
             .First();
@@ -212,12 +269,15 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         Profile Profile, string StoreName, ProfileData Data, string LegacyId, Guid MintedCorrelationId);
 
     /// <summary>The upserted versions a write created or changed, rather than left as they were.</summary>
-    private static IEnumerable<(string ProfileName, DateTime Start)> ChangedSince<TRecord>(
-        LegacyUpsertBatch<TRecord> batch, DateTime writtenSince)
-        where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped =>
+    private static IEnumerable<TRecord> Changed<TRecord>(LegacyUpsertBatch<TRecord> batch)
+        where TRecord : class, V4Models.IV4Record =>
         batch.Outcomes.Values
-            .Where(o => o.Created || o.Record.ModifiedAt >= writtenSince)
-            .Select(o => (o.Record.ProfileName, o.Record.Timestamp));
+            .Where(o => o.Outcome != UpsertOutcome.Unchanged)
+            .Select(o => o.Record);
+
+    private static (string ProfileName, DateTime Start) VersionKey<TRecord>(TRecord version)
+        where TRecord : V4Models.IV4Record, V4Models.IProfileScoped =>
+        (version.ProfileName, version.Timestamp);
 
     private static void Record<TRecord>(
         V4Models.DecompositionResult result, LegacyUpsertBatch<TRecord> batch)
@@ -226,10 +286,13 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         result.SkippedDeleted += batch.SkippedDeleted;
         foreach (var outcome in batch.Outcomes.Values)
         {
-            if (outcome.Created)
-                result.CreatedRecords.Add(outcome.Record);
-            else
-                result.UpdatedRecords.Add(outcome.Record);
+            var records = outcome.Outcome switch
+            {
+                UpsertOutcome.Created => result.CreatedRecords,
+                UpsertOutcome.Updated => result.UpdatedRecords,
+                _ => result.UnchangedRecords,
+            };
+            records.Add(outcome.Record);
         }
     }
 
@@ -254,7 +317,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         // place it where its client meant it instead. A zone-less startDate is read as UTC where
         // Nightscout reads it in the server's zone, which is UTC in its container image.
         if (profile.Mills != 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
+            return profile.Mills.ToUtcDateTime();
 
         return UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt) ?? DateTime.UnixEpoch;
     }
@@ -456,6 +519,9 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units) =>
         MergeTargets(lows, highs, units, out _);
 
+    /// <param name="lows">The low-target time-value entries from the profile store.</param>
+    /// <param name="highs">The high-target time-value entries from the profile store.</param>
+    /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
     /// <param name="undone">Whether an extra conversion was undone.</param>
     internal static List<V4Models.TargetRangeEntry> MergeTargets(
         List<TimeValue> lows, List<TimeValue> highs, string? units, out bool undone)
@@ -488,6 +554,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
 
     /// <summary>
     /// Whether a profile's units string denotes mmol/L (matching the forms Nightscout profiles use).
+    /// Not <see cref="V4Models.GlucoseUnits.Parse"/>: the write and the read must agree on stored rows,
+    /// and rows already stored were converted under this rule.
     /// </summary>
     internal static bool IsMmol(string? units) =>
         units is not null
@@ -496,11 +564,11 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
 
     /// <summary>
     /// Converts a stored mg/dL glucose value back to the profile's display units: the inverse of the
-    /// write-time normalisation in <see cref="ConvertSensitivityValues"/> and <see cref="MergeTargets"/>.
+    /// write-time normalisation in <see cref="ConvertSensitivityValues"/> and <see cref="MergeTargets(List{TimeValue}, List{TimeValue}, string)"/>.
     /// mmol values are rounded to one decimal place, the precision Nightscout profiles use.
     /// </summary>
     internal static double FromMgdl(double mgdl, string? units) =>
-        IsMmol(units) ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
+        IsMmol(units) ? ScaledRounding.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
 
     /// <summary>The highest stored mg/dL target one mmol conversion of a real target reaches (22.2 mmol/L).</summary>
     internal const double MaxSingleConversionMgdl = 400;
@@ -558,40 +626,40 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// </remarks>
     public async Task<bool> ReplaceDocumentAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
-        if (profile.Store.Count == 0)
+        var stores = profile.Store.Keys.Where(store => !IsProfileSwitchStoreName(store)).ToList();
+        if (stores.Count == 0)
             return false;
 
         var documentId = profile.Id!;
-        var stored = new List<(string LegacyId, string ProfileName, DateTime Start)>();
-        foreach (var row in await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct))
-        {
-            stored.Add((
-                IsKeyedUnder(row, documentId) ? row.LegacyId! : await KeyUnderDocumentAsync(row, documentId, origin, ct),
-                row.ProfileName,
-                row.Timestamp));
-        }
+        var rows = (await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct)).ToList();
+        await KeyUnderDocumentAsync([.. rows.Where(row => !IsKeyedUnder(row, documentId))], documentId, origin, ct);
+        var stored = rows.Select(row => (LegacyId: row.LegacyId!, row.ProfileName, Start: row.Timestamp)).ToList();
 
-        var changed = new List<(string ProfileName, DateTime Start)>();
-        var result = await DecomposeCoreAsync([profile], origin, changed, ct);
-        var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.TherapySettings>().Count();
-        if (written < profile.Store.Count)
+        var changes = new ScheduleChanges();
+        changes.LoopSettings.AddRange(stored.Select(row => row.Start));
+        var result = await DecomposeBatchAsync([profile], origin, changes, ct);
+        var kept = result.StoredRecords.OfType<V4Models.TherapySettings>().Count();
+        if (kept < stores.Count)
         {
-            await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+            await FollowAsync(changes, ct);
             return false;
         }
 
-        var carried = profile.Store.Keys.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
-        foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
+        var carried = stores.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
+        using (SystemAttributedBatchWrites(_auditContext))
         {
-            await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
-            changed.Add((dropped.ProfileName, dropped.Start));
+            foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
+            {
+                await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+                changes.Versions.Add((dropped.ProfileName, dropped.Start));
+            }
         }
 
-        await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+        await FollowAsync(changes, ct);
         return true;
     }
 
@@ -602,18 +670,23 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         var unkeyed = rows.Where(row => !IsKeyedUnder(row, documentId)).ToList();
 
         var deleted = await DeleteByLegacyIdAsync(documentId, origin, ct);
+        deleted += await DeleteSiblingsAsync(_basalScheduleRepo, unkeyed, origin, ct);
+        deleted += await DeleteSiblingsAsync(_carbRatioScheduleRepo, unkeyed, origin, ct);
+        deleted += await DeleteSiblingsAsync(_sensitivityScheduleRepo, unkeyed, origin, ct);
+        deleted += await DeleteSiblingsAsync(_targetRangeScheduleRepo, unkeyed, origin, ct);
         foreach (var row in unkeyed)
         {
-            deleted += await DeleteSiblingsAsync(_basalScheduleRepo, row, origin, ct);
-            deleted += await DeleteSiblingsAsync(_carbRatioScheduleRepo, row, origin, ct);
-            deleted += await DeleteSiblingsAsync(_sensitivityScheduleRepo, row, origin, ct);
-            deleted += await DeleteSiblingsAsync(_targetRangeScheduleRepo, row, origin, ct);
             await _therapySettingsRepo.DeleteAsync(row.Id, origin, ct);
             deleted++;
         }
 
         if (deleted > 0)
-            await _tempBasalRates.AfterSchedulesWrittenAsync(rows.Select(r => (r.ProfileName, r.Timestamp)).ToList(), ct);
+        {
+            var changes = new ScheduleChanges();
+            changes.Versions.AddRange(rows.Select(r => (r.ProfileName, r.Timestamp)));
+            changes.LoopSettings.AddRange(rows.Select(r => r.Timestamp));
+            await FollowAsync(changes, ct);
+        }
         return deleted;
     }
 
@@ -621,70 +694,93 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         row.LegacyId?.StartsWith(documentId + ":", StringComparison.Ordinal) == true;
 
     /// <summary>
-    /// Keys an unkeyed settings row, and the schedules <see cref="SiblingsAsync"/> finds for it, under
-    /// <c>"{documentId}:{profileName}"</c>.
+    /// Keys each of the unkeyed settings <paramref name="rows"/>, and the schedules
+    /// <see cref="SiblingsAsync"/> finds for it, under <c>"{documentId}:{profileName}"</c>.
     /// </summary>
-    /// <returns>The legacy id the row now carries.</returns>
-    private async Task<string> KeyUnderDocumentAsync(
-        V4Models.TherapySettings row, string documentId, WriteOrigin origin, CancellationToken ct)
+    private async Task KeyUnderDocumentAsync(
+        IReadOnlyList<V4Models.TherapySettings> rows, string documentId, WriteOrigin origin, CancellationToken ct)
     {
-        var legacyId = $"{documentId}:{row.ProfileName}";
-        await KeySiblingsAsync(_basalScheduleRepo, row, legacyId, origin, ct);
-        await KeySiblingsAsync(_carbRatioScheduleRepo, row, legacyId, origin, ct);
-        await KeySiblingsAsync(_sensitivityScheduleRepo, row, legacyId, origin, ct);
-        await KeySiblingsAsync(_targetRangeScheduleRepo, row, legacyId, origin, ct);
-        row.LegacyId = legacyId;
-        await _therapySettingsRepo.UpdateAsync(row.Id, row, origin, ct);
-        return legacyId;
+        if (rows.Count == 0)
+            return;
+
+        await KeySiblingsAsync(_basalScheduleRepo, rows, documentId, origin, ct);
+        await KeySiblingsAsync(_carbRatioScheduleRepo, rows, documentId, origin, ct);
+        await KeySiblingsAsync(_sensitivityScheduleRepo, rows, documentId, origin, ct);
+        await KeySiblingsAsync(_targetRangeScheduleRepo, rows, documentId, origin, ct);
+        foreach (var row in rows)
+        {
+            row.LegacyId = $"{documentId}:{row.ProfileName}";
+            await _therapySettingsRepo.UpdateAsync(row.Id, row, origin, ct);
+        }
     }
 
     private static async Task KeySiblingsAsync<TRecord>(
-        IProfileScopedRepository<TRecord> repository, V4Models.TherapySettings row, string legacyId,
+        IProfileScopedRepository<TRecord> repository, IReadOnlyList<V4Models.TherapySettings> rows, string documentId,
         WriteOrigin origin, CancellationToken ct)
         where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped
     {
-        foreach (var sibling in await SiblingsAsync(repository, row, ct))
+        foreach (var (row, siblings) in await SiblingsAsync(repository, rows, ct))
         {
-            sibling.LegacyId = legacyId;
-            await repository.UpdateAsync(sibling.Id, sibling, origin, ct);
+            foreach (var sibling in siblings)
+            {
+                sibling.LegacyId = $"{documentId}:{row.ProfileName}";
+                await repository.UpdateAsync(sibling.Id, sibling, origin, ct);
+            }
         }
     }
 
     private static async Task<int> DeleteSiblingsAsync<TRecord>(
-        IProfileScopedRepository<TRecord> repository, V4Models.TherapySettings row,
+        IProfileScopedRepository<TRecord> repository, IReadOnlyList<V4Models.TherapySettings> rows,
         WriteOrigin origin, CancellationToken ct)
         where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped
     {
-        var siblings = await SiblingsAsync(repository, row, ct);
-        foreach (var sibling in siblings)
-            await repository.DeleteAsync(sibling.Id, origin, ct);
-        return siblings.Count;
+        var deleted = 0;
+        foreach (var (_, siblings) in await SiblingsAsync(repository, rows, ct))
+        {
+            foreach (var sibling in siblings)
+                await repository.DeleteAsync(sibling.Id, origin, ct);
+            deleted += siblings.Count;
+        }
+        return deleted;
     }
 
     /// <summary>
-    /// The schedules that belong to an unkeyed settings row and to no other: those sharing its
-    /// correlation id and profile name, or its exact legacy id. A schedule the projection reaches only
-    /// by profile name may be shared with another row, so it is left alone.
+    /// The schedules that belong to each unkeyed settings row and to no other: those sharing its
+    /// correlation id and profile name, or its exact legacy id, read for every row in one query by
+    /// correlation id and one by legacy id. A schedule the projection reaches only by profile name may
+    /// be shared with another row, so it is left alone.
     /// </summary>
-    private static async Task<List<TRecord>> SiblingsAsync<TRecord>(
-        IProfileScopedRepository<TRecord> repository, V4Models.TherapySettings row, CancellationToken ct)
+    private static async Task<List<(V4Models.TherapySettings Row, List<TRecord> Siblings)>> SiblingsAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repository, IReadOnlyList<V4Models.TherapySettings> rows, CancellationToken ct)
         where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped
     {
-        var siblings = row.CorrelationId is { } correlationId
-            ? (await repository.GetByCorrelationIdAsync(correlationId, ct))
-                .Where(s => s.ProfileName == row.ProfileName)
-                .ToList()
-            : [];
+        if (rows.Count == 0)
+            return [];
 
-        if (!string.IsNullOrEmpty(row.LegacyId)
-            && await repository.GetByLegacyIdAsync(row.LegacyId, ct) is { } byLegacyId
-            && byLegacyId.ProfileName == row.ProfileName
-            && siblings.All(s => s.Id != byLegacyId.Id))
-        {
-            siblings.Add(byLegacyId);
-        }
+        var correlationIds = rows.Select(row => row.CorrelationId).OfType<Guid>().Distinct().ToList();
+        var byCorrelation = correlationIds.Count == 0
+            ? []
+            : (await repository.GetByCorrelationIdsAsync(correlationIds, ct)).ToList();
+        var legacyIds = rows.Select(row => row.LegacyId).Where(id => !string.IsNullOrEmpty(id)).OfType<string>().Distinct().ToList();
+        var byLegacyId = legacyIds.Count == 0
+            ? []
+            : (await repository.GetByLegacyIdsAsync(legacyIds, ct)).ToList();
 
-        return siblings;
+        return
+        [
+            .. rows.Select(row =>
+            {
+                var siblings = byCorrelation
+                    .Where(s => row.CorrelationId is { } correlationId && s.CorrelationId == correlationId && s.ProfileName == row.ProfileName)
+                    .ToList();
+                foreach (var byLegacy in byLegacyId.Where(s => s.LegacyId == row.LegacyId && s.ProfileName == row.ProfileName))
+                {
+                    if (siblings.All(s => s.Id != byLegacy.Id))
+                        siblings.Add(byLegacy);
+                }
+                return (row, siblings);
+            }),
+        ];
     }
 
     /// <inheritdoc />

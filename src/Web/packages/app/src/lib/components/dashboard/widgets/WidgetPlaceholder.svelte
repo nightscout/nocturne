@@ -11,13 +11,15 @@
 </script>
 
 <!-- Each shape repeats its widget's first-render lines with the same spacing; a skeleton bar
-     stands in for a line of text at that text size's line height (text-xs h-4, text-xl h-7,
+     stands in for a line of text at that text size's line height (text-xs h-4, text-sm h-5, text-xl h-7,
      text-2xl h-8). -->
 <WidgetCard title="Loading">
-  {#if shape === "delta"}
-    <div class="bg-muted h-7 w-20 animate-pulse rounded"></div>
-    <div class="mt-2 border-t border-transparent pt-2">
-      <div class="bg-muted h-4 w-24 animate-pulse rounded"></div>
+  {#if shape === "current-glucose"}
+    <!-- GlucoseValueIndicator's xl loading skeleton, then the details row the widget holds while
+         its reading loads. -->
+    <div class="flex flex-col gap-3">
+      <div class="bg-muted h-28 animate-pulse rounded-lg"></div>
+      <div class="min-h-5"></div>
     </div>
   {:else if shape === "stat"}
     <div class="bg-muted h-8 w-20 animate-pulse rounded"></div>
@@ -36,9 +38,10 @@
     </div>
     <div class="bg-muted mt-1 h-4 w-32 animate-pulse rounded"></div>
   {:else if shape === "empty-state"}
-    <div class="flex flex-col items-center py-2">
-      <div class="bg-muted mb-1 size-6 animate-pulse rounded"></div>
-      <div class="bg-muted h-4 w-24 animate-pulse rounded"></div>
+    <!-- EmptyState at its compact size: the artwork, then a text-sm title. -->
+    <div class="flex flex-col items-center gap-2 px-4 py-3">
+      <div class="bg-muted size-16 animate-pulse rounded"></div>
+      <div class="bg-muted h-5 w-28 animate-pulse rounded"></div>
     </div>
   {:else}
     <WidgetStatSkeleton {shape} />

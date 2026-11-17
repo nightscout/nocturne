@@ -496,11 +496,6 @@ public class OidcAuthService : IOidcAuthService
             if (session is null)
                 return null;
 
-            // Resolve subject ID from the new refresh token for the response
-            var rotated = await _refreshTokenService.ValidateRefreshTokenAsync(session.RefreshToken);
-            if (rotated is null)
-                return null;
-
             return new OidcTokenResponse
             {
                 AccessToken = session.AccessToken,
@@ -509,7 +504,7 @@ public class OidcAuthService : IOidcAuthService
                 ExpiresIn = session.ExpiresInSeconds,
                 RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
-                SubjectId = rotated.SubjectId,
+                SubjectId = session.SubjectId,
             };
         }
 
@@ -520,26 +515,14 @@ public class OidcAuthService : IOidcAuthService
         await _refreshTokenService.UpdateLastUsedAsync(refreshToken);
 
         var subjectId = owner.SubjectId;
-        var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
-        if (subject == null || !subject.IsActive)
-        {
-            await _refreshTokenService.RevokeRefreshTokenAsync(refreshToken, "Subject inactive");
+        if (await _sessionService.ReadRefreshClaimsAsync(refreshToken, subjectId) is not { } claims)
             return null;
-        }
-
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId);
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId);
 
         var accessTokenLifetime = _options.Session.AccessTokenLifetime;
         var accessToken = _jwtService.GenerateAccessToken(
-            new SubjectInfo
-            {
-                Id = subject.Id,
-                Name = subject.Name,
-                Email = subject.Email,
-            },
-            permissions,
-            roles,
+            claims.Subject,
+            claims.Permissions,
+            claims.Roles,
             owner.SessionId,
             accessTokenLifetime
         );

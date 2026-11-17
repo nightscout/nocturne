@@ -64,8 +64,8 @@ public class AuthAuditServiceTests : IDisposable
                 SubjectId = _adminSubjectId,
             });
 
+        Assert.Equal(_subjectId, row.TargetSubjectId);
         Assert.Equal(_adminSubjectId, row.ActorSubjectId);
-        Assert.NotEqual(row.SubjectId, row.ActorSubjectId);
         Assert.Null(row.ActorCredential);
     }
 
@@ -171,6 +171,7 @@ public class AuthAuditServiceTests : IDisposable
                 SubjectId = _subjectId,
             });
 
+        Assert.Equal(_subjectId, row.TargetSubjectId);
         Assert.Equal(_subjectId, row.ActorSubjectId);
         Assert.Null(row.ActorCredential);
     }

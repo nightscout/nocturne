@@ -8,6 +8,7 @@
     rel="external noopener noreferrer"
     class="group flex items-start gap-4 py-5 no-underline text-inherit"
 >
+    <img src="/logos/pikapods.png" alt="" class="size-8 rounded-md object-contain shrink-0 mt-0.5" />
     <div class="flex-1">
         <h3 class="text-lg font-semibold text-foreground m-0 mb-1 group-hover:underline underline-offset-4">
             PikaPods

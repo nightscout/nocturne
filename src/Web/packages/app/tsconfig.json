@@ -7,7 +7,7 @@
     "skipLibCheck": true,
     "checkJs": false,
     "noImplicitAny": true,
-    "types": ["svelte"],
+    "types": ["$app/types", "svelte"],
     // "typeRoots": ["./@types"],
 
     /* Bundler mode */
@@ -25,9 +25,6 @@
     "noUncheckedSideEffectImports": true
   },
   "include": [
-    ".svelte-kit/ambient.d.ts",
-    ".svelte-kit/non-ambient.d.ts",
-    ".svelte-kit/types/**/$types.d.ts",
     "global.d.ts",
     "@types/d3/d3.d.ts",
     "lib/types.d.ts",
@@ -47,5 +44,5 @@
     "**/locales/**",
     "**/locales/.wuchale/**"
   ],
-  "extends": "./.svelte-kit/tsconfig.json"
+  "extends": "$app/tsconfig"
 }

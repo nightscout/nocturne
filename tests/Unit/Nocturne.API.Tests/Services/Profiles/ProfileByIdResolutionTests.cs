@@ -26,6 +26,8 @@ public class ProfileByIdResolutionTests
             .ReturnsAsync([]);
         _therapyRepo.Setup(r => r.GetDocumentIdsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        _therapyRepo.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _therapyRepo.Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((TherapySettings?)null);
 

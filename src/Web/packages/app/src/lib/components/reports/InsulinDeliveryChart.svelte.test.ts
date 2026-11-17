@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { HourlyInsulinDeliveryResponse } from "$lib/api";
+import type { HourlyInsulinDeliveryResponse } from "#lib/api/index.js";
 import InsulinDeliveryChart from "./InsulinDeliveryChart.svelte";
 
 const period = (units: number, percent: number) => ({ units, percent });

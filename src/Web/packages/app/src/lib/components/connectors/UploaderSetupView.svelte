@@ -1,18 +1,15 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import type {
     UploaderApp,
     UploaderSetupResponse,
     DataSourceInfo,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
-  import { getActiveDataSources } from "$api/generated/services.generated.remote";
-  import { create as createGrant } from "$lib/api/generated/directGrants.generated.remote";
-  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
-  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
+  import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
+  import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
@@ -21,17 +18,12 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Clock from "@lucide/svelte/icons/clock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import X from "@lucide/svelte/icons/x";
-  import Shield from "@lucide/svelte/icons/shield";
-  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
+  import DeviceCodeApproval from "#lib/components/oauth/DeviceCodeApproval.svelte";
   import QRCode from "qrcode";
 
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -46,21 +38,9 @@
     onConnected,
   }: Props = $props();
 
-  // ── Device authorization (OAuth) state ────────────────────────
 
   let qrCodeDataUrl = $state<string | null>(null);
-  let deviceCodeInput = $state("");
-  let deviceLookupLoading = $state(false);
-  let deviceLookupError = $state<string | null>(null);
-  let deviceInfo = $state<{
-    userCode: string;
-    clientId: string;
-    displayName: string | null;
-    scopes: string[];
-  } | null>(null);
-  let deviceApproveLoading = $state(false);
   let deviceApproved = $state(false);
-  let deviceDenied = $state(false);
 
   // ── API key generation (for apps without OAuth connectUrl) ────
 
@@ -79,6 +59,7 @@
         scopes: ["health.readwrite"],
       });
       apiToken = result.token ?? null;
+      if (apiToken) startPolling();
     } catch (err) {
       apiTokenError = describeSubmitError(
         err,
@@ -91,12 +72,14 @@
 
   // ── Connection polling ────────────────────────────────────────
 
-  let pollInterval = $state<ReturnType<typeof setInterval> | null>(null);
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let destroyed = false;
 
   const dataSourcesQuery = getActiveDataSources();
   const dataSources = $derived<DataSourceInfo[]>(dataSourcesQuery.current ?? []);
 
   onDestroy(() => {
+    destroyed = true;
     stopPolling();
   });
 
@@ -110,62 +93,6 @@
     } catch {
       // Local rendering, not a request — there is no server reason to surface.
       qrCodeDataUrl = null;
-    }
-  }
-
-  async function lookupDeviceCode() {
-    const code = deviceCodeInput.trim();
-    if (!code) return;
-
-    deviceLookupLoading = true;
-    deviceLookupError = null;
-
-    try {
-      const info = await getDeviceInfo({ userCode: code }).run();
-      if (!info) {
-        deviceLookupError = "Invalid or expired device code.";
-        return;
-      }
-      deviceInfo = {
-        userCode: info.userCode ?? code,
-        clientId: info.clientId ?? "",
-        displayName: info.clientDisplayName ?? null,
-        scopes: (info.scopes ?? []).filter(Boolean),
-      };
-    } catch (err) {
-      deviceLookupError = describeSubmitError(
-        err,
-        "Invalid or expired device code. Please check and try again."
-      );
-    } finally {
-      deviceLookupLoading = false;
-    }
-  }
-
-  async function handleApproveDevice() {
-    if (!deviceInfo) return;
-    deviceApproveLoading = true;
-    try {
-      await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
-      deviceApproved = true;
-      startPolling();
-    } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
-    } finally {
-      deviceApproveLoading = false;
-    }
-  }
-
-  async function handleDenyDevice() {
-    if (!deviceInfo) return;
-    deviceApproveLoading = true;
-    try {
-      await deviceApprove({ user_code: deviceInfo.userCode, approved: false });
-      deviceDenied = true;
-    } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to deny the request.");
-    } finally {
-      deviceApproveLoading = false;
     }
   }
 
@@ -184,6 +111,7 @@
   }
 
   function startPolling() {
+    if (destroyed) return;
     stopPolling();
     pollInterval = setInterval(async () => {
       try {
@@ -206,20 +134,15 @@
     }
   }
 
-  // Initialize QR code or generate API key when setupResponse arrives
   $effect(() => {
-    if (setupResponse?.connectUrl) {
-      generateQrCode(setupResponse.connectUrl);
-    } else if (setupResponse && !setupResponse.connectUrl) {
-      generateApiToken();
-    }
-  });
-
-  // Start polling for data once the API key has been generated
-  $effect(() => {
-    if (apiToken) {
-      startPolling();
-    }
+    const response = setupResponse;
+    untrack(() => {
+      if (response?.connectUrl) {
+        generateQrCode(response.connectUrl);
+      } else if (response) {
+        generateApiToken();
+      }
+    });
   });
 </script>
 
@@ -245,151 +168,10 @@
     </div>
 
     {#if setupResponse.connectUrl}
-      <!-- ── OAuth Device Flow (QR code + inline authorization) ── -->
-      {#if deviceApproved}
-        <!-- Approved — waiting for data -->
-        <Card.Root variant="success">
-          <Card.Content class="space-y-2 pt-6">
-            <div class="flex items-center gap-3">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10">
-                <Check class="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <p class="font-medium text-success">Device Authorized</p>
-                <p class="text-sm text-muted-foreground">
-                  {app ? getUploaderName(app) : ''} is now connected. You can return to your device.
-                </p>
-              </div>
-            </div>
-          </Card.Content>
-        </Card.Root>
-
-        <!-- Connection status (polling for data) -->
-        {@const detected = isDetected(app?.id)}
-        {@const ds = getDataSource(app?.id)}
-        {#if detected && ds}
-          <Card.Root variant="success">
-            <Card.Content class="flex items-center gap-3 pt-6">
-              <CheckCircle class="h-5 w-5 text-success" />
-              <div>
-                <p class="font-medium text-success">Receiving Data</p>
-                <p class="text-sm text-muted-foreground">
-                  {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
-                </p>
-              </div>
-            </Card.Content>
-          </Card.Root>
-
-          <div class="flex justify-end">
-            <Button onclick={onConnected}>Continue to Dashboard</Button>
-          </div>
-        {:else}
-          <Card.Root>
-            <Card.Content class="flex items-center gap-3 pt-6">
-              <Clock class="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p class="font-medium">Waiting for data</p>
-                <p class="text-sm text-muted-foreground">
-                  It can take a few minutes for the first glucose reading to arrive. This page will update automatically.
-                </p>
-              </div>
-            </Card.Content>
-          </Card.Root>
-        {/if}
-
-      {:else if deviceDenied}
-        <!-- Denied -->
-        <Card.Root>
-          <Card.Content class="flex items-center gap-3 pt-6">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-              <X class="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p class="font-medium">Authorization Denied</p>
-              <p class="text-sm text-muted-foreground">The device will not be granted access.</p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-
-      {:else if deviceInfo}
-        <!-- Step 2: Approve / deny the device -->
-        <Card.Root>
-          <Card.Header class="space-y-1 text-center">
-            <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <Shield class="h-6 w-6 text-primary" />
-            </div>
-            <Card.Title class="text-lg">Authorize Application</Card.Title>
-            <Card.Description>A device wants to access your Nocturne data.</Card.Description>
-          </Card.Header>
-          <Card.Content class="space-y-4">
-            <DeviceAppClaimNotice claimedName={deviceInfo.displayName ?? deviceInfo.clientId} />
-
-            <Separator />
-
-            <div>
-              <p class="mb-3 text-sm font-medium">This application is requesting permission to:</p>
-              <ul class="space-y-2">
-                {#each deviceInfo.scopes as scope (scope)}
-                  <li class="flex items-start gap-3 text-sm">
-                    <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span class="text-muted-foreground">{getOAuthScopeDescription(scope)}</span>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-
-            {#if deviceInfo.scopes.includes("*")}
-              <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p class="text-sm text-destructive">This app is requesting full access, including the ability to delete data.</p>
-              </div>
-            {:else}
-              <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">
-                <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <p class="text-sm text-muted-foreground">This app cannot delete your data.</p>
-              </div>
-            {/if}
-
-            {#if deviceLookupError}
-              <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p class="text-sm text-destructive">{deviceLookupError}</p>
-              </div>
-            {/if}
-
-            <Separator />
-
-            <div class="flex gap-3">
-              <Button
-                variant="outline"
-                class="flex-1"
-                disabled={deviceApproveLoading}
-                onclick={handleDenyDevice}
-              >
-                {#if deviceApproveLoading}
-                  <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                {/if}
-                Deny
-              </Button>
-              <Button
-                class="flex-1"
-                disabled={deviceApproveLoading}
-                onclick={handleApproveDevice}
-              >
-                {#if deviceApproveLoading}
-                  <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                {/if}
-                Approve
-              </Button>
-            </div>
-          </Card.Content>
-        </Card.Root>
-
-      {:else}
-        <!-- Step 1: QR code + code entry -->
+      {#if !deviceApproved}
         <Card.Root>
           <Card.Header class="text-center pb-3">
-            <Card.Title class="text-sm">Scan to Connect</Card.Title>
+            <Card.Title class="text-sm">Scan to connect</Card.Title>
             <Card.Description>
               Scan this QR code with your phone's camera to open {app ? getUploaderName(app) : ''} and start the connection.
             </Card.Description>
@@ -406,55 +188,66 @@
             {/if}
           </Card.Content>
         </Card.Root>
+      {/if}
 
-        <Card.Root>
+      <Card.Root>
+        {#if !deviceApproved}
           <Card.Header class="pb-3">
-            <Card.Title class="text-sm">Enter Authorization Code</Card.Title>
+            <Card.Title class="text-sm">Enter authorization code</Card.Title>
             <Card.Description>
               After scanning, {app ? getUploaderName(app) : ''} will show an 8-character code. Enter it here to approve the connection.
             </Card.Description>
           </Card.Header>
-          <Card.Content class="space-y-4">
-            {#if deviceLookupError}
-              <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p class="text-sm text-destructive">{deviceLookupError}</p>
-              </div>
-            {/if}
+        {/if}
+        <Card.Content>
+          <DeviceCodeApproval
+            onApproved={() => {
+              deviceApproved = true;
+              startPolling();
+            }}
+          />
+        </Card.Content>
+      </Card.Root>
 
-            <form
-              class="flex gap-2"
-              onsubmit={(e) => {
-                e.preventDefault();
-                lookupDeviceCode();
-              }}
-            >
-              <Input
-                type="text"
-                placeholder="XXXX-YYYY"
-                maxlength={9}
-                autocomplete="off"
-                variant="code"
-                bind:value={deviceCodeInput}
-                disabled={deviceLookupLoading}
-              />
-              <Button type="submit" disabled={deviceLookupLoading || !deviceCodeInput.trim()}>
-                {#if deviceLookupLoading}
-                  <Loader2 class="h-4 w-4 animate-spin" />
-                {:else}
-                  Continue
-                {/if}
-              </Button>
-            </form>
-          </Card.Content>
-        </Card.Root>
+      {#if deviceApproved}
+        {@const detected = isDetected(app?.id)}
+        {@const ds = getDataSource(app?.id)}
+        {#if detected && ds}
+          <Card.Root variant="success">
+            <Card.Content class="flex items-center gap-3 pt-6">
+              <CheckCircle class="h-5 w-5 text-success" />
+              <div>
+                <p class="font-medium text-success">Receiving data</p>
+                <p class="text-sm text-muted-foreground">
+                  {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
+                </p>
+              </div>
+            </Card.Content>
+          </Card.Root>
+
+          <div class="flex justify-end">
+            <Button onclick={onConnected}>Continue to dashboard</Button>
+          </div>
+        {:else}
+          <Card.Root>
+            <Card.Content class="flex items-center gap-3 pt-6">
+              <Clock class="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p class="font-medium">Waiting for data</p>
+                <p class="text-sm text-muted-foreground">
+                  It can take a few minutes for the first glucose reading to arrive. This page will update automatically.
+                </p>
+              </div>
+            </Card.Content>
+          </Card.Root>
+        {/if}
       {/if}
 
     {:else}
       <!-- ── Manual setup (API key + Base URL) ── -->
       <Card.Root>
         <Card.Header class="pb-3">
-          <Card.Title class="text-sm">Connection Details</Card.Title>
+          <Card.Title class="text-sm">Connection details</Card.Title>
           <Card.Description>
             Enter these values in {app ? getUploaderName(app) : 'your app'}'s Nightscout settings.
           </Card.Description>
@@ -483,7 +276,7 @@
 
           <!-- API Key -->
           <div class="space-y-1.5">
-            <p class="text-xs font-medium text-muted-foreground">API Key</p>
+            <p class="text-xs font-medium text-muted-foreground">API key</p>
             {#if apiTokenLoading}
               <div class="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 <Loader2 class="h-4 w-4 animate-spin" />
@@ -527,7 +320,7 @@
           <Card.Content class="flex items-center gap-3 pt-6">
             <CheckCircle class="h-5 w-5 text-success" />
             <div>
-              <p class="font-medium text-success">Receiving Data</p>
+              <p class="font-medium text-success">Receiving data</p>
               <p class="text-sm text-muted-foreground">
                 {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
               </p>
@@ -536,7 +329,7 @@
         </Card.Root>
 
         <div class="flex justify-end">
-          <Button onclick={onConnected}>Continue to Dashboard</Button>
+          <Button onclick={onConnected}>Continue to dashboard</Button>
         </div>
       {:else}
         <Card.Root>
@@ -559,7 +352,7 @@
         <div>
           <p class="font-medium">Failed to load setup instructions</p>
           <p class="text-sm text-muted-foreground">
-            Could not load setup details for {app ? getUploaderName(app) : ''}. Please try again.
+            Could not load setup details for {app ? getUploaderName(app) : ''}. Try again.
           </p>
         </div>
       </Card.Content>

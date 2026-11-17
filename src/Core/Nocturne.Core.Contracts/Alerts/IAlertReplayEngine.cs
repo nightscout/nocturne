@@ -5,8 +5,7 @@ namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
 /// Engine seam for replay (docs/alerts/engine-semantics.md §8): re-evaluates a rule set over a
-/// series of pre-enriched ticks. Selected by the same <c>Alerts:Engine</c> flag as
-/// <see cref="IAlertEvaluationEngine"/>. Replay owns no persistent state: every call starts from a
+/// series of pre-enriched ticks. Replay owns no persistent state: every call starts from a
 /// fresh timer store and nothing it evaluates is written anywhere.
 /// </summary>
 public interface IAlertReplayEngine

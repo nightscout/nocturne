@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Alerts;
@@ -10,8 +10,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
 
 /// <summary>
-/// <see cref="IAlertEvaluationEngine.EvaluateAutoResolveAsync"/>, the sweep's auto-resolve, for
-/// each engine: it closes the open excursion with reason auto only when the tree holds.
+/// <see cref="IAlertEvaluationEngine.EvaluateAutoResolveAsync"/>, the sweep's auto-resolve: it
+/// closes the open excursion with reason auto only when the tree holds.
 /// </summary>
 public class AutoResolveSeamTests
 {
@@ -41,39 +41,19 @@ public class AutoResolveSeamTests
         LastReadingAt = T0,
     };
 
-    public enum Engine { Managed, Rust }
-
-    private static (IAlertEvaluationEngine Engine, InMemoryTrackerRepository Repository, IAsyncDisposable Scope)
-        Build(Engine engine, AlertRule rule)
+    private static (IAlertEvaluationEngine Engine, InMemoryTrackerRepository Repository) Build(AlertRule rule)
     {
         var time = new ManualTimeProvider();
         time.SetUtcNow(T0);
-        var timers = new RecordingTimerStore();
         var repository = new InMemoryTrackerRepository([rule]);
-        if (engine == Engine.Rust)
-            return (EngineTestHarness.BuildRustEngine(time, timers, repository), repository, NoScope.Instance);
-
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timers, repository);
-        return (managed, repository, provider);
+        return (EngineTestHarness.BuildRustEngine(time, repository), repository);
     }
 
-    private sealed class NoScope : IAsyncDisposable
-    {
-        public static readonly NoScope Instance = new();
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    [Fact] public Task Closes_the_open_excursion_when_the_tree_holds_managed() =>
-        Closes_the_open_excursion_when_the_tree_holds(Engine.Managed);
-    [NativeFact] public Task Closes_the_open_excursion_when_the_tree_holds_rust() =>
-        Closes_the_open_excursion_when_the_tree_holds(Engine.Rust);
-
-    private static async Task Closes_the_open_excursion_when_the_tree_holds(Engine kind)
+    [NativeFact]
+    public async Task Closes_the_open_excursion_when_the_tree_holds()
     {
         var rule = Rule();
-        var (engine, repository, scope) = Build(kind, rule);
-        await using var _ = scope;
+        var (engine, repository) = Build(rule);
         var opened = await engine.EvaluateRuleAsync(
             Snapshot(rule), Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
 
@@ -85,16 +65,11 @@ public class AutoResolveSeamTests
         state.Should().BeEquivalentTo(new { State = "idle", ActiveExcursionId = (Guid?)null });
     }
 
-    [Fact] public Task Leaves_the_excursion_open_when_the_tree_does_not_hold_managed() =>
-        Leaves_the_excursion_open_when_the_tree_does_not_hold(Engine.Managed);
-    [NativeFact] public Task Leaves_the_excursion_open_when_the_tree_does_not_hold_rust() =>
-        Leaves_the_excursion_open_when_the_tree_does_not_hold(Engine.Rust);
-
-    private static async Task Leaves_the_excursion_open_when_the_tree_does_not_hold(Engine kind)
+    [NativeFact]
+    public async Task Leaves_the_excursion_open_when_the_tree_does_not_hold()
     {
         var rule = Rule();
-        var (engine, repository, scope) = Build(kind, rule);
-        await using var _ = scope;
+        var (engine, repository) = Build(rule);
         var opened = await engine.EvaluateRuleAsync(
             Snapshot(rule), Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
 
@@ -104,16 +79,11 @@ public class AutoResolveSeamTests
         (await repository.GetTrackerStateAsync(RuleId))!.ActiveExcursionId.Should().Be(opened.Transition.ExcursionId);
     }
 
-    [Fact] public Task Does_nothing_when_auto_resolve_is_disabled_managed() =>
-        Does_nothing_when_auto_resolve_is_disabled(Engine.Managed);
-    [NativeFact] public Task Does_nothing_when_auto_resolve_is_disabled_rust() =>
-        Does_nothing_when_auto_resolve_is_disabled(Engine.Rust);
-
-    private static async Task Does_nothing_when_auto_resolve_is_disabled(Engine kind)
+    [NativeFact]
+    public async Task Does_nothing_when_auto_resolve_is_disabled()
     {
         var rule = Rule(autoResolveEnabled: false);
-        var (engine, repository, scope) = Build(kind, rule);
-        await using var _ = scope;
+        var (engine, repository) = Build(rule);
         await engine.EvaluateRuleAsync(Snapshot(rule), Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
 
         var resolved = await engine.EvaluateAutoResolveAsync(Snapshot(rule), Glucose(100), CancellationToken.None);
@@ -122,16 +92,11 @@ public class AutoResolveSeamTests
         (await repository.GetTrackerStateAsync(RuleId))!.State.Should().Be("active");
     }
 
-    [Fact] public Task Does_nothing_without_an_open_excursion_managed() =>
-        Does_nothing_without_an_open_excursion(Engine.Managed);
-    [NativeFact] public Task Does_nothing_without_an_open_excursion_rust() =>
-        Does_nothing_without_an_open_excursion(Engine.Rust);
-
-    private static async Task Does_nothing_without_an_open_excursion(Engine kind)
+    [NativeFact]
+    public async Task Does_nothing_without_an_open_excursion()
     {
         var rule = Rule();
-        var (engine, repository, scope) = Build(kind, rule);
-        await using var _ = scope;
+        var (engine, repository) = Build(rule);
 
         var resolved = await engine.EvaluateAutoResolveAsync(Snapshot(rule), Glucose(100), CancellationToken.None);
 

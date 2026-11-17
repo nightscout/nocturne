@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { enumValue } from "$lib/components/ui/enum-value";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as Select from "$lib/components/ui/select";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { enumValue } from "#lib/components/ui/enum-value.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Check from "@lucide/svelte/icons/check";
   import Globe from "@lucide/svelte/icons/globe";
-  import { OidcProviderType } from "$api";
-  import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { OidcProviderType } from "#lib/api/index.js";
+  import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "#lib/api/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   const OIDC_SCOPES = "openid profile email";
 
@@ -147,7 +147,7 @@
     testingProvider = true;
     testResult = null;
     try {
-      const { testUnsaved } = await import("$lib/api/generated/oidcProviderAdmins.generated.remote");
+      const { testUnsaved } = await import("#lib/api/generated/oidcProviderAdmins.generated.remote.js");
       testResult = await testUnsaved({
         issuerUrl: providerIssuerUrl,
         clientId: providerClientId,
@@ -244,7 +244,7 @@
   <Dialog.Content class="max-w-2xl max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
-        {editingProvider ? "Edit Identity Provider" : "Add Identity Provider"}
+        {editingProvider ? "Edit identity provider" : "Add identity provider"}
       </Dialog.Title>
       <Dialog.Description>
         Configure an external identity provider (OpenID Connect or OAuth 2.0) for single sign-on.
@@ -261,7 +261,7 @@
 
       <div class="space-y-2">
         <Label for="provider-name">Name</Label>
-        <Input id="provider-name" bind:value={providerName} placeholder="My Provider" />
+        <Input id="provider-name" bind:value={providerName} placeholder="My provider" />
       </div>
 
       <div class="space-y-2">
@@ -340,7 +340,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-client-secret">Client Secret</Label>
+        <Label for="provider-client-secret">Client secret</Label>
         <Input
           id="provider-client-secret"
           type="password"
@@ -360,7 +360,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-roles">Default Roles</Label>
+        <Label for="provider-roles">Default roles</Label>
         <Input
           id="provider-roles"
           bind:value={providerDefaultRoles}
@@ -381,7 +381,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-color">Button Color</Label>
+        <Label for="provider-color">Button color</Label>
         <Input
           id="provider-color"
           bind:value={providerButtonColor}
@@ -390,7 +390,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-order">Display Order</Label>
+        <Label for="provider-order">Display order</Label>
         <Input
           id="provider-order"
           type="number"
@@ -415,7 +415,7 @@
           {:else}
             <Globe class="h-4 w-4" />
           {/if}
-          Test Connection
+          Test connection
         </Button>
         {#if testResult}
           {#if testResult.success}
@@ -455,7 +455,7 @@
         {#if providerSaving}
           <Loader2 class="h-4 w-4 animate-spin" />
         {/if}
-        {editingProvider ? "Save Changes" : "Create Provider"}
+        {editingProvider ? "Save changes" : "Create provider"}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

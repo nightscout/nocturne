@@ -31,13 +31,13 @@ Commercial platforms such as Clarity, Tidepool, and Sugarmate are not self-hoste
 ## Operating Context
 
 - **Surfaces:**
-  - the tenant web app (SvelteKit), with its dashboard, reports, alerts, food and meals, calendar, and time spans;
+  - the tenant web app (SvelteKit), with its dashboard, reports, alerts, food and meals, calendar, and therapy timeline;
   - configurable clock faces and fullscreen displays;
   - public share links (`{token}.share.{domain}`), which show anonymous viewers only the categories the owner granted;
   - the marketing and docs portal (`src/Portal`, `packages/portal`).
 - **Companion surfaces in the repo:** a desktop app, embeddable widgets, and a chat bot framework for Discord, Slack, Telegram, and WhatsApp. The Prelude Android app is a separate product.
 - **Data sources:**
-  - native connectors: Dexcom, FreeStyle Libre, Eversense, Medtronic CareLink, Tandem, twiist, myLife, Glooko, Tidepool, Gluroo, Nightscout, MyFitnessPal, Home Assistant, and remote Nocturne instances;
+  - native connectors: Dexcom, FreeStyle Libre, Eversense, Medtronic CareLink, Tandem, twiist, myLife, Glooko, Tidepool, Gluroo, Nightscout, MyFitnessPal, Oura (data export), Home Assistant, and remote Nocturne instances;
   - Nightscout-API uploaders: Loop, Trio, AndroidAPS, xDrip+, Juggluco, and others.
 - **Auth:** passkeys, plus legacy `API_SECRET` for Nightscout clients.
 - **Deployment:** Docker Compose or Portainer bundles, installed as "two files and a domain name".

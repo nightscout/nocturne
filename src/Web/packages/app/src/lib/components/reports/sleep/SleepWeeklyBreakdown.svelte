@@ -4,10 +4,10 @@
    * tracked night is a weekday-keyed link to its single-night report.
    */
   import { resolve } from "$app/paths";
-  import type { SleepNightSummary, SleepWeekSummary } from "$lib/api";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import { parseCalendarDate, weekdayIndex, weekdayLabels } from "$lib/components/calendar/calendar-date";
-  import { formatLocale } from "$lib/utils/formatting";
+  import type { SleepNightSummary, SleepWeekSummary } from "#lib/api/index.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { parseCalendarDate, weekdayIndex, weekdayLabels } from "#lib/components/calendar/calendar-date.js";
+  import { formatLocale } from "#lib/utils/formatting.js";
 
   interface Props {
     weeks: SleepWeekSummary[];
@@ -72,7 +72,7 @@
 <div class="divide-y divide-border/60">
   {#each rows as { week, cells } (week.weekStart)}
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-2.5 first:pt-0 last:pb-0">
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 flex-1 basis-48">
         <div class="text-sm font-medium">{week.label}</div>
         {#if (week.nightCount ?? 0) > 0}
           <div class="text-xs text-muted-foreground">

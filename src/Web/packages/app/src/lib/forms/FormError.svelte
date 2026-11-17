@@ -1,6 +1,6 @@
 <script lang="ts">
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
   import { fieldMessages, type FieldIssues } from "./field-messages";
 
   interface Props {

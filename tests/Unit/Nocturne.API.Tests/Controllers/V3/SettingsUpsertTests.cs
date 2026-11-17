@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Configuration;
@@ -128,7 +129,7 @@ public class SettingsUpsertTests : IDisposable
 
         await _controller.UpdateSettings("newkey", Json(AapsDocument("{}", extra: $"\"_ID\":\"{other}\"")));
 
-        var untouched = await _context.Settings.FindAsync(other);
+        var untouched = await _context.Settings.SingleOrDefaultAsync(s => s.Id == other);
         untouched!.Key.Should().Be("displayUnits");
         untouched.Value.Should().Be("\"mmol\"");
         _context.Settings.Should().HaveCount(2);

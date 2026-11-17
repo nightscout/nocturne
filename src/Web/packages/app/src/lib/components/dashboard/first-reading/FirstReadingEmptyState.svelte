@@ -1,20 +1,15 @@
 <script lang="ts">
-  import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import { Card, CardContent } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Plug from "@lucide/svelte/icons/plug";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Download from "@lucide/svelte/icons/download";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import Wifi from "@lucide/svelte/icons/wifi";
+  import { DropGroup, DropSurface } from "water-ui";
   import { resolve } from "$app/paths";
-  import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
+  import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     /**
@@ -38,21 +33,18 @@
     return Boolean(connector.lastSyncAttempt || connector.lastSuccessfulSync);
   }
 
-  const connectorsPath = resolve("/settings/connectors");
-  const uploaderTokenPath = `${resolve("/settings/connectors")}#api-tokens-section`;
-  const migrationPath = resolve("/settings/migration");
+  const connectorsPath = resolve('settings/connectors');
+  const uploaderTokenPath = `${resolve('settings/connectors')}#api-tokens-section`;
+  const migrationPath = resolve('settings/migration');
 </script>
 
 <Card data-testid="first-reading-empty-state">
-  <CardHeader>
-    <CardTitle class="flex items-center gap-2">
-      <Wifi class="h-5 w-5 text-primary" />
-      Waiting for your first reading
-    </CardTitle>
-    <CardDescription>
-      Your glucose chart will appear here as soon as the first reading arrives.
-    </CardDescription>
-  </CardHeader>
+  <EmptyState
+    art="sunrise"
+    title="Waiting for your first reading"
+    headingLevel={2}
+    body="Your glucose chart will appear here as soon as the first reading arrives."
+  />
   <CardContent class="space-y-4">
     {#if hasConnector}
       <div class="space-y-3" data-testid="waiting-connectors">
@@ -93,7 +85,7 @@
                   class="mt-1 text-sm text-muted-foreground"
                   data-testid="connector-not-synced"
                 >
-                  It hasn't run its first sync yet. This can take a few minutes.
+                  Its first sync is not done yet. This can take a few minutes.
                 </p>
               {/if}
             </div>
@@ -107,48 +99,61 @@
       </div>
     {:else}
       <p class="text-sm text-muted-foreground" data-testid="no-connector-intro">
-        No data source is set up yet. Pick whichever matches how you track your
-        glucose.
+        No data source is configured yet. Pick whichever matches how you track your glucose.
       </p>
-      <div class="grid gap-3 @md:grid-cols-3">
-        <a
-          href={connectorsPath}
-          data-testid="path-connector"
-          class="group flex flex-col gap-2 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
-        >
-          <Plug class="h-5 w-5 text-primary" />
-          <span class="font-medium">Connect a CGM or pump account</span>
-          <span class="text-sm text-muted-foreground">
-            Pull data automatically from services like Dexcom, LibreLink, or
-            Glooko.
-          </span>
-        </a>
-        <!-- eslint-disable svelte/no-navigation-without-resolve -- resolve() covers the route; the #api-tokens-section fragment deep-links to the token section and cannot be expressed through resolve() -->
-        <a
-          href={uploaderTokenPath}
-          data-testid="path-uploader"
-          class="group flex flex-col gap-2 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
-        >
-          <KeyRound class="h-5 w-5 text-primary" />
-          <span class="font-medium">Set up an uploader app</span>
-          <span class="text-sm text-muted-foreground">
-            Create an API token so an app like xDrip, AAPS, Loop, or Trio can
-            send readings.
-          </span>
-        </a>
-        <!-- eslint-enable svelte/no-navigation-without-resolve -->
-        <a
-          href={migrationPath}
-          data-testid="path-migration"
-          class="group flex flex-col gap-2 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
-        >
-          <Download class="h-5 w-5 text-primary" />
-          <span class="font-medium">Coming from Nightscout?</span>
-          <span class="text-sm text-muted-foreground">
-            Import your existing history from a Nightscout site.
-          </span>
-        </a>
-      </div>
+      <!-- No `fonts`: these sizes are inherited rather than set on the element,
+           so there is no class to mirror. The DOM fallback measures it. -->
+      <DropGroup name="first reading paths">
+        <div class="grid gap-3 @md:grid-cols-3">
+          <DropSurface
+            as="a"
+            name="connector"
+            palette="water"
+            href={connectorsPath}
+            data-testid="path-connector"
+            class="group rounded-lg border bg-card transition-colors hover:border-primary/40 hover:bg-muted/40"
+            contentClass="flex flex-col gap-2 p-4"
+          >
+            <Plug data-drop-obstacle class="h-5 w-5 text-primary" />
+            <span class="font-medium">Connect a CGM or pump account</span>
+            <span class="text-sm text-muted-foreground">
+              Pull data automatically from services like Dexcom, LibreLink, or
+              Glooko.
+            </span>
+          </DropSurface>
+          <DropSurface
+            as="a"
+            name="uploader"
+            palette="water"
+            href={uploaderTokenPath}
+            data-testid="path-uploader"
+            class="group rounded-lg border bg-card transition-colors hover:border-primary/40 hover:bg-muted/40"
+            contentClass="flex flex-col gap-2 p-4"
+          >
+            <KeyRound data-drop-obstacle class="h-5 w-5 text-primary" />
+            <span class="font-medium">Add an uploader app</span>
+            <span class="text-sm text-muted-foreground">
+              Create an API token so an app like xDrip, AAPS, Loop, or Trio can
+              send readings.
+            </span>
+          </DropSurface>
+          <DropSurface
+            as="a"
+            name="migration"
+            palette="water"
+            href={migrationPath}
+            data-testid="path-migration"
+            class="group rounded-lg border bg-card transition-colors hover:border-primary/40 hover:bg-muted/40"
+            contentClass="flex flex-col gap-2 p-4"
+          >
+            <Download data-drop-obstacle class="h-5 w-5 text-primary" />
+            <span class="font-medium">Coming from Nightscout?</span>
+            <span class="text-sm text-muted-foreground">
+              Import your existing history from a Nightscout site.
+            </span>
+          </DropSurface>
+        </div>
+      </DropGroup>
     {/if}
   </CardContent>
 </Card>

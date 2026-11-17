@@ -4,6 +4,8 @@ import { useSubmission } from "./submission.svelte";
 export interface ToastSubmission {
   /** Whether a run is in flight. Disable the control that starts it. */
   readonly busy: boolean;
+  /** See `Submission.saved`. */
+  readonly saved: number;
   /**
    * Runs `action`, turning a rejection into an error toast.
    *
@@ -27,6 +29,9 @@ export function useToastSubmission(fallback: string): ToastSubmission {
   return {
     get busy() {
       return busy;
+    },
+    get saved() {
+      return submission.saved;
     },
     async run(action) {
       if (busy) return false;

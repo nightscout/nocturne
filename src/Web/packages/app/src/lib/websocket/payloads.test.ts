@@ -8,6 +8,7 @@ import {
   parseNotification,
   parseStorageEvent,
   parseSyncProgress,
+  parseTrackerDefinitionUpdate,
   parseTrackerUpdate,
   parseUrgentAlarm,
 } from "./payloads";
@@ -104,6 +105,18 @@ describe("parseTrackerUpdate", () => {
     expect(parseTrackerUpdate({ action: "create", instance: [] })).toBeNull();
     expect(parseTrackerUpdate({ action: "create" })).toBeNull();
     expect(parseTrackerUpdate(null)).toBeNull();
+  });
+});
+
+describe("parseTrackerDefinitionUpdate", () => {
+  it("accepts a payload naming a definition", () => {
+    expect(parseTrackerDefinitionUpdate({ definitionId: "d1" })).toEqual({ definitionId: "d1" });
+  });
+
+  it("rejects a payload without a definition id", () => {
+    expect(parseTrackerDefinitionUpdate({ definitionId: "" })).toBeNull();
+    expect(parseTrackerDefinitionUpdate({})).toBeNull();
+    expect(parseTrackerDefinitionUpdate(null)).toBeNull();
   });
 });
 

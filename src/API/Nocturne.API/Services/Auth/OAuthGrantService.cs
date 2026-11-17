@@ -1,8 +1,8 @@
-using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -14,7 +14,8 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="IOAuthClientService"/>
 public class OAuthGrantService : IOAuthGrantService
 {
-    private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthGrantRepository _grants;
     private readonly IOAuthClientService _clientService;
     private readonly GuestSessionCacheService _guestSessionCache;
     private readonly GrantRevocationService _grantRevocation;
@@ -23,21 +24,24 @@ public class OAuthGrantService : IOAuthGrantService
     /// <summary>
     /// Initialises a new <see cref="OAuthGrantService"/>.
     /// </summary>
-    /// <param name="dbContextFactory">Opens each operation's context. <see cref="IsGrantRevokedAsync"/>
-    /// pins the token's tenant rather than reading its scope's: it runs inside the authentication
-    /// handlers, which may hold a scope with no tenant resolved.</param>
+    /// <param name="contexts">Opens the unit of work a revoke runs on.</param>
+    /// <param name="grants">The stored grants. <see cref="IsGrantRevokedAsync"/> pins the token's
+    /// tenant rather than reading its scope's: it runs inside the authentication handlers, which may
+    /// hold a scope with no tenant resolved.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
     /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
     /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
-        INocturneDbContextFactory dbContextFactory,
+        INocturneDbContextFactory contexts,
+        IOAuthGrantRepository grants,
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
         GrantRevocationService grantRevocation,
         ILogger<OAuthGrantService> logger)
     {
-        _dbContextFactory = dbContextFactory;
+        _contexts = contexts;
+        _grants = grants;
         _clientService = clientService;
         _guestSessionCache = guestSessionCache;
         _grantRevocation = grantRevocation;
@@ -55,13 +59,7 @@ public class OAuthGrantService : IOAuthGrantService
         bool approvedByDeviceCode = false,
         CancellationToken ct = default)
     {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        var existingGrant = await db.OAuthGrants
-            .Include(g => g.Client)
-            .Where(g => g.ClientEntityId == clientEntityId
-                     && g.SubjectId == subjectId
-                     && g.RevokedAt == null)
-            .FirstOrDefaultAsync(ct);
+        var existingGrant = await _grants.FindActiveAsync(clientEntityId, subjectId, ct);
 
         if (existingGrant != null)
         {
@@ -71,51 +69,41 @@ public class OAuthGrantService : IOAuthGrantService
                 .OrderBy(s => s)
                 .ToList();
 
-            existingGrant.Scopes = mergedScopes;
-            existingGrant.LimitTo24Hours = limitTo24Hours;
-            existingGrant.ApprovedByDeviceCode |= approvedByDeviceCode;
-
-            if (label != null)
-            {
-                existingGrant.Label = label;
-            }
-
-            await db.SaveChangesAsync(ct);
+            var updated = await _grants.UpdateAsync(
+                existingGrant.Id,
+                new OAuthGrantEdit(label, mergedScopes, limitTo24Hours, approvedByDeviceCode),
+                ct) ?? throw new InvalidOperationException($"Grant {existingGrant.Id} vanished while its consent was merged.");
 
             _logger.LogInformation(
                 "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
                 "grant_updated", existingGrant.Id, subjectId, clientEntityId, string.Join(" ", mergedScopes));
 
-            return MapToInfo(existingGrant);
+            return ToInfo(updated);
         }
 
         var scopeList = scopes.Distinct().OrderBy(s => s).ToList();
 
-        var entity = new OAuthGrantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            ClientEntityId = clientEntityId,
-            SubjectId = subjectId,
-            GrantType = grantType,
-            Scopes = scopeList,
-            Label = label,
-            LimitTo24Hours = limitTo24Hours,
-            ApprovedByDeviceCode = approvedByDeviceCode,
-        };
-
-        db.OAuthGrants.Add(entity);
-        await db.SaveChangesAsync(ct);
-
-        // Load the Client navigation property for the return DTO
-        await db.Entry(entity)
-            .Reference(e => e.Client)
-            .LoadAsync(ct);
+        var grantId = await _grants.CreateAsync(
+            new NewOAuthGrant(
+                clientEntityId,
+                subjectId,
+                grantType,
+                scopeList,
+                label,
+                TokenHash: null,
+                LegacySecretHash: null,
+                ExpiresAt: null,
+                limitTo24Hours,
+                approvedByDeviceCode),
+            ct);
+        var grant = await _grants.GetAsync(grantId, ct)
+            ?? throw new InvalidOperationException($"Grant {grantId} is not readable after its save.");
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
-            "grant_created", entity.Id, subjectId, clientEntityId, string.Join(" ", scopeList));
+            "grant_created", grant.Id, subjectId, clientEntityId, string.Join(" ", scopeList));
 
-        return MapToInfo(entity);
+        return ToInfo(grant);
     }
 
     /// <inheritdoc />
@@ -124,21 +112,8 @@ public class OAuthGrantService : IOAuthGrantService
         Guid subjectId,
         CancellationToken ct = default)
     {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        var entity = await db.OAuthGrants
-            .AsNoTracking()
-            .Include(g => g.Client)
-            .Where(g => g.ClientEntityId == clientEntityId
-                     && g.SubjectId == subjectId
-                     && g.RevokedAt == null)
-            .FirstOrDefaultAsync(ct);
-
-        if (entity == null)
-        {
-            return null;
-        }
-
-        return MapToInfo(entity);
+        var grant = await _grants.FindActiveAsync(clientEntityId, subjectId, ct);
+        return grant == null ? null : ToInfo(grant);
     }
 
     /// <inheritdoc />
@@ -146,15 +121,8 @@ public class OAuthGrantService : IOAuthGrantService
         Guid subjectId,
         CancellationToken ct = default)
     {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        var entities = await db.OAuthGrants
-            .AsNoTracking()
-            .Include(g => g.Client)
-            .Where(g => g.SubjectId == subjectId && g.RevokedAt == null)
-            .OrderByDescending(g => g.CreatedAt)
-            .ToListAsync(ct);
-
-        return entities.Select(MapToInfo).ToList();
+        var grants = await _grants.GetActiveForSubjectAsync(subjectId, ct);
+        return grants.Select(ToInfo).ToList();
     }
 
     /// <inheritdoc />
@@ -163,30 +131,15 @@ public class OAuthGrantService : IOAuthGrantService
         Guid ownerSubjectId,
         CancellationToken ct = default)
     {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        var entity = await db.OAuthGrants
-            .AsNoTracking()
-            .Include(g => g.Client)
-            .Where(g => g.Id == grantId
-                     && g.SubjectId == ownerSubjectId
-                     && g.RevokedAt == null)
-            .FirstOrDefaultAsync(ct);
-
-        if (entity == null)
-        {
-            return null;
-        }
-
-        return MapToInfo(entity);
+        var grant = await _grants.FindOfSubjectAsync(grantId, ownerSubjectId, ct);
+        return grant is null || grant.IsRevoked ? null : ToInfo(grant);
     }
 
     /// <inheritdoc />
     public async Task RevokeGrantAsync(Guid grantId, CancellationToken ct = default)
     {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        var grant = await db.OAuthGrants
-            .Where(g => g.Id == grantId)
-            .FirstOrDefaultAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var grant = await new OAuthGrantRepository(unit).GetAsync(grantId, ct);
 
         if (grant == null)
         {
@@ -194,7 +147,9 @@ public class OAuthGrantService : IOAuthGrantService
             return;
         }
 
-        var outcome = await _grantRevocation.RevokeAsync(db, grant, ct);
+        var outcome = await _grantRevocation.StageAsync(unit, grant, ct);
+        await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+        _grantRevocation.EvictSessions([grant]);
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount} revoked_devices={DeviceCount}",
@@ -207,65 +162,43 @@ public class OAuthGrantService : IOAuthGrantService
         Guid tenantId,
         CancellationToken ct = default)
     {
-        // A dedicated context pinned to the token's tenant: this runs inside the authentication
-        // handlers, which may hold a child scope whose context carries no tenant (and therefore no
-        // RLS tenant GUC), and an unpinned read would return nothing for every grant.
-        await using var db = await _dbContextFactory.CreateForTenantAsync(tenantId, ct);
-
-        var state = await db.OAuthGrants
-            .AsNoTracking()
-            .Where(g => g.Id == grantId && g.TenantId == tenantId)
-            .Select(g => new { g.RevokedAt })
-            .FirstOrDefaultAsync(ct);
+        var state = await _grants.GetStateAsync(tenantId, grantId, ct);
 
         // No row means the grant was deleted, belongs to another tenant, or never existed.
         return state is null || state.RevokedAt != null;
     }
 
     /// <inheritdoc />
-    public async Task UpdateLastUsedAsync(
+    public Task UpdateLastUsedAsync(
         Guid grantId,
         string? ipAddress,
         string? userAgent,
-        CancellationToken ct = default)
-    {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        await db.OAuthGrants
-            .Where(g => g.Id == grantId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
-                .SetProperty(g => g.LastUsedIp, ipAddress)
-                .SetProperty(g => g.LastUsedUserAgent, userAgent),
-                ct);
-    }
+        CancellationToken ct = default) =>
+        _grants.RecordUseAsync(grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), ct);
 
-    /// <summary>
-    /// Maps an <see cref="OAuthGrantEntity"/> to an <see cref="OAuthGrantInfo"/> DTO.
-    /// </summary>
-    /// <param name="entity">The database entity to map. The <c>Client</c> navigation property must be loaded.</param>
-    /// <returns>A populated <see cref="OAuthGrantInfo"/> view model.</returns>
-    private static OAuthGrantInfo MapToInfo(OAuthGrantEntity entity)
+    /// <summary>The grant as the management UI and token minting see it.</summary>
+    internal static OAuthGrantInfo ToInfo(OAuthGrantRecord grant)
     {
         return new OAuthGrantInfo
         {
-            Id = entity.Id,
-            TenantId = entity.TenantId,
-            ClientEntityId = entity.ClientEntityId,
-            ClientId = entity.Client?.ClientId ?? string.Empty,
-            ClientDisplayName = entity.Client?.DisplayName,
-            ClientUri = entity.Client?.ClientUri,
-            LogoUri = entity.Client?.LogoUri,
-            ClientIdentity = entity.ClientIdentity,
-            SubjectId = entity.SubjectId,
-            GrantType = entity.GrantType,
-            Scopes = entity.Scopes,
-            Label = entity.Label,
-            CreatedAt = entity.CreatedAt,
-            LastUsedAt = entity.LastUsedAt,
-            LastUsedIp = entity.LastUsedIp,
-            LastUsedUserAgent = entity.LastUsedUserAgent,
-            IsRevoked = entity.IsRevoked,
-            LimitTo24Hours = entity.LimitTo24Hours,
+            Id = grant.Id,
+            TenantId = grant.TenantId,
+            ClientEntityId = grant.ClientEntityId,
+            ClientId = grant.Client?.ClientId ?? string.Empty,
+            ClientDisplayName = grant.Client?.DisplayName,
+            ClientUri = grant.Client?.ClientUri,
+            LogoUri = grant.Client?.LogoUri,
+            ClientIdentity = grant.ClientIdentity,
+            SubjectId = grant.SubjectId,
+            GrantType = grant.GrantType,
+            Scopes = [.. grant.Scopes],
+            Label = grant.Label,
+            CreatedAt = grant.CreatedAt,
+            LastUsedAt = grant.LastUsedAt,
+            LastUsedIp = grant.LastUsedIp,
+            LastUsedUserAgent = grant.LastUsedUserAgent,
+            IsRevoked = grant.IsRevoked,
+            LimitTo24Hours = grant.LimitTo24Hours,
         };
     }
 
@@ -277,16 +210,12 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default)
     {
-        await using var db = await _dbContextFactory.CreateAsync(ct);
-        var grant = await db.OAuthGrants
-            .Include(g => g.Client)
-            .Where(g => g.Id == grantId && g.SubjectId == ownerSubjectId)
-            .FirstOrDefaultAsync(ct);
+        var grant = await _grants.FindOfSubjectAsync(grantId, ownerSubjectId, ct);
 
         if (grant == null)
             return null;
 
-        // Validated before anything is assigned, so a rejected update leaves the tracked entity
+        // Validated before anything is written, so a rejected update leaves the stored grant
         // untouched. This method filters on the grant id and the owning subject with no GrantType
         // filter, and a guest grant records the DATA OWNER's subject id, so the owner reaches their
         // own guest link here; the cap is what stops a PATCH turning a read-only share into full
@@ -302,17 +231,8 @@ public class OAuthGrantService : IOAuthGrantService
             throw new ArgumentException("A grant needs at least one scope.");
         }
 
-        if (label != null)
-        {
-            grant.Label = label;
-        }
-
-        if (validatedScopes != null)
-        {
-            grant.Scopes = validatedScopes;
-        }
-
-        await db.SaveChangesAsync(ct);
+        var updated = await _grants.UpdateAsync(grant.Id, new OAuthGrantEdit(label, validatedScopes), ct)
+            ?? throw new InvalidOperationException($"Grant {grant.Id} vanished while it was edited.");
 
         // The cached guest session carries the grant's scopes, so narrowing a guest link's scopes
         // would otherwise leave the wider set live for the rest of the 30-second TTL.
@@ -322,6 +242,6 @@ public class OAuthGrantService : IOAuthGrantService
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId}",
             "grant_modified", grantId, ownerSubjectId);
 
-        return MapToInfo(grant);
+        return ToInfo(updated);
     }
 }

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { TrackerMode } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     /** The computed hours value (bindable) */
@@ -19,7 +20,7 @@
     /** Callback when value changes (alternative to bind:value) */
     onchange?: (value: number | undefined) => void;
     /** Tracker mode for display formatting */
-    mode?: "Duration" | "Event";
+    mode?: TrackerMode;
     /** Lifespan hours for negative threshold validation (Duration mode only) */
     lifespanHours?: number | undefined;
   }
@@ -31,13 +32,28 @@
     id,
     disabled = false,
     onchange,
-    mode = "Duration",
+    mode = TrackerMode.Duration,
     lifespanHours,
   }: Props = $props();
 
   // Internal state for the text input
   let inputValue = $state("");
-  let parseError = $state(false);
+  // Lifespans and thresholds are stored as whole hours.
+  let parseError = $state<"format" | "fraction" | null>(null);
+  let inputRef = $state<HTMLInputElement | null>(null);
+
+  const parseErrorMessage = $derived(
+    parseError === "fraction"
+      ? "Use a whole number of hours."
+      : parseError === "format"
+        ? "Invalid format. Try: 168, 7x24, 7d, or 1w"
+        : null
+  );
+
+  // `value` keeps the last entry that parsed, so an entry that does not must stop the form.
+  $effect(() => {
+    inputRef?.setCustomValidity(parseErrorMessage ?? "");
+  });
 
   // Initialize inputValue from value prop
   $effect(() => {
@@ -113,16 +129,17 @@
 
   function handleInput() {
     const parsed = parseExpression(inputValue);
-    if (parsed !== null) {
-      value = parsed;
-      onchange?.(parsed);
-      parseError = false;
+    const hours = parsed === null ? null : Math.round(parsed);
+    if (parsed !== null && hours !== null && Math.abs(parsed - hours) < 1e-9) {
+      value = hours;
+      onchange?.(hours);
+      parseError = null;
     } else if (inputValue.trim() === "") {
       value = undefined;
       onchange?.(undefined);
-      parseError = false;
+      parseError = null;
     } else {
-      parseError = true;
+      parseError = parsed === null ? "format" : "fraction";
     }
   }
 
@@ -164,7 +181,7 @@
 
   // Validation for negative thresholds in Duration mode
   const exceedsLifespan = $derived(
-    mode === "Duration" &&
+    mode === TrackerMode.Duration &&
       value !== undefined &&
       value < 0 &&
       lifespanHours !== undefined &&
@@ -174,7 +191,7 @@
   // Effective hours for Duration mode negative thresholds
   const effectiveHours = $derived.by(() => {
     if (value === undefined) return null;
-    if (mode === "Event") return null; // Event mode doesn't need this
+    if (mode === TrackerMode.Event) return null; // Event mode doesn't need this
     if (value >= 0) return null; // Positive values don't need effective calculation
     if (lifespanHours === undefined) return null;
     return lifespanHours + value;
@@ -184,13 +201,14 @@
 <div class="space-y-1">
   <div class="relative">
     <Input
+      bind:ref={inputRef}
       {id}
       {disabled}
       bind:value={inputValue}
       oninput={handleInput}
       {placeholder}
       class={cn("pr-10", parseError && "border-destructive", className)}
-      aria-invalid={parseError}
+      aria-invalid={parseError !== null}
     />
     <Tooltip.Root>
       <Tooltip.Trigger>
@@ -212,32 +230,32 @@
         <p class="font-medium mb-1">Supported formats:</p>
         <ul class="text-sm space-y-0.5">
           <li>
-            <code class="bg-muted px-1 rounded">168</code>
-            — plain hours
+            <code class="bg-muted px-1 rounded">168</code>:
+            plain hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">7x24</code>
             or
-            <code class="bg-muted px-1 rounded">7*24</code>
-            — multiplication
+            <code class="bg-muted px-1 rounded">7*24</code>:
+            multiplication
           </li>
           <li>
             <code class="bg-muted px-1 rounded">7d</code>
             or
-            <code class="bg-muted px-1 rounded">7 days</code>
-            — days to hours
+            <code class="bg-muted px-1 rounded">7 days</code>:
+            days to hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">1w</code>
             or
-            <code class="bg-muted px-1 rounded">1 week</code>
-            — weeks to hours
+            <code class="bg-muted px-1 rounded">1 week</code>:
+            weeks to hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">-24</code>
             or
-            <code class="bg-muted px-1 rounded">-2d</code>
-            — before expiration/event
+            <code class="bg-muted px-1 rounded">-2d</code>:
+            before expiration/event
           </li>
         </ul>
       </Tooltip.Content>
@@ -245,7 +263,7 @@
   </div>
   {#if showComputed && computedHours !== null}
     <p class="text-sm text-muted-foreground px-1">
-      {#if mode === "Event"}
+      {#if mode === TrackerMode.Event}
         {#if computedHours < 0}
           = <span class="font-medium">{formatHours(computedHours)}</span> before event
         {:else}
@@ -265,9 +283,9 @@
     <p class="text-sm text-destructive px-1">
       Exceeds tracker lifespan
     </p>
-  {:else if parseError}
+  {:else if parseErrorMessage}
     <p class="text-sm text-destructive px-1">
-      Invalid format. Try: 168, 7x24, 7d, or 1w
+      {parseErrorMessage}
     </p>
   {/if}
 </div>

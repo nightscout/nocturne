@@ -15,6 +15,7 @@ COPY src/Web/packages/app/package.json packages/app/
 COPY src/Web/packages/bridge/package.json packages/bridge/
 COPY src/Web/packages/bot/package.json packages/bot/
 COPY src/Web/packages/portal/package.json packages/portal/
+COPY src/Web/vendor/water-ui/packages/water-ui/package.json vendor/water-ui/packages/water-ui/
 RUN pnpm install --frozen-lockfile
 
 # Copy source — then reinstall to fix any symlinks overwritten by COPY

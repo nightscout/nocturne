@@ -1,4 +1,5 @@
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
@@ -10,10 +11,7 @@ public readonly record struct RateSegment(long Start, long End, double Rate);
 
 public readonly record struct DeliveredBasalSegment(long Start, long End, double Rate, BasalDeliveryOrigin Origin);
 
-public readonly record struct InsulinDose(long Mills, double Units, bool Automatic);
-
-/// <summary>An override's insulin-needs scale factor over <c>[Start, End)</c>.</summary>
-public readonly record struct ScaleFactorInterval(long Start, long End, double Factor);
+public readonly record struct InsulinDose(long Mills, double Units, bool Automatic, Guid? CorrelationId = null);
 
 /// <summary>
 /// Where insulin above schedule came from. Every AID system's correction is
@@ -97,7 +95,7 @@ public sealed class NetInsulinAboveSchedule
     private readonly InsulinDose[] _doses;
 
     /// <param name="delivered">Non-overlapping; see <see cref="DeliveredFromSeries"/>.</param>
-    /// <param name="scheduled">Non-overlapping; see <see cref="ScheduledBaseline"/>.</param>
+    /// <param name="scheduled">Non-overlapping; see <see cref="ScheduledBasal.Segments"/>.</param>
     public NetInsulinAboveSchedule(
         IEnumerable<DeliveredBasalSegment> delivered,
         IEnumerable<RateSegment> scheduled,
@@ -156,35 +154,6 @@ public sealed class NetInsulinAboveSchedule
         BasalDeliveryOrigin.Suspended => NetInsulinOrigin.Suspend,
         _ => NetInsulinOrigin.Inferred,
     };
-
-    /// <summary>
-    /// The schedule a delivered rate is measured against: <paramref name="schedule"/>, scaled
-    /// wherever an override with an insulin-needs scale factor was running. Where overrides overlap,
-    /// the one that started last is in force.
-    /// </summary>
-    public static List<RateSegment> ScheduledBaseline(
-        IEnumerable<BasalSegment> schedule, IEnumerable<ScaleFactorInterval> overrides)
-    {
-        var factors = StepTimeline<double>.LatestStartedWins(
-            overrides.Select(o => new Step<double>(o.Start, o.End, o.Factor)));
-        var steps = factors.Steps;
-        var result = new List<RateSegment>();
-        foreach (var segment in schedule.Where(s => s.EndMills > s.StartMills).OrderBy(s => s.StartMills))
-        {
-            var cursor = segment.StartMills;
-            for (var i = factors.FirstEndingAfter(cursor); i < steps.Count && steps[i].Start < segment.EndMills; i++)
-            {
-                if (steps[i].Start > cursor)
-                    result.Add(new RateSegment(cursor, steps[i].Start, segment.UnitsPerHour));
-                var stepEnd = Math.Min(steps[i].End, segment.EndMills);
-                result.Add(new RateSegment(Math.Max(cursor, steps[i].Start), stepEnd, segment.UnitsPerHour * steps[i].Value));
-                cursor = stepEnd;
-            }
-            if (cursor < segment.EndMills)
-                result.Add(new RateSegment(cursor, segment.EndMills, segment.UnitsPerHour));
-        }
-        return result;
-    }
 
     /// <summary>
     /// Temp basals as delivered (<see cref="StatisticsService.ClipOverlappingTempBasals"/>), with what

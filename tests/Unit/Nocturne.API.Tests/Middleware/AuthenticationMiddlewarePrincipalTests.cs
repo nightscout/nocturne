@@ -14,12 +14,14 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -84,21 +86,27 @@ public sealed class AuthenticationMiddlewarePrincipalTests
 
     private static (AuthenticationMiddleware Middleware, DefaultHttpContext Context) Build(bool isMember)
     {
-        var memberService = new Mock<ITenantMemberService>();
-        memberService
-            .Setup(s => s.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(isMember);
-
-        // A real provider, not a mocked IServiceScopeFactory: the middleware resolves a
-        // NocturneDbContext from the scope to read IsPlatformAdmin, and a mock returning a null
-        // scope throws into the catch that calls SetUnauthenticated — which makes every case,
-        // including the ones that should succeed, look rejected.
+        // A real provider, not a mocked IServiceScopeFactory: the middleware reads the membership
+        // and IsPlatformAdmin from the database, and a mock returning a null scope throws into the
+        // catch that calls SetUnauthenticated, which makes every case, including the ones that
+        // should succeed, look rejected.
         var dbName = $"auth_principal_{Guid.NewGuid()}";
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
-        services.AddSingleton(memberService.Object);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         var provider = services.BuildServiceProvider();
+
+        if (isMember)
+        {
+            using var seed = TestDbContextFactory.CreateInMemoryContext(dbName);
+            seed.Subjects.Add(new SubjectEntity { Id = SubjectId, Name = "someone", IsActive = true });
+            seed.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = SubjectId,
+            });
+            seed.SaveChanges();
+        }
 
         var context = new DefaultHttpContext { RequestServices = provider };
         context.Items["TenantContext"] = new TenantContext(TenantId, "victim", "Victim", true, false);
@@ -163,12 +171,11 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         // membership check cannot catch this either: it only runs for IsAuthenticated: true. So a
         // token pinned to another tenant, a revoked grant, or a credential presented on a share host
         // still satisfied bare [Authorize] on ~40 V4 controllers, including the sensor-glucose read.
-        var memberService = new Mock<ITenantMemberService>();
         var dbName = $"auth_principal_reject_{Guid.NewGuid()}";
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
-        services.AddSingleton(memberService.Object);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

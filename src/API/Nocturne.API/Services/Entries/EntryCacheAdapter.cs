@@ -3,7 +3,6 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Entries;
 using Nocturne.Infrastructure.Cache.Constants;
-using Nocturne.API.Services.Glucose;
 
 namespace Nocturne.API.Services.Entries;
 
@@ -14,18 +13,16 @@ namespace Nocturne.API.Services.Entries;
 /// </summary>
 /// <seealso cref="IEntryCache"/>
 /// <seealso cref="EntryService"/>
-public class EntryCacheAdapter : IEntryCache
+internal class EntryCacheAdapter : IEntryCache
 {
     /// <summary>The <see cref="ITenantCache"/> key family every entry read is cached under.</summary>
-    public const string CacheFamily = TenantCacheFamily.Entries;
+    private const string CacheFamily = TenantCacheFamily.Entries;
 
     private readonly ITenantCache _cache;
-    private readonly ILogger<EntryCacheAdapter> _logger;
 
-    public EntryCacheAdapter(ITenantCache cache, ILogger<EntryCacheAdapter> logger)
+    public EntryCacheAdapter(ITenantCache cache)
     {
         _cache = cache;
-        _logger = logger;
     }
 
     public async Task<IReadOnlyList<Entry>?> GetOrComputeAsync(
@@ -49,38 +46,12 @@ public class EntryCacheAdapter : IEntryCache
             ct);
     }
 
-    public async Task<Entry?> GetOrComputeCurrentAsync(
+    public Task<Entry?> GetOrComputeCurrentAsync(
         Func<Task<Entry?>> compute,
-        CancellationToken ct = default)
-    {
-        const string cacheKey = $"{CacheFamily}:current";
-
-        var cached = await _cache.GetAsync<Entry>(cacheKey, ct);
-        if (cached != null)
-            return cached;
-
-        var entry = await compute();
-        if (entry != null)
-        {
-            await _cache.SetAsync(
-                cacheKey,
-                entry,
-                TimeSpan.FromSeconds(CacheConstants.Defaults.CurrentEntryExpirationSeconds),
-                ct);
-        }
-
-        return entry;
-    }
-
-    public async Task InvalidateAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            await _cache.RemoveFamilyAsync(CacheFamily, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to invalidate entry caches");
-        }
-    }
+        CancellationToken ct = default) =>
+        _cache.GetOrSetUnlessNullAsync(
+            $"{CacheFamily}:current",
+            compute,
+            TimeSpan.FromSeconds(CacheConstants.Defaults.CurrentEntryExpirationSeconds),
+            ct);
 }

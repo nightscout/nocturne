@@ -135,6 +135,7 @@
 }
 
 /* Dark mode */
+@media not print {
 :root.aaps-theme.dark,
 .aaps-theme .dark {
   /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
@@ -193,4 +194,5 @@
   --percentile-outer: oklch(0.25 0.05 240);
   --percentile-inner: oklch(0.38 0.10 240);
   --percentile-median: oklch(0.72 0.12 230);
+}
 }

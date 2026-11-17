@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
 import * as main from '../../../locales/main.loader.server.svelte.js';
 import * as js from '../../../locales/js.loader.server.js';

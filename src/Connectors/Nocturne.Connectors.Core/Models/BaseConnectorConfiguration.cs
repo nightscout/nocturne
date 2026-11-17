@@ -17,8 +17,6 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
 
     protected string ConnectorName => ConnectorRegistrationAttribute.NameFor(GetType());
 
-    private string? EnvPrefix =>
-        GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.EnvironmentPrefix;
     /// <summary>
     ///     Timezone offset in hours (default 0).
     ///     Can be set via environment variable: CONNECT_{CONNECTORNAME}_TIMEZONE_OFFSET
@@ -43,7 +41,7 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     public int BatchSize { get; set; } = 50;
 
     [ConnectorProperty(ConnectorPropertyKey.SyncIntervalMinutes, MinValue = 1, MaxValue = 60)]
-    public int SyncIntervalMinutes { get; set; } = 5;
+    public virtual int SyncIntervalMinutes { get; set; } = 5;
 
     [ConnectorProperty(ConnectorPropertyKey.GlucoseProcessing)]
     public GlucoseProcessing GlucoseProcessing { get; set; } = GlucoseProcessing.Smoothed;
@@ -134,24 +132,6 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
             return toggles;
         });
 
-    public virtual void Validate()
-    {
-        if (!Enum.IsDefined(typeof(ConnectSource), ConnectSource))
-            throw new ArgumentException($"Invalid connector source: {ConnectSource}");
-
-        if (MaxRetryAttempts < 0)
-            throw new ArgumentException("MaxRetryAttempts cannot be negative");
-
-        if (BatchSize <= 0)
-            throw new ArgumentException("BatchSize must be greater than zero");
-
-        // Validate properties marked with [Required] or [ConnectorProperty(Required = true)]
-        ValidateRequiredProperties();
-
-        // Allow derived classes to add additional validation
-        ValidateSourceSpecificConfiguration();
-    }
-
     /// <summary>
     ///     Whether every required property — those marked [Required] or
     ///     [ConnectorProperty(Required = true)] — has a value. Required secrets are merged into the
@@ -169,7 +149,7 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     public IReadOnlyList<string> MissingRequiredProperties()
     {
         var missing = new List<string>();
-        foreach (var (property, displayName, _) in GetRequiredProperties())
+        foreach (var (property, displayName) in GetRequiredProperties())
         {
             if (IsRequiredValueMissing(property, property.GetValue(this)))
                 missing.Add(displayName);
@@ -179,40 +159,10 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     }
 
     /// <summary>
-    ///     Validates all properties marked with [Required] attribute or
-    ///     [ConnectorProperty(Required = true)].
-    ///     Throws ArgumentException if any required string property is null or empty.
-    /// </summary>
-    private void ValidateRequiredProperties()
-    {
-        foreach (var (property, displayName, connectorProp) in GetRequiredProperties())
-        {
-            var value = property.GetValue(this);
-            if (!IsRequiredValueMissing(property, value))
-                continue;
-
-            if (property.PropertyType == typeof(string))
-            {
-                var envVarHint = connectorProp != null && EnvPrefix != null
-                    ? $" (set via {connectorProp.GetFullEnvVarName(EnvPrefix)} or configuration)"
-                    : "";
-                throw new ArgumentException(
-                    $"{ConnectorName}: {displayName} is required{envVarHint}");
-            }
-
-            throw new ArgumentException(
-                $"{ConnectorName}: {displayName} is required");
-        }
-    }
-
-    /// <summary>
     ///     Enumerates the properties required via [Required] or [ConnectorProperty(Required = true)],
-    ///     with their display name and connector-property attribute (if any). Shared by
-    ///     <see cref="HasRequiredConfiguration"/> and <see cref="ValidateRequiredProperties"/> so
-    ///     both agree on what "required" means.
+    ///     with their display name.
     /// </summary>
-    private IEnumerable<(PropertyInfo Property, string DisplayName, ConnectorPropertyAttribute? ConnectorProp)>
-        GetRequiredProperties()
+    private IEnumerable<(PropertyInfo Property, string DisplayName)> GetRequiredProperties()
     {
         foreach (var property in GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
@@ -226,7 +176,7 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
                 displayName = connectorProp.GetKeyName();
 
             if (displayName != null)
-                yield return (property, displayName, connectorProp);
+                yield return (property, displayName);
         }
     }
 
@@ -243,15 +193,5 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
             return value == null;
 
         return false;
-    }
-
-    /// <summary>
-    ///     Override this method to add connector-specific validation beyond [Required] properties.
-    ///     The base implementation does nothing - derived classes can add custom validation rules.
-    /// </summary>
-    protected virtual void ValidateSourceSpecificConfiguration()
-    {
-        // Default implementation: no additional validation needed
-        // Derived classes can override to add custom validation
     }
 }

@@ -90,13 +90,13 @@ internal static class MyLifePumpSettingsMapper
                     continue;
 
                 var startMills = MyLifeMapperHelpers.ToUnixMilliseconds(readout.UploadDateTime);
-                var startTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
+                var startTimestamp = startMills.ToUtcDateTime();
 
                 DateTime? endTimestamp = null;
                 if (i < ordered.Count - 1)
                 {
                     var nextMills = MyLifeMapperHelpers.ToUnixMilliseconds(ordered[i + 1].UploadDateTime);
-                    endTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(nextMills).UtcDateTime;
+                    endTimestamp = nextMills.ToUtcDateTime();
                 }
 
                 var deviceKey = string.IsNullOrEmpty(device.Key) ? "unknown" : device.Key;

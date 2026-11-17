@@ -47,7 +47,7 @@ if (!import.meta.env.DEV) {
 			const { getNodeAutoInstrumentations } = await import('@opentelemetry/auto-instrumentations-node');
 			const { OTLPLogExporter } = await import('@opentelemetry/exporter-logs-otlp-grpc');
 			const { BatchLogRecordProcessor } = await import('@opentelemetry/sdk-logs');
-			const { OTEL_SERVICE_NAME } = await import('$lib/config/constants');
+			const { OTEL_SERVICE_NAME } = await import('#lib/config/constants.js');
 
 			const sdk = new NodeSDK({
 				resource: resourceFromAttributes({

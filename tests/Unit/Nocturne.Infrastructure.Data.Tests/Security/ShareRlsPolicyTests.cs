@@ -136,7 +136,7 @@ public class ShareRlsPolicyTests
             " AND (NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
             " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
             " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')" +
-            " OR EXISTS (SELECT 1 FROM carb_intakes p WHERE p.id = treatment_foods.\"carb_intake_id\"" +
+            " OR EXISTS (SELECT 1 FROM carb_intakes p WHERE p.tenant_id = treatment_foods.tenant_id AND p.id = treatment_foods.\"carb_intake_id\"" +
             " AND p.\"timestamp\" >= now() - interval '24 hours')));");
         sql.Should().NotContain("visible_categories");
     }
@@ -149,7 +149,7 @@ public class ShareRlsPolicyTests
             parentSpanEndColumn: "end_time");
 
         sql.Should().Contain(
-            " OR EXISTS (SELECT 1 FROM sleep_sessions p WHERE p.id = sleep_stages.\"sleep_session_id\"" +
+            " OR EXISTS (SELECT 1 FROM sleep_sessions p WHERE p.tenant_id = sleep_stages.tenant_id AND p.id = sleep_stages.\"sleep_session_id\"" +
             " AND (p.\"end_time\" IS NULL OR p.\"end_time\" >= now() - interval '24 hours'))));");
     }
 
@@ -260,8 +260,10 @@ public class ShareRlsPolicyTests
                 var references = model.GetEntityTypes()
                     .Where(t => t.GetTableName() == table)
                     .SelectMany(t => t.GetForeignKeys())
-                    .Where(fk => fk.Properties.Count == 1
-                        && fk.Properties[0].GetColumnName(StoreObjectIdentifier.Table(table, null)) == parent.ForeignKeyColumn)
+                    .Where(fk => fk.Properties
+                        .Select(p => p.GetColumnName(StoreObjectIdentifier.Table(table, null)))
+                        .Where(c => c != "tenant_id")
+                        .SequenceEqual([parent.ForeignKeyColumn]))
                     .Select(fk => fk.PrincipalEntityType.GetTableName());
                 if (!references.Contains(parent.Table))
                     problems.Add($"{table}.{parent.ForeignKeyColumn} is not a foreign key to {parent.Table}");

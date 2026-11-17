@@ -39,11 +39,19 @@ internal static class ModifiedSearch
     /// <paramref name="needed"/> are held, or the store is exhausted when <paramref name="needed"/> is
     /// null, or <paramref name="maxRead"/> records have been read.
     /// </summary>
+    /// <param name="fetch">
+    /// Reads one modified-since page of the store: given the stamp to resume after and a page size.
+    /// </param>
+    /// <param name="isDeleted">Whether a record is a tombstone, which is neither returned nor counted.</param>
     /// <param name="identity">
     /// A record's identity. A page can carry a record it was not cut on (a treatment re-sent with the
     /// Note it serves), so one record can arrive on two pages: the later arrival is its current
     /// state, and it counts once toward <paramref name="needed"/>.
     /// </param>
+    /// <param name="cursor">The stamp the first page resumes after.</param>
+    /// <param name="needed">How many live records end the read, or null to read the store to its end.</param>
+    /// <param name="maxRead">Most records to read, live or deleted, before stopping.</param>
+    /// <param name="ct">Cancels the operation.</param>
     internal static async Task<List<T>> CollectAsync<T>(
         Func<long, int, CancellationToken, Task<Page<T>>> fetch,
         Func<T, bool> isDeleted,

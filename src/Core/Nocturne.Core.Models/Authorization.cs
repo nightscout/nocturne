@@ -104,6 +104,11 @@ public class AuthorizationResponse
     /// Issued at timestamp
     /// </summary>
     public long Iat { get; set; }
+
+    /// <summary>
+    /// The Shiro permissions the token carries, one group per grant, as Nightscout lists one per role.
+    /// </summary>
+    public List<List<string>> PermissionGroups { get; set; } = [];
 }
 
 public class Permission

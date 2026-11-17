@@ -13,6 +13,9 @@ public record CgmProperties
     /// </summary>
     public required int SensorDurationDays { get; init; }
 
+    /// <summary>Hours past <see cref="SensorDurationDays"/> the sensor keeps working before it stops; null when the manufacturer states none.</summary>
+    public int? GraceHours { get; init; }
+
     /// <summary>
     /// Warm-up period in minutes before the CGM begins reporting readings after sensor insertion.
     /// </summary>

@@ -1,7 +1,7 @@
-import * as patientRemote from "$api/generated/patientRecords.generated.remote";
-import { getCatalog as getInsulinCatalog } from "$api/generated/insulinCatalogs.generated.remote";
-import { getCatalog as getDeviceCatalog } from "$api/generated/deviceCatalogs.generated.remote";
-import { getBodyWeights, create as createBodyWeight } from "$api/generated/bodyWeights.generated.remote";
+import * as patientRemote from "#lib/api/generated/patientRecords.generated.remote.js";
+import { getCatalog as getInsulinCatalog } from "#lib/api/generated/insulinCatalogs.generated.remote.js";
+import { getCatalog as getDeviceCatalog } from "#lib/api/generated/deviceCatalogs.generated.remote.js";
+import { getBodyWeights, create as createBodyWeight } from "#lib/api/generated/bodyWeights.generated.remote.js";
 import {
   type PatientDevice,
   type PatientInsulin,
@@ -9,8 +9,8 @@ import {
   type DiscoveredSource,
   type DeviceCatalogEntry,
   DiabetesType,
-} from "$api";
-import { FormGuard, describeSubmitError } from "$lib/forms";
+} from "#lib/api/index.js";
+import { FormGuard, describeSubmitError } from "#lib/forms/index.js";
 import { z } from "zod";
 
 /** Convert a date value from the API into a YYYY-MM-DD string for date inputs. */
@@ -20,7 +20,7 @@ function toDateInput(value: string | Date | null | undefined): string {
 }
 
 const ClinicalFieldsSchema = z.object({
-  diabetesType: z.string().min(1, "Diabetes type is required"),
+  diabetesType: z.string().optional(),
   diabetesTypeOther: z.string().optional(),
   diagnosisDate: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -116,9 +116,9 @@ export class ClinicalState {
       }),
       navBlockMessage: "You have unsaved changes. Leave anyway?",
       submitErrorMessage:
-        "We couldn't save your patient record. Your changes are still here — please try again.",
+        "We could not save your patient record. Your changes are still here. Try again.",
       onreset: (snapshot) => {
-        this.diabetesType = snapshot.diabetesType;
+        this.diabetesType = snapshot.diabetesType ?? "";
         this.diabetesTypeOther = snapshot.diabetesTypeOther ?? "";
         this.diagnosisDate = snapshot.diagnosisDate ?? "";
         this.dateOfBirth = snapshot.dateOfBirth ?? "";

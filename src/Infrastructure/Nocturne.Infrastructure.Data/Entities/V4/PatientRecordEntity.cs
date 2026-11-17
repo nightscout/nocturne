@@ -91,6 +91,13 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable, ISystemTimesta
     public string? Timezone { get; set; }
 
     /// <summary>
+    /// The owner answered the setup hub's insulin question with "none". Set only through the
+    /// Devices setup item; any current insulin on record outweighs it.
+    /// </summary>
+    [Column("takes_no_insulin")]
+    public bool TakesNoInsulin { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [AuditIgnored]

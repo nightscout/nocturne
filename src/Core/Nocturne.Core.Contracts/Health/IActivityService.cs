@@ -19,11 +19,15 @@ public interface IActivityService
     /// </param>
     /// <param name="count">Maximum number of records to return.</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="from">Earliest start to include, inclusive. Narrows the find's own lower bound.</param>
+    /// <param name="to">Latest start to include, inclusive. Narrows the find's own upper bound.</param>
     /// <returns>Collection of <see cref="Activity"/> records matching the filter criteria.</returns>
     Task<IEnumerable<Activity>> GetActivitiesAsync(
         string? find = null,
         int? count = null,
         int? skip = null,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     );
 
@@ -44,11 +48,14 @@ public interface IActivityService
     );
 
     /// <summary>
-    /// Get a specific <see cref="Activity"/> record by ID.
+    /// Every stored record <paramref name="id"/> addresses, by primary key or by the client id it
+    /// was stored under, in state span, sleep session, heart rate and step count order. One id can
+    /// name a record in each storage, and <see cref="DeleteActivityAsync"/> removes all of them, so
+    /// a scope gate on an existing record checks every one.
     /// </summary>
-    /// <param name="id">Activity ID (legacy MongoDB ObjectId or UUID v7 string).</param>
-    /// <returns>The <see cref="Activity"/> if found; <c>null</c> otherwise.</returns>
-    Task<Activity?> GetActivityByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Activity>> GetStoredActivitiesAsync(
+        string id,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Create new <see cref="Activity"/> records with WebSocket broadcasting.
@@ -74,7 +81,8 @@ public interface IActivityService
     );
 
     /// <summary>
-    /// Delete an <see cref="Activity"/> record with WebSocket broadcasting.
+    /// Delete every record <see cref="GetStoredActivitiesAsync"/> returns for the id, with WebSocket
+    /// broadcasting.
     /// </summary>
     /// <remarks>Broadcasts a storage-delete event via SignalR after persistence.</remarks>
     /// <returns><c>true</c> if deleted successfully; <c>false</c> if not found.</returns>
@@ -92,16 +100,20 @@ public interface IActivityService
 
     /// <summary>
     /// Count <see cref="Activity"/> records in each of <paramref name="categories"/>, keyed by the
-    /// same read scope <see cref="V4.IActivityDecomposer.RequiredReadScope"/> returns for records
+    /// same read scope the activity decomposer's <c>RequiredReadScope</c> returns for records
     /// from that source. A source not named is not queried at all, and a name this service does not
     /// recognize yields no entry. A find with field filters reads each source up to the cap
     /// <see cref="GetActivitiesAsync"/> applies to the same filter, so its count stops there.
     /// </summary>
     /// <param name="categories">The sources to count, named by their read scope.</param>
     /// <param name="find">Optional MongoDB-style query filter string.</param>
+    /// <param name="from">Earliest start to count, inclusive.</param>
+    /// <param name="to">Latest start to count, inclusive.</param>
     Task<IReadOnlyDictionary<string, long>> CountActivitiesByCategoryAsync(
         IReadOnlySet<string> categories,
         string? find = null,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     );
 }

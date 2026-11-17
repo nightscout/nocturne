@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import {
     AlertRuleSeverity,
     type TenantOverviewItem,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
-  import { bg, bgDelta, minutesAgo, toDate } from "$lib/utils/formatting";
-  import { getDirectionInfo } from "$lib/utils";
-  import { tenantUrl } from "$lib/utils/tenant-host";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
+  import { bg, bgDelta, relativeAge, toDate } from "#lib/utils/formatting.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { tenantUrl } from "#lib/utils/tenant-host.js";
   import Bell from "@lucide/svelte/icons/bell";
 
   interface Props {
@@ -62,7 +62,7 @@
       </div>
     </Card.Header>
     <Card.Content>
-      <div class="flex items-baseline gap-2">
+      <div class="flex flex-wrap items-baseline gap-x-2">
         {#if tenant.latest?.mgdl != null}
           <span
             class="text-3xl font-bold tabular-nums {statusClass}"
@@ -96,7 +96,7 @@
       </div>
       <p class="mt-1 text-xs text-muted-foreground" data-testid="freshness">
         {#if lastReadingAt}
-          Last reading {minutesAgo(lastReadingAt.getTime())}
+          Last reading {relativeAge(lastReadingAt)}
         {:else}
           No recent data
         {/if}

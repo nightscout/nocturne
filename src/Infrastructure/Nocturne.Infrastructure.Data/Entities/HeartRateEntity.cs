@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// </summary>
 [Table("heart_rates")]
 public class HeartRateEntity
-    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified, IObservationTimestamped
+    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified, IObservationTimestamped, IWriterStamped
 {
     /// <summary>
     /// Identifier of the tenant this heart rate record belongs to
@@ -17,10 +17,7 @@ public class HeartRateEntity
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
-    /// <summary>
-    /// Primary key - UUID Version 7 for time-ordered, globally unique identification
-    /// </summary>
-    [Key]
+    /// <summary>Row id, unique within its tenant: the primary key is <c>(TenantId, Id)</c>.</summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -80,6 +77,11 @@ public class HeartRateEntity
     [Column("data_source")]
     [MaxLength(256)]
     public string? DataSource { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("writer_grant_id")]
+    public Guid? WriterGrantId { get; set; }
 
     /// <summary>
     /// Stable per-source identifier; second half of the sync-dedup key. A create

@@ -9,8 +9,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </summary>
 /// <remarks>
 /// Notes are projected from legacy Nightscout treatment records of type <c>Note</c> as well as
-/// created natively through the V4 API. The <paramref name="nativeOnly"/> flag restricts results
-/// to records created natively, excluding projected legacy entries.
+/// created natively through the V4 API.
 /// </remarks>
 /// <seealso cref="Note"/>
 /// <seealso cref="IV4Repository{T}"/>
@@ -26,8 +25,7 @@ public interface INoteRepository : ILegacyKeyedRepository<Note>, ISyncKeyedRepos
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
-    Task<IEnumerable<Note>> GetAsync(
+    new Task<IEnumerable<Note>> GetAsync(
         DateTime? from,
         DateTime? to,
         string? device,
@@ -35,15 +33,8 @@ public interface INoteRepository : ILegacyKeyedRepository<Note>, ISyncKeyedRepos
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         CancellationToken ct = default
     );
-
-    // Explicit base-interface bridge — delegates to the extended overload
-    Task<IEnumerable<Note>> IV4Repository<Note>.GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, ct);
 
     /// <summary>Delete <see cref="Note"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>

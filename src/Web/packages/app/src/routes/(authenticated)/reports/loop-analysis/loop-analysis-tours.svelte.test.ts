@@ -1,37 +1,40 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { Component } from "svelte";
 import type { CoachMarkContext, MarkState } from "@nocturne/coach";
 import { page as pageState } from "$app/state";
-import { coachCopy, tourReplayLabel } from "$lib/coach-marks/copy.svelte";
-import { loopAnalysisTour, sequences } from "$lib/coach-marks/sequences";
-import { ALL_SCOPES, profileResponse } from "$lib/components/reports/loop-analysis/daily-profile.test-fixtures";
-import { eventResponse } from "$lib/components/reports/loop-analysis/event-response.test-fixtures";
-import { predictionResponse } from "$lib/components/reports/loop-analysis/prediction-accuracy.test-fixtures";
-import { loopHealthResponse } from "$lib/components/reports/loop-analysis/loop-health.test-fixtures";
+import { coachCopy, tourReplayLabel } from "#lib/coach-marks/copy.svelte.js";
+import { loopAnalysisTour, sequences } from "#lib/coach-marks/sequences.js";
+import { ALL_SCOPES, profileResponse } from "#lib/components/reports/loop-analysis/daily-profile.test-fixtures.js";
+import { eventResponse } from "#lib/components/reports/loop-analysis/event-response.test-fixtures.js";
+import { predictionResponse } from "#lib/components/reports/loop-analysis/prediction-accuracy.test-fixtures.js";
+import { loopHealthResponse } from "#lib/components/reports/loop-analysis/loop-health.test-fixtures.js";
 import {
   settingsEvidenceResponse,
   WITHHELD_SETTINGS_EVIDENCE,
-} from "$lib/components/reports/loop-analysis/settings-evidence.test-fixtures";
-import { LoopAnalysisSeries, SettingsEvidenceWithheldReason } from "$lib/api";
+} from "#lib/components/reports/loop-analysis/settings-evidence.test-fixtures.js";
+import { LoopAnalysisSeries, SettingsEvidenceWithheldReason } from "#lib/api/index.js";
 import {
   LOOP_ANALYSIS_PAGES,
   type LoopAnalysisPage,
-} from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+} from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
+import { resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import Harness from "./LoopAnalysisTourHarness.test.svelte";
+
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 vi.mock("$app/state", async () => {
   const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
-  const { reactiveFields } = await import("$lib/test-stubs/reactive-fields.svelte");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
   return { ...stub, page: reactiveFields({ ...stub.page }) };
 });
 
 /** A test's own response for a page, served in place of the full one. */
 const served = vi.hoisted(() => new Map<string, () => unknown>());
 
-vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
+vi.mock("#lib/api/generated/loopAnalysis.generated.remote.js", () => ({
   getEnvelope: () => remoteQuery(() => ({ ...profileResponse(), profileNames: ["Default"] })),
   getDailyProfile: () => remoteQuery(served.get("daily-profile") ?? profileResponse),
   getEventResponse: () => remoteQuery(served.get("meals-and-events") ?? eventResponse),
@@ -40,13 +43,18 @@ vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
   getSettingsEvidence: () => remoteQuery(served.get("settings-evidence") ?? settingsEvidenceResponse),
 }));
 
-vi.mock("$app/navigation", () => ({ goto: () => Promise.resolve() }));
+vi.mock("$app/navigation", async () => ({
+  ...(await vi.importActual<typeof import("$app/navigation")>("$app/navigation")),
+  goto: () => Promise.resolve(),
+}));
 
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/hooks/date-params.svelte.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/hooks/date-params.svelte.js")>()),
   requireDateParamsContext: () => ({ fromDay: "2026-10-09", toDay: "2026-10-22" }),
 }));
 
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/hooks/resource-context.svelte.js")>()),
   contextResource: <T>(create: () => { current: T | undefined }) => ({
     get current() {
       return create().current;
@@ -120,10 +128,10 @@ async function walkInPlace(ctx: CoachMarkContext): Promise<string[]> {
 }
 
 describe("Loop Analysis tours", () => {
-  // An overlay holds a history entry until it closes; let the previous test's go first.
-  beforeEach(async () => {
+  afterEach(() => resetWatercolour());
+
+  beforeEach(() => {
     served.clear();
-    await vi.waitFor(() => expect(history.state?.__coachMark).not.toBe(true), { timeout: 5_000 });
   });
 
   it.each(LOOP_ANALYSIS_PAGES)("tours %s on a first visit, after the pages and filters", async (name) => {
@@ -251,11 +259,11 @@ describe("Loop Analysis tours", () => {
   it.each([
     ["a share viewer", { user: null }],
     ["a guest", { isGuestSession: true }],
-  ])("leaves the page alone for %s", async (_, data) => {
+  ])("shows none of its tours to %s", async (_, data) => {
     const { ctx } = await open("daily-profile", { data });
     await expect.element(page.getByTestId("loop-analysis-daily-totals")).toBeVisible();
 
-    for (const key of [...SHARED, ...steps("daily-profile")]) expect(ctx.getMountedSteps(key), key).toHaveLength(0);
+    for (const key of [...SHARED, ...steps("daily-profile")]) expect(ctx.isMarkEligible(key), key).toBe(false);
     expect(ctx.activeKey).toBeNull();
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
     await expect.element(page.getByRole("button", { name: tourReplayLabel() })).not.toBeInTheDocument();

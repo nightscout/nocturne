@@ -8,7 +8,7 @@ namespace Nocturne.Core.Clinical.LoopAnalysis;
 
 public readonly record struct GlucoseSample(long Mills, double Mgdl);
 
-public readonly record struct CarbEvent(long Mills, double Grams);
+public readonly record struct CarbEvent(long Mills, double Grams, Guid? CorrelationId = null);
 
 /// <summary>Everything the Daily profile is computed from, fetched once for every range it covers.</summary>
 public sealed record DailyProfileInputs
@@ -133,8 +133,8 @@ public static class DailyProfileCalculator
 
         return new DailyProfileRange
         {
-            From = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            To = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            From = from.ToUtcDateTime(),
+            To = to.ToUtcDateTime(),
             SlotMinutes = SlotMinutes,
             Slots = slots,
             HourlyNetLoopCorrection = Hourly(dayCount, acc),
@@ -450,7 +450,7 @@ public static class DailyProfileCalculator
             {
                 Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 DayOfWeek = date.DayOfWeek,
-                Start = DateTimeOffset.FromUnixTimeMilliseconds(dayStarts[d]).UtcDateTime,
+                Start = dayStarts[d].ToUtcDateTime(),
                 Complete = dayStarts[d] >= from && dayStarts[d + 1] <= to,
                 Coverage = coverage.ToCoverage(),
                 NetLoopCorrection = net is { } n ? SlotSummary.Round(n) : null,

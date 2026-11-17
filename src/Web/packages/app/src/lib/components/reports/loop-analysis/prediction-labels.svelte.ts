@@ -1,6 +1,6 @@
-import { PredictionContext, PredictionCurve } from "$lib/api";
-import { plural } from "$lib/utils/plural";
-import { formatLocale } from "$lib/utils/formatting";
+import { PredictionContext, PredictionCurve } from "#lib/api/index.js";
+import { plural } from "#lib/utils/plural.js";
+import { formatLocale } from "#lib/utils/formatting.js";
 import { hoursText } from "./settings-evidence-labels.svelte";
 
 /** Built per call so wuchale reads them in the current locale. */

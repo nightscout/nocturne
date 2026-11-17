@@ -5,7 +5,7 @@
    */
   import { type DayBucket } from "./buckets";
   import NoiseDayChart from "./NoiseDayChart.svelte";
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
 
   interface Props {
     buckets: DayBucket[];

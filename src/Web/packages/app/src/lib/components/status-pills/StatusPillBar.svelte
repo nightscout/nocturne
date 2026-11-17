@@ -9,8 +9,8 @@
     BasalPillData,
     LoopPillData,
     StatusPillsConfig,
-  } from "$lib/types/status-pills";
-  import { cn } from "$lib/utils";
+  } from "#lib/types/status-pills.js";
+  import { cn } from "#lib/utils/index.js";
 
   interface StatusPillBarProps {
     /** IOB data */
@@ -39,7 +39,6 @@
     class: className,
   }: StatusPillBarProps = $props();
 
-  // Merge with defaults (CAGE/SAGE now handled by TrackerPillBar)
   const mergedConfig = $derived({
     enabledPills: config.enabledPills ?? ["iob", "cob", "basal", "loop"],
   });

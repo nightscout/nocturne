@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Models;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models.Sleep.Report;
@@ -180,6 +181,25 @@ public class SleepReportCalculatorTests
         result.MeanBg.Should().Be((int)Math.Round((50 + 65 + 120 + 120 + 200 + 260) / 6.0));
     }
 
+    [Fact]
+    public void ComputeOvernightTir_WeighsTimeNotReadings_WhenTheSensorChangesCadence()
+    {
+        // An hour of one-minute readings at 65, then seven hours of five-minute readings at 120.
+        var session = MakeSession();
+        var oneMinute = Enumerable.Range(0, 60)
+            .Select(i => MakeGlucose(session.StartTime.AddMinutes(i), 65));
+        var fiveMinute = Enumerable.Range(0, 84)
+            .Select(i => MakeGlucose(session.StartTime.AddMinutes(60 + i * 5), 120));
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeOvernightTir(
+            session, oneMinute.Concat(fiveMinute).ToList(), _thresholds);
+
+        result!.LowPct.Should().BeApproximately(100.0 * 60 / 480, 0.5);
+        result.InRangePct.Should().BeApproximately(100.0 * 420 / 480, 0.5);
+        (result.VeryLowPct + result.LowPct + result.InRangePct + result.HighPct + result.VeryHighPct)
+            .Should().BeApproximately(100, 0.001);
+    }
+
     // ── Hypo Events ───────────────────────────────────────────────────────
 
     [Fact]
@@ -351,7 +371,7 @@ public class SleepReportCalculatorTests
         var glucose = mgdl.Select((value, i) => MakeGlucose(t0.AddMinutes(i * 5), value)).ToArray();
 
         var hypos = Clinical.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
-        var episodes = new StatisticsService().CalculateTimeInRange(glucose, _thresholds).Episodes;
+        var episodes = new StatisticsService(TimeProvider.System).CalculateTimeInRange(glucose, _thresholds).Episodes;
 
         hypos.Should().HaveCount(episodes.BelowRange).And.HaveCount(2);
         hypos.Count(h => h.Severity == SleepHypoSeverity.VeryLow).Should().Be(episodes.VeryLow).And.Be(1);
@@ -736,6 +756,79 @@ public class SleepReportCalculatorTests
     }
 
     [Fact]
+    public void ComputeTrendsSummary_CountsTheNightsEachMeanAverages()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, OvernightTirPct = 80, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, OvernightTirPct = null, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, OvernightTirPct = 90, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, OvernightTirPct = null, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.NightCount.Should().Be(4);
+        result.ScoredNightCount.Should().Be(2);
+        result.TirNightCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_NoScoredOrTirNights_CountsZero()
+    {
+        var nights = new[] { new SleepNightSummary { SleepMinutes = 440 } };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.ScoredNightCount.Should().Be(0);
+        result.TirNightCount.Should().Be(0);
+        result.MeanScore.Should().BeNull();
+        result.MeanTirPct.Should().BeNull();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_IncludesEstimatedScore_WhenAScoredNightIsComputed()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, ScoreSource = SleepScoreSource.Computed, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_DoesNotIncludeEstimatedScore_WhenEveryScoredNightIsFromTheDevice()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = 80, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ComputeTrendsSummary_DoesNotIncludeEstimatedScore_WhenOnlyAnUnscoredNightIsComputed()
+    {
+        var nights = new[]
+        {
+            new SleepNightSummary { SleepScore = 70, ScoreSource = SleepScoreSource.Device, SleepMinutes = 440 },
+            new SleepNightSummary { SleepScore = null, ScoreSource = SleepScoreSource.Computed, SleepMinutes = 440 },
+        };
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange: 30);
+
+        result.IncludesEstimatedScore.Should().BeFalse();
+    }
+
+    [Fact]
     public void ComputeTrendsSummary_Computes7dVsPrior7dDeltas()
     {
         // 14 nights: first 7 score=60, last 7 score=80 → delta = +20
@@ -885,7 +978,7 @@ public class SleepReportCalculatorTests
         };
 
         var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            nights, from: new DateTime(2026, 5, 11), to: new DateTime(2026, 5, 24), DayOfWeek.Monday);
+            nights, from: new DateOnly(2026, 5, 11), to: new DateOnly(2026, 5, 24), DayOfWeek.Monday);
 
         result.Should().HaveCount(2);
 
@@ -915,9 +1008,9 @@ public class SleepReportCalculatorTests
         };
 
         var sunday = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            nights, from: new DateTime(2026, 5, 10), to: new DateTime(2026, 5, 23), DayOfWeek.Sunday);
+            nights, from: new DateOnly(2026, 5, 10), to: new DateOnly(2026, 5, 23), DayOfWeek.Sunday);
         var monday = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            nights, from: new DateTime(2026, 5, 11), to: new DateTime(2026, 5, 24), DayOfWeek.Monday);
+            nights, from: new DateOnly(2026, 5, 11), to: new DateOnly(2026, 5, 24), DayOfWeek.Monday);
 
         sunday.Select(w => (w.WeekStart, w.WeekEnd, w.NightCount)).Should().Equal(
             (new DateTime(2026, 5, 10), new DateTime(2026, 5, 16), 1),
@@ -937,7 +1030,7 @@ public class SleepReportCalculatorTests
         };
 
         var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            nights, from: new DateTime(2026, 5, 4), to: new DateTime(2026, 5, 24), DayOfWeek.Monday);
+            nights, from: new DateOnly(2026, 5, 4), to: new DateOnly(2026, 5, 24), DayOfWeek.Monday);
 
         result.Should().HaveCount(3);
         result[1].WeekStart.Should().Be(new DateTime(2026, 5, 11));
@@ -951,7 +1044,7 @@ public class SleepReportCalculatorTests
     {
         // Range Wed May 13 – Tue May 19: 5 days of the first week, 2 of the second.
         var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            [], from: new DateTime(2026, 5, 13), to: new DateTime(2026, 5, 19), DayOfWeek.Monday);
+            [], from: new DateOnly(2026, 5, 13), to: new DateOnly(2026, 5, 19), DayOfWeek.Monday);
 
         result.Should().HaveCount(2);
         result[0].DaysInRange.Should().Be(5);
@@ -965,7 +1058,7 @@ public class SleepReportCalculatorTests
         var nights = new[] { MakeNight(new DateTime(2026, 5, 18, 1, 0, 0, DateTimeKind.Utc)) };
 
         var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            nights, from: new DateTime(2026, 5, 11), to: new DateTime(2026, 5, 24), DayOfWeek.Monday);
+            nights, from: new DateOnly(2026, 5, 11), to: new DateOnly(2026, 5, 24), DayOfWeek.Monday);
 
         result[0].WeekStart.Should().Be(new DateTime(2026, 5, 11));
         result[0].NightCount.Should().Be(1);
@@ -980,7 +1073,7 @@ public class SleepReportCalculatorTests
         var nights = new[] { MakeNight(new DateTime(2026, 5, 18, 0, 30, 0, DateTimeKind.Utc)) };
 
         var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            nights, from: new DateTime(2026, 5, 18), to: new DateTime(2026, 5, 24), DayOfWeek.Monday);
+            nights, from: new DateOnly(2026, 5, 18), to: new DateOnly(2026, 5, 24), DayOfWeek.Monday);
 
         result.Should().HaveCount(2);
         result[0].WeekStart.Should().Be(new DateTime(2026, 5, 11));
@@ -992,8 +1085,26 @@ public class SleepReportCalculatorTests
     public void ComputeWeekSummaries_EmptyRange_ReturnsEmpty()
     {
         var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
-            [], from: new DateTime(2026, 5, 18), to: new DateTime(2026, 5, 11), DayOfWeek.Monday);
+            [], from: new DateOnly(2026, 5, 18), to: new DateOnly(2026, 5, 11), DayOfWeek.Monday);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ComputeWeekSummaries_RangeStartingOnTheWeeksFirstDayEastOfUtc_HasNoEarlierWeek()
+    {
+        // Sydney Mon 12 Jan 2026 00:00 is Sun 11 Jan 13:00 UTC, so the UTC date falls in the week before.
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var days = LocalSlotBinning.LocalDays(
+            new DateTime(2026, 1, 11, 13, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 18, 12, 59, 59, 999, DateTimeKind.Utc),
+            sydney);
+
+        var result = Clinical.Sleep.SleepReportCalculator.ComputeWeekSummaries(
+            [], from: days[0], to: days[^1], DayOfWeek.Monday);
+
+        result.Should().ContainSingle();
+        result[0].WeekStart.Should().Be(new DateTime(2026, 1, 12));
+        result[0].DaysInRange.Should().Be(7);
     }
 }

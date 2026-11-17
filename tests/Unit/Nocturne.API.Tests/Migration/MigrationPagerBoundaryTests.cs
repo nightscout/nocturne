@@ -46,7 +46,7 @@ public class MigrationPagerBoundaryTests
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((state, _) =>
-                    state.ToString()!.Contains("treatments") && state.ToString()!.Contains($"{Crowded:o}")),
+                    state!.ToString()!.Contains("treatments") && state!.ToString()!.Contains($"{Crowded:o}")),
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once());

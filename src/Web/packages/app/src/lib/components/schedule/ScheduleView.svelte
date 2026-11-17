@@ -7,13 +7,13 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  } from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
 
   interface ScheduleEntry {
@@ -37,6 +37,10 @@
     /** Numeric input constraints (edit mode only) */
     step?: number;
     min?: number;
+    /** Low/high columns even while every entry is still blank (edit mode only). */
+    range?: boolean;
+    /** A note shown under a value that looks wrong (edit mode only). */
+    warning?: (value: number) => string | undefined;
     /** Rendered on the right of the read-mode card header (e.g. an Edit button) */
     actions?: Snippet;
   }
@@ -52,11 +56,15 @@
     onchange,
     step = 0.1,
     min = 0,
+    range,
+    warning,
     actions,
   }: Props = $props();
 
   /** Whether this is a range schedule (has low/high) vs single-value */
-  let isRange = $derived(entries.some((e) => e.low !== undefined || e.high !== undefined));
+  let isRange = $derived(
+    range ?? entries.some((e) => e.low !== undefined || e.high !== undefined)
+  );
 
   /** Whether editing is enabled */
   let editable = $derived(!!onchange);
@@ -120,11 +128,7 @@
   function addEntry() {
     if (!onchange) return;
     const updated = cloneEntries();
-    if (isRange) {
-      updated.push({ time: "12:00", low: 0, high: 0 });
-    } else {
-      updated.push({ time: "12:00", value: 0 });
-    }
+    updated.push({ time: "12:00" });
     onchange(updated);
   }
 
@@ -136,6 +140,11 @@
     onchange(updated);
   }
 
+  /** A cleared field is blank, not zero. */
+  function inputNumber(e: Event & { currentTarget: HTMLInputElement }): number | undefined {
+    return e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value);
+  }
+
   function updateEntryTime(index: number, time: string) {
     if (!onchange) return;
     const updated = cloneEntries();
@@ -145,7 +154,7 @@
     }
   }
 
-  function updateEntryValue(index: number, value: number) {
+  function updateEntryValue(index: number, value: number | undefined) {
     if (!onchange) return;
     const updated = cloneEntries();
     if (updated[index]) {
@@ -154,7 +163,7 @@
     }
   }
 
-  function updateEntryLow(index: number, value: number) {
+  function updateEntryLow(index: number, value: number | undefined) {
     if (!onchange) return;
     const updated = cloneEntries();
     if (updated[index]) {
@@ -163,7 +172,7 @@
     }
   }
 
-  function updateEntryHigh(index: number, value: number) {
+  function updateEntryHigh(index: number, value: number | undefined) {
     if (!onchange) return;
     const updated = cloneEntries();
     if (updated[index]) {
@@ -173,14 +182,43 @@
   }
 </script>
 
+{#snippet numberField(
+  value: number | undefined,
+  label: string,
+  set: (value: number | undefined) => void,
+  prefix?: string
+)}
+  {@const note = value === undefined ? undefined : warning?.(value)}
+  <div class="flex flex-col items-end">
+    <div class="flex items-center justify-end gap-1.5">
+      {#if prefix}
+        <span class="text-xs text-muted-foreground">{prefix}</span>
+      {/if}
+      <Input
+        type="number"
+        {step}
+        {min}
+        value={value ?? ""}
+        aria-label={label}
+        class="w-24 text-right"
+        onchange={(e: Event & { currentTarget: HTMLInputElement }) => set(inputNumber(e))}
+      />
+      <span class="text-xs text-muted-foreground" data-testid="field-unit">{unit}</span>
+    </div>
+    {#if note}
+      <p class="mt-1 max-w-56 whitespace-normal text-left text-xs text-warning">{note}</p>
+    {/if}
+  </div>
+{/snippet}
+
 {#if editable}
   <!-- Edit mode: compact input rows, no Card wrapper -->
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         {#if icon}
           {@const Icon = icon}
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             <Icon class="h-5 w-5 {iconClass}" />
           </div>
         {/if}
@@ -193,20 +231,17 @@
       </div>
       <Button variant="outline" size="sm" onclick={addEntry}>
         <Plus class="h-4 w-4 mr-1" />
-        Add Time Block
+        Add time block
       </Button>
     </div>
 
     <Table.Root>
       <Table.Header>
         <Table.Row>
-          <Table.Head>Start Time</Table.Head>
-          {#if isRange}
-            <Table.Head class="text-right">Low ({unit})</Table.Head>
-            <Table.Head class="text-right">High ({unit})</Table.Head>
-          {:else}
-            <Table.Head class="text-right">{unit}</Table.Head>
-          {/if}
+          <Table.Head>Start time</Table.Head>
+          <Table.Head class="text-right">
+            {isRange ? `Low and high (${unit})` : unit}
+          </Table.Head>
           <Table.Head class="w-10"></Table.Head>
         </Table.Row>
       </Table.Header>
@@ -222,42 +257,17 @@
                   updateEntryTime(i, e.currentTarget.value)}
               />
             </Table.Cell>
-            {#if isRange}
-              <Table.Cell class="text-right">
-                <Input
-                  type="number"
-                  {step}
-                  {min}
-                  value={entry.low ?? 0}
-                  class="ml-auto w-24 text-right"
-                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
-                    updateEntryLow(i, Number(e.currentTarget.value))}
-                />
-              </Table.Cell>
-              <Table.Cell class="text-right">
-                <Input
-                  type="number"
-                  {step}
-                  {min}
-                  value={entry.high ?? 0}
-                  class="ml-auto w-24 text-right"
-                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
-                    updateEntryHigh(i, Number(e.currentTarget.value))}
-                />
-              </Table.Cell>
-            {:else}
-              <Table.Cell class="text-right">
-                <Input
-                  type="number"
-                  {step}
-                  {min}
-                  value={entry.value ?? 0}
-                  class="ml-auto w-24 text-right"
-                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
-                    updateEntryValue(i, Number(e.currentTarget.value))}
-                />
-              </Table.Cell>
-            {/if}
+            <Table.Cell class="align-top">
+              {#if isRange}
+                <!-- Wraps to one field per line on a narrow screen, each keeping its unit. -->
+                <div class="flex flex-wrap justify-end gap-2">
+                  {@render numberField(entry.low, `Low from ${entry.time}`, (v) => updateEntryLow(i, v), "Low")}
+                  {@render numberField(entry.high, `High from ${entry.time}`, (v) => updateEntryHigh(i, v), "High")}
+                </div>
+              {:else}
+                {@render numberField(entry.value, `${title} from ${entry.time}`, (v) => updateEntryValue(i, v))}
+              {/if}
+            </Table.Cell>
             <Table.Cell>
               <Button
                 variant="ghost-destructive"
@@ -271,8 +281,8 @@
           </Table.Row>
         {:else}
           <Table.Row>
-            <Table.Cell variant="muted" colspan={isRange ? 4 : 3} class="text-center py-4">
-              No time blocks configured. Click "Add Time Block" to get started.
+            <Table.Cell variant="muted" colspan={3} class="text-center py-4">
+              No time blocks configured. Select "Add time block" to get started.
             </Table.Cell>
           </Table.Row>
         {/each}
@@ -287,7 +297,7 @@
         <div class="flex items-center gap-3">
           {#if icon}
             {@const Icon = icon}
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
               <Icon class="h-5 w-5 {iconClass}" />
             </div>
           {/if}

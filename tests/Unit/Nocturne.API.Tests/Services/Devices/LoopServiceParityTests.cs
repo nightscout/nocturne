@@ -35,7 +35,8 @@ public class LoopServiceParityTests
         var service = new LoopService(
             Mock.Of<ILogger<LoopService>>(),
             Options.Create(configuration),
-            mockFactory
+            mockFactory,
+            TimeProvider.System
         );
         return (service, mockFactory);
     }
@@ -54,7 +55,8 @@ public class LoopServiceParityTests
                     DeveloperTeamId = "TEAM123456",
                 }
             ),
-            factory
+            factory,
+            TimeProvider.System
         );
 
         var result = await service.SendNotificationAsync(

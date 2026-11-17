@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { enumValue } from "$lib/components/ui/enum-value";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { DurationInput } from "$lib/components/ui/duration-input";
+  import { TrackerMode } from "#lib/api/index.js";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { enumValue } from "#lib/components/ui/enum-value.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { DurationInput } from "#lib/components/ui/duration-input/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Bell from "@lucide/svelte/icons/bell";
-  import { cn } from "$lib/utils";
-  import { NotificationUrgency } from "$api";
+  import { cn } from "#lib/utils/index.js";
+  import { NotificationUrgency } from "#lib/api/index.js";
   import type { TrackerNotification } from "./types";
 
   interface Props {
@@ -18,7 +22,7 @@
     /** Additional CSS classes */
     class?: string;
     /** Tracker mode for display formatting */
-    mode?: "Duration" | "Event";
+    mode?: TrackerMode;
     /** Lifespan hours for negative threshold validation (Duration mode only) */
     lifespanHours?: number | undefined;
   }
@@ -26,9 +30,13 @@
   let {
     notifications = $bindable([]),
     class: className,
-    mode = "Duration",
+    mode = TrackerMode.Duration,
     lifespanHours,
   }: Props = $props();
+
+  const canOpenRule = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.read")
+  );
 
   const urgencyOptions: {
     value: NotificationUrgency;
@@ -83,7 +91,7 @@
 
 <div class={cn("space-y-3", className)} data-testid="tracker-thresholds">
   <div class="flex items-center justify-between">
-    <Label>Notification Thresholds</Label>
+    <Label>Notification thresholds</Label>
     <Button
       variant="outline"
       size="sm"
@@ -97,14 +105,13 @@
   </div>
 
   {#if notifications.length === 0}
-    <div
-      class="text-center py-4 text-muted-foreground text-sm border border-dashed rounded-lg"
-    >
-      <p>No notification thresholds configured</p>
-      <p class="text-xs mt-1">
-        Add thresholds to get notified as the tracker ages
-      </p>
-    </div>
+    <EmptyState
+      art="stopwatch"
+      size="compact"
+      variant="outline"
+      title="No notification thresholds configured"
+      body="Add thresholds to get notified as the tracker ages"
+    />
   {:else}
     <div class="space-y-3">
       <!-- eslint-disable-next-line svelte/require-each-key -- each notification is replaced on every edit and new ones have no id, so neither the object nor an id identifies a row -->
@@ -138,7 +145,7 @@
 
           <div class="flex-shrink-0 w-36">
             <Label size="sm" variant="muted" class="mb-1 block">
-              {mode === "Event" ? "Hours" : "After (hours)"}
+              {mode === TrackerMode.Event ? "Hours" : "After (hours)"}
             </Label>
             <DurationInput
               value={notification.hours}
@@ -164,7 +171,7 @@
           <div class="ml-auto flex-shrink-0 pt-5 flex items-center gap-1">
             <!-- New tab: this editor lives in a dialog, so in-place navigation
                  would discard the tracker edits made so far. -->
-            {#if notification.alertRuleId}
+            {#if notification.alertRuleId && canOpenRule}
               <Button
                 variant="ghost-muted"
                 href="/alerts/{notification.alertRuleId}"
@@ -193,16 +200,16 @@
 
   {#if notifications.length > 0}
     <p class="text-xs text-muted-foreground">
-      {#if mode === "Event"}
-        Negative = before event, Positive = after event.
+      {#if mode === TrackerMode.Event}
+        Negative = before event, positive = after event.
       {:else}
-        Positive = after start, Negative = before expiration.
+        Positive = after start, negative = before expiration.
       {/if}
     </p>
   {/if}
 
   <p class="text-xs text-muted-foreground">
     Each threshold is delivered through a managed alert rule. Use Channels to
-    open that rule; a new threshold gets its rule after the tracker is saved.
+    open that rule. A new threshold gets its rule after you save the tracker.
   </p>
 </div>

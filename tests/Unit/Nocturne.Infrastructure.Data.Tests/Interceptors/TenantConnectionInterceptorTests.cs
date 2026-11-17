@@ -6,11 +6,9 @@ using Nocturne.Infrastructure.Data.Interceptors;
 namespace Nocturne.Infrastructure.Data.Tests.Interceptors;
 
 /// <summary>
-/// Pins the close path of <see cref="TenantConnectionInterceptor"/> as free of round trips.
-/// Npgsql's reset on pool return clears every RLS GUC the interceptor sets, so a command issued
-/// here buys nothing: in the production profile the five RESET statements it sent were about
-/// 62 % of all statements reaching Postgres (5 x ~43,000 of 345,917 per 5 minutes).
-/// <c>PoolReturnDiscardsRlsGucsIntegrationTests</c> is the proof that the pool reset suffices.
+/// Pins the close path of <see cref="TenantConnectionInterceptor"/> as free of round trips. The next
+/// open overwrites every RLS GUC the interceptor sets, so a command issued here buys nothing;
+/// <c>PooledLeaseSessionIsolationTests</c> is the proof, and of a failed open closing the connection.
 /// </summary>
 [Trait("Category", "Unit")]
 public class TenantConnectionInterceptorTests
@@ -40,6 +38,27 @@ public class TenantConnectionInterceptorTests
         result.IsSuppressed.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFailedRoleCheck_ClosesTheConnection(bool async)
+    {
+        var interceptor = new TenantConnectionInterceptor();
+        await using var connection = new CommandCountingConnection();
+
+        // The role check runs before the event data is read, and this connection's reader throws.
+        Func<Task> open = async
+            ? () => interceptor.ConnectionOpenedAsync(connection, null!, default)
+            : () =>
+            {
+                interceptor.ConnectionOpened(connection, null!);
+                return Task.CompletedTask;
+            };
+
+        await open.Should().ThrowAsync<NotSupportedException>();
+        connection.Closes.Should().Be(1);
+    }
+
     /// <summary>
     /// Counts rather than throws: a close that creates a command and swallows the failure would
     /// still look clean to an assertion that relies on the exception escaping.
@@ -47,6 +66,8 @@ public class TenantConnectionInterceptorTests
     private sealed class CommandCountingConnection : DbConnection
     {
         public int CommandsCreated { get; private set; }
+
+        public int Closes { get; private set; }
 
         [AllowNull]
         public override string ConnectionString { get; set; } = string.Empty;
@@ -61,9 +82,7 @@ public class TenantConnectionInterceptorTests
 
         public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
 
-        public override void Close()
-        {
-        }
+        public override void Close() => Closes++;
 
         public override void Open() => throw new NotSupportedException();
 

@@ -6,15 +6,17 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Glucose;
+using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Controllers.V1;
 
@@ -25,7 +27,8 @@ public class PebbleControllerTests
     private readonly Mock<IEntryService> _entryService = new();
     private static readonly Guid TenantId = Guid.NewGuid();
     private readonly Mock<ITenantAppearanceReader> _appearance = new();
-    private readonly Mock<ICurrentIobCobReader> _iobCob = new();
+    private readonly Mock<ITenantService> _tenants = new();
+    private readonly Mock<IIobCobReader> _iobCob = new();
     private readonly Mock<IUploaderSnapshotRepository> _uploaders = new();
     private List<UploaderSnapshot> _uploaderSnapshotsNewestFirst = [];
     private int _requestedSgvCount;
@@ -45,8 +48,7 @@ public class PebbleControllerTests
         _appearance
             .Setup(a => a.GetTenantAppearanceAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences { GlucoseUnits = tenantUnits });
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(TenantId);
+        var tenantAccessor = MockTenantAccessor.Create(TenantId);
 
         _uploaders
             .Setup(u => u.GetAsync(null, null, null, null, It.IsAny<int>(), 0, true, It.IsAny<CancellationToken>()))
@@ -56,8 +58,7 @@ public class PebbleControllerTests
             _entryService.Object,
             _iobCob.Object,
             _uploaders.Object,
-            _appearance.Object,
-            tenantAccessor.Object,
+            new TenantGlucoseUnits(tenantAccessor.Object, _appearance.Object, _tenants.Object),
             Mock.Of<ILogger<PebbleController>>()
         )
         {
@@ -92,24 +93,39 @@ public class PebbleControllerTests
             .GetProperty("bgs")[0];
 
     [Fact]
+    public async Task Glucose_IsTheMgdlValueWhenItDiffersFromSgv()
+    {
+        var entry = Sgv(113, 0);
+        entry.Sgv = 90;
+        var controller = NewController("mg/dl", entry);
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("sgv").GetString().Should().Be("113");
+    }
+
+    [Fact]
     public async Task IobAndCob_ComeFromTheReader()
     {
         _iobCob
-            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CurrentIobCob(1.25, "1.25", "OpenAPS", 23, "OpenAPS"));
+            .Setup(r => r.ReadTotalAsync(It.IsAny<long>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobCobReading(
+                new IobResult { Iob = 1.254, Source = "OpenAPS" },
+                new CobResult { Cob = 17.8333333, Source = "OpenAPS" },
+                new IobCobInputs([], [], [])));
         var controller = NewController("mg/dl", Sgv(113, 0));
 
         var bg = FirstBg(await Get(controller));
 
         bg.GetProperty("iob").GetString().Should().Be("1.25");
-        bg.GetProperty("cob").GetDouble().Should().Be(23);
+        bg.GetProperty("cob").GetDouble().Should().Be(17.8);
     }
 
     [Fact]
     public async Task WhenTheReaderFails_TheGlucoseStillReturns()
     {
         _iobCob
-            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
+            .Setup(r => r.ReadTotalAsync(It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException());
         var controller = NewController("mg/dl", Sgv(113, 0));
 
@@ -157,6 +173,19 @@ public class PebbleControllerTests
     }
 
     [Fact]
+    public async Task NoUnitsParameter_AndOnlyTheSetupDefault_UsesTheSetupDefault()
+    {
+        _tenants
+            .Setup(t => t.GetDefaultGlucoseUnitsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mmol");
+        var controller = NewController(null, Sgv(113, 0), Sgv(108, 5));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("sgv").GetString().Should().Be("6.3");
+    }
+
+    [Fact]
     public async Task NoUnitsParameter_UsesTenantMgdlUnits()
     {
         var controller = NewController("mg/dl", Sgv(113, 0), Sgv(108, 5));
@@ -182,6 +211,7 @@ public class PebbleControllerTests
     [InlineData("mmol", "mgdl", "113")]
     [InlineData("mg/dl", "mmol", "6.3")]
     [InlineData("mg/dl", "mmol/L", "6.3")]
+    [InlineData("mg/dl", " MMOL/L", "6.3")]
     public async Task UnitsParameter_OverridesTenantUnits(string tenantUnits, string units, string expectedSgv)
     {
         var controller = NewController(tenantUnits, Sgv(113, 0), Sgv(108, 5));

@@ -7,7 +7,7 @@ describe("TokenScopeSelector", () => {
   it("offers the shared category labels", async () => {
     render(TokenScopeSelector, { props: { selected: [] } });
 
-    for (const label of ["Blood Glucose", "Device Status", "Treatment Profile", "Sharing", "All Health Data", "All permissions"]) {
+    for (const label of ["Blood glucose", "Device status", "Treatment profile", "Sharing", "All health data", "All permissions"]) {
       await expect.element(page.getByText(label, { exact: true })).toBeVisible();
     }
   });

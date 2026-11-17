@@ -33,7 +33,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
                 if (w.SoftDeleted) continue;
 
                 // value is grams (e.g. 86700 = 86.7 kg).
-                var weightKg = (decimal)(w.Value / 1000.0);
+                var weightKg = (w.Value / 1000.0).ToDecimal();
                 if (weightKg <= 0) continue;
 
                 results.Add(BuildWeight(w.Timestamp, weightKg, bodyFat: null, "ssv2_weight", w.Guid));
@@ -61,7 +61,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
             {
                 if (w.SoftDeleted || w.Weight is not > 0) continue;
 
-                var weightKg = (decimal)w.Weight.Value;
+                var weightKg = w.Weight.Value.ToDecimal();
 
                 results.Add(BuildWeight(w.Timestamp, weightKg, bodyFat: null, "ssv2_validic_weight", w.Guid));
             }
@@ -81,7 +81,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
     {
         var rawTimestamp = _timeMapper.GetRawGlookoDate(timestamp ?? string.Empty, null);
         var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
-        var mills = new DateTimeOffset(correctedTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var mills = correctedTimestamp.ToMills();
 
         // Stable upsert key: a deterministic GUID derived from the Glooko guid (raw-timestamp hash fallback).
         // Carried in Id so the publisher's get-by-id round-trips to the entity PK and re-syncs update in place.
@@ -102,9 +102,9 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
 
 /// <summary>
 ///     Shared deterministic-id derivation for the connector's health/biometric records (BodyWeight,
-///     StepCount, HeartRate). These domain models have no string sync-identifier field, and the entity
-///     <c>OriginalId</c> column only accepts 24-char Mongo ObjectIds — so the upsert key must be a real GUID
-///     carried in the model's <c>Id</c>, which round-trips through the entity mapper to the primary key.
+///     StepCount, HeartRate). The upsert key is a real GUID carried in the model's <c>Id</c>, which
+///     round-trips through the entity mapper to the primary key, so rows stored before a sync identifier
+///     existed keep matching. The entity <c>OriginalId</c> column only accepts 24-char Mongo ObjectIds.
 /// </summary>
 internal static class GlookoHealthIds
 {

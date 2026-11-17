@@ -14,6 +14,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// A member or credential limited to the last 24 hours reads no older night of compression lows:
 /// neither the suggestions already saved, nor a detection it runs itself (#2156).
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
 {
@@ -68,27 +69,6 @@ public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
         var response = await client.GetAsync("/api/v4/compression-lows/suggestions");
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
-    }
-
-    private async Task<HttpClient> CreateHistoryClampedClientAsync()
-    {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
-            conn, Fixture.TenantId, "Clamped Follower");
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
     }
 
     [Fact]

@@ -1,33 +1,17 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
-  import { bg, bgLabel, formatLocale } from "$lib/utils/formatting";
+  import { bg, bgLabel, relativeAge, time } from "#lib/utils/formatting.js";
   import type {
     LoopPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface LoopPillProps {
     data: LoopPillData | null;
   }
 
   let { data }: LoopPillProps = $props();
-
-  /** Format relative time (e.g., "3m ago") */
-  function formatTimeAgo(mills: number): string {
-    const now = Date.now();
-    const diff = now - mills;
-    const mins = Math.floor(diff / 60000);
-
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  }
 
   /** Build info items for the popover */
   const info = $derived.by((): PillInfoItem[] => {
@@ -37,20 +21,20 @@
 
     // Last enacted action
     if (data.lastEnacted) {
-      const timeAgo = formatTimeAgo(data.lastEnacted.time);
+      const timeAgo = relativeAge(data.lastEnacted.time);
 
       let lead: string | undefined;
       let actionText = "";
       if (data.lastEnacted.bolusVolume) {
-        lead = "Automatic Bolus";
+        lead = "Automatic bolus";
         actionText = ` ${data.lastEnacted.bolusVolume}U`;
         if (data.lastEnacted.type === "cancel") {
           actionText += " (Temp Basal Canceled)";
         }
       } else if (data.lastEnacted.type === "cancel") {
-        lead = "Temp Basal Canceled";
+        lead = "Temp basal canceled";
       } else if (data.lastEnacted.rate != null) {
-        lead = "Temp Basal Started";
+        lead = "Temp basal started";
         actionText = ` ${data.lastEnacted.rate.toFixed(2)}U/hour for ${data.lastEnacted.duration}m`;
       }
 
@@ -111,19 +95,13 @@
   const display = $derived.by(() => {
     if (!data?.lastLoopTime) return null;
 
-    const time = new Date(data.lastLoopTime).toLocaleTimeString(
-      formatLocale(),
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
+    const at = time(data.lastLoopTime);
 
     if (data.eventualBG != null) {
-      return `${time} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
+      return `${at} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
     }
 
-    return time;
+    return at;
   });
 
   const level = $derived<AlertLevel>(data?.level ?? "none");

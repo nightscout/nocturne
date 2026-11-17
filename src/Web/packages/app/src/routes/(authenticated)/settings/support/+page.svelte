@@ -5,17 +5,15 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import GithubIcon from "$lib/components/icons/GithubIcon.svelte";
-  import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
-  import MessageCircle from "@lucide/svelte/icons/message-circle";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import GithubIcon from "#lib/components/icons/GithubIcon.svelte";
+  import LifeBuoy from "@lucide/svelte/icons/life-buoy";
   import FileText from "@lucide/svelte/icons/file-text";
   import Bug from "@lucide/svelte/icons/bug";
   import ExternalLink from "@lucide/svelte/icons/external-link";
@@ -24,22 +22,22 @@
   import Shield from "@lucide/svelte/icons/shield";
   import Heart from "@lucide/svelte/icons/heart";
   import Users from "@lucide/svelte/icons/users";
-  import BookOpen from "@lucide/svelte/icons/book-open";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import Database from "@lucide/svelte/icons/database";
   import CreditCard from "@lucide/svelte/icons/credit-card";
   import GraduationCap from "@lucide/svelte/icons/graduation-cap";
-  import { getServicesOverview } from "$api/generated/services.generated.remote";
-  import { getStatus } from "$api/generated/status.generated.remote";
-  import { getSupportConfig } from "$lib/api/support.remote";
-  import { formatDateTime } from "$lib/utils/formatting";
-  import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
+  import { DropGroup, DropSurface } from "water-ui";
+  import { getServicesOverview } from "#lib/api/generated/services.generated.remote.js";
+  import { getStatus } from "#lib/api/generated/status.generated.remote.js";
+  import { getSupportConfig } from "#lib/api/support.remote.js";
+  import { formatDateTime } from "#lib/utils/formatting.js";
+  import IssueCreatorDialog from "#lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     buildDiagnosticReport,
     readDiagnosticDevice,
@@ -73,7 +71,7 @@
     resettingTutorials = true;
     try {
       await coachCtx.resetAll();
-      toast.success("Tutorials reset — they'll appear as you navigate the app");
+      toast.success("Tutorials reset. They will appear as you use the app");
     } catch (err) {
       toast.error(describeSubmitError(err, "Failed to reset tutorials"));
     } finally {
@@ -86,57 +84,27 @@
     toast.success(value ? "Tutorials disabled" : "Tutorials enabled");
   }
 
-  const communityLinks = $derived([
-    {
-      name: "GitHub Repository",
-      description: "Source code, issues, and feature requests",
-      icon: GithubIcon,
-      href: "https://github.com/nightscout/nocturne",
-      badge: "Open Source",
-    },
-    {
-      name: "Discord Community",
-      description: "Chat with developers and other users",
-      icon: MessageCircle,
-      href: "https://discord.gg/xWYz9fFWrj",
-      badge: "Active",
-    },
-    {
-      name: "Documentation",
-      description: "Guides, tutorials, and API reference",
-      icon: BookOpen,
-      href: "https://getnocturne.dev/docs",
-    },
-    {
-      name: "Nightscout Foundation",
-      description: "The organization behind Nightscout",
-      icon: Heart,
-      href: "https://www.nightscoutfoundation.org/",
-      badge: "501(c)(3)",
-    },
-  ]);
-
   const supportOptions = [
     {
-      name: "Report a Bug",
+      name: "Report a bug",
       description: "Found something not working? Let us know",
       icon: Bug,
       template: "bug",
     },
     {
-      name: "Request a Feature",
-      description: "Have an idea? We'd love to hear it",
+      name: "Request a feature",
+      description: "Have an idea? Tell us about it",
       icon: Lightbulb,
       template: "feature",
     },
     {
-      name: "Data Issue",
+      name: "Data issue",
       description: "CGM data problems or missing readings",
       icon: Database,
       template: "data-issue",
     },
     {
-      name: "Account / Billing",
+      name: "Account / billing",
       description: "Help with your account or subscription",
       icon: CreditCard,
       template: "account",
@@ -162,7 +130,7 @@
     return buildDiagnosticReport({
       timestamp: new Date().toISOString(),
       build: status
-        ? { version: status.version, head: status.head, build: status.build }
+        ? { version: status.nocturneVersion, head: status.head, build: status.build }
         : null,
       includeDeviceInfo,
       device: readDiagnosticDevice(),
@@ -178,86 +146,51 @@
 </script>
 
 <svelte:head>
-  <title>Support & Community - Settings - Nocturne</title>
+  <title>Support - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-      <HeartHandshake class="h-6 w-6 text-primary" />
+    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+      <LifeBuoy class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Support & Community</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Support</h1>
       <p class="text-muted-foreground">
-        Get help, connect with the community, and share feedback
+        Get help, report problems, and share feedback
       </p>
     </div>
   </div>
-
-  <!-- Community Links -->
-  <Card>
-    <CardHeader>
-      <CardTitle class="flex items-center gap-2">
-        <HeartHandshake class="h-5 w-5" />
-        Community
-      </CardTitle>
-      <CardDescription>Connect with the Nightscout community</CardDescription>
-    </CardHeader>
-    <CardContent class="space-y-4">
-      {#each communityLinks as link (link.name)}
-        <a
-          href={link.href}
-          target="_blank"
-          rel="external noopener noreferrer"
-          class="flex items-center justify-between p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
-        >
-          <div class="flex items-center gap-4">
-            <div
-              class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
-            >
-              <link.icon class="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-medium">{link.name}</span>
-                {#if link.badge}
-                  <Badge variant="secondary">
-                    {link.badge}
-                  </Badge>
-                {/if}
-              </div>
-              <p class="text-sm text-muted-foreground">{link.description}</p>
-            </div>
-          </div>
-          <ExternalLink class="h-4 w-4 text-muted-foreground" />
-        </a>
-      {/each}
-    </CardContent>
-  </Card>
 
   <!-- Support Options -->
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <HelpCircle class="h-5 w-5" />
-        Get Support
+        Get support
       </CardTitle>
       <CardDescription>Need help? Here's how to reach us</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
+      <!-- No `fonts`: these sizes are inherited, so there is no class to mirror. -->
+      <DropGroup name="support options">
       <div class="grid gap-4 @xl:grid-cols-2">
         {#each supportOptions as option (option.name)}
           {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
-            <Item
-              variant="outline"
-              size="lg"
-              class="flex-col"
+            <DropSurface
+              as="a"
+              name={option.template}
+              palette="water"
+              peak={0.6}
               href={supportConfig.accountBilling.url}
               target="_blank"
               rel="external noopener noreferrer"
+              class="rounded-lg border border-border transition-colors hover:not-disabled:border-primary/50 hover:not-disabled:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-60"
+              contentClass="flex flex-col items-center gap-4 p-4"
             >
               <div
+                data-drop-obstacle
                 class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
               >
                 <ExternalLink class="h-6 w-6 text-primary" />
@@ -268,20 +201,25 @@
                   {option.description}
                 </p>
               </div>
-            </Item>
+            </DropSurface>
           {:else}
             <!-- The account tile's routing depends on the operator config; keep it inert until
                  the config resolves so a click during the fetch window can't misroute a
                  redirect/api-mode tenant to the generic community dialog. Other templates route
                  the same regardless of config, so they stay interactive. -->
-            <Item
-              variant="outline"
-              size="lg"
-              class="flex-col"
+            <DropSurface
+              as="button"
+              type="button"
+              name={option.template}
+              palette="water"
+              peak={0.6}
+              class="rounded-lg border border-border transition-colors hover:not-disabled:border-primary/50 hover:not-disabled:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-60"
+              contentClass="flex flex-col items-center gap-4 p-4"
               disabled={option.template === "account" && supportConfig === undefined}
               onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
             >
               <div
+                data-drop-obstacle
                 class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
               >
                 <option.icon class="h-6 w-6 text-primary" />
@@ -292,10 +230,11 @@
                   {option.description}
                 </p>
               </div>
-            </Item>
+            </DropSurface>
           {/if}
         {/each}
       </div>
+      </DropGroup>
 
       <div class="flex justify-center pt-2">
         <a
@@ -305,7 +244,7 @@
         >
           <Button variant="outline">
             <Users class="h-4 w-4" />
-            Get Help on Discord
+            Get help on Discord
             <ExternalLink class="h-3 w-3" />
           </Button>
         </a>
@@ -323,7 +262,7 @@
       <CardDescription>Guided walkthroughs to help you learn the app</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="space-y-0.5">
           <p class="text-sm font-medium">Show all tutorials again</p>
           <p class="text-sm text-muted-foreground">
@@ -336,7 +275,7 @@
           disabled={resettingTutorials}
         >
           <GraduationCap class="h-4 w-4" />
-          {resettingTutorials ? "Resetting..." : "Reset Tutorials"}
+          {resettingTutorials ? "Resetting..." : "Reset tutorials"}
         </Button>
       </div>
 
@@ -363,13 +302,13 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <FileText class="h-5 w-5" />
-        Share Diagnostic Logs
+        Share diagnostic logs
       </CardTitle>
       <CardDescription>Export logs to help troubleshoot issues</CardDescription>
     </CardHeader>
     <CardContent class="space-y-6">
       <div class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="space-y-0.5">
             <Label>Include device information</Label>
             <p class="text-sm text-muted-foreground">
@@ -395,15 +334,15 @@
         <Button variant="outline" onclick={copyLogs}>
           {#if copy.isCopied()}
             <CheckCircle class="h-4 w-4 text-success" />
-            Copied!
+            Copied
           {:else}
             <Copy class="h-4 w-4" />
-            Copy to Clipboard
+            Copy to clipboard
           {/if}
         </Button>
         <Button variant="outline" onclick={downloadLogs}>
           <Download class="h-4 w-4" />
-          Download Logs
+          Download logs
         </Button>
       </div>
 
@@ -414,7 +353,7 @@
           />
           <div>
             <p class="font-medium text-info">
-              Privacy Note
+              Privacy note
             </p>
             <p class="text-sm text-info">
               Logs never include your glucose data, API tokens, or passwords.
@@ -433,9 +372,9 @@
     </CardHeader>
     <CardContent class="space-y-4">
       {#if services?.apiEndpoint?.baseUrl}
-        <div class="flex items-center justify-between py-2 border-b">
-          <span class="text-muted-foreground">API Endpoint</span>
-          <span class="font-mono text-sm">{services.apiEndpoint.baseUrl}</span>
+        <div class="flex flex-wrap items-center justify-between gap-x-4 py-2 border-b">
+          <span class="text-muted-foreground">API endpoint</span>
+          <span class="min-w-0 break-all font-mono text-sm">{services.apiEndpoint.baseUrl}</span>
         </div>
       {/if}
       {#if status?.head && status.head !== "unknown" && status.head !== "nocturne-dev"}
@@ -463,7 +402,7 @@
         <span>AGPL-3.0</span>
       </div>
       <div class="flex items-center justify-between py-2">
-        <span class="text-muted-foreground">API Compatibility</span>
+        <span class="text-muted-foreground">API compatibility</span>
         <Badge variant="secondary">Nightscout v1-v4</Badge>
       </div>
 

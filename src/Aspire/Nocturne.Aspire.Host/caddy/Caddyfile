@@ -49,7 +49,12 @@
 # the operator's own domain, and its other hosts are not Nocturne's to pin to HTTPS. nosniff is a
 # default (set only when the upstream sent none) for the static assets served before the web
 # app's own headers apply.
+#
+# encode compresses the SSR documents and the API's JSON, which nothing behind the gateway does;
+# the web server only ships precompressed copies of its static assets, which encode leaves alone.
+# A response of unknown length (streamed SSR, long polling) is still flushed as it is written.
 (to_gateway) {
+	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		?X-Content-Type-Options nosniff

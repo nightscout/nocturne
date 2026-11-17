@@ -24,17 +24,6 @@ namespace Nocturne.Core.Models.V4;
 public class TherapySettings : V4RecordBase, IProfileScoped
 {
     /// <summary>
-    /// Separates the profile name from the switch time in the store name of a profile a Profile
-    /// Switch treatment carried inline (<c>"{name}@@@@@{mills}"</c>). Such a row is a snapshot of
-    /// the switch, not a profile document, so it never takes part in the default (see <see cref="IsDefault"/>).
-    /// </summary>
-    public const string ProfileSwitchStoreMarker = "@@@@@";
-
-    /// <summary>Whether <paramref name="settings"/> is a profile-switch snapshot (see <see cref="ProfileSwitchStoreMarker"/>).</summary>
-    public static bool IsProfileSwitchSnapshot(TherapySettings settings) =>
-        settings.ProfileName.Contains(ProfileSwitchStoreMarker, StringComparison.Ordinal);
-
-    /// <summary>
     /// The <c>_id</c> a row answers to as a legacy profile document: the part of its legacy id before
     /// the first colon, since a document fans out to one <c>"{_id}:{storeName}"</c> row per store; the
     /// whole legacy id when it has no colon; or the row's own id when it has no legacy id.
@@ -122,7 +111,7 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// its <c>defaultProfile</c>, matched to the store key exactly, until a user picks another. It
     /// is a tenant-wide singleton, not per-document provenance, so ingest settles it across the
     /// tenant rather than deriving it per document. The profile in effect at a given time is not
-    /// this flag: that comes from Profile state spans (profile switches).
+    /// this flag: that comes from profile activations (profile switches).
     /// An update never writes it: only <c>ITherapySettingsRepository.SetDefaultAsync</c> moves it, so a
     /// write carrying a stale read of the flag cannot leave a second default.
     /// </remarks>

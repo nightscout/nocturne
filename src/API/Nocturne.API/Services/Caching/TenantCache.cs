@@ -9,6 +9,7 @@ namespace Nocturne.API.Services.Caching;
 public sealed class TenantCache(
     ICacheService distributed,
     IMemoryCache local,
+    CacheFlights flights,
     ITenantAccessor tenantAccessor,
     IReaderCachePartition partition,
     IDemoModeService demoMode) : ITenantCache
@@ -21,19 +22,24 @@ public sealed class TenantCache(
             ? $"{tenant.TenantId:D}:{current}:{DemoSegment}:{key}"
             : null;
 
-    public async Task<T?> GetAsync<T>(string key, CancellationToken ct = default) where T : class =>
-        KeyFor(key) is { } full ? await distributed.GetAsync<T>(full, ct) : null;
-
-    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct = default) where T : class =>
-        KeyFor(key) is { } full ? distributed.SetAsync(full, value, ttl, ct) : Task.CompletedTask;
-
-    public Task SetAsync<T>(string key, T value, DateTimeOffset expiresAt, CancellationToken ct = default)
+    public Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan ttl, CancellationToken ct = default)
         where T : class =>
-        KeyFor(key) is { } full ? distributed.SetAsync(full, value, expiresAt, ct) : Task.CompletedTask;
+        GetOrSetAsync(key, async () => new CacheResult<T>(await factory(), ttl), ct);
 
-    public async Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan ttl, CancellationToken ct = default)
+    public async Task<T> GetOrSetAsync<T>(string key, Func<Task<CacheResult<T>>> factory, CancellationToken ct = default)
         where T : class =>
-        KeyFor(key) is { } full ? await distributed.GetOrSetAsync(full, factory, ttl, ct) : await factory();
+        await GetOrSetResultAsync(key, factory, ct)
+            ?? throw new InvalidOperationException($"The factory for cache key {key} returned null.");
+
+    public Task<T?> GetOrSetUnlessNullAsync<T>(
+        string key, Func<Task<T?>> factory, TimeSpan ttl, CancellationToken ct = default) where T : class =>
+        GetOrSetResultAsync(key, async () => new CacheResult<T>(await factory(), ttl), ct);
+
+    private async Task<T?> GetOrSetResultAsync<T>(
+        string key, Func<Task<CacheResult<T>>> factory, CancellationToken ct) where T : class =>
+        KeyFor(key) is { } full
+            ? await flights.GetOrSetAsync(distributed, full, factory, ct)
+            : (await factory()).Value;
 
     public Task RemoveFamilyAsync(string family, CancellationToken ct = default) =>
         tenantAccessor.Context is { } tenant
@@ -58,13 +64,23 @@ public sealed class TenantCache(
             local.Set(full, value, ttl);
     }
 
-    public async Task<T> GetOrCreateLocalAsync<T>(string key, Func<Task<T>> factory, TimeSpan ttl)
+    public async Task<T> GetOrCreateLocalAsync<T>(
+        string key, Func<Task<T>> factory, TimeSpan ttl, CancellationToken ct = default)
     {
-        if (TryGetLocal<T>(key, out var cached))
+        if (KeyFor(key) is not { } full)
+            return await factory();
+
+        if (local.TryGetValue(full, out T? cached))
             return cached!;
 
-        var value = await factory();
-        SetLocal(key, value, ttl);
-        return value;
+        return await flights.RunAsync($"local:{full}", async () =>
+        {
+            if (local.TryGetValue(full, out T? again))
+                return again!;
+
+            var value = await factory();
+            local.Set(full, value, ttl);
+            return value;
+        }, ct);
     }
 }

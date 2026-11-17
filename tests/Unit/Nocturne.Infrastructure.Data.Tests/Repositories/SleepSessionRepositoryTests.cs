@@ -318,6 +318,35 @@ public class SleepSessionRepositoryTests : IDisposable
         result.Should().BeNull();
     }
 
+    // --- GetSessionBySourceRecordAsync ---
+
+    [Fact]
+    public async Task GetSessionBySourceRecordAsync_matches_source_and_original_id_together()
+    {
+        var start = new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc);
+        var end = new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc);
+        var manual = CreateEntity(TenantA, start, end, source: "Manual", originalId: "rec-1");
+        var fitbit = CreateEntity(TenantA, start, end, source: "Fitbit", originalId: "rec-2");
+        await SeedAsync(manual, fitbit);
+
+        (await _repository.GetSessionBySourceRecordAsync(SleepSource.Manual, "rec-1"))!
+            .Id.Should().Be(manual.Id.ToString());
+        (await _repository.GetSessionBySourceRecordAsync(SleepSource.Manual, "rec-2")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSessionBySourceRecordAsync_skips_a_deleted_session()
+    {
+        var deleted = CreateEntity(TenantA,
+            new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
+            source: "Manual", originalId: "rec-1");
+        deleted.DeletedAt = DateTime.UtcNow;
+        await SeedAsync(deleted);
+
+        (await _repository.GetSessionBySourceRecordAsync(SleepSource.Manual, "rec-1")).Should().BeNull();
+    }
+
     // --- UpsertSessionAsync ---
 
     [Fact]

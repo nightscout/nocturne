@@ -502,7 +502,7 @@ fn evaluate_node_defaults_root_to_the_verbatim_type() {
 }
 
 #[test]
-fn evaluate_node_unknown_kind_is_silent_false() {
+fn evaluate_node_rejects_an_unknown_kind() {
     let request = json!({
         "schema_version": 1,
         "rule_id": "00000000-0000-0000-0000-000000000004",
@@ -511,9 +511,10 @@ fn evaluate_node_unknown_kind_is_silent_false() {
         "context": {},
         "now": "2026-01-05T12:00:00Z",
     });
-    let response = evaluate_node(&request);
-    assert_eq!(response["ok"], Value::Bool(true));
-    assert_eq!(response["value"], Value::Bool(false));
+    assert_error(
+        &evaluate_node(&request),
+        "malformed condition node: unknown_kind at 'snooze' (field 'type')",
+    );
 }
 
 #[test]
@@ -620,10 +621,9 @@ fn evaluate_rejects_unknown_condition_type() {
 
 #[test]
 fn evaluate_rejects_structurally_malformed_condition_params() {
-    // JsonException parity: the managed engine throws on a wrong-shape payload
-    // and the orchestrator's per-rule catch leaves timers/tracker untouched, so
-    // the envelope must reject it rather than fail-closed-evaluate (which would
-    // advance the tracker and silently close an active excursion).
+    // A wrong-shape payload must be rejected, so the host's per-rule catch
+    // leaves timers and tracker untouched, rather than fail-closed-evaluated
+    // (which would advance the tracker and silently close an active excursion).
     let request = json!({
         "schema_version": 1,
         "rule": {
@@ -789,16 +789,11 @@ fn leaf_paths_honours_root_override() {
 }
 
 #[test]
-fn leaf_paths_treats_container_with_missing_child_as_leaf() {
-    // A sustained node without a child fails the container guard and IS a
-    // leaf (LeafIdentity anomaly — normative).
+fn leaf_paths_rejects_a_node_that_cannot_be_evaluated() {
     let node = json!({ "type": "sustained", "sustained": { "minutes": 10 } });
-    let response = call_json(nocturne_alerts_leaf_paths, &node.to_string());
-    assert_eq!(response["ok"], Value::Bool(true));
-    assert_eq!(response["paths"], json!(["sustained"]));
-    assert_eq!(
-        response["leaves"],
-        json!([{ "leaf_id": 0, "path": "sustained" }])
+    assert_error(
+        &call_json(nocturne_alerts_leaf_paths, &node.to_string()),
+        "malformed condition node: field_missing at 'sustained' (field 'child')",
     );
 }
 
@@ -812,8 +807,7 @@ fn leaf_paths_rejects_non_object() {
 
 #[test]
 fn leaf_paths_rejects_malformed_node() {
-    // `type` must be a string (or null/absent) — a number is a JsonException
-    // in the C# engine.
+    // `type` must be a string (or null/absent).
     assert_error(
         &call_json(nocturne_alerts_leaf_paths, r#"{ "type": 5 }"#),
         "malformed condition node",
@@ -1234,44 +1228,77 @@ fn describe_signal_loss_is_a_leaf_with_its_timeout() {
 }
 
 #[test]
-fn describe_decodes_enum_ordinal_operands_to_names() {
-    let tree = describe_rule("day_of_week", json!({ "days": [0, 6] }));
-    assert_eq!(tree["kind"], json!("day_of_week"));
-    assert_eq!(tree["params"]["days"], json!(["Sunday", "Saturday"]));
+fn describe_a_body_that_cannot_be_evaluated_is_null() {
+    let low = json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } });
+    for (kind, params) in [
+        (
+            "composite",
+            json!({ "operator": "or", "conditions": [low, null] }),
+        ),
+        ("not", json!({})),
+        ("threshold", Value::Null),
+        (
+            "composite",
+            json!({ "operator": "and", "conditions": "nope" }),
+        ),
+        ("pump_state", json!({ "mode": 5, "is_active": true })),
+        ("threshold", json!({ "direction": "below", "value": "70" })),
+    ] {
+        assert_eq!(describe_rule(kind, params), Value::Null, "{kind}");
+    }
 }
 
 #[test]
-fn describe_malformed_container_collapses_to_a_single_leaf() {
-    // A composite whose `conditions` is not an array fails to parse: the engine
-    // force-evaluates it as one (false) leaf, and describe matches — one leaf,
-    // kind composite, no children.
-    let tree = describe_rule(
-        "composite",
-        json!({ "operator": "and", "conditions": "nope" }),
-    );
-    assert_eq!(tree["leaf_id"], json!(0));
-    assert_eq!(tree["kind"], json!("composite"));
-    assert!(
-        tree.get("conditions").is_none(),
-        "malformed composite is a leaf, not a container"
-    );
+fn describe_without_auto_resolve_params_has_no_auto_resolve_tree() {
+    let response = describe(&json!({
+        "schema_version": 1,
+        "condition_type": "threshold",
+        "condition_params": { "direction": "below", "value": 70 },
+    }));
+    assert!(response.get("auto_resolve_tree").is_none());
 }
 
 #[test]
-fn describe_null_composite_slot_is_a_typeless_leaf() {
-    let params = json!({
-        "operator": "or",
-        "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
-            null
-        ]
-    });
-    let tree = describe_rule("composite", params);
+fn describe_auto_resolve_tree_is_rooted_at_auto_resolve() {
+    let response = describe(&json!({
+        "schema_version": 1,
+        "condition_type": "threshold",
+        "condition_params": { "direction": "below", "value": 70 },
+        "auto_resolve_params": {
+            "type": "composite",
+            "composite": {
+                "operator": "and",
+                "conditions": [
+                    { "type": "threshold", "threshold": { "direction": "above", "value": 90 } },
+                    { "type": "iob", "iob": { "operator": "<", "value": 1 } }
+                ]
+            }
+        },
+    }));
+    let tree = &response["auto_resolve_tree"];
+    assert_eq!(tree["path"], json!("auto_resolve"));
     let conds = tree["conditions"].as_array().unwrap();
     assert_eq!(conds[0]["leaf_id"], json!(0));
-    assert_eq!(conds[1]["leaf_id"], json!(1));
-    assert_eq!(conds[1]["type"], Value::Null);
-    assert_eq!(conds[1]["kind"], Value::Null);
+    assert_eq!(conds[0]["path"], json!("auto_resolve[0].threshold"));
+    assert_eq!(conds[1]["kind"], json!("iob"));
+    assert_eq!(response["tree"]["leaf_id"], json!(0));
+}
+
+#[test]
+fn describe_null_or_unevaluable_auto_resolve_tree_is_null() {
+    for params in [
+        Value::Null,
+        json!({ "type": "threshold", "threshold": { "value": 90 } }),
+    ] {
+        let response = describe(&json!({
+            "schema_version": 1,
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 },
+            "auto_resolve_params": params,
+        }));
+        assert_eq!(response["ok"], json!(true));
+        assert_eq!(response["auto_resolve_tree"], Value::Null, "for {params}");
+    }
 }
 
 #[test]
@@ -1319,41 +1346,7 @@ fn describe_not_unwraps_to_its_child() {
 }
 
 #[test]
-fn describe_not_without_a_child_collapses_to_a_leaf() {
-    let tree = describe_rule("not", json!({}));
-    assert_eq!(tree["leaf_id"], json!(0));
-    assert_eq!(tree["kind"], json!("not"));
-}
-
-#[test]
-fn describe_noncanonical_typed_leaf_uses_default_operands_like_the_evaluator() {
-    // A leaf whose `type` is the PascalCase enum-name (not the wire string) is
-    // evaluated with constructor defaults (eval/mod.rs gate); describe must
-    // surface the SAME defaults, not the authored operands, so the readout
-    // agrees with the leaf's truth.
-    let params = json!({
-        "operator": "or",
-        "conditions": [
-            { "type": "RateOfChange", "rate_of_change": { "direction": "falling", "rate": 2 } }
-        ]
-    });
-    let leaf = describe_rule("composite", params)["conditions"][0].clone();
-    assert_eq!(leaf["kind"], json!("rate_of_change"));
-    assert_eq!(
-        leaf["params"]["direction"],
-        Value::Null,
-        "authored operand must be ignored"
-    );
-    assert_eq!(
-        leaf["params"]["rate"],
-        json!(0),
-        "defaults surface, like the evaluator"
-    );
-}
-
-#[test]
-fn describe_canonical_typed_leaf_keeps_its_operands() {
-    // Same operands under the canonical wire `type` ARE kept (contrast above).
+fn describe_leaf_keeps_its_operands() {
     let params = json!({
         "operator": "or",
         "conditions": [
@@ -1412,41 +1405,65 @@ fn describe_nested_composite_preorder_ids_align_with_evaluate() {
 }
 
 #[test]
-fn describe_decodes_remaining_enum_ordinal_operands() {
+fn describe_shows_enum_operands_by_wire_name() {
+    let operand = |kind: &str, params: Value, field: &str| {
+        describe_rule(kind, params)["params"][field].clone()
+    };
     assert_eq!(
-        describe_rule(
+        operand(
+            "day_of_week",
+            json!({ "days": ["sunday", "saturday"] }),
+            "days"
+        ),
+        json!(["sunday", "saturday"])
+    );
+    assert_eq!(
+        operand(
             "temp_basal",
-            json!({ "metric": 1, "operator": ">", "value": 150 })
-        )["params"]["metric"],
+            json!({ "metric": "percent_of_scheduled", "operator": ">", "value": 150 }),
+            "metric"
+        ),
         json!("percent_of_scheduled")
     );
     assert_eq!(
-        describe_rule(
+        operand(
             "time_since_last_bolus",
-            json!({ "operator": 2, "minutes": 30 })
-        )["params"]["operator"],
+            json!({ "operator": "<", "minutes": 30 }),
+            "operator"
+        ),
         json!("<")
     );
     assert_eq!(
-        describe_rule("glucose_bucket", json!({ "buckets": [0, 5] }))["params"]["buckets"],
+        operand(
+            "glucose_bucket",
+            json!({ "buckets": ["very_low", "very_high"] }),
+            "buckets"
+        ),
         json!(["very_low", "very_high"])
     );
     assert_eq!(
-        describe_rule("pump_state", json!({ "mode": 5, "is_active": true }))["params"]["mode"],
+        operand(
+            "pump_state",
+            json!({ "mode": "Sleep", "is_active": true }),
+            "mode"
+        ),
         json!("Sleep")
     );
     assert_eq!(
-        describe_rule(
+        operand(
             "state_span_active",
-            json!({ "category": 4, "is_active": true })
-        )["params"]["category"],
+            json!({ "category": "Exercise", "is_active": true }),
+            "category"
+        ),
         json!("Exercise")
     );
-    // An out-of-range ordinal surfaces verbatim as a number (the engine accepts
-    // raw integers).
     assert_eq!(
-        describe_rule("pump_state", json!({ "mode": 99, "is_active": true }))["params"]["mode"],
-        json!(99)
+        operand(
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "Australia/Sydney" }),
+            "timezone"
+        ),
+        json!("Australia/Sydney")
     );
 }
 

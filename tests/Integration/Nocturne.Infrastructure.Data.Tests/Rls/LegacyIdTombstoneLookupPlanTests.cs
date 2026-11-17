@@ -1,8 +1,5 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
-using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -48,9 +45,9 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
             .ToHashSet(StringComparer.Ordinal);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await PlanTestSupport.SetTenantAsync(conn, tenant);
 
-        var capture = new LastReaderCapture();
+        var capture = new PlanTestSupport.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
             .AddInterceptors(capture)
@@ -63,7 +60,7 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
             "live rows and user tombstones block re-creation; system sweeps and unknown ids do not");
         blocks.DeletedByUser.Should().BeEquivalentTo(lookedUp.Where(id => id.StartsWith("user-")));
 
-        var plan = await ExplainAsync(conn, capture.Command!);
+        var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);
         var indexes = plan.Descendants("Index Name").ToList();
         var nodes = plan.Descendants("Node Type").ToList();
 
@@ -87,7 +84,7 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
             await cmd.ExecuteNonQueryAsync();
         }
 
-        await SetTenantAsync(conn, tenant);
+        await PlanTestSupport.SetTenantAsync(conn, tenant);
 
         (string Prefix, int Count, string DeletedAt, string ByUser)[] batches =
         [
@@ -111,64 +108,5 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
         await using var analyze = conn.CreateCommand();
         analyze.CommandText = $"ANALYZE {table}";
         await analyze.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-        cmd.Parameters.AddWithValue("tid", tenant.ToString());
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<JsonElement> ExplainAsync(NpgsqlConnection conn, NpgsqlCommand captured)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "EXPLAIN (FORMAT JSON) " + captured.CommandText;
-        foreach (NpgsqlParameter p in captured.Parameters)
-            cmd.Parameters.Add(p.Clone());
-
-        var json = (string)(await cmd.ExecuteScalarAsync())!;
-        return JsonDocument.Parse(json).RootElement.Clone();
-    }
-
-    private sealed class LastReaderCapture : DbCommandInterceptor
-    {
-        public NpgsqlCommand? Command { get; private set; }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            var copy = new NpgsqlCommand(command.CommandText);
-            foreach (NpgsqlParameter p in command.Parameters)
-                copy.Parameters.Add(p.Clone());
-            Command = copy;
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
-    }
-}
-
-internal static class PlanJson
-{
-    public static IEnumerable<string> Descendants(this JsonElement element, string property)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                foreach (var p in element.EnumerateObject())
-                {
-                    if (p.Name == property && p.Value.ValueKind == JsonValueKind.String)
-                        yield return p.Value.GetString()!;
-                    foreach (var d in p.Value.Descendants(property))
-                        yield return d;
-                }
-                break;
-            case JsonValueKind.Array:
-                foreach (var item in element.EnumerateArray())
-                foreach (var d in item.Descendants(property))
-                    yield return d;
-                break;
-        }
     }
 }

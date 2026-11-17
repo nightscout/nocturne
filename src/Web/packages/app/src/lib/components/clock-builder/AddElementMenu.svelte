@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Popover from "$lib/components/ui/popover";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import {
     ELEMENT_GROUPS,
     ELEMENT_INFO,
     type ClockElementType,
-  } from "$lib/clock-builder";
+  } from "#lib/clock-builder/index.js";
 
   interface Props {
     position: "top" | "bottom";
@@ -32,7 +32,7 @@
     align="center"
   >
     <div class="space-y-3">
-      <h4 class="font-medium">Add Element</h4>
+      <h4 class="font-medium">Add element</h4>
       {#each ELEMENT_GROUPS as group (group.name)}
         <div>
           <p class="mb-1 text-xs font-medium text-muted-foreground">

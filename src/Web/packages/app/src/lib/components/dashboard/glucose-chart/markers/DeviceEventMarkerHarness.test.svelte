@@ -2,7 +2,7 @@
   import DeviceEventMarker from "./DeviceEventMarker.svelte";
   import { setGlucoseChartContext } from "../chart-context.svelte";
   import type { GlucoseChartContext } from "../chart-context.svelte";
-  import { DeviceEventType } from "$lib/api";
+  import { DeviceEventType } from "#lib/api/index.js";
 
   interface Props {
     isInferred?: boolean;

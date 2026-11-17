@@ -19,14 +19,14 @@ const DESTRUCTIVE = "bg-destructive/10 text-destructive";
 const MUTED = "bg-muted text-foreground";
 
 const MATCH_TYPES: Record<number, MatchTypeDisplay> = {
-	0: { label: "Perfect", longLabel: "Perfect Match", class: SUCCESS },
-	1: { label: "Minor Diff", longLabel: "Minor Differences", class: INFO },
-	2: { label: "Major Diff", longLabel: "Major Differences", class: WARNING },
-	3: { label: "Critical", longLabel: "Critical Differences", class: DESTRUCTIVE },
-	4: { label: "NS Missing", longLabel: "Nightscout Missing", class: MUTED },
-	5: { label: "Nocturne Missing", longLabel: "Nocturne Missing", class: MUTED },
-	6: { label: "Both Missing", longLabel: "Both Missing", class: MUTED },
-	7: { label: "Error", longLabel: "Comparison Error", class: DESTRUCTIVE },
+	0: { label: "Perfect", longLabel: "Perfect match", class: SUCCESS },
+	1: { label: "Minor diff", longLabel: "Minor differences", class: INFO },
+	2: { label: "Major diff", longLabel: "Major differences", class: WARNING },
+	3: { label: "Critical", longLabel: "Critical differences", class: DESTRUCTIVE },
+	4: { label: "NS missing", longLabel: "Nightscout missing", class: MUTED },
+	5: { label: "Nocturne missing", longLabel: "Nocturne missing", class: MUTED },
+	6: { label: "Both missing", longLabel: "Both missing", class: MUTED },
+	7: { label: "Error", longLabel: "Comparison error", class: DESTRUCTIVE },
 };
 
 /**
@@ -35,7 +35,7 @@ const MATCH_TYPES: Record<number, MatchTypeDisplay> = {
  */
 const UNKNOWN: MatchTypeDisplay = {
 	label: "Unknown",
-	longLabel: "Unknown Result",
+	longLabel: "Unknown result",
 	class: MUTED,
 };
 

@@ -18,6 +18,7 @@ internal sealed class DashboardChartDataAssembler : IChartDataAssembler
             BasalSeries = context.BasalSeries,
             DefaultBasalRate = context.DefaultBasalRate,
             MaxBasalRate = context.MaxBasalRate,
+            MinIob = context.MinIob,
             MaxIob = context.MaxIob,
             MaxCob = context.MaxCob,
             GlucoseData = context.GlucoseData,

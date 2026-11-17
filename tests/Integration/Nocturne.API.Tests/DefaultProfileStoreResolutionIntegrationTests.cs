@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json.Nodes;
@@ -23,6 +24,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Nightscout's <c>profileFromTime</c> and <c>activeProfileToTime</c> do, whatever the store is
 /// called, on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestBase
 {
@@ -390,6 +392,48 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         var documents = JsonNode.Parse(await client.GetStringAsync("/api/v1/profile?count=10"))!.AsArray();
         documents.Select(d => (d!["_id"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
             .Should().BeEquivalentTo([("5f8d0c1e8a7b4c3d9e5f1887", "Day"), ("5f8d0c1e8a7b4c3d9e5f1886", "Night")]);
+
+        foreach (var path in new[] { "/api/v3/profile?limit=10", "/api/v3/profile/history/0?limit=10" })
+        {
+            var v3 = JsonNode.Parse(await client.GetStringAsync(path))!["result"]!.AsArray();
+            v3.Select(d => (d!["identifier"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
+                .Should().BeEquivalentTo(
+                    [("5f8d0c1e8a7b4c3d9e5f1887", "Day"), ("5f8d0c1e8a7b4c3d9e5f1886", "Night")], path);
+        }
+    }
+
+    [Fact]
+    public async Task OlderDocumentsWithoutARecordedDefault_AreServedTheDefaultTheResolversRead()
+    {
+        var client = await SeedAsync(
+            Document("5f8d0c1e8a7b4c3d9e5f188d", "Night", Now.AddDays(-4), new() { ["Day"] = Day, ["Night"] = Night }),
+            Document("5f8d0c1e8a7b4c3d9e5f188e", "Default", Now.AddDays(-3), new() { ["Alpha"] = Day, ["Default"] = Old }),
+            Document("5f8d0c1e8a7b4c3d9e5f188f", "Night", Now.AddDays(-2), new() { ["Day"] = Day, ["Night"] = Night }));
+        await using (var db = Fixture.CreateDbContext(Fixture.TenantId))
+            await db.TherapySettings
+                .Where(t => t.LegacyId!.StartsWith("5f8d0c1e8a7b4c3d9e5f188d:")
+                            || t.LegacyId!.StartsWith("5f8d0c1e8a7b4c3d9e5f188e:"))
+                .ExecuteUpdateAsync(u => u.SetProperty(t => t.DocumentDefaultProfile, (string?)null));
+
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-84).ToUnixTimeMilliseconds()), Night, "Night");
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-60).ToUnixTimeMilliseconds()), Old, "Default");
+        (string, string)[] expected =
+        [
+            ("5f8d0c1e8a7b4c3d9e5f188f", "Night"),
+            ("5f8d0c1e8a7b4c3d9e5f188e", "Default"),
+            ("5f8d0c1e8a7b4c3d9e5f188d", "Night"),
+        ];
+
+        var documents = JsonNode.Parse(await client.GetStringAsync("/api/v1/profile?count=10"))!.AsArray();
+        documents.Select(d => (d!["_id"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
+            .Should().BeEquivalentTo(expected);
+
+        foreach (var path in new[] { "/api/v3/profile?limit=10", "/api/v3/profile/history/0?limit=10" })
+        {
+            var v3 = JsonNode.Parse(await client.GetStringAsync(path))!["result"]!.AsArray();
+            v3.Select(d => (d!["identifier"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
+                .Should().BeEquivalentTo(expected, path);
+        }
     }
 
     [Fact]

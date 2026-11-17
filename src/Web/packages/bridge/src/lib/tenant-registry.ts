@@ -66,6 +66,18 @@ export default class TenantRegistry<C extends TenantConnection> {
     if (!this.bySlug.has(slug)) void this.refresh();
   }
 
+  /** Whether `slug` names the tenant `id`, reading the tenant list again first when it names no tenant or another. */
+  async holds(slug: string, id: string): Promise<boolean> {
+    if (this.holdsNow(slug, id)) return true;
+    await this.refresh();
+    return this.holdsNow(slug, id);
+  }
+
+  /** Whether `slug` names the tenant `id` in the list as last applied, with no read. */
+  holdsNow(slug: string, id: string): boolean {
+    return this.bySlug.get(slug)?.id === id;
+  }
+
   /**
    * Whether `connection` is still the one held for `slug`, from a tenant list read after this call.
    * A connection that is not, because its tenant is gone or its slug now names another tenant, has

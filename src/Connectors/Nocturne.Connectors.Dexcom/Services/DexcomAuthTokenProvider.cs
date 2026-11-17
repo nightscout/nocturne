@@ -19,13 +19,14 @@ public class DexcomAuthTokenProvider(
     IConnectorServerResolver<DexcomConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     ILogger<DexcomAuthTokenProvider> logger,
-    IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<DexcomConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    IRetryDelayStrategy retryDelayStrategy,
+    TimeProvider? timeProvider = null)
+    : AuthTokenProviderBase<DexcomConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private const string DexcomApplicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db";
 
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>
     ///     Dexcom sessions typically last 24 hours, but we refresh at 23 hours.
@@ -58,7 +59,6 @@ public class DexcomAuthTokenProvider(
 
                 return (token, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Dexcom authentication",
             cancellationToken
@@ -67,7 +67,7 @@ public class DexcomAuthTokenProvider(
         if (string.IsNullOrEmpty(sessionId))
             return (null, DateTime.MinValue, null);
 
-        var expiresAt = DateTime.UtcNow.AddHours(24);
+        var expiresAt = _timeProvider.GetUtcNow().UtcDateTime.AddHours(24);
         _logger.LogInformation(
             "Dexcom Share authentication successful, session expires at {ExpiresAt}",
             expiresAt);

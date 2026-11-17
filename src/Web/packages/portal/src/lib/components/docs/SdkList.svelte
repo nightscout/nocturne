@@ -2,7 +2,7 @@
     // Renders the supported-SDK table. The rows come from SDKS, which is derived
     // from sdk/<lang>/config.yaml at build time; adding or removing an SDK there
     // updates this table with no edit here.
-    import { SDKS } from "$lib/sdk/sdks";
+    import { SDKS } from "#lib/sdk/sdks.js";
 </script>
 
 <table>

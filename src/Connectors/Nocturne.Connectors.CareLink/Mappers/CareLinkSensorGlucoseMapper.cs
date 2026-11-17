@@ -3,6 +3,7 @@ using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.CareLink.Mappers;
@@ -11,7 +12,7 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public List<SensorGlucose> Map(CareLinkData data)
+    public List<SensorGlucose> Map(CareLinkData data, DateTime now)
     {
         if (data.Sgs is not { Count: > 0 })
             return [];
@@ -21,7 +22,6 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
             data.CurrentServerTime);
 
         var deviceName = $"CareLink {data.MedicalDeviceFamily ?? "Unknown"}";
-        var now = DateTime.UtcNow;
 
         var validSgs = data.Sgs
             .Where(sg => sg is { Kind: "SG", Sg: > 0 } && !string.IsNullOrEmpty(sg.Datetime))
@@ -47,7 +47,7 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
             {
                 Id = Guid.CreateVersion7(),
                 Timestamp = timestamp.Value,
-                LegacyId = $"carelink_{new DateTimeOffset(timestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds()}",
+                LegacyId = $"carelink_{timestamp.Value.ToMills()}",
                 Device = deviceName,
                 DataSource = DataSources.CareLinkConnector,
                 Mgdl = mgdl,

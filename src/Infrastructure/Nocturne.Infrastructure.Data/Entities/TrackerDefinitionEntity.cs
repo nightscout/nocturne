@@ -24,11 +24,12 @@ public class TrackerDefinitionEntity : ITenantScoped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// User identifier this definition belongs to
+    /// The subject who created this row. It grants nothing: trackers are the tenant's, and any
+    /// member may read or change them.
     /// </summary>
-    [Column("user_id")]
+    [Column("created_by")]
     [MaxLength(255)]
-    public string UserId { get; set; } = string.Empty;
+    public string CreatedBy { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable name (e.g., "G7 Sensor", "Steel Cannula")
@@ -63,6 +64,29 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// </summary>
     [Column("trigger_event_types", TypeName = "jsonb")]
     public string TriggerEventTypes { get; set; } = "[]";
+
+    /// <summary>
+    /// Device event types that end the running instance without starting another (JSON array),
+    /// e.g. ["Pod Deactivated"]. Subject to <see cref="TriggerNotesContains"/> like the triggers.
+    /// </summary>
+    [Column("end_event_types", TypeName = "jsonb")]
+    public string EndEventTypes { get; set; } = "[]";
+
+    /// <summary>
+    /// The <see cref="Nocturne.Core.Models.V4.PumpCapability"/> names the tracked hardware provides
+    /// (JSON array), e.g. ["Site","Reservoir","Power"] for a pod. Empty when not known, and then what
+    /// the tracker stands for is read from its triggers and category.
+    /// </summary>
+    [Column("covers", TypeName = "jsonb")]
+    public string Covers { get; set; } = "[]";
+
+    /// <summary>
+    /// The catalog pump part the tracker follows, as the catalog id and the part's key
+    /// (e.g. "omnipod-5/pod"). Null for a tracker that follows no catalog part.
+    /// </summary>
+    [Column("device_component")]
+    [MaxLength(128)]
+    public string? DeviceComponent { get; set; }
 
     /// <summary>
     /// Optional: match treatment notes containing this string
@@ -125,12 +149,6 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// </summary>
     [Column("mode")]
     public TrackerMode Mode { get; set; } = TrackerMode.Duration;
-
-    /// <summary>
-    /// Visibility level for this tracker: Public or Private
-    /// </summary>
-    [Column("visibility")]
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// When this definition was created
