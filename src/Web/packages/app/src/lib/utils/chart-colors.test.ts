@@ -18,6 +18,9 @@ const {
   getGlucoseColorContinuous,
   getGlucoseColorByMode,
   getGlucoseHeatmapFill,
+  getGlucoseRangeBlend,
+  glucoseRangeStops,
+  distinctRangeStops,
   GLUCOSE_HEATMAP_LEGEND_STOPS,
 } = await import("./chart-colors");
 
@@ -97,5 +100,50 @@ describe("getGlucoseColorByMode", () => {
 
   it("returns oklch() in continuous mode", () => {
     expect(getGlucoseColorByMode(120, "continuous", thresholds)).toMatch(/^oklch\(/);
+  });
+});
+
+describe("the distinct range palette's continuous colour", () => {
+  const thresholds = { veryLow: 55, low: 70, high: 180, veryHigh: 250 };
+
+  it("applies only to the clarity palette", () => {
+    expect(distinctRangeStops("theme", thresholds)).toBeUndefined();
+    expect(distinctRangeStops("clarity", thresholds)).toEqual(glucoseRangeStops(thresholds));
+  });
+
+  const stops = glucoseRangeStops(thresholds);
+
+  it("is an anchor's own variable exactly at its threshold", () => {
+    expect(getGlucoseRangeBlend(70, stops)).toBe("var(--glucose-low)");
+    expect(getGlucoseRangeBlend(180, stops)).toBe("var(--glucose-high)");
+  });
+
+  it("clamps to the end colours outside the anchors", () => {
+    expect(getGlucoseRangeBlend(20, stops)).toBe("var(--glucose-very-low)");
+    expect(getGlucoseRangeBlend(400, stops)).toBe("var(--glucose-very-high)");
+  });
+
+  it("blends the neighbouring colours in oklch between anchors", () => {
+    expect(getGlucoseRangeBlend(62.5, stops)).toBe(
+      "color-mix(in oklch, var(--glucose-very-low) 50.00%, var(--glucose-low))"
+    );
+  });
+
+  it("is chosen by getGlucoseColorContinuous only when given a range", () => {
+    expect(getGlucoseColorContinuous(120, stops)).toBe(getGlucoseRangeBlend(120, stops));
+    expect(getGlucoseColorContinuous(120)).toMatch(/^oklch\(/);
+  });
+
+  it("places in-range at the middle of the target range", () => {
+    expect(glucoseRangeStops(thresholds).find((s) => s.color === "var(--glucose-in-range)")?.mgdl).toBe(125);
+  });
+
+  it("sorts thresholds given out of order by value", () => {
+    const mgdl = glucoseRangeStops({ veryLow: 80, low: 70, high: 180, veryHigh: 100 }).map((s) => s.mgdl);
+    expect(mgdl).toEqual([...mgdl].sort((a, b) => a - b));
+  });
+
+  it("leaves the heatmap blend in sRGB", () => {
+    expect(getGlucoseHeatmapFill(47)).toMatch(/^color-mix\(in srgb, /);
   });
 });

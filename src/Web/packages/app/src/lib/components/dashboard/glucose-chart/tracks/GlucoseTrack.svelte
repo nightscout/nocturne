@@ -13,9 +13,14 @@
   import type { GlucosePoint } from "../engine/chart-data-view.svelte";
   import { bg } from "#lib/utils/formatting.js";
   import {
+    distinctRangeStops,
     getGlucoseColor,
     getGlucoseColorContinuous,
   } from "#lib/utils/chart-colors.js";
+  import {
+    glucoseRangePalette,
+    type GlucoseRangePalette,
+  } from "#lib/stores/appearance-store.svelte.js";
   import {
     lineStopsFor,
     fillStopsFor,
@@ -52,6 +57,8 @@
     pointColorMode?: LineColorMode;
     pointColor?: string;
     areaOpacity?: number;
+    /** The range palette the continuous colours follow; the viewer's own when omitted. A server render has no viewer store, so it passes the request's. */
+    rangePalette?: GlucoseRangePalette;
     /**
      * Draw only the readings in the chart's x domain. Two more on each side keep the curve and
      * the points at its edges as the whole series draws them: a monotone curve's segment reads
@@ -69,6 +76,7 @@
     pointColorMode,
     pointColor,
     areaOpacity = 0.5,
+    rangePalette,
     visibleOnly = false,
   }: Props = $props();
 
@@ -100,8 +108,21 @@
     areaMode === "off" ? undefined : areaY0Accessor(areaMode, thresholds),
   );
 
+  const rangeStops = $derived(
+    distinctRangeStops(
+      rangePalette ?? glucoseRangePalette.current,
+      thresholds,
+    ),
+  );
+
   const lineStops = $derived(
-    lineStopsFor(lineColorMode, thresholds, glucoseAxisScale, chartCtx.height),
+    lineStopsFor(
+      lineColorMode,
+      thresholds,
+      glucoseAxisScale,
+      chartCtx.height,
+      rangeStops,
+    ),
   );
 
   const fillStops = $derived(
@@ -111,7 +132,7 @@
   function pointFill(sgv: number): string {
     if (effectivePointMode === "single") return effectivePointColor;
     if (effectivePointMode === "continuous")
-      return getGlucoseColorContinuous(sgv);
+      return getGlucoseColorContinuous(sgv, rangeStops);
     return getGlucoseColor(sgv, thresholds);
   }
 
