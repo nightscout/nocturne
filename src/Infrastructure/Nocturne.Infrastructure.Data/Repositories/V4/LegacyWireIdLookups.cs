@@ -170,7 +170,7 @@ public static class LegacyWireIdLookups
     /// The rule of <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/>
     /// over <paramref name="rows"/>, the rows that block re-creating their legacy ids.
     /// </summary>
-    public static List<string> WriteBackMaySend(IEnumerable<WriteBackCandidate> rows, string skippedSource) =>
+    public static List<WriteBackCandidate> WriteBackMaySend(IEnumerable<WriteBackCandidate> rows, string skippedSource) =>
         rows
             .GroupBy(r => r.LegacyId, StringComparer.Ordinal)
             .Select(g => g
@@ -179,6 +179,5 @@ public static class LegacyWireIdLookups
                 .ThenBy(r => r.Id)
                 .First())
             .Where(r => r.WrittenLive && r.Source != skippedSource)
-            .Select(r => r.LegacyId)
             .ToList();
 }

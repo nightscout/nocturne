@@ -314,7 +314,7 @@ public class OwnIdAdoptionTests : IDisposable
             .ReturnsAsync(new HashSet<string> { "dexcom_7f3c2a91" });
         sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["dexcom_7f3c2a91"]);
+            .ReturnsAsync([new WriteBackSendable("dexcom_7f3c2a91", null, null)]);
         List<SensorGlucose>? written = null;
         sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
@@ -344,7 +344,7 @@ public class OwnIdAdoptionTests : IDisposable
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
         sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["dexcom_7f3c2a91"]);
+            .ReturnsAsync([new WriteBackSendable("dexcom_7f3c2a91", null, null)]);
 
         await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
             [new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = "xdrip" }],
@@ -363,7 +363,7 @@ public class OwnIdAdoptionTests : IDisposable
             .ReturnsAsync(new HashSet<string> { "loop_status_42" });
         aps.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["loop_status_42"]);
+            .ReturnsAsync([new WriteBackSendable("loop_status_42", null, null)]);
         var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
         status.UpstreamIdentifier = "loop_status_42";
 

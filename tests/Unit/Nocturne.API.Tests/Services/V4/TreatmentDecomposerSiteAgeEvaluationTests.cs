@@ -65,7 +65,7 @@ public sealed class TreatmentDecomposerSiteAgeEvaluationTests(AlertFactEvaluatio
     {
         var contexts = scope.GetRequiredService<INocturneDbContextFactory>();
         return new TreatmentDecomposer(
-            contexts, new DecomposedTreatmentKeys(contexts),
+            contexts, new DecomposedTreatmentKeys(contexts, TimeProvider.System),
             Mock.Of<IBolusRepository>(),
             Mock.Of<ITempBasalRepository>(),
             Mock.Of<ICarbIntakeRepository>(),
@@ -84,6 +84,7 @@ public sealed class TreatmentDecomposerSiteAgeEvaluationTests(AlertFactEvaluatio
             TempBasalTestDeps.Unscheduled(),
             scope.GetRequiredService<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance,
+            TimeProvider.System,
             changes: scope.GetRequiredService<IRecordChangePublisher>());
     }
 }

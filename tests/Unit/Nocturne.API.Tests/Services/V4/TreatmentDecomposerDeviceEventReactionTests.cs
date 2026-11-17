@@ -55,7 +55,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             .Returns(Task.CompletedTask);
 
         _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System),
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(factory, dedup, audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -73,7 +73,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             audit,
-            NullLogger<TreatmentDecomposer>.Instance,
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System,
             reactor.Object);
     }
 

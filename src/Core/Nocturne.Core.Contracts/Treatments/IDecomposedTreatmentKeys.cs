@@ -8,7 +8,7 @@ namespace Nocturne.Core.Contracts.Treatments;
 /// against a re-upload and by whom, the moving of a source's records from a client id to a server id,
 /// and the upstream fingerprints a source's rows carry.
 /// </summary>
-public interface IDecomposedTreatmentKeys
+public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
 {
     /// <summary>
     /// The ids among <paramref name="legacyIds"/> a re-upload would find stored, from any source, and of

@@ -20,15 +20,17 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// return only a count: a referential clean-up
 /// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>), the duplicate flag
 /// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
-/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, and the stamp of a
-/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>). A lifted statement may also be a read
+/// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, the stamp of a
+/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>), and the stamp of what write-back
+/// is sending and sent (<see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSendingAsync"/>, <see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSentAsync"/>). A lifted statement may also be a read
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
 /// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),
 /// the restore's check of the unique keys a restored row would take
 /// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant, and
 /// the first arrival of each glucose stream, which replay classifies readings by
-/// (<see cref="Repositories.V4.SensorGlucoseRepository.GetStreamFirstArrivalsAsync"/>). One lifted read
+/// (<see cref="Repositories.V4.SensorGlucoseRepository.GetStreamFirstArrivalsAsync"/>), and whether
+/// write-back sent a record (<see cref="Repositories.V4.DecomposedTreatmentKeys.GetSentUpstreamAsync"/>). One lifted read
 /// returns a row the clamp hides: a retried clear of a do-not-disturb window the caller names by id, cleared before
 /// the clamp's window, answers with that window as the first clear did (<see cref="Repositories.DndWindowRepository"/>).
 /// <para>

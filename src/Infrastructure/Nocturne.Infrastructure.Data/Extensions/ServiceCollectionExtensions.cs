@@ -257,6 +257,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
         services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
+        services.AddScoped<IWriteBackSentRecords>(sp => sp.GetRequiredService<IDecomposedTreatmentKeys>());
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
         services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();

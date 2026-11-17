@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
@@ -61,11 +62,20 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// could store a second copy. The edit is not retried, so upstream keeps the previous version until
 /// the treatment is edited again.
 /// </para>
+/// <para>
+/// Once upstream accepts a treatment, the <see cref="WriteBackFingerprint"/> of each document it went
+/// as is kept on its rows (<see cref="IWriteBackSentRecords"/>), so the connector's pull tells its
+/// echo from an edit made upstream. Before each send they are added to rows that already keep some,
+/// since upstream may hold any of them from the moment it is sent: a pull before the stamp, or after a
+/// meal's bolus is accepted and its carbs are not, would otherwise apply Nocturne's own document as an
+/// upstream edit.
+/// </para>
 /// </remarks>
 public class NightscoutTreatmentWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
     NightscoutCircuitBreaker circuitBreaker,
+    IWriteBackSentRecords sentRecords,
     ILogger<NightscoutTreatmentWriteBackSink> logger)
     : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, circuitBreaker, logger)
 {
@@ -79,6 +89,7 @@ public class NightscoutTreatmentWriteBackSink(
     protected override async Task<IReadOnlyList<Treatment>> PrepareAsync(
         NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> batch, CancellationToken ct)
     {
+        await sentRecords.RecordSendingAsync([.. batch.Select(SentRecord)], ct);
         var sent = new List<Treatment>(batch.Count);
         foreach (var item in batch)
             sent.AddRange(await SplitAsync(config, item, ct));
@@ -90,7 +101,21 @@ public class NightscoutTreatmentWriteBackSink(
     {
         foreach (var item in items.Where(i => PreBolusSplit.ForWriteBack(i).Count == 1))
             await RemoveSplitCopiesAsync(config, item, ct);
+
+        await sentRecords.RecordSentAsync([.. items.Select(SentRecord)], ct);
     }
+
+    private static WriteBackSentRecord SentRecord(Treatment item) =>
+        new(item.LegacyId, item.RecordId, [.. PreBolusSplit.ForWriteBack(item).Select(AsPulled)]);
+
+    /// <summary>
+    /// The <see cref="WriteBackFingerprint"/> of <paramref name="document"/> as it is sent and read back:
+    /// written with <see cref="UpstreamIdentityJson.Options"/>, which every send uses, and read with
+    /// <see cref="UpstreamIdentityJson.ReadOptions"/>, which the connector's pull reads with.
+    /// </summary>
+    internal static string AsPulled(Treatment document) =>
+        WriteBackFingerprint.Of(JsonSerializer.Deserialize<Treatment>(
+            JsonSerializer.Serialize(document, UpstreamIdentityJson.Options), UpstreamIdentityJson.ReadOptions)!);
 
     /// <summary>
     /// Up to 15.0.6 the POST of the carbs record a v1 POST split off a meal upserts by time onto the
@@ -194,6 +219,7 @@ public class NightscoutTreatmentWriteBackSink(
     protected override async Task<bool> SendUpdatedAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
     {
+        await sentRecords.RecordSendingAsync([SentRecord(item)], ct);
         var halves = await SplitAsync(config, item, ct);
         if (item.LegacyId is not { Length: > 0 } legacyId)
             return await SendEditAsync(config, halves[0], null, ct);

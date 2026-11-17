@@ -86,9 +86,27 @@ public sealed record WireLegacyId(string WireId, string LegacyId);
 /// (<see cref="MongoObjectId.TryGetOwnIdRange"/>), from
 /// <see cref="ILegacyKeyedRepository{TRecord}.FindUnkeyedOwnIdsAsync"/>, and whether Nightscout
 /// write-back may have sent that record upstream, as
-/// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/> decides it.
+/// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/> decides it, with
+/// what <see cref="WriteBackSendable"/> carries for it.
 /// </summary>
-public sealed record UnkeyedOwnId(string WireId, bool WriteBackMaySend);
+public sealed record UnkeyedOwnId(
+    string WireId, bool WriteBackMaySend, string? DataSource = null, string? SentFingerprint = null, bool Live = true);
+
+/// <summary>
+/// A legacy id held by a record Nightscout write-back may have sent upstream, from
+/// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/>.
+/// </summary>
+/// <param name="DataSource">The record's <see cref="IV4Record.DataSource"/>, which an upstream edit applied to it keeps.</param>
+/// <param name="SentFingerprint">
+/// The documents of the record a pull may bring back as an echo, in the list
+/// <see cref="WriteBackFingerprint.Stored"/> describes (<see cref="Treatments.IWriteBackSentRecords"/>),
+/// or null where the table keeps none or the record was written back before they were kept.
+/// </param>
+/// <param name="Live">
+/// Whether the row is live rather than the user's deletion. A deletion keeps what was sent before it,
+/// which no longer describes the record once a live row of it is sent again.
+/// </param>
+public sealed record WriteBackSendable(string LegacyId, string? DataSource, string? SentFingerprint, bool Live = true);
 
 /// <summary>
 /// A V4 repository addressable by the legacy MongoDB <c>_id</c> its records were decomposed from.
@@ -203,7 +221,7 @@ public interface ILegacyKeyedRepository<TRecord>
     /// a connector's initial backfill) was never offered to write-back. A live record governs over
     /// the user's deletion of the same id, and the latest of several deletions governs over the rest.
     /// </summary>
-    Task<IEnumerable<string>> GetLegacyIdsWriteBackMaySendAsync(
+    Task<IEnumerable<WriteBackSendable>> GetLegacyIdsWriteBackMaySendAsync(
         IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct = default);
 
     /// <summary>

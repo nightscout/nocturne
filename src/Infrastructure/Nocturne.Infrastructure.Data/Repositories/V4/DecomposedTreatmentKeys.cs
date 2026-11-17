@@ -12,7 +12,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <see cref="IDecomposedTreatmentKeys"/> over <see cref="DecomposedTreatmentTables"/> and the state
 /// spans of overrides and temporary targets, one context of the scope's reader per call.
 /// </summary>
-public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts) : IDecomposedTreatmentKeys
+public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, TimeProvider time) : IDecomposedTreatmentKeys
 {
     /// <inheritdoc />
     public async Task<HeldLegacyIds> GetHeldLegacyIdsAsync(
@@ -182,6 +182,111 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts) 
                 await table.StampUnfingerprintedAsync(db, source, fingerprints, ct);
             await transaction.CommitAsync(ct);
         });
+    }
+
+    /// <summary>Serialises the stamps of a tenant, each of which reads what its rows store and writes it on.</summary>
+    private const int SentStampLockClass = 0x4E57_4253;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs with the member history clamp lifted: the record was sent because its writer may write it,
+    /// and a clamped member's edit of a record dated before the window would otherwise stamp nothing,
+    /// leaving it reading as never sent.
+    /// </remarks>
+    public Task RecordSentAsync(IReadOnlyList<WriteBackSentRecord> records, CancellationToken ct = default)
+        => StampAsync(records, WriteBackFingerprint.Accepted, ct);
+
+    /// <inheritdoc />
+    /// <remarks>Runs with the member history clamp lifted, as <see cref="RecordSentAsync"/> does.</remarks>
+    public Task RecordSendingAsync(IReadOnlyList<WriteBackSentRecord> records, CancellationToken ct = default)
+        => StampAsync(records, WriteBackFingerprint.Sending, ct);
+
+    /// <summary>
+    /// Sets each live row of <paramref name="records"/> to <paramref name="stamp"/> of what it stores
+    /// and its record's documents. Rows are read and written under a lock on the tenant, so two sends
+    /// of one record cannot each write over what the other added.
+    /// </summary>
+    private async Task StampAsync(
+        IReadOnlyList<WriteBackSentRecord> records,
+        Func<string?, IReadOnlyList<string>, DateTimeOffset, string?> stamp,
+        CancellationToken ct)
+    {
+        if (records.Count == 0)
+            return;
+
+        await using var db = await contexts.CreateAsync(ct);
+        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await db.WriteWithHistoryClampLiftedAsync(
+                async token =>
+                {
+                    await db.LockForTransactionAsync(SentStampLockClass, db.TenantId, token);
+                    var now = time.GetUtcNow();
+
+                    var byLegacyId = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+                    var byRow = new Dictionary<Guid, IReadOnlyList<string>>();
+                    foreach (var record in records)
+                    {
+                        if (record.LegacyId is { Length: > 0 } legacyId)
+                            byLegacyId[legacyId] = record.Documents;
+                        else if (record.RecordId is { } recordId)
+                            byRow[recordId] = record.Documents;
+                    }
+
+                    var byCorrelation = new Dictionary<Guid, IReadOnlyList<string>>();
+                    if (byRow.Count > 0)
+                    {
+                        Guid[] rowIds = [.. byRow.Keys];
+                        foreach (var table in DecomposedTreatmentTables.All)
+                        {
+                            foreach (var (id, correlationId) in await table.CorrelationsAsync(db, rowIds, token))
+                                byCorrelation[correlationId] = byRow[id];
+                        }
+                    }
+
+                    foreach (var table in DecomposedTreatmentTables.All)
+                    {
+                        var stamped = new Dictionary<Guid, string>();
+                        foreach (var row in await table.SentRowsAsync(db, byLegacyId, byRow, byCorrelation, token))
+                        {
+                            if (stamp(row.Stored, row.Documents, now) is { } value && value != row.Stored)
+                                stamped[row.Id] = value;
+                        }
+
+                        await table.StampSentAsync(db, stamped, token);
+                    }
+
+                    return true;
+                },
+                ct);
+            await transaction.CommitAsync(ct);
+        });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads with the member history clamp lifted, so a clamped caller's record dated before the window
+    /// does not read as never sent. It returns only ids the caller named, and its answer only feeds a
+    /// decision made inside Nocturne: returned to a request, it would tell a clamped member of a record
+    /// dated before the window.
+    /// </remarks>
+    public async Task<IReadOnlySet<string>> GetSentUpstreamAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        var sent = new HashSet<string>(StringComparer.Ordinal);
+        if (legacyIds.Count == 0)
+            return sent;
+
+        await using var db = await contexts.CreateAsync(ct);
+        string[] ids = [.. legacyIds];
+        return await db.WriteWithHistoryClampLiftedAsync(
+            async token =>
+            {
+                foreach (var table in DecomposedTreatmentTables.All)
+                    sent.UnionWith(await table.SentUpstreamAsync(db, ids, token));
+                return sent;
+            },
+            ct);
     }
 
     /// <summary>Stages a user tombstone like each of <paramref name="tombstones"/> under each of <paramref name="keys"/>.</summary>

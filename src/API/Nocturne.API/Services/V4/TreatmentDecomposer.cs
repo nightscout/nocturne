@@ -71,6 +71,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private readonly RelativeTempBasalRates _relativeTempBasalRates;
     private readonly IAuditContext _auditContext;
     private readonly IRecordChangePublisher? _changes;
+    private readonly TimeProvider _time;
 
     public TreatmentDecomposer(
         INocturneDbContextFactory contexts,
@@ -93,10 +94,12 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         RelativeTempBasalRates relativeTempBasalRates,
         IAuditContext auditContext,
         ILogger<TreatmentDecomposer> logger,
+        TimeProvider time,
         IDeviceEventReactor? deviceEventReactor = null,
         IRecordChangePublisher? changes = null)
         : base(logger)
     {
+        _time = time;
         _changes = changes;
         _deviceEventReactor = deviceEventReactor;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -417,6 +420,28 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         => treatment.DataSource == Nocturne.Core.Constants.DataSources.NightscoutConnector;
 
     /// <summary>
+    /// <see cref="DecomposerBase.PlanStoredIdentitiesAsync"/> across the treatment tables, telling a
+    /// write-back echo from an upstream edit by <see cref="WriteBackFingerprint"/>.
+    /// </summary>
+    private async Task<Dictionary<Treatment, PlannedIdentity>> PlanAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        var now = _time.GetUtcNow();
+        var plans = await PlanStoredIdentitiesAsync(
+            treatments, TreatmentTables, PulledFromNightscout, ct,
+            sentCopy: (treatment, stored) => WriteBackFingerprint.MayBeSent(stored, WriteBackFingerprint.Of(treatment), now),
+            namesSplitHalf: PreBolusSplit.NamesWriteBackCarbs);
+        foreach (var (treatment, planned) in plans.Where(p => p.Value.ChangedSplitHalf))
+            Logger.LogWarning(
+                "Kept treatment {LegacyId} as it is: upstream changed one half of the preBolus meal write-back split, which Nocturne stores as one record",
+                LogText.Sanitize(planned.Id));
+        return plans;
+    }
+
+    /// <summary>The planned identity of <paramref name="treatment"/> when it is an upstream edit of a record write-back sent.</summary>
+    private PlannedIdentity? UpstreamEditOf(Treatment treatment) =>
+        _identities.TryGetValue(treatment, out var identity) && identity.Planned.UpstreamEdit ? identity.Planned : null;
+
+    /// <summary>
     /// Where each treatment this scope has already planned or pointed stands, so a connector sync
     /// resolves a treatment once across <see cref="SelectForRepublishAsync"/>,
     /// <see cref="ResolveStoredIdentitiesAsync"/> and the decomposition that follows.
@@ -450,18 +475,16 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                 echoes.Add(treatment);
         }
 
-        foreach (var (treatment, planned) in await PlanStoredIdentitiesAsync(unplanned, TreatmentTables, PulledFromNightscout, ct))
+        foreach (var (treatment, planned) in await PlanAsync(unplanned, ct))
             pending[treatment] = planned;
 
         if (pending.Count == 0)
             return echoes;
 
-        var applied = await ApplyStoredIdentitiesAsync(pending, TreatmentTables, ct);
-        foreach (var (treatment, planned) in pending)
+        foreach (var (treatment, applied) in await ApplyStoredIdentitiesAsync(pending, TreatmentTables, ct))
         {
-            var echo = applied.Contains(treatment);
-            _identities.AddOrUpdate(treatment, new StoredIdentity(planned with { Echo = echo }) { Applied = true });
-            if (echo)
+            _identities.AddOrUpdate(treatment, new StoredIdentity(applied) { Applied = true });
+            if (applied.Echo)
                 echoes.Add(treatment);
         }
 
@@ -1354,8 +1377,17 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         var spans = await PreloadSpansAsync(writing, ct);
 
         var models = new BatchModels();
+        var upstreamEdits = new List<BatchTreatment>();
         foreach (var treatment in writing)
         {
+            var pulledSource = treatment.Treatment.DataSource;
+            if (UpstreamEditOf(treatment.Treatment) is { } edit)
+            {
+                upstreamEdits.Add(treatment);
+                result.AppliesUpstreamEdit(treatment.Index);
+                treatment.Treatment.DataSource = edit.Owner;
+            }
+
             try
             {
                 Build(treatment, devices, links, stored, storedCorrelations, mealCarbs, models);
@@ -1363,6 +1395,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             catch (TreatmentMappingException ex)
             {
                 result.Reject(treatment.Index, ex);
+            }
+            finally
+            {
+                treatment.Treatment.DataSource = pulledSource;
             }
         }
 
@@ -1430,6 +1466,12 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                     ExceptionDispatchInfo.Capture(refusal).Throw();
             });
         }
+
+        await _keys.RecordSentAsync(
+            [.. upstreamEdits
+                .Where(e => !result.Rejected.ContainsKey(e.Index))
+                .Select(e => new WriteBackSentRecord(e.Treatment.Id, null, [WriteBackFingerprint.Of(e.Treatment)]))],
+            ct);
 
         return result;
     }
@@ -2493,7 +2535,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// <para>
     /// All of this is keyed by the id each treatment is stored under, which for a copy Nightscout
     /// re-keyed is not the <c>_id</c> it came back with, so each is first planned onto the record it
-    /// names (<see cref="PlanForRepublishAsync"/>). A write-back echo is never selected.
+    /// names (<see cref="PlanForRepublishAsync"/>). A write-back echo is never selected, and an
+    /// upstream edit of a record write-back sent always is: that record is not this source's, so it
+    /// carries none of its fingerprints.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
@@ -2517,7 +2561,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
             var fingerprint = UpstreamFingerprint(treatment);
             var prior = stamped.GetValueOrDefault(id) ?? [];
-            if (!stored)
+            if (!stored || UpstreamEditOf(treatment) is not null)
                 republish.Add(treatment);
             else if (prior.All(f => f is null))
                 baselines[id] = fingerprint;
@@ -2544,7 +2588,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             NormalizeIdentity(treatment);
 
         var unplanned = treatments.Where(t => !_identities.TryGetValue(t, out _)).ToList();
-        foreach (var (treatment, planned) in await PlanStoredIdentitiesAsync(unplanned, TreatmentTables, PulledFromNightscout, ct))
+        foreach (var (treatment, planned) in await PlanAsync(unplanned, ct))
         {
             treatment.Id = planned.Id;
             _identities.AddOrUpdate(treatment, new StoredIdentity(planned));

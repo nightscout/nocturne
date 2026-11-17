@@ -32,7 +32,7 @@ public class DecomposedTreatmentKeysTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private DecomposedTreatmentKeys Keys(Guid tenant) => new(new TestNocturneDbContextFactory(_db.CreateContext(tenant)));
+    private DecomposedTreatmentKeys Keys(Guid tenant) => new(new TestNocturneDbContextFactory(_db.CreateContext(tenant)), TimeProvider.System);
 
     private static BolusEntity Bolus(string legacyId, string source, string? fingerprint = null) => new()
     {
