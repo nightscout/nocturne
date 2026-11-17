@@ -821,12 +821,12 @@ public class StateSpanRepository : IStateSpanRepository
     {
         var deleted = await db.ExecuteInTransactionAsync<IReadOnlyList<StateSpan>>(async token =>
         {
-            var (saved, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(
+            var (saved, copies, copyIds) = await DuplicateGroupPrimaries.SoftDeleteAsync(
                 db, entity, RecordType.StateSpan, token);
             if (saved == 0)
                 return [];
 
-            await db.ClearSupersededByAsync([entity.Id, .. copies.Select(c => c.Id)], token);
+            await db.ClearSupersededByAsync([entity.Id, .. copyIds], token);
             return [StateSpanMapper.ToDomainModel(entity), .. copies.Select(StateSpanMapper.ToDomainModel)];
         }, ct: cancellationToken);
         if (deleted.Count > 0)
