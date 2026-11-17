@@ -42,6 +42,7 @@ public sealed record TenantMemberRecord(
 public sealed record TenantMemberRoleRecord(Guid RoleId, string Name, string Slug, IReadOnlyList<string> Permissions);
 
 /// <summary>A membership to store, with the roles it is assigned at once.</summary>
+/// <param name="MadeBy">Who the membership's audit rows name as the actor.</param>
 public sealed record NewTenantMember(
     Guid TenantId,
     Guid SubjectId,
@@ -50,7 +51,25 @@ public sealed record NewTenantMember(
     string? Label = null,
     string? Username = null,
     bool LimitTo24Hours = false,
-    Guid? CreatedFromInviteId = null);
+    Guid? CreatedFromInviteId = null,
+    MembershipMadeBy MadeBy = MembershipMadeBy.Caller);
+
+/// <summary>Who made a membership, as its audit rows record it.</summary>
+public enum MembershipMadeBy
+{
+    /// <summary>The scope's audit actor.</summary>
+    Caller,
+
+    /// <summary>
+    /// The member's own subject, for a membership made before the person has a session: the invitee
+    /// accepting an invite, the owner a first-run setup creates, or the owner redeeming a
+    /// tenant-creation invite.
+    /// </summary>
+    Member,
+
+    /// <summary>The platform, for a membership every tenant is given when it is created.</summary>
+    System,
+}
 
 /// <summary>A row of <c>tenant_roles</c>, with how many members hold it.</summary>
 public sealed record TenantRoleRecord(

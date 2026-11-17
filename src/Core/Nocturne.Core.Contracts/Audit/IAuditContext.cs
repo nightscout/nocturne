@@ -13,6 +13,15 @@ public interface IAuditContext
     Guid? TokenId { get; }
 
     /// <summary>
+    /// The fingerprint of the credential the caller authenticated with, when it has one: the
+    /// audit name of a subjectless credential such as the instance key. Never key material.
+    /// </summary>
+    string? CredentialFingerprint => null;
+
+    /// <summary>The request's <c>User-Agent</c>.</summary>
+    string? UserAgent => null;
+
+    /// <summary>
     /// Request trace identifier, persisted to the audit logs' <c>correlation_id</c> column.
     /// Distinct from the V4 decomposition correlation on
     /// <c>Nocturne.Infrastructure.Data.Entities.IV4Entity.CorrelationId</c>, which links records

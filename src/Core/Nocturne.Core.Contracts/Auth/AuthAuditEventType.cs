@@ -51,6 +51,12 @@ public static class AuthAuditEventType
     public const string RoleRemoved = "role_removed";
 
     /// <summary>
+    /// Event type when a tenant member's 24-hour history limit is turned on or off. The details name
+    /// the limit the member reads under afterwards: <c>24_hours</c> or <c>full</c>.
+    /// </summary>
+    public const string HistoryLimitChanged = "history_limit_changed";
+
+    /// <summary>
     /// Event type when a subject (user) is created.
     /// </summary>
     public const string SubjectCreated = "subject_created";

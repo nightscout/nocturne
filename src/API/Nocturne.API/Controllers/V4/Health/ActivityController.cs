@@ -50,11 +50,14 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Get activity records with pagination.
-    /// The page size is clamped. Records in categories the caller cannot read are left out after paging, so a page can hold fewer than <c>limit</c> records; the total counts only categories the caller can read.
+    /// Get activity records with pagination, newest first, optionally within a window of start times.
+    /// A window wider than the V4 date span limit is refused. The page size is clamped. Records in categories the caller cannot read are left out after paging, so a page can hold fewer than <c>limit</c> records; the total counts only categories the caller can read.
     /// </summary>
+    /// <param name="from">Earliest start time to include, inclusive. Applies to every source.</param>
+    /// <param name="to">Latest start time to include, inclusive. Applies to every source.</param>
     /// <remarks>
-    /// This read merges four sources in memory, so the page is bounded by
+    /// The window bounds each record by its start, in all four sources, and the total counts only
+    /// records inside it. This read merges four sources in memory, so the page is bounded by
     /// <see cref="V4ReadLimits.ClampMergedPage"/> rather than the plain page-size ceiling.
     /// The scope requirement is an OR over the four storages, and
     /// <see cref="ActivityReadScopeGuard"/> then drops the records whose category the caller does
@@ -67,6 +70,7 @@ public class ActivityController : ControllerBase
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Activity>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [RequireScope(
         Scope.TreatmentsRead,
         Scope.HeartRateRead,
@@ -75,18 +79,25 @@ public class ActivityController : ControllerBase
     public async Task<ActionResult<PaginatedResponse<Activity>>> GetActivities(
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default)
     {
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
+
         offset = V4ReadLimits.ClampOffset(offset);
         limit = V4ReadLimits.ClampMergedPage(limit, offset);
 
         var records = await _activityService.GetActivitiesAsync(
-            count: limit, skip: offset, cancellationToken: cancellationToken);
+            count: limit, skip: offset, from: from, to: to, cancellationToken: cancellationToken);
         var visible = ActivityReadScopeGuard.Filter(
             records, _activityDecomposer, HttpContext.GetGrantedScopes());
 
         var counts = await _activityService.CountActivitiesByCategoryAsync(
             ActivityReadScopeGuard.GrantedCategories(HttpContext),
+            from: from,
+            to: to,
             cancellationToken: cancellationToken);
         var total = (int)counts.Values.Sum();
 
