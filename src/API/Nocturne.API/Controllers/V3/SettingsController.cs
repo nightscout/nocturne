@@ -303,7 +303,9 @@ public class SettingsController : BaseV3Controller<Settings>
         foreach (var field in document.EnumerateObject())
         {
             // Case-insensitive, as the body binds: "_ID" would otherwise reach Settings.Id.
-            if (!ServerFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase))
+            // A "key" that is not a string is the document's own field, not the settings key.
+            if (!ServerFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase)
+                || IsDocumentKey(field))
             {
                 fields[field.Name] = JsonNode.Parse(field.Value.GetRawText());
             }
@@ -314,6 +316,10 @@ public class SettingsController : BaseV3Controller<Settings>
 
     private static readonly string[] ServerFields =
         ["_id", "identifier", "key", "srvCreated", "srvModified", "subject"];
+
+    private static bool IsDocumentKey(JsonProperty field) =>
+        string.Equals(field.Name, "key", StringComparison.OrdinalIgnoreCase)
+        && field.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
 
     /// <summary>
     /// Delete a settings record by ID
