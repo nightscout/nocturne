@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { setupBridge } from "@nocturne/bridge";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { KIT_CSP } from "./src/lib/server/content-security-policy";
 import manifest from "./package.json" with { type: "json" };
 
 // @resend/chat-sdk-adapter (via @nocturne/bot) renders email cards with React
@@ -92,6 +93,8 @@ export default defineConfig(({ mode }) => {
         adapter: adapter({ out: "build", precompress: true }),
         // Turns off SvelteKit's form origin check; csrfHandle in hooks.server.ts runs it instead.
         csrf: { trustedOrigins: ["*"] },
+        // The dev server's HMR client needs inline scripts, eval and its own socket.
+        ...(mode === "development" ? {} : { csp: KIT_CSP }),
         experimental: { remoteFunctions: true },
         tracing: { server: true },
       }),
