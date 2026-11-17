@@ -40563,3 +40563,11 @@ msgstr ""
 #: src/lib/components/settings/ClientDevices.svelte
 msgid "Last seen"
 msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "A role with this name already exists. Use a different name."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "This name is reserved. Use a different name."
+msgstr ""
