@@ -1096,7 +1096,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
-        var (_, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
+        var (_, copies, _) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
         await RaiseBroadcastAsync([], [], [ToDomain(entity), .. copies.Select(ToDomain)], origin, ct);
     }
 
