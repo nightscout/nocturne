@@ -94,7 +94,7 @@ public class PropertiesServiceTests
     }
 
     [Theory]
-    [InlineData(59, "ok")]
+    [InlineData(59, "current")]
     [InlineData(60, "warn")]
     [InlineData(74, "warn")]
     [InlineData(75, "urgent")]
@@ -112,6 +112,77 @@ public class PropertiesServiceTests
         dbsize["size"].Should().Be(percent * mib, "the size is the data and the indexes together");
         dbsize["percentage"].Should().Be(percent);
         dbsize["status"].Should().Be(status);
+    }
+
+    [Theory]
+    [InlineData(59, 0)]
+    [InlineData(60, 1)]
+    [InlineData(75, 2)]
+    public async Task DbSize_CarriesNightscoutsFieldsInMiB(int percent, int level)
+    {
+        const long mib = 1024 * 1024;
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = percent * mib / 2, IndexSize = percent * mib / 2 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("dataPercentage").GetInt32().Should().Be(percent);
+        json.GetProperty("totalDataSize").GetDouble().Should().Be(percent);
+        json.GetProperty("notificationLevel").GetInt32().Should().Be(level);
+        json.GetProperty("details").GetProperty("dataSize").GetDouble().Should().Be(percent);
+        json.GetProperty("details").GetProperty("maxSize").GetDouble().Should().Be(100);
+        json.GetProperty("display").GetString().Should().Be($"{percent}%");
+    }
+
+    [Theory]
+    [InlineData(2048, 1228.5, 1, "warn")]
+    [InlineData(2048, 1227.5, 0, "current")]
+    [InlineData(2047, 1534.5, 1, "warn")]
+    [InlineData(2047, 1535.0, 2, "urgent")]
+    public async Task DbSize_ComparesMiBAgainstTheFlooredThreshold(int maxMiB, double usedMiB, int level, string status)
+    {
+        var service = ServiceWithBudget(maxMiB);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = (long)(usedMiB * 1024 * 1024) } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("notificationLevel").GetInt32().Should().Be(level);
+        json.GetProperty("status").GetString().Should().Be(status);
+    }
+
+    [Fact]
+    public async Task DbSize_RoundsDetailsDataSizeTiesUpLikeToFixed()
+    {
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = 131_072 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("details").GetProperty("dataSize").GetDouble().Should().Be(0.13);
+    }
+
+    [Fact]
+    public async Task DbSize_RoundsDetailsToTwoDecimalsAndLeavesTotalDataSizeExact()
+    {
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = 1_000_000 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("totalDataSize").GetDouble().Should().BeApproximately(1_000_000 / 1048576.0, 1e-12);
+        json.GetProperty("details").GetProperty("dataSize").GetDouble().Should().Be(0.95);
     }
 
     [Fact]
