@@ -69,11 +69,18 @@ public class ConnectionService(
             }
         }
 
+        var folded = await FoldedGrantsAsync(grantRecords, ct);
         var connections = grantRecords
             .GroupBy(KeyOf)
-            .Select(group => FromGrants(
-                group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts, viewerSubjectId, now,
-                androidApsDevices))
+            .Select(group =>
+            {
+                var connection = FromGrants(
+                    group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts,
+                    viewerSubjectId, now, androidApsDevices);
+                connection.CanDeleteRecords =
+                    viewerSubjectId is { } viewer && AllOwnedBy(folded[group.Key], viewer);
+                return connection;
+            })
             .ToList();
 
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
@@ -112,6 +119,59 @@ public class ConnectionService(
             WindowDays = DataSourceService.DiscoveryWindowDays,
             ActiveWithinMinutes = SenderActiveMinutes,
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<DataSourceDeleteResult> DeleteRecordsAsync(
+        Guid viewerSubjectId, IReadOnlyCollection<Guid> grantIds, bool allowReimport, CancellationToken ct = default)
+    {
+        var named = new List<OAuthGrantRecord>();
+        foreach (var grantId in grantIds.Distinct())
+        {
+            if (await grants.FindOfSubjectAsync(grantId, viewerSubjectId, ct) is not
+                { GrantType: OAuthGrantTypes.App or OAuthGrantTypes.Direct } grant)
+                return NotOwn(grantIds);
+            named.Add(grant);
+        }
+
+        if (named.Select(KeyOf).Distinct().ToList() is not [var key])
+            return NotOwn(grantIds);
+
+        var connection = (await FoldedGrantsAsync(named, ct))[key];
+        if (!AllOwnedBy(connection, viewerSubjectId))
+            return NotOwn(grantIds);
+
+        return await dataSources.DeleteWrittenDataAsync([.. connection.Select(g => g.Id)], allowReimport, ct);
+    }
+
+    private static DataSourceDeleteResult NotOwn(IReadOnlyCollection<Guid> grantIds) =>
+        DataSourceDeleteResult.Failed(
+            string.Join(',', grantIds), DataSourceDeleteError.NotFound,
+            "A credential of the connection is not yours, or it is gone.");
+
+    private static bool AllOwnedBy(IEnumerable<OAuthGrantRecord> credentials, Guid subjectId) =>
+        credentials.All(g => g.SubjectId == subjectId);
+
+    /// <summary>
+    /// Every grant folded under the <see cref="KeyOf"/> key of each of <paramref name="grantsOfKeys"/>, in
+    /// any state and of any subject, by key. The connections list shows only the unrevoked ones and those
+    /// that wrote inside its window; a token's key holds that token alone.
+    /// </summary>
+    private async Task<Dictionary<string, List<OAuthGrantRecord>>> FoldedGrantsAsync(
+        IReadOnlyCollection<OAuthGrantRecord> grantsOfKeys, CancellationToken ct)
+    {
+        var apps = grantsOfKeys.Where(g => g.GrantType == OAuthGrantTypes.App).ToList();
+        IReadOnlyList<OAuthGrantRecord> clients = apps.Count == 0
+            ? []
+            : await grants.ListAppGrantsOfClientsAsync(
+                [.. apps.Where(g => g.ClientEntityId.HasValue).Select(g => g.ClientEntityId!.Value).Distinct()],
+                [.. apps.Select(g => g.Client?.SoftwareId).OfType<string>().Distinct()],
+                ct);
+        var keys = grantsOfKeys.Select(KeyOf).ToHashSet();
+        return grantsOfKeys
+            .UnionBy(clients.Where(g => keys.Contains(KeyOf(g))), g => g.Id)
+            .GroupBy(KeyOf)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     private static void Add(Dictionary<string, List<WriterBucket>> map, string key, WriterBucket bucket)

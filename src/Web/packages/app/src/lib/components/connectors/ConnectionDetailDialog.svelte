@@ -10,6 +10,7 @@
   } from "#lib/api/generated/nocturne-api-client.js";
   import { revoke as revokeAppGrant } from "#lib/api/generated/connectedApps.generated.remote.js";
   import { revoke as revokeDirectGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import { deleteConnectionRecords } from "#lib/api/generated/services.generated.remote.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -38,6 +39,7 @@
   import ConnectionLogo from "./ConnectionLogo.svelte";
   import ConnectionStatusLabel from "./ConnectionStatusLabel.svelte";
   import ConnectionTime from "./ConnectionTime.svelte";
+  import DeleteRecordsConfirmDialog from "./DeleteRecordsConfirmDialog.svelte";
 
   let {
     open = $bindable(false),
@@ -57,7 +59,7 @@
     windowDays: number | undefined;
     /** Minutes without a record after which a connection that sends is no longer active. */
     activeWithinMinutes: number | undefined;
-    /** Whether the viewer may configure, sync and delete the data of connectors. */
+    /** Whether the viewer may configure, sync and delete the data of connectors and of their own credentials. */
     canManage: boolean;
     syncing?: boolean;
     quickSyncing?: boolean;
@@ -80,6 +82,11 @@
   // The API withholds when another member's credential was last used, so "Never" is a claim only
   // about the viewer's own.
   const hasOwnCredential = $derived(credentials.some((c) => c.isOwn === true));
+  const canDeleteRecords = $derived(
+    canManage && connection?.canDeleteRecords === true
+  );
+
+  let showDeleteRecords = $state(false);
 
   function canRevoke(credential: ConnectionCredential): boolean {
     return (
@@ -449,6 +456,17 @@
           </section>
         {/if}
 
+        {#if canDeleteRecords}
+          <Button
+            variant="outline-destructive"
+            size="sm"
+            onclick={() => (showDeleteRecords = true)}
+          >
+            <Trash2 class="size-4" aria-hidden="true" />
+            Delete data...
+          </Button>
+        {/if}
+
         {#if isConnector && connection.connectorId && (canManage || onConnectorDetails)}
           {@const connectorId = connection.connectorId}
           <div class="flex flex-wrap gap-2">
@@ -493,3 +511,19 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+{#if canDeleteRecords && connection}
+  {@const grantIds = credentials.flatMap((c) => (c.grantId ? [c.grantId] : []))}
+  <DeleteRecordsConfirmDialog
+    bind:open={showDeleteRecords}
+    name={connection.name ?? "API token"}
+    {recordCounts}
+    {windowDays}
+    notFound={{
+      title: "You cannot delete this data",
+      message: "A credential of this connection is not yours, or it was removed.",
+    }}
+    onDelete={(allowReimport) =>
+      deleteConnectionRecords({ grantIds, allowReimport })}
+  />
+{/if}

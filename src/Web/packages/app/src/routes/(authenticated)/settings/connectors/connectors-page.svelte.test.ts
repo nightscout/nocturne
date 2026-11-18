@@ -524,7 +524,7 @@ describe("connection detail", () => {
     const dialog = browserPage.getByRole("dialog");
     await dialog.getByRole("button", { name: "Records by device name" }).click();
     await expect.element(dialog.getByText("home-assistant")).toBeVisible();
-    expect(dialog.getByRole("button", { name: /Delete data/ }).elements()).toHaveLength(0);
+    expect(dialog.getByRole("button", { name: /Delete data from/ }).elements()).toHaveLength(0);
   });
 
   it("offers delete on a connector stream, and returns to the connection on cancel", async () => {

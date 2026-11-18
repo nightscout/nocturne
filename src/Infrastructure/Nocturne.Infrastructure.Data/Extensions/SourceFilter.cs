@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -46,8 +47,51 @@ public static class SourceFilter
         e => e.Device == source && e.DataSource != null && string.Compare(e.DataSource, source) > 0,
     ];
 
-    /// <summary>Applies <see cref="For{TEntity}"/> to <paramref name="rows"/>.</summary>
-    public static IQueryable<TEntity> FromSource<TEntity>(this IQueryable<TEntity> rows, string source)
-        where TEntity : ISourcedEntity
-        => rows.Where(For<TEntity>(source));
+    /// <summary>
+    /// Rows one of <paramref name="grantIds"/> inserted. The test is on the row, so a query that is
+    /// run again per chunk of ids reads the same parameter rather than a rebuilt set.
+    /// </summary>
+    public static Expression<Func<TEntity, bool>> WrittenBy<TEntity>(IReadOnlyList<Guid> grantIds)
+        where TEntity : IWriterStamped
+        => e => e.WriterGrantId != null && grantIds.Contains(e.WriterGrantId.Value);
+
+    /// <summary>
+    /// The rows <paramref name="selector"/> names, with <paramref name="source"/> as the predicate of a
+    /// source: one test on the row, for a query correlated with another row.
+    /// </summary>
+    public static Expression<Func<TEntity, bool>> For<TEntity>(
+        RecordSelector selector, Func<string, Expression<Func<TEntity, bool>>> source)
+        where TEntity : IWriterStamped
+        => selector switch
+        {
+            RecordSelector.BySource s => source(s.Source),
+            RecordSelector.ByWriters w => WrittenBy<TEntity>(w.GrantIds),
+            _ => throw new ArgumentOutOfRangeException(nameof(selector), selector, null),
+        };
+
+    /// <summary>
+    /// The rows of <paramref name="rows"/> that <paramref name="selector"/> names: a source's as the
+    /// union of its <paramref name="sourceParts"/>, so each part is read off its own index as a read of
+    /// <see cref="Parts{TEntity}"/> is, and a set of writers' by <see cref="WrittenBy{TEntity}"/>.
+    /// </summary>
+    /// <remarks>
+    /// A delete runs the query again for each chunk of the ids it read, filtered by those ids, and
+    /// PostgreSQL pushes that filter into each part of the union.
+    /// </remarks>
+    public static IQueryable<TEntity> Selected<TEntity>(
+        this IQueryable<TEntity> rows,
+        RecordSelector selector,
+        Func<string, IReadOnlyList<Expression<Func<TEntity, bool>>>> sourceParts)
+        where TEntity : IWriterStamped
+        => selector switch
+        {
+            RecordSelector.BySource s => sourceParts(s.Source).Select(rows.Where).Aggregate(Queryable.Concat),
+            RecordSelector.ByWriters w => rows.Where(WrittenBy<TEntity>(w.GrantIds)),
+            _ => throw new ArgumentOutOfRangeException(nameof(selector), selector, null),
+        };
+
+    /// <summary>Applies <see cref="Selected{TEntity}(IQueryable{TEntity}, RecordSelector, Func{string, IReadOnlyList{Expression{Func{TEntity, bool}}}})"/> with <see cref="Parts{TEntity}"/>.</summary>
+    public static IQueryable<TEntity> Selected<TEntity>(this IQueryable<TEntity> rows, RecordSelector selector)
+        where TEntity : ISourcedEntity, IWriterStamped
+        => rows.Selected(selector, Parts<TEntity>);
 }
