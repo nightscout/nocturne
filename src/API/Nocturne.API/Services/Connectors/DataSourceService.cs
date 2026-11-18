@@ -753,6 +753,25 @@ public class DataSourceService : IDataSourceService
 
 
     /// <inheritdoc />
+    public async Task<bool> ConnectorHoldsDataAsync(string connectorId, CancellationToken cancellationToken = default)
+    {
+        if (ConnectorMetadataService.GetByConnectorId(connectorId) is not { } metadata)
+            return false;
+
+        if (await _sourceData.HoldsRowsByDataSourceAsync(metadata.DataSourceId, cancellationToken))
+            return true;
+
+        var last24Hours = _time.GetUtcNow().UtcDateTime.AddHours(-24);
+        foreach (var purge in PurgesOf(metadata))
+        {
+            if ((await purge.DescribeAsync(null, last24Hours, cancellationToken)).Count > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc />
     public async Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
         string connectorId,
         CancellationToken cancellationToken = default

@@ -131,6 +131,19 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     }
 
     /// <inheritdoc/>
+    public virtual async Task<bool> HoldsRowsByDataSourceAsync(string dataSource, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        foreach (var table in V4RecordTables.All)
+        {
+            if (await table.HoldsDataSourceAsync(db, dataSource, ct))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyDictionary<string, long>> CountsBySourceAsync(
         string source, CancellationToken ct)
     {
