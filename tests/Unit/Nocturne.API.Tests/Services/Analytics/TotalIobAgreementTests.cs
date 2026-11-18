@@ -23,6 +23,7 @@ using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
@@ -366,7 +367,7 @@ public class TotalIobAgreementTests
         var trackers = new Mock<ITrackerRepository>();
         trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var service = new WidgetSummaryService(
-            entries.Object, Reader(now),
+            entries.Object, Reader(now), InsulinDeliveryReaders.Over(),
             _aps.Object, trackers.Object, Mock.Of<INotificationV1Service>(),
             Mock.Of<IGlucoseStatusClassifier>(), Mock.Of<IAlertRepository>(),
             Mock.Of<ICategoryReadContext>(),

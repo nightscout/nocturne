@@ -2,6 +2,7 @@
   import { Key } from "@nocturne/ui/keys";
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
+    calculatedBasalInjection,
     calculatedCob,
     calculatedIob,
     displayedGlucose,
@@ -97,6 +98,9 @@
       satisfiesScope(data.effectivePermissions ?? [], "treatments.read");
     realtimeStore.calculatedIob = canViewTreatments ? calculatedIob() : undefined;
     realtimeStore.calculatedCob = canViewTreatments ? calculatedCob() : undefined;
+    realtimeStore.calculatedBasalInjection = canViewTreatments
+      ? calculatedBasalInjection()
+      : undefined;
   });
   const authStore = createAuthStore(); // Initialize auth store in context
   refreshOnVisible(

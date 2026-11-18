@@ -265,6 +265,7 @@ internal static class WidgetSummaryReadScopeGuard
         {
             data.Iob = 0;
             data.Cob = 0;
+            data.BasalInjection = null;
         }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.AlertsRead))

@@ -584,6 +584,7 @@ public partial class AnalyticsReadScopeGuardTests
         Cob = 20,
         Alarm = new V4AlarmState(),
         Predictions = new V4Predictions(),
+        BasalInjection = new V4BasalInjectionStatus { Units = 18, EstimatedRate = 0.75 },
         Trackers = [new V4TrackerStatus()],
     };
 
@@ -597,6 +598,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Predictions.Should().NotBeNull();
         data.Iob.Should().Be(0);
         data.Cob.Should().Be(0);
+        data.BasalInjection.Should().BeNull();
         data.Alarm.Should().BeNull();
     }
 
@@ -610,6 +612,16 @@ public partial class AnalyticsReadScopeGuardTests
         data.History.Should().BeEmpty();
         data.Predictions.Should().BeNull();
         data.Iob.Should().Be(0);
+        data.BasalInjection.Should().BeNull();
+    }
+
+    [Fact]
+    public void WidgetSummary_TreatmentsGrant_KeepsTheBasalInjection()
+    {
+        var data = WidgetSummaryReadScopeGuard.Redact(Summary(), Granted(Scope.TreatmentsRead));
+
+        data.BasalInjection.Should().NotBeNull();
+        data.BasalInjection!.EstimatedRate.Should().Be(0.75);
     }
 
     /// <summary>

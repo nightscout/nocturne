@@ -35,6 +35,13 @@ public class V4SummaryResponse
     public double Cob { get; set; }
 
     /// <summary>
+    /// The last long-acting dose, present when the tenant records basal injections and no temp
+    /// basals in the last 24 hours. Null otherwise.
+    /// </summary>
+    [JsonPropertyName("basalInjection")]
+    public V4BasalInjectionStatus? BasalInjection { get; set; }
+
+    /// <summary>
     /// Current status of active trackers.
     /// Includes device ages, consumable status, and scheduled events.
     /// </summary>
