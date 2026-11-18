@@ -21,7 +21,7 @@ public class TransmitterStatusController(IUploaderSnapshotRepository uploaderSna
     /// <summary>
     /// Get the latest transmitter battery status.
     /// </summary>
-    /// <returns>The status, or no content when no uploader has reported one.</returns>
+    /// <returns>The status, or no content when the caller can read none.</returns>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(TransmitterStatus), StatusCodes.Status200OK)]

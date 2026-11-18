@@ -480,13 +480,13 @@
     </Select.Root>
     <Select.Root
       type="single"
-      value={payload.operator ?? "<"}
+      value={payload.operator ?? ">="}
       onValueChange={(v) => {
         payload.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, payload.operator ?? "<")}
+        {labelFor(opLabels, payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
