@@ -1,6 +1,9 @@
 import { untrack } from "svelte";
 import { getSummary } from "#lib/api/generated/summaries.generated.remote.js";
-import type { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import type {
+  GlucoseStatus,
+  V4BasalInjectionStatus,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
 
 /** Longest a superseded reading stays on screen while the summary catches up. */
@@ -56,6 +59,37 @@ export function currentGlucoseStatus(
   if (!mills) return undefined;
   const current = getSummary().current?.current;
   return current?.mills === mills ? current.status : undefined;
+}
+
+/**
+ * The IOB the server calculated from treatments, as of the summary's last refresh (once per
+ * new reading). Undefined when the server has no IOB to report (none in the window, a failed
+ * calculation, or redacted), so a 0 here is a real zero. Callers still check the treatments
+ * scope before showing it.
+ */
+export function calculatedIob(): number | undefined {
+  const summary = getSummary().current;
+  return summary?.iobKnown ? summary.iob : undefined;
+}
+
+/**
+ * The COB the server calculated from treatments, as of the summary's last refresh (once per
+ * new reading). Undefined when the server has no COB to report (a failed calculation or
+ * redacted), so a 0 here is a real zero. Callers still check the treatments
+ * scope before showing it.
+ */
+export function calculatedCob(): number | undefined {
+  const summary = getSummary().current;
+  return summary?.cobKnown ? summary.cob : undefined;
+}
+
+/**
+ * The last long-acting dose the server read for a tenant on multiple daily injections, as of the
+ * summary's last refresh. The summary drops a redacted dose, so callers check the treatments
+ * scope before showing it.
+ */
+export function calculatedBasalInjection(): V4BasalInjectionStatus | undefined {
+  return getSummary().current?.basalInjection;
 }
 
 export interface DisplayedGlucose {

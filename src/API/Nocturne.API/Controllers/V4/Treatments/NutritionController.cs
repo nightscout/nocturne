@@ -88,7 +88,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// <param name="sort">Sort order by timestamp: `timestamp_asc` or `timestamp_desc`. Defaults to `timestamp_desc`.</param>
     /// <param name="device">Optional filter to restrict results to a specific device.</param>
     /// <param name="source">Optional filter to restrict results to a specific data source.</param>
-    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet("carbs")]
     [RemoteQuery]
@@ -106,7 +106,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
             return invalid;
 
         var data = (await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct: ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => _carbIntakeRepo.CountAsync(from, to, ct));
+        await _treatmentFoodService.ApplyFoodTypesAsync(data, ct);
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => _carbIntakeRepo.CountAsync(from, to, device, source, ct));
         return Ok(new PaginatedResponse<CarbIntake> { Data = data, Pagination = pagination });
     }
 
@@ -120,7 +121,11 @@ public class NutritionController : ControllerBase, IWriteScopedController
     public async Task<ActionResult<CarbIntake>> GetCarbIntakeById(Guid id, CancellationToken ct = default)
     {
         var result = await _carbIntakeRepo.GetByIdAsync(id, ct);
-        return result is null ? NotFound() : Ok(result);
+        if (result is null)
+            return NotFound();
+
+        await _treatmentFoodService.ApplyFoodTypesAsync([result], ct);
+        return Ok(result);
     }
 
     /// <summary>
@@ -166,8 +171,9 @@ public class NutritionController : ControllerBase, IWriteScopedController
             return invalid;
 
         var models = requests.Select(MapCreateToModel).ToList();
-        var persisted = await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct);
-        return StatusCode(201, persisted.ToArray());
+        var persisted = (await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
+        await _treatmentFoodService.ApplyFoodTypesAsync(persisted, ct);
+        return StatusCode(201, persisted);
     }
 
     private static CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new()
@@ -229,6 +235,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         try
         {
             var updated = await _carbIntakeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
+            await _treatmentFoodService.ApplyFoodTypesAsync([updated], ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -463,6 +470,9 @@ public class NutritionController : ControllerBase, IWriteScopedController
 
         var bolus = await _bolusRepo.UpsertAsync(bolusModel, WriteOrigin.Live, ct);
         var carb = await _carbIntakeRepo.UpsertAsync(carbModel, WriteOrigin.Live, ct);
+
+        if (!carb.Created)
+            await _treatmentFoodService.ApplyFoodTypesAsync([carb.Record], ct);
 
         var response = new CreateMealResponse
         {

@@ -753,6 +753,25 @@ public class DataSourceService : IDataSourceService
 
 
     /// <inheritdoc />
+    public async Task<bool> ConnectorHoldsDataAsync(string connectorId, CancellationToken cancellationToken = default)
+    {
+        if (ConnectorMetadataService.GetByConnectorId(connectorId) is not { } metadata)
+            return false;
+
+        if (await _sourceData.HoldsRowsByDataSourceAsync(metadata.DataSourceId, cancellationToken))
+            return true;
+
+        var last24Hours = _time.GetUtcNow().UtcDateTime.AddHours(-24);
+        foreach (var purge in PurgesOf(metadata))
+        {
+            if ((await purge.DescribeAsync(null, last24Hours, cancellationToken)).Count > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc />
     public async Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
         string connectorId,
         CancellationToken cancellationToken = default
@@ -950,19 +969,13 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <summary>
-    /// The source <paramref name="key"/> names among the records no credential is recorded as the
-    /// writer of, which the connections list shows under either origin handle.
+    /// The source <paramref name="key"/> names under either origin handle, however long ago it last
+    /// wrote: the connections list drops a source after the discovery window but keeps its records.
     /// </summary>
-    private async Task<DataSourceInfo?> FindUnwrittenSourceAsync(string key, CancellationToken ct)
-    {
-        var now = _time.GetUtcNow();
-        var buckets = await _sourceData.WriterBucketsAsync(
-            now.AddDays(-DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
-
-        return buckets.Any(b => b.WriterGrantId is null && (b.DataSource == key || b.Device == key))
+    private async Task<DataSourceInfo?> FindStoredSourceAsync(string key, CancellationToken ct) =>
+        (await _sourceData.CountsBySourceAsync(key, ct)).Count > 0
             ? CreateDataSourceInfo(key, key, SourceHandle.Unknown)
             : null;
-    }
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
@@ -1003,7 +1016,7 @@ public class DataSourceService : IDataSourceService
                 s.Id == dataSourceId || s.DeviceId == dataSourceId
             );
 
-            source ??= await FindUnwrittenSourceAsync(dataSourceId, cancellationToken);
+            source ??= await FindStoredSourceAsync(dataSourceId, cancellationToken);
 
             if (source == null)
             {

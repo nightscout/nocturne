@@ -718,6 +718,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (entity is null)
             return null;
 
+        MemberAccessAudit.StageRolePermissions(lease.Context, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
         entity.Name = edit.Name;
         entity.Slug = edit.Slug;
         entity.Description = edit.Description;

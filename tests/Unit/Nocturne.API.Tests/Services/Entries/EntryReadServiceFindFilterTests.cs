@@ -129,13 +129,13 @@ public class EntryReadServiceFindFilterTests
     [Fact]
     public async Task CountAsync_FindTypeEquality_CountsSingleRepo()
     {
-        _sgRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _sgRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(7);
 
         var count = await _sut.CountAsync(find: "find[type]=sgv");
 
         count.Should().Be(7);
-        _mgRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static SensorGlucose MakeSg(DateTime ts, double mgdl) => new()

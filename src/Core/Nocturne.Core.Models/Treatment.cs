@@ -51,6 +51,12 @@ public class Treatment : ProcessableDocumentBase
     public Guid? RecordId { get; set; }
 
     /// <summary>
+    /// For the carbs <see cref="PreBolusSplit"/> split off a meal, the meal's legacy id. Never on the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? PreBolusMealId { get; set; }
+
+    /// <summary>
     /// V3 API identifier - alias for Id for Nightscout V3 compatibility.
     /// Nightscout V3 API returns both _id and identifier fields with the same value.
     /// </summary>

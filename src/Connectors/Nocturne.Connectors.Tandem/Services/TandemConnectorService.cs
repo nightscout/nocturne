@@ -97,7 +97,7 @@ public class TandemConnectorService
                 return result;
             }
 
-            var time = new TandemTimeResolver(config.TimezoneOffset);
+            var time = new TandemTimeResolver(config.TimezoneOffset, config.TimeZoneId);
 
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
@@ -450,7 +450,7 @@ public class TandemConnectorService
             ? parsed
             : null;
 
-    /// <summary>Parses a naive pump-local BFF timestamp and converts it to UTC via the configured offset.</summary>
+    /// <summary>Parses a naive pump-local BFF timestamp and converts it to UTC in the configured zone or offset.</summary>
     private static DateTime? ParseWallClockUtc(string? value, TandemTimeResolver time) =>
         ParseWallClock(value) is { } wallClock ? time.ToUtc(wallClock) : null;
 

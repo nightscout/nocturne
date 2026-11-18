@@ -25,6 +25,7 @@ public class ConnectionService(
     IOAuthGrantRepository grants,
     IConnectorHealthService connectorHealth,
     IClientDeviceService devices,
+    IDataSourceService dataSources,
     TimeProvider time) : IConnectionService
 {
     private const int SenderActiveMinutes = 15;
@@ -77,11 +78,24 @@ public class ConnectionService(
 
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
         {
+            if (ConnectorMetadataService.GetByConnectorId(status.Id)?.IsImport == true)
+                continue;
+
             var owned = connectorBuckets.GetValueOrDefault(status.Id) ?? [];
-            if (!status.IsEnabled && !status.HasDatabaseConfig && owned.Count == 0)
+            if (owned.Count == 0 && !status.IsEnabled && !status.HasDatabaseConfig)
                 continue;
 
             connections.Add(FromConnector(status, owned, androidApsDevices));
+        }
+
+        foreach (var import in ConnectorMetadataService.GetAll().Where(c => c.IsImport))
+        {
+            if (!await dataSources.ConnectorHoldsDataAsync(import.ConnectorName, ct))
+                continue;
+
+            var summary = await dataSources.GetConnectorDataSummaryAsync(import.ConnectorName, ct);
+            if (summary.Total > 0)
+                connections.Add(FromImport(import, summary));
         }
 
         return new ConnectionsOverview
@@ -96,6 +110,7 @@ public class ConnectionService(
             ],
             OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)], androidApsDevices),
             WindowDays = DataSourceService.DiscoveryWindowDays,
+            ActiveWithinMinutes = SenderActiveMinutes,
         };
     }
 
@@ -219,6 +234,31 @@ public class ConnectionService(
         ApplyRecords(connection, buckets, androidApsDevices);
         foreach (var stream in connection.Streams)
             stream.CanDelete = true;
+        return connection;
+    }
+
+    /// <summary>
+    /// An import connector is its records alone, of any age, counted as the detail dialog counts them
+    /// (<see cref="IDataSourceService.GetConnectorDataSummaryAsync"/>): a configuration row or a health
+    /// status is not a connection.
+    /// </summary>
+    private static Connection FromImport(
+        ConnectorMetadataService.ConnectorDisplayInfo import, ConnectorDataSummary summary)
+    {
+        var id = import.ConnectorName.ToLowerInvariant();
+        var connection = new Connection
+        {
+            Id = $"connector:{id}",
+            Kind = ConnectionKind.Connector,
+            Direction = ConnectionDirection.Imports,
+            Status = ConnectionStatus.Imported,
+            Name = import.DisplayName,
+            Icon = import.Icon,
+            ConnectorId = id,
+            TotalRecords = summary.Total,
+        };
+        foreach (var (type, count) in summary.RecordCounts)
+            connection.RecordCounts[type] = count;
         return connection;
     }
 

@@ -180,7 +180,7 @@ const newToken: Connection = {
 
 function loaded(overview: ConnectionsOverview) {
   mocks.connections.mockReturnValue({
-    current: { windowDays: 30, ...overview },
+    current: { windowDays: 30, activeWithinMinutes: 15, ...overview },
     error: undefined,
     refresh: mocks.refreshConnections,
   });
@@ -394,6 +394,31 @@ describe("connections list", () => {
 });
 
 describe("connection detail", () => {
+  it("tells with the server's threshold why a stopped connection has no recent record", async () => {
+    loaded({ connections: [loop], activeWithinMinutes: 20 });
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: /Loop/ }).click();
+
+    await expect
+      .element(browserPage.getByRole("dialog").getByText(/last 20 minutes/))
+      .toHaveTextContent("It is possible that it stopped");
+  });
+
+  it("tells that a quiet connection that sends treatments only is normal", async () => {
+    loaded({
+      connections: [
+        { ...loop, id: "app:pump", name: "Pump app", status: ConnectionStatus.Quiet },
+      ],
+    });
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: "Not in use (1)" }).click();
+    await browserPage.getByRole("button", { name: /Pump app/ }).click();
+
+    await expect
+      .element(browserPage.getByRole("dialog").getByText(/last 15 minutes/))
+      .toHaveTextContent("This is normal");
+  });
+
   it("shows streams and credentials, and revokes only the viewer's own grant", async () => {
     render(ConnectorsPage);
     await browserPage.getByRole("button", { name: /xDrip\+/ }).click();
@@ -557,6 +582,35 @@ describe("connection detail", () => {
     await expect.element(dialog).not.toHaveTextContent("Never");
     expect(dialog.getByRole("button", { name: /permission/ }).elements()).toHaveLength(0);
     expect(dialog.getByRole("button", { name: "Revoke" }).elements()).toHaveLength(0);
+  });
+
+  it("lists an imported connector as imported, with no sync", async () => {
+    const oura: Connection = {
+      id: "connector:oura",
+      kind: ConnectionKind.Connector,
+      direction: ConnectionDirection.Imports,
+      status: ConnectionStatus.Imported,
+      name: "Oura",
+      icon: "oura",
+      connectorId: "oura",
+      lastRecordAt: minutesAgo(6000),
+      recordCounts: { HeartRate: 500 },
+      streams: [],
+      credentials: [],
+    };
+    loaded({ connections: [xdrip, oura] });
+    render(ConnectorsPage);
+
+    const ouraRow = browserPage.getByRole("button", { name: /Oura/ });
+    await expect.element(ouraRow).toHaveTextContent("Imported from a file");
+    await expect.element(ouraRow).toHaveTextContent("Imported");
+    await expect.element(ouraRow).not.toHaveTextContent("Off");
+    await expect.element(ouraRow).not.toHaveTextContent("Last sync");
+
+    await ouraRow.click();
+    const dialog = browserPage.getByRole("dialog");
+    await expect.element(dialog.getByRole("link", { name: "Configure" })).toBeVisible();
+    expect(dialog.getByRole("button", { name: "Sync now" }).elements()).toHaveLength(0);
   });
 
   it("offers a connector its configuration page and its sync", async () => {

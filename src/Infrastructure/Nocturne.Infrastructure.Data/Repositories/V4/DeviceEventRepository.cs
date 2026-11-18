@@ -155,6 +155,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single registered patient device.</param>
+    /// <param name="eventTypes">Optional filter restricting results to events of any of these types.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of device events.</returns>
     public async Task<IEnumerable<DeviceEvent>> GetAsync(
@@ -166,15 +167,47 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         int offset = 0,
         bool descending = true,
         Guid? patientDeviceId = null,
+        IReadOnlyCollection<DeviceEventType>? eventTypes = null,
         CancellationToken ct = default
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await PagedRead(
             ctx.DeviceEvents.AsNoTracking(), from, to, device, source, limit, offset, descending,
-            query => patientDeviceId.HasValue ? query.Where(e => e.PatientDeviceId == patientDeviceId.Value) : query)
+            query => WithAttribution(query, patientDeviceId, eventTypes))
             .ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        IReadOnlyCollection<DeviceEventType>? eventTypes,
+        CancellationToken ct = default
+    )
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await Matching(
+            ctx.DeviceEvents.AsNoTracking(), from, to, device, source,
+            query => WithAttribution(query, patientDeviceId, eventTypes))
+            .CountAsync(ct);
+    }
+
+    private static IQueryable<DeviceEventEntity> WithAttribution(
+        IQueryable<DeviceEventEntity> query, Guid? patientDeviceId, IReadOnlyCollection<DeviceEventType>? eventTypes)
+    {
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+        if (eventTypes is { Count: > 0 })
+        {
+            var names = eventTypes.Select(t => t.ToString()).ToList();
+            query = query.Where(e => names.Contains(e.EventType));
+        }
+        return query;
     }
 
     /// <summary>

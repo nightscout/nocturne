@@ -29,6 +29,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public class AlertReplayServiceTests
 {
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     // Looping-fact mocks plumbed through the real SensorContextEnricher so replay walks
@@ -56,12 +58,12 @@ public class AlertReplayServiceTests
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
 
         // The repo never returns null; default the DND-window fetches to empty (no DND).
-        // Tests that exercise scoped suppression override GetDndWindowsAsOfAsync.
-        _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        // Tests that exercise scoped suppression override GetReceivedByAsync.
+        _dndWindows
+            .Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
@@ -78,6 +80,8 @@ public class AlertReplayServiceTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             new Mock<Nocturne.Core.Contracts.V4.Repositories.ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
@@ -94,6 +98,7 @@ public class AlertReplayServiceTests
 
         _sut = new AlertReplayService(
             _alertRepository.Object,
+            _dndWindows.Object,
             _glucoseRepository.Object,
             _enricher,
             _tenantAccessor.Object,
@@ -210,7 +215,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
 
         // A lows window received before the fire tick (created_at <= tick) and active across it.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows.Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null, CreatedAt: dayStart),
@@ -245,7 +250,7 @@ public class AlertReplayServiceTests
 
         // The window's intent (StartedAt) covers the fire, but it was *received* an hour after
         // the fire tick — receipt gating (created_at <= tick) must NOT retroactively suppress.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows.Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null,
@@ -283,7 +288,7 @@ public class AlertReplayServiceTests
 
         // A scope=all window active (and received) 02:00-03:00; replay must reconstruct
         // ActiveDoNotDisturb from it so the leaf evaluates true across exactly that span.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows.Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.All, StartedAt: dayStart.AddHours(2),

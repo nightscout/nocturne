@@ -27,6 +27,9 @@ public enum ConnectionDirection
     /// <summary>Nocturne pulls the records from the service.</summary>
     [JsonStringEnumMemberName("fetches")] Fetches,
 
+    /// <summary>The records came from a file the member imported.</summary>
+    [JsonStringEnumMemberName("imports")] Imports,
+
     /// <summary>A credential that wrote no record inside the window.</summary>
     [JsonStringEnumMemberName("noRecords")] NoRecords,
 }
@@ -49,6 +52,9 @@ public enum ConnectionStatus
     [JsonStringEnumMemberName("waiting")] Waiting,
 
     [JsonStringEnumMemberName("error")] Error,
+
+    /// <summary>A connector with no sync, whose records were imported from a file.</summary>
+    [JsonStringEnumMemberName("imported")] Imported,
 
     /// <summary>A connector that is configured and turned off.</summary>
     [JsonStringEnumMemberName("disabled")] Disabled,
@@ -241,6 +247,12 @@ public class ConnectionsOverview
     /// </summary>
     [JsonPropertyName("otherSources")]
     public List<ConnectionStream> OtherSources { get; set; } = [];
+
+    /// <summary>
+    /// Minutes without a record after which a connection that sends is no longer active.
+    /// </summary>
+    [JsonPropertyName("activeWithinMinutes")]
+    public int ActiveWithinMinutes { get; set; }
 
     /// <summary>Days back from now that every record count covers.</summary>
     [JsonPropertyName("windowDays")]

@@ -43,6 +43,7 @@
     open = $bindable(false),
     connection,
     windowDays,
+    activeWithinMinutes,
     canManage,
     syncing = false,
     quickSyncing = false,
@@ -54,6 +55,8 @@
     open: boolean;
     connection: Connection | null;
     windowDays: number | undefined;
+    /** Minutes without a record after which a connection that sends is no longer active. */
+    activeWithinMinutes: number | undefined;
     /** Whether the viewer may configure, sync and delete the data of connectors. */
     canManage: boolean;
     syncing?: boolean;
@@ -194,6 +197,8 @@
             Sends to Nocturne
           {:else if connection.direction === ConnectionDirection.Fetches}
             Nocturne fetches
+          {:else if connection.direction === ConnectionDirection.Imports}
+            Imported from a file
           {:else}
             No records in the last {windowDays} days
           {/if}
@@ -211,7 +216,7 @@
               fallback={hasOwnCredential ? "Never" : undefined}
             />
           {/if}
-          {#if isConnector}
+          {#if connection.direction === ConnectionDirection.Fetches}
             <ConnectionTime
               label="Last sync"
               at={connection.lastSyncAt}
@@ -219,6 +224,19 @@
             />
           {/if}
         </div>
+        {#if connection.direction === ConnectionDirection.Sends && connection.status === ConnectionStatus.Stopped}
+          <p class="text-sm text-muted-foreground">
+            No record arrived in the last {activeWithinMinutes} minutes. This
+            connection sends glucose or device status all the time. It is
+            possible that it stopped.
+          </p>
+        {:else if connection.direction === ConnectionDirection.Sends && connection.status === ConnectionStatus.Quiet}
+          <p class="text-sm text-muted-foreground">
+            No record arrived in the last {activeWithinMinutes} minutes. This
+            connection sends only records that come from time to time, such as
+            treatments. This is normal.
+          </p>
+        {/if}
       </Dialog.Header>
 
       <div class="-mx-6 min-h-0 flex-1 space-y-6 overflow-y-auto px-6">
@@ -444,7 +462,7 @@
                 Configure
               </Button>
             {/if}
-            {#if canManage && supportsManualSync && connection.status !== ConnectionStatus.Disabled}
+            {#if canManage && supportsManualSync && connection.direction === ConnectionDirection.Fetches && connection.status !== ConnectionStatus.Disabled}
               <Button
                 variant="outline"
                 size="sm"

@@ -9,6 +9,12 @@ namespace Nocturne.Core.Contracts.Alerts;
 /// </summary>
 public interface ITenantAlertSettingsRepository
 {
+    /// <summary>
+    /// The stored settings without creating a row, or <see cref="TenantAlertSettingsSnapshot.Empty"/>
+    /// when the tenant has none.
+    /// </summary>
+    Task<TenantAlertSettingsSnapshot> GetAsync(CancellationToken ct);
+
     /// <summary>The stored settings, which are created with the defaults when the tenant has none.</summary>
     Task<TenantAlertSettingsSnapshot> GetOrCreateAsync(CancellationToken ct);
 

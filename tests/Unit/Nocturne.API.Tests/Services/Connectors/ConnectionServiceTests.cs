@@ -1,11 +1,16 @@
 using FluentAssertions;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Models;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Services;
@@ -18,20 +23,33 @@ public class ConnectionServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 16, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid Viewer = Guid.NewGuid();
+    private static readonly string SleepType = nameof(SyncDataType.Sleep);
 
     private readonly Mock<ISourceOwnedDataReader> _sourceData = new();
     private readonly Mock<IOAuthGrantRepository> _grants = new();
     private readonly Mock<IConnectorHealthService> _health = new();
     private readonly List<WriterBucket> _buckets = [];
+    private readonly Dictionary<string, Dictionary<string, long>> _importCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Mock<IDataSourceService> _dataSources = new();
     private readonly List<OAuthGrantRecord> _grantRecords = [];
     private readonly List<ConnectorStatusDto> _statuses = [];
     private readonly List<ApsDeviceLastSeen> _apsDevices = [];
 
-    private Task<ConnectionsOverview> ListAsync()
+    private Task<ConnectionsOverview> ListAsync(IConnectorHealthService? health = null)
     {
         _sourceData
             .Setup(s => s.WriterBucketsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(_buckets);
+        _dataSources
+            .Setup(d => d.ConnectorHoldsDataAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) => _importCounts.ContainsKey(id));
+        _dataSources
+            .Setup(d => d.GetConnectorDataSummaryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) => new ConnectorDataSummary
+            {
+                ConnectorId = id,
+                RecordCounts = _importCounts.GetValueOrDefault(id) ?? [],
+            });
         _sourceData
             .Setup(s => s.ApsSnapshotDevicesAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(_apsDevices);
@@ -46,7 +64,8 @@ public class ConnectionServiceTests
             .ReturnsAsync(new Dictionary<Guid, int>());
 
         return new ConnectionService(
-                _sourceData.Object, _grants.Object, _health.Object, devices.Object, new FakeTimeProvider(Now))
+                _sourceData.Object, _grants.Object, health ?? _health.Object, devices.Object, _dataSources.Object,
+                new FakeTimeProvider(Now))
             .GetConnectionsAsync(Viewer);
     }
 
@@ -207,6 +226,120 @@ public class ConnectionServiceTests
     }
 
     [Fact]
+    public async Task AnImportIsListedWithTheCountsTheDetailDialogShows_WhateverTheAgeOfItsRecords()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _importCounts["oura"] = new()
+        {
+            [SourceDataTypes.HeartRate] = 500, [SourceDataTypes.Steps] = 40, [SleepType] = 12,
+        };
+
+        var overview = await ListAsync();
+
+        var connector = overview.Connections.Should().ContainSingle().Subject;
+        connector.Id.Should().Be("connector:oura");
+        connector.Status.Should().Be(ConnectionStatus.Imported);
+        connector.Direction.Should().Be(ConnectionDirection.Imports);
+        connector.LastSyncAt.Should().BeNull();
+        connector.TotalRecords.Should().Be(552);
+        connector.RecordCounts.Should().BeEquivalentTo(_importCounts["oura"]);
+    }
+
+    [Fact]
+    public async Task AnImportWithOnlySleepSessionsIsListed()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _importCounts["oura"] = new() { [SleepType] = 3 };
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().ContainSingle().Which.TotalRecords.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnImportIsListedOnceWhateverTheHealthServiceReportsOfIt()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _statuses.Add(new ConnectorStatusDto
+        {
+            Id = "oura", Name = "oura", Status = "Running", State = "Running", IsEnabled = true,
+            LastSuccessfulSync = Now.UtcDateTime.AddDays(-3),
+        });
+        _importCounts["oura"] = new() { [SourceDataTypes.HeartRate] = 500 };
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().ContainSingle().Which.Direction.Should().Be(ConnectionDirection.Imports);
+    }
+
+    [Fact]
+    public async Task AnImportTheRealHealthServiceDropsIsStillListed()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _importCounts["oura"] = new() { [SourceDataTypes.HeartRate] = 500, [SleepType] = 12 };
+        var configurations = new Mock<IConnectorConfigurationService>();
+        configurations
+            .Setup(c => c.GetAllConnectorStatusAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        configurations
+            .Setup(c => c.GetConfigurationAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConnectorConfigurationResponse?)null);
+        _dataSources
+            .Setup(d => d.GetDataSourceStatsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string dataSource, CancellationToken _) => new DataSourceStats(
+                dataSource, 0, 0, null, null, 0, 0, null, null, 0, 0, null, null, [], []));
+        var health = new ConnectorHealthService(
+            new ConfigurationBuilder().Build(), _dataSources.Object, configurations.Object,
+            NullLogger<ConnectorHealthService>.Instance);
+
+        (await health.GetConnectorStatusesAsync()).Should().NotContain(s => s.Id == "oura");
+
+        var overview = await ListAsync(health);
+
+        overview.Connections.Should().ContainSingle().Which.TotalRecords.Should().Be(512);
+    }
+
+    [Fact]
+    public async Task ATenantThatNeverImportedRunsNoSummary()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().BeEmpty();
+        _dataSources.Verify(
+            d => d.ConnectorHoldsDataAsync("Oura", It.IsAny<CancellationToken>()), Times.Once);
+        _dataSources.Verify(
+            d => d.GetConnectorDataSummaryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AFetchingConnectorOlderThanTheWindowIsStillNotListed_AndIsNotReadForItsWholeHistory()
+    {
+        _statuses.Add(new ConnectorStatusDto { Id = "dexcom", Name = "dexcom", Status = "Not Configured", State = "Not Configured" });
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().BeEmpty();
+        _dataSources.Verify(
+            d => d.GetConnectorDataSummaryAsync("dexcom", It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AConnectorWithNoSyncAndNoRecordsIsNotListed_EvenWithAConfigurationRow()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _statuses.Add(new ConnectorStatusDto
+        {
+            Id = "oura", Name = "oura", Status = "Disabled", State = "Disabled", HasDatabaseConfig = true,
+        });
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task AppsWithoutASoftwareIdAreSeparateConnectionsPerClient()
     {
         _grantRecords.AddRange(
@@ -256,6 +389,20 @@ public class ConnectionServiceTests
         var overview = await ListAsync();
 
         overview.Connections.Single().Status.Should().Be(ConnectionStatus.Stopped);
+    }
+
+    [Fact]
+    public async Task TheActiveThresholdTheOverviewStatesIsTheOneStatusUses()
+    {
+        var uploader = Grant(OAuthGrantTypes.Direct, "Phone");
+        _grantRecords.Add(uploader);
+        var minutes = (await ListAsync()).ActiveWithinMinutes;
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, uploader.Id, null, "xDrip", 12, minutesAgo: minutes - 1));
+        (await ListAsync()).Connections.Single().Status.Should().Be(ConnectionStatus.Active);
+
+        _buckets.Clear();
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, uploader.Id, null, "xDrip", 12, minutesAgo: minutes + 1));
+        (await ListAsync()).Connections.Single().Status.Should().Be(ConnectionStatus.Stopped);
     }
 
     [Fact]

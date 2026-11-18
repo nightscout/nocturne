@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 
@@ -37,6 +38,7 @@ public class CorrelationController : ControllerBase
     private readonly ICarbIntakeRepository _carbIntakeRepo;
     private readonly IBGCheckRepository _bgCheckRepo;
     private readonly INoteRepository _noteRepo;
+    private readonly ITreatmentFoodService _treatmentFoodService;
 
     public CorrelationController(
         ISensorGlucoseRepository sensorRepo,
@@ -46,7 +48,8 @@ public class CorrelationController : ControllerBase
         IBolusCalculationRepository bolusCalcRepo,
         ICarbIntakeRepository carbIntakeRepo,
         IBGCheckRepository bgCheckRepo,
-        INoteRepository noteRepo)
+        INoteRepository noteRepo,
+        ITreatmentFoodService treatmentFoodService)
     {
         _sensorRepo = sensorRepo;
         _meterRepo = meterRepo;
@@ -56,6 +59,7 @@ public class CorrelationController : ControllerBase
         _carbIntakeRepo = carbIntakeRepo;
         _bgCheckRepo = bgCheckRepo;
         _noteRepo = noteRepo;
+        _treatmentFoodService = treatmentFoodService;
     }
 
     /// <summary>
@@ -78,13 +82,16 @@ public class CorrelationController : ControllerBase
         var glucose = CorrelationReadScopeGuard.AllowsGlucose(granted);
         var treatments = CorrelationReadScopeGuard.AllowsTreatments(granted);
 
+        var carbIntakes = treatments ? (await _carbIntakeRepo.GetByCorrelationIdAsync(correlationId, ct)).ToArray() : [];
+        await _treatmentFoodService.ApplyFoodTypesAsync(carbIntakes, ct);
+
         var result = new
         {
             SensorGlucose = glucose ? await _sensorRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
             MeterGlucose = glucose ? await _meterRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
             Calibrations = glucose ? await _calibrationRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
             Boluses = treatments ? await _bolusRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
-            CarbIntakes = treatments ? await _carbIntakeRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            CarbIntakes = carbIntakes,
             BGChecks = glucose ? await _bgCheckRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
             Notes = treatments ? await _noteRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
             BolusCalculations = treatments ? await _bolusCalcRepo.GetByCorrelationIdAsync(correlationId, ct) : [],

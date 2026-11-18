@@ -459,6 +459,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
 
         // COB on the OpenAps status level
         ds.OpenAps.Cob = aps.Cob;
+        UploadedExtras.RestoreOpenAps(ds.OpenAps, aps.AdditionalProperties);
     }
 
     private static void ProjectPumpData(DeviceStatus ds, PumpSnapshot pump)
@@ -470,6 +471,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Reservoir = pump.Reservoir,
             ReservoirDisplayOverride = pump.ReservoirDisplay,
             Clock = pump.Clock,
+            PumpMode = pump.PumpMode,
             Battery = (pump.BatteryPercent.HasValue || pump.BatteryVoltage.HasValue)
                 ? new PumpBattery { Percent = pump.BatteryPercent, Voltage = pump.BatteryVoltage }
                 : null,
@@ -479,10 +481,8 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Iob = (pump.Iob.HasValue || pump.BolusIob.HasValue)
                 ? new PumpIob { Iob = pump.Iob, BolusIob = pump.BolusIob }
                 : null,
-            Extended = pump.AdditionalProperties?.ToDictionary(
-                kvp => kvp.Key,
-                kvp => kvp.Value ?? (object)string.Empty),
         };
+        UploadedExtras.RestorePump(ds.Pump, pump.AdditionalProperties);
     }
 
     private static void ProjectUploaderData(DeviceStatus ds, UploaderSnapshot uploaderSnapshot)
