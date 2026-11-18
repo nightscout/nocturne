@@ -1900,6 +1900,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock/ClockFaceRenderer.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
@@ -28209,6 +28210,7 @@ msgstr ""
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/wizard/templates.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
 msgid "# hour"
 msgid_plural "# hours"
@@ -41029,6 +41031,7 @@ msgid "Enter 1 minute or more."
 msgstr ""
 
 #: src/lib/components/alerts/wizard/templates.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Enter a number above 0."
 msgstr ""
 
@@ -41085,12 +41088,12 @@ msgstr ""
 msgid "Pump battery low: {0}%"
 msgstr ""
 
-#. 0: daysText((leaf?.site_age?.value ?? 0) / 24)
+#. 0: daysText(ageDays(leaf))
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Site change due: {0}"
 msgstr ""
 
-#. 0: daysText(leaf?.sensor_age?.value ?? 0)
+#. 0: daysText(ageDays(leaf))
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Sensor change due: {0}"
 msgstr ""
@@ -41649,4 +41652,56 @@ msgstr ""
 
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "The alert is on."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the battery is this old, or older"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Choose a tracker"
+msgstr ""
+
+#. 0: lifespanText(tracker.lifespanHours)
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "The tracker lasts {0}."
+msgstr ""
+
+#. 0: tracker.name
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Nocturne reads the age from the tracker {0}. <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "There is no tracker for the infusion site. The alert uses the site change that your uploader records."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "There is no tracker for the sensor. The alert uses the sensor start that your uploader records."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Open Trackers"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Battery change due"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The battery is older than the age you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Choose a tracker."
+msgstr ""
+
+#. 0: tracker.name; 1: daysText(ageDays(draft.leaf))
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "{0} change due: {1}"
+msgstr ""
+
+#. 0: daysText(ageDays(leaf))
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Battery change due: {0}"
 msgstr ""
