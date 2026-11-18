@@ -25,6 +25,8 @@
     condition: ConditionNode;
     /** The condition that closes the alert at once, when the alert's type has one. */
     autoResolve?: ConditionNode | null;
+    /** Whether `autoResolve` is known yet. The history check starts once it is. */
+    autoResolveAnswered?: boolean;
     /** The name the wizard gives the alert when the person types none. */
     suggestedName: string;
     /** Whether the person has typed a name of their own. */
@@ -38,6 +40,7 @@
     editor = $bindable(),
     condition,
     autoResolve = null,
+    autoResolveAnswered = true,
     suggestedName,
     nameEdited = $bindable(),
     rule,
@@ -74,7 +77,9 @@
     <h3 id="alert-history-heading" class="text-base font-semibold leading-none">
       Would it have alerted you?
     </h3>
-    <HistoryCheck {rule} {condition} severity={editor.severity} {onOpenReplay} />
+    {#if autoResolveAnswered}
+      <HistoryCheck {rule} {condition} severity={editor.severity} {onOpenReplay} />
+    {/if}
     {#if autoResolve}
       <p class="text-sm text-muted-foreground" data-testid="alert-auto-resolve">
         The alert closes when this is true: {summarizeCondition(autoResolve)}.

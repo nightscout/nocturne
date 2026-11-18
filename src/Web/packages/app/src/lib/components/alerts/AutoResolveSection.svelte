@@ -50,9 +50,16 @@
     const replaces = enabled && (condition?.composite?.conditions.length ?? 0) > 0;
     if (replaces && !confirm("Replace the conditions with the suggestion?")) return;
     suggesting = true;
+    const asked = JSON.stringify(firingCondition);
     try {
       const suggested = await oppositeCondition(firingCondition);
-      condition = suggested ?? ensureCompositeRoot(defaultPayload("threshold"));
+      // The conditions changed while the answer was on its way: it is the opposite of others.
+      if (JSON.stringify(firingCondition) !== asked) return;
+      if (!suggested) {
+        toast.message("These conditions have no opposite. Add a closing condition yourself.");
+        return;
+      }
+      condition = suggested;
       enabled = true;
     } catch (e) {
       toast.error(describeSubmitError(e, "Could not get a suggestion. Try again."));

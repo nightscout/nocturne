@@ -24,6 +24,7 @@
     ensureCompositeRoot,
     nodeFromApi,
     parseRule,
+    stripEditorFields,
     validateChannels,
     type ConditionNode,
     type RuleEditorState,
@@ -88,7 +89,11 @@
     const tracker = trackers[0];
     untrack(() => {
       if (!tracker || !draft?.leaf || draft.leaf.tracker_age) return;
-      if (JSON.stringify(draft.leaf) !== JSON.stringify(draft.def.build())) return;
+      const built = draft.def.build();
+      const untouched =
+        built !== null &&
+        JSON.stringify(stripEditorFields(draft.leaf)) === JSON.stringify(stripEditorFields(built));
+      if (!untouched) return;
       draft.leaf = trackerLeaf(draft.def, tracker);
     });
   });
@@ -132,6 +137,8 @@
   // steps before it.
   let autoResolve = $state<ConditionNode | null>(null);
   let autoResolveAsked: Promise<ConditionNode | null> = Promise.resolve(null);
+  // The history check plays the alert with its closing condition, so it waits for the answer.
+  let autoResolveAnswered = $state(false);
 
   function askAutoResolve(): Promise<ConditionNode | null> {
     return draft?.def.autoResolve ? oppositeCondition(condition) : Promise.resolve(null);
@@ -143,12 +150,17 @@
       const asked = askAutoResolve();
       autoResolveAsked = asked;
       autoResolve = null;
+      autoResolveAnswered = false;
       asked.then(
         (closing) => {
-          if (autoResolveAsked === asked) autoResolve = closing;
+          if (autoResolveAsked !== asked) return;
+          autoResolve = closing;
+          autoResolveAnswered = true;
         },
         // The last step shows no closing condition, and Create asks again.
-        () => {},
+        () => {
+          if (autoResolveAsked === asked) autoResolveAnswered = true;
+        },
       );
     });
   });
@@ -380,6 +392,7 @@
         bind:nameEdited
         {condition}
         {autoResolve}
+        {autoResolveAnswered}
         {suggestedName}
         rule={replayRule}
         onOpenReplay={openReplay}

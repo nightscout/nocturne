@@ -11,8 +11,9 @@ namespace Nocturne.API.Services.Alerts.Conditions;
 /// A node is the envelope a rule stores: <c>{"type":"threshold","threshold":{...}}</c>. An "and"
 /// of conditions closes when any one is no longer true, so its opposites join with "or", and the
 /// reverse. A wait (<c>sustained</c>) is dropped: the alert closes when the condition lifts, not
-/// after it has been lifted for the wait. A condition with no opposite is left out, and a tree
-/// with none has no suggestion.
+/// after it has been lifted for the wait. A condition with no opposite is left out of an "and",
+/// whose other opposites still close it. An "or" with one has no opposite at all: the alert can
+/// be true through that condition alone, with every other opposite true beside it.
 /// </para>
 /// <para>
 /// An opposite must never be true together with its condition: the engine closes the alert on the
@@ -34,6 +35,11 @@ internal static class AutoResolveSuggestion
         {
             return null;
         }
+        catch (ArgumentException)
+        {
+            // A name given twice in one object, which the node model refuses when it is read.
+            return null;
+        }
     }
 
     public static JsonObject? For(JsonNode? condition)
@@ -48,10 +54,13 @@ internal static class AutoResolveSuggestion
             {
                 if (payload?["conditions"] is not JsonArray conditions)
                     return null;
+                var all = TextOf(payload["operator"]) == "and";
                 var opposites = conditions.Select(For).OfType<JsonObject>().ToList();
+                if (!all && opposites.Count < conditions.Count)
+                    return null;
                 if (opposites.Count <= 1)
                     return opposites.FirstOrDefault();
-                var joined = TextOf(payload["operator"]) == "and" ? "or" : "and";
+                var joined = all ? "or" : "and";
                 return Node("composite", new JsonObject
                 {
                     ["operator"] = joined,
@@ -74,17 +83,16 @@ internal static class AutoResolveSuggestion
                 return Node(type, opposite);
             }
 
-            // A rate has no comparison to turn round. A flat trend is the nearest condition.
-            case "rate_of_change":
-                return payload is null ? null : Flat();
-
+            // The trend is in one bucket at a time, so another bucket is never true with this one.
             case "trend":
                 return payload is null || TextOf(payload["bucket"]) == "flat" ? null : Flat();
 
-            // A forecast is true when any of its points matches, so one with the comparison turned
-            // round is true together with it. Only its negation is its opposite.
+            // Only the negation is the opposite of these. A rate has no comparison to turn round,
+            // and a slow one is true inside the flat trend. A forecast is true when any of its
+            // points matches, so one with the comparison turned round is true together with it.
+            case "rate_of_change":
             case "predicted":
-                return payload is null ? null : Node("not", new JsonObject { ["child"] = node.DeepClone() });
+                return payload is null ? null : Negated(node);
 
             case "staleness":
             case "iob":
@@ -114,12 +122,16 @@ internal static class AutoResolveSuggestion
                 return Node(type, new JsonObject { ["is_active"] = !isActive });
             }
 
+            // An acknowledged alert is still one that started, so those two states are true
+            // together. Only "not acknowledged" has another state as its opposite.
             case "alert_state":
             {
                 if (payload is null)
                     return null;
+                if (TextOf(payload["state"]) != "unacknowledged")
+                    return Negated(node);
                 var opposite = (JsonObject)payload.DeepClone();
-                opposite["state"] = TextOf(payload["state"]) == "firing" ? "acknowledged" : "firing";
+                opposite["state"] = "acknowledged";
                 return Node(type, opposite);
             }
 
@@ -134,6 +146,9 @@ internal static class AutoResolveSuggestion
         new() { ["type"] = type, [type] = payload };
 
     private static JsonObject Flat() => Node("trend", new JsonObject { ["bucket"] = "flat" });
+
+    private static JsonObject Negated(JsonObject node) =>
+        Node("not", new JsonObject { ["child"] = node.DeepClone() });
 
     private static string? TextOf(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
