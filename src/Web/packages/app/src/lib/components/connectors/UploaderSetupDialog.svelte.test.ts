@@ -67,7 +67,7 @@ describe("UploaderSetupDialog API key", () => {
   it("offers the AAPSClient QR code only for AAPS", async () => {
     render(UploaderSetupDialog, { open: true, selectedUploader: JUGGLUCO });
 
-    await expect.element(page.getByRole("button", { name: "Generate API key" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Create API token" })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Make QR code" })).not.toBeInTheDocument();
   });
 

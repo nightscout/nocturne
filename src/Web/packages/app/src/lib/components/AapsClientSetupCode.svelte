@@ -57,7 +57,7 @@
   <div>
     <p class="text-sm font-medium">Connect AAPSClient with a QR code</p>
     <p class="text-muted-foreground text-sm">
-      For a follower phone with AAPSClient 4.0 or later. The phone gets its own API key and can
+      For a follower phone with AAPSClient 4.0 or later. The phone gets its own API token and can
       read your data.
     </p>
   </div>
@@ -93,7 +93,7 @@
         <p class="text-muted-foreground text-sm">
           After you pair it in AAPS, the phone can ask your AAPS phone for a bolus, a temporary
           target, or a profile switch. Your AAPS phone checks each command before it does it. The
-          API key can then also change the treatment profiles in Nocturne. When this is off, the
+          API token can then also change the treatment profiles in Nocturne. When this is off, the
           phone cannot pair and can only read your data.
         </p>
       </div>
