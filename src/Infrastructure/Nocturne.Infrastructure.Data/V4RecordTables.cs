@@ -471,6 +471,9 @@ internal abstract class V4RecordTable(Type entity, string name, string dataType,
     public abstract Task<List<WriterBucket>> WriterBucketsAsync(
         NocturneDbContext db, DateTime windowStart, DateTime last24HoursDate, CancellationToken ct);
 
+    /// <summary>Whether a row's source column equals <paramref name="source"/> exactly.</summary>
+    public abstract Task<bool> HoldsDataSourceAsync(NocturneDbContext db, string source, CancellationToken ct);
+
     public abstract Task<long> CountAsync(NocturneDbContext db, string source, CancellationToken ct);
 
     public abstract Task<int> SoftDeleteAsync(
@@ -555,6 +558,13 @@ internal sealed class V4RecordTable<T> : V4RecordTable
         _writerBuckets is null
             ? Task.FromResult(new List<WriterBucket>())
             : _writerBuckets(DataType, Set(db), windowStart, last24HoursDate, ct);
+
+    public override Task<bool> HoldsDataSourceAsync(NocturneDbContext db, string by, CancellationToken ct)
+    {
+        Expression<Func<string>> value = () => by;
+        var matches = Expression.Lambda<Func<T, bool>>(Expression.Equal(Source.Body, value.Body), Source.Parameters);
+        return Set(db).Where(matches).AnyAsync(ct);
+    }
 
     public override Task<long> CountAsync(NocturneDbContext db, string by, CancellationToken ct) =>
         Owned(db, by).LongCountAsync(ct);

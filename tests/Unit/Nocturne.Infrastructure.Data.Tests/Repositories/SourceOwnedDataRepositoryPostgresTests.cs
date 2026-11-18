@@ -125,6 +125,38 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     }
 
     [Fact]
+    public async Task HoldingRowsIsReadByTheDataSourceAloneAndForTheScopesTenantOnly()
+    {
+        var holder = await SeedTenantAsync();
+        var empty = await InsertTenantAsync();
+        var deviceOnly = await InsertTenantAsync();
+        var activityOnly = await InsertTenantAsync();
+        await using (var db = Context(deviceOnly))
+        {
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = deviceOnly, Device = Source, Timestamp = DateTime.UtcNow.AddDays(-90), Bpm = 60,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = Context(activityOnly))
+        {
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = activityOnly, DataSource = Source, Timestamp = DateTime.UtcNow.AddDays(-90), Bpm = 60,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        (await Repository(holder).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeTrue();
+        (await Repository(holder).HoldsRowsByDataSourceAsync("never-written", CancellationToken.None)).Should().BeFalse();
+        (await Repository(empty).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeFalse();
+        (await Repository(deviceOnly).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeFalse();
+        (await Repository(activityOnly).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task APurgeAsTenantADeletesNothingOfTenantB()
     {
         var a = await SeedTenantAsync();
