@@ -562,7 +562,8 @@ public partial class AnalyticsReadScopeGuardTests
             Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(),
-            Mock.Of<INoteRepository>())
+            Mock.Of<INoteRepository>(),
+            Mock.Of<ITreatmentFoodService>())
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };

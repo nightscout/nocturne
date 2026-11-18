@@ -1295,7 +1295,7 @@ internal static class LegacyTreatmentTables
             Insulin = bolus.Insulin,
             PreBolus = TreatmentUploadedPreBolus.Of(bolus.AdditionalProperties),
             Carbs = carb.Carbs,
-            FoodType = DeriveFoodType(foods),
+            FoodType = TreatmentFood.DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
@@ -1343,7 +1343,7 @@ internal static class LegacyTreatmentTables
             EventType = TreatmentUploadedEventType.Of(carb.AdditionalProperties) ?? TreatmentTypes.CarbCorrection,
             Mills = carb.Mills,
             Carbs = carb.Carbs,
-            FoodType = DeriveFoodType(foods),
+            FoodType = TreatmentFood.DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
@@ -1353,18 +1353,6 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = carb.SyncIdentifier,
             UtcOffset = carb.UtcOffset,
         };
-
-    private static string? DeriveFoodType(List<TreatmentFood> foods)
-    {
-        if (foods.Count == 0) return null;
-
-        var names = foods
-            .Select(f => f.FoodName ?? f.Note)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .ToList();
-
-        return names.Count > 0 ? string.Join(", ", names) : null;
-    }
 
     private static double? DeriveTotalFat(List<TreatmentFood> foods)
     {
