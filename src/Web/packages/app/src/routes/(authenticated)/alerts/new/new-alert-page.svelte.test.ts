@@ -123,7 +123,7 @@ describe("new alert wizard", () => {
     await expect.poll(() => calls.searched).toHaveLength(1);
     expect(calls.searched[0]).toMatchObject({
       rule: {
-        name: "Sensor change due: 9 days",
+        name: "Dexcom G7 change due: 9 days",
         conditionType: "tracker_age",
         conditionParams: JSON.stringify({
           tracker_definition_id: "11111111-1111-1111-1111-111111111111",

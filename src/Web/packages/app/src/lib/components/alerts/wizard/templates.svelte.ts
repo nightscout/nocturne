@@ -365,9 +365,22 @@ const MAX_NAME_LENGTH = 80;
  * The name the alert gets when the person does not type one. It is the text a
  * notification shows, so it says the type and the level that started it.
  */
-export function suggestName(draft: AlertDraft): string {
-	const name = withQualifiers(baseName(draft), draft);
+export function suggestName(
+	draft: AlertDraft,
+	definitions: readonly TrackerDefinitionDto[] = [],
+): string {
+	const name = withQualifiers(trackerName(draft, definitions) ?? baseName(draft), draft);
 	return name.length > MAX_NAME_LENGTH ? `${name.slice(0, MAX_NAME_LENGTH - 1).trimEnd()}…` : name;
+}
+
+/** An alert on a tracker is named for the tracker, so it says which device is due. */
+function trackerName(
+	draft: AlertDraft,
+	definitions: readonly TrackerDefinitionDto[],
+): string | null {
+	const id = draft.leaf?.tracker_age?.tracker_definition_id;
+	const tracker = id ? definitions.find((d) => d.id === id) : undefined;
+	return tracker?.name ? `${tracker.name} change due: ${daysText(ageDays(draft.leaf))}` : null;
 }
 
 function baseName(draft: AlertDraft): string {

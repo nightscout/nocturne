@@ -90,12 +90,16 @@ describe("alert wizard templates", () => {
 			operator: ">=",
 			minutes: 252 * 60,
 		});
+		expect(suggestName(draft, definitions)).toBe("Dexcom G7 change due: 10.5 days");
 		expect(suggestName(draft)).toBe("Sensor change due: 10.5 days");
 		expect(draftIssue(draft)).toBeNull();
 	});
 
 	it("reads the site's age from a pod tracker", () => {
 		expect(templateTrackers("site_change_due", definitions)).toEqual([podTracker]);
+		expect(suggestName(newDraft("site_change_due", definitions), definitions)).toBe(
+			"Pod change due: 3 days",
+		);
 		expect(bodyOf(newDraft("site_change_due", definitions)).conditionParams).toMatchObject({
 			tracker_definition_id: podTracker.id,
 			minutes: 72 * 60,

@@ -105,7 +105,7 @@
   });
 
   const condition = $derived<ConditionNode | null>(draft ? draftCondition(draft) : null);
-  const suggestedName = $derived(draft ? suggestName(draft) : "");
+  const suggestedName = $derived(draft ? suggestName(draft, trackerDefinitions) : "");
   const name = $derived(nameEdited ? editor.name.trim() : suggestedName);
 
   function rule(): RuleEditorState {
