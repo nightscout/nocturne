@@ -168,6 +168,12 @@ public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteB
     public string? LoopJson { get; set; }
 
     /// <summary>
+    /// The override object Loop uploaded with the status, as it sent it
+    /// </summary>
+    [Column("override_json", TypeName = "jsonb")]
+    public string? OverrideJson { get; set; }
+
+    /// <summary>
     /// Algorithm version string (e.g. Trio app version)
     /// </summary>
     [Column("aid_version")]

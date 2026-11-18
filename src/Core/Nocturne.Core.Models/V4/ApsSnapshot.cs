@@ -128,6 +128,9 @@ public class ApsSnapshot : V4RecordBase, IPatientDeviceLinked
     /// <summary>Full serialized Loop status object for round-trip fidelity.</summary>
     public string? LoopJson { get; set; }
 
+    /// <summary>The override object Loop uploaded with the status, as it sent it. Null when it sent none.</summary>
+    public string? OverrideJson { get; set; }
+
     /// <summary>Algorithm version string (e.g. Trio app version).</summary>
     public string? AidVersion { get; set; }
 }

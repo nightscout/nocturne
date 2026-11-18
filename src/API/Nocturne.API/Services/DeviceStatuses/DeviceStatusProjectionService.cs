@@ -379,8 +379,8 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             ProjectUploaderData(ds, uploader);
         }
 
-        // Project override data
-        if (overrideSpan != null)
+        // A status stored before its override object was kept has only the span to rebuild it from.
+        if (ds.Override is null && overrideSpan != null)
         {
             ProjectOverrideData(ds, overrideSpan);
         }
@@ -435,6 +435,9 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
                 RecommendedBolus = aps.RecommendedBolus,
             };
         }
+
+        if (!string.IsNullOrEmpty(aps.OverrideJson))
+            ds.Override = DeserializeOrNull<OverrideStatus>(aps.OverrideJson, logger);
     }
 
     private static void ProjectOpenApsData(DeviceStatus ds, ApsSnapshot aps, ILogger? logger = null)
@@ -503,7 +506,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
         ds.IsCharging = uploaderSnapshot.IsCharging;
     }
 
-    private static void ProjectOverrideData(DeviceStatus ds, StateSpan overrideSpan)
+    internal static void ProjectOverrideData(DeviceStatus ds, StateSpan overrideSpan)
     {
         ds.Override = new OverrideStatus
         {
