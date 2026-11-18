@@ -150,7 +150,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
         // GMI formula: 3.31 + (0.02392 × mean glucose in mg/dL)
         var gmiValue = 3.31 + (0.02392 * meanGlucose);
-        gmiValue = Math.Round(gmiValue * 10) / 10; // Round to 1 decimal
+        gmiValue = ScaledRounding.Round(gmiValue, 1);
 
         return new GlucoseManagementIndicator
         {
@@ -184,7 +184,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var gri = (hypoWeight * hypoComponent) + (hyperWeight * hyperComponent);
 
         // Cap at 100
-        gri = Math.Min(100, Math.Round(gri * 10) / 10);
+        gri = Math.Min(100, ScaledRounding.Round(gri, 1));
 
         var zone = gri switch
         {
@@ -208,8 +208,8 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         return new GlycemicRiskIndex
         {
             Score = gri,
-            HypoglycemiaComponent = Math.Round(hypoComponent * 10) / 10,
-            HyperglycemiaComponent = Math.Round(hyperComponent * 10) / 10,
+            HypoglycemiaComponent = ScaledRounding.Round(hypoComponent, 1),
+            HyperglycemiaComponent = ScaledRounding.Round(hyperComponent, 1),
             Zone = zone,
             Interpretation = interpretation,
         };
@@ -338,13 +338,13 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         return new TargetAssessment
         {
             MetricName = name,
-            CurrentValue = Math.Round(current * 10) / 10,
+            CurrentValue = ScaledRounding.Round(current, 1),
             TargetValue = target,
             IsMaximumTarget = false,
             Status = status,
-            DifferenceFromTarget = Math.Round((current - target) * 10) / 10,
+            DifferenceFromTarget = ScaledRounding.Round(current - target, 1),
             ProgressPercentage =
-                target > 0 ? Math.Min(100, Math.Round(current / target * 100 * 10) / 10) : 0,
+                target > 0 ? Math.Min(100, ScaledRounding.Round(current / target * 100, 1)) : 0,
         };
     }
 
@@ -361,14 +361,14 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         return new TargetAssessment
         {
             MetricName = name,
-            CurrentValue = Math.Round(current * 10) / 10,
+            CurrentValue = ScaledRounding.Round(current, 1),
             TargetValue = target,
             IsMaximumTarget = true,
             Status = status,
-            DifferenceFromTarget = Math.Round((current - target) * 10) / 10,
+            DifferenceFromTarget = ScaledRounding.Round(current - target, 1),
             ProgressPercentage =
                 target > 0
-                    ? Math.Max(0, Math.Round((1 - (current - target) / target) * 100 * 10) / 10)
+                    ? Math.Max(0, ScaledRounding.Round((1 - (current - target) / target) * 100, 1))
                     : (current == 0 ? 100 : 0),
         };
     }
@@ -387,7 +387,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 Key = InsightKey.TimeInRangeExcellent,
                 Context = new Dictionary<string, double>
                 {
-                    { "actual", Math.Round(tir.Target * 10) / 10 },
+                    { "actual", ScaledRounding.Round(tir.Target, 1) },
                     { "target", targets.TargetTIR },
                 }
             });
@@ -403,7 +403,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             assessment.Strengths.Add(new LocalizedInsight
             {
                 Key = InsightKey.VariabilityControlled,
-                Context = new Dictionary<string, double> { { "cv", Math.Round(cv * 10) / 10 } }
+                Context = new Dictionary<string, double> { { "cv", ScaledRounding.Round(cv, 1) } }
             });
 
         // Priority areas for improvement
@@ -419,7 +419,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 Key = InsightKey.TimeVeryLow,
                 Context = new Dictionary<string, double>
                 {
-                    { "actual", Math.Round(tir.VeryLow * 10) / 10 },
+                    { "actual", ScaledRounding.Round(tir.VeryLow, 1) },
                     { "target", targets.MaxTBRVeryLow },
                 }
             });
@@ -437,7 +437,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 Key = InsightKey.TimeBelowRange,
                 Context = new Dictionary<string, double>
                 {
-                    { "actual", Math.Round((tir.VeryLow + tir.Low) * 10) / 10 },
+                    { "actual", ScaledRounding.Round(tir.VeryLow + tir.Low, 1) },
                     { "target", targets.MaxTBR },
                 }
             });
@@ -455,7 +455,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 Key = InsightKey.TimeInRange,
                 Context = new Dictionary<string, double>
                 {
-                    { "actual", Math.Round(tir.Target * 10) / 10 },
+                    { "actual", ScaledRounding.Round(tir.Target, 1) },
                     { "target", targets.TargetTIR },
                 }
             });
@@ -473,7 +473,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 Key = InsightKey.TimeVeryHigh,
                 Context = new Dictionary<string, double>
                 {
-                    { "actual", Math.Round(tir.VeryHigh * 10) / 10 },
+                    { "actual", ScaledRounding.Round(tir.VeryHigh, 1) },
                     { "target", targets.MaxTARVeryHigh },
                 }
             });
@@ -491,7 +491,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 Key = InsightKey.Variability,
                 Context = new Dictionary<string, double>
                 {
-                    { "actual", Math.Round(cv * 10) / 10 },
+                    { "actual", ScaledRounding.Round(cv, 1) },
                     { "target", targets.TargetCV },
                 }
             });
@@ -584,9 +584,9 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             DaysWithData = daysWithData,
             ExpectedReadings = expectedTotal,
             ActualReadings = actualReadings,
-            CompletenessPercentage = Math.Round(completeness * 10) / 10,
+            CompletenessPercentage = ScaledRounding.Round(completeness, 1),
             AverageReadingsPerDay = Math.Round(avgPerDay),
-            LongestGapHours = Math.Round(longestGapHours * 10) / 10,
+            LongestGapHours = ScaledRounding.Round(longestGapHours, 1),
             WarningMessage = warningMessage,
             Recommendation = recommendation,
         };
@@ -770,11 +770,11 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         return new BasicGlucoseStats
         {
             Count = count,
-            Mean = Math.Round(mean * 10) / 10,
+            Mean = ScaledRounding.Round(mean, 1),
             Median = median,
             Min = min,
             Max = max,
-            StandardDeviation = Math.Round(standardDeviation * 10) / 10,
+            StandardDeviation = ScaledRounding.Round(standardDeviation, 1),
             Percentiles = percentiles,
         };
     }
@@ -790,7 +790,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             return 0;
 
         var sum = values.Sum();
-        return Math.Round((sum / values.Count) * 10) / 10;
+        return ScaledRounding.Round(sum / values.Count, 1);
     }
 
     /// <summary>
@@ -863,21 +863,21 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
         return new GlycemicVariability
         {
-            CoefficientOfVariation = Math.Round(coefficientOfVariation * 10) / 10,
-            StandardDeviation = Math.Round(standardDeviation * 10) / 10,
-            MeanAmplitudeGlycemicExcursions = Math.Round(mage * 10) / 10,
-            ContinuousOverlappingNetGlycemicAction = Math.Round(conga * 10) / 10,
-            AverageDailyRiskRange = adrr is { } risk ? Math.Round(risk * 10) / 10 : null,
-            LabilityIndex = Math.Round(labilityIndex * 10) / 10,
-            JIndex = Math.Round(jIndex * 10) / 10,
-            HighBloodGlucoseIndex = Math.Round(hbgi * 100) / 100,
-            LowBloodGlucoseIndex = Math.Round(lbgi * 100) / 100,
-            GlycemicVariabilityIndex = Math.Round(gvi * 100) / 100,
-            PatientGlycemicStatus = Math.Round(pgs * 10) / 10,
+            CoefficientOfVariation = ScaledRounding.Round(coefficientOfVariation, 1),
+            StandardDeviation = ScaledRounding.Round(standardDeviation, 1),
+            MeanAmplitudeGlycemicExcursions = ScaledRounding.Round(mage, 1),
+            ContinuousOverlappingNetGlycemicAction = ScaledRounding.Round(conga, 1),
+            AverageDailyRiskRange = adrr is { } risk ? ScaledRounding.Round(risk, 1) : null,
+            LabilityIndex = ScaledRounding.Round(labilityIndex, 1),
+            JIndex = ScaledRounding.Round(jIndex, 1),
+            HighBloodGlucoseIndex = ScaledRounding.Round(hbgi, 2),
+            LowBloodGlucoseIndex = ScaledRounding.Round(lbgi, 2),
+            GlycemicVariabilityIndex = ScaledRounding.Round(gvi, 2),
+            PatientGlycemicStatus = ScaledRounding.Round(pgs, 1),
             EstimatedA1c = CalculateEstimatedA1C(mean),
             Gmi = CalculateGMI(mean),
             MeanTotalDailyChange = Math.Round(meanTotalDailyChange),
-            TimeInFluctuation = Math.Round(timeInFluctuation * 10) / 10,
+            TimeInFluctuation = ScaledRounding.Round(timeInFluctuation, 1),
         };
     }
 
@@ -1630,7 +1630,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var total = readings.Count;
         foreach (var bin in counts)
         {
-            bin.Percent = total > 0 ? Math.Round((double)bin.Count / total * 100 * 10) / 10 : 0;
+            bin.Percent = total > 0 ? ScaledRounding.Round((double)bin.Count / total * 100, 1) : 0;
         }
 
         // Filter out empty bins
@@ -2162,34 +2162,34 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
         return new InsulinDeliveryStatistics
         {
-            TotalBolus = Math.Round(totalBolus * 100) / 100,
-            ManualBolus = Math.Round(manualBolus * 100) / 100,
-            AutomaticBolus = Math.Round(automaticBolus * 100) / 100,
+            TotalBolus = ScaledRounding.Round(totalBolus, 2),
+            ManualBolus = ScaledRounding.Round(manualBolus, 2),
+            AutomaticBolus = ScaledRounding.Round(automaticBolus, 2),
             TotalBasal = 0,
-            TotalInsulin = Math.Round(totalBolus * 100) / 100,
-            TotalCarbs = Math.Round(totalCarbs * 10) / 10,
-            CarbsPerDay = Math.Round(totalCarbs / dayCount * 10) / 10,
+            TotalInsulin = ScaledRounding.Round(totalBolus, 2),
+            TotalCarbs = ScaledRounding.Round(totalCarbs, 1),
+            CarbsPerDay = ScaledRounding.Round(totalCarbs / dayCount, 1),
             ManualBolusCount = manualCount,
             AutomaticBolusCount = automaticList.Count,
             BasalCount = 0,
             InsulinEventCount = manualCount + automaticList.Count,
             BasalPercent = 0,
             BolusPercent = totalBolus > 0 ? 100 : 0,
-            Tdd = Math.Round(totalBolus / dayCount * 10) / 10,
-            ManualBolusPerDay = Math.Round(manualBolus / dayCount * 100) / 100,
-            TotalBolusPerDay = Math.Round(totalBolus / dayCount * 100) / 100,
-            AutomaticBolusPerDay = Math.Round(automaticBolus / dayCount * 100) / 100,
-            AvgBolus = manualCount > 0 ? Math.Round(manualBolus / manualCount * 100) / 100 : 0,
+            Tdd = ScaledRounding.Round(totalBolus / dayCount, 1),
+            ManualBolusPerDay = ScaledRounding.Round(manualBolus / dayCount, 2),
+            TotalBolusPerDay = ScaledRounding.Round(totalBolus / dayCount, 2),
+            AutomaticBolusPerDay = ScaledRounding.Round(automaticBolus / dayCount, 2),
+            AvgBolus = manualCount > 0 ? ScaledRounding.Round(manualBolus / manualCount, 2) : 0,
             MealBoluses = mealBoluses,
             CorrectionBoluses = correctionBoluses,
-            MealBolusesPerDay = Math.Round((double)mealBoluses / dayCount * 10) / 10,
-            CorrectionBolusesPerDay = Math.Round((double)correctionBoluses / dayCount * 10) / 10,
-            MealBolusPercent = manualCount > 0 ? Math.Round(mealBoluses * 100.0 / manualCount * 10) / 10 : 0,
+            MealBolusesPerDay = ScaledRounding.Round((double)mealBoluses / dayCount, 1),
+            CorrectionBolusesPerDay = ScaledRounding.Round((double)correctionBoluses / dayCount, 1),
+            MealBolusPercent = manualCount > 0 ? ScaledRounding.Round(mealBoluses * 100.0 / manualCount, 1) : 0,
             CorrectionBolusPercent =
-                manualCount > 0 ? Math.Round(correctionBoluses * 100.0 / manualCount * 10) / 10 : 0,
+                manualCount > 0 ? ScaledRounding.Round(correctionBoluses * 100.0 / manualCount, 1) : 0,
             IcRatio = pairing.Ratio,
-            UnpairedCarbs = Math.Round(pairing.UnpairedCarbs * 10) / 10,
-            BolusesPerDay = Math.Round(bolusesPerDay * 10) / 10,
+            UnpairedCarbs = ScaledRounding.Round(pairing.UnpairedCarbs, 1),
+            BolusesPerDay = ScaledRounding.Round(bolusesPerDay, 1),
             WindowDays = dayCount,
             StartDate = startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             EndDate = endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -2238,7 +2238,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         }
 
         var units = mealInsulin.Sum();
-        double? ratio = units > 0 ? Math.Round(pairedGrams / units * 10) / 10 : null;
+        double? ratio = units > 0 ? ScaledRounding.Round(pairedGrams / units, 1) : null;
         return new MealBolusPairing(ratio, unpairedGrams, paired);
     }
 
@@ -2620,18 +2620,18 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var totalBasal = tempBasalInsulin + basalInjectionInsulin;
         var totalInsulin = stats.TotalBolus + totalBasal;
 
-        stats.TotalBasal = Math.Round(totalBasal * 100) / 100;
-        stats.ScheduledBasal = Math.Round(scheduledBasalInsulin * 100) / 100;
-        stats.AdditionalBasal = Math.Round(additionalBasalInsulin * 100) / 100;
-        stats.TotalInsulin = Math.Round(totalInsulin * 100) / 100;
-        stats.Tdd = Math.Round(totalInsulin / stats.WindowDays * 10) / 10;
-        stats.TotalBasalPerDay = Math.Round(totalBasal / stats.WindowDays * 100) / 100;
-        stats.ScheduledBasalPerDay = Math.Round(scheduledBasalInsulin / stats.WindowDays * 100) / 100;
+        stats.TotalBasal = ScaledRounding.Round(totalBasal, 2);
+        stats.ScheduledBasal = ScaledRounding.Round(scheduledBasalInsulin, 2);
+        stats.AdditionalBasal = ScaledRounding.Round(additionalBasalInsulin, 2);
+        stats.TotalInsulin = ScaledRounding.Round(totalInsulin, 2);
+        stats.Tdd = ScaledRounding.Round(totalInsulin / stats.WindowDays, 1);
+        stats.TotalBasalPerDay = ScaledRounding.Round(totalBasal / stats.WindowDays, 2);
+        stats.ScheduledBasalPerDay = ScaledRounding.Round(scheduledBasalInsulin / stats.WindowDays, 2);
         stats.BasalPercent =
-            totalInsulin > 0 ? Math.Round(totalBasal / totalInsulin * 100 * 10) / 10 : 0;
+            totalInsulin > 0 ? ScaledRounding.Round(totalBasal / totalInsulin * 100, 1) : 0;
         stats.BolusPercent =
-            totalInsulin > 0 ? Math.Round(stats.TotalBolus / totalInsulin * 100 * 10) / 10 : 0;
-        stats.BasalInjectionInsulin = Math.Round(basalInjectionInsulin * 100) / 100;
+            totalInsulin > 0 ? ScaledRounding.Round(stats.TotalBolus / totalInsulin * 100, 1) : 0;
+        stats.BasalInjectionInsulin = ScaledRounding.Round(basalInjectionInsulin, 2);
         stats.BasalInjectionCount = basalInjectionCount;
         stats.BasalCount = tempBasalCount + basalInjectionCount;
         stats.InsulinEventCount =
@@ -2747,14 +2747,14 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
                 {
                     Date = dateKey,
                     DisplayDate = displayDate,
-                    Basal = Math.Round(basal * 100) / 100,
-                    Bolus = Math.Round(bolus * 100) / 100,
-                    ManualBolus = Math.Round(manual * 100) / 100,
-                    AutomaticBolus = Math.Round(automatic * 100) / 100,
-                    Total = Math.Round(total * 100) / 100,
-                    BasalPercent = Math.Round(basalPercent * 10) / 10,
-                    BolusPercent = Math.Round(bolusPercent * 10) / 10,
-                    Carbs = Math.Round(carbs * 10) / 10,
+                    Basal = ScaledRounding.Round(basal, 2),
+                    Bolus = ScaledRounding.Round(bolus, 2),
+                    ManualBolus = ScaledRounding.Round(manual, 2),
+                    AutomaticBolus = ScaledRounding.Round(automatic, 2),
+                    Total = ScaledRounding.Round(total, 2),
+                    BasalPercent = ScaledRounding.Round(basalPercent, 1),
+                    BolusPercent = ScaledRounding.Round(bolusPercent, 1),
+                    Carbs = ScaledRounding.Round(carbs, 1),
                 }
             );
 
@@ -2764,11 +2764,11 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
         var grandTotal = totalBasal + totalBolus;
         result.AverageBasalPercent =
-            grandTotal > 0 ? Math.Round((totalBasal / grandTotal) * 100 * 10) / 10 : 0;
+            grandTotal > 0 ? ScaledRounding.Round((totalBasal / grandTotal) * 100, 1) : 0;
         result.AverageBolusPercent =
-            grandTotal > 0 ? Math.Round((totalBolus / grandTotal) * 100 * 10) / 10 : 0;
+            grandTotal > 0 ? ScaledRounding.Round((totalBolus / grandTotal) * 100, 1) : 0;
         result.AverageTdd =
-            result.DaysWithData > 0 ? Math.Round((grandTotal / result.DaysWithData) * 10) / 10 : 0;
+            result.DaysWithData > 0 ? ScaledRounding.Round(grandTotal / result.DaysWithData, 1) : 0;
 
         return result;
     }
@@ -2844,17 +2844,17 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var basalStats = new BasalStats
         {
             Count = tempBasalList.Count + injectionPieces.Count,
-            AvgRate = totalDurationMs > 0 ? Math.Round(rateTimeMs / totalDurationMs * 100) / 100 : 0,
-            MinRate = allRates.Count > 0 ? Math.Round(allRates.Min() * 100) / 100 : 0,
-            MaxRate = allRates.Count > 0 ? Math.Round(allRates.Max() * 100) / 100 : 0,
-            TotalDelivered = Math.Round(totalDelivered * 100) / 100,
-            TotalDeliveredPerDay = Math.Round(totalDelivered / dayCount * 100) / 100,
+            AvgRate = totalDurationMs > 0 ? ScaledRounding.Round(rateTimeMs / totalDurationMs, 2) : 0,
+            MinRate = allRates.Count > 0 ? ScaledRounding.Round(allRates.Min(), 2) : 0,
+            MaxRate = allRates.Count > 0 ? ScaledRounding.Round(allRates.Max(), 2) : 0,
+            TotalDelivered = ScaledRounding.Round(totalDelivered, 2),
+            TotalDeliveredPerDay = ScaledRounding.Round(totalDelivered / dayCount, 2),
         };
 
         var tempBasalInfo = new TempBasalInfo
         {
             Total = tempBasalCount,
-            PerDay = dayCount > 0 ? Math.Round((tempBasalCount / (double)dayCount) * 10) / 10 : 0,
+            PerDay = dayCount > 0 ? ScaledRounding.Round(tempBasalCount / (double)dayCount, 1) : 0,
             HighTemps = highTempCount,
             LowTemps = lowTempCount,
             ZeroTemps = zeroTempCount,
@@ -2874,11 +2874,11 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             hourlyPercentiles.Add(new HourlyBasalPercentileData
             {
                 Hour = hour,
-                P10 = Math.Round(WeightedPercentile(samples, 10) * 100) / 100,
-                P25 = Math.Round(WeightedPercentile(samples, 25) * 100) / 100,
-                Median = Math.Round(WeightedPercentile(samples, 50) * 100) / 100,
-                P75 = Math.Round(WeightedPercentile(samples, 75) * 100) / 100,
-                P90 = Math.Round(WeightedPercentile(samples, 90) * 100) / 100,
+                P10 = ScaledRounding.Round(WeightedPercentile(samples, 10), 2),
+                P25 = ScaledRounding.Round(WeightedPercentile(samples, 25), 2),
+                Median = ScaledRounding.Round(WeightedPercentile(samples, 50), 2),
+                P75 = ScaledRounding.Round(WeightedPercentile(samples, 75), 2),
+                P90 = ScaledRounding.Round(WeightedPercentile(samples, 90), 2),
                 Count = samples.Count,
             });
         }
@@ -3019,23 +3019,23 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             exactBasal[hour] = (scheduledBasal[hour] + tempBasal[hour]) / basalDayCount;
             exactTotal[hour] = exactBasal[hour]
                 + (manualBolus[hour] + automaticBolus[hour]) / bolusDayCount;
-            var avgScheduled = Math.Round(scheduledBasal[hour] / basalDayCount * 100) / 100;
-            var avgTemp = Math.Round(tempBasal[hour] / basalDayCount * 100) / 100;
-            var avgManual = Math.Round(manualBolus[hour] / bolusDayCount * 100) / 100;
-            var avgAutomatic = Math.Round(automaticBolus[hour] / bolusDayCount * 100) / 100;
+            var avgScheduled = ScaledRounding.Round(scheduledBasal[hour] / basalDayCount, 2);
+            var avgTemp = ScaledRounding.Round(tempBasal[hour] / basalDayCount, 2);
+            var avgManual = ScaledRounding.Round(manualBolus[hour] / bolusDayCount, 2);
+            var avgAutomatic = ScaledRounding.Round(automaticBolus[hour] / bolusDayCount, 2);
             hours.Add(new HourlyInsulinDeliveryPoint
             {
                 Hour = hour,
                 ScheduledBasal = avgScheduled,
                 TempBasal = avgTemp,
-                Basal = Math.Round((avgScheduled + avgTemp) * 100) / 100,
+                Basal = ScaledRounding.Round(avgScheduled + avgTemp, 2),
                 ManualBolus = avgManual,
-                ManualBolusesPerDay = Math.Round((double)manualBolusCounts[hour] / bolusDayCount * 100) / 100,
+                ManualBolusesPerDay = ScaledRounding.Round((double)manualBolusCounts[hour] / bolusDayCount, 2),
                 AutomaticBolus = avgAutomatic,
-                Total = Math.Round((avgScheduled + avgTemp + avgManual + avgAutomatic) * 100) / 100,
+                Total = ScaledRounding.Round(avgScheduled + avgTemp + avgManual + avgAutomatic, 2),
                 Count = counts[hour],
                 ProfileBasalRate = profileHours[hour] > 0
-                    ? Math.Round(profileUnits[hour] / profileHours[hour] * 100) / 100
+                    ? ScaledRounding.Round(profileUnits[hour] / profileHours[hour], 2)
                     : 0,
             });
         }
@@ -3067,8 +3067,8 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
         static InsulinDeliveryPeriodTotal Period(double units, double daily) => new()
         {
-            Units = Math.Round(units * 100) / 100,
-            Percent = daily > 0 ? Math.Round(units / daily * 1000) / 10 : 0,
+            Units = ScaledRounding.Round(units, 2),
+            Percent = daily > 0 ? ScaledRounding.Round(units / daily * 1000, 0) / 10 : 0,
         };
 
         return new InsulinDeliveryPeriodBreakdown
@@ -3076,7 +3076,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             Morning = Period(morning, daily),
             Afternoon = Period(afternoon, daily),
             EveningNight = Period(eveningNight, daily),
-            DailyTotal = Math.Round(daily * 100) / 100,
+            DailyTotal = ScaledRounding.Round(daily, 2),
         };
     }
 
