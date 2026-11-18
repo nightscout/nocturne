@@ -43,6 +43,8 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single
     /// registered <see cref="PatientDevice"/>.</param>
+    /// <param name="eventTypes">Optional filter restricting results to events of any of these types.
+    /// <c>null</c> or empty matches every type.</param>
     Task<IEnumerable<DeviceEvent>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -52,14 +54,33 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
         int offset = 0,
         bool descending = true,
         Guid? patientDeviceId = null,
+        IReadOnlyCollection<DeviceEventType>? eventTypes = null,
         CancellationToken ct = default
     );
 
-    // Explicit base-interface bridge — delegates to the extended overload
+    /// <summary>
+    /// Count the events the extended <see cref="GetAsync(DateTime?, DateTime?, string?, string?, int, int, bool, Guid?, IReadOnlyCollection{DeviceEventType}?, CancellationToken)"/>
+    /// pages through for the same filters.
+    /// </summary>
+    Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        IReadOnlyCollection<DeviceEventType>? eventTypes,
+        CancellationToken ct = default
+    );
+
+    // Explicit base-interface bridges, delegating to the extended overloads
     Task<IEnumerable<DeviceEvent>> IV4Repository<DeviceEvent>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, patientDeviceId: null, ct: ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, patientDeviceId: null, eventTypes: null, ct: ct);
+
+    Task<int> IV4Repository<DeviceEvent>.CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct)
+        => CountAsync(from, to, device, source, patientDeviceId: null, eventTypes: null, ct: ct);
 
     /// <summary>Delete <see cref="DeviceEvent"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>

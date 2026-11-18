@@ -257,6 +257,18 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, Guid? patientDeviceId,
+        GlucoseStreams streams = GlucoseStreams.All, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await Matching(
+            ctx.SensorGlucose.AsNoTracking(), from, to, device, source,
+            query => WithAttribution(query, patientDeviceId, streams))
+            .CountAsync(ct);
+    }
+
     public async Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
@@ -289,23 +301,26 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         return PagedRead(
             ctx.SensorGlucose.AsNoTracking(), from, to, device, source, limit, offset, descending,
-            query =>
-            {
-                if (patientDeviceId.HasValue)
-                    query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
-                if (streams != GlucoseStreams.All)
-                    query = query.Where(e => !e.IsSecondaryStream);
-                if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
-                    query = query.Where(e => e.DataSource == null
-                        || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
-                return query;
-            },
+            query => WithAttribution(query, patientDeviceId, streams),
             afterTimestamp, afterId,
             query => orderByValue
                 ? descending
                     ? query.OrderByDescending(e => e.Mgdl).ThenByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
                     : query.OrderBy(e => e.Mgdl).ThenBy(e => e.Timestamp).ThenBy(e => e.Id)
                 : query.InObservationOrder(descending));
+    }
+
+    private static IQueryable<SensorGlucoseEntity> WithAttribution(
+        IQueryable<SensorGlucoseEntity> query, Guid? patientDeviceId, GlucoseStreams streams)
+    {
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+        if (streams != GlucoseStreams.All)
+            query = query.Where(e => !e.IsSecondaryStream);
+        if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
+            query = query.Where(e => e.DataSource == null
+                || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
+        return query;
     }
 
     /// <inheritdoc />

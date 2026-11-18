@@ -105,6 +105,23 @@ public class SensorGlucoseRepositoryAttributionTests : IDisposable
     }
 
     [Fact]
+    public async Task CountAsync_WithPatientDeviceIdDeviceAndSource_CountsWhatGetAsyncReturns()
+    {
+        var deviceId = SeedDevice();
+        var now = DateTime.UtcNow;
+        SeedReading(now, dataSource: "dexcom", device: "g7", patientDeviceId: deviceId);
+        SeedReading(now.AddMinutes(-5), dataSource: "dexcom", device: "g7", patientDeviceId: deviceId);
+        SeedReading(now.AddMinutes(-10), dataSource: "dexcom", device: "g7");
+        SeedReading(now.AddMinutes(-15), dataSource: "libre", device: "l3", patientDeviceId: deviceId);
+
+        var count = await _repo.CountAsync(null, null, "g7", "dexcom", deviceId);
+        var page = await _repo.GetAsync(null, null, "g7", "dexcom", patientDeviceId: deviceId);
+
+        count.Should().Be(2).And.Be(page.Count());
+        (await _repo.CountAsync(null, null, null, null, deviceId)).Should().Be(3);
+    }
+
+    [Fact]
     public async Task GetAsync_WithoutPatientDeviceId_ReturnsAllReadings()
     {
         var deviceId = SeedDevice();

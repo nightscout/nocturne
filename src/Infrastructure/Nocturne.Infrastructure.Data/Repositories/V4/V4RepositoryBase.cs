@@ -28,10 +28,9 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 /// <remarks>
 /// Behaviour is intentionally identical to the pre-refactor per-type repositories (the golden suite
-/// holds it constant). Per-type strategy points that some types diverge on — SyncId-upsert,
-/// non-primary-excluding counts — are exposed as
-/// <see langword="virtual"/> members (<see cref="BulkCreateAsync"/>, <see cref="CountAsync"/>) for
-/// the dedup participants to override; the base implements the LegacyId-only path.
+/// holds it constant). The per-type strategy point that some types diverge on, SyncId-upsert, is a
+/// <see langword="virtual"/> member (<see cref="BulkCreateAsync"/>) for the dedup participants to
+/// override; the base implements the LegacyId-only path.
 /// </remarks>
 /// <typeparam name="TModel">The V4 domain record type.</typeparam>
 /// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
@@ -321,10 +320,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         DateTime? afterTimestamp = null, Guid? afterId = null,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? order = null)
     {
-        var query = InWindow(rows, from, to, device);
-        if (source != null) query = query.Where(e => e.DataSource == source);
-        if (extra != null) query = extra(query);
-        query = query.ExcludeDuplicatesWhereFlagged();
+        var query = Matching(rows, from, to, device, source, extra);
 
         var seeking = afterTimestamp.HasValue && afterId.HasValue;
         if (seeking)
@@ -338,6 +334,22 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
         query = order != null ? order(query) : query.InObservationOrder(descending);
         return (seeking ? query : query.Skip(offset)).Take(limit);
+    }
+
+    /// <summary>
+    /// The rows a list read matches: the time window, device and source, <paramref name="extra"/> and
+    /// the duplicate filter. <see cref="PagedRead"/> pages it and the counts count it, so a total
+    /// cannot disagree with its page.
+    /// </summary>
+    protected static IQueryable<TEntity> Matching(
+        IQueryable<TEntity> rows,
+        DateTime? from, DateTime? to, string? device, string? source,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? extra = null)
+    {
+        var query = InWindow(rows, from, to, device);
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        if (extra != null) query = extra(query);
+        return query.ExcludeDuplicatesWhereFlagged();
     }
 
     /// <summary>Returns the records sharing <paramref name="correlationId"/>.</summary>
@@ -1173,13 +1185,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 .Select(ToDomain).ToList();
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountAsync" />
-    public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    /// <remarks>Counts through <see cref="Matching"/>, the filter <see cref="PagedRead"/> pages through.</remarks>
+    public async Task<int> CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.Set<TEntity>().AsNoTracking().ExcludeDuplicatesWhereFlagged();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
+        return await Matching(ctx.Set<TEntity>().AsNoTracking(), from, to, device, source).CountAsync(ct);
     }
 
     /// <summary>

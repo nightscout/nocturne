@@ -212,7 +212,24 @@ public class NutritionControllerTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<CarbIntake>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetCarbIntakes_IncludeTotal_CountsWithTheDeviceAndSourceTheDataQueryUses()
+    {
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), "pump-a", "tandem",
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new CarbIntake()]);
+        _repoMock.Setup(r => r.CountAsync(null, null, "pump-a", "tandem", It.IsAny<CancellationToken>())).ReturnsAsync(4);
+
+        var result = await CreateController().GetCarbIntakes(null, null, 1, 0, "timestamp_desc", "pump-a", "tandem", includeTotal: true);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<CarbIntake>>().Subject;
+        response.Pagination.Total.Should().Be(4);
     }
 
     [Fact]
