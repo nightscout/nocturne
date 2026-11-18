@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// <remarks>
 /// These belong here rather than with the unit tests because the behaviour under test *is* the
 /// SQL predicate. Every unit test of the enricher and the replay walker mocks
-/// <c>IAlertRepository</c>, so nothing there can catch the live read regressing to "every
+/// <c>IDndWindowRepository</c>, so nothing there can catch the live read regressing to "every
 /// uncleared row" — which is unbounded, since a window that merely expires is never cleared and
 /// the read runs once per glucose reading.
 /// </remarks>
@@ -29,7 +29,7 @@ public class DndWindowRepositoryTests
     public DndWindowRepositoryTests(RlsCompletenessFixture fx) => _fx = fx;
 
     [Fact]
-    public async Task GetUnexpiredDndWindows_excludesExpiredAndClearedWindows()
+    public async Task GetUnexpiredSnapshots_excludesExpiredAndClearedWindows()
     {
         var tenant = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -47,7 +47,7 @@ public class DndWindowRepositoryTests
         await InsertWindowAsync(tenant, DndScope.Highs, now.AddDays(-30), endsAt: now.AddDays(-30).AddHours(8));
         await InsertWindowAsync(tenant, DndScope.Lows, now.AddMinutes(-20), endsAt: null, clearedAt: now.AddMinutes(-1));
 
-        var windows = await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None);
+        var windows = await repository.GetUnexpiredSnapshotsAsync(now, CancellationToken.None);
 
         windows.Should().HaveCount(2, "expired and cleared windows must not reach the evaluation path");
         windows.Select(w => w.Scope).Should().BeEquivalentTo(new[] { DndScope.All, DndScope.Lows });
@@ -58,7 +58,7 @@ public class DndWindowRepositoryTests
     /// from deleting anything — this is what keeps the per-reading read bounded.
     /// </summary>
     [Fact]
-    public async Task GetUnexpiredDndWindows_leavesTheExpiredRowsInPlace()
+    public async Task GetUnexpiredSnapshots_leavesTheExpiredRowsInPlace()
     {
         var tenant = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -74,7 +74,7 @@ public class DndWindowRepositoryTests
                 tenant, DndScope.All, now.AddDays(-day), endsAt: now.AddDays(-day).AddHours(1));
         }
 
-        (await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None))
+        (await repository.GetUnexpiredSnapshotsAsync(now, CancellationToken.None))
             .Should().BeEmpty();
 
         await using var context = await provider
@@ -88,7 +88,7 @@ public class DndWindowRepositoryTests
     /// <see cref="DndWindowSnapshot.IsActiveAt"/>'s half-open <c>atUtc &lt; ends</c>.
     /// </summary>
     [Fact]
-    public async Task GetUnexpiredDndWindows_treatsEndsAtAsExclusive()
+    public async Task GetUnexpiredSnapshots_treatsEndsAtAsExclusive()
     {
         var tenant = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -101,9 +101,9 @@ public class DndWindowRepositoryTests
         var endsAt = now.AddMinutes(15);
         await InsertWindowAsync(tenant, DndScope.All, now.AddMinutes(-5), endsAt);
 
-        (await repository.GetUnexpiredDndWindowsAsync(endsAt.AddSeconds(-1), CancellationToken.None))
+        (await repository.GetUnexpiredSnapshotsAsync(endsAt.AddSeconds(-1), CancellationToken.None))
             .Should().HaveCount(1);
-        (await repository.GetUnexpiredDndWindowsAsync(endsAt, CancellationToken.None))
+        (await repository.GetUnexpiredSnapshotsAsync(endsAt, CancellationToken.None))
             .Should().BeEmpty("ends_at is exclusive, so the window is over at exactly that instant");
     }
 
@@ -112,7 +112,7 @@ public class DndWindowRepositoryTests
     /// receipt-bounded read must not inherit the live read's expiry filter.
     /// </summary>
     [Fact]
-    public async Task GetDndWindowsAsOf_stillReturnsClearedAndExpiredWindows()
+    public async Task GetReceivedBy_stillReturnsClearedAndExpiredWindows()
     {
         var tenant = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -125,7 +125,10 @@ public class DndWindowRepositoryTests
         await InsertWindowAsync(tenant, DndScope.All, now.AddHours(-4), endsAt: now.AddHours(-3));
         await InsertWindowAsync(tenant, DndScope.Lows, now.AddHours(-2), endsAt: null, clearedAt: now.AddHours(-1));
 
-        var windows = await repository.GetDndWindowsAsOfAsync(now, CancellationToken.None);
+        (await repository.GetReceivedByAsync(now.AddHours(-5), CancellationToken.None))
+            .Should().BeEmpty("a window received after the as-of instant must not reach replay");
+
+        var windows = await repository.GetReceivedByAsync(now, CancellationToken.None);
 
         windows.Should().HaveCount(2);
         windows.Should().Contain(w => w.ClearedAt != null);
@@ -133,7 +136,7 @@ public class DndWindowRepositoryTests
     }
 
     [Fact]
-    public async Task GetUnexpiredDndWindows_isScopedToTheTenant()
+    public async Task GetUnexpiredSnapshots_isScopedToTheTenant()
     {
         var mine = Guid.NewGuid();
         var theirs = Guid.NewGuid();
@@ -148,12 +151,12 @@ public class DndWindowRepositoryTests
         await InsertWindowAsync(mine, DndScope.Lows, now.AddMinutes(-5), endsAt: null);
         await InsertWindowAsync(theirs, DndScope.All, now.AddMinutes(-5), endsAt: null);
 
-        var windows = await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None);
+        var windows = await repository.GetUnexpiredSnapshotsAsync(now, CancellationToken.None);
 
         windows.Should().ContainSingle().Which.Scope.Should().Be(DndScope.Lows);
 
         await using var theirScope = provider.CreateAsyncScope();
-        (await NewRepository(theirScope.ServiceProvider, theirs).GetUnexpiredDndWindowsAsync(now, CancellationToken.None))
+        (await NewRepository(theirScope.ServiceProvider, theirs).GetUnexpiredSnapshotsAsync(now, CancellationToken.None))
             .Should().ContainSingle().Which.Scope.Should().Be(DndScope.All);
     }
 
@@ -163,7 +166,7 @@ public class DndWindowRepositoryTests
     /// column would resolve against the wrong offset.
     /// </summary>
     [Fact]
-    public async Task GetUnexpiredDndWindows_normalisesEveryInstantToUtc()
+    public async Task GetUnexpiredSnapshots_normalisesEveryInstantToUtc()
     {
         var tenant = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -175,7 +178,7 @@ public class DndWindowRepositoryTests
 
         await InsertWindowAsync(tenant, DndScope.All, now.AddMinutes(-5), endsAt: now.AddHours(2));
 
-        var window = (await repository.GetUnexpiredDndWindowsAsync(now, CancellationToken.None)).Single();
+        var window = (await repository.GetUnexpiredSnapshotsAsync(now, CancellationToken.None)).Single();
 
         window.StartedAt.Kind.Should().Be(DateTimeKind.Utc);
         window.EndsAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
@@ -187,10 +190,10 @@ public class DndWindowRepositoryTests
     private ServiceProvider BuildProvider() => TenantReaderData.BuildProvider(_fx.AppConnectionString);
 
     /// <summary>A repository on <paramref name="scope"/>, resolved to <paramref name="tenant"/>.</summary>
-    private static AlertRepository NewRepository(IServiceProvider scope, Guid tenant)
+    private static DndWindowRepository NewRepository(IServiceProvider scope, Guid tenant)
     {
         TenantReaderData.Resolve(scope, tenant);
-        return new AlertRepository(scope.GetRequiredService<INocturneDbContextFactory>());
+        return new DndWindowRepository(scope.GetRequiredService<INocturneDbContextFactory>());
     }
 
     private async Task SeedTenantAsync(Guid tenantId)

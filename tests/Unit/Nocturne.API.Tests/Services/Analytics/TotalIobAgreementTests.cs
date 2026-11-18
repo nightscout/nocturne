@@ -334,6 +334,8 @@ public class TotalIobAgreementTests
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanService>(),
             Mock.Of<IAlertRepository>(),
+            Mock.Of<ITenantAlertSettingsRepository>(),
+            Mock.Of<IDndWindowRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IProfileActivationResolver>(),
