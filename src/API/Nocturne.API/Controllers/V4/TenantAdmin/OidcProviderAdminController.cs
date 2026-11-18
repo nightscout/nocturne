@@ -11,7 +11,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing OIDC identity providers configured on the instance.
+/// OIDC sign-in providers for the instance. Create, read, update, delete, enable, disable and test providers.
 /// </summary>
 /// <remarks>
 /// Allows platform administrators to register, update, and remove OIDC providers (Google,
@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// a provider before any passkeys exist.
 /// </remarks>
 [ApiController]
+[System.ComponentModel.DisplayName("OIDC Providers")]
 [Tags("TenantAdmin")]
 [Route("api/v4/admin/oidc-providers")]
 [Produces("application/json")]

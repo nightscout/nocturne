@@ -495,6 +495,9 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Name = uploaderSnapshot.Name,
             Type = uploaderSnapshot.Type,
             IsCharging = uploaderSnapshot.IsCharging,
+            ExtensionData = uploaderSnapshot.AdditionalProperties?.ToDictionary(
+                kvp => kvp.Key,
+                kvp => JsonSerializer.SerializeToElement(kvp.Value)),
         };
 
         ds.IsCharging = uploaderSnapshot.IsCharging;

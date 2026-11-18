@@ -14,7 +14,7 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Figures for the Treatment Log report.
+/// Figures for the Treatment Log report: record counts and a treatment summary.
 /// </summary>
 /// <remarks>
 /// Every response is an aggregate (record counts and a treatment summary), so the controller sits

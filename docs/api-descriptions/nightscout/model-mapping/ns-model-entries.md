@@ -9,7 +9,7 @@ A Nightscout entry is a single polymorphic document discriminated by `type` (`sg
 | Legacy entry `type` | Nocturne v4 model |
 | --- | --- |
 | `sgv` (sensor glucose) | **SensorGlucose** |
-| `mbg` (meter blood glucose) | **MeterGlucose** / **BGCheck** |
+| `mbg` (meter blood glucose) | **MeterGlucose** |
 | `cal` (calibration) | **Calibration** |
 
 Splitting by source preserves each reading's true units, fidelity, provenance, and device linkage rather than flattening everything into one numeric blob.

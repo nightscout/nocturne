@@ -18,12 +18,16 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Internal API for connector configuration management.
-/// This endpoint is intended for internal use by connectors via mTLS authentication.
-/// In the initial implementation, it uses standard API authentication.
+/// Connector configuration. Read a connector's settings, schema and effective values, update them,
+/// store its secrets, verify it, and turn it on or off. Deleting a connector's configuration
+/// removes its settings and secrets.
 /// </summary>
+/// <remarks>
+/// Uses standard API authentication; every action except the schema needs <c>tenant.settings</c>.
+/// </remarks>
 /// <seealso cref="IConnectorConfigurationService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Connector Configuration")]
 [Tags("Connectors")]
 [Route("api/v4/connectors/config")]
 [Authorize]

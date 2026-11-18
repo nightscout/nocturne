@@ -13,9 +13,13 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages the tenant's single rotatable public share link ({token}.share.{baseDomain}).
-/// All operations require the <c>sharing.manage</c> permission.
+/// The tenant's public share link. A caller can read the link state, reveal the link, rotate the
+/// link, turn sharing off, choose full history or the last 24 hours, and set the scopes the link
+/// shares. All operations require the <c>sharing.manage</c> permission.
 /// </summary>
+/// <remarks>
+/// The link is served at {token}.share.{baseDomain}.
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/share")]
