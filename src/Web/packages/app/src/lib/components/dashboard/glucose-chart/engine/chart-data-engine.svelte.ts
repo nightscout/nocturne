@@ -273,7 +273,7 @@ export function createChartDataEngine(
     if (!trigger) return;
 
     let cancelled = false;
-    getPredictions({})
+    fresh(getPredictions({}))
       .then((data) => {
         if (!cancelled) {
           predictionData = data;
