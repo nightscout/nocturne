@@ -73,7 +73,8 @@ internal static class V4RecordTables
         TimeSeries<BasalInjectionEntity>(SourceDataTypes.BasalInjections, typeof(BasalInjection), V4RecordKind.Treatment, db => db.BasalInjections),
         new V4RecordTable<StateSpanEntity>(
                 SourceDataTypes.StateSpans, typeof(StateSpan), V4RecordKind.StateSpan, db => db.StateSpans,
-                source => s => s.Source == source, s => s.Source, s => s.StartTimestamp, newestStamp: null,
+                source => s => s.Source == source, source => [s => s.Source == source], s => s.Source,
+                s => s.StartTimestamp, newestStamp: null,
                 StateSpanBuckets, StateSpanWriterBuckets)
             .WithDeduplication(table => new DeduplicatedTable<StateSpanEntity>(
                 RecordType.StateSpan, table, s => s.CreatedAt, MatchCriteriaMapper.From,
@@ -84,8 +85,8 @@ internal static class V4RecordTables
         TimeSeries<StepCountEntity>(SourceDataTypes.Steps, typeof(StepCount), V4RecordKind.Activity, db => db.StepCounts),
         new V4RecordTable<BodyWeightEntity>(
             SourceDataTypes.BodyWeight, typeof(BodyWeight), V4RecordKind.Activity, db => db.BodyWeights,
-            SourceFilter.For<BodyWeightEntity>, e => e.DataSource, eventTime: null, NewestStamp, BodyWeightBuckets,
-            BodyWeightWriterBuckets),
+            SourceFilter.For<BodyWeightEntity>, SourceFilter.Parts<BodyWeightEntity>, e => e.DataSource,
+            eventTime: null, NewestStamp, BodyWeightBuckets, BodyWeightWriterBuckets),
         Profile<TherapySettingsEntity>(typeof(TherapySettings), db => db.TherapySettings),
         Profile<BasalScheduleEntity>(typeof(BasalSchedule), db => db.BasalSchedules),
         Profile<CarbRatioScheduleEntity>(typeof(CarbRatioSchedule), db => db.CarbRatioSchedules),
@@ -252,13 +253,13 @@ internal static class V4RecordTables
         string dataType, Type model, V4RecordKind kind, Expression<Func<NocturneDbContext, DbSet<T>>> set,
         bool discovered = true, bool? byWriter = null)
         where T : class, ITenantScoped, ISoftDeletable, IIdentified, ISourcedEntity, IObservationTimestamped, ISystemTimestamped, IWriterStamped =>
-        new(dataType, model, kind, set, SourceFilter.For<T>, e => e.DataSource, e => e.Timestamp, NewestStamp,
-            discovered ? TimeSeriesBuckets : null, byWriter ?? discovered ? TimeSeriesWriterBuckets : null);
+        new(dataType, model, kind, set, SourceFilter.For<T>, SourceFilter.Parts<T>, e => e.DataSource, e => e.Timestamp,
+            NewestStamp, discovered ? TimeSeriesBuckets : null, byWriter ?? discovered ? TimeSeriesWriterBuckets : null);
 
     private static V4RecordTable<T> Profile<T>(Type model, Expression<Func<NocturneDbContext, DbSet<T>>> set)
         where T : class, IProfileScopedEntity, ISystemTimestamped =>
-        new(SourceDataTypes.Profiles, model, V4RecordKind.Profile, set, SourceFilter.For<T>, e => e.DataSource,
-            e => e.Timestamp, NewestStamp, buckets: null, writerBuckets: null);
+        new(SourceDataTypes.Profiles, model, V4RecordKind.Profile, set, SourceFilter.For<T>, SourceFilter.Parts<T>,
+            e => e.DataSource, e => e.Timestamp, NewestStamp, buckets: null, writerBuckets: null);
 
     private static V4RecordTable<T> LinkedAs<T>(
         this V4RecordTable<T> table, RecordType recordType, Func<T, MatchCriteria> criteria)
@@ -488,15 +489,18 @@ internal abstract class V4RecordTable(Type entity, string name, string dataType,
 
 /// <inheritdoc cref="V4RecordTable"/>
 /// <remarks>
-/// <c>ownedBy</c> selects the rows a source owns and <c>source</c> is the column a row's source is
-/// read from. <c>eventTime</c> is when a row's event happened, null for a table read by its Unix
-/// milliseconds alone, and <c>newestStamp</c> reads the newest <c>SysUpdatedAt</c>, null for a table
-/// whose rows carry none.
+/// <c>ownedBy</c> selects the rows a source owns and <c>ownedParts</c> the same rows as disjoint parts,
+/// which a read unions (<see cref="SourceFilter.Parts{TEntity}"/>); the first is the part an index
+/// leading on the source column serves. <c>source</c> is the column a row's source is read from.
+/// <c>eventTime</c> is when a row's event happened, null for a table read by its Unix milliseconds
+/// alone, and <c>newestStamp</c> reads the newest <c>SysUpdatedAt</c>, null for a table whose rows
+/// carry none.
 /// </remarks>
 internal sealed class V4RecordTable<T> : V4RecordTable
     where T : class, ITenantScoped, ISoftDeletable, IIdentified
 {
     private readonly Func<string, Expression<Func<T, bool>>> _ownedBy;
+    private readonly Func<string, IReadOnlyList<Expression<Func<T, bool>>>> _ownedParts;
     private readonly Func<string, IQueryable<T>, DateTime, DateTime, CancellationToken, Task<List<SourceBucket>>>? _buckets;
     private readonly Func<string, IQueryable<T>, DateTime, DateTime, CancellationToken, Task<List<WriterBucket>>>? _writerBuckets;
 
@@ -506,6 +510,7 @@ internal sealed class V4RecordTable<T> : V4RecordTable
         V4RecordKind kind,
         Expression<Func<NocturneDbContext, DbSet<T>>> set,
         Func<string, Expression<Func<T, bool>>> ownedBy,
+        Func<string, IReadOnlyList<Expression<Func<T, bool>>>> ownedParts,
         Expression<Func<T, string?>> source,
         Expression<Func<T, DateTime>>? eventTime,
         Func<IQueryable<T>, CancellationToken, Task<DateTime?>>? newestStamp,
@@ -516,6 +521,7 @@ internal sealed class V4RecordTable<T> : V4RecordTable
         Set = set.Compile();
         Source = source;
         _ownedBy = ownedBy;
+        _ownedParts = ownedParts;
         _buckets = buckets;
         _writerBuckets = writerBuckets;
         TimedTable = eventTime is null ? null : new TimedRecordTable<T>(this, eventTime);
@@ -543,9 +549,15 @@ internal sealed class V4RecordTable<T> : V4RecordTable
         return this;
     }
 
-    public Expression<Func<T, bool>> OwnedBy(string by) => _ownedBy(by);
-
     public IQueryable<T> Owned(NocturneDbContext db, string by) => Set(db).Where(_ownedBy(by));
+
+    /// <summary>The rows of <see cref="Owned"/> as disjoint parts, each read off its own index.</summary>
+    public IReadOnlyList<IQueryable<T>> OwnedParts(NocturneDbContext db, string by) =>
+        [.. _ownedParts(by).Select(part => Set(db).Where(part))];
+
+    /// <summary>The rows of <see cref="Owned"/>, for a read: <see cref="OwnedParts"/> unioned.</summary>
+    public IQueryable<T> ReadOwned(NocturneDbContext db, string by) =>
+        OwnedParts(db, by).Aggregate(Queryable.Concat);
 
     public override Task<List<SourceBucket>> BucketsAsync(
         NocturneDbContext db, DateTime windowStart, DateTime last24HoursDate, CancellationToken ct) =>
@@ -620,7 +632,7 @@ internal sealed class TimedRecordTable<T>(V4RecordTable<T> table, Expression<Fun
         var name = _eventTimeName;
         if (extent)
         {
-            var span = await table.Owned(db, by)
+            var span = await table.ReadOwned(db, by)
                 .GroupBy(_ => 1)
                 .Select(g => new
                 {
@@ -633,20 +645,28 @@ internal sealed class TimedRecordTable<T>(V4RecordTable<T> table, Expression<Fun
             return new SourceTypeStats(table.DataType, span?.Total ?? 0, span?.Last24H ?? 0, span?.Latest, span?.Oldest);
         }
 
-        var total = await table.Owned(db, by).LongCountAsync(ct);
+        var total = await table.ReadOwned(db, by).LongCountAsync(ct);
         var recent = total > 0
-            ? await table.Owned(db, by).Where(e => EF.Property<DateTime>(e, name) >= last24Hours).CountAsync(ct)
+            ? await table.ReadOwned(db, by).Where(e => EF.Property<DateTime>(e, name) >= last24Hours).CountAsync(ct)
             : 0;
         return new SourceTypeStats(table.DataType, total, recent);
     }
 
+    /// <remarks>
+    /// Only the first part is read in time order, off the index its source column leads. A part read in
+    /// time order with no index in that order is a walk of the tenant's rows by time until one matches,
+    /// which for a source that holds none of them is every row. The group keeps PostgreSQL from turning
+    /// the <c>max</c> or <c>min</c> over the union into that walk for every part.
+    /// </remarks>
     public override Task<DateTime?> EdgeAsync(NocturneDbContext db, string by, bool latest, CancellationToken ct)
     {
         var name = _eventTimeName;
-        var owned = table.Set(db).AsNoTracking().Where(table.OwnedBy(by));
-        return (latest ? owned.OrderByDescending(eventTime) : owned.OrderBy(eventTime))
-            .Select(e => (DateTime?)EF.Property<DateTime>(e, name))
-            .FirstOrDefaultAsync(ct);
+        IQueryable<DateTime?> Times(IQueryable<T> rows) => rows.Select(e => (DateTime?)EF.Property<DateTime>(e, name));
+
+        var parts = table.OwnedParts(db, by);
+        var nearest = (latest ? parts[0].OrderByDescending(eventTime) : parts[0].OrderBy(eventTime)).Take(1);
+        var edges = parts.Skip(1).Select(Times).Aggregate(Times(nearest), Queryable.Concat).GroupBy(_ => 1);
+        return (latest ? edges.Select(g => g.Max()) : edges.Select(g => g.Min())).FirstOrDefaultAsync(ct);
     }
 
     public override IDataOverviewTable ToOverview(bool attributed) =>
