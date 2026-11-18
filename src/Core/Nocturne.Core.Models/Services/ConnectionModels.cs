@@ -230,6 +230,14 @@ public class Connection
     /// <summary>Newest first. Empty for a connector.</summary>
     [JsonPropertyName("credentials")]
     public List<ConnectionCredential> Credentials { get; set; } = [];
+
+    /// <summary>
+    /// Whether the viewer may delete every record the connection wrote: true only when each credential
+    /// folded into it, listed or not and revoked or not, is the viewer's. False for a connector, whose
+    /// records go by <see cref="ConnectionStream.CanDelete"/>.
+    /// </summary>
+    [JsonPropertyName("canDeleteRecords")]
+    public bool CanDeleteRecords { get; set; }
 }
 
 public class ConnectionsOverview

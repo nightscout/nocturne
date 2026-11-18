@@ -66,6 +66,20 @@ public interface IDataSourceService
     );
 
     /// <summary>
+    /// Deletes every record the credentials <paramref name="grantIds"/> inserted, whatever handle it
+    /// carries, through the same steps as <see cref="DeleteDataSourceDataAsync"/>. The caller decides
+    /// whether the reader may delete them (<see cref="IConnectionService.DeleteRecordsAsync"/>).
+    /// </summary>
+    /// <param name="allowReimport">
+    /// Leave the credentials free to send their records again, including those of earlier deletes.
+    /// </param>
+    Task<DataSourceDeleteResult> DeleteWrittenDataAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        bool allowReimport = false,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Delete all demo data (data from the demo-service source).
     /// This is safe to call as demo data can be easily regenerated.
     /// </summary>

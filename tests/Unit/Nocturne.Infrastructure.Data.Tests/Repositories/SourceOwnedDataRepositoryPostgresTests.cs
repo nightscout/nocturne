@@ -181,8 +181,8 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         var a = await SeedTenantAsync();
         var b = await SeedTenantAsync();
 
-        var result = await Repository(a).SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
-        await Repository(a).AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository(a).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
+        await Repository(a).AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         result.DeletedCounts.Should().BeEquivalentTo(new Dictionary<string, long>
         {
@@ -302,7 +302,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         var pumpOnly = await SeedStatusAsync(tenant, null, Source);
         var otherTenants = await SeedStatusAsync(other, Source, Source, Source);
 
-        var result = await Repository(tenant).SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository(tenant).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         (await ServedStatusesAsync(tenant)).Should().BeEquivalentTo([otherSources, keptByAps, keptByPump, keptByUploader, unsnapshotted]);
         (await ServedStatusesAsync(other)).Should().Equal(otherTenants);
@@ -329,7 +329,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     {
         var tenant = await InsertTenantAsync();
         var purged = await SeedStatusAsync(tenant, Source, Source, Source);
-        await Repository(tenant).SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository(tenant).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
         var extrasRepository = new DeviceStatusExtrasRepository(
             new Factory(Context, tenant), new UserAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
         var resent = new DeviceStatusExtras
@@ -341,7 +341,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         (await extrasRepository.BulkCreateAsync([resent], WriteOrigin.Live)).Should().BeEmpty(
             "the purge holds the status's extras against a re-upload until the release");
 
-        await Repository(tenant).AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository(tenant).AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
         (await extrasRepository.BulkCreateAsync([resent], WriteOrigin.Live)).Should().ContainSingle();
         await using (var db = Context(tenant))
         {
@@ -503,6 +503,110 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         "Bitmap Heap Scan" => BoundBySource(node["Plans"]![0]!),
         _ => false,
     };
+
+    /// <summary>
+    /// A bolus, a state span, a therapy setting and a status of APS and pump snapshots with its extras,
+    /// all under <see cref="Source"/> and written by <paramref name="writer"/>. Returns the status's
+    /// correlation id.
+    /// </summary>
+    private async Task<Guid> SeedWrittenAsync(Guid tenant, Guid? writer)
+    {
+        var correlationId = Guid.CreateVersion7();
+        var now = DateTime.UtcNow;
+        await using var db = Context(tenant);
+        db.Boluses.Add(new BolusEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bolus-{correlationId:N}",
+            DataSource = Source, Timestamp = now, Insulin = 1, WriterGrantId = writer,
+        });
+        db.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, Source = Source,
+            Category = "PumpMode", State = "Automatic", StartTimestamp = now, WriterGrantId = writer,
+        });
+        db.TherapySettings.Add(new TherapySettingsEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = Source, Timestamp = now,
+            ProfileName = $"Day-{correlationId:N}", WriterGrantId = writer,
+        });
+        db.DeviceStatusExtras.Add(new DeviceStatusExtrasEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, CorrelationId = correlationId, Timestamp = now,
+            ExtrasJson = """{"xdripjs":{"state":6}}""",
+        });
+        db.ApsSnapshots.Add(new ApsSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, CorrelationId = correlationId, DataSource = Source,
+            AidAlgorithm = "OpenAps", Timestamp = now, WriterGrantId = writer,
+        });
+        db.PumpSnapshots.Add(new PumpSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, CorrelationId = correlationId, DataSource = Source,
+            Timestamp = now, WriterGrantId = writer,
+        });
+        await db.SaveChangesAsync();
+        return correlationId;
+    }
+
+    [Fact]
+    public async Task AWritersPurgeDeletesOnlyTheRowsItsGrantsWroteUnderAHandleAnotherWriterShares()
+    {
+        var tenant = await InsertTenantAsync();
+        Guid writer = Guid.NewGuid(), sharer = Guid.NewGuid();
+        var written = await SeedWrittenAsync(tenant, writer);
+        var shared = await SeedWrittenAsync(tenant, sharer);
+        var unwritten = await SeedWrittenAsync(tenant, writer: null);
+
+        var result = await Repository(tenant).SoftDeleteAsync(RecordSelector.ForWriters([writer]), CancellationToken.None);
+
+        result.DeletedCounts.Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [SourceDataTypes.Boluses] = 1,
+            [SourceDataTypes.DeviceStatus] = 2,
+            [SourceDataTypes.StateSpans] = 1,
+            [SourceDataTypes.Profiles] = 1,
+        });
+        (await ServedStatusesAsync(tenant)).Should().BeEquivalentTo([shared, unwritten]);
+        await using var db = Context(tenant);
+        (await db.Boluses.IgnoreQueryFilters().Where(b => b.DeletedAt != null).Select(b => b.WriterGrantId).ToListAsync())
+            .Should().Equal(writer);
+        (await db.StateSpans.IgnoreQueryFilters().Where(s => s.DeletedAt != null).Select(s => s.WriterGrantId).ToListAsync())
+            .Should().Equal(writer);
+        (await db.TherapySettings.IgnoreQueryFilters().Where(t => t.DeletedAt != null).Select(t => t.WriterGrantId).ToListAsync())
+            .Should().Equal(writer);
+        var extras = await db.DeviceStatusExtras.IgnoreQueryFilters().ToDictionaryAsync(e => e.CorrelationId);
+        extras[written].DeletedAt.Should().NotBeNull("its writer's purge leaves the status with no live snapshot");
+        db.Entry(extras[written]).Property<bool>("DeletedByUser").CurrentValue.Should().BeTrue();
+        extras[shared].DeletedAt.Should().BeNull();
+        extras[unwritten].DeletedAt.Should().BeNull();
+        var bolus = await db.Boluses.IgnoreQueryFilters().SingleAsync(b => b.WriterGrantId == writer);
+        db.Entry(bolus).Property<bool>("DeletedByUser").CurrentValue.Should().BeTrue(
+            "a user's delete holds the record against a re-upload");
+        (await db.MutationAuditLog.Where(a => a.Action == "bulk_delete").Select(a => a.ChangesJson).ToListAsync())
+            .Should().NotBeEmpty().And.OnlyContain(json => json!.Contains($"writer_grant_id={writer}"));
+    }
+
+    [Fact]
+    public async Task AWritersReleaseLiftsOnlyTheTombstonesOfItsGrants()
+    {
+        var tenant = await InsertTenantAsync();
+        Guid writer = Guid.NewGuid(), sharer = Guid.NewGuid();
+        var written = await SeedWrittenAsync(tenant, writer);
+        var shared = await SeedWrittenAsync(tenant, sharer);
+        await Repository(tenant).SoftDeleteAsync(RecordSelector.ForWriters([writer, sharer]), CancellationToken.None);
+
+        await Repository(tenant).AllowReimportAsync(RecordSelector.ForWriters([writer]), CancellationToken.None);
+
+        await using var db = Context(tenant);
+        bool HeldAgainstReimport(object entity) => (bool)db.Entry(entity).Property("DeletedByUser").CurrentValue!;
+        var boluses = await db.Boluses.IgnoreQueryFilters().ToDictionaryAsync(b => b.WriterGrantId!.Value);
+        boluses.Values.Should().OnlyContain(b => b.DeletedAt != null, "the release leaves the rows deleted");
+        HeldAgainstReimport(boluses[writer]).Should().BeFalse();
+        HeldAgainstReimport(boluses[sharer]).Should().BeTrue("another writer's tombstone under the same handle stays");
+        var extras = await db.DeviceStatusExtras.IgnoreQueryFilters().ToDictionaryAsync(e => e.CorrelationId);
+        HeldAgainstReimport(extras[written]).Should().BeFalse();
+        HeldAgainstReimport(extras[shared]).Should().BeTrue();
+    }
 
     private sealed class UserAuditContext : IAuditContext
     {

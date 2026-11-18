@@ -95,23 +95,23 @@ internal static class V4RecordTables
     ];
 
     /// <summary>
-    /// The extras rows of the device statuses <paramref name="source"/> holds a snapshot of, deleted or
+    /// The extras rows of the device statuses <paramref name="selector"/> names a snapshot of, deleted or
     /// not, that have no live snapshot left. An extras row has no source of its own: it is a part of its
     /// status, deleted and released with the status's last snapshot, as the delete of one status deletes
     /// it by its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>.
     /// </summary>
     /// <remarks>
     /// Reading the deleted snapshots lifts the soft-delete filter for the whole query, so each live
-    /// test is written out. The source tests are correlated on the extras row, not a set of the
-    /// source's statuses: <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteAsync{T}"/> runs
-    /// this query again for each chunk of ids, and a set would be rebuilt from the source's whole
-    /// history for every chunk.
+    /// test is written out. The selector's tests are correlated on the extras row, not a set of the
+    /// selected statuses: <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteAsync{T}"/> runs
+    /// this query again for each chunk of ids, and a set would be rebuilt from the whole history of
+    /// the source or writers for every chunk.
     /// </remarks>
-    internal static IQueryable<DeviceStatusExtrasEntity> StatusExtrasLeftBy(NocturneDbContext db, string source)
+    internal static IQueryable<DeviceStatusExtrasEntity> StatusExtrasLeftBy(NocturneDbContext db, RecordSelector selector)
     {
-        var aps = ApsSnapshots.Owned(db, source).IncludingDeleted();
-        var pump = PumpSnapshots.Owned(db, source).IncludingDeleted();
-        var uploader = UploaderSnapshots.Owned(db, source).IncludingDeleted();
+        var aps = ApsSnapshots.SelectedPerRow(db, selector).IncludingDeleted();
+        var pump = PumpSnapshots.SelectedPerRow(db, selector).IncludingDeleted();
+        var uploader = UploaderSnapshots.SelectedPerRow(db, selector).IncludingDeleted();
         return db.DeviceStatusExtras.Where(e => e.TenantId == db.TenantId
             && (aps.Any(s => s.CorrelationId == e.CorrelationId)
                 || pump.Any(s => s.CorrelationId == e.CorrelationId)
@@ -257,13 +257,13 @@ internal static class V4RecordTables
             NewestStamp, discovered ? TimeSeriesBuckets : null, byWriter ?? discovered ? TimeSeriesWriterBuckets : null);
 
     private static V4RecordTable<T> Profile<T>(Type model, Expression<Func<NocturneDbContext, DbSet<T>>> set)
-        where T : class, IProfileScopedEntity, ISystemTimestamped =>
+        where T : class, IProfileScopedEntity, ISystemTimestamped, IWriterStamped =>
         new(SourceDataTypes.Profiles, model, V4RecordKind.Profile, set, SourceFilter.For<T>, SourceFilter.Parts<T>,
             e => e.DataSource, e => e.Timestamp, NewestStamp, buckets: null, writerBuckets: null);
 
     private static V4RecordTable<T> LinkedAs<T>(
         this V4RecordTable<T> table, RecordType recordType, Func<T, MatchCriteria> criteria)
-        where T : class, ITenantScoped, ISoftDeletable, IDuplicateFlagged, ISystemTimestamped =>
+        where T : class, ITenantScoped, ISoftDeletable, IDuplicateFlagged, ISystemTimestamped, IWriterStamped =>
         table.WithDeduplication(t => new DeduplicatedTable<T>(
             recordType, t, e => e.SysCreatedAt, criteria, spanEnd: null,
             DuplicateGroupPrimaries.ByUpdate, DuplicateGroupPrimaries.Touch));
@@ -477,11 +477,13 @@ internal abstract class V4RecordTable(Type entity, string name, string dataType,
 
     public abstract Task<long> CountAsync(NocturneDbContext db, string source, CancellationToken ct);
 
+    /// <summary>Soft-deletes the rows <paramref name="selector"/> names, under its <see cref="RecordSelector.Scope"/>.</summary>
     public abstract Task<int> SoftDeleteAsync(
-        NocturneDbContext db, string source, IAuditContext? audit, string scope, CancellationToken ct);
+        NocturneDbContext db, RecordSelector selector, IAuditContext? audit, CancellationToken ct);
 
+    /// <summary>Releases the user tombstones of the rows <paramref name="selector"/> names.</summary>
     public abstract Task<int> AllowReimportAsync(
-        NocturneDbContext db, string source, IAuditContext? audit, string scope, CancellationToken ct);
+        NocturneDbContext db, RecordSelector selector, IAuditContext? audit, CancellationToken ct);
 
     /// <summary>Hard-deletes the source's rows, soft-deleted ones included (<see cref="PurgeExtensions"/>).</summary>
     public abstract Task<int> PurgeAsync(NocturneDbContext db, string source, CancellationToken ct);
@@ -497,7 +499,7 @@ internal abstract class V4RecordTable(Type entity, string name, string dataType,
 /// carry none.
 /// </remarks>
 internal sealed class V4RecordTable<T> : V4RecordTable
-    where T : class, ITenantScoped, ISoftDeletable, IIdentified
+    where T : class, ITenantScoped, ISoftDeletable, IIdentified, IWriterStamped
 {
     private readonly Func<string, Expression<Func<T, bool>>> _ownedBy;
     private readonly Func<string, IReadOnlyList<Expression<Func<T, bool>>>> _ownedParts;
@@ -559,6 +561,17 @@ internal sealed class V4RecordTable<T> : V4RecordTable
     public IQueryable<T> ReadOwned(NocturneDbContext db, string by) =>
         OwnedParts(db, by).Aggregate(Queryable.Concat);
 
+    /// <summary>The rows <paramref name="selector"/> names, a source's read as <see cref="ReadOwned"/> reads them.</summary>
+    public IQueryable<T> Selected(NocturneDbContext db, RecordSelector selector) =>
+        Set(db).Selected(selector, _ownedParts);
+
+    /// <summary>
+    /// The rows <paramref name="selector"/> names, tested on each row, for a query correlated with
+    /// another row: a union of <see cref="OwnedParts"/> there would be rebuilt for every row it is tested for.
+    /// </summary>
+    public IQueryable<T> SelectedPerRow(NocturneDbContext db, RecordSelector selector) =>
+        Set(db).Where(SourceFilter.For(selector, _ownedBy));
+
     public override Task<List<SourceBucket>> BucketsAsync(
         NocturneDbContext db, DateTime windowStart, DateTime last24HoursDate, CancellationToken ct) =>
         _buckets is null
@@ -582,12 +595,12 @@ internal sealed class V4RecordTable<T> : V4RecordTable
         Owned(db, by).LongCountAsync(ct);
 
     public override Task<int> SoftDeleteAsync(
-        NocturneDbContext db, string by, IAuditContext? audit, string scope, CancellationToken ct) =>
-        db.AuditedSoftDeleteAsync(Owned(db, by), audit, scope, ct);
+        NocturneDbContext db, RecordSelector selector, IAuditContext? audit, CancellationToken ct) =>
+        db.AuditedSoftDeleteAsync(Selected(db, selector), audit, selector.Scope, ct);
 
     public override Task<int> AllowReimportAsync(
-        NocturneDbContext db, string by, IAuditContext? audit, string scope, CancellationToken ct) =>
-        db.AuditedAllowReimportAsync(Owned(db, by), audit, scope, ct);
+        NocturneDbContext db, RecordSelector selector, IAuditContext? audit, CancellationToken ct) =>
+        db.AuditedAllowReimportAsync(Selected(db, selector), audit, selector.Scope, ct);
 
     public override Task<int> PurgeAsync(NocturneDbContext db, string by, CancellationToken ct) =>
         Set(db).PurgeAsync(_ownedBy(by), ct);
@@ -618,7 +631,7 @@ internal abstract class TimedRecordTable(V4RecordTable table)
 /// <inheritdoc cref="TimedRecordTable"/>
 internal sealed class TimedRecordTable<T>(V4RecordTable<T> table, Expression<Func<T, DateTime>> eventTime)
     : TimedRecordTable(table)
-    where T : class, ITenantScoped, ISoftDeletable, IIdentified
+    where T : class, ITenantScoped, ISoftDeletable, IIdentified, IWriterStamped
 {
     private readonly string _eventTimeName = V4RecordTables.MemberName(eventTime);
 
@@ -721,7 +734,7 @@ internal sealed class DeduplicatedTable<T>(
     Func<NocturneDbContext, DbSet<T>, RecordType, int, CancellationToken, IAsyncEnumerable<DisagreeingRow[]>> pages,
     Func<IQueryable<T>, IReadOnlyList<Guid>, DateTime, CancellationToken, Task<int>>? touch)
     : DeduplicatedTable(recordType)
-    where T : class, ITenantScoped, ISoftDeletable, IDuplicateFlagged
+    where T : class, ITenantScoped, ISoftDeletable, IDuplicateFlagged, IWriterStamped
 {
     private V4RecordTable<T> Table => timed.Table;
 

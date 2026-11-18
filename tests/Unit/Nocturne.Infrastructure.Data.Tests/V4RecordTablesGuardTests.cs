@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -63,7 +64,7 @@ public class V4RecordTablesGuardTests
     public void APurgeReadsEveryDeviceStatusTableBeforeItDeletesAStatusExtrasRow()
     {
         using var context = OfflineDbContext.Create();
-        var sql = V4RecordTables.StatusExtrasLeftBy(context, "src").ToQueryString();
+        var sql = V4RecordTables.StatusExtrasLeftBy(context, RecordSelector.ForSource("src")).ToQueryString();
 
         foreach (var table in V4RecordTables.OfKind(V4RecordKind.DeviceStatus))
         {
@@ -76,10 +77,26 @@ public class V4RecordTablesGuardTests
     }
 
     [Fact]
+    public void AWritersPurgeTestsEachStatusTableOnTheRowItCorrelatesWith()
+    {
+        using var context = OfflineDbContext.Create();
+        var sql = V4RecordTables.StatusExtrasLeftBy(context, RecordSelector.ForWriters([Guid.NewGuid()])).ToQueryString();
+
+        sql.Should().NotContain("UNION").And.NotContain(" IN (",
+            "each chunk of a purge reruns this query, and a set of the writers' statuses is rebuilt from their whole history every time");
+        foreach (var table in V4RecordTables.OfKind(V4RecordKind.DeviceStatus))
+        {
+            var name = context.Model.FindEntityType(table.Entity)!.GetTableName()!;
+            Regex.IsMatch(sql, HeldBy(name, @"\1\.writer_grant_id"), RegexOptions.Singleline).Should().BeTrue(
+                $"a status with a row of the writers in {name}, deleted or not, is a status of the writers");
+        }
+    }
+
+    [Fact]
     public void APurgeFindsTheSourceStatusesOfAnExtrasRowByItsOwnCorrelationId()
     {
         using var context = OfflineDbContext.Create();
-        var sql = V4RecordTables.StatusExtrasLeftBy(context, "src").ToQueryString();
+        var sql = V4RecordTables.StatusExtrasLeftBy(context, RecordSelector.ForSource("src")).ToQueryString();
 
         sql.Should().NotContain("UNION").And.NotContain(" IN (",
             "each chunk of a purge reruns this query, and a set of the source's statuses is rebuilt from its whole history every time");
@@ -88,8 +105,10 @@ public class V4RecordTablesGuardTests
         Regex.Matches(sql, @"\) OR EXISTS \(").Should().HaveCount(tables - 1);
     }
 
-    private static string HeldBySource(string table) =>
-        $@"(?<!NOT )EXISTS \(\s*SELECT 1\s*FROM {table} AS (\w+)\s*WHERE (?:(?!EXISTS).)*?@source(?:(?!EXISTS).)*?\1\.correlation_id = d\.correlation_id\)";
+    private static string HeldBySource(string table) => HeldBy(table, "@source");
+
+    private static string HeldBy(string table, string test) =>
+        $@"(?<!NOT )EXISTS \(\s*SELECT 1\s*FROM {table} AS (\w+)\s*WHERE (?:(?!EXISTS).)*?{test}(?:(?!EXISTS).)*?\1\.correlation_id = d\.correlation_id\)";
 
     private static string LiveIn(string table) =>
         $@"NOT EXISTS \(\s*SELECT 1\s*FROM {table} AS (\w+)\s*WHERE (?:(?!EXISTS).)*?\1\.correlation_id = d\.correlation_id AND \1\.deleted_at IS NULL\)";
