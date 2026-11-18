@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
   import Check from "@lucide/svelte/icons/check";
 
   interface Props {
@@ -11,38 +12,55 @@
   }
 
   let { steps, current, reached, onJump }: Props = $props();
+
+  // With illustrations off neither arrives, and the plain fills below mark the steps.
+  const mark = stillArtwork(() => import("#lib/watercolour/artwork.js"));
+  const stroke = stillArtwork(() => import("#lib/watercolour/painted-underline.js"));
 </script>
 
-<!-- A finished step is washed over: the fill spreads across the number from its lower left edge,
-     like wet pigment, and the line to the next step fills after it. -->
+<!-- A finished step is painted: a check in place of its number, then a stroke along the line to
+     the next step. -->
 {#snippet marker(index: number)}
   {@const done = index < current}
+  {@const painted = done && mark.component !== null}
   <span
-    class="relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full border text-xs tabular-nums transition-colors duration-200 motion-reduce:transition-none
-      {done ? 'border-primary' : ''}
+    class="relative flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors duration-200 motion-reduce:transition-none
+      {painted ? 'border-transparent' : 'overflow-hidden'}
+      {done && !painted ? 'border-primary' : ''}
       {index === current ? 'border-2 border-primary text-foreground' : ''}
       {index > current ? 'border-border' : ''}"
   >
-    <span
-      class="absolute -inset-1 origin-bottom-left rounded-full bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none {done
-        ? 'scale-100'
-        : 'scale-0'}"
-      aria-hidden="true"
-    ></span>
-    <span
-      class="relative transition-opacity duration-200 motion-reduce:transition-none {done
-        ? 'opacity-0'
-        : 'opacity-100'}"
-    >
-      {index + 1}
-    </span>
-    <span
-      class="absolute inset-0 flex items-center justify-center text-primary-foreground transition-all duration-300 ease-out motion-reduce:transition-none {done
-        ? 'scale-100 opacity-100 delay-200'
-        : 'scale-50 opacity-0'}"
-    >
-      <Check class="size-3.5" aria-hidden="true" />
-    </span>
+    {#if painted && mark.component}
+      <mark.component
+        artwork="confirmation-mark"
+        palette="moss"
+        motion="auto"
+        autoplay="once"
+        position="absolute"
+        class="-inset-1"
+      />
+    {:else}
+      <span
+        class="absolute -inset-1 origin-bottom-left rounded-full bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none {done
+          ? 'scale-100'
+          : 'scale-0'}"
+        aria-hidden="true"
+      ></span>
+      <span
+        class="relative transition-opacity duration-200 motion-reduce:transition-none {done
+          ? 'opacity-0'
+          : 'opacity-100'}"
+      >
+        {index + 1}
+      </span>
+      <span
+        class="absolute inset-0 flex items-center justify-center text-primary-foreground transition-all duration-300 ease-out motion-reduce:transition-none {done
+          ? 'scale-100 opacity-100 delay-200'
+          : 'scale-50 opacity-0'}"
+      >
+        <Check class="size-3.5" aria-hidden="true" />
+      </span>
+    {/if}
     {#if done}
       <span class="sr-only">Done:</span>
     {/if}
@@ -50,12 +68,20 @@
 {/snippet}
 
 {#snippet track(filled: boolean, shape: string)}
-  <span class="flex-1 overflow-hidden bg-border {shape}" aria-hidden="true">
-    <span
-      class="block h-full origin-left bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none rtl:origin-right {filled
-        ? 'scale-x-100 delay-150'
-        : 'scale-x-0'}"
-    ></span>
+  <!-- As tall as the stroke, which is painted over the line and not inside it. -->
+  <span class="relative flex h-1.5 min-w-4 flex-1 items-center" aria-hidden="true">
+    <span class="w-full overflow-hidden bg-border {shape}">
+      {#if !stroke.component}
+        <span
+          class="block h-full origin-left bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none rtl:origin-right {filled
+            ? 'scale-x-100 delay-150'
+            : 'scale-x-0'}"
+        ></span>
+      {/if}
+    </span>
+    {#if stroke.component}
+      <stroke.component active={filled} fit="fill" class="translate-y-px" />
+    {/if}
   </span>
 {/snippet}
 
@@ -94,7 +120,7 @@
           </span>
         {/if}
         {#if index < steps.length - 1}
-          {@render track(index < current, "h-px min-w-4")}
+          {@render track(index < current, "h-px")}
         {/if}
       </li>
     {/each}

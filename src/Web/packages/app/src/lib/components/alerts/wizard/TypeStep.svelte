@@ -3,6 +3,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Item } from "#lib/components/ui/item/index.js";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
@@ -32,6 +33,9 @@
 
   let { selected, onPick }: Props = $props();
 
+  // Absolutely positioned over the row, so the list lays out the same before it arrives.
+  const selectionEdge = stillArtwork(() => import("#lib/watercolour/selection-edge.js"));
+
   const ICONS: Record<TemplateId, Component> = {
     urgent_low: ChevronsDown,
     low: ArrowDown,
@@ -59,7 +63,7 @@
 {#snippet row(id: TemplateId)}
   {@const Icon = ICONS[id]}
   {@const isSelected = selected === id}
-  <li>
+  <li class="relative">
     <Item
       variant="row"
       data-testid="alert-type-{id}"
@@ -77,6 +81,9 @@
         <ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       {/if}
     </Item>
+    {#if selectionEdge.component}
+      <selectionEdge.component active={isSelected} />
+    {/if}
   </li>
 {/snippet}
 
