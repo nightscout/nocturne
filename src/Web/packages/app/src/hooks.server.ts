@@ -17,7 +17,7 @@ import { mintDemoSession } from "#lib/server/demo-session.js";
 import { sequence, type Handle, type HandleServerError } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
-import { buildProxyHeaders } from "#lib/server/api-proxy-headers.js";
+import { buildProxyHeaders, buildProxyResponseHeaders } from "#lib/server/api-proxy-headers.js";
 import { clientAddressHeaders } from "#lib/server/client-address.js";
 
 import {
@@ -352,7 +352,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     return new Response(proxyResponse.body, {
       status: proxyResponse.status,
       statusText: proxyResponse.statusText,
-      headers: proxyResponse.headers,
+      headers: buildProxyResponseHeaders(proxyResponse.headers),
     });
   }
 
