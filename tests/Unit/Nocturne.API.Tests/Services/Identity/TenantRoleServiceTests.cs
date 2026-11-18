@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Npgsql;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -32,9 +34,11 @@ public class TenantRoleServiceTests : IDisposable
     {
         public List<NocturneDbContext> Handed { get; } = [];
 
+        public IAuditContext? Actor { get; set; }
+
         public NocturneDbContext CreateDbContext()
         {
-            var context = TestDbContextFactory.CreateInMemoryContext(dbName);
+            var context = TestDbContextFactory.CreateInMemoryContext(dbName).ActingAs(Actor);
             Handed.Add(context);
             return context;
         }
@@ -243,6 +247,35 @@ public class TenantRoleServiceTests : IDisposable
         var act = () => service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
         await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_ChangingThePermissions_AuditsTheGainedAndLostAgainstTheCaller()
+    {
+        var caller = Guid.CreateVersion7();
+        _factory.Actor = new TestAuditActor { SubjectId = caller };
+        var role = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read", "reports.read"], [Scope.FullAccess])).Role!;
+
+        await _service.UpdateRoleAsync(
+            _tenantId, role.Id, "Night Shift", null, ["reports.read", "devices.read"], [Scope.FullAccess]);
+
+        var row = await _context.AuthAuditLog.AsNoTracking().SingleAsync();
+        row.EventType.Should().Be(AuthAuditEventType.RolePermissionsChanged);
+        row.ActorSubjectId.Should().Be(caller);
+        row.TenantId.Should().Be(_tenantId);
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{role.Id}}","role":"night-shift","gained":["devices.read"],"lost":["glucose.read"],"kind":"tenant"}""");
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_RenamingWithTheSamePermissions_AuditsNothing()
+    {
+        var role = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read", "reports.read"], [Scope.FullAccess])).Role!;
+
+        await _service.UpdateRoleAsync(
+            _tenantId, role.Id, "Late Shift", "described", ["reports.read", "glucose.read"], [Scope.FullAccess]);
+
+        (await _context.AuthAuditLog.AsNoTracking().ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]
