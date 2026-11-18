@@ -95,6 +95,7 @@ public partial class ChildScopeGuardTests
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an
         // inference would take the rows the caller cannot see for missing ones.
+        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestComplete",
         "src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs: DevAdminController.SyncAll",
         "src/API/Nocturne.API/Middleware/CompatibilityProxyMiddleware.cs: CompatibilityProxyMiddleware.InvokeAsync",
         "src/API/Nocturne.API/Middleware/Handlers/ApiKeyHandler.cs: ApiKeyHandler.SendRotationNudgeAsync",
