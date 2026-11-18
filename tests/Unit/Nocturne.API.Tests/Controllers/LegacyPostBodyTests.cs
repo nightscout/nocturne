@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -243,7 +244,7 @@ public class LegacyPostBodyTests
             .Callback<IEnumerable<Settings>, CancellationToken>((s, _) => settings.AddRange(s))
             .ReturnsAsync([]);
         var controller = WithContext(new LegacyV3.SettingsController(
-            repository.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
+            repository.Object, Mock.Of<IWriteSideEffects>(), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
         return new Handler(
             $$"""{"Key":"units","Mills":{{Millis}}}""",
             """{"Key":"units","Mills":"abc"}""",
