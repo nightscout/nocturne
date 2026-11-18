@@ -129,6 +129,11 @@ public class ConnectorRegistrationAttribute(
     public bool SupportsManualSync { get; set; } = true;
 
     /// <summary>
+    ///     The connector has no sync: its data arrives as a file the user imports.
+    /// </summary>
+    public bool IsImport { get; set; }
+
+    /// <summary>
     ///     Supported data types for this connector.
     /// </summary>
     public SyncDataType[] SupportedDataTypes { get; set; } = [SyncDataType.Glucose];

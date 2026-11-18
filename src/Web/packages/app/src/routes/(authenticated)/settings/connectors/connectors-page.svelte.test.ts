@@ -559,6 +559,35 @@ describe("connection detail", () => {
     expect(dialog.getByRole("button", { name: "Revoke" }).elements()).toHaveLength(0);
   });
 
+  it("lists an imported connector as imported, with no sync", async () => {
+    const oura: Connection = {
+      id: "connector:oura",
+      kind: ConnectionKind.Connector,
+      direction: ConnectionDirection.Imports,
+      status: ConnectionStatus.Imported,
+      name: "Oura",
+      icon: "oura",
+      connectorId: "oura",
+      lastRecordAt: minutesAgo(6000),
+      recordCounts: { HeartRate: 500 },
+      streams: [],
+      credentials: [],
+    };
+    loaded({ connections: [xdrip, oura] });
+    render(ConnectorsPage);
+
+    const ouraRow = browserPage.getByRole("button", { name: /Oura/ });
+    await expect.element(ouraRow).toHaveTextContent("Imported from a file");
+    await expect.element(ouraRow).toHaveTextContent("Imported");
+    await expect.element(ouraRow).not.toHaveTextContent("Off");
+    await expect.element(ouraRow).not.toHaveTextContent("Last sync");
+
+    await ouraRow.click();
+    const dialog = browserPage.getByRole("dialog");
+    await expect.element(dialog.getByRole("link", { name: "Configure" })).toBeVisible();
+    expect(dialog.getByRole("button", { name: "Sync now" }).elements()).toHaveLength(0);
+  });
+
   it("offers a connector its configuration page and its sync", async () => {
     render(ConnectorsPage);
     await browserPage.getByRole("button", { name: /Dexcom/ }).click();

@@ -7,7 +7,9 @@ using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Demo;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Services.Health.Oura;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Health.GoogleHealth;
@@ -18,6 +20,7 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Devices;
@@ -847,6 +850,57 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         }
 
         sleep.Verify(p => p.PurgeAsync(It.IsAny<bool>(), It.IsAny<IAuditContext>(), It.IsAny<CancellationToken>()), Times.Never);
+        await using var db = NewContext();
+        (await db.HeartRates.CountAsync()).Should().Be(2);
+    }
+
+    private OuraImportPurgeGuard OuraGuard(TenantRunGuard runGuard) =>
+        new(runGuard, Mock.Of<ITenantAccessor>(tenant => tenant.TenantId == TenantId));
+
+    private static string OuraDataSourceId
+    {
+        get
+        {
+            _ = typeof(OuraConnectorConfiguration);
+            return ConnectorMetadataService.GetByConnectorId(OuraConnectorConfiguration.Name)!.DataSourceId;
+        }
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_Oura_DeletesItsRecords_AndWritesNoConfiguration()
+    {
+        SeedHealthRecords(OuraDataSourceId);
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx, OuraGuard(new TenantRunGuard()))
+                .DeleteConnectorDataAsync(OuraConnectorConfiguration.Name);
+
+            result.Success.Should().BeTrue();
+        }
+
+        _connectorConfig.Verify(c => c.SetActiveAsync(
+            It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        await using var db = NewContext();
+        (await db.HeartRates.Select(r => r.DataSource).ToListAsync()).Should().Equal("manual");
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_Oura_WhileAnImportRuns_ReportsSyncRunningAndDeletesNothing()
+    {
+        var runGuard = new TenantRunGuard();
+        using var import = runGuard.TryAcquire(TenantId, OuraImportJobService.RunName);
+        SeedHealthRecords(OuraDataSourceId);
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx, OuraGuard(runGuard))
+                .DeleteConnectorDataAsync(OuraConnectorConfiguration.Name);
+
+            result.Success.Should().BeFalse();
+            result.ErrorCode.Should().Be(DataSourceDeleteError.SyncRunning);
+        }
+
         await using var db = NewContext();
         (await db.HeartRates.CountAsync()).Should().Be(2);
     }

@@ -32,6 +32,9 @@ namespace Nocturne.API.Controllers.V4.Platform;
 [Authorize]
 public class ServicesController : ControllerBase
 {
+    private const string SyncRunningCode = "sync_running";
+    private const string ImportRunningCode = "import_running";
+
     private readonly IDataSourceService _dataSourceService;
     private readonly IConnectionService _connectionService;
     private readonly IConnectorHealthService _connectorHealthService;
@@ -455,10 +458,15 @@ public class ServicesController : ControllerBase
                 }
                 if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
                 {
-                    return Problem(
-                        detail: "A sync is running for this connector. Wait for it to end, then try again.",
-                        statusCode: 409,
-                        title: "Conflict");
+                    return ConnectorMetadataService.GetByConnectorId(id)?.IsImport == true
+                        ? this.ProblemWithCode(
+                            ImportRunningCode,
+                            "An import is running for this connector. Wait for it to end, then try again.",
+                            StatusCodes.Status409Conflict)
+                        : this.ProblemWithCode(
+                            SyncRunningCode,
+                            "A sync is running for this connector. Wait for it to end, then try again.",
+                            StatusCodes.Status409Conflict);
                 }
                 return StatusCode(500, result);
             }
