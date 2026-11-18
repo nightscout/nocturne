@@ -621,6 +621,9 @@ public class LoopStatus
 
     [JsonPropertyName("forecastError")]
     public object? ForecastError { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class RileyLinkStatus
@@ -642,6 +645,9 @@ public class RileyLinkStatus
 
     [JsonPropertyName("connected")]
     public bool? Connected { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopAutomaticDoseRecommendation
@@ -657,6 +663,9 @@ public class LoopAutomaticDoseRecommendation
 
     [JsonPropertyName("notice")]
     public string? Notice { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>Loop's carbs on board (COB).</summary>
@@ -667,6 +676,9 @@ public class LoopCob
 
     [JsonPropertyName("cob")]
     public double? Cob { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopPredicted
@@ -676,6 +688,9 @@ public class LoopPredicted
 
     [JsonPropertyName("startDate")]
     public string? StartDate { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopIob
@@ -691,6 +706,9 @@ public class LoopIob
 
     [JsonPropertyName("netbasalinsulin")]
     public double? NetBasalInsulin { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -727,6 +745,9 @@ public class LoopEnacted
     /// </summary>
     [JsonPropertyName("received")]
     public bool? Received { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopRecommendedTempBasal
@@ -745,6 +766,9 @@ public class LoopRecommendedTempBasal
 
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class XDripJsStatus
@@ -805,6 +829,9 @@ public class CorrectionRange
 
     [JsonPropertyName("minValue")]
     public double? MinValue { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class CgmStatus
