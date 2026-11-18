@@ -1,6 +1,9 @@
 import { untrack } from "svelte";
 import { getSummary } from "#lib/api/generated/summaries.generated.remote.js";
-import type { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import type {
+  GlucoseStatus,
+  V4BasalInjectionStatus,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
 
 /** Longest a superseded reading stays on screen while the summary catches up. */
@@ -74,6 +77,15 @@ export function calculatedIob(): number | undefined {
  */
 export function calculatedCob(): number | undefined {
   return getSummary().current?.cob;
+}
+
+/**
+ * The last long-acting dose the server read for a tenant on multiple daily injections, as of the
+ * summary's last refresh. The summary drops a redacted dose, so callers check the treatments
+ * scope before showing it.
+ */
+export function calculatedBasalInjection(): V4BasalInjectionStatus | undefined {
+  return getSummary().current?.basalInjection;
 }
 
 export interface DisplayedGlucose {

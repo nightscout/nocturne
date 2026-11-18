@@ -2,6 +2,7 @@ using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -28,6 +29,7 @@ public class WidgetSummaryService : IWidgetSummaryService
 {
     private readonly IEntryService _entryService;
     private readonly IIobCobReader _iobCobReader;
+    private readonly InsulinDeliveryReader _insulinDelivery;
     private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
@@ -42,9 +44,15 @@ public class WidgetSummaryService : IWidgetSummaryService
     /// </summary>
     private const long CgmIntervalMills = 5 * 60 * 1000;
 
+    /// <summary>
+    /// How far back a temp basal still marks the tenant as a pump user.
+    /// </summary>
+    private static readonly TimeSpan PumpLookback = TimeSpan.FromHours(24);
+
     public WidgetSummaryService(
         IEntryService entryService,
         IIobCobReader iobCobReader,
+        InsulinDeliveryReader insulinDelivery,
         IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
@@ -58,6 +66,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         _time = timeProvider;
         _entryService = entryService;
         _iobCobReader = iobCobReader;
+        _insulinDelivery = insulinDelivery;
         _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
@@ -92,6 +101,8 @@ public class WidgetSummaryService : IWidgetSummaryService
 
         // Calculate IOB and COB using v4 types
         await CalculateIobCobAsync(response, cancellationToken);
+
+        await ReadBasalInjectionAsync(response, currentTime, cancellationToken);
 
         // Process tracker statuses
         ProcessTrackers(response, trackerInstances);
@@ -210,6 +221,49 @@ public class WidgetSummaryService : IWidgetSummaryService
             response.Iob = 0;
             response.Cob = 0;
         }
+    }
+
+    /// <summary>
+    /// Sets <see cref="V4SummaryResponse.BasalInjection"/> for a tenant with basal injections and no
+    /// temp basals in <see cref="PumpLookback"/>, the test
+    /// <c>StatisticsController.AddScheduledBasalFallbackAsync</c> applies. The rate is the piece of
+    /// <see cref="StatisticsService.BasalInjectionPieces"/> that covers now.
+    /// </summary>
+    private async Task ReadBasalInjectionAsync(
+        V4SummaryResponse response,
+        long now,
+        CancellationToken cancellationToken
+    )
+    {
+        var nowUtc = now.ToUtcDateTime();
+        var given = (await _insulinDelivery.ReadBasalInjectionsAsync(nowUtc, nowUtc, cancellationToken))
+            .Where(bi => bi.Units > 0 && bi.Mills <= now)
+            .ToList();
+        if (given.Count == 0)
+        {
+            return;
+        }
+
+        var pumpFrom = nowUtc - PumpLookback;
+        var temps = await _insulinDelivery.ReadTempBasalsAsync(pumpFrom, nowUtc, cancellationToken);
+        if (StatisticsService.DeliveredWithin(temps, pumpFrom, now).Count > 0)
+        {
+            return;
+        }
+
+        var lastDose = given.GroupBy(bi => bi.Mills).MaxBy(g => g.Key)!.ToList();
+        var covering = StatisticsService.BasalInjectionPieces(given)
+            .FirstOrDefault(p => p.StartMills <= now && p.EndMills > now);
+
+        response.BasalInjection = new V4BasalInjectionStatus
+        {
+            Units = ScaledRounding.Round(lastDose.Sum(bi => bi.Units), 2),
+            Mills = lastDose[0].Mills,
+            InsulinName = lastDose
+                .Select(bi => bi.InsulinContext?.InsulinName)
+                .FirstOrDefault(name => !string.IsNullOrEmpty(name)),
+            EstimatedRate = covering?.Rate is double rate ? ScaledRounding.Round(rate, 2) : null,
+        };
     }
 
     /// <summary>

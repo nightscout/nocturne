@@ -18,6 +18,7 @@ import type {
 	StatusPillsConfig
 } from '#lib/types/status-pills.js';
 import type { Bolus, CarbIntake, ApsSnapshot, ProfileSummary } from '#lib/api/index.js';
+import type { V4BasalInjectionStatus } from '#lib/api/generated/nocturne-api-client.js';
 
 /**
  * DeviceStatus represents device state data from Loop, OpenAPS, or pump systems
@@ -138,6 +139,12 @@ export interface PillsProcessorConfig extends StatusPillsConfig {
 	 * APS snapshot or device status reported COB within the recency threshold.
 	 */
 	calculatedCob?: number | null;
+	/**
+	 * The last long-acting dose the server read (the widget summary's `basalInjection`). Shown
+	 * only when no APS snapshot or device status reported a temp basal, as for a tenant on
+	 * multiple daily injections.
+	 */
+	basalInjection?: V4BasalInjectionStatus | null;
 }
 
 /**
@@ -286,7 +293,7 @@ function processBasalFromSnapshot(
 		isComboActive: false,
 		tempBasal: { rate: enactedRate, duration, remaining: Math.max(0, remaining), startTime },
 		activeProfile: profileName ?? undefined,
-		display: `${enactedRate.toFixed(3)}U`,
+		display: `${enactedRate.toFixed(3)}U/h`,
 		label: 'BASAL',
 		info: [],
 		level: 'none',
@@ -658,9 +665,9 @@ export function processBasal(
 	profile: ProfileSummary | null,
 	now: number,
 	_units: string,
-	_config: Partial<PillsProcessorConfig> = {}
+	config: Partial<PillsProcessorConfig> = {}
 ): BasalPillData | null {
-	if (!profile && deviceStatuses.length === 0) {
+	if (!profile && deviceStatuses.length === 0 && !config.basalInjection) {
 		return null;
 	}
 
@@ -731,6 +738,22 @@ export function processBasal(
 		}
 	}
 
+	if (!isTempBasal && config.basalInjection) {
+		return {
+			totalBasal: config.basalInjection.estimatedRate ?? 0,
+			scheduledBasal,
+			isTempBasal: false,
+			isComboActive,
+			injection: config.basalInjection,
+			activeProfile: profileName ?? undefined,
+			display: `${config.basalInjection.units ?? 0} U`,
+			label: 'BASAL',
+			info: [],
+			level: 'none',
+			lastUpdated: config.basalInjection.mills ?? now
+		};
+	}
+
 	// If we have no basal data at all, return null
 	if (totalBasal === 0 && scheduledBasal === 0 && !profile) {
 		return null;
@@ -743,7 +766,7 @@ export function processBasal(
 		isComboActive,
 		tempBasal: tempBasalInfo,
 		activeProfile: profileName ?? undefined,
-		display: `${totalBasal.toFixed(3)}U`,
+		display: `${totalBasal.toFixed(3)}U/h`,
 		label: 'BASAL',
 		info: [],
 		level: 'none',

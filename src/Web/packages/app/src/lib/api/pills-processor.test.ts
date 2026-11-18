@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AidAlgorithm, type ApsSnapshot } from "#lib/api/generated/nocturne-api-client.js";
 import type { DeviceStatus } from "#lib/api/pills-processor.js";
-import type { Bolus, CarbIntake } from "#lib/api/index.js";
+import type { Bolus, CarbIntake, ProfileSummary } from "#lib/api/index.js";
 
 // The module graph for #lib/api transitively imports several $app/* modules
 // and @sveltejs/kit.  Mock them all before loading the module under test.
@@ -375,6 +375,65 @@ describe("processPillsData – Basal from APS snapshot", () => {
 		const snap = makeSnapshot({ enacted: false }, NOW, 3);
 		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, { now: NOW });
 		expect(result.basal).toBeNull();
+	});
+});
+
+describe("processPillsData – Basal on injections", () => {
+	const lastDose = { units: 18, mills: NOW - 9 * 60 * MIN, insulinName: "Tresiba", estimatedRate: 0.75 };
+	const profile = {
+		therapySettings: [{ profileName: "Default", isDefault: true }],
+		basalSchedules: [{ profileName: "Default", entries: [{ time: "00:00", value: 0.9 }] }],
+	} as unknown as ProfileSummary;
+
+	it("shows the last dose and the server's estimated rate with no profile and no device", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal).not.toBeNull();
+		expect(result.basal!.display).toBe("18 U");
+		expect(result.basal!.isTempBasal).toBe(false);
+		expect(result.basal!.totalBasal).toBe(0.75);
+		expect(result.basal!.injection).toEqual(lastDose);
+	});
+
+	it("shows the dose rather than the profile's scheduled rate", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, profile, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal!.display).toBe("18 U");
+		expect(result.basal!.totalBasal).toBe(0.75);
+	});
+
+	it("yields to a temp basal an APS snapshot enacted", () => {
+		const snap = makeSnapshot({ enacted: true, enactedRate: 1.2, enactedDuration: 30 }, NOW, 5);
+		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal!.isTempBasal).toBe(true);
+		expect(result.basal!.injection).toBeUndefined();
+	});
+
+	it("yields to a temp basal a device status enacted", () => {
+		const status: DeviceStatus[] = [{
+			mills: NOW - 3 * MIN,
+			openaps: { enacted: { rate: 1.1, duration: 30, timestamp: new Date(NOW - 3 * MIN).toISOString() } },
+		}];
+		const result = processPillsData(status, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal!.isTempBasal).toBe(true);
+		expect(result.basal!.injection).toBeUndefined();
+	});
+
+	it("labels a pump's rate per hour", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, profile, { now: NOW });
+		expect(result.basal!.display).toBe("0.900U/h");
+		const snap = makeSnapshot({ enacted: true, enactedRate: 1.2, enactedDuration: 30 }, NOW, 5);
+		expect(processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, { now: NOW }).basal!.display).toBe("1.200U/h");
 	});
 });
 
