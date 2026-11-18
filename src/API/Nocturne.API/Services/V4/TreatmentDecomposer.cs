@@ -754,9 +754,11 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.CarbIntake
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedEventType(
-                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-                treatment, keepEventType, TreatmentTypes.CarbCorrection),
+            AdditionalProperties = PreBolusSplit.AddMealId(
+                UploadedEventType(
+                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    treatment, keepEventType, TreatmentTypes.CarbCorrection),
+                treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             Carbs = treatment.Carbs ?? 0,
             Device = UploadedDevice(treatment),

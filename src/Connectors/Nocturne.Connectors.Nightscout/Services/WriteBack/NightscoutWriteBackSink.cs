@@ -116,6 +116,15 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         => Task.FromResult(batch);
 
     /// <summary>
+    /// Removes what an earlier write left upstream that refused a create of <paramref name="batch"/>
+    /// with <paramref name="refusal"/>, which is then sent once more.
+    /// </summary>
+    /// <returns>Whether anything was removed.</returns>
+    protected virtual Task<bool> ClearRefusalAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<T> batch, string refusal, CancellationToken ct)
+        => Task.FromResult(false);
+
+    /// <summary>
     /// Runs once upstream has accepted <paramref name="items"/>, to tidy what an earlier write left there.
     /// </summary>
     protected virtual Task AfterWrittenAsync(
@@ -203,7 +212,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return filtered;
     }
 
-    private async Task<bool> SendCreatedAsync(NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct)
+    private async Task<bool> SendCreatedAsync(
+        NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct, bool cleared = false)
     {
         if (await TrySendAsync(config, HttpMethod.Post, await PrepareAsync(config, batch, ct), SerializerOptions, ct) is not { } outcome)
             return false;
@@ -212,6 +222,9 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
 
         if (!IsAlreadyStored(refusal))
         {
+            if (!cleared && await ClearRefusalAsync(config, batch, refusal, ct))
+                return await SendCreatedAsync(config, batch, ct, cleared: true);
+
             RecordFailure(null, HttpMethod.Post);
             return false;
         }

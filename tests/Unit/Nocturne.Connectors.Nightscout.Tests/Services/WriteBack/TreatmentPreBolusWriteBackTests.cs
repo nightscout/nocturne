@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -291,9 +292,9 @@ public class TreatmentPreBolusWriteBackTests
     }
 
     /// <summary>The bolus and the carbs record a v1 POST splits <see cref="MealBolus"/> into, as reads serve them.</summary>
-    private static IReadOnlyList<Treatment> V1Split()
+    private static IReadOnlyList<Treatment> V1Split(double carbs = 30)
     {
-        var meal = MealBolus(carbs: 30, preBolus: 15);
+        var meal = MealBolus(carbs, preBolus: 15);
         meal.Id = Key;
         var halves = PreBolusSplit.Split(meal, _ => { });
         halves[1].LegacyId = halves[1].Id;
@@ -340,38 +341,167 @@ public class TreatmentPreBolusWriteBackTests
     /// A one-record meal posted again through v1 is stored split, and announced as the service
     /// announces it: the new carbs record created, then the bolus re-uploaded as an update.
     /// </summary>
-    private async Task<PreBolusSplittingNightscout> SplitByALaterV1PostAsync(bool v15_0_8)
+    private static async Task PostAgainThroughV1Async(NightscoutTreatmentWriteBackSink sink, double carbs = 30)
+    {
+        var halves = V1Split(carbs);
+        await sink.OnCreatedAsync([halves[1]]);
+        await sink.OnUpdatedAsync(halves[0]);
+    }
+
+    private static void ShouldHoldTheV1Split(PreBolusSplittingNightscout upstream, bool v15_0_8, double carbs = 30)
+    {
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, V1CarbsKey]);
+        upstream.Documents.Single(d => KeyOf(d, v15_0_8) == Key)["carbs"].Should().BeNull();
+        var meal = upstream.Documents.Single(d => KeyOf(d, v15_0_8) == V1CarbsKey);
+        Str(meal, "created_at").Should().Be("2026-09-30T10:15:00.000Z");
+        meal["carbs"]!.GetValue<double>().Should().Be(carbs);
+    }
+
+    /// <summary>
+    /// Up to 15.0.6 the carbs record's POST upserts onto the carbs the meal's write-back split off at
+    /// the same time, and is refused; those are removed and the POST sent again. From 15.0.7 it is
+    /// matched by its identifier, and the bolus update removes the split-off carbs.
+    /// </summary>
+    [Theory]
+    [InlineData(false, 3)]
+    [InlineData(true, 1)]
+    public async Task A_written_back_meal_posted_again_through_v1_with_a_preBolus_keeps_its_carbs_upstream(
+        bool v15_0_8, int posts)
     {
         var upstream = new PreBolusSplittingNightscout(v15_0_8);
         var sink = Sink(upstream);
         await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
-        var halves = V1Split();
+        upstream.Methods.Clear();
 
-        await sink.OnCreatedAsync([halves[1]]);
-        await sink.OnUpdatedAsync(halves[0]);
-        return upstream;
+        await PostAgainThroughV1Async(sink);
+
+        ShouldHoldTheV1Split(upstream, v15_0_8);
+        upstream.Methods.Count(m => m == HttpMethod.Post).Should().Be(posts);
     }
 
-    [Fact]
-    public async Task A_one_record_meal_split_by_a_later_v1_POST_leaves_one_carbs_document_from_15_0_7()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_written_back_meal_posted_again_through_v1_without_a_preBolus_leaves_one_document(bool v15_0_8)
     {
-        var upstream = await SplitByALaterV1PostAsync(v15_0_8: true);
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
 
-        upstream.Documents.Select(d => KeyOf(d, true)).Should().BeEquivalentTo([Key, V1CarbsKey]);
-        upstream.Documents.Single(d => KeyOf(d, true) == V1CarbsKey)["carbs"]!.GetValue<double>().Should().Be(30);
+        await sink.OnUpdatedAsync(MealBolus(carbs: 30, preBolus: 0));
+
+        var copy = upstream.Documents.Should().ContainSingle().Subject;
+        KeyOf(copy, v15_0_8).Should().Be(Key);
+        copy["carbs"]!.GetValue<double>().Should().Be(30);
+        copy["insulin"]!.GetValue<double>().Should().Be(2);
+    }
+
+    /// <summary>A meal whose write-back stored only its bolus upstream before the meal was posted again.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_meal_posted_again_through_v1_before_its_write_back_finished_leaves_its_bolus_and_its_carbs(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        upstream.Documents.RemoveAll(d => KeyOf(d, v15_0_8) == CarbsKey);
+
+        await PostAgainThroughV1Async(sink);
+
+        ShouldHoldTheV1Split(upstream, v15_0_8);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_meal_posted_again_through_v1_a_second_time_edits_its_carbs_in_place(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        await PostAgainThroughV1Async(sink);
+        var halves = V1Split(carbs: 45);
+
+        await sink.OnUpdatedAsync(halves[0]);
+        await sink.OnUpdatedAsync(halves[1]);
+
+        ShouldHoldTheV1Split(upstream, v15_0_8, carbs: 45);
+    }
+
+    /// <summary>A delete is not written back, so upstream keeps both documents.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_meal_deleted_after_it_was_posted_again_through_v1_stays_upstream(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        await PostAgainThroughV1Async(sink);
+        upstream.Methods.Clear();
+
+        foreach (var half in V1Split())
+            await sink.OnDeletedAsync(half);
+
+        ShouldHoldTheV1Split(upstream, v15_0_8);
+        upstream.Methods.Should().BeEmpty();
+    }
+
+    /// <summary>A POST that fails for any reason other than 15.0.6's immutable <c>_id</c> clears nothing and is not sent again.</summary>
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, null)]
+    [InlineData(HttpStatusCode.InternalServerError, """{"status":500,"message":"Mongo Error","description":[{"driver":true,"name":"MongoError","index":0,"code":11000}]}""")]
+    [InlineData(HttpStatusCode.BadGateway, null)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, null)]
+    public async Task A_carbs_record_create_failing_otherwise_leaves_the_split_off_carbs_and_is_sent_once(
+        HttpStatusCode status, string? body)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8: false);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        upstream.Methods.Clear();
+        upstream.FailPostsWith = status;
+        upstream.FailPostsBody = body;
+
+        await sink.OnCreatedAsync([V1Split()[1]]);
+
+        upstream.Methods.Should().Equal(HttpMethod.Post);
+        upstream.Documents.Select(d => KeyOf(d, false)).Should().BeEquivalentTo([Key, CarbsKey]);
+    }
+
+    /// <summary>A refusal still there once the split-off carbs are cleared is not cleared and sent again a second time.</summary>
+    [Fact]
+    public async Task A_carbs_record_refused_again_after_the_clear_is_sent_no_more_than_twice()
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8: false);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        upstream.Methods.Clear();
+        upstream.KeepOnDelete = true;
+
+        await sink.OnCreatedAsync([V1Split()[1]]);
+
+        upstream.Methods.Count(m => m == HttpMethod.Post).Should().Be(2);
+        upstream.Methods.Count(m => m == HttpMethod.Delete).Should().Be(1);
     }
 
     /// <summary>
-    /// Known gap (#3431): up to 15.0.6 the carbs record's POST upserts onto the split-off document at
-    /// the same time and is refused for the <c>_id</c> it would change, and the bolus update then
-    /// removes that document, so upstream holds no carbs.
+    /// Only the carbs write-back split off the meal are removed for a refused carbs record: another
+    /// uploader's meal at that time keeps refusing it up to 15.0.6.
     /// </summary>
     [Fact]
-    public async Task Known_gap_3431_a_one_record_meal_split_by_a_later_v1_POST_loses_its_upstream_carbs_up_to_15_0_6()
+    public async Task A_carbs_record_refused_by_another_uploaders_meal_leaves_that_meal_up_to_15_0_6()
     {
-        var upstream = await SplitByALaterV1PostAsync(v15_0_8: false);
+        var upstream = new PreBolusSplittingNightscout(v15_0_8: false);
+        upstream.Post(JsonNode.Parse("""
+            [{"identifier":"aaps-1","eventType":"Meal Bolus","created_at":"2026-09-30T10:15:00.000Z","carbs":12,"enteredBy":"aaps"}]
+            """)!.AsArray());
 
-        upstream.Documents.Select(d => KeyOf(d, false)).Should().Equal(Key);
+        await Sink(upstream).OnCreatedAsync([V1Split()[1]]);
+
+        upstream.Documents.Should().ContainSingle().Which["carbs"]!.GetValue<double>().Should().Be(12);
+        upstream.Methods.Should().NotContain(HttpMethod.Delete);
     }
 
     [Fact]

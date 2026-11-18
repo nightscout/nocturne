@@ -1338,6 +1338,7 @@ internal static class LegacyTreatmentTables
             Id = carb.Id.ToString(),
             LegacyId = carb.LegacyId,
             RecordId = carb.Id,
+            PreBolusMealId = PreBolusSplit.MealIdOf(carb.AdditionalProperties),
             AdditionalProperties = TreatmentClientId.ToTreatment(carb.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(carb.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(carb.AdditionalProperties) ?? TreatmentTypes.CarbCorrection,
