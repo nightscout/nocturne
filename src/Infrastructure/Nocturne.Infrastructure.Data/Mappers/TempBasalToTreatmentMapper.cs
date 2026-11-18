@@ -20,9 +20,13 @@ public static class TempBasalToTreatmentMapper
         var rate = tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate;
         // A Nightscout client takes absolute over percent, so a relative temp serves none
         var relative = tempBasal.Percent is not null && tempBasal.Origin != TempBasalOrigin.Suspended;
-        var durationMinutes = tempBasal.EndMills.HasValue
-            ? (tempBasal.EndMills.Value - tempBasal.StartMills) / (1000.0 * 60.0)
-            : 0;
+        var durationMs = tempBasal.EndMills.HasValue ? tempBasal.EndMills.Value - tempBasal.StartMills : 0;
+        // The upload truncates its duration to whole milliseconds when it sets the end, so a match is within 1 ms
+        var uploadedMinutes = TempBasalUploadedFields.UploadedDuration(tempBasal.AdditionalProperties)
+            is { } minutes && Math.Abs(minutes * 60_000 - durationMs) <= 1
+            ? minutes
+            : (double?)null;
+        var durationMinutes = uploadedMinutes ?? durationMs / (1000.0 * 60.0);
 
         var treatment = new Treatment
         {
@@ -39,6 +43,7 @@ public static class TempBasalToTreatmentMapper
             SrvModified = tempBasal.ModifiedAt.ToMills(),
             EventType = TreatmentTypes.TempBasal,
             Duration = durationMinutes,
+            DurationIsUploaded = uploadedMinutes is not null,
             Absolute = relative ? null : rate,
             Rate = relative && tempBasal.RateFromSchedule ? null : rate,
             DeliveredRate = rate,

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
@@ -354,6 +355,21 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
         var served = (await ReadAsync()).Should().ContainSingle().Subject;
         (served.EventType, served.Notes).Should().Be(("Temp Basal", "exercise"));
+    }
+
+    [Theory]
+    [InlineData("4.962561716636022", "4.962561716636022")]
+    [InlineData("30", "30")]
+    [InlineData("30.0", "30")]
+    public async Task ATempBasalPostedThroughV1_IsServedWithTheDurationItWasUploadedWith(string uploaded, string served)
+    {
+        await UploadAsync(
+            $$"""{"eventType":"Temp Basal","created_at":"{{At}}","duration":{{uploaded}},"absolute":0.5}""");
+
+        var read = (await ReadAsync()).Should().ContainSingle().Subject;
+
+        JsonDocument.Parse(JsonSerializer.Serialize(read, NightscoutJsonOptions.Create()))
+            .RootElement.GetProperty("duration").GetRawText().Should().Be(served);
     }
 
     [Fact]
