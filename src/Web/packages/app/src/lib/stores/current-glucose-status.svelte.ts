@@ -58,6 +58,15 @@ export function currentGlucoseStatus(
   return current?.mills === mills ? current.status : undefined;
 }
 
+/**
+ * The IOB the server calculated from treatments, as of the summary's last refresh (once per
+ * new reading). The summary reports a redacted IOB as 0, so callers check the treatments
+ * scope before showing it.
+ */
+export function calculatedIob(): number | undefined {
+  return getSummary().current?.iob;
+}
+
 export interface DisplayedGlucose {
   readonly mills: number | undefined;
   readonly currentBG: number;
