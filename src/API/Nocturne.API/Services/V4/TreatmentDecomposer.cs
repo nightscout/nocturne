@@ -1184,7 +1184,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (treatment.DurationInMilliseconds is { } durationMs)
             metadata[ProfileSpanMetadata.DurationInMillisecondsKey] = durationMs;
 
-        AddPumpFields(metadata, treatment);
+        AddUploadedApp(metadata, treatment);
         AddServedTreatmentFields(metadata, treatment);
         AddInsulinContext(metadata, treatment);
 
@@ -1194,24 +1194,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static Dictionary<string, object> BuildEffectiveProfileMetadata(Treatment treatment)
     {
         var metadata = EffectiveProfileSwitch.Metadata(treatment);
-        AddPumpFields(metadata, treatment);
+        AddUploadedApp(metadata, treatment);
         AddServedTreatmentFields(metadata, treatment);
         AddInsulinContext(metadata, treatment);
         return metadata;
     }
 
-    /// <summary>The pump record ids and uploading app AAPS reads a profile switch back with.</summary>
-    private static void AddPumpFields(Dictionary<string, object> metadata, Treatment treatment)
+    private static void AddUploadedApp(Dictionary<string, object> metadata, Treatment treatment)
     {
-        if (treatment.PumpId is { } pumpId)
-            metadata[ProfileSpanMetadata.PumpIdKey] = pumpId;
-
-        if (!string.IsNullOrEmpty(treatment.PumpType))
-            metadata[ProfileSpanMetadata.PumpTypeKey] = treatment.PumpType;
-
-        if (!string.IsNullOrEmpty(treatment.PumpSerial))
-            metadata[ProfileSpanMetadata.PumpSerialKey] = treatment.PumpSerial;
-
         if (UploadedString(treatment, ProfileSpanMetadata.AppKey) is { Length: > 0 } app)
             metadata[ProfileSpanMetadata.AppKey] = app;
     }
@@ -1301,8 +1291,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     /// <summary>
     /// The upload fields every span <see cref="LegacyTreatmentTables.StateSpanTables"/> serves, and every
-    /// activation <see cref="LegacyProfileActivationTable"/> serves, reads back. <c>notes</c> lives here rather than in a Note of its own, which would serve the treatment
-    /// twice.
+    /// activation <see cref="LegacyProfileActivationTable"/> serves, reads back
+    /// (<see cref="LegacyTreatmentTables.RestoreServedFields"/>). <c>notes</c> lives here rather than in a
+    /// Note of its own, which would serve the treatment twice.
     /// </summary>
     private static void AddServedTreatmentFields(Dictionary<string, object> metadata, Treatment treatment)
     {
@@ -1320,6 +1311,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         if (TreatmentUploadedTimestamp.Uploaded(treatment) is { } timestamp)
             metadata[LegacyTreatmentTables.UploadedTimestampKey] = timestamp;
+
+        SpanUploadedFields.Keep(metadata, treatment);
+        TreatmentClientId.KeepInMetadata(metadata, treatment);
 
         metadata[StateSpanMetadataExtensions.UtcOffsetKey] = treatment.UtcOffset ?? 0;
     }

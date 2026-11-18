@@ -571,12 +571,7 @@ internal sealed class LegacyStateSpanTable(
         treatment.LegacyId = span.LegacyId;
         treatment.RecordId = span.Id;
         treatment.Mills = span.StartTimestamp.ToMills();
-        treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
-        treatment.EnteredBy = metadata.TryReadString("enteredBy");
-        treatment.Notes = metadata.TryReadString(LegacyTreatmentTables.NotesKey);
-        treatment.SyncIdentifier = metadata.TryReadString(LegacyTreatmentTables.SyncIdentifierKey);
-        treatment.InsulinType = metadata.TryReadString(LegacyTreatmentTables.InsulinTypeKey);
-        treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
+        LegacyTreatmentTables.RestoreServedFields(treatment, metadata);
         return treatment;
     }
 }
@@ -1038,9 +1033,6 @@ internal static class LegacyTreatmentTables
             };
         }
 
-        treatment.PumpId = span.PumpId;
-        treatment.PumpType = span.PumpType;
-        treatment.PumpSerial = span.PumpSerial;
         if (span.App is { } app)
             treatment.AdditionalProperties = new Dictionary<string, object> { [ProfileSpanMetadata.AppKey] = app };
 
@@ -1049,13 +1041,24 @@ internal static class LegacyTreatmentTables
         treatment.RecordId = activation.Id;
         treatment.Mills = activation.Mills;
         treatment.DataSource = activation.DataSource;
+        RestoreServedFields(treatment, metadata);
+        return treatment;
+    }
+
+    /// <summary>
+    /// Sets the upload fields a span's or activation's metadata keeps for every treatment it is served
+    /// as, as <c>TreatmentDecomposer.AddServedTreatmentFields</c> wrote them.
+    /// </summary>
+    internal static void RestoreServedFields(Treatment treatment, IDictionary<string, object>? metadata)
+    {
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
         treatment.EnteredBy = metadata.TryReadString(ProfileActivationLegacyFields.EnteredByKey);
         treatment.Notes = metadata.TryReadString(NotesKey);
         treatment.SyncIdentifier = metadata.TryReadString(SyncIdentifierKey);
         treatment.InsulinType = metadata.TryReadString(InsulinTypeKey);
         treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
-        return treatment;
+        SpanUploadedFields.Restore(treatment, metadata);
+        TreatmentClientId.RestoreFromMetadata(treatment, metadata);
     }
 
     /// <summary>The tables whose records pair into a Meal Bolus.</summary>
