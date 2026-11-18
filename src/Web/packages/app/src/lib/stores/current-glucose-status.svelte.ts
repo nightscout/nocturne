@@ -63,20 +63,24 @@ export function currentGlucoseStatus(
 
 /**
  * The IOB the server calculated from treatments, as of the summary's last refresh (once per
- * new reading). The summary reports a redacted IOB as 0, so callers check the treatments
+ * new reading). Undefined when the server has no IOB to report (none in the window, a failed
+ * calculation, or redacted), so a 0 here is a real zero. Callers still check the treatments
  * scope before showing it.
  */
 export function calculatedIob(): number | undefined {
-  return getSummary().current?.iob;
+  const summary = getSummary().current;
+  return summary?.iobKnown ? summary.iob : undefined;
 }
 
 /**
  * The COB the server calculated from treatments, as of the summary's last refresh (once per
- * new reading). The summary reports a redacted COB as 0, so callers check the treatments
+ * new reading). Undefined when the server has no COB to report (a failed calculation or
+ * redacted), so a 0 here is a real zero. Callers still check the treatments
  * scope before showing it.
  */
 export function calculatedCob(): number | undefined {
-  return getSummary().current?.cob;
+  const summary = getSummary().current;
+  return summary?.cobKnown ? summary.cob : undefined;
 }
 
 /**

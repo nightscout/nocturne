@@ -212,14 +212,18 @@ public class WidgetSummaryService : IWidgetSummaryService
             var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
             var reading = await _iobCobReader.ReadTotalAsync(now, live: true, cancellationToken);
-            response.Iob = Math.Round(reading.Iob.Iob * 100) / 100;
-            response.Cob = reading.Cob is null ? 0 : Math.Round(reading.Cob.Cob);
+            response.IobKnown = reading.HasIob;
+            response.Iob = reading.HasIob ? Math.Round(reading.Iob.Iob * 100) / 100 : 0;
+            response.CobKnown = reading.HasCob;
+            response.Cob = reading.HasCob ? Math.Round(reading.Cob!.Cob) : 0;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error calculating IOB/COB for widget summary");
             response.Iob = 0;
+            response.IobKnown = false;
             response.Cob = 0;
+            response.CobKnown = false;
         }
     }
 
