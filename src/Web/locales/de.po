@@ -14391,9 +14391,8 @@ msgstr "Wiedergabegeschwindigkeit"
 msgid "{0}x"
 msgstr "{0}x"
 
-#: src/lib/components/alerts/RuleSidebar.svelte
-msgid "(editing)"
-msgstr "(in Bearbeitung)"
+#~ msgid "(editing)"
+#~ msgstr "(in Bearbeitung)"
 
 #. 0: r.name
 #. 0: rule.name
@@ -40632,10 +40631,8 @@ msgstr ""
 msgid "Enter a name."
 msgstr ""
 
-#. 0: name
-#: src/routes/(authenticated)/alerts/new/+page.svelte
-msgid "{0} is on."
-msgstr ""
+#~ msgid "{0} is on."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "Could not create the alert. Try again."
@@ -41635,4 +41632,21 @@ msgstr ""
 #. 0: formatClock(waitUntil)
 #: src/lib/components/tenants/SiteAddressCard.svelte
 msgid "You can change the address one time each hour. You can change it again at {0}."
+msgstr ""
+
+#: src/lib/components/alerts/ReplayView.svelte
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "This alert"
+msgstr ""
+
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "The alert you are editing"
+msgstr ""
+
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "Your other alerts"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "The alert is on."
 msgstr ""
