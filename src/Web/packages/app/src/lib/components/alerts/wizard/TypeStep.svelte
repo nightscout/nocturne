@@ -2,7 +2,9 @@
   import { untrack, type Component } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import { Item } from "#lib/components/ui/item/index.js";
+  import { DropGroup, DropSurface } from "water-ui";
+  import { itemVariants } from "#lib/components/ui/item/index.js";
+  import { cn } from "#lib/utils/index.js";
   import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
@@ -35,6 +37,9 @@
   }
 
   let { selected, onPick, trackerDefinitions = [] }: Props = $props();
+
+  // The padding is on the content, which sits above the paint.
+  const ROW = cn(itemVariants({ variant: "row", interactive: true }), "p-0");
 
   // Absolutely positioned over the row, so the list lays out the same before it arrives.
   const selectionEdge = stillArtwork(() => import("#lib/watercolour/selection-edge.js"));
@@ -69,23 +74,32 @@
   {@const Icon = ICONS[id]}
   {@const isSelected = selected === id}
   <li class="relative">
-    <Item
-      variant="row"
+    <!-- The row is the surface, so the paint lands under its copy; the chosen row has the edge
+         and stays plain. -->
+    <DropSurface
+      as="button"
+      type="button"
+      name={id}
+      shown={isSelected ? false : undefined}
       data-testid="alert-type-{id}"
       aria-current={isSelected ? "true" : undefined}
       onclick={() => onPick(id)}
+      class={ROW}
+      contentClass="flex w-full items-center gap-3 p-3"
     >
-      <Icon class="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <Icon data-drop-obstacle class="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span class="min-w-0 flex-1">
-        <span class="block font-medium">{templateLabel(id)}</span>
-        <span class="block text-sm text-muted-foreground">{templateDescription(id)}</span>
+        <span data-drop-obstacle class="block font-medium">{templateLabel(id)}</span>
+        <span data-drop-obstacle class="block text-sm text-muted-foreground">
+          {templateDescription(id)}
+        </span>
       </span>
       {#if isSelected}
         <Check class="size-4 shrink-0 text-primary" aria-hidden="true" />
       {:else}
         <ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       {/if}
-    </Item>
+    </DropSurface>
     {#if selectionEdge.component}
       <selectionEdge.component active={isSelected} />
     {/if}
@@ -93,11 +107,13 @@
 {/snippet}
 
 <div class="space-y-3">
-  <ul class="divide-y border-y" aria-label="Alert types">
-    {#each common as template (template.id)}
-      {@render row(template.id)}
-    {/each}
-  </ul>
+  <DropGroup name="alert types">
+    <ul class="divide-y border-y" aria-label="Alert types">
+      {#each common as template (template.id)}
+        {@render row(template.id)}
+      {/each}
+    </ul>
+  </DropGroup>
 
   <Collapsible.Root bind:open={moreOpen}>
     <Collapsible.Trigger>
@@ -118,11 +134,13 @@
       {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content>
-      <ul class="mt-1 divide-y border-y" aria-label="More alert types">
-        {#each more as template (template.id)}
-          {@render row(template.id)}
-        {/each}
-      </ul>
+      <DropGroup name="more alert types">
+        <ul class="mt-1 divide-y border-y" aria-label="More alert types">
+          {#each more as template (template.id)}
+            {@render row(template.id)}
+          {/each}
+        </ul>
+      </DropGroup>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>
