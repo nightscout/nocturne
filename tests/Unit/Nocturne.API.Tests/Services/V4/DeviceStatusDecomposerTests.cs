@@ -2463,6 +2463,101 @@ public class DeviceStatusDecomposerTests : IDisposable
         extended.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("Version", "ActiveProfile");
     }
 
+    [Theory]
+    [InlineData("activity", "0.021", JsonValueKind.Number)]
+    [InlineData("time", "\"2023-11-14T12:00:00Z\"", JsonValueKind.String)]
+    [InlineData("timestamp", "\"2023-11-14T12:00:00.000Z\"", JsonValueKind.String)]
+    [InlineData("mills", "1700000000000", JsonValueKind.Number)]
+    [InlineData("basaliob", "0.4", JsonValueKind.Number)]
+    public async Task DecomposeAsync_OpenApsIobField_SurvivesTheStoreAndTheV1Read(
+        string name, string json, JsonValueKind kind)
+    {
+        var uploaded = $$"""{ "iob": { "iob": 1.8, "{{name}}": {{json}} } }""";
+        var ds = new DeviceStatus
+        {
+            Id = "openaps-iob-" + name,
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            OpenAps = JsonSerializer.Deserialize<OpenApsStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(aps.AdditionalProperties));
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        var iob = JsonDocument.Parse(JsonSerializer.Serialize(projected.OpenAps)).RootElement.GetProperty("iob");
+
+        iob.GetProperty(name).ValueKind.Should().Be(kind);
+        iob.GetProperty(name).GetRawText().Should().Be(json);
+        iob.GetProperty("iob").GetDouble().Should().Be(1.8);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpFieldsTheSnapshotHasNoColumnFor_SurviveTheStoreAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "serial": "SN-0042",
+              "pumpMode": "Automatic",
+              "iob": { "iob": 1.2, "bolusiob": 0.5, "basaliob": 0.7, "timestamp": "2023-11-14T12:00:00Z" }
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "pump-modelled",
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            Pump = JsonSerializer.Deserialize<PumpStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var pump = result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single();
+        pump.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(pump.AdditionalProperties));
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(ProjectPump(pump).Pump)).RootElement;
+
+        read.GetProperty("serial").GetString().Should().Be("SN-0042");
+        read.GetProperty("pumpMode").GetString().Should().Be("Automatic");
+        var iob = read.GetProperty("iob");
+        iob.GetProperty("basaliob").GetDouble().Should().Be(0.7);
+        iob.GetProperty("timestamp").GetString().Should().Be("2023-11-14T12:00:00Z");
+        iob.GetProperty("iob").GetDouble().Should().Be(1.2);
+        iob.GetProperty("bolusiob").GetDouble().Should().Be(0.5);
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_StoredModelledFieldsOfTheWrongKind_ComeBackAsStoredWithoutFailingTheRead()
+    {
+        var aps = new V4Models.ApsSnapshot
+        {
+            AidAlgorithm = V4Models.AidAlgorithm.OpenAps,
+            Iob = 1.8,
+            AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+                """{ "uploaded:openaps": { "iob": { "mills": "1700000000000", "activity": "x", "time": 5, "timestamp": true } } }"""),
+        };
+        var pump = new V4Models.PumpSnapshot
+        {
+            Iob = 1.2,
+            AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+                """{ "uploaded:pump": { "serial": 42, "iob": { "basaliob": "0.7", "timestamp": 9 } } }"""),
+        };
+
+        var read = DeviceStatusProjectionService.ProjectFromSnapshots(aps, pump, null, null, null);
+
+        var openApsIob = JsonDocument.Parse(JsonSerializer.Serialize(read.OpenAps)).RootElement.GetProperty("iob");
+        openApsIob.GetProperty("mills").GetString().Should().Be("1700000000000");
+        openApsIob.GetProperty("activity").GetString().Should().Be("x");
+        openApsIob.GetProperty("time").GetInt32().Should().Be(5);
+        openApsIob.GetProperty("timestamp").GetBoolean().Should().BeTrue();
+        var pumpRead = JsonDocument.Parse(JsonSerializer.Serialize(read.Pump)).RootElement;
+        pumpRead.GetProperty("serial").GetInt32().Should().Be(42);
+        pumpRead.GetProperty("iob").GetProperty("basaliob").GetString().Should().Be("0.7");
+        pumpRead.GetProperty("iob").GetProperty("timestamp").GetInt32().Should().Be(9);
+    }
+
     private static DeviceStatus ProjectPump(V4Models.PumpSnapshot pump) =>
         DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, null, null, null);
 

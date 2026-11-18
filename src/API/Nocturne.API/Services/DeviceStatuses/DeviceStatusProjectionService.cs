@@ -471,6 +471,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Reservoir = pump.Reservoir,
             ReservoirDisplayOverride = pump.ReservoirDisplay,
             Clock = pump.Clock,
+            PumpMode = pump.PumpMode,
             Battery = (pump.BatteryPercent.HasValue || pump.BatteryVoltage.HasValue)
                 ? new PumpBattery { Percent = pump.BatteryPercent, Voltage = pump.BatteryVoltage }
                 : null,

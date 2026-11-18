@@ -7,6 +7,8 @@ namespace Nocturne.API.Services.DeviceStatuses;
 /// <summary>
 /// The keys an <c>openaps</c> or <c>pump</c> object holds beyond the ones the typed models name,
 /// kept in the snapshot's <c>additional_properties</c> because no typed column holds them. The
+/// modelled fields no column holds either (<see cref="OpenApsIobData.Activity"/>, the pump's
+/// <see cref="PumpStatus.Serial"/>, ...) are stored the same way and restored to their properties. The
 /// stored object carries the top-level unknown keys, and the unknown keys of a nested object under
 /// that object's own (modelled) name, so the two cannot collide.
 /// </summary>
@@ -21,9 +23,20 @@ internal static class UploadedExtras
     private const string IobName = "iob";
     private const string BatteryName = "battery";
     private const string StatusName = "status";
+    private const string SerialName = "serial";
+    private const string ActivityName = "activity";
+    private const string TimeName = "time";
+    private const string TimestampName = "timestamp";
+    private const string MillsName = "mills";
+    private const string BasalIobName = "basaliob";
 
     public static Dictionary<string, object?>? OfOpenAps(OpenApsStatus openAps) =>
-        Wrap(OpenApsKey, Pack(openAps.ExtensionData, (IobName, openAps.Iob?.ExtensionData)));
+        Wrap(OpenApsKey, Pack(openAps.ExtensionData, (IobName, With(
+            openAps.Iob?.ExtensionData,
+            (ActivityName, openAps.Iob?.Activity),
+            (TimeName, openAps.Iob?.Time),
+            (TimestampName, openAps.Iob?.Timestamp),
+            (MillsName, openAps.Iob?.Mills)))));
 
     public static void RestoreOpenAps(OpenApsStatus openAps, Dictionary<string, object?>? stored)
     {
@@ -32,7 +45,11 @@ internal static class UploadedExtras
         if (nested[IobName] is { } iob)
         {
             openAps.Iob ??= new OpenApsIobData();
-            openAps.Iob.ExtensionData = iob;
+            openAps.Iob.Activity = TakeDouble(iob, ActivityName);
+            openAps.Iob.Time = TakeString(iob, TimeName);
+            openAps.Iob.Timestamp = TakeString(iob, TimestampName);
+            openAps.Iob.Mills = TakeLong(iob, MillsName);
+            openAps.Iob.ExtensionData = iob.Count > 0 ? iob : null;
         }
     }
 
@@ -43,10 +60,13 @@ internal static class UploadedExtras
     public static Dictionary<string, object?>? OfPump(PumpStatus pump)
     {
         var extras = Wrap(PumpKey, Pack(
-            pump.ExtensionData,
+            With(pump.ExtensionData, (SerialName, pump.Serial)),
             (BatteryName, pump.Battery?.ExtensionData),
             (StatusName, pump.Status?.ExtensionData),
-            (IobName, pump.Iob?.ExtensionData)));
+            (IobName, With(
+                pump.Iob?.ExtensionData,
+                (BasalIobName, pump.Iob?.BasalIob),
+                (TimestampName, pump.Iob?.Timestamp)))));
         if (pump.Extended is not { Count: > 0 })
             return extras;
 
@@ -59,7 +79,8 @@ internal static class UploadedExtras
     public static void RestorePump(PumpStatus pump, Dictionary<string, object?>? stored)
     {
         var (top, nested) = Unpack(stored, PumpKey, BatteryName, StatusName, IobName);
-        pump.ExtensionData = top;
+        pump.Serial = top is null ? null : TakeString(top, SerialName);
+        pump.ExtensionData = top is { Count: > 0 } ? top : null;
         if (nested[BatteryName] is { } battery)
         {
             pump.Battery ??= new PumpBattery();
@@ -75,13 +96,57 @@ internal static class UploadedExtras
         if (nested[IobName] is { } iob)
         {
             pump.Iob ??= new PumpIob();
-            pump.Iob.ExtensionData = iob;
+            pump.Iob.BasalIob = TakeDouble(iob, BasalIobName);
+            pump.Iob.Timestamp = TakeString(iob, TimestampName);
+            pump.Iob.ExtensionData = iob.Count > 0 ? iob : null;
         }
 
         var extended = stored?
             .Where(kvp => kvp.Key != PumpKey)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value ?? (object)string.Empty);
         pump.Extended = extended is { Count: > 0 } ? extended : null;
+    }
+
+    private static Dictionary<string, JsonElement>? With(
+        Dictionary<string, JsonElement>? data,
+        params (string Name, object? Value)[] modelled)
+    {
+        var merged = data is null ? [] : new Dictionary<string, JsonElement>(data);
+        foreach (var (name, value) in modelled)
+        {
+            if (value is not null)
+                merged[name] = JsonSerializer.SerializeToElement(value);
+        }
+
+        return merged.Count > 0 ? merged : null;
+    }
+
+    private static double? TakeDouble(Dictionary<string, JsonElement> data, string name)
+    {
+        if (!data.TryGetValue(name, out var value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetDouble(out var number))
+            return null;
+        data.Remove(name);
+        return number;
+    }
+
+    private static long? TakeLong(Dictionary<string, JsonElement> data, string name)
+    {
+        if (!data.TryGetValue(name, out var value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt64(out var number))
+            return null;
+        data.Remove(name);
+        return number;
+    }
+
+    private static string? TakeString(Dictionary<string, JsonElement> data, string name)
+    {
+        if (!data.TryGetValue(name, out var value) || value.ValueKind != JsonValueKind.String)
+            return null;
+        data.Remove(name);
+        return value.GetString();
     }
 
     private static JsonObject? Pack(
