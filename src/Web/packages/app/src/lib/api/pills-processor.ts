@@ -133,6 +133,11 @@ export interface PillsProcessorConfig extends StatusPillsConfig {
 	 * history reaches the server through a cloud connector.
 	 */
 	calculatedIob?: number | null;
+	/**
+	 * COB the server calculated from treatments (the widget summary's `cob`). Shown only when no
+	 * APS snapshot or device status reported COB within the recency threshold.
+	 */
+	calculatedCob?: number | null;
 }
 
 /**
@@ -565,43 +570,29 @@ export function processCOB(
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
 
-	if (cobFromDevice) {
-		if (lastCarbs) {
-			cobFromDevice.lastCarbs = {
-				mills: lastCarbs.mills ?? 0,
-				carbs: lastCarbs.carbs ?? 0,
-				food: undefined,
-			};
-		}
-		return cobFromDevice;
-	}
+	const calculated = config.calculatedCob;
+	const cobData: COBPillData | null =
+		cobFromDevice ??
+		(typeof calculated === 'number'
+			? {
+					cob: calculated,
+					source: 'Calculated',
+					display: `${Math.round(calculated * 10) / 10}g`,
+					label: 'COB',
+					info: [],
+					level: 'none',
+					lastUpdated: now
+				}
+			: null);
 
-	// If no device data but we have recent carbs, show that
-	if (lastCarbs) {
-		// Simple COB estimation (not accurate, just for display)
-		const carbTime = lastCarbs.mills ?? 0;
-		const hoursSinceCarbs = (now - carbTime) / HOURS(1);
-		// Assume 30g/hr absorption rate
-		const estimatedCOB = Math.max(0, (lastCarbs.carbs ?? 0) - hoursSinceCarbs * 30);
-
-		return {
-			cob: estimatedCOB,
-			source: 'Care Portal',
-			display: `${Math.round(estimatedCOB * 10) / 10}g`,
-			label: 'COB',
-			info: [],
-			level: 'none',
-			lastCarbs: {
-				mills: lastCarbs.mills ?? 0,
-				carbs: lastCarbs.carbs ?? 0,
-				food: undefined,
-			},
-			isDecaying: estimatedCOB > 0,
-			lastUpdated: now
+	if (cobData && lastCarbs) {
+		cobData.lastCarbs = {
+			mills: lastCarbs.mills ?? 0,
+			carbs: lastCarbs.carbs ?? 0,
+			food: undefined,
 		};
 	}
-
-	return null;
+	return cobData;
 }
 
 /**

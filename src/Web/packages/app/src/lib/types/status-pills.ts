@@ -75,8 +75,6 @@ export interface COBPillData extends PillDisplayProps {
 	cob: number;
 	/** Source of COB data */
 	source?: string;
-	/** Whether COB is actively decaying */
-	isDecaying?: boolean;
 	/** Last carbs info */
 	lastCarbs?: {
 		mills: number;
