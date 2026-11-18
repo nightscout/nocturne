@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
+  import type { TrackerDefinitionDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -7,15 +10,25 @@
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import RuleBuilder from "../RuleBuilder.svelte";
   import NumberField from "./NumberField.svelte";
-  import { getTemplate, minutesText, type AlertDraft } from "./templates.svelte";
+  import {
+    ageDays,
+    daysToMinutes,
+    getTemplate,
+    lifespanText,
+    minutesText,
+    trackerLeaf,
+    type AlertDraft,
+  } from "./templates.svelte";
 
   interface Props {
     /** Edited in place. */
     draft: AlertDraft;
     availableRules: { id: string; name: string }[];
+    /** The trackers that measure the age this type alerts on; empty when it reads none. */
+    trackers?: TrackerDefinitionDto[];
   }
 
-  let { draft = $bindable(), availableRules }: Props = $props();
+  let { draft = $bindable(), availableRules, trackers = [] }: Props = $props();
 
   const template = $derived(getTemplate(draft.template));
   const leaf = $derived(draft.leaf);
@@ -29,6 +42,12 @@
   const glucoseStep = $derived(glucoseUnits.current === "mmol" ? 0.1 : 1);
   const rateStep = $derived(glucoseUnits.current === "mmol" ? 0.01 : 0.1);
   const fromGlucose = (shown: number) => convertFromDisplayUnits(shown, glucoseUnits.current);
+
+  const ageLabel = $derived(
+    draft.template === "site_change_due"
+      ? "Alert when the infusion site is this old, or older"
+      : "Alert when the sensor is this old, or older",
+  );
 
   const endsNextDay = $derived(draft.hours.enabled && draft.hours.to <= draft.hours.from);
 </script>
@@ -125,11 +144,56 @@
         value={payload.value ?? 0}
         onChange={(v) => (payload.value = v)}
       />
+    {:else if leaf.tracker_age}
+      {@const payload = leaf.tracker_age}
+      {@const tracker = trackers.find((t) => t.id === payload.tracker_definition_id)}
+      {#if trackers.length > 1}
+        <div class="space-y-2">
+          <Label for="alert-tracker">Tracker</Label>
+          <Select.Root
+            type="single"
+            value={payload.tracker_definition_id ?? ""}
+            onValueChange={(id) => {
+              const chosen = trackers.find((t) => t.id === id);
+              if (chosen) draft.leaf = trackerLeaf(draft.template, chosen);
+            }}
+          >
+            <Select.Trigger id="alert-tracker" class="w-full max-w-56" data-testid="alert-tracker">
+              {tracker?.name ?? "Choose a tracker"}
+            </Select.Trigger>
+            <Select.Content>
+              {#each trackers as option (option.id)}
+                <Select.Item value={option.id ?? ""} label={option.name ?? ""} />
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+      {/if}
+      {#key payload.tracker_definition_id}
+        <NumberField
+          id="alert-level"
+          label={ageLabel}
+          suffix="days"
+          step={0.5}
+          value={payload.minutes ?? 0}
+          toDisplay={() => String(ageDays(leaf))}
+          fromDisplay={daysToMinutes}
+          onChange={(v) => (payload.minutes = v)}
+        />
+      {/key}
+      {#if tracker}
+        <p class="text-sm text-muted-foreground" data-testid="alert-tracker-source">
+          Nocturne reads the age from the tracker {tracker.name}.
+          {#if tracker.lifespanHours}
+            The tracker lasts {lifespanText(tracker.lifespanHours)}.
+          {/if}
+        </p>
+      {/if}
     {:else if leaf.site_age}
       {@const payload = leaf.site_age}
       <NumberField
         id="alert-level"
-        label="Alert when the infusion site is this old, or older"
+        label={ageLabel}
         suffix="days"
         step={0.5}
         value={payload.value ?? 0}
@@ -141,7 +205,7 @@
       {@const payload = leaf.sensor_age}
       <NumberField
         id="alert-level"
-        label="Alert when the sensor is this old, or older"
+        label={ageLabel}
         suffix="days"
         step={0.5}
         value={payload.value ?? 0}
@@ -156,6 +220,27 @@
         value={payload.minutes ?? 0}
         onChange={(v) => (payload.minutes = v)}
       />
+    {/if}
+
+    {#if template.trackerCategories && !leaf.tracker_age}
+      <p class="text-sm text-muted-foreground" data-testid="alert-no-tracker">
+        {#if draft.template === "site_change_due"}
+          There is no tracker for the infusion site. The alert uses the site change that your
+          uploader records.
+        {:else}
+          There is no tracker for the sensor. The alert uses the sensor start that your uploader
+          records.
+        {/if}
+        <Button
+          variant="link-underlined"
+          size="inline"
+          href={resolve("/(authenticated)/trackers")}
+          target="_blank"
+          rel="noopener"
+        >
+          Open Trackers
+        </Button>
+      </p>
     {/if}
 
     {#if template.canWait}

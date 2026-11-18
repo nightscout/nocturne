@@ -8,6 +8,7 @@
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { createRule, getRules } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import type { ReplayRuleDefinition } from "#lib/api/generated/nocturne-api-client.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
@@ -34,6 +35,8 @@
     newDraft,
     suggestName,
     templateLabel,
+    templateTrackers,
+    trackerLeaf,
     type AlertDraft,
     type TemplateId,
   } from "#lib/components/alerts/wizard/templates.svelte.js";
@@ -66,6 +69,20 @@
   let editor = $state<RuleEditorState>(parseRule(null));
   let draft = $state<AlertDraft | null>(null);
   let nameEdited = $state(false);
+
+  const trackersQuery = getDefinitions({});
+  const trackerDefinitions = $derived(trackersQuery.current ?? []);
+  const trackers = $derived(draft ? templateTrackers(draft.template, trackerDefinitions) : []);
+
+  // A type chosen before the trackers loaded moves to its tracker when they arrive.
+  $effect(() => {
+    const tracker = trackers[0];
+    untrack(() => {
+      if (tracker && draft?.leaf && !draft.leaf.tracker_age) {
+        draft.leaf = trackerLeaf(draft.template, tracker);
+      }
+    });
+  });
 
   // The furthest step reached. A step past it cannot be opened from the browser's history.
   let reached = $state(TYPE);
@@ -113,7 +130,7 @@
 
   function pickType(id: TemplateId): void {
     if (draft?.template !== id) {
-      draft = newDraft(id);
+      draft = newDraft(id, trackerDefinitions);
       editor.severity = getTemplate(id).severity;
       // The steps after this one were set for a different type.
       reached = TYPE;
@@ -266,7 +283,7 @@
       <TypeStep selected={draft?.template ?? null} onPick={pickType} />
     {:else if step === SETTINGS}
       {#key draft.template}
-        <SettingsStep bind:draft {availableRules} />
+        <SettingsStep bind:draft {availableRules} {trackers} />
       {/key}
     {:else if step === DELIVERY}
       <DeliveryStep bind:editor />

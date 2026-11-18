@@ -1,4 +1,9 @@
-import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+import {
+	AlertRuleSeverity,
+	TrackerCategory,
+	TrackerMode,
+	type TrackerDefinitionDto,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { plural } from "#lib/utils/plural.js";
 import { summarizeCondition } from "../summarizeCondition.svelte";
@@ -35,6 +40,11 @@ export interface TemplateDef {
 	severity: AlertRuleSeverity;
 	/** Whether "wait before alerting" applies; a type with its own duration has none. */
 	canWait: boolean;
+	/**
+	 * The tracker categories that measure the age this type alerts on. With a tracker of one
+	 * of them the type reads that tracker; `build` is what it reads with none.
+	 */
+	trackerCategories?: readonly TrackerCategory[];
 	build: () => ConditionNode | null;
 }
 
@@ -110,6 +120,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
 		group: "more",
 		severity: AlertRuleSeverity.Info,
 		canWait: false,
+		trackerCategories: [TrackerCategory.Cannula, TrackerCategory.Pod],
 		build: () => ({ type: "site_age", site_age: { operator: ">=", value: 72 } }),
 	},
 	{
@@ -117,6 +128,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
 		group: "more",
 		severity: AlertRuleSeverity.Info,
 		canWait: false,
+		trackerCategories: [TrackerCategory.Sensor],
 		build: () => ({ type: "sensor_age", sensor_age: { operator: ">=", value: 10 } }),
 	},
 	{
@@ -225,11 +237,49 @@ export interface AlertDraft {
 	custom: ConditionNode | null;
 }
 
-export function newDraft(id: TemplateId): AlertDraft {
+/** The trackers that measure the age a type alerts on, in the order the person keeps them. */
+export function templateTrackers(
+	id: TemplateId,
+	definitions: readonly TrackerDefinitionDto[],
+): TrackerDefinitionDto[] {
+	const categories = getTemplate(id).trackerCategories;
+	if (!categories) return [];
+	return definitions.filter(
+		(d) =>
+			!!d.id &&
+			d.mode !== TrackerMode.Event &&
+			d.category !== undefined &&
+			categories.includes(d.category),
+	);
+}
+
+/** The age, in hours, a type alerts at when it reads no tracker. */
+function fallbackAgeHours(id: TemplateId): number {
+	const leaf = getTemplate(id).build();
+	return leaf?.site_age?.value ?? (leaf?.sensor_age?.value ?? 0) * 24;
+}
+
+/** A type's condition on a tracker: its age reaches the tracker's lifespan. */
+export function trackerLeaf(id: TemplateId, tracker: TrackerDefinitionDto): ConditionNode {
+	return {
+		type: "tracker_age",
+		tracker_age: {
+			tracker_definition_id: tracker.id ?? "",
+			operator: ">=",
+			minutes: (tracker.lifespanHours ?? fallbackAgeHours(id)) * 60,
+		},
+	};
+}
+
+export function newDraft(
+	id: TemplateId,
+	definitions: readonly TrackerDefinitionDto[] = [],
+): AlertDraft {
 	const template = getTemplate(id);
+	const tracker = templateTrackers(id, definitions)[0];
 	return {
 		template: id,
-		leaf: template.build(),
+		leaf: tracker ? trackerLeaf(id, tracker) : template.build(),
 		waitMinutes: 0,
 		hours: { enabled: false, from: "22:00", to: "07:00" },
 		custom:
@@ -297,6 +347,11 @@ export function draftIssue(draft: AlertDraft): string | null {
 		leaf.sensor_age?.value;
 	if (amount !== undefined && !(amount > 0)) return "Enter a number above 0.";
 
+	if (leaf.tracker_age) {
+		if (!leaf.tracker_age.tracker_definition_id) return "Choose a tracker.";
+		if (!((leaf.tracker_age.minutes ?? 0) > 0)) return "Enter a number above 0.";
+	}
+
 	if (draft.hours.enabled) {
 		if (!draft.hours.from || !draft.hours.to) return "Enter a start time and an end time.";
 		if (draft.hours.from === draft.hours.to) return "The start time and the end time must be different.";
@@ -337,9 +392,9 @@ function baseName(draft: AlertDraft): string {
 		case "pump_battery_low":
 			return `Pump battery low: ${leaf?.pump_battery?.value ?? 0}%`;
 		case "site_change_due":
-			return `Site change due: ${daysText((leaf?.site_age?.value ?? 0) / 24)}`;
+			return `Site change due: ${daysText(ageDays(leaf))}`;
 		case "sensor_change_due":
-			return `Sensor change due: ${daysText(leaf?.sensor_age?.value ?? 0)}`;
+			return `Sensor change due: ${daysText(ageDays(leaf))}`;
 		case "loop_not_running":
 			return `Loop not running for ${minutesText(leaf?.loop_stale?.minutes ?? 0)}`;
 		case "phone_battery_low":
@@ -347,6 +402,22 @@ function baseName(draft: AlertDraft): string {
 		case "custom":
 			return summarizeCondition(draft.custom) || "Custom alert";
 	}
+}
+
+const MINUTES_PER_DAY = 24 * 60;
+
+/** The age a site or sensor type alerts at, in days, to two decimal places. */
+export function ageDays(leaf: ConditionNode | null): number {
+	const days = leaf?.tracker_age
+		? (leaf.tracker_age.minutes ?? 0) / MINUTES_PER_DAY
+		: leaf?.site_age
+			? (leaf.site_age.value ?? 0) / 24
+			: (leaf?.sensor_age?.value ?? 0);
+	return Math.round(days * 100) / 100;
+}
+
+export function daysToMinutes(days: number): number {
+	return Math.round(days * MINUTES_PER_DAY);
 }
 
 function withQualifiers(name: string, draft: AlertDraft): string {
@@ -374,4 +445,9 @@ export function minutesText(minutes: number): string {
 
 export function daysText(days: number): string {
 	return plural(days, ["# day", "# days"]);
+}
+
+/** A tracker's lifespan: in days when it is a whole number of them. */
+export function lifespanText(hours: number): string {
+	return hours % 24 === 0 ? daysText(hours / 24) : plural(hours, ["# hour", "# hours"]);
 }

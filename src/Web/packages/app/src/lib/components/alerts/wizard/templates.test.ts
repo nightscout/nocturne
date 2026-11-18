@@ -1,4 +1,9 @@
 import { describe, it, expect } from "vitest";
+import {
+	TrackerCategory,
+	TrackerMode,
+	type TrackerDefinitionDto,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { buildBody, parseRule } from "../types";
 import {
 	TEMPLATES,
@@ -8,7 +13,30 @@ import {
 	suggestName,
 	templateDescription,
 	templateLabel,
+	templateTrackers,
 } from "./templates.svelte";
+
+const sensorTracker: TrackerDefinitionDto = {
+	id: "11111111-1111-1111-1111-111111111111",
+	name: "Dexcom G7",
+	category: TrackerCategory.Sensor,
+	mode: TrackerMode.Duration,
+	lifespanHours: 252,
+};
+const podTracker: TrackerDefinitionDto = {
+	id: "22222222-2222-2222-2222-222222222222",
+	name: "Pod",
+	category: TrackerCategory.Pod,
+	mode: TrackerMode.Duration,
+	lifespanHours: 72,
+};
+const appointment: TrackerDefinitionDto = {
+	id: "33333333-3333-3333-3333-333333333333",
+	name: "Clinic",
+	category: TrackerCategory.Appointment,
+	mode: TrackerMode.Event,
+};
+const definitions = [appointment, podTracker, sensorTracker];
 
 function bodyOf(draft: ReturnType<typeof newDraft>) {
 	return buildBody({ ...parseRule(null), condition: draftCondition(draft) });
@@ -49,6 +77,50 @@ describe("alert wizard templates", () => {
 				{ type: "time_of_day", time_of_day: { from: "22:00", to: "07:00" } },
 			],
 		});
+	});
+
+	it("reads the sensor's age from the sensor tracker, at the tracker's lifespan", () => {
+		const draft = newDraft("sensor_change_due", definitions);
+
+		const body = bodyOf(draft);
+
+		expect(body.conditionType).toBe("tracker_age");
+		expect(body.conditionParams).toEqual({
+			tracker_definition_id: sensorTracker.id,
+			operator: ">=",
+			minutes: 252 * 60,
+		});
+		expect(suggestName(draft)).toBe("Sensor change due: 10.5 days");
+		expect(draftIssue(draft)).toBeNull();
+	});
+
+	it("reads the site's age from a pod tracker", () => {
+		expect(templateTrackers("site_change_due", definitions)).toEqual([podTracker]);
+		expect(bodyOf(newDraft("site_change_due", definitions)).conditionParams).toMatchObject({
+			tracker_definition_id: podTracker.id,
+			minutes: 72 * 60,
+		});
+	});
+
+	it("alerts at the type's own age on a tracker that has no lifespan", () => {
+		const draft = newDraft("sensor_change_due", [{ ...sensorTracker, lifespanHours: undefined }]);
+		expect(draft.leaf?.tracker_age?.minutes).toBe(10 * 24 * 60);
+	});
+
+	it("reads the uploader's sensor start when there is no sensor tracker", () => {
+		const draft = newDraft("sensor_change_due", [appointment, podTracker]);
+		expect(bodyOf(draft).conditionType).toBe("sensor_age");
+	});
+
+	it("gives a type that is not an age no tracker", () => {
+		expect(templateTrackers("low", definitions)).toEqual([]);
+		expect(bodyOf(newDraft("low", definitions)).conditionType).toBe("threshold");
+	});
+
+	it("does not accept a tracker age of zero", () => {
+		const draft = newDraft("sensor_change_due", definitions);
+		draft.leaf!.tracker_age!.minutes = 0;
+		expect(draftIssue(draft)).toBe("Enter a number above 0.");
 	});
 
 	it("leaves the wait out for a type that has its own duration", () => {
