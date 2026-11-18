@@ -6262,6 +6262,7 @@ msgstr "Upload an audio file to use as a custom alarm sound."
 msgid "Optional: Give your sound a friendly name"
 msgstr "Optional: Give your sound a friendly name"
 
+#: src/lib/components/connectors/OuraImportCard.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "<0/> Uploading..."
 msgstr "<0/> Uploading..."
@@ -40083,45 +40084,38 @@ msgstr "This export contains more data than Nocturne can import."
 msgid "Your access shows only the last 24 hours. A member with full access must import the export."
 msgstr "Your access shows only the last 24 hours. A member with full access must import the export."
 
-#: src/lib/components/connectors/OuraImportCard.svelte
-msgid "The import did not complete. Try again."
-msgstr "The import did not complete. Try again."
+#~ msgid "The import did not complete. Try again."
+#~ msgstr "The import did not complete. Try again."
 
-#: src/lib/components/connectors/OuraImportCard.svelte
-msgid "Import an Oura data export"
-msgstr "Import an Oura data export"
+#~ msgid "Import an Oura data export"
+#~ msgstr "Import an Oura data export"
 
-#: src/lib/components/connectors/OuraImportCard.svelte
-msgid "Request your data export at <0>membership.ouraring.com/data-export</0>. When the export is ready, download the ZIP file and select it here. To add newer data, import a new export."
-msgstr "Request your data export at <0>membership.ouraring.com/data-export</0>. When the export is ready, download the ZIP file and select it here. To add newer data, import a new export."
+#~ msgid "Request your data export at <0>membership.ouraring.com/data-export</0>. When the export is ready, download the ZIP file and select it here. To add newer data, import a new export."
+#~ msgstr "Request your data export at <0>membership.ouraring.com/data-export</0>. When the export is ready, download the ZIP file and select it here. To add newer data, import a new export."
 
 #. 0: MAX_SIZE_MB
 #: src/lib/components/connectors/OuraImportCard.svelte
 msgid "The file is larger than {0} MB."
 msgstr "The file is larger than {0} MB."
 
-#. 0: MAX_SIZE_MB
-#: src/lib/components/connectors/OuraImportCard.svelte
-msgid "Data export (ZIP file, up to {0} MB)"
-msgstr "Data export (ZIP file, up to {0} MB)"
+#~ msgid "Data export (ZIP file, up to {0} MB)"
+#~ msgstr "Data export (ZIP file, up to {0} MB)"
 
-#: src/lib/components/connectors/OuraImportCard.svelte
-msgid "<0/> Importing..."
-msgstr "<0/> Importing..."
+#~ msgid "<0/> Importing..."
+#~ msgstr "<0/> Importing..."
 
 #: src/lib/components/connectors/OuraImportCard.svelte
 msgid "<0/> Import"
 msgstr "<0/> Import"
 
-#: src/lib/components/connectors/OuraImportCard.svelte
-msgid "A large export can take some minutes. Keep this page open."
-msgstr "A large export can take some minutes. Keep this page open."
+#~ msgid "A large export can take some minutes. Keep this page open."
+#~ msgstr "A large export can take some minutes. Keep this page open."
 
 #: src/lib/components/connectors/OuraImportCard.svelte
 msgid "Import complete"
 msgstr "Import complete"
 
-#. 0: count(imported.sleepSessions); 1: count(imported.heartRates); 2: count(imported.stepDays)
+#. 0: count(status.sleepSessions); 1: count(status.heartRates); 2: count(status.stepDays)
 #: src/lib/components/connectors/OuraImportCard.svelte
 msgid "Sleep sessions: {0}. Heart rate readings: {1}. Days of steps: {2}."
 msgstr "Sleep sessions: {0}. Heart rate readings: {1}. Days of steps: {2}."
@@ -41429,3 +41423,81 @@ msgstr "The times this alert started. Select one to replay that day."
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "This alert has not started yet"
 msgstr "This alert has not started yet"
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionRow.svelte
+msgid "Imported from a file"
+msgstr "Imported from a file"
+
+#: src/lib/components/connectors/ConnectionStatusLabel.svelte
+msgid "Imported"
+msgstr "Imported"
+
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+msgid "A sync is in progress for this connector. Wait until it is complete, then try again."
+msgstr "A sync is in progress for this connector. Wait until it is complete, then try again."
+
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+msgid "An import is in progress for this connector. Wait until it is complete, then try again."
+msgstr "An import is in progress for this connector. Wait until it is complete, then try again."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "An import is in progress. Wait until it is complete."
+msgstr "An import is in progress. Wait until it is complete."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne is deleting the Oura data. Wait until the delete is complete, then import the export."
+msgstr "Nocturne is deleting the Oura data. Wait until the delete is complete, then import the export."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne could not get the status of the import. Refresh the page."
+msgstr "Nocturne could not get the status of the import. Refresh the page."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The import did not start. Try again."
+msgstr "The import did not start. Try again."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne examines the export before the import starts. A large export can take one minute."
+msgstr "Nocturne examines the export before the import starts. A large export can take one minute."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The import stopped before it was complete"
+msgstr "The import stopped before it was complete"
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne kept the records that it imported. To import the remaining records, import the same export again."
+msgstr "Nocturne kept the records that it imported. To import the remaining records, import the same export again."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Importing heart rate readings"
+msgstr "Importing heart rate readings"
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Importing steps"
+msgstr "Importing steps"
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Importing sleep sessions"
+msgstr "Importing sleep sessions"
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The import continues if you close this page."
+msgstr "The import continues if you close this page."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne imported these records. <0/>"
+msgstr "Nocturne imported these records. <0/>"
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "To import the remaining records, import the same export again."
+msgstr "To import the remaining records, import the same export again."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "Nocturne did not import records from this export. Try again."
+msgstr "Nocturne did not import records from this export. Try again."
+
+#: src/lib/components/connectors/OuraImportCard.svelte
+msgid "The import did not complete"
+msgstr "The import did not complete"
