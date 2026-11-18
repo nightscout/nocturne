@@ -9,9 +9,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for querying correlated data across all V4 repositories by correlation ID.
-/// A correlation ID links related records — for example, a sensor glucose reading with the
-/// bolus that was delivered in response to it.
+/// Related records across data types, found by correlation ID. A correlation ID links records such as
+/// a sensor glucose reading and the bolus given in response to it.
 /// </summary>
 /// <remarks>
 /// Queries all supported V4 repositories in parallel and returns a composite result keyed by

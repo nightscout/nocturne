@@ -17,7 +17,8 @@ using Nocturne.API.Services.Caching;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for managing nutrition data: carbohydrate intakes, food breakdown, and meals.
+/// Carbohydrate intakes, the foods in each intake, and meals. Create, read, update, and delete carb intakes
+/// and their food lines. Create a meal, and list meals.
 /// </summary>
 /// <remarks>
 /// Three logical resource groups are exposed under <c>/api/v4/nutrition</c>:
@@ -38,6 +39,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="IBolusRepository"/>
 /// <seealso cref="ITreatmentFoodService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Carbs and Meals")]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
 [RequireScope(Scope.TreatmentsRead)]

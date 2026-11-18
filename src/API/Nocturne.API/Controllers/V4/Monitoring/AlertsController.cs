@@ -18,7 +18,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for active alert state, history, and acknowledgement.
+/// Active alerts, alert history, and acknowledgement of alerts. Snooze an alert, record delivery
+/// outcomes, and list deliveries waiting to be sent.
 /// </summary>
 /// <remarks>
 /// <para>

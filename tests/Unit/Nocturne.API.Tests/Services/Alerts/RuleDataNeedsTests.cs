@@ -217,6 +217,18 @@ public class RuleDataNeedsTests
     }
 
     [NativeFact]
+    public void TransmitterBattery_rule_sets_TransmitterStatus_only()
+    {
+        var rule = MakeRule(AlertConditionType.TransmitterBattery,
+            """{"metric":"voltage_a","operator":"<","value":290}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsTransmitterStatus.Should().BeTrue();
+        result.NeedsUploaderStatus.Should().BeFalse();
+    }
+
+    [NativeFact]
     public void OverrideActive_rule_sets_Override_only()
     {
         var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");

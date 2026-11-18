@@ -11,8 +11,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Compares two of the patient's CGMs against each other over a window: readings time-paired
-/// device to device, plus the agreement measures over that pairing.
+/// Compares two CGMs over a time window. Readings are paired by time from one device to the other,
+/// and the agreement measures for those pairs are returned.
 /// </summary>
 /// <seealso cref="CgmComparisonCalculator"/>
 [ApiController]

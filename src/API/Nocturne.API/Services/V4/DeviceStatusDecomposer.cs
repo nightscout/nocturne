@@ -1124,6 +1124,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             IsCharging = ds.IsCharging ?? ds.Uploader?.IsCharging,
             Temperature = ds.Uploader?.Temperature,
             Type = ds.Uploader?.Type,
+            AdditionalProperties = ds.Uploader?.ExtensionData is { Count: > 0 } reported
+                ? reported.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
         };
     }
 

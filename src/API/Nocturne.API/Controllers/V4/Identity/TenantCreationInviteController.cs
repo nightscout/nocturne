@@ -10,10 +10,14 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// What the holder of a tenant creation invite uses, on the bare domain and without a tenant. A
-/// visitor without an account creates one through <c>PasskeyController.TenantInviteOptions</c>; a
-/// signed-in visitor redeems here.
+/// Tenant creation invites, for the person who holds one. Read what the link offers, check that a
+/// tenant address is free, and redeem the invite to create a tenant. These operations work on the
+/// base domain, with no tenant in the host name.
 /// </summary>
+/// <remarks>
+/// A visitor without an account creates one through <c>PasskeyController.TenantInviteOptions</c>; a
+/// signed-in visitor redeems here.
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/tenant-invites")]

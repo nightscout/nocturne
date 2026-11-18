@@ -8,8 +8,8 @@ using Nocturne.Core.Models.Services;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Aggregated data overview for heatmap visualization.
-/// Provides year-level availability, day-level record counts, average glucose, and monthly GRI scores.
+/// Aggregated data for the heatmap: year-level availability, day-level record counts, average glucose,
+/// and monthly GRI scores.
 /// </summary>
 /// <remarks>
 /// Responses are cached (300s for years and GRI timeline; 180s for daily summary)

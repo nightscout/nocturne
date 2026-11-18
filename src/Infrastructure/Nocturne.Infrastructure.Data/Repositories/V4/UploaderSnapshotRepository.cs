@@ -58,4 +58,14 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
     }
+
+    /// <inheritdoc />
+    public async Task<UploaderSnapshot?> GetLatestOfTypeAsync(string type, DateTime? asOf, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.UploaderSnapshots.AsNoTracking().Where(e => e.Type == type);
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        var entity = await query.OrderByDescending(e => e.Timestamp).FirstOrDefaultAsync(ct);
+        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
+    }
 }
