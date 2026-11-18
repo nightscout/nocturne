@@ -298,6 +298,8 @@ export class RealtimeStore {
   notes = $state.raw<Note[]>([]);
   deviceEvents = $state.raw<DeviceEvent[]>([]);
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
+  /** Server-calculated IOB for the IOB pill's fallback, set by the authenticated layout. */
+  calculatedIob = $state<number | undefined>();
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
@@ -407,7 +409,7 @@ export class RealtimeStore {
       this.boluses,
       this.carbIntakes,
       this.profile,
-      { units: "mg/dL" }
+      { units: "mg/dL", calculatedIob: this.calculatedIob }
     );
   });
 
