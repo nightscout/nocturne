@@ -496,6 +496,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
+        if (needs.NeedsTransmitterStatus)
+        {
+            var latest = await _deps.UploaderSnapshots.GetLatestOfTypeAsync(TransmitterStatus.UploaderType, asOf, ct);
+            if (TransmitterStatus.From(latest) is { } transmitter)
+            {
+                enriched = enriched with
+                {
+                    TransmitterVoltageA = transmitter.VoltageA,
+                    TransmitterVoltageB = transmitter.VoltageB,
+                    TransmitterResistance = transmitter.Resistance,
+                    TransmitterDays = transmitter.Days,
+                };
+            }
+        }
+
         if (needs.NeedsOverride)
         {
             var span = await _deps.StateSpans.GetActiveAtAsync(

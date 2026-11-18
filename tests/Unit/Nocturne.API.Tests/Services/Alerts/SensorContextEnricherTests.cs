@@ -769,6 +769,35 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
+    public async Task TransmitterBattery_need_reads_the_latest_transmitter_status_however_old()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _uploaderSnapshotRepository
+            .Setup(r => r.GetLatestOfTypeAsync(TransmitterStatus.UploaderType, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UploaderSnapshot
+            {
+                Timestamp = now.AddDays(-9),
+                Type = TransmitterStatus.UploaderType,
+                AdditionalProperties = new()
+                {
+                    ["voltagea"] = System.Text.Json.JsonSerializer.SerializeToElement(288),
+                    ["voltageb"] = System.Text.Json.JsonSerializer.SerializeToElement(271),
+                    ["days"] = System.Text.Json.JsonSerializer.SerializeToElement(95),
+                },
+            });
+        var rule = MakeRule(AlertConditionType.TransmitterBattery,
+            """{"metric":"voltage_a","operator":"<","value":290}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
+
+        enriched.TransmitterVoltageA.Should().Be(288m);
+        enriched.TransmitterVoltageB.Should().Be(271m);
+        enriched.TransmitterResistance.Should().BeNull();
+        enriched.TransmitterDays.Should().Be(95m);
+    }
+
+    [Fact]
     public async Task TempBasal_need_projects_with_null_scheduled_rate_when_not_present()
     {
         var enricher = BuildEnricher();

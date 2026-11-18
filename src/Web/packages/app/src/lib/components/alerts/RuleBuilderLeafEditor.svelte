@@ -16,6 +16,7 @@
     rateDirectionLabel,
     stateSpanCategoryLabel,
     tempBasalMetricLabel,
+    transmitterBatteryMetricLabel,
     trendBucketLabel,
   } from "./alert-labels.svelte";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -29,6 +30,7 @@
     isStringEnumMember,
     TREND_BUCKETS,
     TempBasalMetric,
+    TransmitterBatteryMetric,
     GlucoseBucket,
     PumpModeState,
     StateSpanCategory,
@@ -456,6 +458,50 @@
             e.currentTarget.value,
             node.temp_basal.value ?? 0,
           );
+      }}
+    />
+  {:else if node.type === "transmitter_battery" && node.transmitter_battery}
+    {@const payload = node.transmitter_battery}
+    <Select.Root
+      type="single"
+      value={payload.metric ?? TransmitterBatteryMetric.VoltageA}
+      onValueChange={(v) => {
+        if (isStringEnumMember(TransmitterBatteryMetric, v)) payload.metric = v;
+      }}
+    >
+      <Select.Trigger size="xs" class="w-32">
+        {transmitterBatteryMetricLabel(payload.metric ?? TransmitterBatteryMetric.VoltageA)}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.values(TransmitterBatteryMetric) as metric (metric)}
+          <Select.Item value={metric} label={transmitterBatteryMetricLabel(metric)} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Select.Root
+      type="single"
+      value={payload.operator ?? "<"}
+      onValueChange={(v) => {
+        payload.operator = v;
+      }}
+    >
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, payload.operator ?? "<")}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.entries(opLabels) as [op, label] (op)}
+          <Select.Item value={op} {label} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Input
+      type="number"
+      step="1"
+      size="xs"
+      class="w-20 text-right tabular-nums"
+      value={payload.value ?? 0}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        payload.value = parseNumber(e.currentTarget.value, payload.value ?? 0);
       }}
     />
   {:else if (node.type === "pump_suspended" || node.type === "override_active" || node.type === "do_not_disturb") && node[node.type]}
