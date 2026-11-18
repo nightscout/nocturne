@@ -4488,6 +4488,7 @@ msgid "Code"
 msgstr "Kód"
 
 #: src/lib/components/members/GuestLinksSection.svelte
+#: src/lib/components/status-pills/LinkBatteryPill.svelte
 msgid "Link"
 msgstr "Odkaz"
 
@@ -22606,7 +22607,7 @@ msgstr "Dočasný bazál"
 msgid "{0} · combo"
 msgstr "{0} · kombinovaný"
 
-#. 0: time; 1: bg(data.eventualBG); 2: bgLabel()
+#. 0: at; 1: bg(data.eventualBG); 2: bgLabel()
 #: src/lib/components/status-pills/LoopPill.svelte
 msgid "{0} · eventual {1} {2}"
 msgstr "{0} · očekávaná {1} {2}"
@@ -40567,4 +40568,8 @@ msgstr ""
 
 #: src/lib/components/members/RolesSection.svelte
 msgid "This name is reserved. Use a different name."
+msgstr ""
+
+#: src/lib/components/settings/DashboardRailConfigurator.svelte
+msgid "Link battery"
 msgstr ""
