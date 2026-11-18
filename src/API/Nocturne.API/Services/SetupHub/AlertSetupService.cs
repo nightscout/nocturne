@@ -83,11 +83,8 @@ public class AlertSetupService(
     /// The resolve condition of a threshold starter whose preset closes on the opposite: glucose on
     /// the other side of the same level, as the rule editor stores a resolve tree of one condition.
     /// </summary>
-    private static string OppositeOf(string direction, decimal mgdl) => JsonSerializer.Serialize(new
-    {
-        type = "threshold",
-        threshold = new { direction = direction == "below" ? "above" : "below", value = mgdl },
-    });
+    private static string OppositeOf(string direction, decimal mgdl) => AutoResolveSuggestion.For(
+        JsonSerializer.Serialize(new { type = "threshold", threshold = new { direction, value = mgdl } }))!;
 
     /// <summary>What can be chosen instead of this device.</summary>
     private static readonly IReadOnlyList<ChannelType> ChannelTypesOffered = ChannelDestinations.Offered

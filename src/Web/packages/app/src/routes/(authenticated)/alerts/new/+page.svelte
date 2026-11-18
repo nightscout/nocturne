@@ -17,6 +17,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";
+  import { oppositeCondition } from "#lib/components/alerts/oppositeCondition.js";
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
   import {
     buildBody,
@@ -33,7 +34,6 @@
   import TypeStep from "#lib/components/alerts/wizard/TypeStep.svelte";
   import WizardProgress from "#lib/components/alerts/wizard/WizardProgress.svelte";
   import {
-    draftAutoResolve,
     draftCondition,
     draftIssue,
     newDraft,
@@ -82,13 +82,14 @@
   const trackerDefinitions = $derived(trackersQuery.current ?? []);
   const trackers = $derived(draft ? templateTrackers(draft.def, trackerDefinitions) : []);
 
-  // A type chosen before the trackers loaded moves to its tracker when they arrive.
+  // A type chosen before the trackers loaded moves to its tracker when they arrive, unless the
+  // person has changed its settings by then: those are theirs to keep.
   $effect(() => {
     const tracker = trackers[0];
     untrack(() => {
-      if (tracker && draft?.leaf && !draft.leaf.tracker_age) {
-        draft.leaf = trackerLeaf(draft.def, tracker);
-      }
+      if (!tracker || !draft?.leaf || draft.leaf.tracker_age) return;
+      if (JSON.stringify(draft.leaf) !== JSON.stringify(draft.def.build())) return;
+      draft.leaf = trackerLeaf(draft.def, tracker);
     });
   });
 
@@ -126,16 +127,39 @@
   const suggestedName = $derived(draft ? suggestName(draft, trackerDefinitions) : "");
   const name = $derived(nameEdited ? editor.name.trim() : suggestedName);
 
-  // A type that closes on the opposite of its condition gets that as its resolve condition.
-  const autoResolve = $derived<ConditionNode | null>(draft ? draftAutoResolve(draft) : null);
+  // A type that closes on the opposite of its condition gets that as its resolve condition. The
+  // API works the opposite out. It is asked when the last step opens: the condition is set on the
+  // steps before it.
+  let autoResolve = $state<ConditionNode | null>(null);
+  let autoResolveAsked: Promise<ConditionNode | null> = Promise.resolve(null);
 
-  function rule(): RuleEditorState {
+  function askAutoResolve(): Promise<ConditionNode | null> {
+    return draft?.def.autoResolve ? oppositeCondition(condition) : Promise.resolve(null);
+  }
+
+  $effect(() => {
+    if (step !== CHECK) return;
+    untrack(() => {
+      const asked = askAutoResolve();
+      autoResolveAsked = asked;
+      autoResolve = null;
+      asked.then(
+        (closing) => {
+          if (autoResolveAsked === asked) autoResolve = closing;
+        },
+        // The last step shows no closing condition, and Create asks again.
+        () => {},
+      );
+    });
+  });
+
+  function rule(closing: ConditionNode | null = autoResolve): RuleEditorState {
     return {
       ...editor,
       name,
       condition,
-      autoResolveEnabled: autoResolve !== null,
-      autoResolveCondition: autoResolve,
+      autoResolveEnabled: closing !== null,
+      autoResolveCondition: closing,
     };
   }
 
@@ -196,7 +220,9 @@
     saving = true;
     error = null;
     try {
-      await createRule(buildBody(rule()));
+      // An alert is not created without the closing condition its type has.
+      const closing = await autoResolveAsked.catch(askAutoResolve);
+      await createRule(buildBody(rule(closing)));
       created = true;
       toastSaved("The alert is on.");
       await goto(resolve("/(authenticated)/alerts"));
@@ -339,6 +365,7 @@
             selected={draft?.template ?? null}
             onPick={pickType}
             {templates}
+            loading={presetsQuery.current === undefined && !presetsQuery.error}
             {trackerDefinitions}
           />
     {:else if step === SETTINGS}

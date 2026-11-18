@@ -145,6 +145,25 @@ public class AlertRulesController : ControllerBase
             .ToList());
 
     /// <summary>
+    /// The condition that closes an alert at once: the opposite of the given condition tree. The
+    /// answer has no condition when the tree has no opposite.
+    /// </summary>
+    [HttpPost("auto-resolve-suggestion")]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(AutoResolveSuggestionResponse), StatusCodes.Status200OK)]
+    public ActionResult<AutoResolveSuggestionResponse> SuggestAutoResolve([FromBody] AutoResolveSuggestionRequest request)
+    {
+        var suggestion = request.Condition is null
+            ? null
+            : AutoResolveSuggestion.For(JsonSerializer.Serialize(request.Condition));
+        return Ok(new AutoResolveSuggestionResponse
+        {
+            Condition = suggestion is null ? null : DeserializeJson(suggestion),
+        });
+    }
+
+    /// <summary>
     /// Get a single alert rule with its flat channel list.
     /// </summary>
     [HttpGet("{id:guid}")]
@@ -691,6 +710,18 @@ public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds, s
 }
 
 #region DTOs
+
+public class AutoResolveSuggestionRequest
+{
+    /// <summary>A condition node as a rule stores it: its type, and its payload under that name.</summary>
+    public object? Condition { get; set; }
+}
+
+public class AutoResolveSuggestionResponse
+{
+    /// <summary>The opposite condition node, or null when the condition has none.</summary>
+    public object? Condition { get; set; }
+}
 
 /// <summary>An <see cref="AlertPreset"/>, with its condition as a JSON object.</summary>
 public class AlertPresetResponse

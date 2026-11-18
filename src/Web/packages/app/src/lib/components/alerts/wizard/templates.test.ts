@@ -8,7 +8,6 @@ import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
 import { buildBody, parseRule } from "../types";
 import {
 	offeredTemplates as offeredFrom,
-	draftAutoResolve,
 	draftCondition,
 	draftIssue,
 	newDraft as draftOf,
@@ -81,37 +80,19 @@ describe("alert wizard templates", () => {
 		expect(templates.map((t) => t.id)).toEqual(["low", "urgent_low", "custom"]);
 	});
 
-	it("closes a level alert at once on the other side of the level it was given", () => {
-		const draft = newDraft("low");
-		draft.leaf!.threshold!.value = 80;
-		draft.waitMinutes = 15;
-
-		const body = buildBody({
-			...parseRule(null),
-			condition: draftCondition(draft),
-			autoResolveEnabled: true,
-			autoResolveCondition: draftAutoResolve(draft),
-		});
-
-		expect(body.autoResolveParams).toEqual({ type: "threshold", threshold: { direction: "above", value: 80 } });
-	});
-
-	it("closes an alert on a tracker when the tracker is younger than the age again", () => {
-		const resolve = draftAutoResolve(newDraft("sensor_change_due", definitions));
-		expect(resolve?.composite?.conditions[0].tracker_age).toEqual({
-			tracker_definition_id: sensorTracker.id,
-			operator: "<",
-			minutes: 252 * 60,
-		});
-	});
-
-	it("gives no closing condition to a type with no opposite, or to a custom alert", () => {
-		expect(draftAutoResolve(newDraft("no_readings"))).toBeNull();
-		expect(draftAutoResolve(newDraft("urgent_low_soon"))).toBeNull();
-		expect(draftAutoResolve(newDraft("falling_fast"))).toBeNull();
-		expect(draftAutoResolve(newDraft("rising_fast"))).toBeNull();
-		expect(draftAutoResolve(newDraft("loop_not_running"))).toBeNull();
-		expect(draftAutoResolve(newDraft("custom"))).toBeNull();
+	it("marks which types close on the opposite of their condition", () => {
+		const closing = TEMPLATES.filter((t) => t.autoResolve).map((t) => t.id);
+		expect(closing).toEqual([
+			"urgent_low",
+			"low",
+			"high",
+			"reservoir_low",
+			"pump_battery_low",
+			"battery_change_due",
+			"site_change_due",
+			"sensor_change_due",
+			"phone_battery_low",
+		]);
 	});
 
 	it("gives every type a label and a description of its own", () => {

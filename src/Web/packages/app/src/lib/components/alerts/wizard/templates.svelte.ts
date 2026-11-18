@@ -8,7 +8,6 @@ import {
 } from "#lib/api/generated/nocturne-api-client.js";
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { plural } from "#lib/utils/plural.js";
-import { suggestAutoResolve } from "../suggestAutoResolve";
 import { summarizeCondition } from "../summarizeCondition.svelte";
 import { browserTimeZone, ensureCompositeRoot, nodeFromApi, type ConditionNode } from "../types";
 
@@ -267,14 +266,6 @@ export function draftCondition(draft: AlertDraft): ConditionNode | null {
 			]
 		: [main];
 	return { type: "composite", composite: { operator: "and", conditions } };
-}
-
-/**
- * The condition that closes the alert at once: the opposite of the draft's condition, for a type
- * that closes that way. `null` for the others, which close when their condition is false.
- */
-export function draftAutoResolve(draft: AlertDraft): ConditionNode | null {
-	return draft.def.autoResolve ? suggestAutoResolve(draftCondition(draft)) : null;
 }
 
 const MIN_GLUCOSE_MGDL = 40;

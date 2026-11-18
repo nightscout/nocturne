@@ -54,7 +54,12 @@ public interface IAlertReplayService
     /// first, so the author of a rule sees the last occasion it applies to before saving it. Only
     /// that rule is evaluated, with the saved rules beside it when its condition reads their state.
     /// </summary>
-    Task<AlertFiringSearchResult> FindFiringsAsync(ReplayRuleOverride ruleOverride, CancellationToken ct);
+    /// <param name="lastDayOnly">
+    /// Search the last day only, for a reader limited to the last 24 hours: no earlier reading is
+    /// shown to them, so an earlier day would be searched empty and reported as a day the alert
+    /// did not start in.
+    /// </param>
+    Task<AlertFiringSearchResult> FindFiringsAsync(ReplayRuleOverride ruleOverride, bool lastDayOnly, CancellationToken ct);
 }
 
 /// <summary>A time a rule would have fired.</summary>

@@ -16,11 +16,18 @@ const calls = vi.hoisted(() => ({
   createError: null as unknown,
   search: null as unknown,
   trackers: [] as unknown[],
+  opposites: [] as unknown[],
 }));
 
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => []),
   getPresets: () => remoteQuery(() => ALERT_PRESETS),
+  suggestAutoResolve: remoteCommand((request: unknown) => {
+    calls.opposites.push(Reflect.get(Object(request), "condition"));
+    return Promise.resolve({
+      condition: { type: "threshold", threshold: { direction: "above", value: 70 } },
+    });
+  }),
   createRule: remoteCommand((body: unknown) => {
     calls.created.push(body);
     return calls.createError ? Promise.reject(calls.createError) : Promise.resolve({ id: "new-id" });
@@ -89,6 +96,7 @@ describe("new alert wizard", () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
     pageState.state = {};
     calls.created.length = 0;
+    calls.opposites.length = 0;
     calls.searched.length = 0;
     calls.tested.length = 0;
     calls.createError = null;
@@ -252,6 +260,10 @@ describe("new alert wizard", () => {
       isEnabled: true,
       autoResolveEnabled: true,
       autoResolveParams: { type: "threshold", threshold: { direction: "above", value: 70 } },
+    });
+    expect(calls.opposites.at(-1)).toMatchObject({
+      type: "composite",
+      composite: { conditions: [{ type: "threshold", threshold: { direction: "below", value: 70 } }] },
     });
   });
 
