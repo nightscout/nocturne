@@ -1467,7 +1467,6 @@ msgstr "Buscar tipos..."
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/meals/MealsTable.svelte
-#: src/lib/components/status-pills/COBPill.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
@@ -6719,13 +6718,11 @@ msgstr "Uso compartido"
 msgid "Source"
 msgstr "Fuente"
 
-#: src/lib/components/status-pills/COBPill.svelte
-msgid "Actively absorbing"
-msgstr "Absorción activa"
+#~ msgid "Actively absorbing"
+#~ msgstr "Absorción activa"
 
-#: src/lib/components/status-pills/COBPill.svelte
-msgid "Waiting for absorption"
-msgstr "Esperando absorción"
+#~ msgid "Waiting for absorption"
+#~ msgstr "Esperando absorción"
 
 #~ msgid "Last Bolus"
 #~ msgstr "Último bolo"
