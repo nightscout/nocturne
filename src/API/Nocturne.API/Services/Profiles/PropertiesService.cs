@@ -1096,16 +1096,28 @@ public class PropertiesService : IPropertiesService
         var totalSize = dbStats.DataSize + dbStats.IndexSize;
         var percentage = totalSize > 0 ? (int)(totalSize * 100.0 / _dbSize.MaxBytes) : 0;
 
+        const double bytesPerMiB = 1024.0 * 1024.0;
+        var totalMiB = totalSize / bytesPerMiB;
+        var maxMiB = (double)Math.Max(_dbSize.MaxMiB, 1);
+        var (status, level) =
+            totalMiB >= Math.Floor(0.75 * maxMiB) ? ("urgent", DeviceAgeLevel.Urgent)
+            : totalMiB >= Math.Floor(0.60 * maxMiB) ? ("warn", DeviceAgeLevel.Warn)
+            : ("current", DeviceAgeLevel.Info);
+
         properties["dbsize"] = new Dictionary<string, object>
         {
             ["size"] = totalSize,
             ["percentage"] = percentage,
             ["display"] = $"{percentage}%",
-            // NIGHTSCOUT-COMPAT: Nightscout's dbsize plugin warns from 60% and is urgent from 75% of the floored percentage.
-            ["status"] =
-                percentage >= 75 ? "urgent"
-                : percentage >= 60 ? "warn"
-                : "ok",
+            ["status"] = status,
+            ["dataPercentage"] = percentage,
+            ["totalDataSize"] = totalMiB,
+            ["notificationLevel"] = level,
+            ["details"] = new Dictionary<string, object>
+            {
+                ["dataSize"] = ScaledRounding.Round(totalMiB, 2, MidpointRounding.AwayFromZero),
+                ["maxSize"] = maxMiB,
+            },
         };
     }
 
