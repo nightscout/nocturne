@@ -221,6 +221,23 @@ describe("processPillsData – calculated COB", () => {
 		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, { now: NOW });
 		expect(result.cob).toBeNull();
 	});
+
+	it("shows a real calculated COB of 0 as 0g", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, {
+			now: NOW,
+			calculatedCob: 0,
+		});
+		expect(result.cob!.display).toBe("0g");
+		expect(result.cob!.source).toBe("Calculated");
+	});
+
+	it("returns null COB when the server has no COB to report", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, {
+			now: NOW,
+			calculatedCob: undefined,
+		});
+		expect(result.cob).toBeNull();
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -535,6 +552,23 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 
 	it("returns null IOB when no device reported IOB and there is no calculated IOB", () => {
 		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
+		expect(result.iob).toBeNull();
+	});
+
+	it("shows a real calculated IOB of 0 as 0.00U", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0,
+		});
+		expect(result.iob!.display).toBe("0.00U");
+		expect(result.iob!.source).toBe("Calculated");
+	});
+
+	it("returns null IOB when the server has no IOB to report", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: undefined,
+		});
 		expect(result.iob).toBeNull();
 	});
 
