@@ -4383,6 +4383,7 @@ msgstr "No meals match the current filters."
 #: src/lib/components/alerts/factText.svelte.ts
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
+#: src/lib/components/status-pills/BasalPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 #: src/lib/constants/entry-category-labels.svelte.ts
@@ -14778,10 +14779,14 @@ msgstr "Total: {0} records deleted"
 #. 0: (point.profileBasalRate ?? 0).toFixed(2)
 #. 0: d.basalRate.toFixed(2)
 #. 0: d.scheduledBasalRate.toFixed(2)
+#. 0: data.injection.estimatedRate
+#. 0: data.scheduledBasal.toFixed(3)
 #. 0: attributeValue(ProfileAttribute.Basal, basal.value)
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/lib/components/status-pills/BasalPill.svelte
+#: src/lib/components/status-pills/BasalPill.svelte
 #: src/lib/components/therapy-timeline/TimelineStage.svelte
 msgid "{0} U/h"
 msgstr "{0} U/h"
@@ -41501,3 +41506,15 @@ msgstr "Nocturne did not import records from this export. Try again."
 #: src/lib/components/connectors/OuraImportCard.svelte
 msgid "The import did not complete"
 msgstr "The import did not complete"
+
+#: src/lib/components/status-pills/BasalPill.svelte
+msgid "Last dose"
+msgstr "Last dose"
+
+#: src/lib/components/status-pills/BasalPill.svelte
+msgid "Dose time"
+msgstr "Dose time"
+
+#: src/lib/components/status-pills/BasalPill.svelte
+msgid "Estimated rate"
+msgstr "Estimated rate"
