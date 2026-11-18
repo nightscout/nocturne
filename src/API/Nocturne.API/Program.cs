@@ -162,6 +162,8 @@ builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddScoped<OuraImportService>();
 builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<OuraImportService>());
+builder.Services.AddSingleton<OuraImportJobService>();
+builder.Services.AddScoped<IConnectorPurgeGuard, OuraImportPurgeGuard>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 

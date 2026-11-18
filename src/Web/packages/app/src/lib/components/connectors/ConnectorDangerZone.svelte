@@ -121,7 +121,10 @@
     } catch (e) {
       deleteDataResult = {
         success: false,
-        error: describeSubmitError(e, "Failed to delete data"),
+        error: describeSubmitError(e, "Failed to delete data", {
+          sync_running: "A sync is in progress for this connector. Wait until it is complete, then try again.",
+          import_running: "An import is in progress for this connector. Wait until it is complete, then try again.",
+        }),
       };
     }
   }

@@ -78,7 +78,9 @@ public class ConnectionService(
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
         {
             var owned = connectorBuckets.GetValueOrDefault(status.Id) ?? [];
-            if (!status.IsEnabled && !status.HasDatabaseConfig && owned.Count == 0)
+            // An import connector is its records alone; a configuration row left by an older delete is not a connection.
+            if (owned.Count == 0 && (ConnectorMetadataService.GetByConnectorId(status.Id)?.IsImport == true
+                                     || (!status.IsEnabled && !status.HasDatabaseConfig)))
                 continue;
 
             connections.Add(FromConnector(status, owned, androidApsDevices));
@@ -196,22 +198,25 @@ public class ConnectionService(
         ConnectorStatusDto status, List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices)
     {
         var metadata = ConnectorMetadataService.GetByConnectorId(status.Id);
+        var isImport = metadata?.IsImport == true;
         var connection = new Connection
         {
             Id = $"connector:{status.Id}",
             Kind = ConnectionKind.Connector,
-            Direction = ConnectionDirection.Fetches,
+            Direction = isImport ? ConnectionDirection.Imports : ConnectionDirection.Fetches,
             Name = metadata?.DisplayName ?? status.Name,
             Icon = metadata?.Icon,
             ConnectorId = status.Id,
-            LastSyncAt = status.LastSuccessfulSync is { } sync ? new DateTimeOffset(sync, TimeSpan.Zero) : null,
-            Status = status.State switch
-            {
-                "Error" => ConnectionStatus.Error,
-                "Running" => ConnectionStatus.Active,
-                "Configured" => ConnectionStatus.Quiet,
-                _ => ConnectionStatus.Disabled,
-            },
+            LastSyncAt = !isImport && status.LastSuccessfulSync is { } sync ? new DateTimeOffset(sync, TimeSpan.Zero) : null,
+            Status = isImport
+                ? ConnectionStatus.Imported
+                : status.State switch
+                {
+                    "Error" => ConnectionStatus.Error,
+                    "Running" => ConnectionStatus.Active,
+                    "Configured" => ConnectionStatus.Quiet,
+                    _ => ConnectionStatus.Disabled,
+                },
         };
         if (connection.Status == ConnectionStatus.Error)
             connection.ErrorMessage = status.StateMessage;

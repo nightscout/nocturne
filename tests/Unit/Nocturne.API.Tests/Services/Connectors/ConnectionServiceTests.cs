@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Models;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Contracts.Connectors;
@@ -204,6 +205,40 @@ public class ConnectionServiceTests
         connector.Status.Should().Be(ConnectionStatus.Disabled);
         connector.Streams.Should().ContainSingle().Which.CanDelete.Should().BeTrue();
         overview.OtherSources.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AConnectorWithNoSyncIsListedAsImported_NotAsOff()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _statuses.Add(new ConnectorStatusDto
+        {
+            Id = "oura", Name = "oura", Status = "Not Configured", State = "Not Configured",
+            LastSuccessfulSync = Now.UtcDateTime.AddDays(-3),
+        });
+        _buckets.Add(Bucket(SourceDataTypes.HeartRate, null, "oura-connector", "Oura", 500, minutesAgo: 6000));
+
+        var overview = await ListAsync();
+
+        var connector = overview.Connections.Should().ContainSingle().Subject;
+        connector.Status.Should().Be(ConnectionStatus.Imported);
+        connector.Direction.Should().Be(ConnectionDirection.Imports);
+        connector.LastSyncAt.Should().BeNull();
+        connector.TotalRecords.Should().Be(500);
+    }
+
+    [Fact]
+    public async Task AConnectorWithNoSyncAndNoRecordsIsNotListed_EvenWithAConfigurationRow()
+    {
+        _ = typeof(OuraConnectorConfiguration);
+        _statuses.Add(new ConnectorStatusDto
+        {
+            Id = "oura", Name = "oura", Status = "Disabled", State = "Disabled", HasDatabaseConfig = true,
+        });
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().BeEmpty();
     }
 
     [Fact]
