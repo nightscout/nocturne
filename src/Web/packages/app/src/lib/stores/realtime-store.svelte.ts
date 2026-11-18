@@ -300,6 +300,8 @@ export class RealtimeStore {
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
   /** Server-calculated IOB for the IOB pill's fallback, set by the authenticated layout. */
   calculatedIob = $state<number | undefined>();
+  /** Server-calculated COB for the COB pill's fallback, set by the authenticated layout. */
+  calculatedCob = $state<number | undefined>();
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
@@ -409,7 +411,11 @@ export class RealtimeStore {
       this.boluses,
       this.carbIntakes,
       this.profile,
-      { units: "mg/dL", calculatedIob: this.calculatedIob }
+      {
+        units: "mg/dL",
+        calculatedIob: this.calculatedIob,
+        calculatedCob: this.calculatedCob,
+      }
     );
   });
 

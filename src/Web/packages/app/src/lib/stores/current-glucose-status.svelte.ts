@@ -67,6 +67,15 @@ export function calculatedIob(): number | undefined {
   return getSummary().current?.iob;
 }
 
+/**
+ * The COB the server calculated from treatments, as of the summary's last refresh (once per
+ * new reading). The summary reports a redacted COB as 0, so callers check the treatments
+ * scope before showing it.
+ */
+export function calculatedCob(): number | undefined {
+  return getSummary().current?.cob;
+}
+
 export interface DisplayedGlucose {
   readonly mills: number | undefined;
   readonly currentBG: number;

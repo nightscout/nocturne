@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AidAlgorithm, type ApsSnapshot } from "#lib/api/generated/nocturne-api-client.js";
 import type { DeviceStatus } from "#lib/api/pills-processor.js";
-import type { Bolus } from "#lib/api/index.js";
+import type { Bolus, CarbIntake } from "#lib/api/index.js";
 
 // The module graph for #lib/api transitively imports several $app/* modules
 // and @sveltejs/kit.  Mock them all before loading the module under test.
@@ -163,6 +163,62 @@ describe("processPillsData – COB from APS snapshot", () => {
 	it("ignores stale COB snapshots", () => {
 		const stale = makeSnapshot({ cob: 15 }, NOW, 35);
 		const result = processPillsData(EMPTY, [stale], EMPTY, EMPTY, null, { now: NOW });
+		expect(result.cob).toBeNull();
+	});
+});
+
+describe("processPillsData – calculated COB", () => {
+	const carbs = { mills: NOW - 60 * MIN, carbs: 60 } as CarbIntake;
+
+	it("shows the calculated COB when no device reported COB", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, {
+			now: NOW,
+			calculatedCob: 47,
+		});
+		expect(result.cob).not.toBeNull();
+		expect(result.cob!.cob).toBe(47);
+		expect(result.cob!.display).toBe("47g");
+		expect(result.cob!.source).toBe("Calculated");
+		expect(result.cob!.lastCarbs).toEqual({ mills: NOW - 60 * MIN, carbs: 60, food: undefined });
+	});
+
+	it("shows the calculated COB when the only device status is older than the threshold", () => {
+		const staleStatus: DeviceStatus[] = [{
+			mills: NOW - 90 * MIN,
+			loop: { cob: { cob: 8, timestamp: new Date(NOW - 90 * MIN).toISOString() } },
+		}];
+		const result = processPillsData(staleStatus, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedCob: 12,
+		});
+		expect(result.cob!.cob).toBe(12);
+		expect(result.cob!.source).toBe("Calculated");
+	});
+
+	it("prefers a recent device status COB over the calculated COB", () => {
+		const status: DeviceStatus[] = [{
+			mills: NOW - 3 * MIN,
+			loop: { cob: { cob: 8, timestamp: new Date(NOW - 3 * MIN).toISOString() } },
+		}];
+		const result = processPillsData(status, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedCob: 47,
+		});
+		expect(result.cob!.cob).toBe(8);
+		expect(result.cob!.source).toBe("Loop");
+	});
+
+	it("prefers a recent APS snapshot COB over the calculated COB", () => {
+		const snap = makeSnapshot({ cob: 15 }, NOW, 3);
+		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedCob: 47,
+		});
+		expect(result.cob!.cob).toBe(15);
+	});
+
+	it("returns null COB with recent carbs but no device COB and no calculated COB", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, { now: NOW });
 		expect(result.cob).toBeNull();
 	});
 });
