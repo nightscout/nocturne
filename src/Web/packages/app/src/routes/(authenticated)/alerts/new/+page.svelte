@@ -6,7 +6,7 @@
   import { beforeNavigate, goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { toast } from "svelte-sonner";
+  import { toastSaved } from "#lib/forms/index.js";
   import { createRule, getRules } from "#lib/api/generated/alertRules.generated.remote.js";
   import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import type { ReplayRuleDefinition } from "#lib/api/generated/nocturne-api-client.js";
@@ -162,7 +162,7 @@
     try {
       await createRule(buildBody(rule()));
       created = true;
-      toast.success(`${name} is on.`);
+      toastSaved("The alert is on.");
       await goto(resolve("/(authenticated)/alerts"));
     } catch (e) {
       error =
