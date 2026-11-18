@@ -8,11 +8,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Answers whether the caller's credential may receive the tenant's realtime broadcasts, for the
-/// socket.io bridge, which admits browser and legacy sockets without a SignalR connection of their
-/// own.
+/// Whether the caller's credential may receive the tenant's realtime updates. A caller can check
+/// this before it connects to realtime, and see which data categories it may receive.
 /// </summary>
 /// <remarks>
+/// The socket.io bridge uses this answer to admit browser and legacy sockets without a SignalR
+/// connection of their own.
 /// Gated like <c>GET /api/v1/entries</c>: the default-deny fallback plus <c>glucose.read</c>, so a
 /// caller that could not read glucose over HTTP is refused realtime too,
 /// and an anonymous public share is admitted by its read scopes rather than 401'd by

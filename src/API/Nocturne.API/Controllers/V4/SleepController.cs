@@ -12,7 +12,9 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Controller for managing sleep sessions recorded by wearables or health platforms.
+/// Sleep sessions recorded by wearables or health platforms. A session is a time-bounded sleep period
+/// with optional stage intervals and biometric samples. Callers can list, read, add (singly or in bulk),
+/// update and delete sessions.
 /// </summary>
 /// <remarks>
 /// Sleep sessions include time-bounded sleep periods with optional stage intervals
@@ -22,7 +24,7 @@ namespace Nocturne.API.Controllers.V4;
 /// <seealso cref="ISleepService"/>
 /// <seealso cref="SleepSession"/>
 [ApiController]
-[Tags("Sleep")]
+[Tags("Health")]
 [Route("api/v4/sleep/sessions")]
 [Authorize]
 public class SleepController : ControllerBase

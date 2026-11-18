@@ -12,8 +12,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Aggregates Nightscout transition status for the migration dashboard.
-/// Reports migration progress, write-back health, and disconnect readiness.
+/// Nightscout transition status. Read the migration progress, write-back health, and whether the
+/// Nightscout connection is ready to disconnect.
 /// </summary>
 /// <seealso cref="IConnectorConfigurationService"/>
 /// <seealso cref="IDiscrepancyPersistenceService"/>

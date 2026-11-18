@@ -10,7 +10,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Controller for compression low detection and review.
+/// Compression low suggestions and their review. List and read suggestions, review them, and run detection.
 /// </summary>
 /// <remarks>
 /// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
@@ -32,6 +32,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <seealso cref="ICompressionLowService"/>
 /// <seealso cref="ICompressionLowDetectionService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Compression Lows")]
 [Tags("TenantAdmin")]
 [Route("api/v4/compression-lows")]
 [RequireScope(Scope.GlucoseRead)]

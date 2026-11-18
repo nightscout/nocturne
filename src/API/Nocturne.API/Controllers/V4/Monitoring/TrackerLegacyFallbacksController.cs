@@ -13,8 +13,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// The legacy consumable ages (SAGE, CAGE, IAGE, BAGE) a tenant without a tracker for them sees in
-/// a tracker's place, and their conversion into trackers.
+/// Legacy consumable ages (SAGE, CAGE, IAGE, BAGE) that a tenant without a tracker for them sees
+/// in its place. Convert these ages into trackers.
 /// </summary>
 /// <seealso cref="ILegacyFallbackService"/>
 [ApiController]
