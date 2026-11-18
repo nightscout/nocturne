@@ -69,4 +69,26 @@ public class GlucoseUnitsTests
     {
         GlucoseUnits.FromMgdl(mgdl, unit).Should().Be(expected);
     }
+
+    [Fact]
+    public void FromMgdl_ToMmol_RoundsEveryReadingInTheMeterRangeAsTheOldFormulaDid()
+    {
+        for (var tenths = 200; tenths <= 6000; tenths++)
+        {
+            var mgdl = tenths / 10.0;
+            var old = Math.Round(mgdl / GlucoseConstants.MgdlPerMmol * 10) / 10;
+
+            GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol).Should().Be(old, $"at {mgdl} mg/dL");
+        }
+    }
+
+    [Theory]
+    [InlineData(99, 5.5)]
+    [InlineData(180, 10.0)]
+    [InlineData(90, 5.0)]
+    [InlineData(270, 15.0)]
+    public void FromMgdl_ToMmol_ConvertsToOneDecimal(double mgdl, double expected)
+    {
+        GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol).Should().Be(expected);
+    }
 }

@@ -17,20 +17,23 @@ using Nocturne.Core.Models.Services;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Services controller for managing data sources, connectors, and integrations.
-/// Provides information about connected data sources, available connectors,
-/// sync status for connectors, and setup instructions for uploaders like xDrip+, Loop, AAPS, etc.
+/// Data sources, connectors, and uploaders for the tenant. Read their status and capabilities, and get
+/// setup instructions for uploaders such as xDrip+, Loop and AAPS. Start syncs, reset sync cursors,
+/// and delete data.
 /// </summary>
 /// <seealso cref="IDataSourceService"/>
 /// <seealso cref="IConnectorHealthService"/>
 /// <seealso cref="IConnectorSyncService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Data Sources and Sync")]
+[Tags("Connectors")]
 [Route("api/v4/services")]
 [Produces("application/json")]
 [Authorize]
 public class ServicesController : ControllerBase
 {
     private readonly IDataSourceService _dataSourceService;
+    private readonly IConnectionService _connectionService;
     private readonly IConnectorHealthService _connectorHealthService;
     private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
@@ -41,6 +44,7 @@ public class ServicesController : ControllerBase
     /// Initializes a new instance of <see cref="ServicesController"/>.
     /// </summary>
     /// <param name="dataSourceService">Service for querying active data sources and their status.</param>
+    /// <param name="connectionService">Service that lists the tenant's connections.</param>
     /// <param name="connectorHealthService">Service for connector health state queries.</param>
     /// <param name="connectorSyncService">Service for triggering on-demand connector syncs.</param>
     /// <param name="logger">Logger instance.</param>
@@ -48,6 +52,7 @@ public class ServicesController : ControllerBase
     /// <param name="baseDomain">Platform base-domain options used to construct the tenant subdomain.</param>
     public ServicesController(
         IDataSourceService dataSourceService,
+        IConnectionService connectionService,
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
@@ -56,6 +61,7 @@ public class ServicesController : ControllerBase
     )
     {
         _dataSourceService = dataSourceService;
+        _connectionService = connectionService;
         _connectorHealthService = connectorHealthService;
         _connectorSyncService = connectorSyncService;
         _logger = logger;
@@ -98,6 +104,23 @@ public class ServicesController : ControllerBase
             return Problem(detail: "Failed to get services overview", statusCode: 500, title: "Internal Server Error");
         }
     }
+
+    /// <summary>
+    /// List the tenant's connections: every authorized app, API token and configured connector, with
+    /// the records each wrote in the last 30 days, and the records none of them wrote.
+    /// </summary>
+    /// <inheritdoc cref="IConnectionService.GetConnectionsAsync"/>
+    /// <remarks>
+    /// It lists the caller's credentials, which is the account holder's to read, so a delegated
+    /// credential is refused (<see cref="RequireInteractiveSessionAttribute"/>).
+    /// </remarks>
+    [HttpGet("connections")]
+    [RequireInteractiveSession]
+    [RequireScope(Scope.DevicesRead)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(ConnectionsOverview), 200)]
+    public async Task<ActionResult<ConnectionsOverview>> GetConnections(CancellationToken cancellationToken = default) =>
+        Ok(await _connectionService.GetConnectionsAsync(HttpContext.GetSubjectId(), cancellationToken));
 
     /// <summary>
     /// Get all active data sources that have been sending data to this Nocturne instance.
@@ -291,7 +314,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/demo")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDemoData(
@@ -327,7 +350,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/{id}")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -407,7 +430,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("connectors/{id}/data")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "ConnectorStatus_GetStatus", "GetConnectorDataSummary"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus", "GetConnectorDataSummary"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(409)]

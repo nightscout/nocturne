@@ -467,6 +467,33 @@ public class EversenseConnectorServiceTests
         fixture.RequestedUris.Should().NotBeEmpty().And.OnlyContain(u => u.Host == ousHost);
     }
 
+    [Theory]
+    [InlineData("US", GlucoseDirection.DoubleUp)]
+    [InlineData("OUS", GlucoseDirection.DoubleDown)]
+    public async Task SyncDataAsync_DoubleArrowTrend_FollowsTheConfiguredServer(string server, GlucoseDirection expected)
+    {
+        var patients = new List<EversensePatientDatum>
+        {
+            CreateFollowedPatient(userId: 42, glucose: 125, cgTime: DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"), trend: 6)
+        };
+        List<SensorGlucose>? published = null;
+
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] = CreateJsonResponse(patients),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
+                    CreateJsonResponse(new List<EversenseUserEvent>())
+            },
+            publisher: CreatePublisher(records => published = records.ToList()).Object,
+            server: server);
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        published.Should().ContainSingle().Which.Direction.Should().Be(expected);
+    }
+
     #endregion
 
     #region History window Tests
@@ -571,12 +598,12 @@ public class EversenseConnectorServiceTests
 
     #region Test Infrastructure
 
-    private static EversensePatientDatum CreateFollowedPatient(int userId, int glucose, string cgTime) => new()
+    private static EversensePatientDatum CreateFollowedPatient(int userId, int glucose, string cgTime, int trend = 3) => new()
     {
         UserId = userId,
         UserName = "patient@example.com",
         CurrentGlucose = glucose,
-        GlucoseTrend = 3,
+        GlucoseTrend = trend,
         CgTime = cgTime,
         IsTransmitterConnected = true
     };

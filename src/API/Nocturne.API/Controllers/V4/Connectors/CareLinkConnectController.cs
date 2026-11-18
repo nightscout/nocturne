@@ -19,13 +19,20 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Drives the user-driven ("manual-paste") CareLink sign-in. The user opens the returned authorize URL,
-/// signs in and solves the CAPTCHA in their own browser, then pastes the resulting code back. The server
-/// exchanges it (PKCE) for a refresh token and stores it as the connector secret. This is the only viable
-/// interactive flow: headless login is CAPTCHA-blocked, and Medtronic's Auth0 client only allows the
-/// <c>com.medtronic.carepartner:/sso</c> custom-scheme redirect, so no web callback can receive the code.
+/// Connects a CareLink account by pasting a sign-in code. Start a connection to get an authorize URL.
+/// Open that URL, sign in, then complete the connection with the code it returns. A desktop token can
+/// also be issued.
 /// </summary>
+/// <remarks>
+/// The user opens the returned authorize URL, signs in and solves the CAPTCHA in their own browser,
+/// then pastes the resulting code back. The server exchanges it (PKCE) for a refresh token and stores
+/// it as the connector secret. This is the only viable interactive flow: headless login is
+/// CAPTCHA-blocked, and Medtronic's Auth0 client only allows the <c>com.medtronic.carepartner:/sso</c>
+/// custom-scheme redirect, so no web callback can receive the code.
+/// </remarks>
 [ApiController]
+[System.ComponentModel.DisplayName("CareLink Connect")]
+[Tags("Connectors")]
 [Route("api/v4/connectors/carelink/connect")]
 [Authorize]
 // Completing this flow writes the signed-in CareLink username and country into the tenant's

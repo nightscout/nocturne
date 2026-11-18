@@ -9,37 +9,38 @@
 //   pnpm run lint:copy --min=error           blocking alerts only
 //   pnpm run lint:copy --rule=Nocturne.Terms one rule
 //   pnpm run lint:copy --json                machine-readable
+//   pnpm run lint:copy --gate-docs           docs-page errors fail the run too
+//
+// The portal docs pages (.svx) are Markdown, so Vale reads them directly. Their
+// findings print after the strings and fail the run only with --gate-docs.
 //
 // It also fails when a file compares a value against a literal that the catalog
 // holds as a string for that same file.
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findTranslatedComparisons } from "./comparedLiterals.ts";
+import { lintDocsProse } from "./docsProse.ts";
+import {
+  levels,
+  runVale,
+  ValeError,
+  type Level,
+  type ValeAlert,
+} from "./valeRunner.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../../..");
 const appDir = path.resolve(here, "../../packages/app");
+const docsDir = path.resolve(here, "../../packages/portal/src/content/docs");
 const catalogPath = path.resolve(here, "../../locales/en.po");
 const exceptionsPath = path.join(here, "exceptions.txt");
-
-const levels = ["suggestion", "warning", "error"] as const;
-type Level = (typeof levels)[number];
 
 interface Entry {
   msgid: string;
   references: string[];
-}
-
-interface ValeAlert {
-  Check: string;
-  Line: number;
-  Match: string;
-  Message: string;
-  Severity: Level;
 }
 
 interface Finding {
@@ -57,6 +58,7 @@ const flag = (name: string) =>
 const minLevel = (flag("min") ?? "suggestion") as Level;
 const onlyRule = flag("rule");
 const asJson = args.includes("--json");
+const gateDocs = args.includes("--gate-docs");
 
 function unquote(line: string): string {
   return JSON.parse(line.slice(line.indexOf('"')));
@@ -163,30 +165,21 @@ for (const entry of unique) {
 }
 fs.writeFileSync(copyFile, lines.join("\n"));
 
-const vale = spawnSync(
-  "vale",
-  [
-    `--config=${path.join(repoRoot, ".vale.ini")}`,
-    `--minAlertLevel=${minLevel}`,
-    "--output=JSON",
-    copyFile,
-  ],
-  { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
-);
-fs.rmSync(workDir, { recursive: true, force: true });
-
-if (vale.error) {
-  console.error(
-    "vale is not installed. See https://vale.sh/docs/install (winget install errata-ai.Vale).",
-  );
-  process.exit(2);
+let report: Record<string, ValeAlert[]> = {};
+let valeFailure: ValeError | undefined;
+try {
+  report = runVale(repoRoot, copyFile, minLevel);
+} catch (e) {
+  if (!(e instanceof ValeError)) throw e;
+  valeFailure = e;
+} finally {
+  fs.rmSync(workDir, { recursive: true, force: true });
 }
-if (vale.status !== 0 && vale.status !== 1) {
-  console.error(vale.stderr || vale.stdout);
+if (valeFailure) {
+  console.error(valeFailure.message);
   process.exit(2);
 }
 
-const report = JSON.parse(vale.stdout || "{}") as Record<string, ValeAlert[]>;
 const exceptions = readExceptions();
 const findings: Finding[] = Object.values(report)
   .flat()
@@ -204,8 +197,24 @@ const findings: Finding[] = Object.values(report)
   })
   .filter((f) => !exceptions.has(`${f.rule}\t${f.msgid}`));
 
+const docs = lintDocsProse(repoRoot, docsDir, minLevel);
+const docsFindings = docs.findings.filter(
+  (f) => !onlyRule || f.rule === onlyRule,
+);
+if (docs.error) {
+  console.error(`The docs pass did not run: ${docs.error}`);
+}
+
+const tally = (list: { severity: Level }[]) =>
+  levels
+    .map((l) => `${list.filter((f) => f.severity === l).length} ${l}s`)
+    .reverse()
+    .join(", ");
+
 if (asJson) {
-  console.log(JSON.stringify(findings, null, 2));
+  console.log(
+    JSON.stringify({ strings: findings, docs: docsFindings }, null, 2),
+  );
 } else {
   const byRule = Map.groupBy(findings, (f) => f.rule);
   for (const [rule, group] of [...byRule].sort((a, b) =>
@@ -218,11 +227,25 @@ if (asJson) {
       for (const ref of f.references) console.log(`    ${ref}`);
     }
   }
-  const counts = levels
-    .map((l) => `${findings.filter((f) => f.severity === l).length} ${l}s`)
-    .reverse()
-    .join(", ");
-  console.log(`\n${unique.length} strings checked: ${counts}.`);
+  console.log(`\n${unique.length} strings checked: ${tally(findings)}.`);
+
+  const docsByRule = Map.groupBy(docsFindings, (f) => f.rule);
+  for (const [rule, group] of [...docsByRule].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    console.log(`\n${rule} (docs, ${group.length})`);
+    for (const f of group) {
+      console.log(`  ${f.file}:${f.line} "${f.match}"`);
+      console.log(`    ${f.message}`);
+    }
+  }
+  const docsMode = gateDocs
+    ? "gating"
+    : "report only; --gate-docs makes them fail";
+  const docsTally = docs.error ? "did not run" : tally(docsFindings);
+  console.log(`\nDocs pages (${docsMode}): ${docsTally}.`);
 }
 
-process.exit(findings.some((f) => f.severity === "error") ? 1 : 0);
+if (gateDocs && docs.error) process.exit(2);
+const failing = [...findings, ...(gateDocs ? docsFindings : [])];
+process.exit(failing.some((f) => f.severity === "error") ? 1 : 0);

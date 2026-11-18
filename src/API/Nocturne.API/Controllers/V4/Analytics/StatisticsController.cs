@@ -28,9 +28,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for comprehensive glucose and treatment statistics.
-/// Provides endpoints for calculating various glucose metrics and analytics including
-/// time-in-range, glycemic variability, GMI, GRI, basal/bolus ratios, and AID system metrics.
+/// Glucose and treatment statistics: time in range, glycemic variability, GMI, GRI, basal and bolus
+/// ratios, AID system metrics, unit conversion and clinical targets.
 /// </summary>
 /// <remarks>
 /// <c>GET /periods</c> caches for five minutes through <see cref="ITenantCache"/>;
@@ -611,7 +610,7 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     public ActionResult<double> MgdlToMMOL(double mgdl)
     {
-        var result = _statisticsService.MgdlToMMOL(mgdl);
+        var result = GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol);
         return Ok(result);
     }
 

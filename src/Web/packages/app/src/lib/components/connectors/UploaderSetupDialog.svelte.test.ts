@@ -23,14 +23,14 @@ describe("UploaderSetupDialog API key", () => {
   it("shows the generated key in the instructions", async () => {
     render(UploaderSetupDialog, { open: true, selectedUploader: AAPS });
 
-    await page.getByRole("button", { name: "Generate API key" }).click();
+    await page.getByRole("button", { name: "Create API token" }).click();
 
     await expect.element(page.getByText("noc_created")).toBeVisible();
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ scopes: ["health.readwrite"] }),
     );
     await expect
-      .element(page.getByRole("button", { name: "Generate API key" }))
+      .element(page.getByRole("button", { name: "Create API token" }))
       .not.toBeInTheDocument();
   });
 
@@ -75,10 +75,10 @@ describe("UploaderSetupDialog API key", () => {
     create.mockRejectedValue({ status: 400, body: { message: "Label already used." } });
     render(UploaderSetupDialog, { open: true, selectedUploader: JUGGLUCO });
 
-    await page.getByRole("button", { name: "Generate API key" }).click();
+    await page.getByRole("button", { name: "Create API token" }).click();
 
     await expect.element(page.getByText("Label already used.")).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Generate API key" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Create API token" })).toBeVisible();
   });
 
   it("links to the uploader's website", async () => {

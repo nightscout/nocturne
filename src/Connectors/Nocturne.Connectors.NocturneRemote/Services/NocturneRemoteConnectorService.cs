@@ -212,7 +212,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     SyncDataType.StateSpans => SyncStateSpansAsync(await BoundAsync(type, () => CalculateStateSpanSinceTimestampAsync(config)), request.To, config, result, activeTypes, cancellationToken),
                     SyncDataType.Profiles => SyncProfilesAsync(config, result, activeTypes, cancellationToken),
                     SyncDataType.DeviceStatus => SyncDeviceStatusAsync(await BoundAsync(type, () => CalculateDeviceStatusCatchUpSinceAsync(config)), request.To, config, result, cancellationToken),
-                    SyncDataType.Activity => SyncActivityAsync(openEnded ? ResumeFrom(request, await CalculateActivityCatchUpSinceAsync(config)) : request.From, request.To, config, result, activeTypes, cancellationToken),
+                    SyncDataType.Activity => SyncActivityAsync(await BoundAsync(type, () => CalculateActivityCatchUpSinceAsync(config)), request.To, config, result, cancellationToken),
                     SyncDataType.Food => SyncFoodAsync(config, result, activeTypes, cancellationToken),
                     _ => Task.CompletedTask
                 });
@@ -338,19 +338,22 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             config, result);
 
     /// <remarks>
-    ///     Accumulated rather than crawled through a low-water mark: the remote's activity list
-    ///     takes no time bounds, so a mark could not resume anything.
+    ///     A remote that predates the activity window ignores its bounds and answers newest first from
+    ///     its whole history. When the floor of the range lies within its newest
+    ///     <see cref="V4ApiLimits.MaxMergedPageWindow"/> records, the range is read in full. A capped
+    ///     remote serves nothing past those, so a deeper range fails and records only what it read.
     /// </remarks>
-    private async Task SyncActivityAsync(
+    private Task SyncActivityAsync(
         DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, SyncResult result,
-        HashSet<SyncDataType> activeTypes, CancellationToken ct)
-    {
-        var records = await FetchAllAsync<Activity>(
-            NocturneRemoteConstants.Activity, from, to, config, ct);
+        CancellationToken ct) =>
+        CrawlAsync(SyncDataType.Activity, from, to,
+            (pageFrom, pageTo) => FetchPagesAsync<Activity>(NocturneRemoteConstants.Activity, pageFrom, pageTo, config, ct, ActivityTime),
+            ActivityTime,
+            page => PublishByRouteAsync(page, config, ct),
+            config, result);
 
-        await PublishRecordTypeAsync(result, activeTypes,
-            records, config, ct);
-    }
+    private static DateTime? ActivityTime(Activity activity) =>
+        activity.Mills > 0 ? activity.Mills.ToUtcDateTime() : null;
 
     private async Task SyncFoodAsync(
         NocturneRemoteConnectorConfiguration config, SyncResult result,
@@ -483,31 +486,54 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     ///     microsecond, and a record on the boundary is read once, in the newer window, whichever way
     ///     its store rounds a bound finer than that.
     ///     </para>
+    ///     <para>
+    ///     A list that merges sources (<paramref name="timeOf"/> given) answers an empty page past
+    ///     <see cref="V4ApiLimits.MaxMergedPageWindow"/> records on a remote that caps it, so a window
+    ///     that answers one there, with records left, is read again from its first page with its upper
+    ///     bound at the end of the millisecond of the oldest record served. A remote older than the cap
+    ///     serves past it and is paged on. A record's time comes to the millisecond and the remote compares the
+    ///     inclusive bound with the time it stores, so the bound covers every record of that
+    ///     millisecond, and those records arrive twice; the publish is idempotent by id, and the
+    ///     repeats are counted. A read that serves nothing older than the bound it asked under, or
+    ///     anything newer, is a remote that ignores the bound or holds more than a window in one
+    ///     millisecond, and fails rather than end as though the range were read.
+    ///     </para>
+    ///     <para>
+    ///     Served newest first, a record from a millisecond before the lower bound's means the remote
+    ///     ignores the bound and has already served everything above it, so the window ends there.
+    ///     A remote that takes the bound never serves one.
+    ///     </para>
     /// </remarks>
     private async IAsyncEnumerable<T[]> FetchPagesAsync<T>(
         string endpoint, DateTime? from, DateTime? to,
         NocturneRemoteConnectorConfiguration config,
-        [EnumeratorCancellation] CancellationToken ct) where T : class
+        [EnumeratorCancellation] CancellationToken ct,
+        Func<T, DateTime?>? timeOf = null) where T : class
     {
         var widest = TimeSpan.FromDays(V4ApiLimits.MaxDateSpanDays);
         var top = to;
         while (from is { } floor && top is { } windowTop && windowTop - floor > widest)
         {
-            await foreach (var page in FetchWindowAsync<T>(endpoint, windowTop - widest, windowTop, config, ct))
+            await foreach (var page in FetchWindowAsync<T>(endpoint, windowTop - widest, windowTop, config, ct, timeOf))
                 yield return page;
             top = windowTop - widest - TimeSpan.FromMicroseconds(1);
         }
 
-        await foreach (var page in FetchWindowAsync<T>(endpoint, from, top, config, ct))
+        await foreach (var page in FetchWindowAsync<T>(endpoint, from, top, config, ct, timeOf))
             yield return page;
     }
 
     private async IAsyncEnumerable<T[]> FetchWindowAsync<T>(
         string endpoint, DateTime? from, DateTime? to,
         NocturneRemoteConnectorConfiguration config,
-        [EnumeratorCancellation] CancellationToken ct) where T : class
+        [EnumeratorCancellation] CancellationToken ct,
+        Func<T, DateTime?>? timeOf = null) where T : class
     {
+        const int reachable = V4ApiLimits.MaxMergedPageWindow;
+        var floor = from is { } lower ? MillisecondOf(lower) : (DateTime?)null;
         var offset = 0;
+        var stepped = false;
+        DateTime? oldest = null;
 
         while (true)
         {
@@ -523,15 +549,47 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
             var items = page.Data.ToArray();
             if (items.Length == 0)
-                yield break;
+            {
+                if (timeOf is null || offset < reachable)
+                    yield break;
+
+                var stepTo = oldest is { } served ? EndOfMillisecond(served) : (DateTime?)null;
+                if (stepTo is null || stepTo >= to)
+                    throw FetchFailed(endpoint, $"the remote serves no further than {reachable} records of a window and its window did not advance");
+
+                to = stepTo;
+                stepped = true;
+                offset = 0;
+                oldest = null;
+                continue;
+            }
+
+            if (stepped && timeOf is not null && items.Any(i => timeOf(i) > to))
+                throw FetchFailed(endpoint, $"the remote ignores the window, so records past the first {reachable} cannot be reached");
 
             yield return items;
 
+            if (timeOf is not null)
+            {
+                oldest = items.Select(timeOf).OfType<DateTime>().Append(oldest ?? DateTime.MaxValue).Min();
+                if (oldest < floor)
+                    yield break;
+            }
+
+            var asked = timeOf is not null && offset < reachable
+                ? Math.Min(config.MaxCount, reachable - offset)
+                : config.MaxCount;
             offset += items.Length;
-            if (offset >= page.Pagination.Total || items.Length < config.MaxCount)
+            if (offset >= page.Pagination.Total || items.Length < asked)
                 yield break;
         }
     }
+
+    private static DateTime MillisecondOf(DateTime at) =>
+        at.AddTicks(-(at.Ticks % TimeSpan.TicksPerMillisecond));
+
+    private static DateTime EndOfMillisecond(DateTime at) =>
+        MillisecondOf(at) + TimeSpan.FromMilliseconds(1) - TimeSpan.FromMicroseconds(1);
 
     private async Task<List<T>> FetchAllAsync<T>(
         string endpoint, DateTime? from, DateTime? to,

@@ -14,11 +14,13 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// OAuth 2.0 endpoints for Nocturne.
-/// Supports Authorization Code + PKCE and Device Authorization Grant (RFC 8628).
-/// All clients are public (no client secrets); PKCE is mandatory.
+/// OAuth 2.0 sign-in for client apps, using the authorization code flow with PKCE or the device grant.
+/// Clients are public and use no client secret. A caller can also revoke or introspect tokens, list, update
+/// and delete grants, and register new clients.
 /// </summary>
 /// <remarks>
+/// All clients are public (no client secrets); PKCE is mandatory.
+///
 /// The full authorization-code flow is:
 /// <list type="number">
 ///   <item><description><c>GET /oauth/authorize</c> — initiates the flow; redirects to login if unauthenticated, then to the consent page.</description></item>
@@ -49,6 +51,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="IJwtService"/>
 [ApiController]
 [Route("api/oauth")]
+[System.ComponentModel.DisplayName("OAuth 2.0")]
 [Tags("Authentication")]
 public class OAuthController : ControllerBase
 {

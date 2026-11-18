@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -136,5 +137,72 @@ public class ActivityRecordRepositoryTests : IDisposable
         (await db.HeartRates.AnyAsync()).Should().BeFalse();
         await using var other = _db.CreateContext(_otherTenant);
         (await other.HeartRates.SingleAsync()).DeletedAt.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task ANullOrEmptyIdIsDeletedByNobody(string? id)
+    {
+        await StoreAsync(_tenant, Heart(null), deletedByUser: true);
+        await StoreAsync(_tenant, new StepCountEntity { Id = Guid.CreateVersion7(), Timestamp = Stamp, Metric = 800 }, deletedByUser: true);
+        await StoreAsync(_tenant, new SleepSessionEntity { Id = Guid.CreateVersion7(), StartTime = Stamp, EndTime = Stamp.AddHours(1) }, deletedByUser: true);
+        await StoreAsync(_tenant, new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), Category = nameof(StateSpanCategory.Exercise), State = "run",
+            StartTimestamp = Stamp, Source = "manual",
+        }, deletedByUser: true);
+
+        (await Repository(_tenant).IsDeletedByUserAsync(id!)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task ANullOrEmptyIdDeletesNothing(string? id)
+    {
+        await StoreAsync(_tenant, Heart(null));
+        await StoreAsync(_tenant, new StepCountEntity { Id = Guid.CreateVersion7(), Timestamp = Stamp, Metric = 800 });
+
+        (await Repository(_tenant).DeleteByLegacyIdAsync(id!)).Should().Be(0);
+
+        await using var db = _db.CreateContext(_tenant);
+        (await db.HeartRates.CountAsync()).Should().Be(1);
+        (await db.StepCounts.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AnIdWithNoOriginalIdIsFoundByTheKeyItDerivesTo()
+    {
+        const string objectId = "b0000000000000000000000b";
+        var row = Heart(null);
+        row.Id = RecordIdKey.ParseIdToGuid(objectId);
+        await StoreAsync(_tenant, row, deletedByUser: true);
+        await StoreAsync(_tenant, new StepCountEntity
+        {
+            Id = RecordIdKey.ParseIdToGuid("d0000000000000000000000d"), Timestamp = Stamp, Metric = 800,
+        });
+
+        (await Repository(_tenant).IsDeletedByUserAsync(objectId)).Should().BeTrue();
+        (await Repository(_tenant).DeleteByLegacyIdAsync("d0000000000000000000000d")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AnActivityStateSpanIsDeletedByUserUnderItsLegacyIdOrItsDerivedKeyInItsCategoriesOnly()
+    {
+        const string legacy = "e0000000000000000000000e";
+        const string derived = "f0000000000000000000000f";
+        StateSpanEntity Span(StateSpanCategory category, string? legacyId, Guid? key = null) => new()
+        {
+            Id = key ?? Guid.CreateVersion7(), Category = category.ToString(), State = "run",
+            StartTimestamp = Stamp, Source = "manual", LegacyId = legacyId,
+        };
+        await StoreAsync(_tenant, Span(StateSpanCategory.Exercise, legacy), deletedByUser: true);
+        await StoreAsync(_tenant, Span(StateSpanCategory.Exercise, null, RecordIdKey.ParseIdToGuid(derived)), deletedByUser: true);
+        await StoreAsync(_tenant, Span(StateSpanCategory.PumpMode, "9000000000000000000000a9"), deletedByUser: true);
+
+        (await Repository(_tenant).IsDeletedByUserAsync(legacy)).Should().BeTrue();
+        (await Repository(_tenant).IsDeletedByUserAsync(derived)).Should().BeTrue();
+        (await Repository(_tenant).IsDeletedByUserAsync("9000000000000000000000a9")).Should().BeFalse();
     }
 }

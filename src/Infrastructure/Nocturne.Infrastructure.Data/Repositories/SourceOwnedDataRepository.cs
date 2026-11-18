@@ -101,10 +101,11 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
                 Device = g.Key!,
                 DataSource = g.Max(ds => ds.DataSource),
                 Latest = g.Max(ds => ds.Timestamp),
+                AidAlgorithm = g.OrderByDescending(ds => ds.Timestamp).Select(ds => ds.AidAlgorithm).FirstOrDefault(),
             })
             .ToListAsync(ct);
 
-        return devices.Select(d => new ApsDeviceLastSeen(d.Device, d.DataSource, d.Latest)).ToList();
+        return devices.Select(d => new ApsDeviceLastSeen(d.Device, d.DataSource, d.Latest, d.AidAlgorithm)).ToList();
     }
 
     /// <inheritdoc/>
@@ -115,6 +116,17 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
         var buckets = new List<SourceBucket>();
         foreach (var table in V4RecordTables.All)
             buckets.AddRange(await table.BucketsAsync(db, windowStart, last24Hours, ct));
+        return buckets;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<WriterBucket>> WriterBucketsAsync(
+        DateTime windowStart, DateTime last24Hours, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var buckets = new List<WriterBucket>();
+        foreach (var table in V4RecordTables.All)
+            buckets.AddRange(await table.WriterBucketsAsync(db, windowStart, last24Hours, ct));
         return buckets;
     }
 

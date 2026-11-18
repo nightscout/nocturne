@@ -117,6 +117,17 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> ListForConnectionsAsync(
+        Guid? subjectId, IReadOnlyCollection<Guid> writerIds, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        return ToRecords(await GrantsWithClient(lease.Context)
+            .Where(g => (g.SubjectId == subjectId && g.RevokedAt == null) || writerIds.Contains(g.Id))
+            .OrderByDescending(g => g.CreatedAt)
+            .ToListAsync(ct));
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<OAuthGrantRecord?> FindOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -471,7 +482,8 @@ public class OAuthGrantRepository : IOAuthGrantRepository
             grant.TenantId,
             grant.ClientEntityId,
             grant.Client is null ? null : new OAuthGrantClient(
-                grant.Client.ClientId, grant.Client.DisplayName, grant.Client.ClientUri, grant.Client.LogoUri),
+                grant.Client.ClientId, grant.Client.DisplayName, grant.Client.ClientUri, grant.Client.LogoUri,
+                grant.Client.SoftwareId),
             grant.ClientIdentity,
             grant.SubjectId,
             grant.CreatedBySubjectId,

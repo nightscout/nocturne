@@ -9,7 +9,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Migration endpoints for importing data from Nightscout.
+/// Import data from Nightscout. Test a source, start an import, check or cancel a job, and list past
+/// jobs and sources.
 /// </summary>
 /// <seealso cref="IMigrationJobService"/>
 /// <seealso cref="IConnectorConfigurationService"/>
@@ -22,6 +23,7 @@ public class MigrationController : ControllerBase
     private readonly IMigrationJobService _migrationService;
     private readonly IConnectorConfigurationService _connectorConfigService;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MigrationController> _logger;
 
     /// <summary>
@@ -30,13 +32,16 @@ public class MigrationController : ControllerBase
     /// <param name="migrationService">Service for managing Nightscout data migration jobs.</param>
     /// <param name="connectorConfigService">Service for reading saved connector credentials.</param>
     /// <param name="tenantAccessor">Resolves the current request's tenant, used to own and scope migration jobs.</param>
+    /// <param name="timeProvider">The clock a connector's history limit is counted back from.</param>
     /// <param name="logger">Logger instance.</param>
     public MigrationController(
         IMigrationJobService migrationService,
         IConnectorConfigurationService connectorConfigService,
         ITenantAccessor tenantAccessor,
+        TimeProvider timeProvider,
         ILogger<MigrationController> logger)
     {
+        _timeProvider = timeProvider;
         _migrationService = migrationService;
         _connectorConfigService = connectorConfigService;
         _tenantAccessor = tenantAccessor;
@@ -105,7 +110,8 @@ public class MigrationController : ControllerBase
     }
 
     /// <summary>
-    /// Start a migration using saved connector credentials (e.g., after Nightscout connector setup).
+    /// Start a migration using saved connector credentials (e.g., after Nightscout connector setup),
+    /// over the history the connector is set to import.
     /// </summary>
     [HttpPost("start-from-connector/{connectorName}")]
     [RemoteCommand(Invalidates = ["GetHistory"])]
@@ -121,7 +127,7 @@ public class MigrationController : ControllerBase
             return Problem(detail: $"No saved configuration found for connector '{connectorName}'", statusCode: 400, title: "Bad Request");
         }
 
-        var (url, apiSecret) = source;
+        var (url, apiSecret, _) = source;
 
         if (string.IsNullOrEmpty(url))
         {
@@ -138,6 +144,7 @@ public class MigrationController : ControllerBase
             Mode = MigrationMode.Api,
             NightscoutUrl = url,
             NightscoutApiSecret = apiSecret,
+            StartDate = source.HistoryStart(_timeProvider.GetUtcNow().UtcDateTime),
         };
 
         try

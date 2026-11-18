@@ -8,7 +8,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Controller for querying and managing tenant-scoped roles.
+/// The roles that group permissions for the tenant's members. A caller can list roles, create a
+/// role, update a role and delete a role.
 /// </summary>
 /// <remarks>
 /// Roles determine what permissions a tenant member holds. Role data is maintained by
@@ -16,6 +17,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Roles")]
 [Tags("Identity")]
 [Route("api/v4/roles")]
 [Produces("application/json")]
@@ -138,7 +140,8 @@ public class RoleController : ControllerBase
     }
 
     private ObjectResult NameProblem(SaveRoleResult result) =>
-        Problem(detail: result.ErrorDescription, statusCode: StatusCodes.Status409Conflict, title: result.ErrorCode);
+        this.ProblemWithCode(
+            result.ErrorCode!, result.ErrorDescription, StatusCodes.Status409Conflict, title: result.ErrorCode);
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal.

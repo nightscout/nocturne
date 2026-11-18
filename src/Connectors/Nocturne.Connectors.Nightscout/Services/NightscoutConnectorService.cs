@@ -50,6 +50,16 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     // would silently drop older records. Catch-up syncs still resume from each type's own cursor.
     protected override DateTime? InitialSyncFloor => null;
 
+    /// <summary>
+    ///     Where a crawl with no lower bound stops: <see cref="NightscoutConnectorConfiguration.HistoryDays"/>
+    ///     before now, or null for the source's first record. Only an open lower bound is given
+    ///     one, so the limit shortens the backfill of a family with nothing stored and what such a
+    ///     crawl left owed. A catch-up keeps its resume point however old, so an outage longer than
+    ///     the limit loses nothing, and a sync of an explicit range is answered as asked.
+    /// </summary>
+    private DateTime? HistoryFloor(TConfig config) =>
+        NightscoutConnectorConfiguration.HistoryStart(config.HistoryDays, Clock.GetUtcNow().UtcDateTime);
+
 
     public override async Task<bool> AuthenticateAsync()
     {
@@ -169,6 +179,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // own resume point. Explicit ranged syncs (request.To set, e.g. a manual re-import) honour
         // request.From/To as-is.
         var openEnded = request.To is null;
+        var historyFloor = openEnded ? HistoryFloor(config) : null;
+
+        DateTime? Floored(DateTime? from) => from ?? historyFloor;
 
         // Each data type below streams fetch-page → publish-page rather than accumulating
         // the whole range first: a multi-year backfill of a high-volume collection held in
@@ -187,7 +200,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 var outcome = await CrawlAndPublishAsync(
                     "Glucose", glucoseFrom, request.To,
-                    (from, to) => FetchGlucosePagesAsync(from, to, recent, cancellationToken),
+                    (from, to) => FetchGlucosePagesAsync(Floored(from), to, recent, cancellationToken),
                     timeOf: EntryTime,
                     publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
                     config.MaxCount);
@@ -227,7 +240,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 var outcome = await CrawlAndPublishAsync(
                     "Treatments", treatmentFrom, request.To,
-                    (from, to) => FetchTreatmentPagesAsync(from, to, recent, cancellationToken),
+                    (from, to) => FetchTreatmentPagesAsync(Floored(from), to, recent, cancellationToken),
                     timeOf: t => ParseCreatedAt(t.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
                     config.MaxCount);
@@ -279,7 +292,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "DeviceStatus", deviceStatusFrom, request.To,
                     (from, to) => FetchCreatedAtPagesAsync<DeviceStatus>(
-                        from, to, "devicestatus", d => d.CreatedAt, "FetchDeviceStatus", cancellationToken,
+                        Floored(from), to, "devicestatus", d => d.CreatedAt, "FetchDeviceStatus", cancellationToken,
                         observe: page => recent?.Collect(page)),
                     timeOf: d => ParseCreatedAt(d.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
@@ -326,7 +339,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Activity", activityFrom, request.To,
                     (from, to) => FetchCreatedAtPagesAsync<Activity>(
-                        from, to, "activity", a => a.CreatedAt, "FetchActivity", cancellationToken,
+                        Floored(from), to, "activity", a => a.CreatedAt, "FetchActivity", cancellationToken,
                         observe: page => recent?.Collect(page)),
                     timeOf: a => ParseCreatedAt(a.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),

@@ -1,3 +1,6 @@
+using System.Linq.Expressions;
+using Nocturne.Infrastructure.Data.Entities;
+
 namespace Nocturne.Infrastructure.Data.Mappers;
 
 /// <summary>
@@ -24,5 +27,33 @@ public static class RecordIdKey
         var guidBytes = new byte[16];
         Array.Copy(hash, guidBytes, 16);
         return new Guid(guidBytes);
+    }
+
+    /// <summary>
+    /// Matches the row a mapper stored under <paramref name="id"/>: by the ObjectId kept in
+    /// <see cref="IOriginalIdentified.OriginalId"/>, or by the key <see cref="ParseIdToGuid"/> derives.
+    /// A null or empty id matches nothing.
+    /// </summary>
+    public static Expression<Func<T, bool>> Matching<T>(string? id)
+        where T : IOriginalIdentified
+    {
+        if (string.IsNullOrEmpty(id))
+            return _ => false;
+
+        var key = ParseIdToGuid(id);
+        return e => e.OriginalId == id || e.Id == key;
+    }
+
+    /// <summary>
+    /// <see cref="Matching{T}"/> for the tables that keep the id in <see cref="ILegacyIdentified.LegacyId"/>.
+    /// </summary>
+    public static Expression<Func<T, bool>> MatchingLegacy<T>(string? id)
+        where T : ILegacyIdentified
+    {
+        if (string.IsNullOrEmpty(id))
+            return _ => false;
+
+        var key = ParseIdToGuid(id);
+        return e => e.LegacyId == id || e.Id == key;
     }
 }

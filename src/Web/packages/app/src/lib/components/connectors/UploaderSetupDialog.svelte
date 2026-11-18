@@ -43,7 +43,7 @@
   let apiTokenLoading = $state(false);
   let apiTokenError = $state<string | null>(null);
 
-  // A key belongs to the uploader it was made for; switching uploaders starts over.
+  // A token belongs to the uploader it was made for; switching uploaders starts over.
   $effect(() => {
     if (selectedUploader?.id !== apiTokenFor) {
       apiToken = null;
@@ -65,7 +65,7 @@
     } catch (err) {
       apiTokenError = describeSubmitError(
         err,
-        "Failed to generate API key. You can create one in the API tokens section.",
+        "Could not create the API token. Create one from Add a connection in the Connections card.",
       );
     } finally {
       apiTokenLoading = false;
@@ -132,6 +132,7 @@
               <Button
                 variant="outline"
                 size="icon"
+                aria-label="Copy Nocturne URL"
                 onclick={() =>
                   typeof window !== "undefined" &&
                   copy.copy(window.location.origin, "dialogUrl")}
@@ -147,7 +148,7 @@
 
           {#if !hasOAuthFlow}
             <div class="space-y-2">
-              <span class="text-sm text-muted-foreground">API key</span>
+              <span class="text-sm text-muted-foreground">API token</span>
               {#if apiToken}
                 <div class="flex gap-2">
                   <code
@@ -158,7 +159,7 @@
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label="Copy API key"
+                    aria-label="Copy API token"
                     onclick={() => apiToken && copy.copy(apiToken, "dialogToken")}
                   >
                     {#if copy.isCopied("dialogToken")}
@@ -184,10 +185,10 @@
                     {:else}
                       <KeyRound class="mr-1.5 h-4 w-4" />
                     {/if}
-                    Generate API key
+                    Create API token
                   </Button>
                   <p class="text-xs text-muted-foreground mt-1.5">
-                    Creates an API key for {getUploaderName(selectedUploader)} with read and write access to health data.
+                    Creates an API token for {getUploaderName(selectedUploader)} with read and write access to health data.
                   </p>
                 </div>
                 {#if apiTokenError}
@@ -199,7 +200,7 @@
             {#if selectedUploader.id === "aaps"}
               <p class="text-sm text-muted-foreground">
                 In AAPS, open Config Builder, then Synchronization, and select NSClient V3. In its
-                settings, paste the URL into Nightscout URL and the API key into NS access token.
+                settings, paste the URL into Nightscout URL and the API token into NS access token.
               </p>
             {/if}
           {/if}

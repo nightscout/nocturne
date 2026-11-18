@@ -6,7 +6,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Controller for browsing the static device catalog.
+/// Known pump and CGM hardware models. Read the full catalog, or the models in one category.
 /// </summary>
 /// <remarks>
 /// The device catalog is a read-only in-memory registry of known pump and CGM hardware models

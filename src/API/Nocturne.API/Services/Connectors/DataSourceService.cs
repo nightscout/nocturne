@@ -238,7 +238,7 @@ public class DataSourceService : IDataSourceService
         // parses for name, category and icon, so a connector-imported snapshot still lists its rig.
         // The connector keeps its own entry via GetNonGlucoseStatsAsync, which keys on DataSource.
         var deviceStatusDevices = (await _sourceData.ApsSnapshotDevicesAsync(windowStart, cancellationToken))
-            .Select(d => new { d.Device, d.DataSource, LastMills = d.Latest.ToMills() })
+            .Select(d => new { d.Device, d.DataSource, d.AidAlgorithm, LastMills = d.Latest.ToMills() })
             .ToList();
 
         // Batch-aggregate non-glucose tables
@@ -335,6 +335,8 @@ public class DataSourceService : IDataSourceService
             if (!dataSources.Any(d => d.DeviceId == dsDevice.Device))
             {
                 var info = CreateDataSourceInfo(dsDevice.Device, dsDevice.DataSource, SourceHandle.Device);
+                if (IsAndroidAps(dsDevice.AidAlgorithm))
+                    DescribeAsAndroidAps(info);
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
                 info.FirstSeen = info.LastSeen;
                 info.TotalEntries = 0;
@@ -567,7 +569,7 @@ public class DataSourceService : IDataSourceService
     /// <summary>
     /// Create a DataSourceInfo from a device identifier
     /// </summary>
-    private DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
+    internal static DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
     {
         var info = new DataSourceInfo
         {
@@ -631,11 +633,7 @@ public class DataSourceService : IDataSourceService
         }
         else if (lowerDevice.Contains("aaps") || lowerDevice.Contains("androidaps"))
         {
-            info.Name = "AndroidAPS";
-            info.SourceType = "aaps";
-            info.Category = "aid-system";
-            info.Icon = "aaps";
-            info.Description = "AndroidAPS AID System";
+            DescribeAsAndroidAps(info);
         }
         else if (lowerDevice.Contains("openaps") || lowerDevice.Contains("oref"))
         {
@@ -734,6 +732,23 @@ public class DataSourceService : IDataSourceService
         }
 
         return info;
+    }
+
+    /// <summary>
+    /// Whether an APS snapshot's stored algorithm is AndroidAPS. AndroidAPS uploads its loop status as
+    /// <c>openaps://&lt;phone model&gt;</c>, the device string an OpenAPS rig uses too, so for those rows
+    /// only the snapshot's attribution tells the two apart.
+    /// </summary>
+    internal static bool IsAndroidAps(string? aidAlgorithm) =>
+        aidAlgorithm == nameof(Core.Models.V4.AidAlgorithm.AndroidAps);
+
+    internal static void DescribeAsAndroidAps(DataSourceInfo info)
+    {
+        info.Name = "AndroidAPS";
+        info.SourceType = "aaps";
+        info.Category = "aid-system";
+        info.Icon = "aaps";
+        info.Description = "AndroidAPS AID System";
     }
 
 
@@ -934,6 +949,21 @@ public class DataSourceService : IDataSourceService
         return deletedCounts;
     }
 
+    /// <summary>
+    /// The source <paramref name="key"/> names among the records no credential is recorded as the
+    /// writer of, which the connections list shows under either origin handle.
+    /// </summary>
+    private async Task<DataSourceInfo?> FindUnwrittenSourceAsync(string key, CancellationToken ct)
+    {
+        var now = _time.GetUtcNow();
+        var buckets = await _sourceData.WriterBucketsAsync(
+            now.AddDays(-DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+
+        return buckets.Any(b => b.WriterGrantId is null && (b.DataSource == key || b.Device == key))
+            ? CreateDataSourceInfo(key, key, SourceHandle.Unknown)
+            : null;
+    }
+
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
     internal static string CleanDeviceName(string deviceId)
@@ -972,6 +1002,8 @@ public class DataSourceService : IDataSourceService
             var source = sources.FirstOrDefault(s =>
                 s.Id == dataSourceId || s.DeviceId == dataSourceId
             );
+
+            source ??= await FindUnwrittenSourceAsync(dataSourceId, cancellationToken);
 
             if (source == null)
             {

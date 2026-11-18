@@ -44,12 +44,17 @@ public static class SecuritySchemeDefinitions
         "Nightscout API secret (SHA-1 hash). "
         + "Grants full read/write access to the tenant.";
 
+    /// <summary>
+    /// What each scope of <see cref="Scope.ValidRequestScopes"/> allows, as the OAuth security
+    /// scheme publishes it. The Scalar reference draws its scope table from this.
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, string> OAuth2Scopes =
         new Dictionary<string, string>
         {
             [Scope.FullAccess] = "Full access (read, write, delete)",
             [Scope.HealthRead] =
-                "Read all health data (glucose, treatments, devices, therapy settings)",
+                "Read all health data (glucose, treatments, devices, therapy settings, heart rate, step counts, sleep, food)",
+            [Scope.HealthReadWrite] = "Read and write all health data",
             [Scope.GlucoseRead] = "Read glucose data",
             [Scope.GlucoseReadWrite] = "Read and write glucose data",
             [Scope.TreatmentsRead] = "Read treatments",
@@ -58,12 +63,22 @@ public static class SecuritySchemeDefinitions
             [Scope.DevicesReadWrite] = "Read and write device status data",
             [Scope.TherapyRead] = "Read therapy settings",
             [Scope.TherapyReadWrite] = "Read and write therapy settings",
+            [Scope.HeartRateRead] = "Read heart rate data",
+            [Scope.HeartRateReadWrite] = "Read and write heart rate data",
+            [Scope.StepCountRead] = "Read step counts",
+            [Scope.StepCountReadWrite] = "Read and write step counts",
+            [Scope.SleepRead] = "Read sleep sessions",
+            [Scope.SleepReadWrite] = "Read and write sleep sessions",
+            [Scope.FoodRead] = "Read food records",
+            [Scope.FoodReadWrite] = "Read and write food records",
             [Scope.AlertsRead] = "Read alert configuration",
             [Scope.AlertsReadWrite] = "Read and write alert configuration",
             [Scope.AlertsAcknowledge] = "Silence an alarm for everyone for a time",
             [Scope.ReportsRead] = "Read reports",
             [Scope.IdentityRead] = "Read identity information",
             [Scope.SharingReadWrite] = "Manage sharing settings",
+            [Scope.DeviceNotify] = "Send alert notifications to a registered client device",
+            [Scope.DeviceActuate] = "Start an alert action on a registered client device",
         };
 
     /// <summary>

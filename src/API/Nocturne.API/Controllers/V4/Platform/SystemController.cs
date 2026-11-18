@@ -7,7 +7,7 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Controller for system-level lifecycle signals such as bot heartbeats.
+/// Platform lifecycle signals, such as heartbeats from the bot. Send a heartbeat, and read the status of each channel.
 /// </summary>
 /// <remarks>
 /// <c>POST /heartbeat</c> is called by the <c>@nocturne/bot</c> process on each polling cycle

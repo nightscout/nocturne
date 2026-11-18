@@ -20,6 +20,7 @@
     onProgressChange,
     onResult,
     onSettled,
+    onRecentReady,
     onComplete,
   }: {
     jobId?: string;
@@ -31,6 +32,11 @@
     onResult?: (result: Exclude<ImportResult, null>) => void;
     /** Fires once there is nothing left to wait for here: the run ended, none exists, or status polling was lost. */
     onSettled?: () => void;
+    /**
+     * Fires once a live run has its recent data in and only older history left. Watching ends
+     * here: the app follows the rest of the run.
+     */
+    onRecentReady?: (jobId: string) => void;
     onComplete: () => void;
   } = $props();
 
@@ -156,6 +162,13 @@
             firstPoll = false;
             startedAt = Date.now();
             onResult?.("running");
+          }
+
+          if (status.recentDataReady && onRecentReady) {
+            onResult?.("background");
+            onSettled?.();
+            onRecentReady(resolvedJobId);
+            break;
           }
 
           await new Promise((resolve) => setTimeout(resolve, 2000));

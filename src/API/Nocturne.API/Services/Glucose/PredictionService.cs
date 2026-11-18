@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -118,7 +119,7 @@ public class PredictionService : IPredictionService
         // Convert to oref treatments
         // A percent temp basal of unknown rate gives oref no delivery to work from, so it is left out
         var orefTreatments = treatments
-            .Where(t => t.EventType != "Temp Basal" || (t.DeliveredRate ?? t.Rate) is not null)
+            .Where(t => t.EventType != TreatmentTypes.TempBasal || (t.DeliveredRate ?? t.Rate) is not null)
             .Select(t => new OrefModels.OrefTreatment
             {
                 EventType = t.EventType ?? "",

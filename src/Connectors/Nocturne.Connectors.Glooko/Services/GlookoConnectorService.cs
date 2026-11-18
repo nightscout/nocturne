@@ -427,9 +427,11 @@ public class GlookoConnectorService
     ///     never store one (CGM backfill is off by default), so that resolves to the six-month
     ///     <see cref="BaseConnectorService{TConfig}.InitialSyncFloor"/> on every run; and where one
     ///     exists it says nothing about what is still to come, because Glooko posts pump data in
-    ///     batches days after the fact. The connector therefore reads a fixed
-    ///     <see cref="GlookoConnectorConfiguration.LookbackDays"/> each run, and the floor once per
-    ///     <see cref="GlookoConstants.FullWalkInterval"/>. The walk is recorded only once it has
+    ///     batches days after the fact. The connector therefore reads <see cref="GlookoConstants.ShortWindow"/>
+    ///     on most runs, the fixed <see cref="GlookoConnectorConfiguration.LookbackDays"/> once per
+    ///     <see cref="GlookoConstants.LookbackReadInterval"/>, and the floor once per
+    ///     <see cref="GlookoConstants.FullWalkInterval"/>. A lookback read is recorded only once it
+    ///     succeeded, so a failed one is read again next cycle. The walk is recorded only once it has
     ///     succeeded, so a run that stopped at a failed chunk is walked again — after
     ///     <see cref="GlookoConstants.FullWalkRetryInterval"/>, not on every cycle, so a persistently
     ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
@@ -460,59 +462,82 @@ public class GlookoConnectorService
         }
 
         var now = Clock.GetUtcNow().UtcDateTime;
-        var fullWalk = await IsFullWalkDueAsync(now, cancellationToken);
-        var from = fullWalk
-            ? now.AddMonths(-GlookoConstants.FullWalkMonths)
-            : now.AddDays(-config.LookbackDays);
+        var tier = await ResolveWindowTierAsync(now, cancellationToken);
+        var from = tier switch
+        {
+            WindowTier.FullWalk => now.AddMonths(-GlookoConstants.FullWalkMonths),
+            WindowTier.Lookback => now.AddDays(-config.LookbackDays),
+            _ => now - GlookoConstants.ShortWindow,
+        };
 
         _logger.LogInformation(
             "[{ConnectorSource}] Scheduled sync reaches back to {From:yyyy-MM-dd} ({Mode})",
-            ConnectorSource, from, fullWalk ? "full walk" : "incremental");
+            ConnectorSource, from, tier);
 
-        if (fullWalk)
-            await RecordFullWalkAsync(GlookoConstants.FullWalkAttemptCursorResource, now, cancellationToken);
+        if (tier == WindowTier.FullWalk)
+            await RecordStampAsync(GlookoConstants.FullWalkAttemptCursorResource, now, cancellationToken);
 
         var result = await base.SyncDataAsync(config, cancellationToken, from, progressReporter);
 
-        if (fullWalk && result.Success)
-            await RecordFullWalkAsync(GlookoConstants.FullWalkCursorResource, now, cancellationToken);
+        if (result.Success)
+        {
+            if (tier == WindowTier.FullWalk)
+                await RecordStampAsync(GlookoConstants.FullWalkCursorResource, now, cancellationToken);
+            if (tier != WindowTier.Short)
+                await RecordStampAsync(GlookoConstants.LookbackReadCursorResource, now, cancellationToken);
+        }
 
         return result;
     }
 
+    private enum WindowTier
+    {
+        Short,
+        Lookback,
+        FullWalk,
+    }
+
     /// <summary>
-    ///     Whether the scheduled run should walk the full history: the last completed walk is older
-    ///     than the interval and the last attempt older than the retry interval. A store that cannot
-    ///     be read walks, so a transient fault costs one extra walk rather than a missed one.
+    ///     Which window the scheduled run reads. A full walk is due when the last completed walk is
+    ///     older than its interval and the last attempt older than its retry interval; otherwise the
+    ///     lookback is due when the last completed lookback read is older than
+    ///     <see cref="GlookoConstants.LookbackReadInterval"/>. A store that cannot be read walks, so a
+    ///     transient fault costs one extra walk rather than a missed one.
     /// </summary>
-    private async Task<bool> IsFullWalkDueAsync(DateTime now, CancellationToken cancellationToken)
+    private async Task<WindowTier> ResolveWindowTierAsync(DateTime now, CancellationToken cancellationToken)
     {
         try
         {
             var completed = await _cursorStore!.GetAsync(
                 ServiceName, GlookoConstants.FullWalkCursorResource, cancellationToken);
-            if (!FullWalkSchedule.IsDue(completed?.LastUpdatedAt, GlookoConstants.FullWalkInterval, now))
-                return false;
+            if (FullWalkSchedule.IsDue(completed?.LastUpdatedAt, GlookoConstants.FullWalkInterval, now))
+            {
+                var attempted = await _cursorStore.GetAsync(
+                    ServiceName, GlookoConstants.FullWalkAttemptCursorResource, cancellationToken);
+                if (FullWalkSchedule.IsDue(attempted?.LastUpdatedAt, GlookoConstants.FullWalkRetryInterval, now))
+                    return WindowTier.FullWalk;
+            }
 
-            var attempted = await _cursorStore.GetAsync(
-                ServiceName, GlookoConstants.FullWalkAttemptCursorResource, cancellationToken);
-            return FullWalkSchedule.IsDue(
-                attempted?.LastUpdatedAt, GlookoConstants.FullWalkRetryInterval, now);
+            var lookback = await _cursorStore.GetAsync(
+                ServiceName, GlookoConstants.LookbackReadCursorResource, cancellationToken);
+            return FullWalkSchedule.IsDue(lookback?.LastUpdatedAt, GlookoConstants.LookbackReadInterval, now)
+                ? WindowTier.Lookback
+                : WindowTier.Short;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not read the full-walk schedule; walking", ConnectorSource);
-            return true;
+                "[{ConnectorSource}] Could not read the sync schedule; walking", ConnectorSource);
+            return WindowTier.FullWalk;
         }
     }
 
     /// <summary>
     ///     Stamps <paramref name="resource"/> with <paramref name="at"/>. A store that cannot be
-    ///     written does not fail the sync; while it stays unwritable the schedule cannot remember a
-    ///     walk and every scheduled run walks, which is what the warning is for.
+    ///     written does not fail the sync; while it stays unwritable the schedule cannot remember the
+    ///     read it stamps and every scheduled run repeats it, which is what the warning is for.
     /// </summary>
-    private async Task RecordFullWalkAsync(string resource, DateTime at, CancellationToken cancellationToken)
+    private async Task RecordStampAsync(string resource, DateTime at, CancellationToken cancellationToken)
     {
         try
         {
@@ -524,7 +549,7 @@ public class GlookoConnectorService
         catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not record the full walk ({Resource})", ConnectorSource, resource);
+                "[{ConnectorSource}] Could not record the sync stamp ({Resource})", ConnectorSource, resource);
         }
     }
 

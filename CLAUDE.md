@@ -182,6 +182,17 @@ Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) 
 - UUID v7 for new records; `OriginalId` preserved for MongoDB migration compatibility
 - Row Level Security for multitenancy
 
+### Record writers
+
+Every table in `V4RecordTables.All` carries `writer_grant_id` (`IWriterStamped`): the
+`oauth_grants` id of the credential that inserted the row, stamped on insert by
+`NocturneDbContext` from the scope's audit actor (`AuditContextExtensions.GrantId`) and never
+changed afterwards. It is null for a row a connector, a background job or a signed-in member
+wrote. `data_source`, `device` and `app` hold what the uploader said about itself, which differs
+per record type for one app, so the connections list (`ConnectionService`,
+`GET /api/v4/services/connections`) groups by the writer and treats those strings as the streams
+inside a connection. A new record table implements `IWriterStamped`.
+
 ### Migration baseline
 
 The first migration, `<id>_Baseline`, is every migration up to the last one of a

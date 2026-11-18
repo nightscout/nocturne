@@ -1,3 +1,13 @@
+<script module lang="ts">
+  import type {
+    AvailableConnector,
+    ConnectorStatusDto,
+  } from "#lib/api/generated/nocturne-api-client.js";
+
+  export type ConnectorStatusWithDescription = ConnectorStatusDto &
+    Pick<AvailableConnector, "description">;
+</script>
+
 <script lang="ts">
   import { ConnectorState, ConnectorReachability } from "#lib/constants/connector-states.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
@@ -27,11 +37,8 @@
     type SyncResult,
   } from "#lib/api/generated/nocturne-api-client.js";
   import type { SyncRequestInput } from "#lib/api/generated/schemas.js";
-  import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
-  import {
-    formatNumber,
-    relativeAge,
-  } from "#lib/utils/formatting.js";
+  import { formatNumber } from "#lib/utils/formatting.js";
+  import ConnectionTime from "./ConnectionTime.svelte";
   import { SkippedRecordsNote } from "#lib/components/shared/index.js";
 
   interface Props {
@@ -357,7 +364,7 @@
                   Last record received
                 </span>
                 <span class="font-medium">
-                  {relativeAge(selectedConnector.lastEntryTime, { fallback: "Never" })}
+                  <ConnectionTime at={selectedConnector.lastEntryTime} fallback="Never" />
                 </span>
               </div>
             {/if}
@@ -367,7 +374,7 @@
                   Last successful sync
                 </span>
                 <span class="font-medium">
-                  {relativeAge(selectedConnector.lastSuccessfulSync, { fallback: "Never" })}
+                  <ConnectionTime at={selectedConnector.lastSuccessfulSync} fallback="Never" />
                 </span>
               </div>
             {/if}
@@ -377,7 +384,7 @@
                   Last sync attempt
                 </span>
                 <span class="font-medium text-destructive">
-                  {relativeAge(selectedConnector.lastSyncAttempt, { fallback: "Never" })}
+                  <ConnectionTime at={selectedConnector.lastSyncAttempt} fallback="Never" />
                 </span>
               </div>
             {/if}
@@ -403,7 +410,13 @@
           <div class="@container space-y-3">
             <div class="flex items-center gap-2">
               <Download class="h-4 w-4" />
-              <h4 class="font-medium text-sm">Manual sync</h4>
+              <h4 class="font-medium text-sm">
+                {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
+                  Sync recent data
+                {:else}
+                  Sync a date range
+                {/if}
+              </h4>
             </div>
             {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
               <p class="text-xs text-muted-foreground">
@@ -472,7 +485,11 @@
                 Syncing...
               {:else}
                 <RefreshCw class="h-3 w-3" />
-                Sync now
+                {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
+                  Sync recent data
+                {:else}
+                  Sync a date range
+                {/if}
               {/if}
             </Button>
           </div>

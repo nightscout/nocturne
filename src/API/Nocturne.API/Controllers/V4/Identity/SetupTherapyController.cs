@@ -13,9 +13,12 @@ using Nocturne.Core.Models.SetupHub;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The setup hub's therapy settings item. Owner-only, like the rest of the hub; the owner's full
-/// access also carries the therapy write scope its writes declare.
+/// The therapy settings step of setup. A caller can read this step, confirm the current therapy
+/// settings, and enter a therapy profile by hand. Only the owner can use these endpoints.
 /// </summary>
+/// <remarks>
+/// The owner's full access also carries the therapy write scope that its writes declare.
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/setup-hub/therapy")]

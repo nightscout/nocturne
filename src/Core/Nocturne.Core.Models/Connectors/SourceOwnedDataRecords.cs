@@ -42,6 +42,25 @@ public sealed record SourceBucket(
     DateTime? Oldest,
     SourceHandle? Handle);
 
+/// <summary>
+/// One table's rows inside a discovery window that share a writer and both origin handles.
+/// </summary>
+/// <param name="DataType">A <see cref="SourceDataTypes"/> name.</param>
+/// <param name="WriterGrantId">The credential that inserted the rows, or null when none is recorded.</param>
+/// <param name="Device">
+/// The device string the uploader reported. A state span records one undifferentiated origin, which
+/// arrives here with <paramref name="DataSource"/> null.
+/// </param>
+public sealed record WriterBucket(
+    string DataType,
+    Guid? WriterGrantId,
+    string? DataSource,
+    string? Device,
+    long Count,
+    int CountLast24Hours,
+    DateTime Latest,
+    DateTime Oldest);
+
 /// <summary>Sensor glucose inside a discovery window from one <c>Device</c>.</summary>
 /// <param name="DataSource">The greatest data source among its rows, or null when none carries one.</param>
 public sealed record GlucoseDeviceStats(
@@ -54,7 +73,8 @@ public sealed record GlucoseDeviceStats(
 
 /// <summary>The latest APS snapshot inside a discovery window from one <c>Device</c>.</summary>
 /// <param name="DataSource">The greatest data source among its rows, or null when none carries one.</param>
-public sealed record ApsDeviceLastSeen(string Device, string? DataSource, DateTime Latest);
+/// <param name="AidAlgorithm">The algorithm its newest snapshot was attributed to, as stored.</param>
+public sealed record ApsDeviceLastSeen(string Device, string? DataSource, DateTime Latest, string? AidAlgorithm = null);
 
 /// <summary>One data type's rows of a source.</summary>
 /// <param name="DataType">A <see cref="SourceDataTypes"/> name.</param>

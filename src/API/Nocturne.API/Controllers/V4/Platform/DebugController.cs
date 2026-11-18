@@ -7,9 +7,11 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Controller for debug and query inspection endpoints
-/// Provides query debugging and MongoDB query inspection capabilities
+/// Debug endpoints. Echo a value back, and preview an entry.
 /// </summary>
+/// <remarks>
+/// Provides query debugging and MongoDB query inspection capabilities.
+/// </remarks>
 [ApiController]
 [Tags("Platform")]
 [Route("api/v4/debug")]

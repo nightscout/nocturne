@@ -25,12 +25,15 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// CRUD controller for alert rules. Each rule owns a flat list of delivery channels;
-/// time-of-day gating, quiet-hours, and escalation chains are expressed inside the rule's
-/// condition tree (<c>time_of_day</c>, <c>do_not_disturb</c>, <c>alert_state</c>) rather
-/// than as side-channel schedule/step structures.
+/// Alert rules for the tenant. Each rule sets the conditions that trigger an alert and the delivery
+/// channels that receive it. Create, read, update, delete, turn on or off, and test-fire rules.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Each rule owns a flat list of delivery channels. Time-of-day gating, quiet-hours, and escalation
+/// chains are expressed inside the rule's condition tree (<c>time_of_day</c>, <c>do_not_disturb</c>,
+/// <c>alert_state</c>) rather than as side-channel schedule/step structures.
+/// </para>
 /// <para>
 /// Every write action requires <see cref="Scope.AlertsReadWrite"/>: a rule decides whether a
 /// low-glucose alert reaches anyone, and the class-level <c>[Authorize]</c> alone is satisfied by

@@ -569,18 +569,40 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var tombstones = ctx.UserTombstones<TEntity>();
 
         if (Guid.TryParse(id, out var guid))
-            return await tombstones.AnyAsync(e => e.Id == guid || e.LegacyId == id, ct);
+            return await tombstones.AnyAsync(OrSyncIdentifier(e => e.Id == guid || e.LegacyId == id, id), ct);
 
         if (!MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-            return await tombstones.AnyAsync(e => e.LegacyId == id, ct);
+            return await tombstones.AnyAsync(OrSyncIdentifier(e => e.LegacyId == id, id), ct);
 
         var dashed = string.Join('-', id[..8], id[8..12], id[12..16], id[16..20], id[20..]) + "%";
         var dashless = id + "%";
-        return await tombstones.AnyAsync(e => e.LegacyId == id
+        return await tombstones.AnyAsync(OrSyncIdentifier(e => e.LegacyId == id
                 || (e.Id >= low && e.Id <= high)
                 || (e.LegacyId != null && e.LegacyId.Length == 36 && EF.Functions.ILike(e.LegacyId, dashed))
-                || (e.LegacyId != null && e.LegacyId.Length == 32 && EF.Functions.ILike(e.LegacyId, dashless)), ct)
+                || (e.LegacyId != null && e.LegacyId.Length == 32 && EF.Functions.ILike(e.LegacyId, dashless)), id), ct)
             || await WhereLegacyIdHashesTo(ctx, id).UserTombstones().AnyAsync(ct);
+    }
+
+    private static readonly bool IsSyncKeyed = typeof(ISyncDedupable).IsAssignableFrom(typeof(TEntity));
+
+    /// <summary>
+    /// <paramref name="byKey"/> or, on a table keyed on <see cref="ISyncDedupable.SyncIdentifier"/>, a
+    /// row that holds <paramref name="id"/> as its sync identifier, whatever its source: a client
+    /// re-sends a record by the sync identifier it uploaded it with.
+    /// </summary>
+    private static Expression<Func<TEntity, bool>> OrSyncIdentifier(Expression<Func<TEntity, bool>> byKey, string id)
+    {
+        if (!IsSyncKeyed)
+            return byKey;
+
+        Expression<Func<TEntity, bool>> bySyncIdentifier =
+            e => EF.Property<string?>(e, nameof(ISyncDedupable.SyncIdentifier)) == id;
+        var row = byKey.Parameters[0];
+        return Expression.Lambda<Func<TEntity, bool>>(
+            Expression.OrElse(
+                byKey.Body,
+                ReplacingExpressionVisitor.Replace(bySyncIdentifier.Parameters[0], row, bySyncIdentifier.Body)),
+            row);
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{T}.GetCorrelationIdsByLegacyIdAsync" />
@@ -1074,7 +1096,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
-        var (_, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
+        var (_, copies, _) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DuplicateGroupPrimaries.RecordTypeOf<TEntity>(), ct);
         await RaiseBroadcastAsync([], [], [ToDomain(entity), .. copies.Select(ToDomain)], origin, ct);
     }
 

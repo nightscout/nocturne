@@ -48,16 +48,13 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
     public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
-        var recordId = RecordIdKey.ParseIdToGuid(id);
 
-        return await db.UserTombstones<StateSpanEntity>().AnyAsync(
-                s => ActivityCategoryNames.Contains(s.Category) && (s.LegacyId == id || s.Id == recordId), ct)
-            || await db.UserTombstones<SleepSessionEntity>().AnyAsync(
-                s => s.OriginalId == id || s.Id == recordId, ct)
-            || await db.UserTombstones<HeartRateEntity>().AnyAsync(
-                h => h.OriginalId == id || h.Id == recordId, ct)
-            || await db.UserTombstones<StepCountEntity>().AnyAsync(
-                s => s.OriginalId == id || s.Id == recordId, ct);
+        return await db.UserTombstones<StateSpanEntity>()
+                .Where(s => ActivityCategoryNames.Contains(s.Category))
+                .AnyAsync(RecordIdKey.MatchingLegacy<StateSpanEntity>(id), ct)
+            || await db.UserTombstones<SleepSessionEntity>().AnyAsync(RecordIdKey.Matching<SleepSessionEntity>(id), ct)
+            || await db.UserTombstones<HeartRateEntity>().AnyAsync(RecordIdKey.Matching<HeartRateEntity>(id), ct)
+            || await db.UserTombstones<StepCountEntity>().AnyAsync(RecordIdKey.Matching<StepCountEntity>(id), ct);
     }
 
     /// <inheritdoc />
@@ -71,16 +68,15 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
         await using var db = await contexts.CreateAsync(ct);
         var deleted = 0;
         var now = time.GetUtcNow().UtcDateTime;
-        var recordId = RecordIdKey.ParseIdToGuid(legacyId);
 
-        var heartRate = await db.HeartRates.FirstOrDefaultAsync(h => h.OriginalId == legacyId || h.Id == recordId, ct);
+        var heartRate = await db.HeartRates.FirstOrDefaultAsync(RecordIdKey.Matching<HeartRateEntity>(legacyId), ct);
         if (heartRate != null)
         {
             heartRate.DeletedAt = now;
             deleted++;
         }
 
-        var stepCount = await db.StepCounts.FirstOrDefaultAsync(s => s.OriginalId == legacyId || s.Id == recordId, ct);
+        var stepCount = await db.StepCounts.FirstOrDefaultAsync(RecordIdKey.Matching<StepCountEntity>(legacyId), ct);
         if (stepCount != null)
         {
             stepCount.DeletedAt = now;

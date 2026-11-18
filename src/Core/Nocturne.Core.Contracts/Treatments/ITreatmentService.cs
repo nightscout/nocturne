@@ -122,7 +122,7 @@ public interface ITreatmentService
     );
 
     /// <summary>
-    /// <see cref="CreateTreatmentsAsync"/> for treatments posted to the v1 API, where a meal with a
+    /// <see cref="CreateTreatmentsAsync"/> for treatments written through the v1 API, where a meal with a
     /// <c>preBolus</c> is stored as a bolus and its carbs at the preBolus offset, as Nightscout's
     /// POST stores it. Both halves are returned, the bolus first.
     /// </summary>
@@ -204,6 +204,17 @@ public interface ITreatmentService
     /// <param name="treatment">Updated treatment data</param>
     /// <returns>Updated treatment if successful, null otherwise</returns>
     Task<Treatment?> UpdateTreatmentAsync(
+        string id,
+        Treatment treatment,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// <see cref="UpdateTreatmentAsync"/> for a treatment saved through the v1 API, where a meal with
+    /// a <c>preBolus</c> is stored as <see cref="CreateV1TreatmentsAsync"/> stores it, keyed by the
+    /// stored record <paramref name="id"/> names, so a re-send replaces both halves. Returns the bolus.
+    /// </summary>
+    Task<Treatment?> UpdateV1TreatmentAsync(
         string id,
         Treatment treatment,
         CancellationToken cancellationToken = default

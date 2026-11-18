@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
 
@@ -126,7 +127,7 @@ public class SensorAgeInfo
     /// The most recent valid event type ("Sensor Start" or "Sensor Change")
     /// </summary>
     [JsonPropertyName("min")]
-    public string Min { get; set; } = "Sensor Start";
+    public string Min { get; set; } = TreatmentTypes.SensorStart;
 }
 
 public class DeviceAgeNotification

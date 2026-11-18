@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using System.Text.Json;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
@@ -156,7 +157,7 @@ public static class ConsumableTrackerSpecs
 
     /// <summary>The spelling of <paramref name="type"/> a definition's trigger or end list stores.</summary>
     private static string CanonicalName(DeviceEventType type) =>
-        TreatmentTypes.DeviceEventTypeMap.First(pair => pair.Value == type).Key;
+        TreatmentTypeMaps.DeviceEventTypeMap.First(pair => pair.Value == type).Key;
 
     /// <summary>
     /// The spec for <paramref name="kind"/>: the first, by rank, of the specs of

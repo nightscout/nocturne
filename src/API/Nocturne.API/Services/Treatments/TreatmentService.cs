@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
@@ -49,22 +50,16 @@ internal class TreatmentService : ITreatmentService
     /// <summary>
     /// Bolus event types that should be enriched with the patient's primary bolus insulin context.
     /// </summary>
-    private static readonly HashSet<string> BolusEventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Snack Bolus",
-        "Meal Bolus",
-        "Correction Bolus",
-        "Combo Bolus"
-    };
+    private static readonly HashSet<string> BolusEventTypes = new(
+        TreatmentTypes.InsulinContextBolusEventTypes,
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Basal event types that should be enriched with the patient's primary basal insulin context.
     /// </summary>
-    private static readonly HashSet<string> BasalEventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Temp Basal",
-        "Temp Basal Start"
-    };
+    private static readonly HashSet<string> BasalEventTypes = new(
+        TreatmentTypes.InsulinContextBasalEventTypes,
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="TreatmentService"/>.
@@ -371,6 +366,31 @@ internal class TreatmentService : ITreatmentService
         await _events.OnUpdatedAsync(updated, cancellationToken);
 
         return updated;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A treatment <see cref="PreBolusSplit"/> leaves alone takes <see cref="UpdateTreatmentAsync"/>.
+    /// A meal it splits is written by <see cref="CreateV1TreatmentsAsync"/> under the stored
+    /// record's upsert key, whose bolus half drops any carbs the meal held under that key.
+    /// NIGHTSCOUT-COMPAT: Nightscout's PUT stores the document as sent; a v1 PUT is split as the POST
+    /// is, so a re-send cannot double the meal's carbs.
+    /// </remarks>
+    public async Task<Treatment?> UpdateV1TreatmentAsync(
+        string id, Treatment treatment, CancellationToken cancellationToken = default)
+    {
+        if (!PreBolusSplit.Applies(treatment))
+            return await UpdateTreatmentAsync(id, treatment, cancellationToken);
+
+        if (await _store.GetForUpdateAsync(id, cancellationToken) is not { Id: { } upsertKey } stored)
+            return null;
+
+        var meal = treatment.ShallowCopy();
+        meal.AdditionalProperties = treatment.AdditionalProperties is { } extra ? new(extra) : null;
+        TreatmentClientId.KeepStored(meal, stored);
+        meal.Id = upsertKey;
+        var written = await CreateV1TreatmentsAsync([meal], WriteOrigin.Live, cancellationToken);
+        return TreatmentEcho.InSubmittedOrder(written).FirstOrDefault();
     }
 
     /// <inheritdoc />

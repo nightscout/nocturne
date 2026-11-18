@@ -136,7 +136,9 @@ public partial class TenantService : ITenantService
             var ownerRoleId = await members.FindRoleIdBySlugAsync(id, RoleSeeds.Owner, token)
                 ?? throw new InvalidOperationException($"Tenant {id} has no owner role after seeding.");
             await members.AddMemberAsync(
-                new NewTenantMember(id, ownerSubjectId, [ownerRoleId], Username: ownerUsername), token);
+                new NewTenantMember(
+                    id, ownerSubjectId, [ownerRoleId], Username: ownerUsername, MadeBy: MembershipMadeBy.Member),
+                token);
             await unit.Context.SaveChangesAsync(token);
 
             return id;
@@ -570,7 +572,10 @@ public partial class TenantService : ITenantService
         if (publicSubject != null)
         {
             await members.AddMemberAsync(
-                new NewTenantMember(tenantId, publicSubject.Id, [], Label: "Public Access", LimitTo24Hours: true), ct);
+                new NewTenantMember(
+                    tenantId, publicSubject.Id, [], Label: "Public Access", LimitTo24Hours: true,
+                    MadeBy: MembershipMadeBy.System),
+                ct);
         }
         else
         {
