@@ -41518,3 +41518,17 @@ msgstr "Dose time"
 #: src/lib/components/status-pills/BasalPill.svelte
 msgid "Estimated rate"
 msgstr "Estimated rate"
+
+#. 0: activeWithinMinutes
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "No record arrived in the last {0} minutes. This connection sends glucose or device status all the time. It is possible that it stopped."
+msgstr "No record arrived in the last {0} minutes. This connection sends glucose or device status all the time. It is possible that it stopped."
+
+#. 0: activeWithinMinutes
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "No record arrived in the last {0} minutes. This connection sends only records that come from time to time, such as treatments. This is normal."
+msgstr "No record arrived in the last {0} minutes. This connection sends only records that come from time to time, such as treatments. This is normal."
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Why one app can show more than one source"
+msgstr "Why one app can show more than one source"
