@@ -586,6 +586,7 @@ public class AlertReplayServiceTests
     private AlertReplayService FiringSearch(AlertEvaluationOptions? options = null) =>
         new(
             _alertRepository.Object,
+            _dndWindows.Object,
             _glucoseRepository.Object,
             _enricher,
             _tenantAccessor.Object,

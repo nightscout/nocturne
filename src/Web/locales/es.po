@@ -512,7 +512,7 @@ msgstr "Código de verificación"
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
@@ -1525,6 +1525,7 @@ msgstr "Error de autenticación"
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "<0/> Waiting for passkey..."
@@ -1606,6 +1607,7 @@ msgstr "Nombre visible"
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Your name"
@@ -2225,8 +2227,9 @@ msgstr "No se pudo eliminar la configuración"
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Failed to delete data"
 msgstr "No se pudieron eliminar los datos"
 
@@ -2522,6 +2525,8 @@ msgstr "<0/> Descargando..."
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/InspectionFooter.svelte
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/notifications/ReleaseNotesDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
@@ -2626,7 +2631,7 @@ msgstr "Se eliminaron {0} registros"
 #~ msgid "Type DELETE"
 #~ msgstr "Escribe DELETE"
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 msgid "<0/> Deleting..."
@@ -10011,7 +10016,7 @@ msgstr "Texto de la nota..."
 msgid "Confirm"
 msgstr "Confirmar"
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 msgid "Type <0/> to confirm:"
 msgstr "Escribe <0/> para confirmar:"
@@ -16302,9 +16307,8 @@ msgstr "<0/> Ver"
 msgid "This role is currently assigned to {0} member{1}. They will lose any permissions granted by this role."
 msgstr "Este rol está asignado actualmente a {0} miembro{1}. Perderán los permisos concedidos por este rol."
 
-#: src/lib/components/members/RequestMembershipDialog.svelte
-msgid "Introduce yourself to the site owner so they know who you are."
-msgstr "Preséntate al propietario del sitio para que sepa quién eres."
+#~ msgid "Introduce yourself to the site owner so they know who you are."
+#~ msgstr "Preséntate al propietario del sitio para que sepa quién eres."
 
 #~ msgid "Continue to Sign Up"
 #~ msgstr "Continuar al registro"
@@ -17534,6 +17538,7 @@ msgstr "¿Seguro que quieres eliminar este ajuste predefinido? Esta acción no s
 #~ msgstr "Los proveedores externos los configura el administrador de tu instancia. Si no ves ningún botón de proveedor en la página de inicio de sesión, este método no está habilitado para tu instancia."
 
 #: src/lib/components/layout/UserMenu.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "Request membership"
@@ -25644,7 +25649,7 @@ msgstr "Rellena solo el espacio entre la línea de glucemia y el rango objetivo 
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Allow re-import"
 msgstr "Permitir volver a importar"
 
@@ -25665,13 +25670,11 @@ msgstr "El conector permanece habilitado y vuelve a importar estos datos en la s
 msgid "The connector is disabled, and deleted records are never imported again, even if {0} still has them."
 msgstr "El conector se desactiva y los registros eliminados nunca vuelven a importarse, aunque {0} todavía los conserve."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records this source sends again are imported, including any of its records deleted earlier."
-msgstr "Los registros que esta fuente vuelva a enviar se importarán, incluidos los que se hayan eliminado anteriormente."
+#~ msgid "Records this source sends again are imported, including any of its records deleted earlier."
+#~ msgstr "Los registros que esta fuente vuelva a enviar se importarán, incluidos los que se hayan eliminado anteriormente."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Deleted records are never imported again, even if this source sends them."
-msgstr "Los registros eliminados nunca vuelven a importarse, aunque esta fuente los envíe de nuevo."
+#~ msgid "Deleted records are never imported again, even if this source sends them."
+#~ msgstr "Los registros eliminados nunca vuelven a importarse, aunque esta fuente los envíe de nuevo."
 
 #: src/lib/components/food/FoodFields.svelte
 msgid "Energy <0>optional</0>"
@@ -33759,12 +33762,12 @@ msgid "Delete {0} data"
 msgstr "Eliminar los datos de {0}"
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Delete and allow re-import"
 msgstr "Eliminar y permitir la reimportación"
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Delete all data"
 msgstr "Eliminar todos los datos"
 
@@ -33807,11 +33810,12 @@ msgstr "Capacidades de sincronización"
 #~ msgid "Delete all data from this source"
 #~ msgstr "Eliminar todos los datos de esta fuente"
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "<0/> Delete data..."
 msgstr "<0/> Eliminar datos..."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "<0/> Permanently delete data"
 msgstr "<0/> Eliminar datos permanentemente"
 
@@ -34291,9 +34295,8 @@ msgstr "Enlace de invitación"
 msgid "<0/> Pending requests"
 msgstr "<0/> Solicitudes pendientes"
 
-#: src/lib/components/members/RequestMembershipDialog.svelte
-msgid "Continue to sign up"
-msgstr "Continuar con el registro"
+#~ msgid "Continue to sign up"
+#~ msgstr "Continuar con el registro"
 
 #: src/lib/components/members/PublicAccessCard.svelte
 msgid "Could not disable public access. Try again."
@@ -41215,6 +41218,7 @@ msgid "No permissions"
 msgstr "Sin permisos"
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/ConnectionRow.svelte
 #: src/lib/components/connectors/UploaderSetupDialog.svelte
 #: src/lib/components/settings/ApiTokenCreateDialog.svelte
@@ -41333,14 +41337,14 @@ msgstr "Sincronizar datos recientes"
 msgid "Sync a date range"
 msgstr "Sincronizar un intervalo de fechas"
 
-#. 0: source.name
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#. 0: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #, python-brace-format
 msgid "Deleted 1 record from {0}"
 msgstr "Se ha eliminado 1 registro de {0}"
 
-#. 0: formatNumber(result.totalDeleted); 1: source.name
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#. 0: formatNumber(result.totalDeleted); 1: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #, python-brace-format
 msgid "Deleted {0} records from {1}"
 msgstr "Se han eliminado {0} registros de {1}"
@@ -41350,16 +41354,16 @@ msgid "Records in the last 24 hours"
 msgstr "Registros de las últimas 24 horas"
 
 #. 0: windowDays
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #, python-brace-format
 msgid "Records in the last {0} days:"
 msgstr "Registros de los últimos {0} días:"
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "You cannot undo this action."
 msgstr "Esta acción no se puede deshacer."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Nocturne deletes all records from <0/>."
 msgstr "Nocturne elimina todos los registros de <0/>."
 
@@ -42470,4 +42474,103 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Why one app can show more than one source"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "AAPSClient"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Could not make the QR code. Try again."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Connect AAPSClient with a QR code"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "For a follower phone with AAPSClient 4.0 or later. The phone gets its own API token and can read your data."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "QR code to connect AAPSClient"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "This phone can read your data and send commands to your AAPS phone."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "This phone can only read your data."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "In AAPSClient, open the setup wizard or Pair with master, then select Scan the QR code."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Anyone who sees this code gets the same access. Show it only to the new phone. It cannot be shown again."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Let this phone send commands to your AAPS phone"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "After you pair it in AAPS, the phone can ask your AAPS phone for a bolus, a temporary target, or a profile switch. Your AAPS phone checks each command before it does it. The API token can then also change the treatment profiles in Nocturne. When this is off, the phone cannot pair and can only read your data."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "<0/> Make QR code"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "You cannot delete this data"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "A credential of this connection is not yours, or it was removed."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+msgid "Nocturne imports the records that {0} sends again. This includes the records that you deleted before."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+msgid "Nocturne does not import the deleted records again, even if {0} sends them."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "We could not send your request. Try again."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "Request sent"
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "The owner must approve your request before you can sign in. After approval, sign in with the passkey you made."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "This browser cannot make a passkey. To send a request, use a browser or device that supports passkeys."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "Tell the owner who you are. You make a passkey to send the request. The owner must approve the request before you can sign in."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "Message to the owner"
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "<0/> Send request"
+msgstr ""
+
+#. 0: formatClock(waitUntil)
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "You can change the address one time each hour. You can change it again at {0}."
 msgstr ""

@@ -386,6 +386,40 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
+    /// Delete every record a connection's credentials wrote, whatever device or data source it names.
+    /// WARNING: This is a destructive operation that cannot be undone.
+    /// </summary>
+    /// <remarks>
+    /// The delete covers every credential of the named connection, revoked ones and those whose records
+    /// are older than the connections list shows, and each has to be an app or API token of the caller.
+    /// A connector's records have no credential and keep the delete by data source.
+    /// </remarks>
+    /// <param name="request">Credentials of one connection, and whether they may send the records again.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result of the delete operation</returns>
+    [HttpPost("connections/delete-records")]
+    [RequireScope(Scope.TenantSettings)]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
+    [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
+    [ProducesResponseType(401)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectionRecords(
+        [FromBody] DeleteConnectionRecordsRequest request,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        var result = await _connectionService.DeleteRecordsAsync(
+            subjectId, request.GrantIds, request.AllowReimport, cancellationToken);
+        return result.Success
+            ? Ok(result)
+            : Problem(detail: result.Error, statusCode: 404, title: "Not Found");
+    }
+
+    /// <summary>
     /// Get a summary of data counts for a specific connector.
     /// Returns the number of entries, treatments, and device statuses synced by this connector.
     /// </summary>
@@ -702,6 +736,16 @@ public class ServicesController : ControllerBase
         return $"{request.PublicScheme()}://{request.Host}";
     }
 
+}
+
+/// <summary>The credentials whose records <see cref="ServicesController.DeleteConnectionRecords"/> deletes.</summary>
+public class DeleteConnectionRecordsRequest
+{
+    /// <summary>The grant ids of credentials of one connection, as the connections list shows them.</summary>
+    public List<Guid> GrantIds { get; init; } = [];
+
+    /// <summary>Let the credentials send the deleted records again.</summary>
+    public bool AllowReimport { get; init; }
 }
 
 /// <summary>

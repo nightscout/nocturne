@@ -732,7 +732,7 @@ export const definitions: ScreenshotDefinition[] = [
 			await page.getByTestId('request-membership-dialog').waitFor();
 		},
 		clip: '[data-testid="request-membership-dialog"]',
-		alt: 'The Request Membership box. You write a short note introducing yourself to the site owner, up to 500 characters, then press Continue to Sign Up.',
+		alt: 'The Request Membership box. You type your name and a short note to the site owner, up to 500 characters, then press Send request and make a passkey.',
 	},
 	{
 		id: 'totp-setup',

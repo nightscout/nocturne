@@ -28,12 +28,13 @@ public class ConnectionServiceTests
     private readonly Mock<ISourceOwnedDataReader> _sourceData = new();
     private readonly Mock<IOAuthGrantRepository> _grants = new();
     private readonly Mock<IConnectorHealthService> _health = new();
+    private readonly Mock<IDataSourceService> _dataSources = new();
     private readonly List<WriterBucket> _buckets = [];
     private readonly Dictionary<string, Dictionary<string, long>> _importCounts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Mock<IDataSourceService> _dataSources = new();
     private readonly List<OAuthGrantRecord> _grantRecords = [];
     private readonly List<ConnectorStatusDto> _statuses = [];
     private readonly List<ApsDeviceLastSeen> _apsDevices = [];
+    private IReadOnlyList<OAuthGrantRecord> _installs = [];
 
     private Task<ConnectionsOverview> ListAsync(IConnectorHealthService? health = null)
     {
@@ -57,6 +58,7 @@ public class ConnectionServiceTests
             .Setup(g => g.ListForConnectionsAsync(Viewer, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(_grantRecords);
         _health.Setup(h => h.GetConnectorStatusesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_statuses);
+        InstallsOf([.. _installs]);
 
         var devices = new Mock<IClientDeviceService>();
         devices
@@ -502,5 +504,173 @@ public class ConnectionServiceTests
         var connector = overview.Connections.Single();
         connector.Status.Should().Be(ConnectionStatus.Error);
         connector.ErrorMessage.Should().Be("Sign-in was rejected");
+    }
+
+    private ConnectionService Service() =>
+        new(_sourceData.Object, _grants.Object, _health.Object, Mock.Of<IClientDeviceService>(), _dataSources.Object,
+            new FakeTimeProvider(Now));
+
+    private void Owns(OAuthGrantRecord grant) =>
+        _grants.Setup(g => g.FindOfSubjectAsync(grant.Id, Viewer, It.IsAny<CancellationToken>())).ReturnsAsync(grant);
+
+    private static readonly OAuthGrantClient Companion = new("companion", "Companion", null, null, "org.example.companion");
+
+    /// <summary>The app grants the store holds of the clients asked about, listed or not.</summary>
+    private void InstallsOf(params OAuthGrantRecord[] installs)
+    {
+        _installs = installs;
+        _grants
+            .Setup(g => g.ListAppGrantsOfClientsAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(installs);
+    }
+
+    private void Verify(params Guid[] deleted) =>
+        _dataSources.Verify(d => d.DeleteWrittenDataAsync(
+            It.Is<IReadOnlyCollection<Guid>>(ids => ids.ToHashSet().SetEquals(deleted)), It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+    private void VerifyNothingDeleted() =>
+        _dataSources.Verify(d => d.DeleteWrittenDataAsync(
+            It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+
+    [Fact]
+    public async Task CanDeleteRecords_ForAnAppWhoseEveryInstallIsTheViewers_RevokedIncluded()
+    {
+        var shown = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid());
+        var revoked = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid(),
+            revokedAt: Now.UtcDateTime.AddDays(-400));
+        _grantRecords.Add(shown);
+        InstallsOf(shown, revoked);
+
+        (await ListAsync()).Connections.Single().CanDeleteRecords.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CannotDeleteRecords_WhenAnotherMembersUnlistedInstallFoldsIntoTheApp()
+    {
+        var shown = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid());
+        var theirs = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid(),
+            subject: Guid.NewGuid(), revokedAt: Now.UtcDateTime.AddDays(-400));
+        _grantRecords.Add(shown);
+        InstallsOf(shown, theirs);
+
+        var connection = (await ListAsync()).Connections.Single();
+
+        connection.Credentials.Should().ContainSingle().Which.IsOwn.Should().BeTrue(
+            "the other member's install wrote nothing inside the window, so the list does not show it");
+        connection.CanDeleteRecords.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CanDeleteRecords_ForTheViewersOwnTokenOnly()
+    {
+        var own = Grant(OAuthGrantTypes.Direct, label: "mine");
+        var theirs = Grant(OAuthGrantTypes.Direct, label: "theirs", subject: Guid.NewGuid());
+        _grantRecords.AddRange([own, theirs]);
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, theirs.Id, null, "Unknown", 3));
+
+        var connections = (await ListAsync()).Connections;
+
+        connections.Single(c => c.Name == "mine").CanDeleteRecords.Should().BeTrue();
+        connections.Single(c => c.Name == "theirs").CanDeleteRecords.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteRecords_OfAVerifiedApp_CoversEveryOwnInstallItFoldsTogether_RevokedIncluded()
+    {
+        var shown = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid());
+        var revoked = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid(),
+            revokedAt: Now.UtcDateTime.AddDays(-90));
+        var unverified = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: shown.ClientEntityId,
+            identity: OAuthClientIdentity.Unverified);
+        Owns(shown);
+        InstallsOf(shown, revoked, unverified);
+        var deleted = new DataSourceDeleteResult { Success = true };
+        _dataSources
+            .Setup(d => d.DeleteWrittenDataAsync(It.IsAny<IReadOnlyCollection<Guid>>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(deleted);
+
+        (await Service().DeleteRecordsAsync(Viewer, [shown.Id], allowReimport: true)).Should().BeSameAs(deleted);
+
+        Verify(shown.Id, revoked.Id);
+    }
+
+    [Fact]
+    public async Task DeleteRecords_OfAToken_CoversThatTokenOnly()
+    {
+        var token = Grant(OAuthGrantTypes.Direct);
+        Owns(token);
+
+        await Service().DeleteRecordsAsync(Viewer, [token.Id], allowReimport: false);
+
+        Verify(token.Id);
+    }
+
+    [Fact]
+    public async Task DeleteRecords_OfAnAppAnotherMemberAlsoInstalled_DeletesNothing()
+    {
+        var own = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid());
+        var theirs = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid(), subject: Guid.NewGuid());
+        Owns(own);
+        InstallsOf(own, theirs);
+
+        var result = await Service().DeleteRecordsAsync(Viewer, [own.Id], allowReimport: false);
+
+        result.ErrorCode.Should().Be(DataSourceDeleteError.NotFound);
+        VerifyNothingDeleted();
+    }
+
+    [Fact]
+    public async Task DeleteRecords_NamingTwoConnections_DeletesNothing()
+    {
+        var app = Grant(OAuthGrantTypes.App, client: Companion, clientEntityId: Guid.NewGuid());
+        var token = Grant(OAuthGrantTypes.Direct);
+        Owns(app);
+        Owns(token);
+        InstallsOf(app);
+
+        (await Service().DeleteRecordsAsync(Viewer, [app.Id, token.Id], allowReimport: false)).ErrorCode
+            .Should().Be(DataSourceDeleteError.NotFound);
+        VerifyNothingDeleted();
+    }
+
+    [Fact]
+    public async Task DeleteRecords_NamingAGrantOfAnotherMember_DeletesNothing()
+    {
+        var own = Grant(OAuthGrantTypes.App);
+        Owns(own);
+        var othersGrant = Guid.NewGuid();
+
+        var result = await Service().DeleteRecordsAsync(Viewer, [own.Id, othersGrant], allowReimport: false);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be(DataSourceDeleteError.NotFound);
+        _dataSources.Verify(d => d.DeleteWrittenDataAsync(
+            It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(OAuthGrantTypes.Guest)]
+    [InlineData(OAuthGrantTypes.Follower)]
+    public async Task DeleteRecords_OfACredentialTheListShowsNoConnectionFor_DeletesNothing(string grantType)
+    {
+        var grant = Grant(grantType);
+        Owns(grant);
+
+        var result = await Service().DeleteRecordsAsync(Viewer, [grant.Id], allowReimport: false);
+
+        result.ErrorCode.Should().Be(DataSourceDeleteError.NotFound);
+        _dataSources.Verify(d => d.DeleteWrittenDataAsync(
+            It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteRecords_OfNoGrant_DeletesNothing()
+    {
+        (await Service().DeleteRecordsAsync(Viewer, [], allowReimport: false)).ErrorCode
+            .Should().Be(DataSourceDeleteError.NotFound);
+        _dataSources.Verify(d => d.DeleteWrittenDataAsync(
+            It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

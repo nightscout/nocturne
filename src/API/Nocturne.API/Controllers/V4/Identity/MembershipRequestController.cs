@@ -32,6 +32,7 @@ public class MembershipRequestController(
     [RemoteCommand(Invalidates = ["GetMyRequest"])]
     [ProducesResponseType(typeof(CreateMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRequest(
         [FromBody] CreateMembershipRequestRequest request,
         CancellationToken ct)
@@ -43,6 +44,9 @@ public class MembershipRequestController(
 
         var result = await membershipRequestService.CreateRequestAsync(
             tenantId, subjectId.Value, request.Message, ct);
+
+        if (result.Outcome == CreateMembershipRequestOutcome.AlreadyMember)
+            return Problem(detail: result.Error, statusCode: StatusCodes.Status409Conflict, title: "Conflict");
 
         if (!result.Success)
             return BadRequest(result);

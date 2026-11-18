@@ -29,7 +29,6 @@
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Database from "@lucide/svelte/icons/database";
   import Download from "@lucide/svelte/icons/download";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Plus from "@lucide/svelte/icons/plus";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
@@ -424,10 +423,14 @@
   <li>
     <Item variant="row" href={resolve("settings/connectors/google-health")}>
       <span
-        class="flex size-8 shrink-0 items-center justify-center text-muted-foreground"
+        class="flex size-8 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
-        <HeartPulse class="size-5" />
+        <AppLogo
+          icon="google-health"
+          invertMode
+          class="size-8 object-contain"
+        />
       </span>
       <span class="min-w-0 flex-1 space-y-0.5">
         <span class="block font-medium">Google Health</span>

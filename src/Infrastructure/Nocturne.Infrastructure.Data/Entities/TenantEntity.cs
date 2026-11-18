@@ -24,6 +24,10 @@ public class TenantEntity : ISystemTimestamped
     [MaxLength(64)]
     public string Slug { get; set; } = string.Empty;
 
+    /// <summary>When <see cref="Slug"/> was last changed, or null if it never was.</summary>
+    [Column("slug_changed_at")]
+    public DateTime? SlugChangedAt { get; set; }
+
     /// <summary>
     /// Human-readable display name
     /// </summary>
