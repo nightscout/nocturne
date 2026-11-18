@@ -51,7 +51,7 @@ public static class AuthAuditEventType
     public const string RoleRemoved = "role_removed";
 
     /// <summary>
-    /// Event type when editing a tenant role changes its permission set, and so what every holder of
+    /// Event type when editing a role changes its permission set, and so what every holder of
     /// the role can read. The details name the role and the permissions it gained and lost.
     /// </summary>
     public const string RolePermissionsChanged = "role_permissions_changed";

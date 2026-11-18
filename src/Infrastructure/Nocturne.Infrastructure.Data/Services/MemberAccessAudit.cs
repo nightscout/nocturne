@@ -33,7 +33,7 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// when an invite caused it. A change that leaves the set as it was stages nothing.
 /// A role whose own permission set changed is one <see cref="AuthAuditEventType.RolePermissionsChanged"/>
 /// row with no target subject, naming the role under <c>role_id</c> and <c>role</c> and the permissions
-/// under <c>gained</c> and <c>lost</c>.
+/// under <c>gained</c> and <c>lost</c>; a global role's row says <c>kind</c> = <c>global</c>.
 /// <para>
 /// The target is the member's subject, except on the role row, which has none. The actor is the <see cref="MemberAccessSource"/> when the
 /// writer passes one, else the scope's <see cref="IAuditContext"/> named as
@@ -45,6 +45,8 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 internal static class MemberAccessAudit
 {
     private const string RoleKey = "role";
+    private const string TenantKind = "tenant";
+    private const string GlobalKind = "global";
     private const string PermissionKey = "permission";
     private const string HistoryLimitKey = "history_limit";
     private const string InviteKey = "invite";
@@ -87,6 +89,21 @@ internal static class MemberAccessAudit
     /// </summary>
     public static void StageRolePermissions(
         NocturneDbContext db, Guid tenantId, Guid roleId, string roleSlug,
+        IReadOnlyCollection<string> before, IReadOnlyCollection<string> after) =>
+        StageRolePermissions(db, tenantId, TenantKind, roleId, roleSlug, before, after);
+
+    /// <summary>
+    /// <see cref="StageRolePermissions(NocturneDbContext, Guid, Guid, string, IReadOnlyCollection{string}, IReadOnlyCollection{string})"/>
+    /// for a global role, which belongs to no tenant: the row's <c>kind</c> is <c>global</c> and its tenant is the one
+    /// the edit was made under, if any.
+    /// </summary>
+    public static void StageGlobalRolePermissions(
+        NocturneDbContext db, Guid roleId, string roleName,
+        IReadOnlyCollection<string> before, IReadOnlyCollection<string> after) =>
+        StageRolePermissions(db, db.TenantIdOrNull, GlobalKind, roleId, roleName, before, after);
+
+    private static void StageRolePermissions(
+        NocturneDbContext db, Guid? tenantId, string kind, Guid roleId, string role,
         IReadOnlyCollection<string> before, IReadOnlyCollection<string> after)
     {
         var gained = after.Except(before).Order(StringComparer.Ordinal).ToList();
@@ -97,10 +114,10 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.RolePermissionsChanged, tenantId, null, new Dictionary<string, object>
         {
             ["role_id"] = roleId.ToString(),
-            [RoleKey] = roleSlug,
+            [RoleKey] = role,
             ["gained"] = gained,
             ["lost"] = lost,
-            ["kind"] = "tenant",
+            ["kind"] = kind,
         }, source: null);
     }
 
@@ -118,7 +135,7 @@ internal static class MemberAccessAudit
         NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId, string key, string item,
         MemberAccessSource? source)
     {
-        var details = new Dictionary<string, object> { [key] = item, ["kind"] = "tenant" };
+        var details = new Dictionary<string, object> { [key] = item, ["kind"] = TenantKind };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
 
@@ -126,7 +143,7 @@ internal static class MemberAccessAudit
     }
 
     private static void Add(
-        NocturneDbContext db, string eventType, Guid tenantId, Guid? targetSubjectId,
+        NocturneDbContext db, string eventType, Guid? tenantId, Guid? targetSubjectId,
         Dictionary<string, object> details, MemberAccessSource? source)
     {
         var audit = db.AuditContext;
