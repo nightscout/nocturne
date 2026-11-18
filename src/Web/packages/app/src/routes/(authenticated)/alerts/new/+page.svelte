@@ -169,6 +169,13 @@
     return null;
   });
 
+  // The steps differ in height, and a scrollbar that comes and goes moves the page sideways.
+  $effect(() => {
+    const root = document.documentElement;
+    root.classList.add("[scrollbar-gutter:stable]");
+    return () => root.classList.remove("[scrollbar-gutter:stable]");
+  });
+
   // ---- Create ------------------------------------------------------------
 
   let saving = $state(false);
@@ -275,11 +282,10 @@
     </Button>
     <div class="min-w-0">
       <h1 class="truncate text-2xl font-bold">New alert</h1>
-      {#if draft && step > TYPE}
-        <p class="truncate text-sm text-muted-foreground" data-testid="alert-wizard-summary">
-          {templateLabel(draft.template)}
-        </p>
-      {/if}
+      <!-- The line is there on every step, so the type's name arrives without moving the page. -->
+      <p class="min-h-5 truncate text-sm text-muted-foreground" data-testid="alert-wizard-summary">
+        {#if draft && step > TYPE}{templateLabel(draft.template)}{/if}
+      </p>
     </div>
   </header>
 
