@@ -2370,6 +2370,48 @@ public class DeviceStatusDecomposerTests : IDisposable
     #region LoopJson and AidVersion
 
     [Fact]
+    public async Task DecomposeAsync_LoopKeysTheModelDoesNotName_SurviveIntoLoopJsonAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "iob": { "iob": 1.8, "timestamp": "2023-11-14T12:00:00Z", "futureIobKey": 7 },
+              "automaticDoseRecommendation": {
+                "timestamp": "2023-11-14T12:00:00Z",
+                "bolusVolume": 0.25,
+                "tempBasalAdjustment": { "rate": 1.5, "duration": 1800 }
+              },
+              "testingDetails": { "remoteCommands": ["carbs-delete", "carbs-edit"] },
+              "version": "3.4"
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "loop-json-unknown-keys",
+            Mills = 1700000000000,
+            Device = "loop://iPhone",
+            Loop = JsonSerializer.Deserialize<LoopStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        var stored = JsonDocument.Parse(aps.LoopJson!).RootElement;
+        stored.GetProperty("testingDetails").GetProperty("remoteCommands").EnumerateArray()
+            .Select(e => e.GetString()).Should().Equal("carbs-delete", "carbs-edit");
+        var dose = stored.GetProperty("automaticDoseRecommendation");
+        dose.GetProperty("bolusVolume").GetDouble().Should().Be(0.25);
+        dose.GetProperty("tempBasalAdjustment").GetProperty("duration").GetInt32().Should().Be(1800);
+        stored.GetProperty("iob").GetProperty("futureIobKey").GetInt32().Should().Be(7);
+
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(projected.Loop)).RootElement;
+        read.GetProperty("testingDetails").GetProperty("remoteCommands").GetArrayLength().Should().Be(2);
+        read.GetProperty("automaticDoseRecommendation").GetProperty("bolusVolume").GetDouble().Should().Be(0.25);
+        read.GetProperty("automaticDoseRecommendation").GetProperty("tempBasalAdjustment")
+            .GetProperty("rate").GetDouble().Should().Be(1.5);
+    }
+
+    [Fact]
     public async Task DecomposeAsync_WithLoopData_StoresLoopJson()
     {
         // Arrange
