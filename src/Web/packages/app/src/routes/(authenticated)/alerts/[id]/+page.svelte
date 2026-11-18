@@ -7,7 +7,6 @@
   import {
     getRule,
     getRules,
-    createRule,
     updateRule,
     deleteRule,
     testFire,
@@ -62,9 +61,7 @@
   } from "#lib/components/alerts/types.js";
 
   // ---- Page state ------------------------------------------------------
-  // The dynamic [id] segment is "new" when creating, otherwise a UUID.
   let ruleId = $derived(page.params.id ?? "");
-  let isNew = $derived(ruleId === "new");
 
   let saving = $state(false);
   let deleting = $state(false);
@@ -75,20 +72,18 @@
   let seededId = $state<string | null>(null);
   let savedBody = $state<ReturnType<typeof buildBody> | null>(null);
   const isDirty = $derived(
-    isNew || savedBody === null || JSON.stringify(buildBody(editor)) !== JSON.stringify(savedBody)
+    savedBody === null || JSON.stringify(buildBody(editor)) !== JSON.stringify(savedBody)
   );
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
   const rulesQuery = getRules();
-  const ruleQuery = $derived(isNew ? null : getRule(ruleId));
+  const ruleQuery = $derived(getRule(ruleId));
 
-  const historyQuery = $derived(isNew
-    ? null
-    : getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }));
+  const historyQuery = $derived(getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }));
 
   const availableRules = $derived<{ id: string; name: string }[]>((rulesQuery.current ?? []).filter((r) => r.id !== ruleId).map((r) => ({ id: r.id ?? "", name: r.name ?? "(unnamed)" })));
-  const history = $derived<HistoryExcursionResponse[]>(historyQuery?.current?.items ?? []);
-  const historyLoading = $derived(historyQuery !== null && historyQuery.current === undefined);
+  const history = $derived<HistoryExcursionResponse[]>(historyQuery.current?.items ?? []);
+  const historyLoading = $derived(historyQuery.current === undefined);
 
   // Ready once the rule has seeded the editor, not when `ruleQuery.current` is set: the derived
   // can re-run and hand the template a fresh query that never starts, while the seeding effect
@@ -110,15 +105,7 @@
   // the route param changes (e.g. navigating from /alerts/foo to /alerts/bar).
   $effect(() => {
     if (seededId === ruleId) return;
-    if (isNew) {
-      untrack(() => {
-        editor = parseRule(null);
-        savedBody = null;
-        seededId = ruleId;
-      });
-      return;
-    }
-    const rule = ruleQuery?.current;
+    const rule = ruleQuery.current;
     if (rule === undefined) return;
     untrack(() => {
       editor = parseRule(rule ?? null);
@@ -138,17 +125,8 @@
     saving = true;
     error = null;
     try {
-      const body = buildBody(editor);
-      if (isNew) {
-        const created = await createRule(body);
-        await goto(
-          created?.id
-          ? resolve("/(authenticated)/alerts/[id]", { id: created.id })
-          : resolve('alerts'));
-      } else {
-        await updateRule({ id: ruleId, request: body });
-        savedBody = buildBody(editor);
-      }
+      await updateRule({ id: ruleId, request: buildBody(editor) });
+      savedBody = buildBody(editor);
     } catch (e) {
       const described = describeSubmitError(e, "Failed to save the alert rule. Try again.");
       error = conditionIssuesMessage(e) ?? described;
@@ -158,7 +136,6 @@
   }
 
   async function destroy(): Promise<void> {
-    if (isNew) return;
     if (!confirm(`Delete "${editor.name}"? This cannot be undone.`)) return;
     deleting = true;
     error = null;
@@ -237,7 +214,7 @@
   function buildReplayRule() {
     const body = buildBody(editor);
     return {
-      id: isNew ? undefined : ruleId,
+      id: ruleId,
       name: body.name,
       conditionType: body.conditionType,
       conditionParams: body.conditionParams == null ? undefined : JSON.stringify(body.conditionParams),
@@ -259,7 +236,7 @@
 </script>
 
 <svelte:head>
-  <title>{isNew ? "New alert" : editor.name || "Alert"} · Nocturne</title>
+  <title>{editor.name || "Alert"} · Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto p-3 @md:p-6 max-w-7xl max-md:pb-24">
@@ -277,37 +254,33 @@
       </Button>
       <div class="min-w-0">
         <h1 class="text-2xl font-bold truncate">
-          {isNew ? "New alert" : editor.name || "Alert"}
+          {editor.name || "Alert"}
         </h1>
-        <p class="text-sm text-muted-foreground">
-          {isNew ? "Define a new alert rule" : "Edit alert rule"}
-        </p>
+        <p class="text-sm text-muted-foreground">Edit alert rule</p>
       </div>
     {/snippet}
     {#snippet actions()}
-      {#if !isNew}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onclick={destroy}
-          disabled={deleting}
-        >
-          {#if deleting}
-            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-          {:else}
-            <Trash2 class="h-4 w-4 mr-2" />
-          {/if}
-          Delete
-        </Button>
-      {/if}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onclick={destroy}
+        disabled={deleting}
+      >
+        {#if deleting}
+          <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+        {:else}
+          <Trash2 class="h-4 w-4 mr-2" />
+        {/if}
+        Delete
+      </Button>
       <Button type="button" onclick={save} disabled={saving || loading || !isDirty}>
         {#if saving}
           <Loader2 class="h-4 w-4 mr-2 animate-spin" />
         {:else}
           <Save class="h-4 w-4 mr-2" />
         {/if}
-        {isNew ? "Create" : "Save"}
+        Save
       </Button>
     {/snippet}
   </EditorActionBar>
@@ -541,22 +514,20 @@
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-2">
-          {#if !isNew}
-            <Button
-              type="button"
-              variant="outline"
-              class="w-full justify-start"
-              onclick={fireSaved}
-              disabled={testingSaved || loading}
-            >
-              {#if testingSaved}
-                <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-              {:else}
-                <Zap class="h-4 w-4 mr-2" />
-              {/if}
-              Fire saved rule
-            </Button>
-          {/if}
+          <Button
+            type="button"
+            variant="outline"
+            class="w-full justify-start"
+            onclick={fireSaved}
+            disabled={testingSaved || loading}
+          >
+            {#if testingSaved}
+              <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+            {:else}
+              <Zap class="h-4 w-4 mr-2" />
+            {/if}
+            Fire saved rule
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -570,78 +541,76 @@
         </CardContent>
       </Card>
 
-      {#if !isNew}
-        <Card>
-          <CardHeader>
-            <CardTitle class="text-base flex items-center gap-2">
-              <HistoryIcon class="h-4 w-4" /> Historic firings
-            </CardTitle>
-            <CardDescription size="sm">
-              Real fires for this rule. Select any to replay the day in the simulator.
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-1.5">
-            {#if historyLoading}
-              <div
-                class="flex items-center justify-center py-4 text-muted-foreground"
-              >
-                <Loader2 class="h-4 w-4 animate-spin" />
-              </div>
-            {:else if history.length === 0}
-              <EmptyState
-                art="clock"
-                size="compact"
-                variant="outline"
-                title="No firings yet"
-              />
-            {:else}
-              <div class="max-h-72 overflow-y-auto space-y-1">
-                {#each history as h (h.id)}
-                  <div
-                    class="flex items-center gap-1 rounded-md border bg-background pr-1 hover:bg-muted"
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-base flex items-center gap-2">
+            <HistoryIcon class="h-4 w-4" /> Historic firings
+          </CardTitle>
+          <CardDescription size="sm">
+            Real fires for this rule. Select any to replay the day in the simulator.
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-1.5">
+          {#if historyLoading}
+            <div
+              class="flex items-center justify-center py-4 text-muted-foreground"
+            >
+              <Loader2 class="h-4 w-4 animate-spin" />
+            </div>
+          {:else if history.length === 0}
+            <EmptyState
+              art="clock"
+              size="compact"
+              variant="outline"
+              title="No firings yet"
+            />
+          {:else}
+            <div class="max-h-72 overflow-y-auto space-y-1">
+              {#each history as h (h.id)}
+                <div
+                  class="flex items-center gap-1 rounded-md border bg-background pr-1 hover:bg-muted"
+                >
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    class="flex min-w-0 flex-1 items-center text-left"
+                    onclick={() => openReplay(h.startedAt)}
+                    title="Replay this day in the simulator"
                   >
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      class="flex min-w-0 flex-1 items-center text-left"
-                      onclick={() => openReplay(h.startedAt)}
-                      title="Replay this day in the simulator"
-                    >
-                      <span
-                        class="h-1.5 w-1.5 shrink-0 rounded-full {severity(
-                          h.severity,
-                          'dot'
-                        )}"
-                        aria-hidden="true"
-                      ></span>
-                      <span class="min-w-0 flex-1 truncate tabular-nums">
-                        {formatHistoryRow(h.startedAt)}
+                    <span
+                      class="h-1.5 w-1.5 shrink-0 rounded-full {severity(
+                        h.severity,
+                        'dot'
+                      )}"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="min-w-0 flex-1 truncate tabular-nums">
+                      {formatHistoryRow(h.startedAt)}
+                    </span>
+                    {#if h.acknowledgedAt}
+                      <span class="text-2xs text-muted-foreground shrink-0">
+                        ack
                       </span>
-                      {#if h.acknowledgedAt}
-                        <span class="text-2xs text-muted-foreground shrink-0">
-                          ack
-                        </span>
-                      {/if}
-                    </Button>
-                    {#if dayInReviewHref(h.startedAt)}
-                      <Button
-                        variant="ghost-muted"
-                        size="icon-xs"
-                        class="shrink-0"
-                        href={dayInReviewHref(h.startedAt)}
-                        title="Open day in review"
-                        aria-label="Open day in review"
-                      >
-                        <CalendarDays class="h-3.5 w-3.5" />
-                      </Button>
                     {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </CardContent>
-        </Card>
-      {/if}
+                  </Button>
+                  {#if dayInReviewHref(h.startedAt)}
+                    <Button
+                      variant="ghost-muted"
+                      size="icon-xs"
+                      class="shrink-0"
+                      href={dayInReviewHref(h.startedAt)}
+                      title="Open day in review"
+                      aria-label="Open day in review"
+                    >
+                      <CalendarDays class="h-3.5 w-3.5" />
+                    </Button>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </CardContent>
+      </Card>
     </aside>
   </div>
 </div>
@@ -663,7 +632,7 @@
       <ReplayPanel
         initialCustomDate={replayInitialDate}
         rule={buildReplayRule}
-        editingRuleId={isNew ? undefined : ruleId}
+        editingRuleId={ruleId}
         editingTree={editor.condition ?? undefined}
         availableRules={rulesQuery.current ?? []}
       />

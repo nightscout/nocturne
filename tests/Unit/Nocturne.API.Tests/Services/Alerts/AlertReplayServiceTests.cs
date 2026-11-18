@@ -573,4 +573,104 @@ public class AlertReplayServiceTests
         result.Events.Should().ContainSingle().Which.Should().Be(new AlertReplayEvent(
             dayStart.AddHours(1), ruleId, "tightened", AlertRuleSeverity.Warning, AlertReplayEventKind.Fired));
     }
+
+    // ── firing search ────────────────────────────────────────────────────────────────────────
+
+    private static readonly DateTime SearchNow = new(2026, 4, 28, 12, 0, 0, DateTimeKind.Utc);
+
+    private AlertReplayService FiringSearch(AlertEvaluationOptions? options = null) =>
+        new(
+            _alertRepository.Object,
+            _glucoseRepository.Object,
+            _enricher,
+            _tenantAccessor.Object,
+            Options.Create(options ?? new AlertEvaluationOptions()),
+            new RustAlertReplayEngine(new AlertEngineErrors(
+                new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(SearchNow)));
+
+    /// <summary>Serves each replay window the readings inside it, as the repository does.</summary>
+    private void SetupReadingsByWindow(params SensorGlucose[] readings) =>
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .Returns((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _,
+                    DateTime? after, Guid? _, CancellationToken _, Guid? _, GlucoseStreams _) =>
+                Task.FromResult<IEnumerable<SensorGlucose>>(readings
+                    .Where(r => r.Timestamp >= from && r.Timestamp < to && (after is null || r.Timestamp > after))
+                    .OrderBy(r => r.Timestamp)
+                    .ToList()));
+
+    private static ReplayRuleOverride LowDraft() => new(
+        Id: null, "draft", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+        AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
+
+    [NativeFact]
+    public async Task FindFirings_ReportsEveryFiringNewestFirst()
+    {
+        var recent = SearchNow.AddHours(-2);
+        var older = SearchNow.AddDays(-3).AddHours(-2);
+        SetupReadingsByWindow(
+            Reading(older, 65), Reading(older.AddMinutes(30), 95),
+            Reading(recent, 60), Reading(recent.AddMinutes(30), 95));
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+
+        result.Firings.Should().Equal(
+            new AlertFiring(recent, AlertReplayEventKind.Fired),
+            new AlertFiring(older, AlertReplayEventKind.Fired));
+        result.Total.Should().Be(2);
+        result.HasReadings.Should().BeTrue();
+        result.SearchedTo.Should().Be(SearchNow);
+        result.SearchedFrom.Should().Be(SearchNow.AddDays(-14));
+    }
+
+    /// <summary>
+    /// Each searched day is its own replay, which starts the rule from rest. A low that runs across
+    /// the boundary between two days is one firing, at the time it began.
+    /// </summary>
+    [NativeFact]
+    public async Task FindFirings_ALowAcrossADayBoundaryIsOneFiring()
+    {
+        var began = SearchNow.AddHours(-25);
+        var low = Enumerable.Range(0, 25).Select(i => Reading(began.AddMinutes(i * 5), 60));
+        SetupReadingsByWindow([.. low, Reading(began.AddMinutes(125), 95)]);
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+
+        result.Firings.Should().Equal(new AlertFiring(began, AlertReplayEventKind.Fired));
+    }
+
+    [NativeFact]
+    public async Task FindFirings_EvaluatesTheDraftWithoutTheSavedRules()
+    {
+        SetupReadingsByWindow(Reading(SearchNow.AddHours(-2), 60));
+
+        await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+
+        _alertRepository.Verify(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [NativeFact]
+    public async Task FindFirings_OutOfTime_ReportsTheSpanItCovered()
+    {
+        SetupReadingsByWindow(Reading(SearchNow.AddDays(-3), 60));
+        var outOfTime = new AlertEvaluationOptions { FiringSearchBudget = TimeSpan.FromTicks(-1) };
+
+        var result = await FiringSearch(outOfTime).FindFiringsAsync(LowDraft(), CancellationToken.None);
+
+        result.SearchedFrom.Should().Be(SearchNow.AddDays(-1));
+        result.Firings.Should().BeEmpty();
+    }
+
+    [NativeFact]
+    public async Task FindFirings_NoReadings_SaysSo()
+    {
+        SetupReadingsByWindow();
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+
+        result.HasReadings.Should().BeFalse();
+        result.Total.Should().Be(0);
+    }
 }

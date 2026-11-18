@@ -9,9 +9,23 @@ title: Building a rule
 
 # Building a rule
 
-Open **Alerts** in the sidebar and press **New rule**, or pick an existing rule
-to change it. The editor is one page with a card for each part of the rule.
-Nothing takes effect until you press **Save** (or **Create** for a new rule).
+Open **Alerts** in the sidebar and press **New alert**. Four steps make the
+alert:
+
+1. **Type.** Choose what the alert is for, such as Low, High or No readings.
+   **Build your own**, under **More alert types**, opens the full set of
+   conditions.
+2. **Settings.** Set the level, how long to wait before the alert starts, and
+   the hours it applies to.
+3. **Delivery.** Choose how urgent the alert is and where it goes.
+4. **Check.** Nocturne shows how many times the alert would have started in
+   your last 14 days, with a chart of the most recent time. Send a test alert
+   to make sure that it arrives, then press **Create alert**. The name is
+   written for you. You can change it.
+
+To change a rule, or to set auto-resolve and smart snooze, pick the rule in the
+list. The editor is one page with a card for each part of the rule. Nothing
+takes effect until you press **Save**.
 
 <Screenshot id="alert-rule-editor" />
 
