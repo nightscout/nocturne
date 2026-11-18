@@ -10088,6 +10088,7 @@ msgstr ""
 #~ msgid "Selected Target"
 #~ msgstr ""
 
+#: src/lib/components/reports/ApsStateCard.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Reason"

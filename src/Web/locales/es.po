@@ -10283,6 +10283,7 @@ msgstr "{0} por {1}"
 #~ msgid "Selected Target"
 #~ msgstr "Destino seleccionado"
 
+#: src/lib/components/reports/ApsStateCard.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Reason"
