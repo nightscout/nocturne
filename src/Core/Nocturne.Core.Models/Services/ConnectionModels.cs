@@ -248,6 +248,12 @@ public class ConnectionsOverview
     [JsonPropertyName("otherSources")]
     public List<ConnectionStream> OtherSources { get; set; } = [];
 
+    /// <summary>
+    /// Minutes without a record after which a connection that sends is no longer active.
+    /// </summary>
+    [JsonPropertyName("activeWithinMinutes")]
+    public int ActiveWithinMinutes { get; set; }
+
     /// <summary>Days back from now that every record count covers.</summary>
     [JsonPropertyName("windowDays")]
     public int WindowDays { get; set; }

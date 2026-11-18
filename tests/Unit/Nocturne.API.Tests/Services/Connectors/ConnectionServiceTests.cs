@@ -294,6 +294,20 @@ public class ConnectionServiceTests
     }
 
     [Fact]
+    public async Task TheActiveThresholdTheOverviewStatesIsTheOneStatusUses()
+    {
+        var uploader = Grant(OAuthGrantTypes.Direct, "Phone");
+        _grantRecords.Add(uploader);
+        var minutes = (await ListAsync()).ActiveWithinMinutes;
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, uploader.Id, null, "xDrip", 12, minutesAgo: minutes - 1));
+        (await ListAsync()).Connections.Single().Status.Should().Be(ConnectionStatus.Active);
+
+        _buckets.Clear();
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, uploader.Id, null, "xDrip", 12, minutesAgo: minutes + 1));
+        (await ListAsync()).Connections.Single().Status.Should().Be(ConnectionStatus.Stopped);
+    }
+
+    [Fact]
     public async Task ASenderOfOccasionalRecordsIsQuietBetweenThem()
     {
         var logger = Grant(OAuthGrantTypes.Direct, "Meal logger");

@@ -180,7 +180,7 @@ const newToken: Connection = {
 
 function loaded(overview: ConnectionsOverview) {
   mocks.connections.mockReturnValue({
-    current: { windowDays: 30, ...overview },
+    current: { windowDays: 30, activeWithinMinutes: 15, ...overview },
     error: undefined,
     refresh: mocks.refreshConnections,
   });
@@ -394,6 +394,31 @@ describe("connections list", () => {
 });
 
 describe("connection detail", () => {
+  it("tells with the server's threshold why a stopped connection has no recent record", async () => {
+    loaded({ connections: [loop], activeWithinMinutes: 20 });
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: /Loop/ }).click();
+
+    await expect
+      .element(browserPage.getByRole("dialog").getByText(/last 20 minutes/))
+      .toHaveTextContent("It is possible that it stopped");
+  });
+
+  it("tells that a quiet connection that sends treatments only is normal", async () => {
+    loaded({
+      connections: [
+        { ...loop, id: "app:pump", name: "Pump app", status: ConnectionStatus.Quiet },
+      ],
+    });
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: "Not in use (1)" }).click();
+    await browserPage.getByRole("button", { name: /Pump app/ }).click();
+
+    await expect
+      .element(browserPage.getByRole("dialog").getByText(/last 15 minutes/))
+      .toHaveTextContent("This is normal");
+  });
+
   it("shows streams and credentials, and revokes only the viewer's own grant", async () => {
     render(ConnectorsPage);
     await browserPage.getByRole("button", { name: /xDrip\+/ }).click();
