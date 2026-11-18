@@ -42644,3 +42644,20 @@ msgstr ""
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Battery change due: {0}"
 msgstr ""
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+msgid "These conditions have no opposite. Add a closing condition yourself."
+msgstr ""
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+msgid "Could not get a suggestion. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Could not load the alert types. Load the page again."
+msgstr ""
+
+#. 0: summarizeCondition(autoResolve)
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "The alert closes when this is true: {0}."
+msgstr ""
