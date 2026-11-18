@@ -419,26 +419,26 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     }
 
     /// <summary>
-    /// Rows from devices that are not the source, so the planner's statistics show a tenant with many rows
-    /// of which the source's are few.
+    /// Rows of <c>boluses</c> and <c>sensor_glucose</c> whose handles <paramref name="handles"/> picks, then
+    /// an ANALYZE so the planner sizes them from real statistics.
     /// </summary>
-    private async Task SeedOtherDevicesAsync(Guid tenant, int count)
+    private async Task SeedBulkAsync(Guid tenant, int count, Func<int, (string? DataSource, string Device)> handles)
     {
         var now = DateTime.UtcNow;
         await using (var db = Context(tenant))
         {
             for (var i = 0; i < count; i++)
             {
+                var (dataSource, device) = handles(i);
                 db.Boluses.Add(new BolusEntity
                 {
                     Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bulk-{i}",
-                    DataSource = i % 2 == 0 ? OtherSource : null, Device = $"phone-{i % 7}",
-                    Timestamp = now.AddMinutes(-i), Insulin = 1,
+                    DataSource = dataSource, Device = device, Timestamp = now.AddMinutes(-i), Insulin = 1,
                 });
                 db.SensorGlucose.Add(new SensorGlucoseEntity
                 {
-                    Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = i % 2 == 0 ? OtherSource : null,
-                    Device = $"phone-{i % 7}", Timestamp = now.AddMinutes(-i), Mgdl = 100,
+                    Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = dataSource, Device = device,
+                    Timestamp = now.AddMinutes(-i), Mgdl = 100,
                 });
             }
 
@@ -451,37 +451,78 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         await analyze.ExecuteNonQueryAsync();
     }
 
+    private Task SeedOtherDevicesAsync(Guid tenant, int count) =>
+        SeedBulkAsync(tenant, count, i => (i % 2 == 0 ? OtherSource : null, $"phone-{i % 7}"));
+
+    private Task SeedCommonSourceAsync(Guid tenant, int count) =>
+        SeedBulkAsync(tenant, count, _ => (Source, Source));
+
     [Fact]
-    public async Task EveryStatsReadIsARangeOfASourceIndex()
+    public async Task CountsCountEveryLiveRowEitherHandleNamesOnceForTheScopesTenantOnly()
+    {
+        var tenant = await InsertTenantAsync();
+        var other = await InsertTenantAsync();
+        var now = DateTime.UtcNow;
+        await SeedHandlesAsync(tenant, now);
+        await SeedHandlesAsync(other, now.AddDays(-100));
+
+        var counts = await Repository(tenant).CountsBySourceAsync(Source, CancellationToken.None);
+
+        counts.Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [SourceDataTypes.Boluses] = 5,
+            [SourceDataTypes.Glucose] = 3,
+        });
+        (await Repository(tenant).CountsBySourceAsync("nobody", CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TheSeededCountedTablesAreReadByTheDeviceIndexForASourceTheTenantHolds()
     {
         var tenant = await InsertTenantAsync();
         await SeedHandlesAsync(tenant, DateTime.UtcNow);
         await SeedOtherDevicesAsync(tenant, 3000);
+
+        await AssertCountedTablePlansAsync(tenant, Source, "nobody");
+    }
+
+    [Fact]
+    public async Task TheSeededCountedTablesAreReadByTheDeviceIndexForASourceCommonToOtherTenantsAndAbsentFromTheTenant()
+    {
+        var tenant = await InsertTenantAsync();
+        await SeedOtherDevicesAsync(tenant, 3000);
+        await SeedCommonSourceAsync(await InsertTenantAsync(), 6000);
+
+        await AssertCountedTablePlansAsync(tenant, Source);
+    }
+
+    private async Task AssertCountedTablePlansAsync(Guid tenant, params string[] sources)
+    {
         var capture = new QueryCapture();
         var repository = new SourceOwnedDataRepository(
             new Factory(t => Context(t, capture), tenant), new UserAuditContext());
 
-        await repository.StatsBySourceAsync(Source, DateTime.UtcNow.AddHours(-24), CancellationToken.None);
-        await repository.LatestTreatmentTimestampAsync(Source, CancellationToken.None);
-        await repository.OldestTreatmentTimestampAsync(Source, CancellationToken.None);
+        foreach (var source in sources)
+        {
+            await repository.StatsBySourceAsync(source, DateTime.UtcNow.AddHours(-24), CancellationToken.None);
+            await repository.LatestTreatmentTimestampAsync(source, CancellationToken.None);
+            await repository.OldestTreatmentTimestampAsync(source, CancellationToken.None);
+            await repository.CountsBySourceAsync(source, CancellationToken.None);
+        }
 
         capture.Queries.Should().NotBeEmpty();
         await using var db = Context(tenant);
         await db.Database.OpenConnectionAsync();
         await using var transaction = await db.Database.BeginTransactionAsync();
         var connection = (NpgsqlConnection)db.Database.GetDbConnection();
-        await using (var off = new NpgsqlCommand("SET LOCAL enable_seqscan = off", connection))
-            await off.ExecuteNonQueryAsync();
         foreach (var (sql, parameters) in capture.Queries)
         {
             await using var explain = new NpgsqlCommand($"EXPLAIN (FORMAT JSON) {sql}", connection);
             explain.Parameters.AddRange(parameters);
             var plan = (string)(await explain.ExecuteScalarAsync())!;
 
-            var scans = ScansOf(JsonNode.Parse(plan)![0]!["Plan"]!).ToList();
-            scans.Should().NotContain(scan => (string)scan["Node Type"]! == "Seq Scan",
-                "a seq scan left with seq scans disabled has no index to read instead:\n{0}\n{1}", sql, plan);
-            scans.Where(scan => (string)scan["Relation Name"]! is "boluses" or "sensor_glucose")
+            ScansOf(JsonNode.Parse(plan)![0]!["Plan"]!)
+                .Where(scan => (string)scan["Relation Name"]! is "boluses" or "sensor_glucose")
                 .Should().OnlyContain(scan => BoundBySource(scan),
                     "a read of a table with statistics is a range of an index on its source handles, not of the tenant's rows:\n{0}\n{1}",
                     sql, plan);

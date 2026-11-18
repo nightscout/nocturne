@@ -90,7 +90,7 @@ public interface IDataSourceService
     /// <summary>
     /// Whether the connector holds any record, by reads an index serves: a row of its data source id,
     /// or a record its <see cref="IConnectorDataPurge"/> describes. A cheap test before
-    /// <see cref="GetConnectorDataSummaryAsync"/>, which scans.
+    /// <see cref="GetConnectorDataSummaryAsync"/>, which counts every record table.
     /// </summary>
     Task<bool> ConnectorHoldsDataAsync(string connectorId, CancellationToken cancellationToken = default);
 

@@ -579,7 +579,7 @@ internal sealed class V4RecordTable<T> : V4RecordTable
     }
 
     public override Task<long> CountAsync(NocturneDbContext db, string by, CancellationToken ct) =>
-        Owned(db, by).LongCountAsync(ct);
+        ReadOwned(db, by).LongCountAsync(ct);
 
     public override Task<int> SoftDeleteAsync(
         NocturneDbContext db, string by, IAuditContext? audit, string scope, CancellationToken ct) =>

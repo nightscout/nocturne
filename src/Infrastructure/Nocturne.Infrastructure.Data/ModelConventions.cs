@@ -43,7 +43,7 @@ internal static class ModelConventions
                 .HasFilter("deleted_at IS NULL");
         }
 
-        // A source's stats (V4RecordTables.Counted) read the rows only their Device names as ranges of
+        // A source's stats (V4RecordTables.Counted) and its counts read the rows only their Device names as ranges of
         // this index (SourceFilter.Parts). Without it each read scans the whole table, for every
         // connector on every Connections page load. Rows a connector writes usually carry its id in
         // both handles, so the ranges that leave out DataSource = Device are usually empty.
