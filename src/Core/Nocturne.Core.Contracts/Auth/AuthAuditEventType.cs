@@ -51,6 +51,12 @@ public static class AuthAuditEventType
     public const string RoleRemoved = "role_removed";
 
     /// <summary>
+    /// Event type when editing a tenant role changes its permission set, and so what every holder of
+    /// the role can read. The details name the role and the permissions it gained and lost.
+    /// </summary>
+    public const string RolePermissionsChanged = "role_permissions_changed";
+
+    /// <summary>
     /// Event type when a tenant member's 24-hour history limit is turned on or off. The details name
     /// the limit the member reads under afterwards: <c>24_hours</c> or <c>full</c>.
     /// </summary>
