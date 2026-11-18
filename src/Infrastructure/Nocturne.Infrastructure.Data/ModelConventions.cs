@@ -43,6 +43,23 @@ internal static class ModelConventions
                 .HasFilter("deleted_at IS NULL");
         }
 
+        // A source's stats (V4RecordTables.Counted) read the rows only their Device names as ranges of
+        // this index (SourceFilter.Parts). Without it each read scans the whole table, for every
+        // connector on every Connections page load. Rows a connector writes usually carry its id in
+        // both handles, so the ranges that leave out DataSource = Device are usually empty.
+        foreach (var entity in V4RecordTables.Counted
+                     .Select(t => t.Table.Entity)
+                     .Where(typeof(ISourcedEntity).IsAssignableFrom)
+                     .Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(ISourcedEntity.Device),
+                    nameof(ISourcedEntity.DataSource))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_device_source")
+                .HasFilter("deleted_at IS NULL");
+        }
+
         // A V4 list reads one tenant newest-first by timestamp, then id on the tables that tie-break
         // on it. With no index leading (tenant_id, timestamp), a LIMIT read reads every live row and
         // sorts. GetLatestAsync and the pump GetTimelineAsync on a snapshot table walk the same index.

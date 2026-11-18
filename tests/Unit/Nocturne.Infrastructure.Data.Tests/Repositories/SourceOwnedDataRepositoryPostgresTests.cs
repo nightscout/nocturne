@@ -1,5 +1,8 @@
+using System.Data.Common;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
@@ -20,7 +23,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 /// <summary>
 /// <see cref="SourceOwnedDataRepository"/> on PostgreSQL under the runtime role and Row Level
 /// Security: a purge and a release run as the scope's tenant reach none of another tenant's rows of
-/// the same source.
+/// the same source, and a source's stats count each row either handle names once, off indexes.
 /// </summary>
 [Trait("Category", "Integration")]
 public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPostgresTests.Database database)
@@ -61,11 +64,27 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
             ValueTask.FromResult(create(tenantId));
     }
 
-    private NocturneDbContext Context(Guid tenant) =>
+    private NocturneDbContext Context(Guid tenant) => Context(tenant, []);
+
+    private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
+            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
             .Options) { TenantId = tenant };
+
+    /// <summary>The queries a context runs, with their parameters.</summary>
+    private sealed class QueryCapture : DbCommandInterceptor
+    {
+        public List<(string Sql, NpgsqlParameter[] Parameters)> Queries { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Queries.Add((command.CommandText, [.. command.Parameters.Cast<NpgsqlParameter>().Select(p => p.Clone())]));
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 
     private SourceOwnedDataRepository Repository(Guid scope) => new(new Factory(Context, scope), new UserAuditContext());
 
@@ -340,6 +359,150 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
 
         (await ServedStatusesAsync(tenant)).Should().Equal(purged);
     }
+
+    private async Task SeedHandlesAsync(Guid tenant, DateTime now)
+    {
+        await using var db = Context(tenant);
+        void Bolus(string? dataSource, string? device, DateTime at, DateTime? deletedAt = null) =>
+            db.Boluses.Add(new BolusEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bolus-{Guid.NewGuid():N}",
+                DataSource = dataSource, Device = device, Timestamp = at, Insulin = 1, DeletedAt = deletedAt,
+            });
+        void Glucose(string? dataSource, string? device, DateTime at) =>
+            db.SensorGlucose.Add(new SensorGlucoseEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = dataSource, Device = device,
+                Timestamp = at, Mgdl = 100,
+            });
+
+        Bolus(Source, Source, now.AddHours(-1));
+        Bolus(Source, "phone", now.AddDays(-2));
+        Bolus(null, Source, now.AddDays(-3));
+        Bolus("aaa-connector", Source, now.AddMinutes(-30));
+        Bolus("zzz-connector", Source, now.AddDays(-5));
+        Bolus(OtherSource, "phone", now);
+        Bolus(null, null, now.AddDays(-9));
+        Bolus(Source, Source, now.AddDays(-20), deletedAt: now);
+
+        Glucose(Source, Source, now.AddMinutes(-10));
+        Glucose(null, Source, now.AddDays(-3));
+        Glucose("zzz-connector", Source, now.AddHours(-1));
+        Glucose(OtherSource, OtherSource, now.AddDays(-30));
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task StatsCountEveryLiveRowEitherHandleNamesOnce()
+    {
+        var tenant = await InsertTenantAsync();
+        var other = await InsertTenantAsync();
+        var now = DateTime.UtcNow;
+        await SeedHandlesAsync(tenant, now);
+        await SeedHandlesAsync(other, now.AddDays(-100));
+        var repository = Repository(tenant);
+
+        var stats = await repository.StatsBySourceAsync(Source, now.AddHours(-24), CancellationToken.None);
+
+        stats.Single(s => s.DataType == SourceDataTypes.Boluses).Should().Be(new SourceTypeStats(SourceDataTypes.Boluses, 5, 2));
+        var glucose = stats.Single(s => s.DataType == SourceDataTypes.Glucose);
+        (glucose.Count, glucose.CountLast24Hours).Should().Be((3, 2));
+        glucose.Latest.Should().BeCloseTo(now.AddMinutes(-10), TimeSpan.FromMilliseconds(1));
+        glucose.Oldest.Should().BeCloseTo(now.AddDays(-3), TimeSpan.FromMilliseconds(1));
+        stats.Where(s => s.DataType is not (SourceDataTypes.Boluses or SourceDataTypes.Glucose))
+            .Should().OnlyContain(s => s.Count == 0);
+        (await repository.LatestTreatmentTimestampAsync(Source, CancellationToken.None))
+            .Should().BeCloseTo(now.AddMinutes(-30), TimeSpan.FromMilliseconds(1));
+        (await repository.OldestTreatmentTimestampAsync(Source, CancellationToken.None))
+            .Should().BeCloseTo(now.AddDays(-5), TimeSpan.FromMilliseconds(1));
+        (await repository.LatestTreatmentTimestampAsync("nobody", CancellationToken.None)).Should().BeNull();
+    }
+
+    /// <summary>
+    /// Rows from devices that are not the source, so the planner's statistics show a tenant with many rows
+    /// of which the source's are few.
+    /// </summary>
+    private async Task SeedOtherDevicesAsync(Guid tenant, int count)
+    {
+        var now = DateTime.UtcNow;
+        await using (var db = Context(tenant))
+        {
+            for (var i = 0; i < count; i++)
+            {
+                db.Boluses.Add(new BolusEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bulk-{i}",
+                    DataSource = i % 2 == 0 ? OtherSource : null, Device = $"phone-{i % 7}",
+                    Timestamp = now.AddMinutes(-i), Insulin = 1,
+                });
+                db.SensorGlucose.Add(new SensorGlucoseEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = i % 2 == 0 ? OtherSource : null,
+                    Device = $"phone-{i % 7}", Timestamp = now.AddMinutes(-i), Mgdl = 100,
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var analyze = new NpgsqlCommand("ANALYZE boluses, sensor_glucose", conn);
+        await analyze.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task EveryStatsReadIsARangeOfASourceIndex()
+    {
+        var tenant = await InsertTenantAsync();
+        await SeedHandlesAsync(tenant, DateTime.UtcNow);
+        await SeedOtherDevicesAsync(tenant, 3000);
+        var capture = new QueryCapture();
+        var repository = new SourceOwnedDataRepository(
+            new Factory(t => Context(t, capture), tenant), new UserAuditContext());
+
+        await repository.StatsBySourceAsync(Source, DateTime.UtcNow.AddHours(-24), CancellationToken.None);
+        await repository.LatestTreatmentTimestampAsync(Source, CancellationToken.None);
+        await repository.OldestTreatmentTimestampAsync(Source, CancellationToken.None);
+
+        capture.Queries.Should().NotBeEmpty();
+        await using var db = Context(tenant);
+        await db.Database.OpenConnectionAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
+        await using (var off = new NpgsqlCommand("SET LOCAL enable_seqscan = off", connection))
+            await off.ExecuteNonQueryAsync();
+        foreach (var (sql, parameters) in capture.Queries)
+        {
+            await using var explain = new NpgsqlCommand($"EXPLAIN (FORMAT JSON) {sql}", connection);
+            explain.Parameters.AddRange(parameters);
+            var plan = (string)(await explain.ExecuteScalarAsync())!;
+
+            var scans = ScansOf(JsonNode.Parse(plan)![0]!["Plan"]!).ToList();
+            scans.Should().NotContain(scan => (string)scan["Node Type"]! == "Seq Scan",
+                "a seq scan left with seq scans disabled has no index to read instead:\n{0}\n{1}", sql, plan);
+            scans.Where(scan => (string)scan["Relation Name"]! is "boluses" or "sensor_glucose")
+                .Should().OnlyContain(scan => BoundBySource(scan),
+                    "a read of a table with statistics is a range of an index on its source handles, not of the tenant's rows:\n{0}\n{1}",
+                    sql, plan);
+        }
+    }
+
+    /// <summary>The plan nodes that read a table.</summary>
+    private static IEnumerable<JsonNode> ScansOf(JsonNode node) =>
+        (node["Relation Name"] is null ? [] : new[] { node })
+            .Concat(node["Plans"]?.AsArray().SelectMany(child => ScansOf(child!)) ?? []);
+
+    /// <summary>Whether a scan reads only rows an index condition on a source handle bounds.</summary>
+    private static bool BoundBySource(JsonNode node) => (string)node["Node Type"]! switch
+    {
+        "Index Scan" or "Index Only Scan" or "Bitmap Index Scan" =>
+            node["Index Cond"]?.GetValue<string>() is { } cond && (cond.Contains("source") || cond.Contains("device")),
+        "BitmapAnd" => node["Plans"]!.AsArray().Any(child => BoundBySource(child!)),
+        "BitmapOr" => node["Plans"]!.AsArray().All(child => BoundBySource(child!)),
+        "Bitmap Heap Scan" => BoundBySource(node["Plans"]![0]!),
+        _ => false,
+    };
 
     private sealed class UserAuditContext : IAuditContext
     {
