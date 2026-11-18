@@ -34,8 +34,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Profiles,
         SyncDataType.Notes,
         SyncDataType.Activity
-    ],
-    DocumentationUrl = UrlConstants.External.DocsGlooko
+    ]
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration
 {
