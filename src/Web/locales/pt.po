@@ -503,7 +503,7 @@ msgstr ""
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/PointActionsDialog.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
@@ -2189,8 +2189,9 @@ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Failed to delete data"
 msgstr ""
 
@@ -2584,7 +2585,7 @@ msgstr ""
 #~ msgid "Type DELETE"
 #~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 msgid "<0/> Deleting..."
@@ -9820,7 +9821,7 @@ msgstr ""
 msgid "Confirm"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 msgid "Type <0/> to confirm:"
 msgstr ""
@@ -25122,7 +25123,7 @@ msgstr ""
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Allow re-import"
 msgstr ""
 
@@ -25142,13 +25143,11 @@ msgstr ""
 msgid "The connector is disabled, and deleted records are never imported again, even if {0} still has them."
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records this source sends again are imported, including any of its records deleted earlier."
-msgstr ""
+#~ msgid "Records this source sends again are imported, including any of its records deleted earlier."
+#~ msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Deleted records are never imported again, even if this source sends them."
-msgstr ""
+#~ msgid "Deleted records are never imported again, even if this source sends them."
+#~ msgstr ""
 
 #: src/lib/components/food/FoodFields.svelte
 msgid "Energy <0>optional</0>"
@@ -32978,12 +32977,12 @@ msgid "Delete {0} data"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Delete and allow re-import"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Delete all data"
 msgstr ""
 
@@ -33026,11 +33025,12 @@ msgstr ""
 #~ msgid "Delete all data from this source"
 #~ msgstr ""
 
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "<0/> Delete data..."
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "<0/> Permanently delete data"
 msgstr ""
 
@@ -40288,6 +40288,7 @@ msgid "No permissions"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/connectors/ConnectionRow.svelte
 #: src/lib/components/connectors/UploaderSetupDialog.svelte
 #: src/lib/components/settings/ApiTokenCreateDialog.svelte
@@ -40400,13 +40401,13 @@ msgstr ""
 msgid "Sync a date range"
 msgstr ""
 
-#. 0: source.name
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#. 0: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Deleted 1 record from {0}"
 msgstr ""
 
-#. 0: formatNumber(result.totalDeleted); 1: source.name
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#. 0: formatNumber(result.totalDeleted); 1: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Deleted {0} records from {1}"
 msgstr ""
 
@@ -40415,15 +40416,15 @@ msgid "Records in the last 24 hours"
 msgstr ""
 
 #. 0: windowDays
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Records in the last {0} days:"
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "You cannot undo this action."
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Nocturne deletes all records from <0/>."
 msgstr ""
 
@@ -41531,4 +41532,70 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Why one app can show more than one source"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "AAPSClient"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Could not make the QR code. Try again."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Connect AAPSClient with a QR code"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "For a follower phone with AAPSClient 4.0 or later. The phone gets its own API token and can read your data."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "QR code to connect AAPSClient"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "This phone can read your data and send commands to your AAPS phone."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "This phone can only read your data."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "In AAPSClient, open the setup wizard or Pair with master, then select Scan the QR code."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Anyone who sees this code gets the same access. Show it only to the new phone. It cannot be shown again."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "Let this phone send commands to your AAPS phone"
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "After you pair it in AAPS, the phone can ask your AAPS phone for a bolus, a temporary target, or a profile switch. Your AAPS phone checks each command before it does it. The API token can then also change the treatment profiles in Nocturne. When this is off, the phone cannot pair and can only read your data."
+msgstr ""
+
+#: src/lib/components/AapsClientSetupCode.svelte
+msgid "<0/> Make QR code"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "You cannot delete this data"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "A credential of this connection is not yours, or it was removed."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+msgid "Nocturne imports the records that {0} sends again. This includes the records that you deleted before."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
+msgid "Nocturne does not import the deleted records again, even if {0} sends them."
 msgstr ""
