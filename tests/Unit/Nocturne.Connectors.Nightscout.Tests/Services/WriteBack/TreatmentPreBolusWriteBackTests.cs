@@ -379,6 +379,45 @@ public class TreatmentPreBolusWriteBackTests
         upstream.Methods.Count(m => m == HttpMethod.Post).Should().Be(posts);
     }
 
+    /// <summary>
+    /// A meal posted again while write-back was off stores its carbs record unsent, so when it is
+    /// posted again with write-back on the carbs record is an update, and its create is refused as a
+    /// create is up to 15.0.6.
+    /// </summary>
+    [Theory]
+    [InlineData(false, 3)]
+    [InlineData(true, 1)]
+    public async Task A_stored_carbs_record_of_a_written_back_meal_never_sent_keeps_its_carbs_upstream(
+        bool v15_0_8, int posts)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        upstream.Methods.Clear();
+        var halves = V1Split();
+
+        await sink.OnUpdatedAsync(halves[1]);
+        await sink.OnUpdatedAsync(halves[0]);
+
+        ShouldHoldTheV1Split(upstream, v15_0_8);
+        upstream.Methods.Count(m => m == HttpMethod.Post).Should().Be(posts);
+    }
+
+    [Fact]
+    public async Task A_stored_carbs_record_refused_again_after_the_clear_is_sent_no_more_than_twice()
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8: false);
+        var sink = Sink(upstream);
+        await sink.OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
+        upstream.Methods.Clear();
+        upstream.KeepOnDelete = true;
+
+        await sink.OnUpdatedAsync(V1Split()[1]);
+
+        upstream.Methods.Count(m => m == HttpMethod.Post).Should().Be(2);
+        upstream.Methods.Count(m => m == HttpMethod.Delete).Should().Be(1);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

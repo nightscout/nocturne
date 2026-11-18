@@ -221,13 +221,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
             return true;
 
         if (!IsAlreadyStored(refusal))
-        {
-            if (!cleared && await ClearRefusalAsync(config, batch, refusal, ct))
-                return await SendCreatedAsync(config, batch, ct, cleared: true);
-
-            RecordFailure(null, HttpMethod.Post);
-            return false;
-        }
+            return await ClearAndResendAsync(config, batch, refusal, cleared, () => SendCreatedAsync(config, batch, ct, cleared: true), ct);
 
         if (batch.Count == 1)
         {
@@ -239,6 +233,42 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         foreach (var item in batch)
             written &= await SendCreatedAsync(config, [item], ct);
         return written;
+    }
+
+    /// <summary>
+    /// POSTs <paramref name="payload"/>, a create of <paramref name="batch"/>. A refusal
+    /// <see cref="ClearRefusalAsync"/> clears sends it once more.
+    /// </summary>
+    /// <returns>Whether upstream accepted it.</returns>
+    protected async Task<bool> SendCreateAsync<TPayload>(
+        NightscoutConnectorConfiguration config,
+        TPayload payload,
+        IReadOnlyList<T> batch,
+        JsonSerializerOptions? options,
+        CancellationToken ct)
+    {
+        if (await TrySendAsync(config, HttpMethod.Post, payload, options, ct) is not { } outcome)
+            return false;
+        if (outcome.Refusal is not { } refusal)
+            return true;
+
+        return await ClearAndResendAsync(
+            config, batch, refusal, cleared: false, () => SendAsync(config, HttpMethod.Post, payload, options, ct), ct);
+    }
+
+    private async Task<bool> ClearAndResendAsync(
+        NightscoutConnectorConfiguration config,
+        IReadOnlyList<T> batch,
+        string refusal,
+        bool cleared,
+        Func<Task<bool>> resend,
+        CancellationToken ct)
+    {
+        if (!cleared && await ClearRefusalAsync(config, batch, refusal, ct))
+            return await resend();
+
+        RecordFailure(null, HttpMethod.Post);
+        return false;
     }
 
     /// <summary>Sends <paramref name="payload"/> to <see cref="Endpoint"/>, recording the outcome on the circuit breaker.</summary>
