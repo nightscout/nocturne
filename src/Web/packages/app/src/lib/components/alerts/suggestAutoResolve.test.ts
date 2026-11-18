@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { defaultPayload, type ConditionNode } from "./types";
+import { defaultPayload, TransmitterBatteryMetric, type ConditionNode } from "./types";
 import { suggestAutoResolve } from "./suggestAutoResolve";
 
 describe("suggestAutoResolve", () => {
@@ -17,6 +17,18 @@ describe("suggestAutoResolve", () => {
 		expect(inner?.type).toBe("threshold");
 		expect(inner?.threshold?.direction).toBe("above");
 		expect(inner?.threshold?.value).toBe(70);
+	});
+
+	it("inverts a transmitter battery comparison on the same reading", () => {
+		const result = suggestAutoResolve({
+			type: "transmitter_battery",
+			transmitter_battery: { metric: TransmitterBatteryMetric.VoltageB, operator: "<", value: 270 },
+		});
+		expect(result?.composite?.conditions[0]?.transmitter_battery).toEqual({
+			metric: TransmitterBatteryMetric.VoltageB,
+			operator: ">=",
+			value: 270,
+		});
 	});
 
 	it("flips an AND of leaves into an OR of inverted leaves", () => {

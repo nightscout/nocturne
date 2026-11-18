@@ -72,6 +72,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
+            TransmitterBatteryMetrics = Enum.GetValues<TransmitterBatteryMetric>(),
             ValidationIssue = new RustValidationIssue("condition", "composite", "list_empty", "conditions"),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
@@ -257,6 +258,9 @@ public class AlertConditionTypesMetadata
 
     /// <summary>All <see cref="TempBasalMetric"/> values.</summary>
     public TempBasalMetric[] TempBasalMetrics { get; set; } = [];
+
+    /// <summary>All <see cref="TransmitterBatteryMetric"/> values.</summary>
+    public TransmitterBatteryMetric[] TransmitterBatteryMetrics { get; set; } = [];
 
     /// <summary>A sample <see cref="RustValidationIssue"/>; pulls the type into the generated client.</summary>
     public RustValidationIssue? ValidationIssue { get; set; }
