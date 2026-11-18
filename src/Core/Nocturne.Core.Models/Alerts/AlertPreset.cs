@@ -69,18 +69,23 @@ public static class AlertPresets
         {
             StarterKind = StarterAlertKind.High,
         },
+        // A rate has no condition that is its opposite. The nearest, a flat trend, is true together
+        // with a rate set below the edge of flat, and would close the alert as it starts.
         new("falling_fast", AlertPresetGroup.Common, AlertRuleSeverity.Warning, CanWait: true,
-            AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}""", AutoResolve: true),
+            AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}""", AutoResolve: false),
         new("rising_fast", AlertPresetGroup.Common, AlertRuleSeverity.Info, CanWait: true,
-            AlertConditionType.RateOfChange, """{"direction":"rising","rate":3}""", AutoResolve: true),
+            AlertConditionType.RateOfChange, """{"direction":"rising","rate":3}""", AutoResolve: false),
         // No reading says the sensor is back: the condition going false is the only sign of it.
         new("no_readings", AlertPresetGroup.Common, AlertRuleSeverity.Warning, CanWait: false,
             AlertConditionType.SignalLoss, """{"timeout_minutes":20}""", AutoResolve: false)
         {
             StarterKind = StarterAlertKind.NoReadings,
         },
+        // A forecast is true when any of its points matches, so a falling one holds a point at or
+        // below the level and a point above it: the flipped comparison is not the opposite, and
+        // would close the alert on the evaluation that starts it.
         new("urgent_low_soon", AlertPresetGroup.More, AlertRuleSeverity.Critical, CanWait: false,
-            AlertConditionType.Predicted, """{"operator":"<=","value":55,"within_minutes":20}""", AutoResolve: true),
+            AlertConditionType.Predicted, """{"operator":"<=","value":55,"within_minutes":20}""", AutoResolve: false),
         new("reservoir_low", AlertPresetGroup.More, AlertRuleSeverity.Warning, CanWait: false,
             AlertConditionType.Reservoir, """{"operator":"<=","value":20}""", AutoResolve: true),
         new("pump_battery_low", AlertPresetGroup.More, AlertRuleSeverity.Warning, CanWait: false,

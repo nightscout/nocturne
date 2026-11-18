@@ -98,10 +98,20 @@
   // Which way the last move went: a step ahead comes in from the right, a step back from the left.
   let direction = $state(1);
 
+  // Each step is drawn again, which removes the control that had the focus. The focus goes to the
+  // new step's heading, so a keyboard continues from there and a screen reader says the step.
+  let headingEl = $state<HTMLElement | null>(null);
+  let moved = false;
+
+  $effect(() => {
+    if (headingEl && moved) headingEl.focus({ preventScroll: true });
+  });
+
   function show(index: number): void {
     if (index === step) return;
     direction = index > step ? 1 : -1;
     step = index;
+    moved = true;
   }
 
   // Each step is an entry in the browser's history, so Back on a phone goes to the step before.
@@ -130,19 +140,22 @@
   }
 
   function open(index: number): void {
+    const from = step;
     reached = Math.max(reached, index);
     show(index);
     void goto(resolve("/(authenticated)/alerts/new"), {
-      state: { alertWizardStep: index },
+      state: { alertWizardStep: index, alertWizardFrom: from },
       shallow: true,
     });
     window.scrollTo({ top: 0 });
   }
 
   function back(): void {
-    // The step before is the history entry before, unless this step was not reached through one.
-    if (page.state.alertWizardStep === step) history.back();
-    else show(Math.max(TYPE, step - 1));
+    // The step before is the history entry before only when this step was opened from it. A step
+    // opened from a later one (a jump back in the indicator) has that later step behind it.
+    const before = Math.max(TYPE, step - 1);
+    if (page.state.alertWizardStep === step && page.state.alertWizardFrom === before) history.back();
+    else open(before);
   }
 
   function pickType(id: TemplateId): void {
@@ -157,26 +170,23 @@
     open(SETTINGS);
   }
 
+  function deliveryIssue(): string | null {
+    if (editor.channels.length === 0) return "Add at least one place for the alert to go.";
+    return validateChannels(editor.channels);
+  }
+
   /** Why the current step cannot be left yet, or `null` when it can. */
   const blocked = $derived.by<string | null>(() => {
     if (!draft) return "Choose an alert type.";
     if (step === SETTINGS) return draftIssue(draft);
-    if (step === DELIVERY) {
-      if (editor.channels.length === 0) return "Add at least one place for the alert to go.";
-      return validateChannels(editor.channels);
+    if (step === DELIVERY) return deliveryIssue();
+    // The last step answers for the ones before it: nothing they refuse is created.
+    if (step === CHECK) {
+      return draftIssue(draft) ?? deliveryIssue() ?? (name === "" ? "Enter a name." : null);
     }
-    if (step === CHECK && name === "") return "Enter a name.";
     return null;
   });
 
-  // The steps differ in height, and a scrollbar that comes and goes moves the page sideways.
-  $effect(() => {
-    const root = document.documentElement;
-    root.classList.add("[scrollbar-gutter:stable]");
-    return () => root.classList.remove("[scrollbar-gutter:stable]");
-  });
-
-  // ---- Create ------------------------------------------------------------
 
   let saving = $state(false);
   let created = $state(false);
@@ -206,8 +216,6 @@
       navigation.cancel();
     }
   });
-
-  // ---- Full replay -------------------------------------------------------
 
   // An id for the unsaved alert, so the replay can list it beside the saved ones.
   const draftId = newGuid();
@@ -270,7 +278,9 @@
   <title>New alert · Nocturne</title>
 </svelte:head>
 
-<div class="@container mx-auto max-w-2xl p-3 @md:p-6 max-md:pb-28">
+<!-- The steps differ in height, and a scrollbar that comes and goes moves the page sideways, so
+     the document keeps the scrollbar's gutter while this page is on it. -->
+<div class="@container mx-auto max-w-2xl p-3 @md:p-6 max-md:pb-28 [:root:has(&)]:[scrollbar-gutter:stable]">
   <header class="mb-6 flex min-h-12 items-center gap-2">
     <Button
       variant="ghost"
@@ -289,7 +299,13 @@
     </div>
   </header>
 
-  <WizardProgress {steps} current={step} {reached} onJump={open} />
+  <WizardProgress
+    {steps}
+    current={step}
+    {reached}
+    locked={step > TYPE && blocked !== null}
+    onJump={open}
+  />
 
   {#key step}
   <div
@@ -300,9 +316,23 @@
       easing: expoOut,
     }}
   >
-    <h2 class="text-lg font-semibold leading-tight" data-testid="alert-wizard-heading">
+    <h2
+      bind:this={headingEl}
+      tabindex="-1"
+      class="text-lg font-semibold leading-tight outline-none"
+      data-testid="alert-wizard-heading"
+    >
       {heading(step)}
     </h2>
+
+    {#if presetsQuery.error}
+      <p
+        class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+        role="alert"
+      >
+        Could not load the alert types. Load the page again.
+      </p>
+    {/if}
 
     {#if step === TYPE || !draft}
       <TypeStep

@@ -217,7 +217,7 @@ export function trackerLeaf(template: TemplateDef, tracker: TrackerDefinitionDto
 		tracker_age: {
 			tracker_definition_id: tracker.id ?? "",
 			operator: ">=",
-			minutes: (tracker.lifespanHours ?? fallbackAgeHours(template)) * 60,
+			minutes: (tracker.lifespanHours || fallbackAgeHours(template)) * 60,
 		},
 	};
 }

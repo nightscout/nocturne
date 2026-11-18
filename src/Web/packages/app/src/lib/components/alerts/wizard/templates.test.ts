@@ -107,6 +107,9 @@ describe("alert wizard templates", () => {
 
 	it("gives no closing condition to a type with no opposite, or to a custom alert", () => {
 		expect(draftAutoResolve(newDraft("no_readings"))).toBeNull();
+		expect(draftAutoResolve(newDraft("urgent_low_soon"))).toBeNull();
+		expect(draftAutoResolve(newDraft("falling_fast"))).toBeNull();
+		expect(draftAutoResolve(newDraft("rising_fast"))).toBeNull();
 		expect(draftAutoResolve(newDraft("loop_not_running"))).toBeNull();
 		expect(draftAutoResolve(newDraft("custom"))).toBeNull();
 	});

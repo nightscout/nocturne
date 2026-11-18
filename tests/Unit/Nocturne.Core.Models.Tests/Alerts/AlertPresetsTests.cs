@@ -53,4 +53,15 @@ public class AlertPresetsTests
             .Where(p => p.StarterKind is not null && p.ConditionType == AlertConditionType.Threshold)
             .Should().OnlyContain(p => p.AutoResolve);
     }
+
+    [Theory]
+    [InlineData(AlertConditionType.Predicted)]
+    [InlineData(AlertConditionType.RateOfChange)]
+    [InlineData(AlertConditionType.SignalLoss)]
+    [InlineData(AlertConditionType.LoopStale)]
+    public void AConditionWithNoOppositeDoesNotCloseOnOne(AlertConditionType type)
+    {
+        AlertPresets.All.Where(p => p.ConditionType == type)
+            .Should().NotBeEmpty().And.OnlyContain(p => !p.AutoResolve);
+    }
 }

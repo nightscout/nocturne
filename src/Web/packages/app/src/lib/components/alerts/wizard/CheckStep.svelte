@@ -44,8 +44,6 @@
     onOpenReplay,
   }: Props = $props();
 
-  // ---- Test alert --------------------------------------------------------
-
   let testState = $state<"idle" | "sending" | "sent">("idle");
   let testError = $state<string | null>(null);
 

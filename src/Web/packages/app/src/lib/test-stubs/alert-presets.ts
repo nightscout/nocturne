@@ -20,18 +20,18 @@ export const ALERT_PRESETS: AlertPresetResponse[] = [
 		direction: "above",
 		value: 250,
 	}),
-	preset("falling_fast", AlertPresetGroup.Common, AlertRuleSeverity.Warning, true, true, AlertConditionType.RateOfChange, {
+	preset("falling_fast", AlertPresetGroup.Common, AlertRuleSeverity.Warning, true, false, AlertConditionType.RateOfChange, {
 		direction: "falling",
 		rate: 3,
 	}),
-	preset("rising_fast", AlertPresetGroup.Common, AlertRuleSeverity.Info, true, true, AlertConditionType.RateOfChange, {
+	preset("rising_fast", AlertPresetGroup.Common, AlertRuleSeverity.Info, true, false, AlertConditionType.RateOfChange, {
 		direction: "rising",
 		rate: 3,
 	}),
 	preset("no_readings", AlertPresetGroup.Common, AlertRuleSeverity.Warning, false, false, AlertConditionType.SignalLoss, {
 		timeout_minutes: 20,
 	}),
-	preset("urgent_low_soon", AlertPresetGroup.More, AlertRuleSeverity.Critical, false, true, AlertConditionType.Predicted, {
+	preset("urgent_low_soon", AlertPresetGroup.More, AlertRuleSeverity.Critical, false, false, AlertConditionType.Predicted, {
 		operator: "<=",
 		value: 55,
 		within_minutes: 20,
