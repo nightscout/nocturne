@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatDayTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { untrack } from "svelte";
   import {
@@ -12,6 +12,7 @@
     testFire,
   } from "#lib/api/generated/alertRules.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { toast } from "svelte-sonner";
   import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";
   import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
   import { z } from "zod";
@@ -37,7 +38,8 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import Zap from "@lucide/svelte/icons/zap";
+  import Send from "@lucide/svelte/icons/send";
+  import Check from "@lucide/svelte/icons/check";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import HistoryIcon from "@lucide/svelte/icons/history";
   import PlayCircle from "@lucide/svelte/icons/circle-play";
@@ -49,12 +51,15 @@
   import AutoResolveSection from "#lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
+  import HistoryCheck from "#lib/components/alerts/HistoryCheck.svelte";
+  import OpenOnlyWarning from "#lib/components/alerts/OpenOnlyWarning.svelte";
   import { severity } from "#lib/components/alerts/severity.js";
-  import { severityLabel } from "#lib/components/alerts/severityLabel.svelte.js";
+  import {
+    severityDescription,
+    severityLabel,
+  } from "#lib/components/alerts/severityLabel.svelte.js";
   import {
     parseRule,
-    ensureCompositeRoot,
-    defaultPayload,
     buildBody,
     validateChannels,
     type RuleEditorState,
@@ -66,6 +71,7 @@
   let saving = $state(false);
   let deleting = $state(false);
   let testingSaved = $state(false);
+  let testSent = $state(false);
   let error = $state<string | null>(null);
 
   let editor = $state<RuleEditorState>(parseRule(null));
@@ -127,6 +133,7 @@
     try {
       await updateRule({ id: ruleId, request: buildBody(editor) });
       savedBody = buildBody(editor);
+      toast.success("Alert saved");
     } catch (e) {
       const described = describeSubmitError(e, "Failed to save the alert rule. Try again.");
       error = conditionIssuesMessage(e) ?? described;
@@ -153,9 +160,11 @@
 
   async function fireSaved(): Promise<void> {
     testingSaved = true;
+    testSent = false;
     error = null;
     try {
       await testFire(ruleId);
+      testSent = true;
     } catch (e) {
       error = describeSubmitError(e, "Failed to send a test alert. Try again.");
     } finally {
@@ -225,14 +234,37 @@
     };
   }
 
+  // Switching smart snooze on adds no condition. With none, the engine extends only a high or
+  // low alert, and only while glucose moves back toward range; a seeded condition would replace
+  // that with one the person did not choose.
   function toggleSmartSnooze(checked: boolean): void {
     editor.clientConfig.snooze.smartSnooze = checked;
-    if (checked && editor.clientConfig.snooze.conditions.length === 0) {
-      editor.clientConfig.snooze.conditions = [
-        ensureCompositeRoot(defaultPayload("trend")),
-      ];
-    }
   }
+
+  function addSnoozeConditions(): void {
+    editor.clientConfig.snooze.conditions = [
+      { type: "composite", _uid: crypto.randomUUID(), composite: { operator: "and", conditions: [] } },
+    ];
+  }
+
+  /** The conditions the history check reads, so it runs again when they change. */
+  const conditionKey = $derived.by(() => {
+    const body = buildBody(editor);
+    return JSON.stringify([
+      body.conditionType,
+      body.conditionParams,
+      body.autoResolveEnabled,
+      body.autoResolveParams,
+    ]);
+  });
+
+  beforeNavigate((navigation) => {
+    if (loading || deleting || !isDirty || navigation.shallow) return;
+    // A reload or a closed tab cannot show a prompt of ours; cancelling shows the browser's.
+    if (navigation.willUnload || !confirm("Leave without saving your changes?")) {
+      navigation.cancel();
+    }
+  });
 </script>
 
 <svelte:head>
@@ -256,7 +288,7 @@
         <h1 class="text-2xl font-bold truncate">
           {editor.name || "Alert"}
         </h1>
-        <p class="text-sm text-muted-foreground">Edit alert rule</p>
+        <p class="text-sm text-muted-foreground">Edit alert</p>
       </div>
     {/snippet}
     {#snippet actions()}
@@ -288,6 +320,7 @@
   {#if error}
     <div
       class="mb-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+      role="alert"
     >
       {error}
     </div>
@@ -311,9 +344,9 @@
         <Card data-testid="alert-identity-card">
           <CardHeader class="flex flex-row items-start justify-between gap-4">
             <div class="space-y-1.5">
-              <CardTitle>Identity</CardTitle>
+              <CardTitle>Name and severity</CardTitle>
               <CardDescription>
-                What is the name of this alert?
+                The notification shows the name.
               </CardDescription>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -348,7 +381,7 @@
               <Textarea
                 id="rule-desc"
                 rows={2}
-                placeholder="Why this alert exists and what it triggers"
+                placeholder="A note for yourself about this alert"
                 value={editor.description}
                 oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => {
                   editor.description = e.currentTarget.value;
@@ -356,7 +389,7 @@
               />
             </div>
             <div class="space-y-2">
-              <Label>Severity</Label>
+              <Label for="rule-severity">Severity</Label>
               <Select.Root
                 type="single"
                 value={editor.severity}
@@ -365,35 +398,29 @@
                   if (parsed.success) editor.severity = parsed.data;
                 }}
               >
-                <Select.Trigger data-testid="alert-severity">{severityLabel(editor.severity)}</Select.Trigger>
+                <Select.Trigger id="rule-severity" data-testid="alert-severity">{severityLabel(editor.severity)}</Select.Trigger>
                 <Select.Content>
                   {#each severityOptions as o (o.value)}
                     <Select.Item value={o.value} label={o.label} />
                   {/each}
                 </Select.Content>
               </Select.Root>
+              <p class="text-sm text-muted-foreground">{severityDescription(editor.severity)}</p>
             </div>
-            <div
-              class="flex items-start gap-2 rounded border bg-muted/30 p-3"
-              data-testid="alert-allow-dnd"
-            >
-              <Checkbox
-                id="rule-allow-dnd"
-                checked={editor.allowThroughDnd}
-                onCheckedChange={(c: boolean) => {
-                  editor.allowThroughDnd = c === true;
-                }}
-              />
-              <div class="space-y-0.5">
+            {#if editor.severity !== AlertRuleSeverity.Critical}
+              <div class="flex items-center gap-2" data-testid="alert-allow-dnd">
+                <Checkbox
+                  id="rule-allow-dnd"
+                  checked={editor.allowThroughDnd}
+                  onCheckedChange={(c: boolean) => {
+                    editor.allowThroughDnd = c === true;
+                  }}
+                />
                 <Label class="cursor-pointer" for="rule-allow-dnd">
-                  Allow through Do not disturb
+                  Also alert during Do Not Disturb
                 </Label>
-                <p class="text-xs text-muted-foreground">
-                  Critical-severity rules implicitly bypass DND regardless of
-                  this flag.
-                </p>
               </div>
-            </div>
+            {/if}
           </CardContent>
         </Card>
 
@@ -402,7 +429,7 @@
           <CardHeader>
             <CardTitle>Condition</CardTitle>
             <CardDescription>
-              Define when this alert fires. Mix facts with AND or OR. Nest them with brackets.
+              The alert starts when these conditions are true.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -420,14 +447,15 @@
           <CardHeader>
             <CardTitle>Channels</CardTitle>
             <CardDescription>
-              Where to deliver the alert. All channels fire in parallel.
+              Where the alert goes. It goes to each channel at the same time.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent class="space-y-3">
             <ChannelsSection
               bind:channels={editor.channels}
               severity={editor.severity}
             />
+            <OpenOnlyWarning channels={editor.channels} />
           </CardContent>
         </Card>
 
@@ -451,9 +479,9 @@
           <CardHeader>
             <CardTitle>Smart snooze</CardTitle>
             <CardDescription>
-              When the user snoozes, extend the snooze automatically while these
-              conditions hold. Each extension counts toward the alert's snooze
-              limit, and without a recent glucose reading the alert fires again.
+              When you snooze this alert, Nocturne can extend the snooze for you. Each
+              extension counts toward the snooze limit of the alert. If there is no recent
+              glucose reading, the alert starts again.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -483,20 +511,29 @@
                   }}
                 />
               </div>
-              <div class="space-y-2">
-                <Label>Extend while</Label>
-                {#each editor.clientConfig.snooze.conditions as _c, i (i)}
-                  <RuleBuilder
-                    bind:node={editor.clientConfig.snooze.conditions[i]}
-                    availableRules={availableRules}
-                  />
-                {/each}
-              </div>
-              <p class="text-sm text-muted-foreground">
-                With no conditions, only high and low glucose alerts are
-                extended, and only while glucose is clearly moving back toward
-                range. Every other alert fires again when its snooze ends.
-              </p>
+              {#if editor.clientConfig.snooze.conditions.length > 0}
+                <div class="space-y-2">
+                  {#each editor.clientConfig.snooze.conditions as _c, i (i)}
+                    <RuleBuilder
+                      bind:node={editor.clientConfig.snooze.conditions[i]}
+                      availableRules={availableRules}
+                      purpose="snooze"
+                    />
+                  {/each}
+                </div>
+                <p class="text-sm text-muted-foreground">
+                  With no conditions in this list, Nocturne extends only high and low glucose
+                  alerts, and only while glucose moves back toward range.
+                </p>
+              {:else}
+                <p class="text-sm text-muted-foreground" data-testid="smart-snooze-default">
+                  Nocturne extends the snooze of a high or low glucose alert only while glucose
+                  moves back toward range. The snooze of every other alert ends at its set time.
+                </p>
+                <Button type="button" variant="outline" size="sm" onclick={addSnoozeConditions}>
+                  Set your own conditions
+                </Button>
+              {/if}
             {/if}
           </CardContent>
         </Card>
@@ -507,13 +544,19 @@
     <aside class="min-w-0 @3xl:sticky @3xl:top-[calc(var(--app-sticky-top,0px)_+_var(--editor-bar-height,0px)_+_1.5rem)] self-start space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle class="text-base">Test alert</CardTitle>
-          <CardDescription size="sm">
-            Fire a real notification, or replay the rule against historical
-            glucose.
-          </CardDescription>
+          <CardTitle class="text-base">Check the alert</CardTitle>
         </CardHeader>
-        <CardContent class="space-y-2">
+        <CardContent class="space-y-3">
+          {#if !loading && editor.condition}
+            <HistoryCheck
+              compact
+              rule={buildReplayRule}
+              condition={editor.condition}
+              severity={editor.severity}
+              watch={conditionKey}
+              onOpenReplay={openReplay}
+            />
+          {/if}
           <Button
             type="button"
             variant="outline"
@@ -524,10 +567,20 @@
             {#if testingSaved}
               <Loader2 class="h-4 w-4 mr-2 animate-spin" />
             {:else}
-              <Zap class="h-4 w-4 mr-2" />
+              <Send class="h-4 w-4 mr-2" />
             {/if}
-            Fire saved rule
+            Send a test alert
           </Button>
+          {#if testSent}
+            <p class="flex items-center gap-1.5 text-sm text-success" role="status">
+              <Check class="size-4" aria-hidden="true" />
+              Test alert sent. Make sure that it arrived.
+            </p>
+          {:else if isDirty && !loading}
+            <p class="text-sm text-muted-foreground">
+              The test uses the saved alert. Save your changes first to test them.
+            </p>
+          {/if}
           <Button
             type="button"
             variant="outline"
@@ -536,7 +589,7 @@
             disabled={loading}
           >
             <PlayCircle class="h-4 w-4 mr-2" />
-            Replay against history
+            Replay a past day
           </Button>
         </CardContent>
       </Card>
@@ -544,10 +597,10 @@
       <Card>
         <CardHeader>
           <CardTitle class="text-base flex items-center gap-2">
-            <HistoryIcon class="h-4 w-4" /> Historic firings
+            <HistoryIcon class="h-4 w-4" /> Past alerts
           </CardTitle>
           <CardDescription size="sm">
-            Real fires for this rule. Select any to replay the day in the simulator.
+            The times this alert started. Select one to replay that day.
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-1.5">
@@ -562,7 +615,7 @@
               art="clock"
               size="compact"
               variant="outline"
-              title="No firings yet"
+              title="This alert has not started yet"
             />
           {:else}
             <div class="max-h-72 overflow-y-auto space-y-1">
@@ -575,7 +628,7 @@
                     size="xs"
                     class="flex min-w-0 flex-1 items-center text-left"
                     onclick={() => openReplay(h.startedAt)}
-                    title="Replay this day in the simulator"
+                    title="Replay this day"
                   >
                     <span
                       class="h-1.5 w-1.5 shrink-0 rounded-full {severity(
@@ -588,9 +641,8 @@
                       {formatHistoryRow(h.startedAt)}
                     </span>
                     {#if h.acknowledgedAt}
-                      <span class="text-2xs text-muted-foreground shrink-0">
-                        ack
-                      </span>
+                      <Check class="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span class="sr-only">Acknowledged</span>
                     {/if}
                   </Button>
                   {#if dayInReviewHref(h.startedAt)}
@@ -623,8 +675,8 @@
         <PlayCircle class="h-4 w-4" /> Replay
       </Dialog.Title>
       <Dialog.Description>
-        Replay this alert (and any siblings) against historical glucose. Nothing
-        is delivered.
+        This alert and your other alerts, played against the glucose of that day. Nothing is
+        sent.
       </Dialog.Description>
     </Dialog.Header>
 

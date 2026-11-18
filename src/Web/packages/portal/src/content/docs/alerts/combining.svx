@@ -66,8 +66,8 @@ next example.
 A group is a set of rows with its own **all of** or **any of**, sitting inside
 the rule as a single row. Groups let you say things like "A, or both B and C".
 
-To make one, open the **...** menu on a row and choose **Wrap in AND group** or
-**Wrap in OR group**, then add more rows inside the group, or drag rows into it.
+To make one, open the **...** menu on a row and choose **Put in an “all of” group** or
+**Put in an “any of” group**, then add more rows inside the group, or drag rows into it.
 
 <Screenshot id="alert-rule-nested-group" callouts={[{ anchor: 'group', label: 'A group' }]} />
 
@@ -89,7 +89,7 @@ exactly like the plain low rule.
 
 ## NOT
 
-**Wrap in NOT** turns a row into its opposite: the row is true whenever the
+**Make it the opposite (NOT)** turns a row into its opposite: the row is true whenever the
 condition inside it is false. It shows a **NOT** badge.
 
 NOT is most useful with time. "Glucose above 180 for at least 30 minutes,

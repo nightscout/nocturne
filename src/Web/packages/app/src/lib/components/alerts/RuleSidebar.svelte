@@ -308,7 +308,7 @@
       </div>
       <Collapsible.Content class="border-t px-2 py-1.5">
         {#if leaves.length === 0}
-          <p class="text-xs text-muted-foreground">No leaves to evaluate.</p>
+          <p class="text-xs text-muted-foreground">No conditions.</p>
         {:else}
           <ul class="space-y-1">
             {#each leaves as entry (entry.leafId)}
@@ -332,6 +332,7 @@
                   class:opacity-30={!lt}
                   aria-hidden="true"
                 ></span>
+                <span class="sr-only">{lt ? "True:" : "Not true:"}</span>
                 {@render leafIconFor(entry.wrapper)}
                 {#if isNot}
                   <Ban class="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
