@@ -620,7 +620,7 @@ public class AlertReplayServiceTests
             Reading(older, 65), Reading(older.AddMinutes(30), 95),
             Reading(recent, 60), Reading(recent.AddMinutes(30), 95));
 
-        var result = await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
 
         result.Firings.Should().Equal(
             new AlertFiring(recent, AlertReplayEventKind.Fired),
@@ -642,7 +642,7 @@ public class AlertReplayServiceTests
         var low = Enumerable.Range(0, 25).Select(i => Reading(began.AddMinutes(i * 5), 60));
         SetupReadingsByWindow([.. low, Reading(began.AddMinutes(125), 95)]);
 
-        var result = await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
 
         result.Firings.Should().Equal(new AlertFiring(began, AlertReplayEventKind.Fired));
     }
@@ -652,9 +652,20 @@ public class AlertReplayServiceTests
     {
         SetupReadingsByWindow(Reading(SearchNow.AddHours(-2), 60));
 
-        await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+        await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
 
         _alertRepository.Verify(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [NativeFact]
+    public async Task FindFirings_AReaderLimitedToADaySearchesThatDayOnly()
+    {
+        SetupReadingsByWindow(Reading(SearchNow.AddDays(-3), 60), Reading(SearchNow.AddHours(-2), 60));
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: true, CancellationToken.None);
+
+        result.SearchedFrom.Should().Be(SearchNow.AddDays(-1));
+        result.Firings.Should().Equal(new AlertFiring(SearchNow.AddHours(-2), AlertReplayEventKind.Fired));
     }
 
     [NativeFact]
@@ -663,7 +674,7 @@ public class AlertReplayServiceTests
         SetupReadingsByWindow(Reading(SearchNow.AddDays(-3), 60));
         var outOfTime = new AlertEvaluationOptions { FiringSearchBudget = TimeSpan.FromTicks(-1) };
 
-        var result = await FiringSearch(outOfTime).FindFiringsAsync(LowDraft(), CancellationToken.None);
+        var result = await FiringSearch(outOfTime).FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
 
         result.SearchedFrom.Should().Be(SearchNow.AddDays(-1));
         result.Firings.Should().BeEmpty();
@@ -674,7 +685,7 @@ public class AlertReplayServiceTests
     {
         SetupReadingsByWindow();
 
-        var result = await FiringSearch().FindFiringsAsync(LowDraft(), CancellationToken.None);
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
 
         result.HasReadings.Should().BeFalse();
         result.Total.Should().Be(0);

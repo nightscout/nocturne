@@ -37,6 +37,7 @@ vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
     refusal.testSends ? Promise.resolve({ success: true }) : Promise.reject(refusal.error),
   ),
   getInAppRecipients: () => remoteQuery(() => []),
+  suggestAutoResolve: remoteCommand(() => Promise.resolve({ condition: null })),
 }));
 
 vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({

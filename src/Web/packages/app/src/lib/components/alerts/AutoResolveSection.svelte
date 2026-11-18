@@ -9,7 +9,9 @@
     ensureCompositeRoot,
     type ConditionNode,
   } from "./types";
-  import { suggestAutoResolve } from "./suggestAutoResolve";
+  import { toast } from "svelte-sonner";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { oppositeCondition } from "./oppositeCondition.js";
 
   interface AvailableRule {
     id: string;
@@ -42,12 +44,28 @@
     }
   }
 
-  function applySuggestion(): void {
+  let suggesting = $state(false);
+
+  async function applySuggestion(): Promise<void> {
     const replaces = enabled && (condition?.composite?.conditions.length ?? 0) > 0;
     if (replaces && !confirm("Replace the conditions with the suggestion?")) return;
-    const suggested = suggestAutoResolve(firingCondition);
-    condition = suggested ?? ensureCompositeRoot(defaultPayload("threshold"));
-    enabled = true;
+    suggesting = true;
+    const asked = JSON.stringify(firingCondition);
+    try {
+      const suggested = await oppositeCondition(firingCondition);
+      // The conditions changed while the answer was on its way: it is the opposite of others.
+      if (JSON.stringify(firingCondition) !== asked) return;
+      if (!suggested) {
+        toast.message("These conditions have no opposite. Add a closing condition yourself.");
+        return;
+      }
+      condition = suggested;
+      enabled = true;
+    } catch (e) {
+      toast.error(describeSubmitError(e, "Could not get a suggestion. Try again."));
+    } finally {
+      suggesting = false;
+    }
   }
 </script>
 
@@ -65,7 +83,7 @@
         variant="outline"
         size="sm"
         onclick={applySuggestion}
-        disabled={!firingCondition}
+        disabled={!firingCondition || suggesting}
         title="Start from the opposite of the alert's conditions"
       >
         <Wand2 class="h-3.5 w-3.5 mr-2" /> Suggest

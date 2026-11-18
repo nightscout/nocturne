@@ -58,7 +58,7 @@ internal sealed class AlertReplayService(
     private const int MaxFiringsReturned = 50;
 
     public async Task<AlertFiringSearchResult> FindFiringsAsync(
-        ReplayRuleOverride ruleOverride, CancellationToken ct)
+        ReplayRuleOverride ruleOverride, bool lastDayOnly, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ruleOverride);
 
@@ -84,7 +84,8 @@ internal sealed class AlertReplayService(
         var hasReadings = false;
         var searchedFrom = searchedTo;
 
-        for (var day = 0; day < Math.Max(1, options.FiringSearchDays); day++)
+        var days = lastDayOnly ? 1 : Math.Max(1, options.FiringSearchDays);
+        for (var day = 0; day < days; day++)
         {
             var dayEnd = searchedTo.AddDays(-day);
             var dayStart = dayEnd.AddDays(-1);

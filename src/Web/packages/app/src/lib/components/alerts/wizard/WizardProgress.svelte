@@ -8,10 +8,12 @@
     current: number;
     /** The furthest step the person has reached; steps up to it can be opened. */
     reached: number;
+    /** The current step cannot be left yet, so no step after it can be opened. */
+    locked?: boolean;
     onJump: (index: number) => void;
   }
 
-  let { steps, current, reached, onJump }: Props = $props();
+  let { steps, current, reached, locked = false, onJump }: Props = $props();
 
   // With illustrations off it does not arrive, and the plain fill below marks a finished step.
   const wash = stillArtwork(() => import("#lib/watercolour/avatar-wash.js"));
@@ -95,7 +97,7 @@
     {#each steps as step, index (step.id)}
       {@const isCurrent = index === current}
       <li class="flex min-w-0 items-center gap-2 {index < steps.length - 1 ? 'flex-1' : ''}">
-        {#if index <= reached && !isCurrent}
+        {#if index <= reached && !isCurrent && !(locked && index > current)}
           <Button variant="ghost" size="sm" class="-mx-3" onclick={() => onJump(index)}>
             {@render marker(index)}
             {step.label}

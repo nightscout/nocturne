@@ -87,7 +87,7 @@ public class AlertReplayController : ControllerBase
     [ProducesResponseType(typeof(AlertFiringSearchResult), StatusCodes.Status200OK)]
     public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
         [FromBody] AlertFiringSearchRequest request, CancellationToken ct) =>
-        Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), ct));
+        Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
 
     private static ReplayRuleOverride ToOverride(ReplayRuleDefinition rule) => new(
         Id: rule.Id,

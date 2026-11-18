@@ -1,7 +1,9 @@
 import {
+	AlertPresetGroup,
 	AlertRuleSeverity,
-	TrackerCategory,
 	TrackerMode,
+	type AlertPresetResponse,
+	type TrackerCategory,
 	type TrackerDefinitionDto,
 } from "#lib/api/generated/nocturne-api-client.js";
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
@@ -10,9 +12,9 @@ import { summarizeCondition } from "../summarizeCondition.svelte";
 import { browserTimeZone, ensureCompositeRoot, nodeFromApi, type ConditionNode } from "../types";
 
 /**
- * The alert types the wizard offers. Each one is a single condition with fixed
- * comparison, so the person sets a number and never an operator. `custom`
- * hands the whole condition to the rule builder.
+ * The alert types the wizard has a name and a description for. The API's presets say which of
+ * them there are, in what order and with what condition; `custom` is the wizard's own and hands
+ * the whole condition to the rule builder.
  */
 export const TEMPLATE_IDS = [
 	"urgent_low",
@@ -41,6 +43,8 @@ export interface TemplateDef {
 	severity: AlertRuleSeverity;
 	/** Whether "wait before alerting" applies; a type with its own duration has none. */
 	canWait: boolean;
+	/** Whether the alert closes at once when the opposite of its condition is true. */
+	autoResolve: boolean;
 	/**
 	 * The tracker categories that measure the age this type alerts on. With a tracker of one
 	 * of them the type reads that tracker; `build` is what it reads with none.
@@ -54,123 +58,36 @@ export interface TemplateDef {
 	build: () => ConditionNode | null;
 }
 
-export const TEMPLATES: readonly TemplateDef[] = [
-	{
-		id: "urgent_low",
-		group: "common",
-		severity: AlertRuleSeverity.Critical,
-		canWait: true,
-		build: () => ({ type: "threshold", threshold: { direction: "below", value: 55 } }),
-	},
-	{
-		id: "low",
-		group: "common",
-		severity: AlertRuleSeverity.Warning,
-		canWait: true,
-		build: () => ({ type: "threshold", threshold: { direction: "below", value: 70 } }),
-	},
-	{
-		id: "high",
-		group: "common",
-		severity: AlertRuleSeverity.Warning,
-		canWait: true,
-		build: () => ({ type: "threshold", threshold: { direction: "above", value: 250 } }),
-	},
-	{
-		id: "falling_fast",
-		group: "common",
-		severity: AlertRuleSeverity.Warning,
-		canWait: true,
-		build: () => ({ type: "rate_of_change", rate_of_change: { direction: "falling", rate: 3 } }),
-	},
-	{
-		id: "rising_fast",
-		group: "common",
-		severity: AlertRuleSeverity.Info,
-		canWait: true,
-		build: () => ({ type: "rate_of_change", rate_of_change: { direction: "rising", rate: 3 } }),
-	},
-	{
-		id: "no_readings",
-		group: "common",
-		severity: AlertRuleSeverity.Warning,
-		canWait: false,
-		build: () => ({ type: "signal_loss", signal_loss: { timeout_minutes: 20 } }),
-	},
-	{
-		id: "urgent_low_soon",
-		group: "more",
-		severity: AlertRuleSeverity.Critical,
-		canWait: false,
-		build: () => ({
-			type: "predicted",
-			predicted: { operator: "<=", value: 55, within_minutes: 20 },
-		}),
-	},
-	{
-		id: "reservoir_low",
-		group: "more",
-		severity: AlertRuleSeverity.Warning,
-		canWait: false,
-		build: () => ({ type: "reservoir", reservoir: { operator: "<=", value: 20 } }),
-	},
-	{
-		id: "pump_battery_low",
-		group: "more",
-		severity: AlertRuleSeverity.Warning,
-		canWait: false,
-		build: () => ({ type: "pump_battery", pump_battery: { operator: "<=", value: 20 } }),
-	},
-	{
-		id: "battery_change_due",
-		group: "more",
-		severity: AlertRuleSeverity.Info,
-		canWait: false,
-		trackerCategories: [TrackerCategory.Battery],
-		trackerOnlyAgeHours: 21 * 24,
-		build: () => null,
-	},
-	{
-		id: "site_change_due",
-		group: "more",
-		severity: AlertRuleSeverity.Info,
-		canWait: false,
-		trackerCategories: [TrackerCategory.Cannula, TrackerCategory.Pod],
-		build: () => ({ type: "site_age", site_age: { operator: ">=", value: 72 } }),
-	},
-	{
-		id: "sensor_change_due",
-		group: "more",
-		severity: AlertRuleSeverity.Info,
-		canWait: false,
-		trackerCategories: [TrackerCategory.Sensor],
-		build: () => ({ type: "sensor_age", sensor_age: { operator: ">=", value: 10 } }),
-	},
-	{
-		id: "loop_not_running",
-		group: "more",
-		severity: AlertRuleSeverity.Warning,
-		canWait: false,
-		build: () => ({ type: "loop_stale", loop_stale: { operator: ">", minutes: 30 } }),
-	},
-	{
-		id: "phone_battery_low",
-		group: "more",
-		severity: AlertRuleSeverity.Info,
-		canWait: false,
-		build: () => ({ type: "uploader_battery", uploader_battery: { operator: "<=", value: 20 } }),
-	},
-	{
-		id: "custom",
-		group: "more",
-		severity: AlertRuleSeverity.Warning,
-		canWait: false,
-		build: () => null,
-	},
-];
+const CUSTOM: TemplateDef = {
+	id: "custom",
+	group: "more",
+	severity: AlertRuleSeverity.Warning,
+	canWait: false,
+	autoResolve: false,
+	build: () => null,
+};
 
-export function getTemplate(id: TemplateId): TemplateDef {
-	return TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
+/** The types to choose from: each preset this build has copy for, then `custom`. */
+export function templatesFrom(presets: readonly AlertPresetResponse[]): TemplateDef[] {
+	const known = presets.flatMap((preset): TemplateDef[] => {
+		const id = TEMPLATE_IDS.find((t) => t === preset.id);
+		if (!id || id === "custom") return [];
+		const kind = preset.conditionType;
+		const params: unknown = preset.conditionParams;
+		return [
+			{
+				id,
+				group: preset.group === AlertPresetGroup.Common ? "common" : "more",
+				severity: preset.severity ?? AlertRuleSeverity.Warning,
+				canWait: preset.canWait ?? false,
+				autoResolve: preset.autoResolve ?? false,
+				trackerCategories: preset.trackerCategories?.length ? preset.trackerCategories : undefined,
+				trackerOnlyAgeHours: preset.trackerOnlyAgeHours ?? undefined,
+				build: () => nodeFromApi(kind, structuredClone(params)),
+			},
+		];
+	});
+	return [...known, CUSTOM];
 }
 
 /** Built per call so wuchale reads them in the current locale. */
@@ -247,6 +164,8 @@ export function templateDescription(id: TemplateId): string {
 /** What the person has chosen so far, before it becomes a rule. */
 export interface AlertDraft {
 	template: TemplateId;
+	/** The type the draft was started from. */
+	def: TemplateDef;
 	/** The one condition of a template; `null` for `custom`. */
 	leaf: ConditionNode | null;
 	/** Minutes the condition must stay true before the alert starts; 0 alerts at once. */
@@ -258,10 +177,10 @@ export interface AlertDraft {
 
 /** The trackers that measure the age a type alerts on, in the order the person keeps them. */
 export function templateTrackers(
-	id: TemplateId,
+	template: TemplateDef,
 	definitions: readonly TrackerDefinitionDto[],
 ): TrackerDefinitionDto[] {
-	const categories = getTemplate(id).trackerCategories;
+	const categories = template.trackerCategories;
 	if (!categories) return [];
 	return definitions.filter(
 		(d) =>
@@ -273,8 +192,7 @@ export function templateTrackers(
 }
 
 /** The age, in hours, a type alerts at when it reads no tracker. */
-function fallbackAgeHours(id: TemplateId): number {
-	const template = getTemplate(id);
+function fallbackAgeHours(template: TemplateDef): number {
 	const leaf = template.build();
 	return (
 		template.trackerOnlyAgeHours ?? leaf?.site_age?.value ?? (leaf?.sensor_age?.value ?? 0) * 24
@@ -283,34 +201,36 @@ function fallbackAgeHours(id: TemplateId): number {
 
 /** The types to offer: a type that reads only a tracker needs one to exist. */
 export function offeredTemplates(
+	templates: readonly TemplateDef[],
 	definitions: readonly TrackerDefinitionDto[],
 ): readonly TemplateDef[] {
-	return TEMPLATES.filter(
-		(t) => t.trackerOnlyAgeHours === undefined || templateTrackers(t.id, definitions).length > 0,
+	return templates.filter(
+		(t) => t.trackerOnlyAgeHours === undefined || templateTrackers(t, definitions).length > 0,
 	);
 }
 
 /** A type's condition on a tracker: its age reaches the tracker's lifespan. */
-export function trackerLeaf(id: TemplateId, tracker: TrackerDefinitionDto): ConditionNode {
+export function trackerLeaf(template: TemplateDef, tracker: TrackerDefinitionDto): ConditionNode {
 	return {
 		type: "tracker_age",
 		tracker_age: {
 			tracker_definition_id: tracker.id ?? "",
 			operator: ">=",
-			minutes: (tracker.lifespanHours ?? fallbackAgeHours(id)) * 60,
+			minutes: (tracker.lifespanHours || fallbackAgeHours(template)) * 60,
 		},
 	};
 }
 
 export function newDraft(
-	id: TemplateId,
+	template: TemplateDef,
 	definitions: readonly TrackerDefinitionDto[] = [],
 ): AlertDraft {
-	const template = getTemplate(id);
-	const tracker = templateTrackers(id, definitions)[0];
+	const id = template.id;
+	const tracker = templateTrackers(template, definitions)[0];
 	return {
 		template: id,
-		leaf: tracker ? trackerLeaf(id, tracker) : template.build(),
+		def: template,
+		leaf: tracker ? trackerLeaf(template, tracker) : template.build(),
 		waitMinutes: 0,
 		hours: { enabled: false, from: "22:00", to: "07:00" },
 		custom:
@@ -328,7 +248,7 @@ export function draftCondition(draft: AlertDraft): ConditionNode | null {
 	if (draft.template === "custom") return draft.custom;
 	if (!draft.leaf) return null;
 
-	const waits = getTemplate(draft.template).canWait && draft.waitMinutes > 0;
+	const waits = draft.def.canWait && draft.waitMinutes > 0;
 	const main: ConditionNode = waits
 		? { type: "sustained", sustained: { minutes: draft.waitMinutes, child: draft.leaf } }
 		: draft.leaf;
@@ -469,7 +389,7 @@ export function daysToMinutes(days: number): number {
 function withQualifiers(name: string, draft: AlertDraft): string {
 	if (draft.template === "custom") return name;
 	const waited =
-		getTemplate(draft.template).canWait && draft.waitMinutes > 0
+		draft.def.canWait && draft.waitMinutes > 0
 			? `${name} for ${minutesText(draft.waitMinutes)}`
 			: name;
 	return draft.hours.enabled

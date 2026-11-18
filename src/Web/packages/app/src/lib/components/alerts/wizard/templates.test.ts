@@ -4,18 +4,38 @@ import {
 	TrackerMode,
 	type TrackerDefinitionDto,
 } from "#lib/api/generated/nocturne-api-client.js";
+import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
 import { buildBody, parseRule } from "../types";
 import {
-	TEMPLATES,
-	offeredTemplates,
+	offeredTemplates as offeredFrom,
 	draftCondition,
 	draftIssue,
-	newDraft,
+	newDraft as draftOf,
 	suggestName,
 	templateDescription,
 	templateLabel,
-	templateTrackers,
+	templatesFrom,
+	templateTrackers as trackersOf,
+	type TemplateId,
 } from "./templates.svelte";
+
+const TEMPLATES = templatesFrom(ALERT_PRESETS);
+
+function template(id: TemplateId) {
+	return TEMPLATES.find((t) => t.id === id)!;
+}
+
+function newDraft(id: TemplateId, definitions: TrackerDefinitionDto[] = []) {
+	return draftOf(template(id), definitions);
+}
+
+function templateTrackers(id: TemplateId, definitions: TrackerDefinitionDto[]) {
+	return trackersOf(template(id), definitions);
+}
+
+function offeredTemplates(definitions: TrackerDefinitionDto[]) {
+	return offeredFrom(TEMPLATES, definitions);
+}
 
 const sensorTracker: TrackerDefinitionDto = {
 	id: "11111111-1111-1111-1111-111111111111",
@@ -51,6 +71,30 @@ function bodyOf(draft: ReturnType<typeof newDraft>) {
 }
 
 describe("alert wizard templates", () => {
+	it("lists the presets it has copy for, in their order, and then the custom type", () => {
+		const templates = templatesFrom([
+			ALERT_PRESETS[1],
+			{ ...ALERT_PRESETS[0], id: "a_preset_from_a_later_api" },
+			ALERT_PRESETS[0],
+		]);
+		expect(templates.map((t) => t.id)).toEqual(["low", "urgent_low", "custom"]);
+	});
+
+	it("marks which types close on the opposite of their condition", () => {
+		const closing = TEMPLATES.filter((t) => t.autoResolve).map((t) => t.id);
+		expect(closing).toEqual([
+			"urgent_low",
+			"low",
+			"high",
+			"reservoir_low",
+			"pump_battery_low",
+			"battery_change_due",
+			"site_change_due",
+			"sensor_change_due",
+			"phone_battery_low",
+		]);
+	});
+
 	it("gives every type a label and a description of its own", () => {
 		const labels = TEMPLATES.map((t) => templateLabel(t.id));
 		const descriptions = TEMPLATES.map((t) => templateDescription(t.id));
@@ -161,11 +205,11 @@ describe("alert wizard templates", () => {
 	});
 
 	it("accepts every type as first offered", () => {
-		for (const template of offeredTemplates(definitions)) {
-			expect(draftIssue(newDraft(template.id, definitions)), template.id).toBeNull();
+		for (const offered of offeredTemplates(definitions)) {
+			expect(draftIssue(newDraft(offered.id, definitions)), offered.id).toBeNull();
 		}
-		for (const template of offeredTemplates([])) {
-			expect(draftIssue(newDraft(template.id)), template.id).toBeNull();
+		for (const offered of offeredTemplates([])) {
+			expect(draftIssue(newDraft(offered.id)), offered.id).toBeNull();
 		}
 	});
 

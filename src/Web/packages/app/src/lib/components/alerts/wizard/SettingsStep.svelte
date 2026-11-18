@@ -13,7 +13,6 @@
   import {
     ageDays,
     daysToMinutes,
-    getTemplate,
     lifespanText,
     minutesText,
     trackerLeaf,
@@ -30,7 +29,7 @@
 
   let { draft = $bindable(), availableRules, trackers = [] }: Props = $props();
 
-  const template = $derived(getTemplate(draft.template));
+  const template = $derived(draft.def);
   const leaf = $derived(draft.leaf);
 
   const WAIT_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
@@ -157,7 +156,7 @@
             value={payload.tracker_definition_id ?? ""}
             onValueChange={(id) => {
               const chosen = trackers.find((t) => t.id === id);
-              if (chosen) draft.leaf = trackerLeaf(draft.template, chosen);
+              if (chosen) draft.leaf = trackerLeaf(draft.def, chosen);
             }}
           >
             <Select.Trigger id="alert-tracker" class="w-full max-w-56" data-testid="alert-tracker">

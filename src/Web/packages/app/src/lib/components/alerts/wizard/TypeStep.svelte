@@ -2,6 +2,7 @@
   import { untrack, type Component } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { DropGroup, DropSurface } from "water-ui";
   import { itemVariants } from "#lib/components/ui/item/index.js";
   import { cn } from "#lib/utils/index.js";
@@ -26,17 +27,22 @@
     offeredTemplates,
     templateDescription,
     templateLabel,
+    type TemplateDef,
     type TemplateId,
   } from "./templates.svelte";
 
   interface Props {
     selected: TemplateId | null;
     onPick: (id: TemplateId) => void;
+    /** The types there are, from the API's presets. */
+    templates: readonly TemplateDef[];
+    /** The presets have not arrived yet. */
+    loading?: boolean;
     /** The trackers there are; a type that reads only a tracker is listed when one matches. */
     trackerDefinitions?: readonly TrackerDefinitionDto[];
   }
 
-  let { selected, onPick, trackerDefinitions = [] }: Props = $props();
+  let { selected, onPick, templates, loading = false, trackerDefinitions = [] }: Props = $props();
 
   // The padding is on the content, which sits above the paint.
   const ROW = cn(itemVariants({ variant: "row", interactive: true }), "p-0");
@@ -62,7 +68,7 @@
     custom: SlidersHorizontal,
   };
 
-  const offered = $derived(offeredTemplates(trackerDefinitions));
+  const offered = $derived(offeredTemplates(templates, trackerDefinitions));
   const common = $derived(offered.filter((t) => t.group === "common"));
   const more = $derived(offered.filter((t) => t.group === "more"));
 
@@ -108,7 +114,12 @@
 
 <div class="space-y-3">
   <DropGroup name="alert types">
-    <ul class="divide-y border-y" aria-label="Alert types">
+    <ul class="divide-y border-y" aria-label="Alert types" aria-busy={loading}>
+      {#if loading}
+        {#each { length: 6 }, index (index)}
+          <li class="p-3"><Skeleton class="h-11 w-full" /></li>
+        {/each}
+      {/if}
       {#each common as template (template.id)}
         {@render row(template.id)}
       {/each}
