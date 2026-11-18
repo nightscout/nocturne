@@ -1507,6 +1507,7 @@ msgstr ""
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "<0/> Waiting for passkey..."
@@ -1588,6 +1589,7 @@ msgstr "Anzeigename"
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Your name"
@@ -2482,6 +2484,8 @@ msgstr "<0/> Wird heruntergeladen ..."
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/InspectionFooter.svelte
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/notifications/ReleaseNotesDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
@@ -15999,9 +16003,8 @@ msgstr ""
 msgid "This role is currently assigned to {0} member{1}. They will lose any permissions granted by this role."
 msgstr ""
 
-#: src/lib/components/members/RequestMembershipDialog.svelte
-msgid "Introduce yourself to the site owner so they know who you are."
-msgstr ""
+#~ msgid "Introduce yourself to the site owner so they know who you are."
+#~ msgstr ""
 
 #~ msgid "Continue to Sign Up"
 #~ msgstr ""
@@ -17203,6 +17206,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
+#: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "Request membership"
@@ -33507,9 +33511,8 @@ msgstr ""
 msgid "<0/> Pending requests"
 msgstr ""
 
-#: src/lib/components/members/RequestMembershipDialog.svelte
-msgid "Continue to sign up"
-msgstr ""
+#~ msgid "Continue to sign up"
+#~ msgstr ""
 
 #: src/lib/components/members/PublicAccessCard.svelte
 msgid "Could not disable public access. Try again."
@@ -41598,4 +41601,37 @@ msgstr ""
 #. 0: name
 #: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Nocturne does not import the deleted records again, even if {0} sends them."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "We could not send your request. Try again."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "Request sent"
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "The owner must approve your request before you can sign in. After approval, sign in with the passkey you made."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "This browser cannot make a passkey. To send a request, use a browser or device that supports passkeys."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "Tell the owner who you are. You make a passkey to send the request. The owner must approve the request before you can sign in."
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "Message to the owner"
+msgstr ""
+
+#: src/lib/components/members/RequestMembershipDialog.svelte
+msgid "<0/> Send request"
+msgstr ""
+
+#. 0: formatClock(waitUntil)
+#: src/lib/components/tenants/SiteAddressCard.svelte
+msgid "You can change the address one time each hour. You can change it again at {0}."
 msgstr ""
