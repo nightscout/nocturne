@@ -28,7 +28,6 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Scalar.AspNetCore;
-using Nocturne.Aspire.Scalar;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -203,11 +202,12 @@ builder.Services.AddOpenApi("nocturne", options =>
 {
     options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
+    options.AddOperationTransformer<ControllerTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
-    options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<IntroductionDocumentTransformer>();
     options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
@@ -215,11 +215,12 @@ builder.Services.AddOpenApi("nightscout", options =>
 {
     options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
+    options.AddOperationTransformer<ControllerTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
-    options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<IntroductionDocumentTransformer>();
     options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
@@ -468,7 +469,11 @@ app.MapScalarApiReference((options, httpContext) =>
     options.WithOperationTitleSource(OperationTitleSource.Path);
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
-    options.AddHeadContent(MermaidLazyLoader.HeadContent);
+    // Built from src/Web/packages/scalar-plugin; renders the diagrams and the other fenced blocks
+    // of the reference pages.
+    // A path: this page loads Scalar from its own host, so the import resolves against the page and
+    // does not depend on the forwarded scheme or host.
+    options.AddPluginUrl("/scalar/nocturne-plugin.js");
     if (!string.IsNullOrEmpty(scalarCss))
         options.WithCustomCss(scalarCss);
     options.EnablePersistentAuthentication();

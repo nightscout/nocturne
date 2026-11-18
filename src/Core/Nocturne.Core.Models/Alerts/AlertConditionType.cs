@@ -142,4 +142,8 @@ public enum AlertConditionType
     /// <summary>Minutes since the active tracker instance's reference timestamp (start for duration trackers, scheduled time for event trackers) compared against a threshold.</summary>
     [EnumMember(Value = "tracker_age"), JsonStringEnumMemberName("tracker_age")]
     TrackerAge,
+
+    /// <summary>A CGM transmitter battery reading (voltage, resistance or days in use) comparison.</summary>
+    [EnumMember(Value = "transmitter_battery"), JsonStringEnumMemberName("transmitter_battery")]
+    TransmitterBattery,
 }

@@ -7,6 +7,11 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
+/// <summary>
+/// Settings for each platform integration category. List the categories, and read, save or delete
+/// one. Secrets are never returned, except by the decrypted credentials route, which accepts
+/// instance-key calls only.
+/// </summary>
 [ApiController]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/platform-settings")]

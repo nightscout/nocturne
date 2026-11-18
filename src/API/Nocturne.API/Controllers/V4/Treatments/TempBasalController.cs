@@ -13,11 +13,12 @@ using Nocturne.API.Services.Caching;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for temporary basal rate spans.
-/// Provides read access plus a bulk write endpoint for native uploaders (e.g. Trio) —
-/// previously temp basals were only written by the legacy v1 treatment decomposer and connectors.
+/// Temporary basal insulin rates, each with a start and end time. Read temp basals, and write them in bulk.
 /// </summary>
 /// <remarks>
+/// Read access plus a bulk write endpoint for native uploaders. Previously temp basals were only written by the
+/// legacy v1 treatment decomposer and connectors.
+///
 /// Temp basals are span records (<see cref="TempBasal.StartTimestamp"/>/<see cref="TempBasal.EndTimestamp"/>),
 /// not point events. The write endpoint accepts both new spans and cancels: a cancel truncates the
 /// span active at its timestamp. Overlapping spans are not auto-truncated on create — the basal
@@ -27,6 +28,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="TempBasal"/>
 /// <seealso cref="CreateTempBasalRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Temp Basals")]
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
 [Produces("application/json")]

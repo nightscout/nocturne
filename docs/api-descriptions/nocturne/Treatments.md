@@ -1,9 +1,10 @@
-V4 treatment data: boluses, nutrition, notes, and meal tracking.
+Insulin, carbohydrates, food, notes, and the states that last for a period of time.
 
-- **Boluses** — Insulin bolus records with calculator context.
-- **Bolus Calculations** — Bolus calculator input/output records for audit and replay.
-- **Nutrition** — Carbohydrate intakes, food breakdown, and meal records.
-- **Foods** — Food favourites, recent foods, and food lifecycle management.
-- **Connector Food Entries** — Food entries imported by external connectors.
-- **Meal Matching** — Match nutrition data to treatment events.
-- **Notes** — Free-text observation records.
+```resources Treatments
+```
+
+## Good to know
+
+- A meal is a view, not a stored record. It is built at read time from the carb intake, boluses and foods that share a `correlationId`.
+- A state span has a start and an end. A span with no end is still in effect, and a query for a time range returns each span that overlaps the range.
+- A legacy Nightscout treatment is stored as one or more of these record types. The Nightscout API reference shows the mapping.

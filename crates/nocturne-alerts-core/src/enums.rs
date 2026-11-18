@@ -96,6 +96,15 @@ wire_enum! {
 }
 
 wire_enum! {
+    pub enum TransmitterBatteryMetric {
+        VoltageA = "voltage_a",
+        VoltageB = "voltage_b",
+        Resistance = "resistance",
+        Days = "days",
+    }
+}
+
+wire_enum! {
     /// `AlertWeekday`.
     pub enum DayOfWeek {
         Sunday = "sunday",
@@ -230,6 +239,10 @@ mod tests {
             ("PumpModeState", names::<PumpMode>()),
             ("StateSpanCategory", names::<StateSpanCategory>()),
             ("TempBasalMetric", names::<TempBasalMetric>()),
+            (
+                "TransmitterBatteryMetric",
+                names::<TransmitterBatteryMetric>(),
+            ),
             ("TrendBucket", names::<TrendBucket>()),
             ("AlertConditionType", names::<ConditionKind>()),
         ];

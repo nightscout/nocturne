@@ -14,7 +14,8 @@ using SixLabors.ImageSharp.Processing;
 namespace Nocturne.API.Controllers.V4.Account;
 
 /// <summary>
-/// Upload, serve, and delete the authenticated subject's avatar image.
+/// Profile pictures of accounts. A signed-in caller can upload and delete its own avatar. Anyone
+/// can read the avatar of an account by its id, with no sign-in.
 /// </summary>
 [ApiController]
 [Tags("Identity")]

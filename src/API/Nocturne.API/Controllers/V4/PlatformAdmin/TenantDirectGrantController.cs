@@ -10,7 +10,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing a tenant's direct grant tokens.
+/// Direct grant tokens for a tenant's members. Create a grant, list the active grants on the tenant,
+/// and revoke a grant.
 /// </summary>
 /// <remarks>
 /// Lets a platform administrator (including instance-key callers, which have no subject of their

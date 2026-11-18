@@ -13,8 +13,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Accepts manually reported reservoir values for pumps whose uploads don't carry
-/// a usable level.
+/// Reservoir levels reported by hand, for pumps whose uploads do not carry a usable level. Create a reservoir
+/// level report. A fill report also records a reservoir change.
 /// </summary>
 /// <remarks>
 /// Omnipod Dash only reports exact levels below 50 units, and the Ypsopump never

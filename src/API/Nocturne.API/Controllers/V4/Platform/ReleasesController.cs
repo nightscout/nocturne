@@ -10,9 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// The running release, the newest published one and its notes, and when Watchtower will install
-/// it. Behind the tenant settings permission: the owners who get the release notices.
+/// The running release and the newest published release, with its notes, and when an automatic
+/// update is due. Callers need the tenant settings permission.
 /// </summary>
+/// <remarks>
+/// The tenant settings permission is held by the owners who get the release notices.
+/// </remarks>
 [ApiController]
 [Tags("Platform")]
 [Authorize]
