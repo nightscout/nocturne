@@ -4488,6 +4488,7 @@ msgid "Code"
 msgstr ""
 
 #: src/lib/components/members/GuestLinksSection.svelte
+#: src/lib/components/status-pills/LinkBatteryPill.svelte
 msgid "Link"
 msgstr ""
 
@@ -22609,7 +22610,7 @@ msgstr ""
 msgid "{0} · combo"
 msgstr ""
 
-#. 0: time; 1: bg(data.eventualBG); 2: bgLabel()
+#. 0: at; 1: bg(data.eventualBG); 2: bgLabel()
 #: src/lib/components/status-pills/LoopPill.svelte
 msgid "{0} · eventual {1} {2}"
 msgstr ""
@@ -36479,14 +36480,11 @@ msgstr ""
 msgid "{0} low end color"
 msgstr ""
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Swap {0} end colors"
-msgstr ""
+#~ msgid "Swap {0} end colors"
+#~ msgstr ""
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Swap colors"
-msgstr ""
+#~ msgid "<0/> Swap colors"
+#~ msgstr ""
 
 #. 0: metricLabel
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
@@ -40570,4 +40568,36 @@ msgstr ""
 
 #: src/lib/components/members/RolesSection.svelte
 msgid "This name is reserved. Use a different name."
+msgstr ""
+
+#: src/lib/components/settings/DashboardRailConfigurator.svelte
+msgid "Link battery"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Add a color boundary here"
+msgstr ""
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} low color position"
+msgstr ""
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} high color position"
+msgstr ""
+
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} focus window"
+msgstr ""
+
+#. 0: Number.isFinite(limits[1]) ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}` \\: ""
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Enter a color range with its low end below its high end{0}."
 msgstr ""
