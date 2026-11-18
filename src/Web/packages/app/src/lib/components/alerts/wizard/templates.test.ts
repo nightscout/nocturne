@@ -7,6 +7,7 @@ import {
 import { buildBody, parseRule } from "../types";
 import {
 	TEMPLATES,
+	offeredTemplates,
 	draftCondition,
 	draftIssue,
 	newDraft,
@@ -36,7 +37,14 @@ const appointment: TrackerDefinitionDto = {
 	category: TrackerCategory.Appointment,
 	mode: TrackerMode.Event,
 };
-const definitions = [appointment, podTracker, sensorTracker];
+const batteryTracker: TrackerDefinitionDto = {
+	id: "44444444-4444-4444-4444-444444444444",
+	name: "Pump Battery",
+	category: TrackerCategory.Battery,
+	mode: TrackerMode.Duration,
+	lifespanHours: 504,
+};
+const definitions = [appointment, podTracker, sensorTracker, batteryTracker];
 
 function bodyOf(draft: ReturnType<typeof newDraft>) {
 	return buildBody({ ...parseRule(null), condition: draftCondition(draft) });
@@ -153,9 +161,26 @@ describe("alert wizard templates", () => {
 	});
 
 	it("accepts every type as first offered", () => {
-		for (const template of TEMPLATES) {
+		for (const template of offeredTemplates(definitions)) {
+			expect(draftIssue(newDraft(template.id, definitions)), template.id).toBeNull();
+		}
+		for (const template of offeredTemplates([])) {
 			expect(draftIssue(newDraft(template.id)), template.id).toBeNull();
 		}
+	});
+
+	it("offers the age of the battery only when there is a battery tracker", () => {
+		const ids = (list: TrackerDefinitionDto[]) => offeredTemplates(list).map((t) => t.id);
+		expect(ids([sensorTracker])).not.toContain("battery_change_due");
+		expect(ids(definitions)).toContain("battery_change_due");
+
+		const draft = newDraft("battery_change_due", definitions);
+		expect(bodyOf(draft).conditionParams).toEqual({
+			tracker_definition_id: batteryTracker.id,
+			operator: ">=",
+			minutes: 504 * 60,
+		});
+		expect(suggestName(draft, definitions)).toBe("Pump Battery change due: 21 days");
 	});
 
 	it("refuses a level that is empty or out of range", () => {

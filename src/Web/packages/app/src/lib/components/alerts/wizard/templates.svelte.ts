@@ -24,6 +24,7 @@ export const TEMPLATE_IDS = [
 	"urgent_low_soon",
 	"reservoir_low",
 	"pump_battery_low",
+	"battery_change_due",
 	"site_change_due",
 	"sensor_change_due",
 	"loop_not_running",
@@ -45,6 +46,11 @@ export interface TemplateDef {
 	 * of them the type reads that tracker; `build` is what it reads with none.
 	 */
 	trackerCategories?: readonly TrackerCategory[];
+	/**
+	 * The age, in hours, the type alerts at on a tracker with no lifespan. Set on a type that
+	 * reads nothing without a tracker, and so is offered only when there is one.
+	 */
+	trackerOnlyAgeHours?: number;
 	build: () => ConditionNode | null;
 }
 
@@ -116,6 +122,15 @@ export const TEMPLATES: readonly TemplateDef[] = [
 		build: () => ({ type: "pump_battery", pump_battery: { operator: "<=", value: 20 } }),
 	},
 	{
+		id: "battery_change_due",
+		group: "more",
+		severity: AlertRuleSeverity.Info,
+		canWait: false,
+		trackerCategories: [TrackerCategory.Battery],
+		trackerOnlyAgeHours: 21 * 24,
+		build: () => null,
+	},
+	{
 		id: "site_change_due",
 		group: "more",
 		severity: AlertRuleSeverity.Info,
@@ -179,6 +194,8 @@ export function templateLabel(id: TemplateId): string {
 			return "Pump reservoir low";
 		case "pump_battery_low":
 			return "Pump battery low";
+		case "battery_change_due":
+			return "Battery change due";
 		case "site_change_due":
 			return "Site change due";
 		case "sensor_change_due":
@@ -212,6 +229,8 @@ export function templateDescription(id: TemplateId): string {
 			return "The pump has little insulin left.";
 		case "pump_battery_low":
 			return "The pump battery is almost empty.";
+		case "battery_change_due":
+			return "The battery is older than the age you set.";
 		case "site_change_due":
 			return "The infusion site is older than the age you set.";
 		case "sensor_change_due":
@@ -255,8 +274,20 @@ export function templateTrackers(
 
 /** The age, in hours, a type alerts at when it reads no tracker. */
 function fallbackAgeHours(id: TemplateId): number {
-	const leaf = getTemplate(id).build();
-	return leaf?.site_age?.value ?? (leaf?.sensor_age?.value ?? 0) * 24;
+	const template = getTemplate(id);
+	const leaf = template.build();
+	return (
+		template.trackerOnlyAgeHours ?? leaf?.site_age?.value ?? (leaf?.sensor_age?.value ?? 0) * 24
+	);
+}
+
+/** The types to offer: a type that reads only a tracker needs one to exist. */
+export function offeredTemplates(
+	definitions: readonly TrackerDefinitionDto[],
+): readonly TemplateDef[] {
+	return TEMPLATES.filter(
+		(t) => t.trackerOnlyAgeHours === undefined || templateTrackers(t.id, definitions).length > 0,
+	);
 }
 
 /** A type's condition on a tracker: its age reaches the tracker's lifespan. */
@@ -404,6 +435,8 @@ function baseName(draft: AlertDraft): string {
 			return `Pump reservoir low: ${leaf?.reservoir?.value ?? 0} U`;
 		case "pump_battery_low":
 			return `Pump battery low: ${leaf?.pump_battery?.value ?? 0}%`;
+		case "battery_change_due":
+			return `Battery change due: ${daysText(ageDays(leaf))}`;
 		case "site_change_due":
 			return `Site change due: ${daysText(ageDays(leaf))}`;
 		case "sensor_change_due":

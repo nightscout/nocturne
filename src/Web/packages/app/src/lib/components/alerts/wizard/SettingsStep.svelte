@@ -46,7 +46,9 @@
   const ageLabel = $derived(
     draft.template === "site_change_due"
       ? "Alert when the infusion site is this old, or older"
-      : "Alert when the sensor is this old, or older",
+      : draft.template === "battery_change_due"
+        ? "Alert when the battery is this old, or older"
+        : "Alert when the sensor is this old, or older",
   );
 
   const endsNextDay = $derived(draft.hours.enabled && draft.hours.to <= draft.hours.from);

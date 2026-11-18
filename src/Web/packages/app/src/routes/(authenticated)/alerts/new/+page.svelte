@@ -280,7 +280,7 @@
     </h2>
 
     {#if step === TYPE || !draft}
-      <TypeStep selected={draft?.template ?? null} onPick={pickType} />
+      <TypeStep selected={draft?.template ?? null} onPick={pickType} {trackerDefinitions} />
     {:else if step === SETTINGS}
       {#key draft.template}
         <SettingsStep bind:draft {availableRules} {trackers} />
