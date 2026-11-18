@@ -14413,6 +14413,7 @@ msgid "Resolved"
 msgstr ""
 
 #: src/lib/components/alerts/GlucoseMonthGrid.svelte
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
 msgid "Previous month"
 msgstr ""
 
@@ -14421,6 +14422,7 @@ msgid "loading…"
 msgstr ""
 
 #: src/lib/components/alerts/GlucoseMonthGrid.svelte
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
 msgid "Next month"
 msgstr ""
 

@@ -14410,6 +14410,7 @@ msgid "Resolved"
 msgstr "Vyřešeno"
 
 #: src/lib/components/alerts/GlucoseMonthGrid.svelte
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
 msgid "Previous month"
 msgstr "Předchozí měsíc"
 
@@ -14418,6 +14419,7 @@ msgid "loading…"
 msgstr "načítání…"
 
 #: src/lib/components/alerts/GlucoseMonthGrid.svelte
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
 msgid "Next month"
 msgstr "Následující měsíc"
 
