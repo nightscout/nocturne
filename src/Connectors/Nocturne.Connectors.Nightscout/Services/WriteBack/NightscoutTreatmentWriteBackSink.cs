@@ -272,7 +272,7 @@ public class NightscoutTreatmentWriteBackSink(
                 return await PostAsync(config, item, legacyId, imported.Identifier ?? legacyId, ct);
         }
 
-        return await PostAsync(config, item, key, key, ct);
+        return await SendCreateAsync(config, new[] { UpstreamIdentityJson.TreatmentPayload(item, key, key) }, [item], null, ct);
     }
 
     private Task<bool> PostAsync(NightscoutConnectorConfiguration config, Treatment item, string id, string identifier, CancellationToken ct)
