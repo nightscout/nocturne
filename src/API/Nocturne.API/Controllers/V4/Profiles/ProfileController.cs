@@ -365,7 +365,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <param name="sort">Order by timestamp: `timestamp_desc` or `timestamp_asc`. Any other value is a 400. Defaults to `timestamp_desc`.</param>
     /// <param name="device">Return only records from this device.</param>
     /// <param name="source">Return only records from this data source.</param>
-    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet("settings")]
     [RequireScope(Scope.TherapyRead)]
@@ -402,7 +402,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             offset,
             data.Count,
             includeTotal,
-            () => _therapyRepo.CountAsync(from, to, ct)
+            () => _therapyRepo.CountAsync(from, to, device, source, ct)
         );
         return Ok(new PaginatedResponse<TherapySettings> { Data = data, Pagination = pagination });
     }

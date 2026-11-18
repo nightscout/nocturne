@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
@@ -49,6 +50,23 @@ public interface ISensorGlucoseRepository
         Guid? patientDeviceId = null,
         GlucoseStreams streams = GlucoseStreams.All
     );
+
+    /// <summary>
+    /// Count the readings <see cref="GetAsync"/> pages through for the same filters.
+    /// </summary>
+    Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        GlucoseStreams streams = GlucoseStreams.All,
+        CancellationToken ct = default
+    );
+
+    Task<int> IV4Repository<SensorGlucose>.CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct)
+        => CountAsync(from, to, device, source, patientDeviceId: null, ct: ct);
 
     /// <summary>
     /// Partial readings for statistics only; these must not be returned as raw records or projected
@@ -166,11 +184,11 @@ public interface ISensorGlucoseRepository
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete all <see cref="SensorGlucose"/> records matching the given data source.
+    /// Soft-deletes every <see cref="SensorGlucose"/> record <paramref name="selector"/> names, under its
+    /// <see cref="RecordSelector.Scope"/>.
     /// </summary>
-    /// <param name="source">Data source identifier (e.g., connector name).</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
+    Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Lists distinct <c>(DataSource, Device)</c> combinations among unattributed readings

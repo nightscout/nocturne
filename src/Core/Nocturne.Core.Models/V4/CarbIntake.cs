@@ -54,4 +54,11 @@ public class CarbIntake : V4RecordBase
     /// Protein consumed in grams, when the source reports macros.
     /// </summary>
     public double? ProteinGrams { get; set; }
+
+    /// <summary>
+    /// The label of this intake's food lines (Loop's <c>foodType</c>), by <see cref="TreatmentFood.DeriveFoodType"/>.
+    /// Derived, never stored, and a request body that carries it is ignored. The carb list, by-id, update and
+    /// bulk endpoints, the meal reads and the correlated read fill it; the realtime <c>carbIntake</c> record does not.
+    /// </summary>
+    public string? FoodType { get; set; }
 }

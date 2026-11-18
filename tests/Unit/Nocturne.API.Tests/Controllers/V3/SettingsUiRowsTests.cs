@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -48,6 +49,7 @@ public class SettingsUiRowsTests : IDisposable
         _repository = new SettingsRepository(_context.AsFactory());
         _controller = new SettingsController(
             _repository,
+            Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<SettingsController>.Instance)
         {

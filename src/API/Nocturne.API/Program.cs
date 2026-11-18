@@ -144,6 +144,8 @@ builder.Services.AddNocturneMemoryCache();
 // Add response caching for GET endpoints
 builder.Services.AddResponseCaching();
 
+builder.Services.AddRequestDecompression();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddScheduledJob<AuditRetentionJob>();
@@ -160,6 +162,8 @@ builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddScoped<OuraImportService>();
 builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<OuraImportService>());
+builder.Services.AddSingleton<OuraImportJobService>();
+builder.Services.AddScoped<IConnectorPurgeGuard, OuraImportPurgeGuard>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
@@ -396,6 +400,7 @@ app.UseMiddleware<V2FallbackMiddleware>();
 // Here rather than where minimal hosting would insert it, so the middleware below see the
 // matched endpoint.
 app.UseRouting();
+app.UseRequestDecompression();
 
 // The policies are attached to endpoints, so this needs UseRouting to have run. Everything
 // without a policy passes through untouched, and no policy partitions on anything this position

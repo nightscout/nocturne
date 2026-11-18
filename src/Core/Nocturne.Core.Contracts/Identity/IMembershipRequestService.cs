@@ -9,7 +9,19 @@ public record MembershipRequestDto(
     string Status,
     DateTime CreatedAt);
 
-public record CreateMembershipRequestResult(bool Success, string? Error);
+public enum CreateMembershipRequestOutcome
+{
+    Created,
+    Refused,
+    AlreadyMember,
+    AlreadyPending,
+}
+
+public record CreateMembershipRequestResult(CreateMembershipRequestOutcome Outcome, string? Error)
+{
+    public bool Success => Outcome == CreateMembershipRequestOutcome.Created;
+}
+
 public record DecideMembershipRequestResult(bool Success, string? Error);
 
 public interface IMembershipRequestService
@@ -26,6 +38,12 @@ public interface IMembershipRequestService
     /// <summary>
     /// Approves the request and adds the subject as a member with <paramref name="roleIds"/>.
     /// </summary>
+    /// <remarks>
+    /// A requester still awaiting access (<c>ApprovalStatus</c> Pending, inactive) is a visitor who
+    /// asked through the anonymous passkey ceremony, which files its one request on the tenant it
+    /// ran on. Approving activates that subject in the same transaction as the membership, so the
+    /// passkey it registered signs in. Any other inactive or deleted requester is refused.
+    /// </remarks>
     /// <param name="granterScopes">
     /// The approving caller's resolved scopes. Required, not optional: approving confers the
     /// requested roles, so it is bound by the same grant ceiling as a direct permission edit.
@@ -40,6 +58,10 @@ public interface IMembershipRequestService
         bool limitTo24Hours = false,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Denies the request. A requester still awaiting access is marked Denied and stays inactive, in
+    /// the same transaction, so it leaves the platform administrators' access-request list.
+    /// </summary>
     Task<DecideMembershipRequestResult> DenyRequestAsync(
         Guid requestId, Guid tenantId,
         Guid decidedBySubjectId, CancellationToken ct = default);

@@ -1,5 +1,8 @@
+using System.Data.Common;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
@@ -20,7 +23,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 /// <summary>
 /// <see cref="SourceOwnedDataRepository"/> on PostgreSQL under the runtime role and Row Level
 /// Security: a purge and a release run as the scope's tenant reach none of another tenant's rows of
-/// the same source.
+/// the same source, and a source's stats count each row either handle names once, off indexes.
 /// </summary>
 [Trait("Category", "Integration")]
 public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPostgresTests.Database database)
@@ -61,11 +64,27 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
             ValueTask.FromResult(create(tenantId));
     }
 
-    private NocturneDbContext Context(Guid tenant) =>
+    private NocturneDbContext Context(Guid tenant) => Context(tenant, []);
+
+    private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
+            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
             .Options) { TenantId = tenant };
+
+    /// <summary>The queries a context runs, with their parameters.</summary>
+    private sealed class QueryCapture : DbCommandInterceptor
+    {
+        public List<(string Sql, NpgsqlParameter[] Parameters)> Queries { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Queries.Add((command.CommandText, [.. command.Parameters.Cast<NpgsqlParameter>().Select(p => p.Clone())]));
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 
     private SourceOwnedDataRepository Repository(Guid scope) => new(new Factory(Context, scope), new UserAuditContext());
 
@@ -125,13 +144,45 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     }
 
     [Fact]
+    public async Task HoldingRowsIsReadByTheDataSourceAloneAndForTheScopesTenantOnly()
+    {
+        var holder = await SeedTenantAsync();
+        var empty = await InsertTenantAsync();
+        var deviceOnly = await InsertTenantAsync();
+        var activityOnly = await InsertTenantAsync();
+        await using (var db = Context(deviceOnly))
+        {
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = deviceOnly, Device = Source, Timestamp = DateTime.UtcNow.AddDays(-90), Bpm = 60,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = Context(activityOnly))
+        {
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = activityOnly, DataSource = Source, Timestamp = DateTime.UtcNow.AddDays(-90), Bpm = 60,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        (await Repository(holder).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeTrue();
+        (await Repository(holder).HoldsRowsByDataSourceAsync("never-written", CancellationToken.None)).Should().BeFalse();
+        (await Repository(empty).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeFalse();
+        (await Repository(deviceOnly).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeFalse();
+        (await Repository(activityOnly).HoldsRowsByDataSourceAsync(Source, CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task APurgeAsTenantADeletesNothingOfTenantB()
     {
         var a = await SeedTenantAsync();
         var b = await SeedTenantAsync();
 
-        var result = await Repository(a).SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
-        await Repository(a).AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository(a).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
+        await Repository(a).AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         result.DeletedCounts.Should().BeEquivalentTo(new Dictionary<string, long>
         {
@@ -251,7 +302,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         var pumpOnly = await SeedStatusAsync(tenant, null, Source);
         var otherTenants = await SeedStatusAsync(other, Source, Source, Source);
 
-        var result = await Repository(tenant).SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository(tenant).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         (await ServedStatusesAsync(tenant)).Should().BeEquivalentTo([otherSources, keptByAps, keptByPump, keptByUploader, unsnapshotted]);
         (await ServedStatusesAsync(other)).Should().Equal(otherTenants);
@@ -278,7 +329,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     {
         var tenant = await InsertTenantAsync();
         var purged = await SeedStatusAsync(tenant, Source, Source, Source);
-        await Repository(tenant).SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository(tenant).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
         var extrasRepository = new DeviceStatusExtrasRepository(
             new Factory(Context, tenant), new UserAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
         var resent = new DeviceStatusExtras
@@ -290,7 +341,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         (await extrasRepository.BulkCreateAsync([resent], WriteOrigin.Live)).Should().BeEmpty(
             "the purge holds the status's extras against a re-upload until the release");
 
-        await Repository(tenant).AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository(tenant).AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
         (await extrasRepository.BulkCreateAsync([resent], WriteOrigin.Live)).Should().ContainSingle();
         await using (var db = Context(tenant))
         {
@@ -307,6 +358,295 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         }
 
         (await ServedStatusesAsync(tenant)).Should().Equal(purged);
+    }
+
+    private async Task SeedHandlesAsync(Guid tenant, DateTime now)
+    {
+        await using var db = Context(tenant);
+        void Bolus(string? dataSource, string? device, DateTime at, DateTime? deletedAt = null) =>
+            db.Boluses.Add(new BolusEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bolus-{Guid.NewGuid():N}",
+                DataSource = dataSource, Device = device, Timestamp = at, Insulin = 1, DeletedAt = deletedAt,
+            });
+        void Glucose(string? dataSource, string? device, DateTime at) =>
+            db.SensorGlucose.Add(new SensorGlucoseEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = dataSource, Device = device,
+                Timestamp = at, Mgdl = 100,
+            });
+
+        Bolus(Source, Source, now.AddHours(-1));
+        Bolus(Source, "phone", now.AddDays(-2));
+        Bolus(null, Source, now.AddDays(-3));
+        Bolus("aaa-connector", Source, now.AddMinutes(-30));
+        Bolus("zzz-connector", Source, now.AddDays(-5));
+        Bolus(OtherSource, "phone", now);
+        Bolus(null, null, now.AddDays(-9));
+        Bolus(Source, Source, now.AddDays(-20), deletedAt: now);
+
+        Glucose(Source, Source, now.AddMinutes(-10));
+        Glucose(null, Source, now.AddDays(-3));
+        Glucose("zzz-connector", Source, now.AddHours(-1));
+        Glucose(OtherSource, OtherSource, now.AddDays(-30));
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task StatsCountEveryLiveRowEitherHandleNamesOnce()
+    {
+        var tenant = await InsertTenantAsync();
+        var other = await InsertTenantAsync();
+        var now = DateTime.UtcNow;
+        await SeedHandlesAsync(tenant, now);
+        await SeedHandlesAsync(other, now.AddDays(-100));
+        var repository = Repository(tenant);
+
+        var stats = await repository.StatsBySourceAsync(Source, now.AddHours(-24), CancellationToken.None);
+
+        stats.Single(s => s.DataType == SourceDataTypes.Boluses).Should().Be(new SourceTypeStats(SourceDataTypes.Boluses, 5, 2));
+        var glucose = stats.Single(s => s.DataType == SourceDataTypes.Glucose);
+        (glucose.Count, glucose.CountLast24Hours).Should().Be((3, 2));
+        glucose.Latest.Should().BeCloseTo(now.AddMinutes(-10), TimeSpan.FromMilliseconds(1));
+        glucose.Oldest.Should().BeCloseTo(now.AddDays(-3), TimeSpan.FromMilliseconds(1));
+        stats.Where(s => s.DataType is not (SourceDataTypes.Boluses or SourceDataTypes.Glucose))
+            .Should().OnlyContain(s => s.Count == 0);
+        (await repository.LatestTreatmentTimestampAsync(Source, CancellationToken.None))
+            .Should().BeCloseTo(now.AddMinutes(-30), TimeSpan.FromMilliseconds(1));
+        (await repository.OldestTreatmentTimestampAsync(Source, CancellationToken.None))
+            .Should().BeCloseTo(now.AddDays(-5), TimeSpan.FromMilliseconds(1));
+        (await repository.LatestTreatmentTimestampAsync("nobody", CancellationToken.None)).Should().BeNull();
+    }
+
+    /// <summary>
+    /// Rows of <c>boluses</c> and <c>sensor_glucose</c> whose handles <paramref name="handles"/> picks, then
+    /// an ANALYZE so the planner sizes them from real statistics.
+    /// </summary>
+    private async Task SeedBulkAsync(Guid tenant, int count, Func<int, (string? DataSource, string Device)> handles)
+    {
+        var now = DateTime.UtcNow;
+        await using (var db = Context(tenant))
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var (dataSource, device) = handles(i);
+                db.Boluses.Add(new BolusEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bulk-{i}",
+                    DataSource = dataSource, Device = device, Timestamp = now.AddMinutes(-i), Insulin = 1,
+                });
+                db.SensorGlucose.Add(new SensorGlucoseEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = dataSource, Device = device,
+                    Timestamp = now.AddMinutes(-i), Mgdl = 100,
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var analyze = new NpgsqlCommand("ANALYZE boluses, sensor_glucose", conn);
+        await analyze.ExecuteNonQueryAsync();
+    }
+
+    private Task SeedOtherDevicesAsync(Guid tenant, int count) =>
+        SeedBulkAsync(tenant, count, i => (i % 2 == 0 ? OtherSource : null, $"phone-{i % 7}"));
+
+    private Task SeedCommonSourceAsync(Guid tenant, int count) =>
+        SeedBulkAsync(tenant, count, _ => (Source, Source));
+
+    [Fact]
+    public async Task CountsCountEveryLiveRowEitherHandleNamesOnceForTheScopesTenantOnly()
+    {
+        var tenant = await InsertTenantAsync();
+        var other = await InsertTenantAsync();
+        var now = DateTime.UtcNow;
+        await SeedHandlesAsync(tenant, now);
+        await SeedHandlesAsync(other, now.AddDays(-100));
+
+        var counts = await Repository(tenant).CountsBySourceAsync(Source, CancellationToken.None);
+
+        counts.Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [SourceDataTypes.Boluses] = 5,
+            [SourceDataTypes.Glucose] = 3,
+        });
+        (await Repository(tenant).CountsBySourceAsync("nobody", CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TheSeededCountedTablesAreReadByTheDeviceIndexForASourceTheTenantHolds()
+    {
+        var tenant = await InsertTenantAsync();
+        await SeedHandlesAsync(tenant, DateTime.UtcNow);
+        await SeedOtherDevicesAsync(tenant, 3000);
+
+        await AssertCountedTablePlansAsync(tenant, Source, "nobody");
+    }
+
+    [Fact]
+    public async Task TheSeededCountedTablesAreReadByTheDeviceIndexForASourceCommonToOtherTenantsAndAbsentFromTheTenant()
+    {
+        var tenant = await InsertTenantAsync();
+        await SeedOtherDevicesAsync(tenant, 3000);
+        await SeedCommonSourceAsync(await InsertTenantAsync(), 6000);
+
+        await AssertCountedTablePlansAsync(tenant, Source);
+    }
+
+    private async Task AssertCountedTablePlansAsync(Guid tenant, params string[] sources)
+    {
+        var capture = new QueryCapture();
+        var repository = new SourceOwnedDataRepository(
+            new Factory(t => Context(t, capture), tenant), new UserAuditContext());
+
+        foreach (var source in sources)
+        {
+            await repository.StatsBySourceAsync(source, DateTime.UtcNow.AddHours(-24), CancellationToken.None);
+            await repository.LatestTreatmentTimestampAsync(source, CancellationToken.None);
+            await repository.OldestTreatmentTimestampAsync(source, CancellationToken.None);
+            await repository.CountsBySourceAsync(source, CancellationToken.None);
+        }
+
+        capture.Queries.Should().NotBeEmpty();
+        await using var db = Context(tenant);
+        await db.Database.OpenConnectionAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
+        foreach (var (sql, parameters) in capture.Queries)
+        {
+            await using var explain = new NpgsqlCommand($"EXPLAIN (FORMAT JSON) {sql}", connection);
+            explain.Parameters.AddRange(parameters);
+            var plan = (string)(await explain.ExecuteScalarAsync())!;
+
+            ScansOf(JsonNode.Parse(plan)![0]!["Plan"]!)
+                .Where(scan => (string)scan["Relation Name"]! is "boluses" or "sensor_glucose")
+                .Should().OnlyContain(scan => BoundBySource(scan),
+                    "a read of a table with statistics is a range of an index on its source handles, not of the tenant's rows:\n{0}\n{1}",
+                    sql, plan);
+        }
+    }
+
+    /// <summary>The plan nodes that read a table.</summary>
+    private static IEnumerable<JsonNode> ScansOf(JsonNode node) =>
+        (node["Relation Name"] is null ? [] : new[] { node })
+            .Concat(node["Plans"]?.AsArray().SelectMany(child => ScansOf(child!)) ?? []);
+
+    /// <summary>Whether a scan reads only rows an index condition on a source handle bounds.</summary>
+    private static bool BoundBySource(JsonNode node) => (string)node["Node Type"]! switch
+    {
+        "Index Scan" or "Index Only Scan" or "Bitmap Index Scan" =>
+            node["Index Cond"]?.GetValue<string>() is { } cond && (cond.Contains("source") || cond.Contains("device")),
+        "BitmapAnd" => node["Plans"]!.AsArray().Any(child => BoundBySource(child!)),
+        "BitmapOr" => node["Plans"]!.AsArray().All(child => BoundBySource(child!)),
+        "Bitmap Heap Scan" => BoundBySource(node["Plans"]![0]!),
+        _ => false,
+    };
+
+    /// <summary>
+    /// A bolus, a state span, a therapy setting and a status of APS and pump snapshots with its extras,
+    /// all under <see cref="Source"/> and written by <paramref name="writer"/>. Returns the status's
+    /// correlation id.
+    /// </summary>
+    private async Task<Guid> SeedWrittenAsync(Guid tenant, Guid? writer)
+    {
+        var correlationId = Guid.CreateVersion7();
+        var now = DateTime.UtcNow;
+        await using var db = Context(tenant);
+        db.Boluses.Add(new BolusEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, LegacyId = $"bolus-{correlationId:N}",
+            DataSource = Source, Timestamp = now, Insulin = 1, WriterGrantId = writer,
+        });
+        db.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, Source = Source,
+            Category = "PumpMode", State = "Automatic", StartTimestamp = now, WriterGrantId = writer,
+        });
+        db.TherapySettings.Add(new TherapySettingsEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, DataSource = Source, Timestamp = now,
+            ProfileName = $"Day-{correlationId:N}", WriterGrantId = writer,
+        });
+        db.DeviceStatusExtras.Add(new DeviceStatusExtrasEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, CorrelationId = correlationId, Timestamp = now,
+            ExtrasJson = """{"xdripjs":{"state":6}}""",
+        });
+        db.ApsSnapshots.Add(new ApsSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, CorrelationId = correlationId, DataSource = Source,
+            AidAlgorithm = "OpenAps", Timestamp = now, WriterGrantId = writer,
+        });
+        db.PumpSnapshots.Add(new PumpSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenant, CorrelationId = correlationId, DataSource = Source,
+            Timestamp = now, WriterGrantId = writer,
+        });
+        await db.SaveChangesAsync();
+        return correlationId;
+    }
+
+    [Fact]
+    public async Task AWritersPurgeDeletesOnlyTheRowsItsGrantsWroteUnderAHandleAnotherWriterShares()
+    {
+        var tenant = await InsertTenantAsync();
+        Guid writer = Guid.NewGuid(), sharer = Guid.NewGuid();
+        var written = await SeedWrittenAsync(tenant, writer);
+        var shared = await SeedWrittenAsync(tenant, sharer);
+        var unwritten = await SeedWrittenAsync(tenant, writer: null);
+
+        var result = await Repository(tenant).SoftDeleteAsync(RecordSelector.ForWriters([writer]), CancellationToken.None);
+
+        result.DeletedCounts.Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [SourceDataTypes.Boluses] = 1,
+            [SourceDataTypes.DeviceStatus] = 2,
+            [SourceDataTypes.StateSpans] = 1,
+            [SourceDataTypes.Profiles] = 1,
+        });
+        (await ServedStatusesAsync(tenant)).Should().BeEquivalentTo([shared, unwritten]);
+        await using var db = Context(tenant);
+        (await db.Boluses.IgnoreQueryFilters().Where(b => b.DeletedAt != null).Select(b => b.WriterGrantId).ToListAsync())
+            .Should().Equal(writer);
+        (await db.StateSpans.IgnoreQueryFilters().Where(s => s.DeletedAt != null).Select(s => s.WriterGrantId).ToListAsync())
+            .Should().Equal(writer);
+        (await db.TherapySettings.IgnoreQueryFilters().Where(t => t.DeletedAt != null).Select(t => t.WriterGrantId).ToListAsync())
+            .Should().Equal(writer);
+        var extras = await db.DeviceStatusExtras.IgnoreQueryFilters().ToDictionaryAsync(e => e.CorrelationId);
+        extras[written].DeletedAt.Should().NotBeNull("its writer's purge leaves the status with no live snapshot");
+        db.Entry(extras[written]).Property<bool>("DeletedByUser").CurrentValue.Should().BeTrue();
+        extras[shared].DeletedAt.Should().BeNull();
+        extras[unwritten].DeletedAt.Should().BeNull();
+        var bolus = await db.Boluses.IgnoreQueryFilters().SingleAsync(b => b.WriterGrantId == writer);
+        db.Entry(bolus).Property<bool>("DeletedByUser").CurrentValue.Should().BeTrue(
+            "a user's delete holds the record against a re-upload");
+        (await db.MutationAuditLog.Where(a => a.Action == "bulk_delete").Select(a => a.ChangesJson).ToListAsync())
+            .Should().NotBeEmpty().And.OnlyContain(json => json!.Contains($"writer_grant_id={writer}"));
+    }
+
+    [Fact]
+    public async Task AWritersReleaseLiftsOnlyTheTombstonesOfItsGrants()
+    {
+        var tenant = await InsertTenantAsync();
+        Guid writer = Guid.NewGuid(), sharer = Guid.NewGuid();
+        var written = await SeedWrittenAsync(tenant, writer);
+        var shared = await SeedWrittenAsync(tenant, sharer);
+        await Repository(tenant).SoftDeleteAsync(RecordSelector.ForWriters([writer, sharer]), CancellationToken.None);
+
+        await Repository(tenant).AllowReimportAsync(RecordSelector.ForWriters([writer]), CancellationToken.None);
+
+        await using var db = Context(tenant);
+        bool HeldAgainstReimport(object entity) => (bool)db.Entry(entity).Property("DeletedByUser").CurrentValue!;
+        var boluses = await db.Boluses.IgnoreQueryFilters().ToDictionaryAsync(b => b.WriterGrantId!.Value);
+        boluses.Values.Should().OnlyContain(b => b.DeletedAt != null, "the release leaves the rows deleted");
+        HeldAgainstReimport(boluses[writer]).Should().BeFalse();
+        HeldAgainstReimport(boluses[sharer]).Should().BeTrue("another writer's tombstone under the same handle stays");
+        var extras = await db.DeviceStatusExtras.IgnoreQueryFilters().ToDictionaryAsync(e => e.CorrelationId);
+        HeldAgainstReimport(extras[written]).Should().BeFalse();
+        HeldAgainstReimport(extras[shared]).Should().BeTrue();
     }
 
     private sealed class UserAuditContext : IAuditContext

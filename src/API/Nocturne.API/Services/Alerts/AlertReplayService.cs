@@ -20,6 +20,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
+    IDndWindowRepository dndWindowRepository,
     ISensorGlucoseRepository glucoseRepository,
     ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
@@ -201,7 +202,7 @@ internal sealed class AlertReplayService(
         // do_not_disturb leaf's ActiveDoNotDisturb snapshot re-source from these windows per
         // tick. Scheduled DND is not reconstructible historically (the schedule row keeps no
         // change history), so — as before D5 — replay considers windows only.
-        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(windowEnd, ct);
+        var dndWindows = await dndWindowRepository.GetReceivedByAsync(windowEnd, ct);
 
         // Per-tick fact snapshots (site age, IOB, temp basal rate, etc.). Keyed by snake_case
         // fact name; same compression as the leaf log — emit baseline + on rounded-value flip.

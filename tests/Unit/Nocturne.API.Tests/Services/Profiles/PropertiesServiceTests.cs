@@ -2,11 +2,13 @@ using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Services.BolusWizard;
 using Nocturne.Core.Contracts.Devices;
@@ -94,7 +96,7 @@ public class PropertiesServiceTests
     }
 
     [Theory]
-    [InlineData(59, "ok")]
+    [InlineData(59, "current")]
     [InlineData(60, "warn")]
     [InlineData(74, "warn")]
     [InlineData(75, "urgent")]
@@ -112,6 +114,77 @@ public class PropertiesServiceTests
         dbsize["size"].Should().Be(percent * mib, "the size is the data and the indexes together");
         dbsize["percentage"].Should().Be(percent);
         dbsize["status"].Should().Be(status);
+    }
+
+    [Theory]
+    [InlineData(59, 0)]
+    [InlineData(60, 1)]
+    [InlineData(75, 2)]
+    public async Task DbSize_CarriesNightscoutsFieldsInMiB(int percent, int level)
+    {
+        const long mib = 1024 * 1024;
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = percent * mib / 2, IndexSize = percent * mib / 2 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("dataPercentage").GetInt32().Should().Be(percent);
+        json.GetProperty("totalDataSize").GetDouble().Should().Be(percent);
+        json.GetProperty("notificationLevel").GetInt32().Should().Be(level);
+        json.GetProperty("details").GetProperty("dataSize").GetDouble().Should().Be(percent);
+        json.GetProperty("details").GetProperty("maxSize").GetDouble().Should().Be(100);
+        json.GetProperty("display").GetString().Should().Be($"{percent}%");
+    }
+
+    [Theory]
+    [InlineData(2048, 1228.5, 1, "warn")]
+    [InlineData(2048, 1227.5, 0, "current")]
+    [InlineData(2047, 1534.5, 1, "warn")]
+    [InlineData(2047, 1535.0, 2, "urgent")]
+    public async Task DbSize_ComparesMiBAgainstTheFlooredThreshold(int maxMiB, double usedMiB, int level, string status)
+    {
+        var service = ServiceWithBudget(maxMiB);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = (long)(usedMiB * 1024 * 1024) } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("notificationLevel").GetInt32().Should().Be(level);
+        json.GetProperty("status").GetString().Should().Be(status);
+    }
+
+    [Fact]
+    public async Task DbSize_RoundsDetailsDataSizeTiesUpLikeToFixed()
+    {
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = 131_072 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("details").GetProperty("dataSize").GetDouble().Should().Be(0.13);
+    }
+
+    [Fact]
+    public async Task DbSize_RoundsDetailsToTwoDecimalsAndLeavesTotalDataSizeExact()
+    {
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = 1_000_000 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var json = JsonSerializer.SerializeToElement(result["dbsize"]);
+        json.GetProperty("totalDataSize").GetDouble().Should().BeApproximately(1_000_000 / 1048576.0, 1e-12);
+        json.GetProperty("details").GetProperty("dataSize").GetDouble().Should().Be(0.95);
     }
 
     [Fact]
@@ -388,12 +461,11 @@ public class PropertiesServiceTests
             new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 60 },
             new() { Type = "sgv", Mills = now - 10 * 60 * 1000, Mgdl = 80 },
         };
-        var ar2Service = new Mock<IAr2Service>();
         var service = new PropertiesService(
             _mockDDataService.Object,
             _mockLogger.Object,
             TestIobCobReader.Empty(),
-            ar2Service.Object,
+            new Ar2Service(NullLogger<Ar2Service>.Instance),
             _mockDeviceAgeService.Object,
             _therapySettings.Object,
             _sensitivity.Object,
@@ -416,8 +488,9 @@ public class PropertiesServiceTests
         Assert.False(bgnow.TryGetProperty("mean", out _));
         Assert.False(bgnow.TryGetProperty("mills", out _));
         Assert.False(doc.RootElement.TryGetProperty("delta", out _));
-        Assert.False(doc.RootElement.TryGetProperty("ar2", out _));
-        ar2Service.VerifyNoOtherCalls();
+        var forecast = doc.RootElement.GetProperty("ar2").GetProperty("forecast");
+        Assert.Equal(0, forecast.GetProperty("predicted").GetArrayLength());
+        Assert.Equal(0, forecast.GetProperty("avgLoss").GetDouble());
     }
 
     [Fact]
@@ -1333,7 +1406,7 @@ public class PropertiesServiceTests
     }
 
     [Fact]
-    public async Task GetAllPropertiesAsync_OmitsUpbat_WhenNoUploaderStatusWithinThirtyMinutes()
+    public async Task GetAllPropertiesAsync_UpbatIsUnknown_WhenNoUploaderStatusWithinThirtyMinutes()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var ddata = CreateTestDData();
@@ -1353,7 +1426,10 @@ public class PropertiesServiceTests
 
         var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
 
-        Assert.False(result.ContainsKey("upbat"));
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        Assert.Equal("?%", upbat["display"]);
+        Assert.Empty(Assert.IsType<Dictionary<string, object>>(upbat["devices"]));
+        Assert.False(upbat.ContainsKey("level"));
     }
 
     [Fact]
@@ -1394,6 +1470,63 @@ public class PropertiesServiceTests
         Assert.NotNull(result);
         // Should still have runtime state even with empty data
         Assert.True(result.ContainsKey("runtimestate"));
+    }
+
+    private async Task<JsonElement> GetAllAsJsonAsync(DData ddata)
+    {
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        return JsonDocument.Parse(JsonSerializer.Serialize(result, NightscoutJsonOptions.Create())).RootElement.Clone();
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_WithNoReadings_SendsFourEmptyBucketsWithNoWindow()
+    {
+        var root = await GetAllAsJsonAsync(new DData());
+
+        Assert.Empty(root.GetProperty("bgnow").EnumerateObject());
+        var buckets = root.GetProperty("buckets").EnumerateArray().ToList();
+        Assert.Equal([0, 1, 2, 3], buckets.Select(b => b.GetProperty("index").GetInt32()));
+        Assert.All(buckets, bucket =>
+        {
+            Assert.Equal(JsonValueKind.Null, bucket.GetProperty("fromMills").ValueKind);
+            Assert.Equal(JsonValueKind.Null, bucket.GetProperty("toMills").ValueKind);
+            Assert.True(bucket.GetProperty("isEmpty").GetBoolean());
+            Assert.Equal(0, bucket.GetProperty("sgvs").GetArrayLength());
+        });
+        Assert.Equal("loaded", root.GetProperty("runtimestate").GetProperty("state").GetString());
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_BucketsHoldEachFiveMinuteWindowNewestFirst()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var five = 5 * 60 * 1000;
+        var root = await GetAllAsJsonAsync(new DData
+        {
+            Sgvs =
+            [
+                new() { Type = "sgv", Mills = now, Mgdl = 120, Direction = "Flat" },
+                new() { Type = "sgv", Mills = now - five, Mgdl = 110 },
+                new() { Type = "sgv", Mills = now - 2 * five, Mgdl = 100 },
+            ],
+        });
+
+        var buckets = root.GetProperty("buckets").EnumerateArray().ToList();
+        Assert.Equal(4, buckets.Count);
+        Assert.Equal([120d, 110d, 100d], buckets.Take(3).Select(b => b.GetProperty("mean").GetDouble()));
+        Assert.Equal(now - five / 2, buckets[0].GetProperty("fromMills").GetInt64());
+        Assert.Equal(buckets[0].GetProperty("fromMills").GetInt64() + five, buckets[0].GetProperty("toMills").GetInt64());
+        Assert.Equal(buckets[1].GetProperty("toMills").GetInt64(), buckets[0].GetProperty("fromMills").GetInt64());
+        Assert.True(buckets[3].GetProperty("isEmpty").GetBoolean());
+        Assert.False(buckets[0].TryGetProperty("isEmpty", out _));
+        Assert.Equal(120, buckets[0].GetProperty("sgvs")[0].GetProperty("scaled").GetDouble());
+        Assert.Equal(110, root.GetProperty("delta").GetProperty("previous").GetProperty("sgvs")[0].GetProperty("scaled").GetDouble());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("direction").GetProperty("display").ValueKind);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -55,11 +56,11 @@ public interface ICalibrationRepository : ILegacyKeyedRepository<Calibration>
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete all <see cref="Calibration"/> records matching the given data source.
+    /// Soft-deletes every <see cref="Calibration"/> record <paramref name="selector"/> names, under its
+    /// <see cref="RecordSelector.Scope"/>.
     /// </summary>
-    /// <param name="source">Data source identifier (e.g., connector name).</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
+    Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default);
 
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>

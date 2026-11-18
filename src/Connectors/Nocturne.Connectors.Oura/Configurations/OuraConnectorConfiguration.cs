@@ -14,6 +14,7 @@ namespace Nocturne.Connectors.Oura.Configurations;
     "Import sleep, heart rate and steps from an Oura data export", "Oura",
     SupportsHistoricalSync = false,
     SupportsManualSync = false,
+    IsImport = true,
     SupportedDataTypes = [SyncDataType.Sleep, SyncDataType.HeartRate, SyncDataType.Steps],
     DocumentationUrl = UrlConstants.External.DocsOura)]
 public sealed class OuraConnectorConfiguration : BaseConnectorConfiguration

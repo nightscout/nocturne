@@ -1040,6 +1040,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 ? openAps.Enacted.Smb
                 : openAps.Enacted?.Units,
             AidVersion = openAps.Version,
+            AdditionalProperties = UploadedExtras.OfOpenAps(openAps),
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
         snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
@@ -1101,9 +1102,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             Clock = ds.Pump.Clock,
             Iob = ds.Pump.Iob?.Iob,
             BolusIob = ds.Pump.Iob?.BolusIob,
-            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
-                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
-                : null,
+            AdditionalProperties = UploadedExtras.OfPump(ds.Pump),
         };
     }
 

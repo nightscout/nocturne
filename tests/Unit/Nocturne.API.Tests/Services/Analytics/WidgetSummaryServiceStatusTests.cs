@@ -1,4 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -168,6 +169,7 @@ public class WidgetSummaryServiceStatusTests
         return new WidgetSummaryService(
             entries.Object,
             TestIobCobReader.Empty(),
+            InsulinDeliveryReaders.Over(),
             Mock.Of<IApsSnapshotRepository>(),
             trackers.Object,
             Mock.Of<INotificationV1Service>(),

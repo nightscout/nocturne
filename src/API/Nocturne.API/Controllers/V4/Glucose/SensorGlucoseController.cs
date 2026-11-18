@@ -56,8 +56,8 @@ public class SensorGlucoseController(
     /// <summary>
     /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base
     /// list surface: when set, results are that registered device's raw readings (canonical stream selection is
-    /// bypassed); when unset, the caller sees every stored reading. Pagination totals match the base
-    /// device/source behaviour (the count is unscoped by the device filters).
+    /// bypassed); when unset, the caller sees every stored reading. Pagination totals count the
+    /// records the same filters match.
     /// </summary>
     /// <remarks>
     /// The <c>patientDeviceId</c> query parameter is read directly from the request because the base list
@@ -86,7 +86,7 @@ public class SensorGlucoseController(
 
         var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending,
             afterTimestamp: null, afterId: null, patientDeviceId: patientDeviceId, ct: ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, ct));
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, device, source, patientDeviceId, ct: ct));
         return Ok(new PaginatedResponse<SensorGlucose> { Data = data, Pagination = pagination });
     }
 

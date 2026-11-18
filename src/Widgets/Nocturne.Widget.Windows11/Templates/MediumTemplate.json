@@ -79,7 +79,7 @@
                         },
                         {
                             "type": "TextBlock",
-                            "text": "${iob}U",
+                            "text": "${iob}",
                             "size": "Medium",
                             "weight": "Bolder",
                             "spacing": "None"
@@ -98,7 +98,7 @@
                         },
                         {
                             "type": "TextBlock",
-                            "text": "${cob}g",
+                            "text": "${cob}",
                             "size": "Medium",
                             "weight": "Bolder",
                             "spacing": "None"

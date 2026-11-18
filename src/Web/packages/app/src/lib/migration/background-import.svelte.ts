@@ -2,7 +2,7 @@ import { MigrationJobState } from "#lib/api/index.js";
 import type { MigrationJobStatus } from "#lib/api/index.js";
 import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
 import { fresh } from "#lib/api/fresh-query.js";
-import { errorStatus } from "#lib/forms/submit-error.js";
+import { followStatus } from "#lib/api/follow-status.js";
 
 // localStorage, so the app finds the import the setup wizard or the settings page started in
 // another tab. No import to watch costs the app no request.
@@ -12,7 +12,6 @@ const WATCHED_IMPORT_KEY = "nocturne.import.watched-job";
 const WATCHED_IMPORT_EVENT = "nocturne:import-watched";
 
 const POLL_INTERVAL_MS = 5000;
-const MAX_CONSECUTIVE_FAILURES = 5;
 
 type WatchedImport = {
   jobId: string;
@@ -101,53 +100,26 @@ export function createImportWatcher(options: {
   function follow(): () => void {
     const watched = readWatchedImport();
     if (!watched) return () => {};
-
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let failures = 0;
     acknowledged = watched.acknowledged;
 
     function stopWatching() {
-      active = false;
       status = undefined;
       writeWatchedImport(undefined);
     }
 
-    async function poll() {
-      // A hidden tab shows no one the progress, and an import can run for hours.
-      if (globalThis.document?.visibilityState === "hidden") {
-        timer = setTimeout(poll, POLL_INTERVAL_MS);
-        return;
-      }
-
-      try {
-        const latest = await fresh(migrationRemote.getStatus(watched!.jobId));
-        if (!active) return;
-        failures = 0;
-        if (isLive(latest.state)) {
-          status = latest;
-        } else {
-          stopWatching();
-          if (latest.state !== undefined) options.ended?.(latest.state, latest);
-          return;
-        }
-      } catch (err) {
-        if (!active) return;
-        // 403 and 404: this session cannot see the job, so it is another tenant's or account's.
-        const refused = [403, 404].includes(errorStatus(err) ?? 0);
-        if (refused || ++failures >= MAX_CONSECUTIVE_FAILURES) {
-          stopWatching();
-          return;
-        }
-      }
-      timer = setTimeout(poll, POLL_INTERVAL_MS);
-    }
-
-    void poll();
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
+    return followStatus({
+      read: () => fresh(migrationRemote.getStatus(watched.jobId)),
+      isLive: (latest) => isLive(latest.state),
+      update: (latest) => {
+        status = latest;
+      },
+      ended: (latest) => {
+        stopWatching();
+        if (latest.state !== undefined) options.ended?.(latest.state, latest);
+      },
+      gone: stopWatching,
+      intervalMs: POLL_INTERVAL_MS,
+    });
   }
 
   return {

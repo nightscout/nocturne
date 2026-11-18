@@ -216,3 +216,38 @@ describe("glucose units on a device shared across tenants", () => {
     expect(writes).toContainEqual(expect.stringMatching(/^nocturne-prefs=.+;domain=\.nocturne\.run$/));
   });
 });
+
+describe("range palette class", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.cookie = "nocturne-prefs=;path=/;max-age=0";
+    document.cookie = "nocturne-glucose-units=;path=/;max-age=0";
+    document.documentElement.classList.remove("range-palette-clarity");
+  });
+
+  it("keeps a class the server set while this device's cookie holds no palette", async () => {
+    document.documentElement.classList.add("range-palette-clarity");
+    document.cookie = `nocturne-prefs=${encodeURIComponent(JSON.stringify({ colorScheme: "dark" }))};path=/`;
+
+    await loadStore();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(document.documentElement.classList.contains("range-palette-clarity")).toBe(true);
+  });
+
+  it("draws a share with the owner's palette", async () => {
+    const store = await loadStore();
+
+    store.presentOwnerPreferences({ glucoseRangePalette: "clarity" });
+
+    expect(document.documentElement.classList.contains("range-palette-clarity")).toBe(true);
+  });
+
+  it("draws a guest with the tenant's palette", async () => {
+    const store = await loadStore();
+
+    store.applyTenantPresentation({ glucoseRangePalette: "clarity" });
+
+    expect(document.documentElement.classList.contains("range-palette-clarity")).toBe(true);
+  });
+});

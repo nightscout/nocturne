@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
+  import {
+    formatMediumDateTime,
+    formatShortDate,
+    relativeAge,
+    time,
+  } from "#lib/utils/formatting.js";
   import StatusPill from "./StatusPill.svelte";
   import type {
     BasalPillData,
@@ -13,11 +19,37 @@
 
   let { data }: BasalPillProps = $props();
 
+  const now = new Now();
+
+  const doseTime = (mills: number | undefined) =>
+    mills != null &&
+    new Date(mills).toDateString() !== new Date(now.current).toDateString()
+      ? `${formatShortDate(mills)}, ${time(mills)}`
+      : time(mills);
+
   /** Build info items for the popover */
   const info = $derived.by((): PillInfoItem[] => {
     if (!data) return [];
 
     const items: PillInfoItem[] = [];
+
+    if (data.injection) {
+      items.push({ label: "Last dose", value: data.display });
+      if (data.injection.insulinName) {
+        items.push({ label: "Insulin", value: data.injection.insulinName });
+      }
+      items.push({
+        label: "Dose time",
+        value: doseTime(data.injection.mills),
+      });
+      if (data.injection.estimatedRate != null) {
+        items.push({
+          label: "Estimated rate",
+          value: `${data.injection.estimatedRate} U/h`,
+        });
+      }
+      return items;
+    }
 
     // Current basal info
     items.push({
@@ -69,7 +101,7 @@
       // Show scheduled basal for reference
       items.push({
         label: "Basal profile value",
-        value: `${data.scheduledBasal.toFixed(3)} U`,
+        value: `${data.scheduledBasal.toFixed(3)} U/h`,
       });
     }
 
@@ -82,7 +114,11 @@
   });
 
   const level = $derived<AlertLevel>(data?.level ?? "none");
-  const display = $derived(data?.display ?? "---U");
+  const display = $derived(
+    data?.injection
+      ? `${data.display} · ${relativeAge(data.injection.mills, { now: now.current })}`
+      : (data?.display ?? "---U/h")
+  );
   const isStale = $derived(data?.isStale ?? false);
 </script>
 

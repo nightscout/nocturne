@@ -11,6 +11,7 @@ internal static class PropertyDDataSources
     private static readonly Dictionary<string, DDataCollections> Sources = new()
     {
         ["bgnow"] = DDataCollections.Sgvs,
+        ["buckets"] = DDataCollections.Sgvs,
         ["delta"] = DDataCollections.Sgvs,
         ["direction"] = DDataCollections.Sgvs,
         ["rawbg"] = DDataCollections.Sgvs,

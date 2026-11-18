@@ -33,6 +33,10 @@ vi.mock("../auth.remote", () => ({
 vi.mock("#lib/api/generated/index.js", () => ({
   getAuthStatus: () => remoteQuery(() => ({ allowAccessRequests: true })),
 }));
+vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
+  accessRequestOptions: vi.fn(),
+  accessRequestComplete: vi.fn(),
+}));
 vi.mock("#lib/components/auth/LoginForm.svelte", () => import("#lib/test-stubs/Empty.test-stub.svelte"));
 vi.mock("#lib/components/auth/GuestCodeForm.svelte", () => import("#lib/test-stubs/Empty.test-stub.svelte"));
 vi.mock("water-ui", async (importOriginal) => ({
@@ -48,38 +52,19 @@ function loginWith(returnUrl: string) {
 }
 
 beforeEach(() => {
-  sessionStorage.clear();
   state.isAuthenticated = false;
   state.goto.mockClear();
 });
 
 describe("Login page", () => {
-  it("sends a membership request to sign-in with the page's own destination and a flow id", async () => {
+  it("opens the membership request dialog in place, without leaving for sign-in", async () => {
     loginWith("/calendar");
 
     await page.getByTestId("request-membership-link").click();
-    await page.getByRole("textbox").fill("hello");
-    await page.getByRole("button", { name: "Continue to sign up" }).click();
 
-    await vi.waitFor(() => expect(state.goto).toHaveBeenCalledOnce());
-    const target = new URL(String(state.goto.mock.calls[0][0]), "http://sam.localhost");
-    expect(target.searchParams.get("returnUrl")).toMatch(/^\/calendar\?membershipRequest=[0-9a-f-]{36}$/);
-  });
-
-  it("refuses a destination that is not a same-origin path", async () => {
-    for (const returnUrl of ["https://evil.test/x", "//evil.test/x", "javascript:alert(1)"]) {
-      state.goto.mockClear();
-      const login = loginWith(returnUrl);
-
-      await page.getByTestId("request-membership-link").click();
-      await page.getByRole("textbox").fill("hello");
-      await page.getByRole("button", { name: "Continue to sign up" }).click();
-
-      await vi.waitFor(() => expect(state.goto).toHaveBeenCalledOnce());
-      const target = new URL(String(state.goto.mock.calls[0][0]), "http://sam.localhost");
-      expect(target.searchParams.get("returnUrl")).toMatch(/^\/\?membershipRequest=/);
-      login.unmount();
-    }
+    await expect.element(page.getByTestId("request-membership-dialog")).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Send request" })).toBeInTheDocument();
+    expect(state.goto).not.toHaveBeenCalled();
   });
 
   it("sends a visitor who is already signed in home rather than off-site", async () => {
