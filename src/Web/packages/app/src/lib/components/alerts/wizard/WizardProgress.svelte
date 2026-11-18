@@ -89,18 +89,20 @@
     </div>
   </div>
 
+  <!-- A step is a button once it can be opened. Both forms are one box (the button's height and
+       gap, its padding cancelled by the margin), so a step that changes form moves nothing. -->
   <ol class="hidden items-center gap-2 @lg:flex">
     {#each steps as step, index (step.id)}
       {@const isCurrent = index === current}
       <li class="flex min-w-0 items-center gap-2 {index < steps.length - 1 ? 'flex-1' : ''}">
         {#if index <= reached && !isCurrent}
-          <Button variant="ghost" size="sm" class="-mx-2" onclick={() => onJump(index)}>
+          <Button variant="ghost" size="sm" class="-mx-3" onclick={() => onJump(index)}>
             {@render marker(index)}
             {step.label}
           </Button>
         {:else}
           <span
-            class="flex min-w-0 items-center gap-2 text-sm transition-colors duration-200 {isCurrent
+            class="flex h-8 min-w-0 items-center gap-1.5 text-sm transition-colors duration-200 {isCurrent
               ? 'font-medium text-foreground'
               : 'text-muted-foreground'}"
             aria-current={isCurrent ? "step" : undefined}
