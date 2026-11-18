@@ -13,10 +13,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for managing insulin bolus records.
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+/// Insulin bolus doses. List, read, create (one or in bulk), update and delete boluses. List
+/// deleted boluses and restore them. Delete a bolus by its data source and sync identifier.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+///
 /// On update, immutable fields (<see cref="Bolus.BolusType"/>, <see cref="Bolus.Kind"/>,
 /// <see cref="V4RecordBase.LegacyId"/>, <see cref="V4RecordBase.CreatedAt"/>, <see cref="Bolus.PumpRecordId"/>,
 /// <see cref="Bolus.DeviceId"/>, and <see cref="V4RecordBase.AdditionalProperties"/>) are preserved from the
@@ -29,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="UpdateBolusRequest"/>
 /// <seealso cref="PatientDeviceAttribution"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Boluses")]
 [Tags("Treatments")]
 [Route("api/v4/insulin/boluses")]
 [RequireScope(Scope.TreatmentsRead)]

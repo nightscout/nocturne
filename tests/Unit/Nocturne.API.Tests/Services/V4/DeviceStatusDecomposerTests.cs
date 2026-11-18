@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.V4;
@@ -337,6 +338,84 @@ public class DeviceStatusDecomposerTests : IDisposable
         var uploader = result.CreatedRecords[0].Should().BeOfType<V4Models.UploaderSnapshot>().Subject;
         uploader.Battery.Should().Be(75);
         uploader.IsCharging.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The document xDrip+ posts with "Upload Dexcom battery" on: <c>battery</c> is a sentence,
+    /// and the readings are keys the uploader model does not type.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_XdripTransmitterStatus_KeepsItsReadings()
+    {
+        var json = """
+            {
+                "device": "G6 Transmitter",
+                "uploader": {
+                    "days": 52,
+                    "daysEstimate": "52 / 100",
+                    "status": "OK",
+                    "voltagea": 296,
+                    "voltageb": 281,
+                    "resistance": 710,
+                    "resistance_status": "GOOD",
+                    "temperature": 31,
+                    "battery": "52 days (voltage: 296/281)",
+                    "lastQueried": 1700000000000,
+                    "type": "DEXCOM_TRANSMITTER"
+                }
+            }
+            """;
+        var ds = NightscoutJsonBody.ReadObjects<DeviceStatus>(JsonDocument.Parse(json).RootElement)!.Single();
+        ds.Mills = 1700000000000;
+
+        await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var uploaderRepo = new UploaderSnapshotRepository(
+            new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
+            NullLogger<UploaderSnapshotRepository>.Instance);
+        var stored = await uploaderRepo.GetLatestOfTypeAsync(V4Models.TransmitterStatus.UploaderType, asOf: null);
+
+        stored!.Battery.Should().BeNull();
+        V4Models.TransmitterStatus.From(stored).Should().BeEquivalentTo(new V4Models.TransmitterStatus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Device = "G6 Transmitter",
+            VoltageA = 296,
+            VoltageB = 281,
+            Resistance = 710,
+            Days = 52,
+            Status = "OK",
+            Temperature = 31,
+        });
+    }
+
+    [Fact]
+    public async Task GetLatestOfTypeAsync_SkipsNewerUploadersOfAnotherType()
+    {
+        var transmitter = new DeviceStatus
+        {
+            Mills = 1700000000000,
+            Device = "G6 Transmitter",
+            Uploader = new UploaderStatus
+            {
+                Type = V4Models.TransmitterStatus.UploaderType,
+                ExtensionData = new() { ["voltagea"] = JsonSerializer.SerializeToElement(288) },
+            },
+        };
+        var phone = new DeviceStatus
+        {
+            Mills = 1700000600000,
+            Device = "Google Pixel 8",
+            Uploader = new UploaderStatus { Battery = 64, Type = "PHONE" },
+        };
+        await _decomposer.DecomposeBatchAsync([transmitter, phone], null, WriteOrigin.Live);
+
+        var uploaderRepo = new UploaderSnapshotRepository(
+            new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
+            NullLogger<UploaderSnapshotRepository>.Instance);
+        var stored = await uploaderRepo.GetLatestOfTypeAsync(V4Models.TransmitterStatus.UploaderType, asOf: null);
+
+        V4Models.TransmitterStatus.From(stored)!.VoltageA.Should().Be(288);
     }
 
     #endregion

@@ -243,6 +243,25 @@ public class DeviceStatusProjectionServiceTests
     #region ProjectFromSnapshots — Uploader
 
     [Fact]
+    public void ProjectFromSnapshots_ReturnsTheUntypedKeysAnUploaderSent()
+    {
+        var uploader = CreateUploaderSnapshot();
+        uploader.Type = TransmitterStatus.UploaderType;
+        uploader.AdditionalProperties = new()
+        {
+            ["voltagea"] = JsonSerializer.SerializeToElement(296),
+            ["status"] = JsonSerializer.SerializeToElement("OK"),
+        };
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(null, null, uploader, null, null);
+
+        var json = JsonSerializer.SerializeToElement(result.Uploader);
+        json.GetProperty("type").GetString().Should().Be("DEXCOM_TRANSMITTER");
+        json.GetProperty("voltagea").GetInt32().Should().Be(296);
+        json.GetProperty("status").GetString().Should().Be("OK");
+    }
+
+    [Fact]
     public void ProjectAsync_WithUploaderSnapshot_ReassemblesUploaderObject()
     {
         // Arrange

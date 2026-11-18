@@ -105,6 +105,14 @@ export function leafFactBinding(
         factKey: "uploader_battery_percent",
         format: (v) => `${Math.round(v)}%`,
       };
+    case "transmitter_battery": {
+      const metric = node.transmitter_battery?.metric;
+      if (!metric) return null;
+      return {
+        factKey: `transmitter_${metric}`,
+        format: (v) => (metric === "days" ? `${Math.round(v)}d` : `${Math.round(v)}`),
+      };
+    }
     case "temp_basal":
       // Only the rate metric has a current-value snapshot; percent-of-scheduled
       // would need a separate fact.

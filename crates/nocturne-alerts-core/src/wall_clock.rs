@@ -42,6 +42,7 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
         | ConditionKind::PumpBattery
         | ConditionKind::TempBasal
         | ConditionKind::UploaderBattery
+        | ConditionKind::TransmitterBattery
         | ConditionKind::SensitivityRatio
         | ConditionKind::GlucoseBucket
         | ConditionKind::DayOfWeek

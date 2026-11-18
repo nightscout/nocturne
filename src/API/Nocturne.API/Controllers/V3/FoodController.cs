@@ -14,9 +14,12 @@ using Nocturne.Core.Contracts.Treatments;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Food controller that provides full V3 API compatibility with Nightscout food endpoints.
-/// Implements the /api/v3/food endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout food: food records, with paging, field selection, sorting and filtering. A client can list, read,
+/// create, update and delete food records, and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout food endpoints, at /api/v3/food.
+/// </remarks>
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IFoodService"/>
 /// <seealso cref="Food"/>

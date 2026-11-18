@@ -13,7 +13,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for meal matching operations.
+/// Suggested matches between imported food entries and carb intake records. Accept a suggested match to link
+/// the food entry to a treatment, or dismiss it.
 /// </summary>
 /// <remarks>
 /// Meal matching surfaces suggested pairings between raw connector food entries

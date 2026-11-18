@@ -1,12 +1,11 @@
-Pre-computed data for dashboards, charts, and retrospective analysis.
+Data that the API computes for dashboards, charts and reports. The operations in this group read data that is stored elsewhere.
 
-Key endpoints:
+```resources Analytics
+```
 
-- **Chart Data** — Returns *everything* the glucose chart needs in a single call: readings, IOB/COB series, basal delivery, treatment markers, state spans, system events, and tracker markers. Prefer this over calling individual endpoints.
-- **Correlation** — Query across all V4 repositories by correlation ID to trace related records.
-- **Data Overview** — Year-level availability and day-level record counts for heatmap visualisation.
-- **Predictions** — Glucose forecasts from DeviceStatus sources (AAPS / Trio / Loop) or the OrefWasm engine.
-- **Retrospective** — Day-in-review snapshots combining IOB, COB, glucose, basal timelines, and insulin delivery at specific points in time.
-- **Statistics** — Aggregated statistics including glucose time-in-range, insulin delivery breakdowns, and AID system metrics.
-- **Summary** — Widget-friendly data designed for mobile widgets, watch faces, and other constrained displays.
-- **Analytics** — Transparency controls for analytics collection — view, configure, and opt out.
+## Good to know
+
+- To draw the glucose chart, start with [Chart Data](#nocturne/tag/chart-data). It returns the readings and everything drawn with them in one call.
+- For a widget or a watch face, use [Summary](#nocturne/tag/summary).
+- The API is the source of truth for calculations. A client displays these values and does not recompute them.
+- Requests over a long span of days are limited. An operation states its limit in its description.

@@ -10,7 +10,12 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Health;
 
+/// <summary>
+/// Data from an Oura ring. Import the data export archive of an Oura account. Importing an export
+/// again, or a newer one, updates the records already imported.
+/// </summary>
 [ApiController, Authorize, DenyDemoSubject, RequireScope(Scope.TenantSettings)]
+[Tags("Connectors")]
 [Route("api/v4/oura")]
 public class OuraController(OuraImportService imports) : ControllerBase
 {

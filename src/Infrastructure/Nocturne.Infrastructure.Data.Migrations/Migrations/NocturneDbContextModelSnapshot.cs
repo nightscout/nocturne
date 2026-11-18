@@ -9962,6 +9962,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_uploader_snapshots_tenant_timestamp_id")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Type", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_type_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_uploader_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_uploader_snapshots_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");

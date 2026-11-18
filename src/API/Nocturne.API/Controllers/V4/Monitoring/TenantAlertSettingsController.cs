@@ -12,12 +12,12 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Tenant-level alert configuration: Do not disturb (manual toggle with optional
-/// auto-expire and a recurring scheduled window). The schedule is interpreted in the
-/// patient's timezone (<see cref="Nocturne.Core.Models.V4.PatientRecord.Timezone"/>) — set there, not here.
-/// The row is created lazily on first access.
+/// Tenant-wide alert settings, including Do Not Disturb. Read the settings, and update the manual
+/// Do Not Disturb toggle and its recurring schedule. Scheduled times use the patient's timezone.
 /// </summary>
 /// <remarks>
+/// The schedule is interpreted in the patient's timezone (<see cref="Nocturne.Core.Models.V4.PatientRecord.Timezone"/>),
+/// which is set there, not here. The row is created lazily on first access.
 /// The request/response shape is unchanged, but manual DND is now backed by a
 /// <c>scope=all</c> row in <c>dnd_windows</c> (ADR 0004 D5) rather than columns on this row:
 /// the toggle creates/clears that window and <c>dndManual*</c> is computed from it. Scheduled
