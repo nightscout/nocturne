@@ -1,9 +1,10 @@
-Alerting, notifications, and flexible tracker management.
+Alerts, in-app notifications and trackers.
 
-- **Alert Rules** — CRUD for alert rules with nested schedules, escalation steps, and notification channels.
-- **Alerts** — Active alert state, history, and acknowledgement.
-- **Alert Invites** — Shareable invite links that grant others permission to receive your alerts.
-- **Alert Custom Sounds** — Upload, list, stream, and delete custom alert audio files.
-- **Tracker Alerts** — Alerts tied to tracker events (e.g. "site change overdue").
-- **Trackers** — Flexible tracker management for consumables, appointments, and reminders.
-- **Notifications** — In-app notification delivery and management.
+```resources Monitoring
+```
+
+## Good to know
+
+- Rules are evaluated on the server each time a glucose reading arrives. A client does not evaluate rules.
+- A tracker counts time since an event, or until one: a cannula change, a sensor expiry, an appointment.
+- An alert can also be pushed in real time. See **Real-time updates** in the guides.

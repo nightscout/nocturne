@@ -10,7 +10,11 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Platform;
 
+/// <summary>
+/// Community content contributions. Submit a contribution.
+/// </summary>
 [ApiController]
+[Tags("Platform")]
 [Authorize]
 [Route("api/v4/content")]
 public class ContentContributionsController(

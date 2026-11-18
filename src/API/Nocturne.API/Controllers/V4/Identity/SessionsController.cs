@@ -11,10 +11,13 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages the authenticated user's web login sessions. A session is one login/device —
-/// a refresh-token rotation chain sharing a single OIDC session ID — so revoking a
-/// session logs that device out everywhere its tokens are used.
+/// The web login sessions of the signed-in account. Each session is one login on one device. A
+/// caller can list sessions, revoke a session and revoke all other sessions. A revoked session
+/// cannot be renewed, and it ends when its current access token expires.
 /// </summary>
+/// <remarks>
+/// A session is a refresh-token rotation chain sharing a single OIDC session ID.
+/// </remarks>
 /// <seealso cref="IRefreshTokenService"/>
 [ApiController]
 [Tags("Identity")]

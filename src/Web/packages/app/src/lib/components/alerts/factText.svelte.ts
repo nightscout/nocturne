@@ -38,6 +38,8 @@ export function factLabel(kind: LeafKind): string {
       return "Pump battery";
     case "uploader_battery":
       return "Phone battery";
+    case "transmitter_battery":
+      return "Transmitter battery";
     case "loop_stale":
       return "Loop has stopped";
     case "loop_enaction_stale":
@@ -107,6 +109,8 @@ export function factDescription(kind: LeafKind): string {
       return "The battery level of the pump";
     case "uploader_battery":
       return "The battery level of the phone that uploads the data";
+    case "transmitter_battery":
+      return "The voltage, resistance or age of the CGM transmitter (xDrip+ only)";
     case "loop_stale":
       return "The loop did not run for a number of minutes";
     case "loop_enaction_stale":

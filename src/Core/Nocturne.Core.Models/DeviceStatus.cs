@@ -198,9 +198,11 @@ public class DeviceStatus : ProcessableDocumentBase
 public class UploaderStatus
 {
     /// <summary>
-    /// Battery percentage (0-100)
+    /// Battery percentage (0-100). xDrip+ sends a sentence here for a transmitter
+    /// ("52 days (voltage: 296/281)"), which reads as no percentage.
     /// </summary>
     [JsonPropertyName("battery")]
+    [JsonConverter(typeof(FlexibleNullableIntConverter))]
     public int? Battery { get; set; }
 
     [JsonPropertyName("batteryVoltage")]
@@ -221,6 +223,13 @@ public class UploaderStatus
 
     [JsonPropertyName("type")]
     public string? Type { get; set; }
+
+    /// <summary>
+    /// Keys the uploader sends beyond the typed ones, e.g. the readings xDrip+ reports for a
+    /// transmitter (<see cref="V4.TransmitterStatus"/>).
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpStatus

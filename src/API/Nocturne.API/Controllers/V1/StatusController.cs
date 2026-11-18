@@ -11,10 +11,13 @@ using IAuthorizationService = Nocturne.Core.Contracts.Identity.IAuthorizationSer
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Status controller that provides 1:1 compatibility with Nightscout status endpoint.
-/// Content-negotiates like Nightscout: HTML "STATUS OK" unless the Accept header prefers another format.
-/// For detailed JSON status, use the V4 status endpoint at /api/v4/status.
+/// Nightscout status. A client that accepts JSON, or any content type, receives the status as JSON.
+/// A client that asks only for HTML receives <c>STATUS OK</c> as HTML.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with Nightscout status endpoint. For detailed JSON status, use the V4 status
+/// endpoint at <c>/api/v4/status</c>.
+/// </remarks>
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="StatusResponse"/>
 [ApiController]
