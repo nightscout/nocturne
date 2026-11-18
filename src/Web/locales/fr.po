@@ -230,6 +230,7 @@ msgid "UrgentHigh"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
@@ -250,6 +251,7 @@ msgid "Low"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
@@ -779,6 +781,7 @@ msgstr ""
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/admin/SubjectEditDialog.svelte
+#: src/lib/components/alerts/wizard/CheckStep.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -827,7 +830,6 @@ msgstr ""
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Create"
 msgstr ""
@@ -846,7 +848,6 @@ msgstr ""
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/forms/FormActions.svelte
 #: src/lib/forms/FormGuard.test-harness.svelte
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
@@ -1064,6 +1065,7 @@ msgstr ""
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/trackers/ReservoirReportDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/(authenticated)/alerts/new/+page.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "Type"
 msgstr ""
@@ -1278,6 +1280,7 @@ msgstr ""
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/settings/ClientDevices.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
@@ -1864,6 +1867,7 @@ msgstr ""
 #: src/lib/components/connectors/AddConnectionDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/routes/(authenticated)/alerts/new/+page.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "<0/> Back"
 msgstr ""
@@ -2398,6 +2402,7 @@ msgid "Select a date range to re-sync specific data."
 msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
@@ -2411,6 +2416,7 @@ msgid "From"
 msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
@@ -4112,6 +4118,7 @@ msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/routes/(authenticated)/alerts/new/+page.svelte
 #: src/routes/(authenticated)/settings/+page.svelte
 msgid "Settings"
 msgstr ""
@@ -5633,6 +5640,7 @@ msgid "<0/> Try again"
 msgstr ""
 
 #: ../portal/src/routes/roadmap/+page.svelte
+#: src/lib/components/alerts/wizard/CheckStep.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -9229,6 +9237,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/engine/point-inspection.svelte.ts
+#: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "Delivery"
 msgstr ""
 
@@ -11276,6 +11285,7 @@ msgstr ""
 #~ msgid "<0/> Step Count Actogram"
 #~ msgstr ""
 
+#: src/lib/components/alerts/wizard/WizardProgress.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
@@ -13840,6 +13850,7 @@ msgid "Auto-resolve"
 msgstr ""
 
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "<0/> Replay"
 msgstr ""
 
@@ -13943,10 +13954,8 @@ msgstr ""
 #~ msgid "<0/> Do Not Disturb"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/alerts/+page.svelte
-#: src/routes/(authenticated)/alerts/+page.svelte
-msgid "<0/> New rule"
-msgstr ""
+#~ msgid "<0/> New rule"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "Rules enabled"
@@ -13973,13 +13982,11 @@ msgstr ""
 msgid "Alert rules"
 msgstr ""
 
-#: src/routes/(authenticated)/alerts/+page.svelte
-msgid "No alert rules yet"
-msgstr ""
+#~ msgid "No alert rules yet"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/alerts/+page.svelte
-msgid "Add a rule so Nocturne can notify you when glucose goes out of range."
-msgstr ""
+#~ msgid "Add a rule so Nocturne can notify you when glucose goes out of range."
+#~ msgstr ""
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
@@ -14082,19 +14089,17 @@ msgstr ""
 #~ msgid "No alert history yet."
 #~ msgstr ""
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "New alert"
 msgstr ""
 
-#. 0: isNew ? "New alert" \\: editor.name || "Alert"
+#. 0: editor.name || "Alert"
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "{0} · Nocturne"
 msgstr ""
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
-msgid "Define a new alert rule"
-msgstr ""
+#~ msgid "Define a new alert rule"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Edit alert rule"
@@ -23327,6 +23332,7 @@ msgstr ""
 msgid "Too little data"
 msgstr ""
 
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
@@ -26271,6 +26277,7 @@ msgid "Time not used: {0}."
 msgstr ""
 
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
@@ -27239,6 +27246,7 @@ msgid "This figure shows only when the loop reports that max IOB limited a dose.
 msgstr ""
 
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 msgid "# minute"
 msgid_plural "# minutes"
@@ -28196,6 +28204,7 @@ msgstr ""
 
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
 msgid "# hour"
 msgid_plural "# hours"
@@ -31348,6 +31357,7 @@ msgstr ""
 msgid "The timezone you chose earlier is already filled in."
 msgstr ""
 
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Urgent low"
 msgstr ""
@@ -31492,10 +31502,12 @@ msgstr ""
 msgid "Things to check"
 msgstr ""
 
+#: src/lib/components/alerts/wizard/CheckStep.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Send another test"
 msgstr ""
 
+#: src/lib/components/alerts/wizard/CheckStep.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Send a test alert"
 msgstr ""
@@ -36958,7 +36970,9 @@ msgid "Tracker age {0} {1}"
 msgstr ""
 
 #. 0: chip; 1: formatMinutes(minutes)
+#. 0: name; 1: minutesText(draft.waitMinutes)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "{0} for {1}"
 msgstr ""
 
@@ -37166,6 +37180,7 @@ msgid "Unacknowledged"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Falling fast"
 msgstr ""
 
@@ -37180,6 +37195,7 @@ msgid "Rising"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
+#: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Rising fast"
 msgstr ""
 
@@ -40619,4 +40635,515 @@ msgstr ""
 #. 0: opSymbol(p.operator); 1: formatDays(p.value ?? 0)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Transmitter age {0} {1}"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/+page.svelte
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "<0/> New alert"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "No alerts yet"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "Add an alert so Nocturne can notify you when glucose goes out of range."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Check"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Choose an alert type."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Add at least one place for the alert to go."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Enter a name."
+msgstr ""
+
+#. 0: name
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "{0} is on."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Could not create the alert. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Leave without creating this alert?"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "When does it alert?"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "How does it reach you?"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Check the alert"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "What is the alert for?"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "New alert · Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Close and go back to alerts"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "<0/> Create alert"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "Next <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/new/+page.svelte
+msgid "This alert and your other alerts, played against the glucose of that day. Nothing is sent."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Could not check the history. Try again."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Could not send the test alert. Try again."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Checking the alert against your recent data."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "This alert would have started # time"
+msgid_plural "This alert would have started # times"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "in the last # day."
+msgid_plural "in the last # days."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "The most recent time: <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Shown: <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "<0/> Do Not Disturb was on, so it would have stayed silent."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "and # earlier time"
+msgid_plural "and # earlier times"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Look at a different time"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "The vertical line shows when the alert would have started."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Replay this day"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "This alert would not have started in the last # day."
+msgid_plural "This alert would not have started in the last # days."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "There are no glucose readings in the last # day, so there is nothing to check the alert against."
+msgid_plural "There are no glucose readings in the last # days, so there is nothing to check the alert against."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Would it have alerted you?"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Does it reach you?"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Send a test alert to the places you chose. It is marked as a test."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "<0/> Test alert sent. Make sure that it arrived."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "Use the suggested name"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "<0/> The notification shows this name. <1/>"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Good to know. No action is necessary now."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Needs attention soon."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Needs action now. Fills the screen in Nocturne and also alerts during Do Not Disturb."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Also alert during Do Not Disturb"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Urgency"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Where it goes"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "The alert goes to each place in this list at the same time."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/DeliveryStep.svelte
+msgid "Nocturne cannot wake you with this. These alerts only show while Nocturne is open and the device is awake. To get alerts at night, or when Nocturne is closed, add a place such as Telegram, WhatsApp or email."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "At once"
+msgstr ""
+
+#. 0: minutesText(minutes)
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "After {0}"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Add the conditions for this alert. The alert starts when they are true."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when glucose is above"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when glucose is below"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when glucose increases this fast, or faster"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when glucose decreases this fast, or faster"
+msgstr ""
+
+#. 0: bgLabel()
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "{0} per minute"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when there are no readings for"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the forecast goes below"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "In the next"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the reservoir has this much insulin, or less"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the pump battery is at this level, or lower"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the phone battery is at this level, or lower"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the infusion site is this old, or older"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the sensor is this old, or older"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Alert when the loop has not run for more than"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "The alert starts with the first reading that matches."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "The alert starts only if glucose stays like this for the full time."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Wait before the alert starts"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "At other hours this alert does not start."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "The alert can start at any hour."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Only at certain hours"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/SettingsStep.svelte
+msgid "Ends the next day."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/WizardProgress.svelte
+msgid "Done:"
+msgstr ""
+
+#. 0: current + 1; 1: steps.length
+#: src/lib/components/alerts/wizard/WizardProgress.svelte
+msgid "Step {0} of {1}: <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/TypeStep.svelte
+msgid "Alert types"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/TypeStep.svelte
+msgid "<0/> More alert types"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/TypeStep.svelte
+msgid "More alert types"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Urgent low soon"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Pump reservoir low"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Pump battery low"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Site change due"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Sensor change due"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Loop not running"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Phone battery low"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Build your own"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Glucose is below a level that needs action now."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Glucose is below the level you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Glucose is above the level you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Glucose decreases faster than the rate you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Glucose increases faster than the rate you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The sensor sends no glucose readings."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The forecast shows an urgent low in the next minutes."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The pump has little insulin left."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The pump battery is almost empty."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The infusion site is older than the age you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The sensor is older than the age you set."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The loop has not run for some time."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The battery of the phone that uploads the data is almost empty."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Combine conditions with the rule builder."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Add at least one condition."
+msgstr ""
+
+#. 0: bg(MIN_GLUCOSE_MGDL); 1: bg(MAX_GLUCOSE_MGDL); 2: bgLabel()
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Enter a glucose level between {0} and {1} {2}."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Enter a rate above 0."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Enter 1 minute or more."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Enter a number above 0."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Enter a start time and an end time."
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "The start time and the end time must be different."
+msgstr ""
+
+#. 0: bg(leaf?.threshold?.value ?? 0); 1: bgLabel()
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Urgent low: below {0} {1}"
+msgstr ""
+
+#. 0: bg(leaf?.threshold?.value ?? 0); 1: bgLabel()
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Low: below {0} {1}"
+msgstr ""
+
+#. 0: bg(leaf?.threshold?.value ?? 0); 1: bgLabel()
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "High: above {0} {1}"
+msgstr ""
+
+#. 0: bg(leaf?.rate_of_change?.rate ?? 0); 1: bgLabel()
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Falling fast: {0} {1} per minute"
+msgstr ""
+
+#. 0: bg(leaf?.rate_of_change?.rate ?? 0); 1: bgLabel()
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Rising fast: {0} {1} per minute"
+msgstr ""
+
+#. 0: minutesText(leaf?.signal_loss?.timeout_minutes ?? 0)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "No readings for {0}"
+msgstr ""
+
+#. 0: bg(leaf?.predicted?.value ?? 0); 1: bgLabel(); 2: minutesText(leaf?.predicted?.within_minutes ?? 0)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Urgent low soon: below {0} {1} in {2}"
+msgstr ""
+
+#. 0: leaf?.reservoir?.value ?? 0
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Pump reservoir low: {0} U"
+msgstr ""
+
+#. 0: leaf?.pump_battery?.value ?? 0
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Pump battery low: {0}%"
+msgstr ""
+
+#. 0: daysText((leaf?.site_age?.value ?? 0) / 24)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Site change due: {0}"
+msgstr ""
+
+#. 0: daysText(leaf?.sensor_age?.value ?? 0)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Sensor change due: {0}"
+msgstr ""
+
+#. 0: minutesText(leaf?.loop_stale?.minutes ?? 0)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Loop not running for {0}"
+msgstr ""
+
+#. 0: leaf?.uploader_battery?.value ?? 0
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Phone battery low: {0}%"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Custom alert"
+msgstr ""
+
+#. 0: waited; 1: clockText(draft.hours.from); 2: clockText(draft.hours.to)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "{0}, {1} to {2}"
 msgstr ""
