@@ -10,7 +10,7 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for managing user preferences.
+/// Preferences of the signed-in user. Read the preferences, and update some or all of them.
 /// </summary>
 [ApiController]
 [Tags("Profiles")]
@@ -24,7 +24,7 @@ public class UserPreferencesController : ControllerBase
     // Supported language codes - must match supportedLocales.json
     private static readonly HashSet<string> SupportedLanguages = new(StringComparer.OrdinalIgnoreCase)
     {
-        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko"
+        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko", "cs"
     };
 
     public UserPreferencesController(

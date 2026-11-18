@@ -73,6 +73,6 @@ public sealed class CompressionLowDetectionJob(CompressionLowDetectionService de
         var (_, windowEnd) = TimeZoneHelper.GetOvernightWindow(
             nightOf, zone, sleepSchedule.BedtimeHour, sleepSchedule.WakeTimeHour);
 
-        return DateTimeOffset.FromUnixTimeMilliseconds(windowEnd).UtcDateTime + DetectionDelay;
+        return windowEnd.ToUtcDateTime() + DetectionDelay;
     }
 }

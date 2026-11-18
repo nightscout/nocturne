@@ -15,9 +15,11 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Device Status controller that provides 1:1 compatibility with Nightscout device status endpoints.
-/// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
+/// Nightscout device status documents. A client can list, create and delete them.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 [ApiController]
 [Tags("V1")]
@@ -58,7 +60,7 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatus(
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         [FromQuery] string format = "json",
         CancellationToken cancellationToken = default
@@ -73,9 +75,8 @@ public class DeviceStatusController : ControllerBase
 
         try
         {
-            // Handle count parameter for Nightscout compatibility:
-            // - 0 or negative: return empty array (Nightscout behavior)
-            if (count <= 0)
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+            if (pageSize < 0)
             {
                 _logger.LogDebug("Returning empty array for count={Count}", count);
                 return Ok(Array.Empty<DeviceStatus>());
@@ -92,7 +93,7 @@ public class DeviceStatusController : ControllerBase
                 _timeProvider.GetUtcNow()
             ));
             var deviceStatusEntries = await _deviceStatuses.GetDeviceStatusesAsync(
-                find, LegacyReadLimits.ClampMergedCount(count), skip, cancellationToken
+                find, LegacyReadLimits.ClampMergedCount(pageSize), skip, cancellationToken
             );
             var deviceStatusArray = deviceStatusEntries.ToArray();
 

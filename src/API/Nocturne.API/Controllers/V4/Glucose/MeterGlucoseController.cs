@@ -13,12 +13,12 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Controller for managing blood glucose meter readings. Meter readings are discrete fingerstick
-/// values expressed in mg/dL and recorded by the uploader or directly by the patient device.
-/// Provides full CRUD operations backed by <see cref="IMeterGlucoseRepository"/>.
+/// Blood glucose meter readings, taken as discrete fingerstick values in mg/dL. List, read, create
+/// (one or in bulk), update and delete readings. List deleted readings and restore them.
 /// </summary>
 /// <remarks>
-/// Inherits standard list, get-by-ID, create, update, and delete operations from
+/// Readings are recorded by the uploader or directly by the patient device. Backed by
+/// <see cref="IMeterGlucoseRepository"/>. Inherits standard list, get-by-ID, create, update, and delete operations from
 /// <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// </remarks>
 /// <seealso cref="IMeterGlucoseRepository"/>

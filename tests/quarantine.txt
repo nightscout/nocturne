@@ -4,9 +4,5 @@
 # its test pass. See tests/README.md.
 #
 # <FullyQualifiedName (no theory arguments)> | <bug>
-Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets and the empty bgnow, upbat and ar2 Nightscout sends with no data, and differ on dbsize and runtimestate (#1919)
-Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Pretty_ReturnsSameShape | v2 properties omit buckets, the empty upbat and direction.display, send scaled as null in readings and ar2 points, and differ on ar2 avgLoss in the last digit, dbsize and runtimestate (#1919)
-Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_WithData_ReturnsSameShape | v2 properties omit buckets, the empty upbat and direction.display, send scaled as null in readings and ar2 points, and differ on ar2 avgLoss in the last digit, dbsize and runtimestate (#1919)
-Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetSpecificProperty_EmptyPath_ReturnsSameShape | v2 properties omit buckets and the empty bgnow, upbat and ar2 Nightscout sends with no data, and differ on dbsize and runtimestate (#1919)
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_EventType_ReturnsSameShape | two identifier-less treatments with the same created_at and eventType are stored apart; Nightscout replaces the first (#1902)
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_Insulin_ReturnsSameShape | two identifier-less treatments with the same created_at and eventType are stored apart; Nightscout replaces the first (#1902)

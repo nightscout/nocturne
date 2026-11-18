@@ -38,7 +38,7 @@ public class TreatmentsSaveTests
         };
 
         _service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateV1TreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) =>
                 new BulkWrite<Treatment>(t.ToList(), 0));
     }
@@ -48,13 +48,13 @@ public class TreatmentsSaveTests
     {
         var stored = new Treatment { Id = LoopId, EventType = "Temporary Override", Duration = 30 };
         _service
-            .Setup(s => s.UpdateTreatmentAsync(LoopId, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpdateV1TreatmentAsync(LoopId, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored);
 
         var result = await _controller.SaveTreatments(Body(Override(duration: 30)));
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(stored);
-        _service.Verify(s => s.UpdateTreatmentAsync(
+        _service.Verify(s => s.UpdateV1TreatmentAsync(
             LoopId, It.Is<Treatment>(t => t.Duration == 30), It.IsAny<CancellationToken>()), Times.Once);
         VerifyNothingCreated();
     }
@@ -69,7 +69,7 @@ public class TreatmentsSaveTests
         var saved = Saved(result);
         saved.Id.Should().Be(LoopId);
         saved.Duration.Should().Be(30);
-        _service.Verify(s => s.CreateTreatmentsAsync(
+        _service.Verify(s => s.CreateV1TreatmentsAsync(
             It.Is<IEnumerable<Treatment>>(t => t.Single().Id == LoopId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -100,7 +100,7 @@ public class TreatmentsSaveTests
         }));
 
         Saved(result).Id.Should().Be(identifier);
-        _service.Verify(s => s.UpdateTreatmentAsync(
+        _service.Verify(s => s.UpdateV1TreatmentAsync(
             identifier, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -151,7 +151,7 @@ public class TreatmentsSaveTests
     public async Task Put_WhenTheStoreRefusesTheTreatment_Answers200WithTheRefusalOnItsEcho()
     {
         _service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateV1TreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<Treatment> submitted, WriteOrigin _, CancellationToken _) => new BulkWrite<Treatment>([], 0)
             {
                 Rejected = [new BulkWriteRejection<Treatment>(0, submitted.Single(), "value too long")],
@@ -168,7 +168,7 @@ public class TreatmentsSaveTests
     public async Task Put_WhenTheServiceThrows_LeavesItToTheExceptionHandler()
     {
         _service
-            .Setup(s => s.UpdateTreatmentAsync(It.IsAny<string>(), It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpdateV1TreatmentAsync(It.IsAny<string>(), It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("store down"));
 
         var save = () => _controller.SaveTreatments(Body(Override(duration: 30)));
@@ -184,7 +184,7 @@ public class TreatmentsSaveTests
         var stored = new Treatment { Id = Guid.CreateVersion7().ToString(), EventType = "Carb Correction", Carbs = 35 };
         UnknownIds();
         _service
-            .Setup(s => s.UpdateTreatmentAsync(syncIdentifier, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpdateV1TreatmentAsync(syncIdentifier, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored);
 
         var result = await _controller.SaveTreatments(Body(new
@@ -197,7 +197,7 @@ public class TreatmentsSaveTests
         }));
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(stored);
-        _service.Verify(s => s.UpdateTreatmentAsync(
+        _service.Verify(s => s.UpdateV1TreatmentAsync(
             echoedId, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
         VerifyNothingCreated();
     }
@@ -213,14 +213,14 @@ public class TreatmentsSaveTests
                 It.Is<Treatment>(t => t.Mills == mills && t.EventType == "Note"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sameEvent);
         _service
-            .Setup(s => s.UpdateTreatmentAsync(sameEvent, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpdateV1TreatmentAsync(sameEvent, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(replaced);
 
         var result = await _controller.SaveTreatments(
             Body(new { eventType = "Note", notes = "edited", created_at = "2026-09-30T01:00:00.000Z" }));
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(replaced);
-        _service.Verify(s => s.UpdateTreatmentAsync(
+        _service.Verify(s => s.UpdateV1TreatmentAsync(
             sameEvent, It.Is<Treatment>(t => t.Notes == "edited"), It.IsAny<CancellationToken>()), Times.Once);
         VerifyNothingCreated();
     }
@@ -236,9 +236,9 @@ public class TreatmentsSaveTests
             Body(new { eventType = "Note", notes = "hello", created_at = "2026-09-30T01:00:00.000Z" }));
 
         Saved(result).Notes.Should().Be("hello");
-        _service.Verify(s => s.UpdateTreatmentAsync(
+        _service.Verify(s => s.UpdateV1TreatmentAsync(
             It.IsAny<string>(), It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
-        _service.Verify(s => s.CreateTreatmentsAsync(
+        _service.Verify(s => s.CreateV1TreatmentsAsync(
             It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -293,7 +293,7 @@ public class TreatmentsSaveTests
     {
         UnknownIds();
         _service
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateV1TreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 1));
 
         var result = await _controller.SaveTreatments(Body(Override(duration: 30)));
@@ -327,10 +327,10 @@ public class TreatmentsSaveTests
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<Treatment>().Subject;
 
     private void UnknownIds() => _service
-        .Setup(s => s.UpdateTreatmentAsync(It.IsAny<string>(), It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+        .Setup(s => s.UpdateV1TreatmentAsync(It.IsAny<string>(), It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
         .ReturnsAsync((Treatment?)null);
 
-    private void VerifyNothingCreated() => _service.Verify(s => s.CreateTreatmentsAsync(
+    private void VerifyNothingCreated() => _service.Verify(s => s.CreateV1TreatmentsAsync(
         It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
 
     private static object Override(double duration) => new

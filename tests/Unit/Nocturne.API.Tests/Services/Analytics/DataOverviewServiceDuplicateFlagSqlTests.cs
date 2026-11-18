@@ -19,6 +19,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -51,6 +52,7 @@ public class DataOverviewServiceDuplicateFlagSqlTests : IDisposable
             new TenantClockResolver(
                 therapySettings.Object,
                 new CategoryReadContext(),
+                new ShareClockDouble(therapySettings.Object),
                 NullLogger<TenantClockResolver>.Instance),
             new Mock<IStatisticsService>().WithRealTimeInRange().Object,
             TestTenantCache.Create(),

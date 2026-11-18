@@ -16,10 +16,11 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Exchanges a login code minted by <see cref="TenantController.IssueLoginCode"/> for a session on
-/// the tenant host the code belongs to.
+/// Exchanges a login code for a session on the tenant the code belongs to.
 /// </summary>
 /// <remarks>
+/// Login codes are minted by <see cref="TenantController.IssueLoginCode"/>.
+///
 /// A context from the request's factory reads the tenant the host resolved to, and a login code is
 /// tenant-scoped, so a code minted for one tenant is not visible here on another's host and fails
 /// like any unknown code.
@@ -52,6 +53,7 @@ public class LoginHandoffController : ControllerBase
 
     /// <summary>
     /// Redeems a login code, issues the session cookies, and answers with where to go next.
+    /// Expired, already-redeemed, unknown and other-tenant codes all fail identically.
     /// </summary>
     /// <remarks>
     /// Expired, already-redeemed, unknown and other-tenant codes all fail identically: telling a

@@ -80,11 +80,36 @@ describe("buildAppNavigation", () => {
     ]);
   });
 
+  it("groups the timeline with the profile and patient record pages for a member", () => {
+    const nav = buildAppNavigation(MEMBER);
+    const therapy = nav.find((item) => item.id === "time-spans");
+
+    expect(therapy?.title).toBe("Therapy");
+    expect(therapy?.children?.map((c) => c.href)).toEqual([
+      "/time-spans",
+      "/settings/profile",
+      "/settings/patient",
+    ]);
+
+    const site = nav.find((item) => item.id === "site-settings");
+    expect(site?.children?.map((c) => c.href)).not.toContain("/settings/profile");
+    expect(site?.children?.map((c) => c.href)).not.toContain("/settings/patient");
+  });
+
+  it("gives a member who cannot read therapy settings the timeline alone", () => {
+    const therapy = buildAppNavigation({ ...MEMBER, grantedScopes: ["glucose.read"] }).find(
+      (item) => item.id === "time-spans"
+    );
+
+    expect(therapy?.href).toBe("/time-spans");
+    expect(therapy?.children).toBeUndefined();
+  });
+
   it("keeps the guest link's read-only navigation", () => {
     expect(titles(GUEST)).toEqual([
       "Dashboard",
       "Calendar",
-      "Time spans",
+      "Therapy timeline",
       "Reports",
     ]);
   });

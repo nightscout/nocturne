@@ -14,11 +14,13 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// OAuth 2.0 endpoints for Nocturne.
-/// Supports Authorization Code + PKCE and Device Authorization Grant (RFC 8628).
-/// All clients are public (no client secrets); PKCE is mandatory.
+/// OAuth 2.0 sign-in for client apps, using the authorization code flow with PKCE or the device grant.
+/// Clients are public and use no client secret. A caller can also revoke or introspect tokens, list, update
+/// and delete grants, and register new clients.
 /// </summary>
 /// <remarks>
+/// All clients are public (no client secrets); PKCE is mandatory.
+///
 /// The full authorization-code flow is:
 /// <list type="number">
 ///   <item><description><c>GET /oauth/authorize</c> — initiates the flow; redirects to login if unauthenticated, then to the consent page.</description></item>
@@ -49,6 +51,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="IJwtService"/>
 [ApiController]
 [Route("api/oauth")]
+[System.ComponentModel.DisplayName("OAuth 2.0")]
 [Tags("Authentication")]
 public class OAuthController : ControllerBase
 {
@@ -588,7 +591,7 @@ public class OAuthController : ControllerBase
 
     /// <summary>
     /// Token revocation endpoint (RFC 7009). Per the specification, always returns <c>200 OK</c>
-    /// regardless of whether the token was found or already revoked.
+    /// regardless of whether the token was found or already revoked. Requires no authentication.
     /// </summary>
     /// <remarks>
     /// Anonymous, unlike the introspection endpoint below: the response carries nothing about the
@@ -884,6 +887,7 @@ public class OAuthController : ControllerBase
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
     /// Per RFC 7662, an authenticated caller always gets 200 OK; invalid tokens get <c>active=false</c>.
+    /// A request with no identity is refused. A token issued to another subject reads as inactive.
     /// </summary>
     /// <remarks>
     /// RFC 7662 section 2.1 requires the endpoint to authenticate its caller. Every client here is

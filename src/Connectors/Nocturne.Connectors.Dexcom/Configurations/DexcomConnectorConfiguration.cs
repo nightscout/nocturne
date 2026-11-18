@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Dexcom.Configurations;
     ServiceNames.DexcomConnector,
     "DEXCOM",
     "ConnectSource.Dexcom",
-    "dexcom-connector",
+    DataSources.DexcomConnector,
     "dexcom",
     ConnectorCategory.Cgm,
     "Connect to Dexcom Share or Clarity",

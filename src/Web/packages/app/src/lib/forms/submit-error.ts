@@ -1,5 +1,5 @@
 import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
-import { parseIssues } from "#lib/api/error-body.js";
+import { parseCode, parseIssues } from "#lib/api/error-body.js";
 import { recordApiFailure } from "#lib/support/api-failure-log.js";
 import {
   genericSubmitError,
@@ -59,6 +59,23 @@ export function errorIssues(
 
   return parseIssues(body.issues);
 }
+
+/**
+ * The stable problem code a rejection carries, when the server sent one in the
+ * shape the API writes its codes in.
+ */
+export function errorCode(err: unknown): string | undefined {
+  const body = errorBody(err);
+  if (body === undefined || !("code" in body)) return undefined;
+
+  return parseCode(body.code);
+}
+
+/**
+ * The sentences a call site has for the problem codes it knows, keyed by code.
+ * A code outside the map, or none, leaves the answer to {@link RemoteErrorPolicy}.
+ */
+export type ProblemCodeMessages = Readonly<Record<string, string>>;
 
 /**
  * The bodies the client wrote itself rather than carried from the server.
@@ -228,10 +245,11 @@ export const READ_SURFACE: RemoteErrorPolicy = {
 export function describeRemoteError(
   err: unknown,
   fallback: string,
-  policy: RemoteErrorPolicy
+  policy: RemoteErrorPolicy,
+  codes?: ProblemCodeMessages
 ): string {
   const status = errorStatus(err);
-  const described = describe(err, fallback, policy, status);
+  const described = describe(err, fallback, policy, status, codes);
 
   // Every rejected API call the user is told about passes through here, and the
   // transport carries no path or correlation id, so this is the only place the
@@ -245,9 +263,16 @@ function describe(
   err: unknown,
   fallback: string,
   policy: RemoteErrorPolicy,
-  status: number | undefined
+  status: number | undefined,
+  codes: ProblemCodeMessages | undefined
 ): string {
   if (status === 429) return rateLimitedError();
+
+  const code = errorCode(err);
+  if (code !== undefined && codes !== undefined && Object.hasOwn(codes, code)) {
+    return codes[code];
+  }
+
   if (status === 404) return policy.missing?.() ?? fallback;
   if (status === 403) {
     return (
@@ -264,11 +289,13 @@ function describe(
 
 /**
  * Turns a rejected form submission into a message for the user, on the writing
- * half of {@link RemoteErrorPolicy}.
+ * half of {@link RemoteErrorPolicy}. `codes` holds the sentences the caller has
+ * for the problem codes it expects.
  */
 export function describeSubmitError(
   err: unknown,
-  fallback = genericSubmitError()
+  fallback = genericSubmitError(),
+  codes?: ProblemCodeMessages
 ): string {
-  return describeRemoteError(err, fallback, WRITE_SURFACE);
+  return describeRemoteError(err, fallback, WRITE_SURFACE, codes);
 }

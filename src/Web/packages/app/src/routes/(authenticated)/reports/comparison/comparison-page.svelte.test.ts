@@ -9,6 +9,10 @@ import { GlucoseUnit, PeriodComparisonMetric, TimeZoneUnavailableReason } from "
 let served: PeriodComparison;
 let requested: { units: GlucoseUnit }[];
 
+vi.mock("#lib/api/generated/metadatas.generated.remote.js", () => ({
+  getV4ApiLimits: () => ({ current: { maxDateSpanDays: 366 } }),
+}));
+
 vi.mock("#lib/api/reports.remote.js", () => ({
   getReportsComparison: (input: { units: GlucoseUnit }) => {
     requested.push(input);

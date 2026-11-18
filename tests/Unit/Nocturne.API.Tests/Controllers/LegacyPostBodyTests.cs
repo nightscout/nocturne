@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -123,7 +124,7 @@ public class LegacyPostBodyTests
     public async Task A_v3_food_update_with_a_document_that_does_not_fit_is_a_bad_request()
     {
         var controller = WithContext(new LegacyV3.FoodController(
-            FoodRepository([]), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
+            FoodRepository([]), Mock.Of<IFoodService>(), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
 
         var result = await controller.UpdateFood("x", Json("""{"Name":"Apple","Carbs":"abc","date":1700000000000}"""));
 
@@ -183,7 +184,7 @@ public class LegacyPostBodyTests
     private static Handler V1FoodHandler()
     {
         var foods = new List<Food>();
-        var controller = WithContext(new LegacyV1.FoodController(FoodRepository(foods), NullLogger<LegacyV1.FoodController>.Instance));
+        var controller = WithContext(new LegacyV1.FoodController(FoodRepository(foods), FoodServices.Over(FoodRepository(foods)), NullLogger<LegacyV1.FoodController>.Instance));
         return new Handler(
             """{"Name":"Apple","Carbs":"12"}""",
             """{"Name":"Apple","Carbs":"abc"}""",
@@ -196,7 +197,7 @@ public class LegacyPostBodyTests
     {
         var foods = new List<Food>();
         var controller = WithContext(new LegacyV3.FoodController(
-            FoodRepository(foods), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
+            FoodRepository(foods), FoodServices.Over(FoodRepository(foods)), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.FoodController>.Instance));
         return new Handler(
             """{"Name":"Apple","Carbs":"12","date":1700000000000}""",
             """{"Name":"Apple","Carbs":"abc","date":1700000000000}""",
@@ -243,7 +244,7 @@ public class LegacyPostBodyTests
             .Callback<IEnumerable<Settings>, CancellationToken>((s, _) => settings.AddRange(s))
             .ReturnsAsync([]);
         var controller = WithContext(new LegacyV3.SettingsController(
-            repository.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
+            repository.Object, Mock.Of<IWriteSideEffects>(), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
         return new Handler(
             $$"""{"Key":"units","Mills":{{Millis}}}""",
             """{"Key":"units","Mills":"abc"}""",

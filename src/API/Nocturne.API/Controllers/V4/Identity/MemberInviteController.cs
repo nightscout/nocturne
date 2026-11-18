@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -17,13 +16,16 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Public-facing member invite endpoints for accepting invites and listing members.
-/// Also provides member role/permission management endpoints.
+/// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke
+/// invites, accept an invite, list members, change a member's roles or permissions, set a member's
+/// 24-hour history limit, remove a member from the tenant, and step themselves down to a more
+/// limited role.
 /// </summary>
 /// <seealso cref="IMemberInviteService"/>
 /// <seealso cref="ITenantService"/>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Members and Invites")]
 [Tags("Identity")]
 [Route("api/v4/member-invites")]
 [Produces("application/json")]
@@ -36,7 +38,6 @@ public class MemberInviteController : ControllerBase
     private readonly ITenantMemberService _tenantMemberService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantMembershipRepository _members;
-    private readonly IAuthAuditService _audit;
 
     /// <summary>
     /// Initializes a new instance of <see cref="MemberInviteController"/>.
@@ -47,15 +48,13 @@ public class MemberInviteController : ControllerBase
     /// <param name="tenantMemberService">Service for membership lookups.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="members">The memberships and roles the member-management actions edit.</param>
-    /// <param name="audit">Records each role or permission a member-management action adds or removes.</param>
     public MemberInviteController(
         IMemberInviteService memberInviteService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
         ITenantMemberService tenantMemberService,
         ITenantAccessor tenantAccessor,
-        ITenantMembershipRepository members,
-        IAuthAuditService audit)
+        ITenantMembershipRepository members)
     {
         _memberInviteService = memberInviteService;
         _tenantService = tenantService;
@@ -63,7 +62,6 @@ public class MemberInviteController : ControllerBase
         _tenantMemberService = tenantMemberService;
         _tenantAccessor = tenantAccessor;
         _members = members ?? throw new ArgumentNullException(nameof(members));
-        _audit = audit ?? throw new ArgumentNullException(nameof(audit));
     }
 
     /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
@@ -171,6 +169,7 @@ public class MemberInviteController : ControllerBase
 
     /// <summary>
     /// Get invite info for the accept page, along with where the caller stands relative to it.
+    /// Requires no authentication. An invite that can no longer be accepted answers with the reason only.
     /// </summary>
     /// <remarks>
     /// Anonymous, because the invitee may have no account yet. A caller who does arrive signed in
@@ -233,7 +232,7 @@ public class MemberInviteController : ControllerBase
         viewer);
 
     /// <summary>
-    /// Accept an invite and join the tenant.
+    /// Accept an invite and join the tenant. The caller must be signed in but need not already belong to the tenant.
     /// </summary>
     /// <remarks>
     /// The caller must be signed in as some subject, but need not already belong to this tenant —
@@ -285,6 +284,7 @@ public class MemberInviteController : ControllerBase
 
     /// <summary>
     /// Set roles for a member. <c>RoleIds</c> is the member's whole role set after the change.
+    /// Only the change is checked against the caller's grant ceiling, so a role the caller could not grant but the member already holds must stay in the set; removing it is refused like adding it.
     /// </summary>
     /// <remarks>
     /// Only the change is checked against the caller's grant ceiling, so a caller who could not
@@ -340,19 +340,9 @@ public class MemberInviteController : ControllerBase
         if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        var addedSlugs = added.Count == 0
-            ? []
-            : (await _members.ListRolesAsync(tenantId, ct)).Where(r => added.Contains(r.Id)).Select(r => r.Slug).ToList();
-        var removedSlugs = member.Roles.Where(r => removed.Contains(r.RoleId)).Select(r => r.Slug).ToList();
-
-        switch (await _members.ReplaceRolesUnlessLastOwnerAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct))
-        {
-            case OwnerGuardedChange.LastOwner:
-                return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
-            case OwnerGuardedChange.Changed:
-                await AuditMemberChangeAsync(member.SubjectId, RoleDetailKey, addedSlugs, removedSlugs);
-                break;
-        }
+        if (await _members.ReplaceRolesUnlessLastOwnerAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct)
+            == OwnerGuardedChange.LastOwner)
+            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
 
         if (member.IsPublicSubject())
             publicAccessCache.Evict(tenantId);
@@ -363,6 +353,7 @@ public class MemberInviteController : ControllerBase
     /// <summary>
     /// Replaces the caller's own roles with <see cref="RoleSeeds.Caretaker"/>, for a helper handing
     /// the tenant over. Direct permissions and the history clamp stay as they are.
+    /// Refused unless the caller could grant that role.
     /// </summary>
     /// <remarks>
     /// The one self-edit allowed past <see cref="IsCallersOwnMembership"/> and
@@ -394,19 +385,10 @@ public class MemberInviteController : ControllerBase
 
         var removed = member.Roles.Where(r => r.RoleId != caretaker).ToList();
         var assigned = member.Roles.All(r => r.RoleId != caretaker);
-        switch (await _members.ReplaceRolesUnlessLastOwnerAsync(
-                    tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], DateTime.UtcNow, ct))
-        {
-            case OwnerGuardedChange.LastOwner:
-                return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
-            case OwnerGuardedChange.Changed:
-                await AuditMemberChangeAsync(
-                    subjectId,
-                    RoleDetailKey,
-                    assigned ? [RoleSeeds.Caretaker] : [],
-                    removed.Select(r => r.Slug));
-                break;
-        }
+        if (await _members.ReplaceRolesUnlessLastOwnerAsync(
+                tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], DateTime.UtcNow, ct)
+            == OwnerGuardedChange.LastOwner)
+            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
 
         return NoContent();
     }
@@ -477,16 +459,7 @@ public class MemberInviteController : ControllerBase
                 member, rolePermissions.Concat(request.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        var permissionsBefore = member.DirectPermissions ?? [];
-        var permissionsAfter = request.DirectPermissions ?? [];
-        if (await _members.SetDirectPermissionsAsync(tenantId, member.Id, request.DirectPermissions, DateTime.UtcNow, ct))
-        {
-            await AuditMemberChangeAsync(
-                member.SubjectId,
-                PermissionDetailKey,
-                permissionsAfter.Except(permissionsBefore),
-                permissionsBefore.Except(permissionsAfter));
-        }
+        await _members.SetDirectPermissionsAsync(tenantId, member.Id, request.DirectPermissions, DateTime.UtcNow, ct);
 
         if (isPublicSubject)
             publicAccessCache.Evict(tenantId);
@@ -570,32 +543,6 @@ public class MemberInviteController : ControllerBase
         "Cannot remove your own membership; ask another member with members.manage.";
 
     private const string UngrantableRoleRemovalDetail = "Cannot remove a role you cannot grant.";
-
-    private const string RoleDetailKey = "role";
-
-    private const string PermissionDetailKey = "permission";
-
-    /// <summary>
-    /// Writes one row per role or permission a committed edit removed or added, against the member's
-    /// subject, removed rows first.
-    /// </summary>
-    /// <param name="detailKey">The detail field that names the item: a role slug or a permission.</param>
-    private async Task AuditMemberChangeAsync(
-        Guid subjectId, string detailKey, IEnumerable<string> added, IEnumerable<string> removed)
-    {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var userAgent = Request.Headers.UserAgent.ToString();
-
-        async Task LogAsync(string eventType, string item) =>
-            await _audit.LogAsync(eventType, subjectId, success: true, ipAddress: ip, userAgent: userAgent,
-                detailsJson: JsonSerializer.Serialize(
-                    new Dictionary<string, string> { [detailKey] = item, ["kind"] = "tenant" }));
-
-        foreach (var item in removed)
-            await LogAsync(AuthAuditEventType.RoleRemoved, item);
-        foreach (var item in added)
-            await LogAsync(AuthAuditEventType.RoleAssigned, item);
-    }
 
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions

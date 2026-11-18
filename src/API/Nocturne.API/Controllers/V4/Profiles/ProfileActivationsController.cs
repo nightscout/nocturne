@@ -13,10 +13,13 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Reads the <see cref="ProfileActivation"/>s, each one stored and the one in force, and writes the
-/// profile switches a person records in Nocturne (<see cref="NativeProfileSwitches"/>).
+/// Profile switches recorded for a person. List switches, read the switch in force and the current status,
+/// and create, renew, end, and delete switches.
 /// </summary>
 /// <remarks>
+/// Reads the <see cref="ProfileActivation"/>s, each one stored and the one in force, and writes the
+/// profile switches a person records in Nocturne (<see cref="NativeProfileSwitches"/>).
+///
 /// Never response-cached: an activation an uploader posts must read back on the next poll, and the
 /// one in force changes with it. See <see cref="ProfileController.GetProfileSummary"/>.
 /// </remarks>
@@ -53,6 +56,7 @@ public class ProfileActivationsController : ControllerBase
     /// Only the activations in force at some moment of the window, as the profile resolvers select them,
     /// each whole: what another instance replicates to read the same profile at every moment.
     /// </param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RemoteQuery]
     [RequireScope(Scope.TherapyRead)]
@@ -87,6 +91,7 @@ public class ProfileActivationsController : ControllerBase
 
     /// <summary>The activation in force at <paramref name="at"/>, or no content when the profile store's default is.</summary>
     /// <param name="at">The moment; now when omitted.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("active")]
     [RequireScope(Scope.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

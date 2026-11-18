@@ -9,7 +9,6 @@ public class CareLinkConnectorInstaller()
     : ConnectorInstaller<CareLinkConnectorConfiguration, CareLinkConnectorService, CareLinkAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "CareLink",
             ServerMapping = new Dictionary<string, string>
             {
                 ["EU"] = $"https://{CareLinkConstants.Servers.Eu}",

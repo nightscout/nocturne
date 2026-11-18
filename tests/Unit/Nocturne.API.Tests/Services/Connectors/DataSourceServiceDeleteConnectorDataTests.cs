@@ -7,7 +7,9 @@ using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Demo;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Services.Health.Oura;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Health.GoogleHealth;
@@ -18,6 +20,7 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Devices;
@@ -27,6 +30,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -406,7 +410,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         await using (var ctx = NewContext())
         {
             var writer = new ProfileActivationWriter(
-                ProfileActivationTestDeps.Repository(ctx), TestTenantCache.Create(), reresolver.Object);
+                ProfileActivationTestDeps.Repository(ctx), reresolver.Object);
             var service = new DataSourceService(
                 new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
                 new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
@@ -416,9 +420,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             (await service.DeleteConnectorDataAsync(ConnectorId)).Success.Should().BeTrue();
         }
 
-        reresolver.Verify(r => r.AfterProfilesChangedAsync(
-            It.Is<IReadOnlyCollection<string>>(names => names.SequenceEqual(new[] { "Imported" })),
-            It.IsAny<CancellationToken>()), Times.Once);
+        reresolver.Verify(r => r.AfterProfilesChangedAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -603,7 +605,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
             NullLogger<Nocturne.Connectors.Nightscout.Services.NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             publisher.Object);
 
@@ -665,7 +666,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         var syncFinished = false;
         bool? deletedAfterSync = null;
         _sensorGlucose
-            .Setup(r => r.DeleteBySourceAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.DeleteAsync(It.IsAny<RecordSelector>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback(() => deletedAfterSync = syncFinished)
             .ReturnsAsync(0);
         var sync = await coordinator.AcquireAsync(TenantId, default);
@@ -688,7 +689,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         var deleting = new TaskCompletionSource();
         var finishDelete = new TaskCompletionSource();
         _sensorGlucose
-            .Setup(r => r.DeleteBySourceAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.DeleteAsync(It.IsAny<RecordSelector>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 deleting.SetResult();
@@ -726,8 +727,8 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             result.ErrorCode.Should().Be(DataSourceDeleteError.SyncRunning);
         }
 
-        _sensorGlucose.Verify(r => r.DeleteBySourceAsync(
-            It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+        _sensorGlucose.Verify(r => r.DeleteAsync(
+            It.IsAny<RecordSelector>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
         await using var assertCtx = NewContext();
         (await assertCtx.Boluses.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bolus-1"))
             .DeletedAt.Should().BeNull();
@@ -854,6 +855,57 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         (await db.HeartRates.CountAsync()).Should().Be(2);
     }
 
+    private OuraImportPurgeGuard OuraGuard(TenantRunGuard runGuard) =>
+        new(runGuard, Mock.Of<ITenantAccessor>(tenant => tenant.TenantId == TenantId));
+
+    private static string OuraDataSourceId
+    {
+        get
+        {
+            _ = typeof(OuraConnectorConfiguration);
+            return ConnectorMetadataService.GetByConnectorId(OuraConnectorConfiguration.Name)!.DataSourceId;
+        }
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_Oura_DeletesItsRecords_AndWritesNoConfiguration()
+    {
+        SeedHealthRecords(OuraDataSourceId);
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx, OuraGuard(new TenantRunGuard()))
+                .DeleteConnectorDataAsync(OuraConnectorConfiguration.Name);
+
+            result.Success.Should().BeTrue();
+        }
+
+        _connectorConfig.Verify(c => c.SetActiveAsync(
+            It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        await using var db = NewContext();
+        (await db.HeartRates.Select(r => r.DataSource).ToListAsync()).Should().Equal("manual");
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_Oura_WhileAnImportRuns_ReportsSyncRunningAndDeletesNothing()
+    {
+        var runGuard = new TenantRunGuard();
+        using var import = runGuard.TryAcquire(TenantId, OuraImportJobService.RunName);
+        SeedHealthRecords(OuraDataSourceId);
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx, OuraGuard(runGuard))
+                .DeleteConnectorDataAsync(OuraConnectorConfiguration.Name);
+
+            result.Success.Should().BeFalse();
+            result.ErrorCode.Should().Be(DataSourceDeleteError.SyncRunning);
+        }
+
+        await using var db = NewContext();
+        (await db.HeartRates.CountAsync()).Should().Be(2);
+    }
+
     [Fact]
     public async Task DeleteDataSourceData_OfAConnectorWithoutAGuard_DisablesItBeforeDeleting()
     {
@@ -864,7 +916,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .Callback(() => steps.Add("disable"))
             .Returns(Task.CompletedTask);
         _sensorGlucose
-            .Setup(r => r.DeleteBySourceAsync(_deviceId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.DeleteAsync(RecordSelector.ForSource(_deviceId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback(() => steps.Add("delete"))
             .ReturnsAsync(0);
 
@@ -896,5 +948,90 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
 
         _connectorConfig.Verify(c => c.SetActiveAsync(
             ConnectorId, false, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static readonly Guid Writer = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
+    private static readonly Guid Sharer = Guid.Parse("00000000-0000-0000-0000-0000000000a2");
+
+    /// <summary>A bolus from each of <see cref="Writer"/> and <see cref="Sharer"/>, both under the device "Unknown".</summary>
+    private async Task SeedSharedHandleBolusesAsync(bool sharerDeletedByUser = false)
+    {
+        await using var seed = NewContext();
+        foreach (var writer in new[] { Writer, Sharer })
+        {
+            seed.Boluses.Add(new BolusEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = $"bolus-{writer:N}", Device = "Unknown",
+                Timestamp = DateTime.UtcNow, Insulin = 1, WriterGrantId = writer,
+                DeletedAt = writer == Sharer && sharerDeletedByUser ? DateTime.UtcNow : null,
+            });
+        }
+        await seed.SaveChangesAsync();
+        if (sharerDeletedByUser)
+        {
+            await seed.Boluses.IgnoreQueryFilters().Where(b => b.WriterGrantId == Sharer)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), true));
+        }
+    }
+
+    private static bool SelectsWriter(RecordSelector selector) =>
+        selector is RecordSelector.ByWriters { GrantIds: [var only] } && only == Writer;
+
+    [Fact]
+    public async Task DeleteWrittenData_DeletesTheWritersRecordsAndLeavesASharersUnderTheSameHandle()
+    {
+        await SeedSharedHandleBolusesAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx).DeleteWrittenDataAsync([Writer]);
+            result.Success.Should().BeTrue();
+            result.DeletedCounts.Should().Equal(new Dictionary<string, long> { ["Boluses"] = 1 });
+        }
+
+        _sensorGlucose.Verify(r => r.DeleteAsync(It.Is<RecordSelector>(s => SelectsWriter(s)), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        _meterGlucose.Verify(r => r.DeleteAsync(It.Is<RecordSelector>(s => SelectsWriter(s)), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        _calibrations.Verify(r => r.DeleteAsync(It.Is<RecordSelector>(s => SelectsWriter(s)), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+
+        await using var db = NewContext();
+        (await db.Boluses.Select(b => b.WriterGrantId).ToListAsync()).Should().Equal(Sharer);
+        (await db.GetBlockingLegacyIdsAsync<BolusEntity>([$"bolus-{Writer:N}"])).Held
+            .Should().Contain($"bolus-{Writer:N}", "a user's delete holds the record against a re-upload");
+        (await db.MutationAuditLog.SingleAsync(a => a.EntityType == "Bolus" && a.Action == "bulk_delete"))
+            .ChangesJson.Should().Contain($"writer_grant_id={Writer}");
+    }
+
+    [Fact]
+    public async Task DeleteWrittenData_AllowingReimport_ReleasesTheWritersTombstonesOnly()
+    {
+        await SeedSharedHandleBolusesAsync(sharerDeletedByUser: true);
+
+        await using (var ctx = NewContext())
+            (await CreateService(ctx).DeleteWrittenDataAsync([Writer], allowReimport: true)).Success.Should().BeTrue();
+
+        await using var db = NewContext();
+        (await db.Boluses.IgnoreQueryFilters().CountAsync(b => b.DeletedAt != null)).Should().Be(2);
+        (await db.GetBlockingLegacyIdsAsync<BolusEntity>([$"bolus-{Writer:N}", $"bolus-{Sharer:N}"])).Held
+            .Should().Equal($"bolus-{Sharer:N}");
+    }
+
+    [Fact]
+    public async Task DeleteWrittenData_RefreshesTheProfilesTempBasalRates()
+    {
+        var reresolver = new Mock<ITempBasalRateReresolver>();
+
+        await using (var ctx = NewContext())
+        {
+            var writer = new ProfileActivationWriter(ProfileActivationTestDeps.Repository(ctx), reresolver.Object);
+            var service = new DataSourceService(
+                new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
+                new SourceOwnedDataRepository(ctx.AsFactory(), _auditContext),
+                new DemoDataPurgeRepository(ctx.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+                new ConnectorConfigurationRepository(ctx.AsFactory()), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
+                _connectorConfig.Object, writer, [], [], TimeProvider.System, NullLogger<DataSourceService>.Instance);
+            (await service.DeleteWrittenDataAsync([Writer])).Success.Should().BeTrue();
+        }
+
+        reresolver.Verify(r => r.AfterProfilesChangedAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

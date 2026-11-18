@@ -28,9 +28,24 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     /// first offender is rejected, or null when all channels are valid. <paramref name="subjectId"/>
     /// is the caller, whose linked identities fill in a DM destination.
     /// </summary>
+    /// <param name="channels">
+    /// The requested channels, whose destinations are filled in and rewritten in place; null is valid.
+    /// </param>
     /// <param name="storedRecipients">
     /// The in-app recipients already stored where these channels come from, which may have left
     /// the site since.
+    /// </param>
+    /// <param name="db">
+    /// The context the caller's linked identities are read on, and whose tenant the members are looked up in.
+    /// </param>
+    /// <param name="members">
+    /// Resolves an in-app channel's destination to a member of the tenant.
+    /// </param>
+    /// <param name="subjectId">
+    /// The caller, or null for none; an in-app channel naming no member is delivered to it.
+    /// </param>
+    /// <param name="ct">
+    /// Cancels the operation.
     /// </param>
     public async Task<string?> ResolveAndValidateAsync(
         List<CreateAlertRuleChannelRequest>? channels,

@@ -419,6 +419,58 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
             .GetByIdAsync(noteId))).Should().BeNull();
     }
 
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_put_without_notes_clears_the_note_written_beside_an_older_span(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var uploadedId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["_id"] = uploadedId;
+        await PostAsync(client, upload);
+        var noteId = await WriteNoteBesideAsync(uploadedId, eventType, upload["created_at"]!.GetValue<string>());
+        var servedId = (await GetArrayAsync(client, "/api/v1/treatments")).Single()!["_id"]!.GetValue<string>();
+
+        var put = await client.PutAsJsonAsync($"/api/v1/treatments/{servedId}", Upload(eventType));
+
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var served = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Which!;
+        served["_id"]!.GetValue<string>().Should().Be(servedId);
+        served["notes"].Should().BeNull("the PUT removed the notes the older Note held");
+        (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle()
+            .Which!["notes"].Should().BeNull();
+        (await WithTenantScopeAsync(async sp => await sp.GetRequiredService<INoteRepository>()
+            .GetByIdAsync(noteId))).Should().BeNull();
+    }
+
+    /// <summary>
+    /// A history page whose only rows are Notes written beside older spans serves those spans in
+    /// their place, so the client's cursor still moves past the Notes.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_history_page_of_only_notes_beside_older_spans_advances_the_cursor(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var uploadedId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["_id"] = uploadedId;
+        await PostAsync(client, upload);
+        var synced = (await GetV3ResultAsync(client, "/api/v3/treatments/history/0")).Should().ContainSingle().Subject!;
+        var cursor = synced["srvModified"]!.GetValue<long>();
+        await WriteNoteBesideAsync(uploadedId, eventType, upload["created_at"]!.GetValue<string>());
+
+        var page = await GetV3ResultAsync(client, $"/api/v3/treatments/history/{cursor}");
+
+        var served = page.Should().ContainSingle().Subject!;
+        served["identifier"]!.GetValue<string>().Should().Be(synced["identifier"]!.GetValue<string>());
+        served["eventType"]!.GetValue<string>().Should().Be(eventType);
+        served["notes"]!.GetValue<string>().Should().Be("Written beside");
+        var next = served["srvModified"]!.GetValue<long>();
+        next.Should().BeGreaterThan(cursor);
+        (await GetV3ResultAsync(client, $"/api/v3/treatments/history/{next}")).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task A_window_delete_counts_a_span_and_the_note_written_beside_it_once()
     {
@@ -975,6 +1027,62 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
         (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle()
             .Which!.AsObject().ContainsKey("timestamp").Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_state_span_treatment_is_served_its_pump_record_client_id_and_validity_as_uploaded(
+        string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var clientId = Guid.NewGuid().ToString().ToLowerInvariant();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["id"] = clientId;
+        upload["isValid"] = true;
+        upload["pumpId"] = 4102;
+        upload["pumpType"] = "OMNIPOD_DASH";
+        upload["pumpSerial"] = "33013206";
+        await PostAsync(client, upload);
+
+        var v1 = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Subject!;
+        var v3 = (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle().Subject!;
+        foreach (var served in new[] { v1, v3 })
+        {
+            served["id"]!.GetValue<string>().Should().Be(clientId);
+            served["isValid"]!.GetValue<bool>().Should().BeTrue();
+            served["pumpId"]!.GetValue<long>().Should().Be(4102);
+            served["pumpType"]!.GetValue<string>().Should().Be("OMNIPOD_DASH");
+            served["pumpSerial"]!.GetValue<string>().Should().Be("33013206");
+        }
+
+        (await GetArrayAsync(client, $"/api/v1/treatments?find[id]={clientId}")).Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_state_span_treatment_uploaded_invalid_is_served_invalid_on_v1(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["isValid"] = false;
+        await PostAsync(client, upload);
+
+        var served = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Subject!;
+        served["eventType"]!.GetValue<string>().Should().Be(eventType);
+        served["isValid"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_state_span_treatment_uploaded_without_validity_or_pump_record_is_served_without_them(
+        string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload(eventType));
+
+        var served = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Subject!.AsObject();
+        foreach (var field in new[] { "id", "isValid", "pumpId", "pumpType", "pumpSerial" })
+            served.ContainsKey(field).Should().BeFalse(field);
     }
 
     [Theory]

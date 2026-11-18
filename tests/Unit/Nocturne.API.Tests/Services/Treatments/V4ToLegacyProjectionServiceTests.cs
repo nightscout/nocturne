@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -1155,11 +1155,11 @@ public class V4ToLegacyProjectionServiceTests
     public async Task CountProjectedTreatments_AddsEveryTableOverTheWindow()
     {
         var (from, to) = (new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
-        _bolusRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        _bgCheckRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(4);
-        _deviceEventRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(8);
-        _tempBasalRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(16);
-        _bolusCalcRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(32);
+        _bolusRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _bgCheckRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(4);
+        _deviceEventRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
+        _tempBasalRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(16);
+        _bolusCalcRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(32);
         _dbContext.CarbIntakes.AddRange(Enumerable.Range(0, 2).Select(i => CarbIntake(from.AddMinutes(i), null)));
         _dbContext.ProfileActivations.AddRange(
             Enumerable.Range(0, 64).Select(i => Activation($"ps-{i}", from.AddMinutes(i)))
@@ -1175,7 +1175,7 @@ public class V4ToLegacyProjectionServiceTests
             new DateTimeOffset(from).ToUnixTimeMilliseconds(), new DateTimeOffset(to).ToUnixTimeMilliseconds());
 
         count.Should().Be(255);
-        _noteRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _noteRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
 
         static ProfileActivationEntity Activation(string? legacyId, DateTime start) => new()
         {
@@ -1361,9 +1361,9 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _dbContext.CarbIntakes
                 .Where(c => c.Timestamp >= from && c.Timestamp <= to).AsEnumerable().Select(CarbIntakeMapper.ToDomainModel).ToList());
-        _bolusRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>()))
+        _bolusRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _dbContext.Boluses.Count(b => b.Timestamp >= from && b.Timestamp <= to));
-        _carbIntakeRepo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>()))
+        _carbIntakeRepo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _dbContext.CarbIntakes.Count(c => c.Timestamp >= from && c.Timestamp <= to));
 
         var (fromMills, toMills) = (new DateTimeOffset(from).ToUnixTimeMilliseconds(), new DateTimeOffset(to).ToUnixTimeMilliseconds());

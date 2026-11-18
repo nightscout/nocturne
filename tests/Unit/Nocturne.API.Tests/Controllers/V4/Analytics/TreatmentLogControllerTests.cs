@@ -48,7 +48,7 @@ public class TreatmentLogControllerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Note { Text = "Evening walk" }]);
         _deviceEvents.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                null, It.IsAny<CancellationToken>()))
+                null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DeviceEvent { EventType = DeviceEventType.SiteChange }]);
         _basalInjections.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
                 It.IsAny<CancellationToken>()))

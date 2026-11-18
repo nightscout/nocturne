@@ -247,19 +247,6 @@ describe("DailyProfileBody", () => {
     expect(page.getByRole("slider").elements()).toHaveLength(0);
   });
 
-  it("says why a shared link has no time-of-day view", async () => {
-    render(DailyProfileBody, {
-      props: {
-        response: {
-          primary: { slots: [], days: [] },
-          timeZoneUnavailableReason: TimeZoneUnavailableReason.Share,
-        },
-      },
-    });
-
-    await expect.element(page.getByText(/A shared link does not show the time zone/)).toBeVisible();
-  });
-
   it("says the ranges were clamped to the last 24 hours", async () => {
     render(DailyProfileBody, { props: { response: profileResponse({ historyClamped: true }) } });
 

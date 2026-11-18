@@ -14,7 +14,8 @@ namespace Nocturne.Connectors.GoogleHealth.Configurations;
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Steps, SyncDataType.HeartRate, SyncDataType.BodyWeight, SyncDataType.Sleep],
     DefaultActiveThresholdMinutes = 30,
-    DefaultStaleThresholdMinutes = 180)]
+    DefaultStaleThresholdMinutes = 180,
+    DocumentationUrl = UrlConstants.External.DocsGoogleHealth)]
 public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfiguration
 {
     public GoogleHealthConnectorConfiguration()
@@ -29,7 +30,7 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     /// <summary>
     /// The client <see cref="RefreshToken"/> was issued to, under the <c>clientId</c> key a former
     /// per-tenant client was stored under, so such a session is checked against the instance client
-    /// like any other (<see cref="IssuedToAnotherClient"/>).
+    /// like any other (<see cref="Services.GoogleHealthSessionStore.IssuedToAnotherClientAsync"/>).
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
     public string? SessionClientId { get; set; }

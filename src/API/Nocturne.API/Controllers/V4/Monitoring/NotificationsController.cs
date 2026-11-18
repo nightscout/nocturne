@@ -11,7 +11,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for managing in-app notifications.
+/// In-app notifications for the signed-in user. Create, list and run actions on notifications.
+/// Mark them as read or dismiss them.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -131,6 +132,12 @@ public class NotificationsController : ControllerBase
     }
 
     /// <inheritdoc cref="IInAppNotificationService.ExecuteActionAsync"/>
+    /// <summary>
+    /// Run an action on one of the caller's own notifications; another user's notification is
+    /// refused. Also accepts <c>device.notify</c>, which every member holding a permission has, but
+    /// with it alone only <c>alert.firing</c> notifications can be acted on; other types need
+    /// <c>alerts.readwrite</c>.
+    /// </summary>
     /// <remarks>
     /// <para>
     /// Accepts <see cref="Scope.DeviceNotify"/> as well as

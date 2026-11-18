@@ -12,6 +12,7 @@
   import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
+  import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
   import { getReportsComparison, type DateRangeInput } from "#lib/api/reports.remote.js";
   import { GlucoseUnit, PeriodComparisonMetric, type MetricComparison } from "#lib/api/index.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -208,6 +209,7 @@
     { errorTitle: "Error loading comparison" }
   );
 
+  const limits = getV4ApiLimits();
   const comparison = $derived(comparisonQuery.current);
   const timeZoneUnavailableReason = $derived(comparison?.timeZoneUnavailableReason);
   const unitLabel = $derived(bgLabel(comparison?.units === GlucoseUnit.Mmol ? "mmol" : "mg/dl"));
@@ -543,6 +545,7 @@
                   startDate={p.from}
                   endDate={p.to}
                   maxDate={today}
+                  maxDays={limits.current?.maxDateSpanDays}
                   onRangeChange={(start, end) => {
                     preset = "custom";
                     draft = {

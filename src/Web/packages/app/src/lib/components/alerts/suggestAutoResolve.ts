@@ -118,6 +118,18 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 				value: payload.value,
 			});
 		}
+		case "transmitter_battery": {
+			const p = node.transmitter_battery;
+			if (!p) return null;
+			return {
+				type: "transmitter_battery",
+				transmitter_battery: {
+					metric: p.metric,
+					operator: invertOperator(p.operator),
+					value: p.value,
+				},
+			};
+		}
 		case "loop_stale":
 		case "loop_enaction_stale":
 			// Loop liveness only supports `>` / `>=` operators — there's no

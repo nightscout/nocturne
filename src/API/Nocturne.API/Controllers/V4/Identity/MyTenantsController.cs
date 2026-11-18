@@ -13,15 +13,16 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Returns the list of tenants the authenticated user belongs to and allows switching the active tenant context.
+/// The tenants the signed-in account belongs to. A caller can list them, read an overview of each,
+/// and check whether a slug is available. A caller can create a tenant when the operator allows
+/// self-service creation.
 /// </summary>
 /// <remarks>
 /// All tenants for which the authenticated subject has an active membership are returned.
-/// Tenant switching writes a new <c>X-Tenant-Slug</c> cookie that is read by subsequent
-/// requests' tenant-resolution middleware.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/me/tenants")]
 [Produces("application/json")]
 [Authorize]
@@ -70,6 +71,7 @@ public class MyTenantsController : ControllerBase
     /// those they can go to.
     /// </summary>
     /// <param name="reachableOnly">Leaves out inactive tenants.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <seealso cref="ITenantService.GetTenantsForSubjectAsync"/>
     /// <seealso cref="ITenantService.GetReachableTenantsForSubjectAsync"/>
     [HttpGet]
@@ -138,7 +140,7 @@ public class MyTenantsController : ControllerBase
         return Created($"/api/v4/me/tenants", tenant);
     }
 
-    /// <inheritdoc cref="ITenantService.ValidateSlugAsync"/>
+    /// <inheritdoc cref="ITenantService.ValidateSlugAsync(string, CancellationToken)"/>
     [HttpGet("validate-slug")]
     [AllowAnonymous]
     [AnonymousUntilSetupComplete]

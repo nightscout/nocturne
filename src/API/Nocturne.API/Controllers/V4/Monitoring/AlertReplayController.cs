@@ -11,8 +11,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// What-if replay of the tenant's enabled alert rules over a historical window.
-/// Returns the events that <em>would</em> have fired had the current rule set been active.
+/// Replay of the enabled alert rules over a past time window: the last 24 hours by default, or one
+/// calendar day. Each result lists the alerts that would have fired. A dry run adds a rule from the
+/// request that is not saved.
 /// </summary>
 /// <seealso cref="AlertReplayReadScopeGuard"/>
 [ApiController]
@@ -65,20 +66,10 @@ public class AlertReplayController : ControllerBase
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
-        var ruleOverride = new ReplayRuleOverride(
-            Id: request.Rule.Id,
-            Name: request.Rule.Name,
-            ConditionType: request.Rule.ConditionType,
-            ConditionParams: request.Rule.ConditionParams,
-            Severity: request.Rule.Severity,
-            AllowThroughDnd: request.Rule.AllowThroughDnd,
-            AutoResolveEnabled: request.Rule.AutoResolveEnabled,
-            AutoResolveParams: request.Rule.AutoResolveParams);
-
         try
         {
             var result = await _replayService.ReplayDryRunAsync(
-                request.Date, request.Timezone, request.From, request.To, ruleOverride, ct);
+                request.Date, request.Timezone, request.From, request.To, ToOverride(request.Rule), ct);
             return Ok(AlertReplayReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
         }
         catch (ReplayWindowTooLargeException ex)
@@ -86,7 +77,31 @@ public class AlertReplayController : ControllerBase
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
     }
+
+    /// <summary>
+    /// The times an unsaved rule would have fired over the recent past, newest first. Answers
+    /// "when would this alert last have gone off?" before the rule is saved.
+    /// </summary>
+    [HttpPost("dry-run/firings")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(AlertFiringSearchResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
+        [FromBody] AlertFiringSearchRequest request, CancellationToken ct) =>
+        Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), ct));
+
+    private static ReplayRuleOverride ToOverride(ReplayRuleDefinition rule) => new(
+        Id: rule.Id,
+        Name: rule.Name,
+        ConditionType: rule.ConditionType,
+        ConditionParams: rule.ConditionParams,
+        Severity: rule.Severity,
+        AllowThroughDnd: rule.AllowThroughDnd,
+        AutoResolveEnabled: rule.AutoResolveEnabled,
+        AutoResolveParams: rule.AutoResolveParams);
 }
+
+/// <summary>Request body for the firing search.</summary>
+public record AlertFiringSearchRequest(ReplayRuleDefinition Rule);
 
 /// <summary>
 /// Request body for the alerts replay endpoint. <paramref name="From"/> and

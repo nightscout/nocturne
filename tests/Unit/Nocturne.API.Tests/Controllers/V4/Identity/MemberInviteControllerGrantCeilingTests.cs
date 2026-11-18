@@ -138,8 +138,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            new TenantMembershipRepository(_dbContext.AsFactory()),
-            Mock.Of<IAuthAuditService>())
+            new TenantMembershipRepository(_dbContext.AsFactory()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

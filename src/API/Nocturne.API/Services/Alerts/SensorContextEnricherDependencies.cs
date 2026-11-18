@@ -36,6 +36,8 @@ internal sealed record SensorContextEnricherDependencies(
     IUploaderSnapshotRepository UploaderSnapshots,
     IStateSpanService StateSpans,
     IAlertRepository Alerts,
+    ITenantAlertSettingsRepository AlertSettings,
+    IDndWindowRepository DndWindowRepository,
     ITargetRangeScheduleRepository TargetRangeSchedules,
     IActiveProfileResolver ActiveProfileResolver,
     IProfileActivationResolver ProfileActivations,

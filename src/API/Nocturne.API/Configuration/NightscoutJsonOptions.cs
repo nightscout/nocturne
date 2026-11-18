@@ -27,7 +27,7 @@ public static class NightscoutJsonOptions
             WriteIndented = false,
             TypeInfoResolver = new DefaultJsonTypeInfoResolver
             {
-                Modifiers = { IgnoredBasePropertyModifier.RemoveIgnoredBaseProperties, ExcludeNocturneOnlyProperties, HideIdBesideUnderscoreId, OmitIndefiniteDuration, ServeFoodFlagsAsStrings }
+                Modifiers = { IgnoredBasePropertyModifier.RemoveIgnoredBaseProperties, ExcludeNocturneOnlyProperties, HideIdBesideUnderscoreId, OmitIndefiniteDuration, ServeFoodFlagsAsStrings, LoopTargetRangeArrayConverter.ServeAsArrays }
             }
         };
     }

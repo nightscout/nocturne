@@ -28,6 +28,6 @@ public static class CareLinkTimestampParser
         var localMs = localTime.ToUnixTimeMilliseconds();
         var utcMs = localMs - (long)pumpOffsetMs;
 
-        return DateTimeOffset.FromUnixTimeMilliseconds(utcMs).UtcDateTime;
+        return utcMs.ToUtcDateTime();
     }
 }

@@ -40,8 +40,8 @@ public class PasskeyCeremonyHostExtensionsTests
     {
         var fido2Config = new Fido2Configuration
         {
-            ServerDomain = rpId,
-            ServerName = "Test",
+            RPID = rpId,
+            RPName = "Test",
             Origins = new HashSet<string> { $"https://{rpId}" },
         };
 

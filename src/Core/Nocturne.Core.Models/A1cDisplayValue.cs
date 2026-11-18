@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
@@ -19,7 +20,7 @@ public class A1cDisplayValue
 
 /// <summary>
 /// Whether a value is below its target, judged separately in each unit at the precision that unit
-/// is displayed at: one decimal for percent, a whole number for mmol/mol. Near a boundary the two
+/// is displayed at: two decimals for percent, one for mmol/mol. Near a boundary the two
 /// can differ, so each unit's display is paired with its own state.
 /// </summary>
 public class A1cTargetState
@@ -29,11 +30,17 @@ public class A1cTargetState
 
     public static A1cTargetState Below(A1cDisplayValue value, A1cDisplayValue target) => new()
     {
-        Percent = Math.Round(value.Percent, 1, MidpointRounding.AwayFromZero)
-            < Math.Round(target.Percent, 1, MidpointRounding.AwayFromZero),
-        MmolMol = Math.Round(value.MmolMol, 0, MidpointRounding.AwayFromZero)
-            < Math.Round(target.MmolMol, 0, MidpointRounding.AwayFromZero),
+        Percent = Shown(value.Percent, 2) < Shown(target.Percent, 2),
+        MmolMol = Shown(value.MmolMol, 1) < Shown(target.MmolMol, 1),
     };
+
+    /// <summary>
+    /// The value as the web app shows it. Fixed-point formatting rounds the exact binary value, as
+    /// JavaScript's <c>toFixed</c> does, where <see cref="Math.Round(double, int)"/> rounds the
+    /// scaled value and can land on the other side of a tie such as 6.995.
+    /// </summary>
+    private static decimal Shown(double value, int decimals) =>
+        decimal.Parse(value.ToString("F" + decimals, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
 }
 
 public class A1cDisplayReferences

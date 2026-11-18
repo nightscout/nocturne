@@ -205,7 +205,7 @@ public class NightscoutWriteBackSinkEndpointTests
         });
 
         handler.RequestCount.Should().Be(1);
-        handler.Bodies.Should().ContainSingle().Which.Should().Contain("\"_id\":\"1\"").And.NotContain("\"_id\":\"2\"");
+        handler.Bodies.Should().ContainSingle().Which.Should().Contain("\"identifier\":\"1\"").And.NotContain("\"identifier\":\"2\"");
     }
 
     /// <summary>

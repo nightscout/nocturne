@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -43,12 +43,12 @@ public sealed class HealthRecordTombstoneTests(HealthRecordTombstoneFixture fixt
     {
         await using var db = Context();
         db.TenantId = tenantId;
-        var heartRates = new HeartRateService(db.AsFactory(), Processing<HeartRate>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<HeartRateService>.Instance);
-        var stepCounts = new StepCountService(db.AsFactory(), Processing<StepCount>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<StepCountService>.Instance);
-        var bodyWeights = new BodyWeightService(db.AsFactory(), Processing<BodyWeight>(),
-            Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<BodyWeightService>.Instance);
+        var heartRates = new HeartRateService(new HeartRateRepository(db.AsFactory(), TimeProvider.System), Processing<HeartRate>(),
+            Mock.Of<ISignalRBroadcastService>());
+        var stepCounts = new StepCountService(new StepCountRepository(db.AsFactory(), TimeProvider.System), Processing<StepCount>(),
+            Mock.Of<ISignalRBroadcastService>());
+        var bodyWeights = new BodyWeightService(new BodyWeightRepository(db.AsFactory(), TimeProvider.System), Processing<BodyWeight>(),
+            Mock.Of<ISignalRBroadcastService>());
         var heartRateId = Guid.NewGuid().ToString();
         var stepCountId = Guid.NewGuid().ToString();
         var bodyWeightId = Guid.NewGuid().ToString();

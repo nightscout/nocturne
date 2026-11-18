@@ -99,7 +99,7 @@ internal sealed class ReservoirEstimationService(
         {
             return newestBound is null
                 ? null
-                : new ReservoirEstimate((decimal)newestBound.Reservoir!.Value, IsLowerBound: true, IsEstimated: false);
+                : new ReservoirEstimate(newestBound.Reservoir!.Value.ToDecimal(), IsLowerBound: true, IsEstimated: false);
         }
 
         var delivered = await GetInsulinDeliveredAsync(anchor.Timestamp, now, ct);
@@ -108,10 +108,10 @@ internal sealed class ReservoirEstimationService(
         // A capped reading newer than the anchor proves the level is still at least
         // the bound; an estimate below it is stale bolus/basal accounting, not signal.
         if (newestBound is { } bound && bound.Timestamp > anchor.Timestamp && bound.Reservoir!.Value > estimate)
-            return new ReservoirEstimate((decimal)bound.Reservoir.Value, IsLowerBound: true, IsEstimated: false);
+            return new ReservoirEstimate(bound.Reservoir.Value.ToDecimal(), IsLowerBound: true, IsEstimated: false);
 
         return new ReservoirEstimate(
-            Math.Round((decimal)estimate, 1),
+            Math.Round(estimate.ToDecimal(), 1),
             IsLowerBound: false,
             IsEstimated: delivered >= EstimationEpsilon);
     }

@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -62,6 +63,7 @@ public class V3FoodRegexFilterTests
             .ReturnsAsync(Foods);
         var controller = new FoodController(
             foods.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

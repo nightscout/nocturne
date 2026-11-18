@@ -445,8 +445,8 @@ public class PasskeyServiceTests
         // For methods that call Fido2, integration tests are needed.
         var fido2Config = new Fido2Configuration
         {
-            ServerDomain = rpId,
-            ServerName = "Test",
+            RPID = rpId,
+            RPName = "Test",
             Origins = new HashSet<string> { $"https://{rpId}" },
         };
         var fido2 = new Fido2NetLib.Fido2(fido2Config);

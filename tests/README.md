@@ -105,7 +105,7 @@ To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
 redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
 steps, heart rate, weight and sleep. The stack configures one instance client
-(`GOOGLE_HEALTH_CLIENT_ID`/`_SECRET`) whose redirect URI is the apex of the TLS proxy, so every
+(configured by global setup through the platform-admin settings API) whose redirect URI is the apex of the TLS proxy, so every
 tenant shares it; each consent picks a fake Google account named after the tenant
 (`mock_account`), which keeps tenants' data apart. The browser spec intercepts only Google's
 external consent navigation; the apex callback, its relay to the tenant host, the web callback,
@@ -143,7 +143,8 @@ migration chain themselves. A migration test that seeds part-way along the chain
 it clones the nearest checkpoint at or below it and migrates the rest (at most 24 migrations). The
 checkpoints are template databases every 25 migrations, each built once per process on first use by
 cloning the one before it and migrating forward; the fully migrated template is built apart from
-them. A migration name not in the chain throws.
+them. A migration name not in the chain throws. The chain starts at the squashed baseline (see
+"Migration baseline" in `CLAUDE.md`), so a test can seed no earlier than it.
 
 **`ApiIntegrationTestFixture`** runs the API with `WebApplicationFactory` on a real Kestrel port
 (so HttpClient and SignalR connect over sockets) as Development, against its own `SharedPostgres`

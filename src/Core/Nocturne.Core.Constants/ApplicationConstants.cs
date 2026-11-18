@@ -292,10 +292,26 @@ public static class ApplicationConstants
     public static class NightscoutApi
     {
         /// <summary>
+        /// The v1 API level reported by <c>/api/versions</c>, matching upstream Nightscout.
+        /// </summary>
+        public const string V1Version = "1.0.0";
+
+        /// <summary>
+        /// The v2 API level reported by <c>/api/versions</c>, matching upstream Nightscout.
+        /// </summary>
+        public const string V2Version = "2.0.0";
+
+        /// <summary>
         /// The v3 API level reported as <c>apiVersion</c> by <c>/api/v3/status</c> and <c>/api/v3/version</c>,
         /// matching upstream Nightscout.
         /// </summary>
         public const string V3Version = "3.0.5";
+
+        /// <summary>
+        /// The Nightscout release Nocturne matches, reported as <c>version</c> by the v1 and v3 status
+        /// and <c>/api/v3/version</c>. Clients compare it against the Nightscout releases they support.
+        /// </summary>
+        public const string CompatibleVersion = "15.0.3";
     }
 
     /// <summary>

@@ -11,7 +11,8 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Controller for testing outbound webhook delivery.
+/// Outbound webhook notifications. Send a test payload to a webhook. The read and update operations
+/// are not implemented and return <c>501</c>.
 /// </summary>
 /// <remarks>
 /// The <c>POST /test</c> endpoint sends a test payload via <see cref="WebhookRequestSender"/>.
@@ -63,7 +64,11 @@ public class WebhookSettingsController(
         title: "Not Implemented"
     );
 
-    /// <summary>Tests webhook settings by sending test payloads to configured URLs.</summary>
+    /// <summary>
+    /// Tests webhook settings by sending test payloads to configured URLs. The server makes the
+    /// outbound POST; a destination on a private network is not called and is listed in
+    /// <c>failedUrls</c>. The demo's shared visitor cannot call it.
+    /// </summary>
     /// <remarks>
     /// Gated for the demo's shared visitor because the destination is caller-chosen: the server
     /// makes an outbound POST from its own address. <c>OutboundDestination</c> keeps it off private

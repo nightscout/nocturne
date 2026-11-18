@@ -10,11 +10,13 @@ using Nocturne.Core.Contracts.V4.Repositories;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Controller for uploader/bridge device snapshot data.
-/// Exposes standard V4 read operations via <see cref="V4ReadOnlyControllerBase{TModel,TRepository}"/>
-/// plus a bulk create-or-update endpoint for native uploaders (e.g. Trio).
+/// Status snapshots of the device that runs an uploader app, such as phone battery, connectivity, and app
+/// version. List and read snapshots, and create or update them in bulk.
 /// </summary>
 /// <remarks>
+/// Standard V4 read operations via <see cref="V4ReadOnlyControllerBase{TModel,TRepository}"/> plus a bulk
+/// create-or-update endpoint for native uploaders (e.g. Trio).
+///
 /// Uploader snapshots capture the state of the device running the upload software
 /// (e.g. phone battery, connectivity status, app version). Records are written by
 /// connector ingest pipelines or uploaded directly via the bulk endpoint.
@@ -23,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="UploaderSnapshot"/>
 /// <seealso cref="UpsertUploaderSnapshotRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Uploader Snapshots")]
 [Tags("Devices")]
 [Route("api/v4/device-status/uploader")]
 [RequireScope(Scope.DevicesRead)]
@@ -32,6 +35,8 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
 {
     /// <summary>
     /// Create or update uploader snapshots in bulk (max 1000).
+    /// A snapshot with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other snapshot is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
     /// </summary>
     /// <remarks>
     /// Array semantics are per-item upsert, not all-or-nothing: each snapshot carrying both

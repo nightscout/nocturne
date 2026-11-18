@@ -19,6 +19,7 @@ internal interface IDeviceStatusDecomposer
     /// <param name="deviceStatus">The replacement document. Its id is set to the legacy id the group is
     /// written under.</param>
     /// <param name="origin">Write classification, as for <see cref="DecomposeBatchAsync"/>.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <returns>The decomposition, or <see langword="null"/> when nothing is stored under
     /// <paramref name="storedId"/>.</returns>
     Task<DecompositionResult?> ReplaceAsync(
@@ -36,10 +37,12 @@ internal interface IDeviceStatusDecomposer
     /// statuses and persists them to v4 tables, idempotently via legacy-id matching, in a fixed number
     /// of queries whatever the batch's size. A single status is a batch of one.
     /// </summary>
+    /// <param name="statuses">The legacy device statuses to decompose.</param>
     /// <param name="source">Connector data source to stamp on the decomposed snapshots, or
     /// <c>null</c> for direct v1/v3 uploads with no connector origin.</param>
     /// <param name="origin">Write classification used by the repository chokepoint to decide whether
     /// to broadcast (live) or stay silent (backfill).</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="into">The decomposition to fill as each write commits, for a caller that must know
     /// what committed when the batch throws part-way.</param>
     Task<DeviceStatusDecomposition> DecomposeBatchAsync(
@@ -53,6 +56,7 @@ internal interface IDeviceStatusDecomposer
     /// <param name="storedId">The id the stored status projects under: its legacy id, or its anchoring
     /// snapshot's uuid when it has none.</param>
     /// <param name="origin">Write classification, as for <see cref="DecomposeBatchAsync"/>.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <returns>Total number of v4 records deleted; 0 when nothing is stored under the id.</returns>
     Task<int> DeleteStoredAsync(string storedId, WriteOrigin origin, CancellationToken ct = default);
 }

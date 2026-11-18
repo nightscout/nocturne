@@ -6,7 +6,10 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
-/// <summary>Platform-admin view of the job ledger: every scheduled job's row, failing ones included.</summary>
+/// <summary>
+/// The job ledger, with one row for each scheduled job. Failing jobs come first. Returns 200 rows
+/// by default and at most 1000.
+/// </summary>
 [ApiController]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/jobs")]
@@ -18,6 +21,7 @@ public class JobLedgerController(IJobLedger ledger) : ControllerBase
     internal const int MaxLimit = 1000;
 
     /// <param name="limit">How many rows to return, at most <see cref="MaxLimit"/>; failing rows come first.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(JobLedgerListing), StatusCodes.Status200OK)]

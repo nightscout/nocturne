@@ -196,7 +196,7 @@ public static class EntryTools
                     .Where(e => e.Mgdl > 0)
                     .Select(e => new SensorGlucose
                     {
-                        Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).UtcDateTime,
+                        Timestamp = e.Mills.ToUtcDateTime(),
                         Mgdl = e.Mgdl,
                     }));
 
@@ -204,11 +204,11 @@ public static class EntryTools
             {
                 Period = $"Last {hours} hours",
                 TotalReadings = glucoseValues.Length,
-                Average = Math.Round(glucoseValues.Average(), 1),
+                Average = ScaledRounding.Round(glucoseValues.Average(), 1),
                 Median = CalculateMedian(glucoseValues),
                 Min = glucoseValues.Min(),
                 Max = glucoseValues.Max(),
-                StandardDeviation = Math.Round(CalculateStandardDeviation(glucoseValues), 1),
+                StandardDeviation = ScaledRounding.Round(CalculateStandardDeviation(glucoseValues), 1),
                 TimeInRangeMinutes = timeInRange.Minutes,
                 TimeInRangePercentages = timeInRange.Percent,
             };

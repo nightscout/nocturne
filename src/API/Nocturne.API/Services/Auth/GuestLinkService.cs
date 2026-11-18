@@ -54,6 +54,9 @@ public class GuestLinkService : IGuestLinkService
 
     /// <param name="contexts">Opens the unit of work a revoke runs on.</param>
     /// <param name="grants">The stored grants.</param>
+    /// <param name="sessionCache">Evicts a dismissed link's cached guest session.</param>
+    /// <param name="grantRevocation">Stages a revoke and evicts the revoked grant's sessions.</param>
+    /// <param name="logger">Logs links created, activated, revoked and dismissed, and refused attempts on another subject's link.</param>
     public GuestLinkService(
         INocturneDbContextFactory contexts,
         IOAuthGrantRepository grants,

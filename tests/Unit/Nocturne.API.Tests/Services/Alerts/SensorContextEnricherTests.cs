@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Tests.Infrastructure;
@@ -42,6 +43,8 @@ public class SensorContextEnricherTests
     private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
     private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepository = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly Mock<IProfileActivationResolver> _profileActivations = new();
@@ -57,8 +60,8 @@ public class SensorContextEnricherTests
     {
         // The repo never returns null; default the new DND-windows fetch to empty so the
         // unconditional enrichment block is exercised. Per-test setups override this.
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
     }
 
@@ -440,7 +443,7 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"flat"}""");
-        decimal? rate = rateInput is null ? null : (decimal)rateInput.Value;
+        decimal? rate = rateInput?.ToDecimal();
 
         var enriched = await enricher.EnrichAsync(BaseContext(trendRate: rate), new[] { rule }, CancellationToken.None);
 
@@ -670,12 +673,13 @@ public class SensorContextEnricherTests
             .ReturnsAsync((decimal?)null);
         var deps2 = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
-                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null),
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null),
                 NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object, _cobCalculator.Object, _treatmentService.Object,
             _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
             apsRepo2.Object, _tempBasalRepository.Object, _uploaderSnapshotRepository.Object,
-            _stateSpanService.Object, _alertRepository.Object,
+            _stateSpanService.Object, _alertRepository.Object, _alertSettings.Object, _dndWindows.Object,
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
             _profileActivations.Object,
@@ -764,6 +768,35 @@ public class SensorContextEnricherTests
 
         enriched.ActivePumpSuspension.Should().NotBeNull();
         enriched.ActivePumpSuspension!.StartedAt.Should().Be(now.AddMinutes(-15));
+    }
+
+    [Fact]
+    public async Task TransmitterBattery_need_reads_the_latest_transmitter_status_however_old()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _uploaderSnapshotRepository
+            .Setup(r => r.GetLatestOfTypeAsync(TransmitterStatus.UploaderType, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UploaderSnapshot
+            {
+                Timestamp = now.AddDays(-9),
+                Type = TransmitterStatus.UploaderType,
+                AdditionalProperties = new()
+                {
+                    ["voltagea"] = System.Text.Json.JsonSerializer.SerializeToElement(288),
+                    ["voltageb"] = System.Text.Json.JsonSerializer.SerializeToElement(271),
+                    ["days"] = System.Text.Json.JsonSerializer.SerializeToElement(95),
+                },
+            });
+        var rule = MakeRule(AlertConditionType.TransmitterBattery,
+            """{"metric":"voltage_a","operator":"<","value":290}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
+
+        enriched.TransmitterVoltageA.Should().Be(288m);
+        enriched.TransmitterVoltageB.Should().Be(271m);
+        enriched.TransmitterResistance.Should().BeNull();
+        enriched.TransmitterDays.Should().Be(95m);
     }
 
     [Fact]
@@ -860,8 +893,8 @@ public class SensorContextEnricherTests
     public async Task LowsWindow_setsLowsScope_butNotActiveDnd()
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.Lows, StartedAt: now.AddMinutes(-5), EndsAt: null, ClearedAt: null, CreatedAt: now.AddMinutes(-5)),
@@ -882,8 +915,8 @@ public class SensorContextEnricherTests
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var startedAt = now.AddMinutes(-30);
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.All, StartedAt: startedAt, EndsAt: null, ClearedAt: null, CreatedAt: startedAt),
@@ -905,8 +938,8 @@ public class SensorContextEnricherTests
     {
         // FakeTimeProvider is 2026-03-22 12:00 UTC; a 00:00–23:00 schedule (UTC fallback, no tz)
         // is active, so scheduled DND is tenant-wide == scope=all.
-        _alertRepository
-            .Setup(r => r.GetTenantAlertSettingsAsync(It.IsAny<CancellationToken>()))
+        _alertSettings
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAlertSettingsSnapshot(
                 DndScheduleEnabled: true,
                 DndScheduleStart: new TimeOnly(0, 0),
@@ -929,14 +962,14 @@ public class SensorContextEnricherTests
         // precedence for the for_minutes anchor and source when both are active.
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var manualStartedAt = now.AddMinutes(-90);
-        _alertRepository
-            .Setup(r => r.GetTenantAlertSettingsAsync(It.IsAny<CancellationToken>()))
+        _alertSettings
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAlertSettingsSnapshot(
                 DndScheduleEnabled: true,
                 DndScheduleStart: new TimeOnly(0, 0),
                 DndScheduleEnd: new TimeOnly(23, 0)));
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.All, StartedAt: manualStartedAt, EndsAt: null, ClearedAt: null, CreatedAt: manualStartedAt),
@@ -974,6 +1007,7 @@ public class SensorContextEnricherTests
         var deps = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
                 _tempBasalRepository.Object, _carbIntakeRepository.Object,
+                Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
                 iobCobCache ?? TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
@@ -985,6 +1019,8 @@ public class SensorContextEnricherTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
             _profileActivations.Object,

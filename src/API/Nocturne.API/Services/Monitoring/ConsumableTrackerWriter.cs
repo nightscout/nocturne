@@ -11,6 +11,7 @@ namespace Nocturne.API.Services.Monitoring;
 
 /// <summary>A consumable tracker <see cref="ConsumableTrackerWriter"/> wrote, not yet announced.</summary>
 /// <param name="Definition">The definition as written in the transaction.</param>
+/// <param name="Spec">The spec it was written from, which finds the latest restarting event again on publish.</param>
 /// <param name="Run">Its first run, or null when no event started one.</param>
 /// <param name="StartEvent">The device event <paramref name="Run"/> started at.</param>
 public sealed record CreatedConsumableTracker(
@@ -41,8 +42,13 @@ public sealed class ConsumableTrackerWriter(
     /// whose definition lock is taken inside the consumable lock; an event older than
     /// <see cref="LegacyFallbackRules.StaleAfterLifespans"/> lifespans starts none.
     /// </summary>
+    /// <param name="tx">The tracker repository of the caller's transaction.</param>
+    /// <param name="unit">The caller's unit of work, which the managed rules are created on.</param>
+    /// <param name="spec">The hardware the tracker is defined from.</param>
+    /// <param name="createdBy">The user recorded as creator of the definition and its run.</param>
     /// <param name="withAlerts">Whether the tracker gets its <see cref="ConsumableTrackerSpecs.Thresholds"/>
     /// and their managed rules.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<CreatedConsumableTracker> CreateAsync(
         ITrackerRepository tx,
         DbUnitOfWork unit,

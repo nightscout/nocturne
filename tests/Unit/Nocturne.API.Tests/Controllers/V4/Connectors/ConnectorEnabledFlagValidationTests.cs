@@ -58,6 +58,9 @@ public class ConnectorEnabledFlagValidationTests
             .Setup(s => s.GetSchemaAsync(ConnectorName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(schema);
         service
+            .Setup(s => s.GetBoundKeysAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, Type> { ["enabled"] = typeof(bool) });
+        service
             .Setup(s => s.SaveConfigurationAsync(
                 ConnectorName, It.IsAny<JsonDocument>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) => calls.Add(document))

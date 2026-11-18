@@ -70,6 +70,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
+    /// <param name="contexts">Creates the contexts the repository reads and writes through</param>
     /// <param name="linker">Links committed inserts into their duplicate groups</param>
     /// <param name="auditContext">The audit context for tracking mutations</param>
     /// <param name="logger">Logger instance</param>
@@ -252,7 +253,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.AsNoTracking().FirstOrDefaultAsync(
-            s => s.OriginalId == id,
+            s => s.LegacyId == id,
             cancellationToken
         );
 
@@ -296,10 +297,10 @@ public class StateSpanRepository : IStateSpanRepository
         var guids = ids.Select(id => Guid.TryParse(id, out var guid) ? guid : (Guid?)null).OfType<Guid>().ToList();
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entities = await db.StateSpans
-            .Where(s => (s.OriginalId != null && ids.Contains(s.OriginalId)) || guids.Contains(s.Id))
+            .Where(s => (s.LegacyId != null && ids.Contains(s.LegacyId)) || guids.Contains(s.Id))
             .ToListAsync(cancellationToken);
-        var byOriginalId = entities.Where(e => e.OriginalId != null)
-            .GroupBy(e => e.OriginalId!).ToDictionary(g => g.Key, g => g.First());
+        var byOriginalId = entities.Where(e => e.LegacyId != null)
+            .ToDictionary(e => e.LegacyId!, StringComparer.Ordinal);
         var byId = entities.ToDictionary(e => e.Id.ToString(), StringComparer.OrdinalIgnoreCase);
 
         var updated = new List<StateSpanEntity?>(stateSpans.Count);
@@ -357,11 +358,9 @@ public class StateSpanRepository : IStateSpanRepository
             return [];
 
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var governingRows = await LoadGoverningSpansAsync(db, stateSpans, cancellationToken);
-        var governingByOriginalId = governingRows
-            .GroupBy(s => s.OriginalId!)
-            .ToDictionary(g => g.Key, g => g.GoverningRow()!);
-        var loaded = new HashSet<StateSpanEntity>(governingRows, ReferenceEqualityComparer.Instance);
+        var governingByOriginalId = await LoadGoverningSpansAsync(db, stateSpans, cancellationToken);
+        var loaded = new HashSet<StateSpanEntity>(
+            governingByOriginalId.Values.Where(s => s.DeletedAt == null), ReferenceEqualityComparer.Instance);
         loaded.UnionWith(await LoadSupersedableSpansAsync(db, stateSpans, cancellationToken));
         var successors = await LoadSuccessorsAsync(db, stateSpans, loaded, cancellationToken);
 
@@ -445,30 +444,45 @@ public class StateSpanRepository : IStateSpanRepository
     }
 
     /// <summary>
-    /// Every row that can govern an <c>OriginalId</c> in the batch, latest delete first: the live row,
-    /// which the batch updates, or else the soft-deleted row that forbids re-creating it. State spans are keyed by
-    /// <c>OriginalId</c> where the V4 tables are keyed by <c>LegacyId</c>, so the lookup is local
-    /// while the rule stays shared.
+    /// The row that governs each <c>OriginalId</c> in the batch, per
+    /// <see cref="SoftDeleteDedupExtensions.GoverningRow{TEntity}"/>: the live row, tracked so the batch
+    /// can update it, or else the latest user tombstone that forbids re-creating it, per
+    /// <see cref="SoftDeleteDedupExtensions.WhereBlocksSpanRecreation"/>. The unique legacy-id index
+    /// allows one live row per id, whatever its category.
     /// </summary>
-    /// <seealso cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>
-    private static async Task<List<StateSpanEntity>> LoadGoverningSpansAsync(
+    private static async Task<Dictionary<string, StateSpanEntity>> LoadGoverningSpansAsync(
         NocturneDbContext db,
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken)
     {
         var originalIds = stateSpans
             .Select(s => s.OriginalId)
-            .Where(id => !string.IsNullOrEmpty(id))
-            .Distinct()
-            .ToList();
+            .OfType<string>()
+            .Where(id => id.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
         if (originalIds.Count == 0)
-            return [];
+            return new Dictionary<string, StateSpanEntity>(StringComparer.Ordinal);
 
-        return await db.StateSpans.IgnoreQueryFilters()
-            .Where(s => s.TenantId == db.TenantId && originalIds.Contains(s.OriginalId))
-            .WhereBlocksSpanRecreation()
-            .OrderByDescending(s => s.DeletedAt)
-            .ToListAsync(cancellationToken);
+        var governing = (await db.StateSpans
+                .Where(s => s.LegacyId != null && originalIds.Contains(s.LegacyId))
+                .ToListAsync(cancellationToken))
+            .ToDictionary(s => s.LegacyId!, StringComparer.Ordinal);
+
+        var unheld = originalIds.Except(governing.Keys).ToList();
+        if (unheld.Count == 0)
+            return governing;
+
+        foreach (var tombstone in (await db.UserTombstones<StateSpanEntity>()
+                     .WhereCategoryIsCurrent()
+                     .Where(s => s.LegacyId != null && unheld.Contains(s.LegacyId))
+                     .ToListAsync(cancellationToken))
+                 .GroupBy(s => s.LegacyId!)
+                 .Select(g => g.MaxBy(s => s.DeletedAt)!))
+        {
+            governing[tombstone.LegacyId!] = tombstone;
+        }
+
+        return governing;
     }
 
     /// <summary>
@@ -629,6 +643,9 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Ends an open span inserted behind a later, conflicting span at that span's start.
     /// </summary>
+    /// <param name="db">The context that reads stored successors and tracks the batch's changes.</param>
+    /// <param name="entity">The open span to end.</param>
+    /// <param name="metadata">The metadata of the span, passed to the supersession check.</param>
     /// <param name="batch">
     /// Rows this batch loaded or added, whose changes the store does not hold until the save. Stored
     /// rows a stored successor closed join it, so the save writes them and the batch detaches them.
@@ -638,6 +655,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// this point would: the batch saves nothing until it is applied. The store is read again only when
     /// every candidate read for the span is passed over.
     /// </param>
+    /// <param name="cancellationToken">The cancellation token.</param>
     private static async Task EndAtSuccessorAsync(
         NocturneDbContext db, StateSpanEntity entity, IDictionary<string, object>? metadata,
         HashSet<StateSpanEntity> batch, Successors successors, CancellationToken cancellationToken)
@@ -749,7 +767,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id,
+            s => s.LegacyId == id,
             cancellationToken
         );
 
@@ -783,7 +801,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id,
+            s => s.LegacyId == id,
             cancellationToken
         );
 
@@ -803,12 +821,12 @@ public class StateSpanRepository : IStateSpanRepository
     {
         var deleted = await db.ExecuteInTransactionAsync<IReadOnlyList<StateSpan>>(async token =>
         {
-            var (saved, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(
+            var (saved, copies, copyIds) = await DuplicateGroupPrimaries.SoftDeleteAsync(
                 db, entity, RecordType.StateSpan, token);
             if (saved == 0)
                 return [];
 
-            await db.ClearSupersededByAsync([entity.Id, .. copies.Select(c => c.Id)], token);
+            await db.ClearSupersededByAsync([entity.Id, .. copyIds], token);
             return [StateSpanMapper.ToDomainModel(entity), .. copies.Select(StateSpanMapper.ToDomainModel)];
         }, ct: cancellationToken);
         if (deleted.Count > 0)
@@ -823,18 +841,17 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var rowIds = ids.Select(id => Guid.TryParse(id, out var rowId) ? rowId : (Guid?)null).ToList();
-        var deleted = await db.StateSpans.IgnoreQueryFilters().AsNoTracking()
+        var deleted = await db.StateSpans.IncludingDeleted().AsNoTracking()
             .WhereCategoryIsCurrent()
-            .Where(s => s.TenantId == db.TenantId
-                        && s.DeletedAt != null
-                        && ((s.OriginalId != null && ids.Contains(s.OriginalId)) || rowIds.Contains(s.Id)))
-            .Select(s => new { s.Id, s.OriginalId, s.Category, s.DeletedAt })
+            .Where(s => s.DeletedAt != null
+                        && ((s.LegacyId != null && ids.Contains(s.LegacyId)) || rowIds.Contains(s.Id)))
+            .Select(s => new { s.Id, s.LegacyId, s.Category, s.DeletedAt })
             .ToListAsync(cancellationToken);
 
         var resolved = new Dictionary<Guid, DeletedStateSpan>();
         foreach (var id in ids.Distinct())
         {
-            var named = deleted.Where(s => s.OriginalId == id).MaxBy(s => s.DeletedAt)
+            var named = deleted.Where(s => s.LegacyId == id).MaxBy(s => s.DeletedAt)
                         ?? deleted.FirstOrDefault(s => Guid.TryParse(id, out var rowId) && s.Id == rowId);
             if (named is not null)
                 resolved[named.Id] = new DeletedStateSpan(id, StateSpanMapper.ParseCategory(named.Category));
@@ -1066,6 +1083,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     /// <param name="count">The maximum number of spans to return.</param>
     /// <param name="skip">The number of spans to skip.</param>
+    /// <param name="from">The earliest start time to include, inclusive.</param>
+    /// <param name="to">The latest start time to include, inclusive.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of state spans representing activities.</returns>
     public async Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(
@@ -1144,7 +1163,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.AsNoTracking().FirstOrDefaultAsync(
-            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
+            s => s.LegacyId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
@@ -1187,7 +1206,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
+            s => s.LegacyId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
@@ -1202,7 +1221,11 @@ public class StateSpanRepository : IStateSpanRepository
         if (entity == null)
             return null;
 
+        // An edit payload carries no record id (V4) or the id it was addressed by (V1). The stored
+        // LegacyId is the key a resync matches, and the stored Source is the connector that owns the row.
+        var (source, legacyId) = (entity.Source, entity.LegacyId);
         StateSpanMapper.UpdateEntity(entity, stateSpan);
+        (entity.Source, entity.LegacyId) = (source, legacyId);
         await db.SaveChangesAsync(cancellationToken);
         await ReportWrittenAsync();
         return StateSpanMapper.ToDomainModel(entity);
@@ -1221,7 +1244,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
+            s => s.LegacyId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 

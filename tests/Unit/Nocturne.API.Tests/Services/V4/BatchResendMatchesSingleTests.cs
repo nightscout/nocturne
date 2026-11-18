@@ -20,6 +20,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -92,7 +93,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -288,7 +289,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {

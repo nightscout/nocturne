@@ -10,11 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for glucose forecast predictions.
-/// Supports multiple prediction sources: <c>DeviceStatus</c> (AAPS/Trio/Loop loop data)
-/// or <c>OrefWasm</c> (server-side oref calculation).
+/// Glucose forecast predictions. Callers can read the current forecast, check the status of the
+/// prediction service, and read the therapy profile a device needs to run its own oref forecast.
 /// </summary>
 /// <remarks>
+/// Supports the <c>DeviceStatus</c> source (AAPS, Trio and Loop loop data) and the <c>OrefWasm</c>
+/// source (server-side oref calculation).
 /// The active prediction source is determined at startup from <c>Predictions:Source</c>
 /// in application configuration. If the source is <c>None</c> or no
 /// <see cref="IPredictionService"/> is registered, the endpoint returns <c>404 Not Found</c>
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="GlucosePredictionResponse"/>
 /// <seealso cref="PredictionStatusResponse"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Predictions")]
 [Tags("Analytics")]
 [Route("api/v4/predictions")]
 [Produces("application/json")]
@@ -80,8 +82,8 @@ public class PredictionController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            // No recent device-status prediction data — the normal state for care-portal-only
-            // tenants now that DeviceStatus is the default source, so not a client fault.
+            // The source has no forecast to give, which is the normal state for a care-portal-only
+            // tenant on the default DeviceStatus source. Not a client fault.
             _logger.LogWarning(ex, "No prediction data available");
             return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
         }
@@ -111,7 +113,10 @@ public class PredictionController : ControllerBase
 
     /// <summary>
     /// Get the pre-resolved therapy profile for the next 24 hours, flattened into contiguous
-    /// absolute-time segments, for an offline on-device <c>oref</c> prediction run.
+    /// absolute-time segments, for an offline on-device <c>oref</c> prediction run. Available
+    /// even when server-side prediction is off. The payload omits the oref constants
+    /// <c>max_iob=10</c>, <c>max_basal=4</c> and <c>max_daily_basal=2</c>; a client matching a
+    /// server-side run applies them itself.
     /// </summary>
     /// <remarks>
     /// Unlike <see cref="GetPredictions"/>, this action is intentionally available regardless of

@@ -125,8 +125,8 @@ public partial class StatisticsService
     public static (DateTime StartUtc, DateTime EndUtc) PunchCardRange(
         DateOnly startDate, DateOnly endDate, TimeZoneInfo timeZone) =>
         (
-            TimeZoneInfo.ConvertTimeToUtc(startDate.ToDateTime(TimeOnly.MinValue), timeZone),
-            TimeZoneInfo.ConvertTimeToUtc(endDate.ToDateTime(TimeOnly.MinValue).AddDays(1).AddTicks(-1), timeZone)
+            TimeZoneHelper.ConvertTimeToUtc(startDate.ToDateTime(TimeOnly.MinValue), timeZone),
+            TimeZoneHelper.ConvertTimeToUtc(endDate.ToDateTime(TimeOnly.MinValue).AddDays(1).AddTicks(-1), timeZone)
         );
 
     /// <inheritdoc />

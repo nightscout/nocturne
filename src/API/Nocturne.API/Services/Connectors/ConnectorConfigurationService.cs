@@ -43,7 +43,16 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
+    /// <param name="configurations">The tenant's stored connector configurations, secrets and health.</param>
+    /// <param name="subjects">Tells whether the caller is the demo account, and gives the device subject an adopted secret belongs to.</param>
     /// <param name="grants">The stored grants, which a saved Nightscout secret is adopted into.</param>
+    /// <param name="encryptionService">Encrypts connector secrets on save and decrypts them on read.</param>
+    /// <param name="broadcastService">Broadcasts each configuration change to connected clients.</param>
+    /// <param name="auditContext">Gives the calling subject, which a demo account's write and a secret's adoption are decided on.</param>
+    /// <param name="configuration">The application configuration a connector's effective configuration is bound from.</param>
+    /// <param name="environment">The host environment.</param>
+    /// <param name="cacheInvalidators">Each is told the connector and tenant of a written configuration.</param>
+    /// <param name="logger">Logs configuration and secret writes, refusals and unknown connectors.</param>
     public ConnectorConfigurationService(
         IConnectorConfigurationRepository configurations,
         ISubjectRepository subjects,
@@ -331,6 +340,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         var schema = GenerateSchemaFromType(configType);
         return Task.FromResult(schema);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default)
+    {
+        var configType = FindConfigurationType(connectorName, _logger);
+        return Task.FromResult<IReadOnlyDictionary<string, Type>?>(configType is null ? null : ConnectorConfigurationBinder.BoundKeyTypes(configType));
     }
 
     /// <inheritdoc />
@@ -716,6 +732,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         if (connectorAttr.AllowedValues != null && connectorAttr.AllowedValues.Length > 0)
         {
             schema["enum"] = connectorAttr.AllowedValues;
+        }
+
+        if (connectorAttr.AllowedNumbers is { Length: > 0 })
+        {
+            schema["enum"] = connectorAttr.AllowedNumbers;
         }
 
         if (!string.IsNullOrEmpty(connectorAttr.Format))

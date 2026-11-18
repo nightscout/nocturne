@@ -22,8 +22,10 @@ public class SubjectService : ISubjectService
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
 
+    /// <param name="subjects">Repository for the stored subjects, their roles and their OIDC identities.</param>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
     /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
+    /// <param name="logger">Logger for subject and role changes.</param>
     public SubjectService(
         ISubjectRepository subjects,
         IAuthAuditService auditService,

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.DeviceStatuses;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -176,7 +177,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             EndTimestamp = DeclaredOverrideEnd(ds, timestamp),
             Source = ds.Device,
             OriginalId = legacyId,
-            Metadata = BuildOverrideMetadata(ds.Override),
+            Metadata = BuildOverrideMetadata(ds.Override!),
         };
     }
 
@@ -411,12 +412,40 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         foreach (var ds in statuses)
             NormalizeMills(ds);
 
+        var echoes = await PointAtStoredStatusesAsync(statuses, source, ct);
+        if (echoes.Count > 0)
+            statuses = [.. statuses.Where(s => !echoes.Contains(s))];
+        if (statuses.Count == 0)
+            return into ?? new DeviceStatusDecomposition();
+
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses.Select(s => s.Id), SnapshotTables, ct);
         var batch = statuses
             .Select(ds => new BatchStatus(ds, ds.Id, CorrelationIdFor(ds.Id, correlationIds), ResolveTimestamp(ds)))
             .ToList();
         return await DecomposeAsync(batch, source, group: null, origin, into ?? new DeviceStatusDecomposition(), ct);
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
+    /// </summary>
+    /// <remarks>
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private Task<IReadOnlySet<DeviceStatus>> PointAtStoredStatusesAsync(
+        IEnumerable<DeviceStatus> statuses, string? source, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, WireForms.UuidPrefix),
+                Table(_pumpRepo, WireForms.UuidPrefix),
+                Table(_uploaderRepo, WireForms.UuidPrefix),
+            ],
+            _ => source == DataSources.NightscoutConnector,
+            ct);
 
     /// <summary>
     /// The snapshot tables a status's stored correlation id is read from, in the APS, pump, uploader
@@ -981,7 +1010,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        var command = ApsSnapshotCurves.FreshestOpenApsCommand(ds.OpenAps!);
+        var openAps = ds.OpenAps!;
+        var command = ApsSnapshotCurves.FreshestOpenApsCommand(openAps);
         var apsSystem = DetectOpenApsVariant(ds);
 
         var snapshot = new V4Models.ApsSnapshot
@@ -993,27 +1023,28 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             DataSource = source,
             CorrelationId = correlationId,
             AidAlgorithm = apsSystem,
-            Iob = ds.OpenAps.Iob?.Iob,
-            BasalIob = ds.OpenAps.Iob?.BasalIob,
-            BolusIob = ds.OpenAps.Iob?.BolusIob,
-            Cob = ds.OpenAps.Cob ?? command?.COB,
+            Iob = openAps.Iob?.Iob,
+            BasalIob = openAps.Iob?.BasalIob,
+            BolusIob = openAps.Iob?.BolusIob,
+            Cob = openAps.Cob ?? command?.COB,
             CurrentBg = command?.Bg,
             EventualBg = command?.EventualBG,
             TargetBg = command?.TargetBG,
             RecommendedBolus = command?.InsulinReq,
             SensitivityRatio = command?.SensitivityRatio,
-            Enacted = ds.OpenAps.Enacted != null
-                && (ds.OpenAps.Enacted.Received == true || ds.OpenAps.Enacted.Recieved == true),
-            EnactedRate = ds.OpenAps.Enacted?.Rate,
-            EnactedDuration = ds.OpenAps.Enacted?.Duration,
-            EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
-                ? ds.OpenAps.Enacted.Smb
-                : ds.OpenAps.Enacted?.Units,
-            AidVersion = ds.OpenAps?.Version,
+            Enacted = openAps.Enacted != null
+                && (openAps.Enacted.Received == true || openAps.Enacted.Recieved == true),
+            EnactedRate = openAps.Enacted?.Rate,
+            EnactedDuration = openAps.Enacted?.Duration,
+            EnactedBolusVolume = openAps.Enacted?.Smb is > 0
+                ? openAps.Enacted.Smb
+                : openAps.Enacted?.Units,
+            AidVersion = openAps.Version,
+            AdditionalProperties = UploadedExtras.OfOpenAps(openAps),
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
-        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Suggested, snapshot, JsonOptions);
-        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Enacted, snapshot, JsonOptions);
+        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
+        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(openAps.Enacted, snapshot, JsonOptions);
         return snapshot;
     }
 
@@ -1071,9 +1102,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             Clock = ds.Pump.Clock,
             Iob = ds.Pump.Iob?.Iob,
             BolusIob = ds.Pump.Iob?.BolusIob,
-            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
-                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
-                : null,
+            AdditionalProperties = UploadedExtras.OfPump(ds.Pump),
         };
     }
 
@@ -1094,6 +1123,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             IsCharging = ds.IsCharging ?? ds.Uploader?.IsCharging,
             Temperature = ds.Uploader?.Temperature,
             Type = ds.Uploader?.Type,
+            AdditionalProperties = ds.Uploader?.ExtensionData is { Count: > 0 } reported
+                ? reported.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
         };
     }
 
@@ -1104,13 +1136,15 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// <summary>
     /// Distinguishes between vanilla OpenAPS, AAPS, and Trio based on payload heuristics.
     /// All three post under the "openaps" devicestatus key.
-    /// - AAPS: uploader name contains "AndroidAPS"
+    /// - AAPS: uploader name contains "AndroidAPS", or the top-level <c>app</c> is "AAPS" (what
+    ///   NSClientV3 sends, with an empty uploader block)
     /// - Trio: openaps block includes a version field
     /// - Vanilla OpenAPS: neither of the above
     /// </summary>
     internal static V4Models.AidAlgorithm DetectOpenApsVariant(DeviceStatus ds)
     {
-        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true)
+        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true
+            || IsAapsApp(ds))
             return V4Models.AidAlgorithm.AndroidAps;
 
         if (!string.IsNullOrEmpty(ds.OpenAps?.Version))
@@ -1118,6 +1152,13 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         return V4Models.AidAlgorithm.OpenAps;
     }
+
+    private static bool IsAapsApp(DeviceStatus ds) =>
+        ds.ExtensionData?.TryGetValue("app", out var app) == true
+        && app.ValueKind == JsonValueKind.String
+        && app.GetString() is { } name
+        && (name.Equals("AAPS", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("AndroidAPS", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Resolves the best available timestamp for a device status record.
@@ -1128,7 +1169,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     internal DateTime ResolveTimestamp(DeviceStatus ds)
     {
         if (ds.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(ds.Mills).UtcDateTime;
+            return ds.Mills.ToUtcDateTime();
 
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;

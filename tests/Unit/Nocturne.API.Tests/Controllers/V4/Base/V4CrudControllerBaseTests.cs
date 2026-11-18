@@ -142,7 +142,7 @@ public class V4CrudControllerBaseTests
         };
         _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(records);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         var result = await _controller.GetAll(null, null, 100, 0, "timestamp_desc", null, null);
@@ -191,7 +191,7 @@ public class V4CrudControllerBaseTests
     {
         _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
         await _controller.GetAll(null, null, 100, 0, "timestamp_asc", null, null);

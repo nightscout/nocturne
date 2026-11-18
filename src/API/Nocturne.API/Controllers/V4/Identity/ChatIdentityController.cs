@@ -12,9 +12,13 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Tenant-scoped chat identity link management. Backed by the global
-/// ChatIdentityDirectory table via <see cref="ChatIdentityService"/>.
+/// Chat accounts linked to the tenant, such as Discord or Telegram users. A caller can list the
+/// links, look up a pending link by its token, claim a link, set the default link, update a link
+/// and delete a link.
 /// </summary>
+/// <remarks>
+/// Backed by the global ChatIdentityDirectory table via <see cref="ChatIdentityService"/>.
+/// </remarks>
 /// <seealso cref="ChatIdentityService"/>
 /// <seealso cref="ITenantAccessor"/>
 [ApiController]
@@ -64,7 +68,10 @@ public class ChatIdentityController : ControllerBase
     private ChatLinkScope OwnedByCaller()
         => ChatLinkScope.ForOwner(_tenantAccessor.TenantId, GetUserIdOrThrow());
 
-    /// <summary>List active chat identity links for the current tenant.</summary>
+    /// <summary>
+    /// List active chat identity links for the current tenant, including other members' links.
+    /// The chat account ID is withheld on other members' links, and the default-link label is filled in only for the caller's own.
+    /// </summary>
     /// <remarks>
     /// <para>
     /// The list stays tenant-scoped, so a chat account linked to several tenants shows a
@@ -105,7 +112,10 @@ public class ChatIdentityController : ControllerBase
         return Ok(responses);
     }
 
-    /// <summary>Claim a pending link token after /connect slash command auth.</summary>
+    /// <summary>
+    /// Claim a pending link token after /connect slash command auth.
+    /// Answers 400 for a token that cannot be claimed here and 409 when this tenant's link for the chat account belongs to another member.
+    /// </summary>
     /// <remarks>
     /// Answers 400 for a token that cannot be claimed here
     /// (<see cref="ChatLinkTokenRejectedException"/>) and 409 when this tenant's link for the chat

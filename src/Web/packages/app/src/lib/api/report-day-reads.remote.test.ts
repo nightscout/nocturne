@@ -42,7 +42,7 @@ function patientIn(timezone: string | null) {
   hoisted.dailyBasalBolus.mockReset().mockResolvedValue({});
   hoisted.locals = {
     apiClient: {
-      patientRecord: { getPatientTimezone: async () => ({ timezone }) },
+      patientTimezone: { getPatientTimezone: async () => ({ timezone }) },
       actogram: { getActogram: hoisted.actogram },
       statistics: {
         getBasalAnalysis: hoisted.basalAnalysis,

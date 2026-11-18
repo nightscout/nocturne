@@ -218,7 +218,7 @@ public class AutoPreparedStatementRecoveryTests(RlsCompletenessFixture fx) : IAs
             .WithInnerException<PostgresException>()
             .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation);
 
-    private async Task<List<string?>> StoredTextsAsync()
+    private async Task<List<string>> StoredTextsAsync()
     {
         await using var scope = Scope(audited: false);
         await using var db = await ContextAsync(scope);

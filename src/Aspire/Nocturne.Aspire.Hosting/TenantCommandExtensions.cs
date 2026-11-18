@@ -96,7 +96,7 @@ public static class TenantCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
 
         try
         {
@@ -181,8 +181,8 @@ public static class TenantCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
-        var interactionService = context.ServiceProvider.GetRequiredService<IInteractionService>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
+        var interactionService = context.Services.GetRequiredService<IInteractionService>();
 
         try
         {
@@ -289,8 +289,8 @@ public static class TenantCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
-        var interactionService = context.ServiceProvider.GetRequiredService<IInteractionService>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
+        var interactionService = context.Services.GetRequiredService<IInteractionService>();
 
         // Check if snapshot exists
         var snapshotPath = ResolveSnapshotPath();
@@ -407,8 +407,8 @@ public static class TenantCommandExtensions
         IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
-        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
-        var interactionService = context.ServiceProvider.GetRequiredService<IInteractionService>();
+        var logger = context.Services.GetRequiredService<ILogger<PostgresServerResource>>();
+        var interactionService = context.Services.GetRequiredService<IInteractionService>();
 
         var inputs = new List<InteractionInput>
         {

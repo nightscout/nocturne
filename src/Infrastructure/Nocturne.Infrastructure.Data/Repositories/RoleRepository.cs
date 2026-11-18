@@ -64,6 +64,7 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
         if (entity is null)
             return null;
 
+        MemberAccessAudit.StageGlobalRolePermissions(db, roleId, name, entity.Permissions, permissions);
         entity.Name = name;
         entity.Description = description;
         entity.Permissions = [.. permissions];

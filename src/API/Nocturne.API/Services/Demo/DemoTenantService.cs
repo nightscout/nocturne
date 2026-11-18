@@ -62,7 +62,15 @@ public sealed class DemoTenantService
     private readonly ILogger<DemoTenantService> _logger;
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
+    /// <param name="tenants">Finds the demo tenant and reads its row.</param>
+    /// <param name="members">Finds the demo member, and removes the memberships of a retired one.</param>
+    /// <param name="subjects">Checks that a retired demo member is a demo subject, then deletes it.</param>
     /// <param name="sessions">The first-party sessions a retired demo visitor's rows are deleted from.</param>
+    /// <param name="tenantService">Re-seeds the roles and the Public membership after a reset.</param>
+    /// <param name="publicAccessCache">Evicted when the Public membership's grant is rewritten.</param>
+    /// <param name="cache">The tenant cache a reset clears of the demo tenant's entries.</param>
+    /// <param name="time">The clock that stamps onboarding, the reset and membership changes.</param>
+    /// <param name="logger">Logs each reset and what provisioning or retiring the demo member found amiss.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
         ITenantRepository tenants,

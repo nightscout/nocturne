@@ -14,10 +14,7 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
 {
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
-        var config = services.AddConnectorConfiguration<MyLifeConnectorConfiguration>(
-            configuration,
-            "MyLife"
-        );
+        var config = services.AddConnectorConfiguration<MyLifeConnectorConfiguration>(configuration);
         if (!config.Enabled)
             return;
 

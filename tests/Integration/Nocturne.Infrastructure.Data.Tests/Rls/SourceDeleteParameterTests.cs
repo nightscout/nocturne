@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Extensions;
 using Npgsql;
 
@@ -41,7 +42,7 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
         recorder.Statements.Clear();
 
         var deleted = await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            ctx.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(Groups);
         recorder.MaxParameters.Should().BeLessThan(10, "an id list is bound as one parameter, not one per id");

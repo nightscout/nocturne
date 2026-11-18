@@ -10,7 +10,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Controller for compression low detection and review.
+/// Compression low suggestions and their review. List and read suggestions, review them, and run detection.
 /// </summary>
 /// <remarks>
 /// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
@@ -32,6 +32,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <seealso cref="ICompressionLowService"/>
 /// <seealso cref="ICompressionLowDetectionService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Compression Lows")]
 [Tags("TenantAdmin")]
 [Route("api/v4/compression-lows")]
 [RequireScope(Scope.GlucoseRead)]
@@ -119,6 +120,7 @@ public class CompressionLowController : ControllerBase
 
     /// <summary>
     /// Accept, dismiss or delete several suggestions at once
+    /// Every item is checked before any is written, and one failing item rejects the whole batch. After that the writes are not atomic: a failure part way leaves earlier items applied, and a retry finishes the rest.
     /// </summary>
     /// <remarks>
     /// Not one database commit: <see cref="ICompressionLowService.ApplyBatchAsync"/> says what a
@@ -153,6 +155,7 @@ public class CompressionLowController : ControllerBase
 
     /// <summary>
     /// Manually trigger detection for a date range (for testing)
+    /// Provide either <c>nightOf</c> or a <c>startDate</c> and <c>endDate</c> range (inclusive, one run per night). Each night analysed stores the suggestions it finds.
     /// </summary>
     /// <remarks>
     /// Provide either a single `nightOf` date or a range with `startDate` and `endDate`.

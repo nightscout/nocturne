@@ -10,7 +10,7 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin view of how full the instance's database is and how each tenant uses it.
+/// How full the instance database is, and how much of it each tenant uses.
 /// </summary>
 /// <remarks>
 /// Whole-database figures and other tenants' sizes are for platform administrators only: a tenant's

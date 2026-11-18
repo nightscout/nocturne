@@ -190,7 +190,7 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var lease = await OpenAsync(ct);
         var entities = await Subjects(lease.Context)
-            .Where(s => s.ApprovalStatus == "Pending" && !s.IsSystemSubject)
+            .Where(s => s.ApprovalStatus == nameof(ApprovalStatus.Pending) && !s.IsSystemSubject)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(ct);
         return entities.Select(e => ToRecord(e)!).ToList();
@@ -204,9 +204,9 @@ public class SubjectRepository : ISubjectRepository
         var candidates = match switch
         {
             EnrolmentMatch.Invite { Username: var username } => db.Subjects.Where(
-                s => s.Username == username && s.IsActive && s.ApprovalStatus != "Pending"),
+                s => s.Username == username && s.IsActive && s.ApprovalStatus != nameof(ApprovalStatus.Pending)),
             EnrolmentMatch.AccessRequest { DisplayName: var displayName } => db.Subjects.Where(
-                s => s.Name == displayName && !s.IsActive && s.ApprovalStatus == "Pending"),
+                s => s.Name == displayName && !s.IsActive && s.ApprovalStatus == nameof(ApprovalStatus.Pending)),
             _ => throw new ArgumentOutOfRangeException(nameof(match)),
         };
 
@@ -353,7 +353,7 @@ public class SubjectRepository : ISubjectRepository
             db.Subjects.Remove(entity);
             await db.SaveChangesAsync(ct);
 
-            await ScrubTenantAuditTrailsAsync(db, subjectId, ct);
+            await ScrubTenantRowsAsync(db, subjectId, ct);
 
             await tx.CommitAsync(ct);
             return new SubjectChange.Changed();
@@ -363,7 +363,8 @@ public class SubjectRepository : ISubjectRepository
     /// <summary>
     /// Clears the subject's client address and user agent from the audit trail of every tenant, not
     /// only those it still belongs to: a member removed earlier, or a platform admin who never
-    /// joined, has rows there too.
+    /// joined, has rows there too. Removes the subject's membership requests there as well, which
+    /// carry its own message and would otherwise sit in an owner's list naming no one.
     /// </summary>
     /// <remarks>
     /// Both tables force row level security, so each tenant's statements run with its id set local
@@ -371,7 +372,7 @@ public class SubjectRepository : ISubjectRepository
     /// tenant, so it is lifted and the tenant named in the predicate. Runs after the subject delete,
     /// so the last tenant set governs no other statement.
     /// </remarks>
-    private static async Task ScrubTenantAuditTrailsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    private static async Task ScrubTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         var tenantIds = await db.Tenants.AsNoTracking().Select(t => t.Id).ToListAsync(ct);
         foreach (var tenantId in tenantIds)
@@ -392,6 +393,10 @@ public class SubjectRepository : ISubjectRepository
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(a => a.IpAddress, (string?)null)
                     .SetProperty(a => a.UserAgent, (string?)null), ct);
+            await db.MembershipRequests
+                .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
+                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId)
+                .ExecuteDeleteAsync(ct);
         }
     }
 

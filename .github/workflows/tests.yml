@@ -33,6 +33,7 @@ jobs:
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
       composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
+      sdk: ${{ steps.filter.outputs.sdk == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -53,6 +54,9 @@ jobs:
               - 'tests/**'
               - 'nocturne.sln'
               - 'docs/postgres/**'
+              # The pages and diagrams of the API reference, which RuntimeOpenApiDocumentTests reads.
+              - 'docs/api-descriptions/**'
+              - 'docs/diagrams/**'
               - &alert-crates 'crates/nocturne-alerts-*/**'
               - &crates-workspace 'crates/Cargo.*'
               - 'crates/clippy.toml'
@@ -89,6 +93,10 @@ jobs:
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            sdk:
+              - *shared
+              - 'sdk/**'
+              - '.github/workflows/sdk-publish.yml'
             composeBundle:
               - *shared
               - 'src/Aspire/**'
@@ -107,7 +115,7 @@ jobs:
     needs: changes
     if: >-
       needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.crates == 'true'
-      || needs.changes.outputs.web == 'true'
+      || needs.changes.outputs.web == 'true' || needs.changes.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -170,6 +178,8 @@ jobs:
       # Unit and Integration each hold a Nocturne.API.Tests and a Nocturne.Infrastructure.Data.Tests,
       # and `dotnet sln add` silently skips a second project of the same name in one folder, hence
       # a folder each and the check that every test project produced its assembly.
+      # From the .NET 11 SDK `dotnet sln add` also adds each project's references, and fails on the
+      # second one of a name; the build finds them through the test projects.
       - name: Build
         run: |
           set -euo pipefail
@@ -179,14 +189,14 @@ jobs:
           fi
           sln="$RUNNER_TEMP/ci/ci.slnx"
           dotnet new sln -n ci -o "$RUNNER_TEMP/ci" --format slnx
-          dotnet sln "$sln" add --solution-folder Unit tests/Unit/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Integration tests/Integration/*/*.csproj
-          dotnet sln "$sln" add --solution-folder Parity \
+          dotnet sln "$sln" add --include-references false --solution-folder Unit tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Integration tests/Integration/*/*.csproj
+          dotnet sln "$sln" add --include-references false --solution-folder Parity \
             tests/Parity/Nocturne.Alerts.Corpus/Nocturne.Alerts.Corpus.csproj
           dotnet build "$sln" -p:GenerateNSwagClient=true
           missing=0
           for project in tests/Unit/*/*.csproj tests/Integration/*/*.csproj tests/Parity/*/*.csproj; do
-            dll="$(dirname "$project")/bin/Debug/net10.0/$(basename "$project" .csproj).dll"
+            dll="$(dirname "$project")/bin/Debug/net11.0/$(basename "$project" .csproj).dll"
             if [ ! -f "$dll" ]; then
               echo "::error file=$project::was not built ($dll is missing)"
               missing=1
@@ -202,7 +212,7 @@ jobs:
         if: env.BUILD_TESTS == 'true'
         run: |
           set -euo pipefail
-          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net10.0/*.staticwebassets.runtime.json | sort -u)
+          mapfile -t roots < <(jq -r '.ContentRoots[]' tests/*/*/bin/Debug/net11.0/*.staticwebassets.runtime.json | sort -u)
           paths=()
           for root in "${roots[@]}"; do
             case "$root" in
@@ -252,7 +262,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/unit/unit.slnx"
           dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
-          dotnet sln "$sln" add tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --include-references false tests/Unit/*/*.csproj
           dotnet test "$sln" --no-build \
             --filter "Category!=Integration" \
             --logger "trx;LogFileName=unit.trx" \
@@ -344,9 +354,12 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Tests with coverage
         if: ${{ !cancelled() }}
+        # Cargo 1.100's build-dir layout passes rustc one -L per dependency, which overflows the Windows
+        # command line into an @argfile that cargo-llvm-cov's rustc wrapper does not read, so the crate
+        # builds uninstrumented. Without the wrapper the coverage flags travel in RUSTFLAGS instead.
         run: |
           mkdir -p "$GITHUB_WORKSPACE/TestResults/desktop-rust"
-          cargo llvm-cov --locked --cobertura --output-path "$GITHUB_WORKSPACE/TestResults/desktop-rust/cobertura.xml"
+          cargo llvm-cov --locked --no-rustc-wrapper --cobertura --output-path "$GITHUB_WORKSPACE/TestResults/desktop-rust/cobertura.xml"
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -407,6 +420,18 @@ jobs:
       - name: CMS unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/cms exec vitest run --coverage
+      - name: Scalar plugin typecheck and unit tests
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm --filter @nocturne/scalar-plugin run check
+          pnpm --filter @nocturne/scalar-plugin run test
+      # The API serves the built plugin from wwwroot, where no .NET build can produce it, so the
+      # bundle is tracked. This fails a change to the package that did not rebuild it.
+      - name: Scalar plugin bundle is current
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm --filter @nocturne/scalar-plugin run build
+          git diff --exit-code -- ../API/Nocturne.API/wwwroot/scalar/nocturne-plugin.js
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.
@@ -475,7 +500,7 @@ jobs:
           set -euo pipefail
           sln="$RUNNER_TEMP/integration/integration.slnx"
           dotnet new sln -n integration -o "$RUNNER_TEMP/integration" --format slnx
-          dotnet sln "$sln" add \
+          dotnet sln "$sln" add --include-references false \
             tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
             tests/Integration/Nocturne.Connectors.Tests/Nocturne.Connectors.Tests.csproj
           dotnet test "$sln" --no-build \
@@ -514,7 +539,7 @@ jobs:
   web-app-tests:
     needs: [changes, build]
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -632,7 +657,7 @@ jobs:
   e2e:
     needs: [changes, images]
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -737,7 +762,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0"
+          dotnet-version: "11.0"
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -892,6 +917,37 @@ jobs:
             exit 1
           fi
 
+  # Generates the Java SDK from the filtered spec of the API build and fails when a model rejects
+  # an unknown response field or enum value. Only sdk/** (filter, config, templates) or a generator
+  # bump can bring that back: the filter strips the setting from every schema the API emits.
+  sdk-tolerant-models:
+    needs: [changes, build]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v5
+        with:
+          name: api-client
+          path: src/Web/packages/app/src/lib/api
+      - name: Filter spec to SDK endpoints (V4 + OAuth)
+        run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
+      - name: Generate Java SDK
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
+        with:
+          args: >-
+            generate
+            -i sdk/openapi-v4.json
+            -c sdk/java/config.yaml
+            -o sdk/java/out
+            --ignore-file-override sdk/java/.openapi-generator-ignore
+      - name: Verify models tolerate unknown fields and enum values
+        run: bash sdk/verify-tolerant-java-models.sh sdk/java/out
+
   # The single check to require on the branch: green when every job it needs passed or was
   # skipped for want of relevant changes.
   tests-passed:
@@ -910,6 +966,7 @@ jobs:
       - e2e
       - migration-upgrade
       - compose-bundle-drift
+      - sdk-tolerant-models
       - coverage
     if: always()
     runs-on: ubuntu-latest

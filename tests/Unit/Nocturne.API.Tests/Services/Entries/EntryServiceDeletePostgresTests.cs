@@ -3,9 +3,6 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V1;
@@ -339,17 +336,33 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         flags.Should().HaveCount(2).And.OnlyContain(f => f.DeletedAt != null && f.DeletedByUser);
     }
 
-    /// <summary>Runs the up of <c>RepairThirtyTwoHexEntryLegacyIds</c> again, as the migrator.</summary>
-    private async Task RepairThirtyTwoHexLegacyIdsAsync()
+    /// <summary>
+    /// Stores every live dashless UUID v7 legacy id as <c>RepairThirtyTwoHexEntryLegacyIds</c> (in the
+    /// v0.3.0 baseline) left the ids an older v1 POST assigned: cut to the 24 characters the entry is
+    /// served under. Runs as the migrator, per tenant, since FORCE ROW LEVEL SECURITY binds it too.
+    /// </summary>
+    private async Task StoreAssignedIdsAsRepairedAsync()
     {
-        await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.MigratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .Options);
-        var migrations = context.GetService<IMigrationsAssembly>();
-        var repair = migrations.Migrations.Single(m => m.Key.EndsWith("_RepairThirtyTwoHexEntryLegacyIds")).Value;
-        var up = migrations.CreateMigration(repair, context.Database.ProviderName!).UpOperations;
-        await context.GetService<IMigrationCommandExecutor>().ExecuteNonQueryAsync(
-            context.GetService<IMigrationsSqlGenerator>().Generate(up), context.GetService<IRelationalConnection>());
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            DO $$
+            DECLARE
+                t RECORD;
+            BEGIN
+                FOR t IN SELECT id FROM tenants LOOP
+                    PERFORM set_config('app.current_tenant_id', t.id::text, true);
+                    UPDATE sensor_glucose SET legacy_id = left(legacy_id, 24)
+                    WHERE deleted_at IS NULL AND legacy_id ~ '^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$';
+                    UPDATE meter_glucose SET legacy_id = left(legacy_id, 24)
+                    WHERE deleted_at IS NULL AND legacy_id ~ '^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$';
+                    UPDATE calibrations SET legacy_id = left(legacy_id, 24)
+                    WHERE deleted_at IS NULL AND legacy_id ~ '^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$';
+                END LOOP;
+            END $$;
+            """;
+        await cmd.ExecuteNonQueryAsync();
     }
 
     [Fact]
@@ -362,7 +375,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         served.Should().Be(assigned[..24]);
         (await setup.Service.GetEntryByIdAsync(served)).Should().BeNull();
 
-        await RepairThirtyTwoHexLegacyIdsAsync();
+        await StoreAssignedIdsAsRepairedAsync();
 
         var got = await setup.Controller.GetEntry(served);
         JsonSerializer.SerializeToElement(got.Result.Should().BeOfType<OkObjectResult>().Subject.Value)
@@ -384,34 +397,12 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         await setup.Service.CreateEntriesAsync([
             new Entry { Id = assigned, Type = type, Mbg = 150, Slope = 850, Intercept = 30000, Scale = 1, Mills = Mills() },
         ]);
-        await RepairThirtyTwoHexLegacyIdsAsync();
+        await StoreAssignedIdsAsRepairedAsync();
 
         (await setup.Service.DeleteEntryAsync(assigned[..24])).Should().BeTrue();
 
         (await setup.Service.GetEntryByIdAsync(assigned[..24])).Should().BeNull();
         (await setup.Service.GetEntryByIdAsync(assigned)).Should().BeNull();
-    }
-
-    [Fact]
-    public async Task A_repaired_id_already_stored_keeps_its_row_and_the_repair_runs_twice()
-    {
-        var setup = await CreateAsync();
-        var assigned = Guid.CreateVersion7().ToString("N");
-        var served = assigned[..24];
-        await setup.Service.CreateEntriesAsync([
-            new Entry { Id = served, Type = "sgv", Sgv = 100, Mills = Mills() },
-            new Entry { Id = assigned, Type = "sgv", Sgv = 200, Mills = Mills() },
-        ]);
-
-        await RepairThirtyTwoHexLegacyIdsAsync();
-        await RepairThirtyTwoHexLegacyIdsAsync();
-
-        (await setup.Service.GetEntryByIdAsync(served))!.Sgv.Should().Be(100);
-        (await setup.Service.DeleteEntryAsync(served)).Should().BeTrue();
-        (await setup.Service.GetEntryByIdAsync(served)).Should().BeNull();
-        await using var db = setup.Db();
-        (await db.SensorGlucose.IgnoreQueryFilters().Select(e => e.LegacyId).ToListAsync())
-            .Should().Equal(served, served);
     }
 
     [Theory]
@@ -423,7 +414,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         var assigned = Guid.CreateVersion7().ToString("N");
         await setup.Service.CreateEntriesAsync([new Entry { Id = assigned, Type = "sgv", Sgv = 166, Mills = Mills() }]);
 
-        await RepairThirtyTwoHexLegacyIdsAsync();
+        await StoreAssignedIdsAsRepairedAsync();
 
         if (api == Api.V1)
         {
@@ -442,34 +433,5 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
 
         (await setup.Service.GetEntryByIdAsync(assigned)).Should().BeNull();
         (await setup.Service.GetEntryByIdAsync(assigned[..24])).Should().BeNull();
-    }
-
-    [Fact]
-    public async Task The_repair_leaves_every_other_id_form_alone_and_collides_only_within_a_tenant()
-    {
-        var mine = await CreateAsync();
-        var theirs = await CreateAsync();
-        var assigned = Guid.CreateVersion7().ToString("N");
-        var untouched = new[]
-        {
-            Guid.NewGuid().ToString("N"),
-            Guid.CreateVersion7().ToString("D"),
-            Guid.CreateVersion7().ToString("N").ToUpperInvariant(),
-            "507f1f77bcf86cd799439abc",
-            "dexcom-1761474000000",
-        };
-        await mine.Service.CreateEntriesAsync([
-            new Entry { Id = assigned, Type = "sgv", Sgv = 120, Mills = Mills() },
-            .. untouched.Select(id => new Entry { Id = id, Type = "sgv", Sgv = 130, Mills = Mills() }),
-        ]);
-        await theirs.Service.CreateEntriesAsync([new Entry { Id = assigned[..24], Type = "sgv", Sgv = 300, Mills = Mills() }]);
-
-        await RepairThirtyTwoHexLegacyIdsAsync();
-
-        (await mine.Service.GetEntryByIdAsync(assigned[..24]))!.Sgv.Should().Be(120);
-        (await theirs.Service.GetEntryByIdAsync(assigned[..24]))!.Sgv.Should().Be(300);
-        await using var db = mine.Db();
-        (await db.SensorGlucose.Where(e => e.DeletedAt == null).Select(e => e.LegacyId).ToListAsync())
-            .Should().BeEquivalentTo([assigned[..24], .. untouched]);
     }
 }

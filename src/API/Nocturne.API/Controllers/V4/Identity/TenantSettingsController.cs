@@ -2,11 +2,14 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -18,9 +21,14 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Tenant-level settings a tenant's own administrators control, as opposed to the platform-admin
-/// surface in <c>PlatformAdmin.TenantController</c>.
+/// Settings that the tenant's own administrators control. A caller can read the settings, update
+/// the public docs setting and the display name, and read and update the patient relationship, the
+/// units and the time zone. The patient relationship, the units and the time zone need full access.
 /// </summary>
+/// <remarks>
+/// Set by the tenant's own administrators, as opposed to the platform-admin surface in
+/// <c>PlatformAdmin.TenantController</c>.
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/tenant-settings")]
@@ -32,17 +40,23 @@ public class TenantSettingsController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IPatientRecordRepository _patientRecords;
     private readonly IUnitsAndTimezoneService _unitsAndTimezone;
+    private readonly IPlatformPolicyRepository _platformPolicy;
+    private readonly BaseDomainOptions _baseDomain;
 
     public TenantSettingsController(
         ITenantService tenantService,
         ITenantAccessor tenantAccessor,
         IPatientRecordRepository patientRecords,
-        IUnitsAndTimezoneService unitsAndTimezone)
+        IUnitsAndTimezoneService unitsAndTimezone,
+        IPlatformPolicyRepository platformPolicy,
+        IOptions<BaseDomainOptions> baseDomain)
     {
         _tenantService = tenantService;
         _tenantAccessor = tenantAccessor;
         _patientRecords = patientRecords;
         _unitsAndTimezone = unitsAndTimezone;
+        _platformPolicy = platformPolicy;
+        _baseDomain = baseDomain.Value;
     }
 
     [HttpGet]
@@ -92,6 +106,62 @@ public class TenantSettingsController : ControllerBase
             return Problem(detail: "The display name must not be blank.", statusCode: 400, title: "Bad Request");
 
         return Ok(await _tenantService.SetDisplayNameAsync(_tenantAccessor.TenantId, name, ct));
+    }
+
+    /// <summary>
+    /// The tenant's subdomain and address, and whether the caller may change it: an owner may when
+    /// the platform policy allows owners to, and an owner who is a platform admin always may.
+    /// </summary>
+    [HttpGet("subdomain")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSubdomainDto>> GetSubdomain(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.TenantSettings))
+            return Forbid();
+
+        return Ok(await ReadSubdomainAsync(ct));
+    }
+
+    /// <inheritdoc cref="ITenantService.ChangeSlugAsync"/>
+    [DenyDemoSubject]
+    [HttpPut("subdomain")]
+    [RemoteCommand(Invalidates = ["GetSubdomain", "GetTenantSettings"])]
+    [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSubdomainDto>> ChangeSubdomain(
+        [FromBody] ChangeSubdomainRequest request, CancellationToken ct)
+    {
+        if (!await CanChangeSubdomainAsync(ct))
+            return Forbid();
+
+        var result = await _tenantService.ChangeSlugAsync(_tenantAccessor.TenantId, request.Slug, ct);
+        if (!result.IsValid)
+            return Problem(detail: result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+
+        return Ok(await ReadSubdomainAsync(ct));
+    }
+
+    private async Task<TenantSubdomainDto> ReadSubdomainAsync(CancellationToken ct)
+    {
+        var settings = await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct);
+        return new TenantSubdomainDto(
+            settings.Slug,
+            _baseDomain.TenantOrigin(settings.Slug),
+            _baseDomain.BaseDomain,
+            await CanChangeSubdomainAsync(ct),
+            settings.NextSlugChangeAt);
+    }
+
+    private async Task<bool> CanChangeSubdomainAsync(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess) || string.IsNullOrEmpty(_baseDomain.BaseDomain))
+            return false;
+
+        return HttpContext.GetAuthContext()?.IsPlatformAdmin == true
+            || (await _platformPolicy.GetAsync(ct)).AllowOwnerSlugChange;
     }
 
     /// <summary>
@@ -149,6 +219,7 @@ public class TenantSettingsController : ControllerBase
     /// </summary>
     /// <param name="locale">The browser's language tag (e.g. "en-AU"), for the units default.</param>
     /// <param name="fromNightscout">Also read the saved Nightscout instance's settings.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("units-and-timezone")]
     [RequireScope(Scope.FullAccess)]
     [RemoteQuery]
@@ -238,3 +309,15 @@ public record SetUnitsAndTimezoneRequest
     [MaxLength(64)]
     public string Timezone { get; init; } = "";
 }
+
+/// <param name="Slug">The tenant's subdomain.</param>
+/// <param name="Address">The tenant's origin, or null when no base domain is configured.</param>
+/// <param name="BaseDomain">The domain every subdomain sits under.</param>
+/// <param name="CanChange">Whether the caller may change the subdomain.</param>
+/// <param name="NextChangeAt">
+/// When the subdomain may next change, while its last change is less than an hour old; otherwise
+/// null.
+/// </param>
+public record TenantSubdomainDto(string Slug, string? Address, string BaseDomain, bool CanChange, DateTime? NextChangeAt);
+
+public record ChangeSubdomainRequest(string Slug);

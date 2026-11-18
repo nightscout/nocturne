@@ -10,15 +10,18 @@ using Nocturne.Core.Models.JsonConverters;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Manually-entered lab HbA1c results (typically one or two a year), stored purely for comparison
-/// against the computed eHbA1c estimate on the eHbA1c report. Not part of the V4 sync/dedup family:
-/// these rows are typed in once, never uploaded by a device or connector, and never read by the
-/// eHbA1c calculation itself.
+/// Lab HbA1c results entered by hand, usually one or two a year. Callers can list, add and delete them.
+/// The results are compared with the estimated eHbA1c on the eHbA1c report.
 /// </summary>
+/// <remarks>
+/// Not part of the V4 sync/dedup family: these rows are typed in once, never uploaded by a device or
+/// connector, and never read by the eHbA1c calculation itself.
+/// </remarks>
 /// <seealso cref="ILabHbA1cResultRepository"/>
 /// <seealso cref="LabHbA1cResult"/>
 [ApiController]
-[Tags("LabResults")]
+[System.ComponentModel.DisplayName("Lab HbA1c")]
+[Tags("Health")]
 [Route("api/v4/lab-results/hba1c")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
@@ -67,6 +70,8 @@ public class LabHbA1cController : ControllerBase
             return Problem(detail: "Lab value must be equivalent to 3.0–20.0% (NGSP)", statusCode: 400, title: "Bad Request");
         if (request.MeasuredAt > DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
             return Problem(detail: "MeasuredAt cannot be in the future", statusCode: 400, title: "Bad Request");
+        if (request.Note is { Length: > LabHbA1cResult.MaxNoteLength })
+            return Problem(detail: $"Note cannot be longer than {LabHbA1cResult.MaxNoteLength} characters", statusCode: 400, title: "Bad Request");
 
         var created = await _repository.CreateAsync(
             new LabHbA1cResult
@@ -106,6 +111,6 @@ public class CreateLabHbA1cResultRequest
     public double? Value { get; set; }
     public string Unit { get; set; } = "percent";
 
-    /// <summary>Optional free-text note (e.g. lab name).</summary>
+    /// <summary>Optional free-text note (e.g. lab name), at most <see cref="LabHbA1cResult.MaxNoteLength"/> characters.</summary>
     public string? Note { get; set; }
 }

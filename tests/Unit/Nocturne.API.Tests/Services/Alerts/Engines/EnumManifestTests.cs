@@ -44,6 +44,7 @@ internal static class EnumManifest
             ["PumpModeState"] = WireNames<PumpModeState>(),
             ["StateSpanCategory"] = WireNames<StateSpanCategory>(),
             ["TempBasalMetric"] = WireNames<TempBasalMetric>(),
+            ["TransmitterBatteryMetric"] = WireNames<TransmitterBatteryMetric>(),
             ["TrendBucket"] = WireNames<TrendBucket>(),
             ["PayloadFields"] = PayloadFields(),
         };

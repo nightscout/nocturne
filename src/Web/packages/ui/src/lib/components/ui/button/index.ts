@@ -63,6 +63,9 @@ export const buttonVariants = tv({
       touch: "h-11 px-4 py-2 has-[>svg]:px-3 @md:h-9",
       "touch-sm": "h-11 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5 @md:h-8",
       "icon-touch": "size-11 @md:size-9",
+      // A page's primary action floating over a phone's scrolling content. The page-coloured ring
+      // cuts it out of whatever passes beneath, in place of a lifting shadow.
+      fab: "size-14 rounded-full ring-4 ring-background [&_svg:not([class*='size-'])]:size-6",
       icon: "size-9",
       "icon-xs": "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3",
       "icon-sm": "size-8",

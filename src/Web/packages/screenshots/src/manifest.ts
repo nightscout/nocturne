@@ -253,7 +253,7 @@ const inApp = { channelType: 'in_app' };
 /**
  * Created disabled: the rules exist to be photographed, and one the engine evaluated against the
  * seeded readings could raise a live alert over every capture after it. The switch that shows it
- * is on the Identity card, which none of these entries photograph.
+ * is on the Name and severity card, which none of these entries photograph.
  */
 async function createAlertRule(
 	{ fetch }: ArrangeContext,
@@ -507,7 +507,7 @@ export const definitions: ScreenshotDefinition[] = [
 	{
 		id: 'alerts-configuration',
 		route: '/alerts',
-		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New rule button sits in the top corner.',
+		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New alert button sits in the top corner.',
 	},
 	{
 		id: 'report-agp',
@@ -732,7 +732,7 @@ export const definitions: ScreenshotDefinition[] = [
 			await page.getByTestId('request-membership-dialog').waitFor();
 		},
 		clip: '[data-testid="request-membership-dialog"]',
-		alt: 'The Request Membership box. You write a short note introducing yourself to the site owner, up to 500 characters, then press Continue to Sign Up.',
+		alt: 'The Request Membership box. You type your name and a short note to the site owner, up to 500 characters, then press Send request and make a passkey.',
 	},
 	{
 		id: 'totp-setup',
@@ -770,7 +770,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		arrange: seededLowRule,
 		// The historic firings are the seeded alarm history, so this one image differs every capture.
-		alt: 'The page for editing one alert rule, here the Low rule. The main column starts with an Identity card for its name, description and how serious it is, then a Condition card that reads Notify when all of these are true, with one line saying glucose below 70. Down the right side, a Test alert panel offers Fire saved rule and Replay against history, and under it a list of the times this rule has actually gone off.',
+		alt: 'The page for editing one alert rule, here the Low rule. The main column starts with a Name and severity card for its name, description and how serious it is, then a Condition card that reads Notify when all of these are true, with one line saying glucose below 70. Down the right side, a Check the alert panel says how many times the rule would have gone off in the last 14 days and offers Send a test alert and Replay a past day, and under it a list of the times this rule has actually gone off.',
 	},
 	{
 		id: 'alert-rule-identity',
@@ -778,7 +778,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		arrange: seededLowRule,
 		clip: '[data-testid="alert-identity-card"]',
-		alt: 'The Identity card of an alert rule. It holds boxes for the name of the rule and an optional description, a Severity menu set to Warning, an Enabled switch in the top corner, and a tick box for Allow through Do not disturb with a note that critical rules always get through.',
+		alt: 'The Name and severity card of an alert rule. It holds boxes for the name of the rule and an optional description, a Severity menu set to Warning, an Enabled switch in the top corner, and a tick box for Also alert during Do Not Disturb.',
 		anchors: {
 			severity: '[data-testid="alert-severity"]',
 			'allow-dnd': '[data-testid="alert-allow-dnd"]',
@@ -854,7 +854,7 @@ export const definitions: ScreenshotDefinition[] = [
 			await page.getByTestId('alert-row-actions-menu').waitFor();
 		},
 		clip: '[data-testid="alert-condition-card"]',
-		alt: 'The actions menu opened from the three-dot button at the end of a condition line. It offers Wrap in AND group, Wrap in OR group, Wrap in NOT, Make sustained, and Remove.',
+		alt: 'The actions menu opened from the three-dot button at the end of a condition line. It offers Add “for at least”, Make it the opposite (NOT), Put in an “all of” group, Put in an “any of” group, Move up, Move down, and Remove.',
 	},
 	{
 		id: 'alert-rule-channels',

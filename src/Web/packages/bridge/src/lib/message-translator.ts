@@ -82,6 +82,11 @@ class MessageTranslator {
     }
   }
 
+  /** Whether this tenant's storage events are reaching the bridge (see `SocketIOServer.setRelayState`). */
+  handleRelayState(relayed: boolean): void {
+    this.socketIOServer.setRelayState(this.tenantSlug, relayed, this);
+  }
+
   handleStorageCreate(data: unknown): void {
     try {
       const translatedData = this.translateStorageEvent(data);

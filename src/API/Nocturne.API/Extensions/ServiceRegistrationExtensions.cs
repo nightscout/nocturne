@@ -372,7 +372,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IStoreSizeReader, StoreSizeReader>();
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
-        services.AddScoped<IIobCobReader, IobCobReader>();
+        services.AddScoped<IobCobReader>();
+        services.AddScoped<IIobCobReader>(sp => sp.GetRequiredService<IobCobReader>());
+        services.AddScoped<IIobCobSeriesReader>(sp => sp.GetRequiredService<IobCobReader>());
         services.AddScoped<ISummaryService, SummaryService>();
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
         var predictionSource = PredictionOptions.ResolveSource(configuration);
@@ -589,6 +591,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IOAuthTokenService, OAuthTokenService>();
         services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
         services.AddScoped<IMemberInviteService, MemberInviteService>();
+        services.AddScoped<ITenantCreationInviteService, TenantCreationInviteService>();
         services.AddScoped<IMembershipRequestService, MembershipRequestService>();
         services.AddScoped<IAccessRequestService, AccessRequestService>();
         services.AddScoped<IGuestLinkService, GuestLinkService>();
@@ -627,8 +630,8 @@ public static class ServiceRegistrationExtensions
         var origin = $"https://{baseDomain}";
         services.AddFido2(options =>
         {
-            options.ServerDomain = rpId;
-            options.ServerName = "Nocturne";
+            options.RPID = rpId;
+            options.RPName = "Nocturne";
             options.Origins = new HashSet<string> { origin };
         });
 
@@ -745,6 +748,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITreatmentService, TreatmentService>();
         services.AddScoped<ITreatmentStore, TreatmentReadService>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadStore, Nocturne.Infrastructure.Data.Repositories.RejectedUploadRepository>();
+        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditLogReader, Nocturne.Infrastructure.Data.Repositories.AuditLogReader>();
+        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditConfigStore, Nocturne.Infrastructure.Data.Repositories.AuditConfigRepository>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadRecorder, Nocturne.API.Services.Uploads.RejectedUploadRecorder>();
         services.AddScoped<ITreatmentCache, TreatmentCacheAdapter>();
         services.AddScoped<SignalRTreatmentEventSink>();
@@ -805,6 +810,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBasalRateResolver, BasalRateResolver>();
         services.AddScoped<IBasalSegmentService, BasalSegmentService>();
         services.AddScoped<IActiveProfileSchedulesService, ActiveProfileSchedulesService>();
+        services.AddScoped<IProfileHistoryService, ProfileHistoryService>();
+        services.AddScoped<Services.Profiles.ProfileHistoryGlucoseReader>();
         services.AddScoped<ISensitivityResolver, SensitivityResolver>();
         services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
@@ -838,6 +845,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
         services.AddScoped<IConnectorFoodEntryRepository, ConnectorFoodEntryRepository>();
         services.AddScoped<IMealMatchingService, MealMatchingService>();
+        services.AddScoped<IMealReadService, MealReadService>();
 
         // Activity and health metric services
         services.AddScoped<IActivityService, ActivityService>();
@@ -929,6 +937,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IChartDataAssembler, DashboardChartDataAssembler>();
         services.AddScoped<IChartDataService, ChartDataService>();
         services.AddScoped<IActogramReportService, ActogramReportService>();
+        services.AddScoped<IShareClockReader, ShareClockReader>();
         services.AddScoped<TenantClockResolver>();
         services.AddScoped<ILoopAnalysisService, LoopAnalysisService>();
         services.AddScoped<IDataOverviewService, DataOverviewService>();
@@ -955,6 +964,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
+        services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
         // Manually-entered lab results (outside the V4 sync/dedup family)
@@ -1191,6 +1201,7 @@ public static class ServiceRegistrationExtensions
     )
     {
         services.AddScoped<IDataSourceService, DataSourceService>();
+        services.AddScoped<IConnectionService, ConnectionService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
         services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();

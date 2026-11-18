@@ -1,6 +1,6 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
-  import { bg, bgLabel, formatLocale, relativeAge } from "#lib/utils/formatting.js";
+  import { bg, bgLabel, relativeAge, time } from "#lib/utils/formatting.js";
   import type {
     LoopPillData,
     PillInfoItem,
@@ -95,19 +95,13 @@
   const display = $derived.by(() => {
     if (!data?.lastLoopTime) return null;
 
-    const time = new Date(data.lastLoopTime).toLocaleTimeString(
-      formatLocale(),
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
+    const at = time(data.lastLoopTime);
 
     if (data.eventualBG != null) {
-      return `${time} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
+      return `${at} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
     }
 
-    return time;
+    return at;
   });
 
   const level = $derived<AlertLevel>(data?.level ?? "none");

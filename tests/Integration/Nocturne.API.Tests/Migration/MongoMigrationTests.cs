@@ -179,6 +179,29 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
             $"{status.CollectionProgress.Count} collections");
     }
 
+    /// <summary>
+    /// The fixture's 20 entries straddle 1746153849903: ten are dated at or after it. MongoDB mode
+    /// streams the whole collection, so the range is applied to each document and the total is
+    /// what the range holds.
+    /// </summary>
+    [Fact]
+    public async Task MigrateEntries_WithAStartDate_ImportsOnlyTheEntriesFromThatDate()
+    {
+        var from = DateTimeOffset.FromUnixTimeMilliseconds(1746153849903).UtcDateTime;
+
+        var status = await RunMigrationToCompletionAsync(
+            MigrationMode.MongoDb, collections: ["entries"], startDate: from);
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        var entries = status.CollectionProgress["entries"];
+        entries.DocumentsMigrated.Should().Be(10);
+        entries.TotalDocuments.Should().Be(10);
+        entries.DocumentsFailed.Should().Be(0);
+
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.SensorGlucose.CountAsync()).Should().Be(10);
+    }
+
     #region Helpers
 
     private async Task<List<JsonElement>> GetV3EntriesAsync()
@@ -191,14 +214,16 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
 
     private async Task<MigrationJobStatus> RunMigrationToCompletionAsync(
         MigrationMode mode,
-        List<string>? collections = null)
+        List<string>? collections = null,
+        DateTime? startDate = null)
     {
         var request = new StartMigrationRequest
         {
             Mode = mode,
             MongoConnectionString = _migration.MongoConnectionString,
             MongoDatabaseName = MigrationTestFixture.DatabaseName,
-            Collections = collections ?? []
+            Collections = collections ?? [],
+            StartDate = startDate,
         };
 
         var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);

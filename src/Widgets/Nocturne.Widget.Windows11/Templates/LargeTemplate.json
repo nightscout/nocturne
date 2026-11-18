@@ -125,7 +125,7 @@
                                 },
                                 {
                                     "type": "TextBlock",
-                                    "text": "${iob} U",
+                                    "text": "${iob}",
                                     "size": "Large",
                                     "weight": "Bolder",
                                     "spacing": "None"
@@ -151,7 +151,7 @@
                                 },
                                 {
                                     "type": "TextBlock",
-                                    "text": "${cob} g",
+                                    "text": "${cob}",
                                     "size": "Large",
                                     "weight": "Bolder",
                                     "spacing": "None"

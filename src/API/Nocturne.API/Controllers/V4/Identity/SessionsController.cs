@@ -11,10 +11,13 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages the authenticated user's web login sessions. A session is one login/device —
-/// a refresh-token rotation chain sharing a single OIDC session ID — so revoking a
-/// session logs that device out everywhere its tokens are used.
+/// The web login sessions of the signed-in account. Each session is one login on one device. A
+/// caller can list sessions, revoke a session and revoke all other sessions. A revoked session
+/// cannot be renewed, and it ends when its current access token expires.
 /// </summary>
+/// <remarks>
+/// A session is a refresh-token rotation chain sharing a single OIDC session ID.
+/// </remarks>
 /// <seealso cref="IRefreshTokenService"/>
 [ApiController]
 [Tags("Identity")]
@@ -76,6 +79,7 @@ public class SessionsController : ControllerBase
     /// <summary>
     /// Revoke a login session, logging that device out. Revoking the current
     /// session is allowed and acts as a logout.
+    /// The demo's shared visitor cannot call it (403).
     /// </summary>
     /// <remarks>
     /// The demo's subject is shared, so these sessions belong to other visitors and revoking one
@@ -115,6 +119,7 @@ public class SessionsController : ControllerBase
 
     /// <summary>
     /// Revoke every session except the current one (log out everywhere else).
+    /// The demo's shared visitor cannot call it (403).
     /// </summary>
     /// <remarks>
     /// On the shared demo subject, "everything else" is every other visitor currently using it.

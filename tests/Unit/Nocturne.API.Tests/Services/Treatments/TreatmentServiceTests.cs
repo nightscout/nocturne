@@ -164,6 +164,48 @@ public class TreatmentServiceTests
             It.Is<IReadOnlyList<Treatment>>(announced => announced.Single() == meal), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// A create that updated a record already stored (a client's resend, the v1 PUT create fallback,
+    /// a connector republish) is announced as the update it is: write-back then looks for the copy
+    /// upstream holds before writing, as for any edit, where the create's POST would store a second
+    /// copy beside one held under another form.
+    /// </summary>
+    [Fact]
+    public async Task CreateTreatmentsAsync_AnnouncesATreatmentThatUpdatedAStoredRecordAsAnUpdate()
+    {
+        var inserted = new Treatment { Id = "new" };
+        var reuploaded = new Treatment { Id = "resent" };
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<StoredTreatment>?>()))
+            .Callback<IReadOnlyList<Treatment>, WriteOrigin, CancellationToken, ICollection<StoredTreatment>?>((_, _, _, landed) =>
+            {
+                landed!.Add(new StoredTreatment.Unnamed(inserted));
+                landed.Add(new StoredTreatment.Unnamed(reuploaded) { Updated = true });
+            })
+            .ReturnsAsync(new BulkWrite<Treatment>([inserted, reuploaded], 0));
+
+        await _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()]);
+
+        _mockEvents.Verify(x => x.OnCreatedAsync(
+            It.Is<IReadOnlyList<Treatment>>(announced => announced.Single() == inserted), It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(reuploaded, It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(inserted, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentsAsync_WhenEveryTreatmentUpdatedAStoredRecord_AnnouncesNoCreate()
+    {
+        var reuploaded = new Treatment { Id = "resent" };
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<StoredTreatment>?>()))
+            .Callback<IReadOnlyList<Treatment>, WriteOrigin, CancellationToken, ICollection<StoredTreatment>?>((_, _, _, landed) =>
+                landed!.Add(new StoredTreatment.Unnamed(reuploaded) { Updated = true }))
+            .ReturnsAsync(new BulkWrite<Treatment>([reuploaded], 0));
+
+        await _treatmentService.CreateTreatmentsAsync([new Treatment()]);
+
+        _mockEvents.Verify(x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(reuploaded, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task CreateTreatmentsAsync_WhenNothingWasStored_AnnouncesNothing()
     {

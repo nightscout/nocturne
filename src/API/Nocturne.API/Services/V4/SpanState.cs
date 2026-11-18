@@ -53,6 +53,10 @@ internal sealed class SpanState
     /// counted in <see cref="DecompositionResult.SkippedDeleted"/>. Each written span takes the owner of
     /// the span it was written from.
     /// </summary>
+    /// <param name="service">Performs the update and the upsert.</param>
+    /// <param name="result">Receives each written span as created, updated or unchanged, and the count of those skipped.</param>
+    /// <param name="owners">The owner of each span by instance; a written span is added under its source span's owner.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="refuse">
     /// Given, a value the store refuses (<see cref="StoreRefusal"/>) fails only its own span: the write
     /// that held it is made again one span at a time, once, and each span refused is passed here and

@@ -10,8 +10,12 @@ using IAuthorizationService = Nocturne.Core.Contracts.Identity.IAuthorizationSer
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// Authorization controller that provides 1:1 compatibility with Nightscout authorization endpoints.
+/// Nightscout authorization. A client can exchange an access token for a JWT and read its
+/// permissions. A client with full access can list, create, update and delete subjects and roles.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with Nightscout authorization endpoints.
+/// </remarks>
 /// <seealso cref="IAuthorizationService"/>
 [ApiController]
 [Tags("V2")]
@@ -37,7 +41,8 @@ public class AuthorizationController : ControllerBase
     }
 
     /// <summary>
-    /// Generate JWT token from access token
+    /// Generate JWT token from access token.
+    /// Needs no other credential: the access token in the URL is validated, and a missing or invalid one returns 401. Accepts legacy subject access tokens and <c>noc_</c> direct-grant tokens; the JWT carries the grant's scopes.
     /// </summary>
     /// <param name="accessToken">Access token to exchange for JWT</param>
     /// <returns>JWT token response</returns>
