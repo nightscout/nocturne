@@ -7,7 +7,11 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { toastSaved } from "#lib/forms/index.js";
-  import { createRule, getRules } from "#lib/api/generated/alertRules.generated.remote.js";
+  import {
+    createRule,
+    getPresets,
+    getRules,
+  } from "#lib/api/generated/alertRules.generated.remote.js";
   import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import type { ReplayRuleDefinition } from "#lib/api/generated/nocturne-api-client.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -29,12 +33,13 @@
   import TypeStep from "#lib/components/alerts/wizard/TypeStep.svelte";
   import WizardProgress from "#lib/components/alerts/wizard/WizardProgress.svelte";
   import {
+    draftAutoResolve,
     draftCondition,
     draftIssue,
-    getTemplate,
     newDraft,
     suggestName,
     templateLabel,
+    templatesFrom,
     templateTrackers,
     trackerLeaf,
     type AlertDraft,
@@ -70,16 +75,19 @@
   let draft = $state<AlertDraft | null>(null);
   let nameEdited = $state(false);
 
+  const presetsQuery = getPresets();
+  const templates = $derived(templatesFrom(presetsQuery.current ?? []));
+
   const trackersQuery = getDefinitions({});
   const trackerDefinitions = $derived(trackersQuery.current ?? []);
-  const trackers = $derived(draft ? templateTrackers(draft.template, trackerDefinitions) : []);
+  const trackers = $derived(draft ? templateTrackers(draft.def, trackerDefinitions) : []);
 
   // A type chosen before the trackers loaded moves to its tracker when they arrive.
   $effect(() => {
     const tracker = trackers[0];
     untrack(() => {
       if (tracker && draft?.leaf && !draft.leaf.tracker_age) {
-        draft.leaf = trackerLeaf(draft.template, tracker);
+        draft.leaf = trackerLeaf(draft.def, tracker);
       }
     });
   });
@@ -108,8 +116,17 @@
   const suggestedName = $derived(draft ? suggestName(draft, trackerDefinitions) : "");
   const name = $derived(nameEdited ? editor.name.trim() : suggestedName);
 
+  // A type that closes on the opposite of its condition gets that as its resolve condition.
+  const autoResolve = $derived<ConditionNode | null>(draft ? draftAutoResolve(draft) : null);
+
   function rule(): RuleEditorState {
-    return { ...editor, name, condition };
+    return {
+      ...editor,
+      name,
+      condition,
+      autoResolveEnabled: autoResolve !== null,
+      autoResolveCondition: autoResolve,
+    };
   }
 
   function open(index: number): void {
@@ -129,9 +146,11 @@
   }
 
   function pickType(id: TemplateId): void {
+    const template = templates.find((t) => t.id === id);
+    if (!template) return;
     if (draft?.template !== id) {
-      draft = newDraft(id, trackerDefinitions);
-      editor.severity = getTemplate(id).severity;
+      draft = newDraft(template, trackerDefinitions);
+      editor.severity = template.severity;
       // The steps after this one were set for a different type.
       reached = TYPE;
     }
@@ -280,7 +299,12 @@
     </h2>
 
     {#if step === TYPE || !draft}
-      <TypeStep selected={draft?.template ?? null} onPick={pickType} {trackerDefinitions} />
+      <TypeStep
+            selected={draft?.template ?? null}
+            onPick={pickType}
+            {templates}
+            {trackerDefinitions}
+          />
     {:else if step === SETTINGS}
       {#key draft.template}
         <SettingsStep bind:draft {availableRules} {trackers} />
@@ -292,6 +316,7 @@
         bind:editor
         bind:nameEdited
         {condition}
+        {autoResolve}
         {suggestedName}
         rule={replayRule}
         onOpenReplay={openReplay}

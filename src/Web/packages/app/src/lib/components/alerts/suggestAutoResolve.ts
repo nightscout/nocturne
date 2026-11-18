@@ -118,6 +118,14 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 				value: payload.value,
 			});
 		}
+		case "tracker_age": {
+			const p = node.tracker_age;
+			if (!p) return null;
+			return {
+				type: "tracker_age",
+				tracker_age: { ...p, operator: invertOperator(p.operator) },
+			};
+		}
 		case "loop_stale":
 		case "loop_enaction_stale":
 			// Loop liveness only supports `>` / `>=` operators — there's no

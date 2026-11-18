@@ -6,6 +6,7 @@ import {
   AlertReplayEventKind,
   type AlertFiringSearchResult,
 } from "#lib/api/generated/nocturne-api-client.js";
+import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const calls = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ const calls = vi.hoisted(() => ({
 
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => []),
+  getPresets: () => remoteQuery(() => ALERT_PRESETS),
   createRule: remoteCommand((body: unknown) => {
     calls.created.push(body);
     return calls.createError ? Promise.reject(calls.createError) : Promise.resolve({ id: "new-id" });
@@ -248,7 +250,19 @@ describe("new alert wizard", () => {
       severity: "warning",
       conditionType: "threshold",
       isEnabled: true,
+      autoResolveEnabled: true,
+      autoResolveParams: { type: "threshold", threshold: { direction: "above", value: 70 } },
     });
+  });
+
+  it("says on the last step what closes the alert", async () => {
+    render(NewAlertPage, {});
+
+    await toCheckStep();
+
+    await expect
+      .element(page.getByTestId("alert-auto-resolve"))
+      .toHaveTextContent("The alert closes when this is true: Glucose above 70 mg/dL.");
   });
 
   it("keeps a name the person typed", async () => {

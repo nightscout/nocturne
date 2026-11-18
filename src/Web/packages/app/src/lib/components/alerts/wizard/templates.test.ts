@@ -4,18 +4,39 @@ import {
 	TrackerMode,
 	type TrackerDefinitionDto,
 } from "#lib/api/generated/nocturne-api-client.js";
+import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
 import { buildBody, parseRule } from "../types";
 import {
-	TEMPLATES,
-	offeredTemplates,
+	offeredTemplates as offeredFrom,
+	draftAutoResolve,
 	draftCondition,
 	draftIssue,
-	newDraft,
+	newDraft as draftOf,
 	suggestName,
 	templateDescription,
 	templateLabel,
-	templateTrackers,
+	templatesFrom,
+	templateTrackers as trackersOf,
+	type TemplateId,
 } from "./templates.svelte";
+
+const TEMPLATES = templatesFrom(ALERT_PRESETS);
+
+function template(id: TemplateId) {
+	return TEMPLATES.find((t) => t.id === id)!;
+}
+
+function newDraft(id: TemplateId, definitions: TrackerDefinitionDto[] = []) {
+	return draftOf(template(id), definitions);
+}
+
+function templateTrackers(id: TemplateId, definitions: TrackerDefinitionDto[]) {
+	return trackersOf(template(id), definitions);
+}
+
+function offeredTemplates(definitions: TrackerDefinitionDto[]) {
+	return offeredFrom(TEMPLATES, definitions);
+}
 
 const sensorTracker: TrackerDefinitionDto = {
 	id: "11111111-1111-1111-1111-111111111111",
@@ -51,6 +72,45 @@ function bodyOf(draft: ReturnType<typeof newDraft>) {
 }
 
 describe("alert wizard templates", () => {
+	it("lists the presets it has copy for, in their order, and then the custom type", () => {
+		const templates = templatesFrom([
+			ALERT_PRESETS[1],
+			{ ...ALERT_PRESETS[0], id: "a_preset_from_a_later_api" },
+			ALERT_PRESETS[0],
+		]);
+		expect(templates.map((t) => t.id)).toEqual(["low", "urgent_low", "custom"]);
+	});
+
+	it("closes a level alert at once on the other side of the level it was given", () => {
+		const draft = newDraft("low");
+		draft.leaf!.threshold!.value = 80;
+		draft.waitMinutes = 15;
+
+		const body = buildBody({
+			...parseRule(null),
+			condition: draftCondition(draft),
+			autoResolveEnabled: true,
+			autoResolveCondition: draftAutoResolve(draft),
+		});
+
+		expect(body.autoResolveParams).toEqual({ type: "threshold", threshold: { direction: "above", value: 80 } });
+	});
+
+	it("closes an alert on a tracker when the tracker is younger than the age again", () => {
+		const resolve = draftAutoResolve(newDraft("sensor_change_due", definitions));
+		expect(resolve?.composite?.conditions[0].tracker_age).toEqual({
+			tracker_definition_id: sensorTracker.id,
+			operator: "<",
+			minutes: 252 * 60,
+		});
+	});
+
+	it("gives no closing condition to a type with no opposite, or to a custom alert", () => {
+		expect(draftAutoResolve(newDraft("no_readings"))).toBeNull();
+		expect(draftAutoResolve(newDraft("loop_not_running"))).toBeNull();
+		expect(draftAutoResolve(newDraft("custom"))).toBeNull();
+	});
+
 	it("gives every type a label and a description of its own", () => {
 		const labels = TEMPLATES.map((t) => templateLabel(t.id));
 		const descriptions = TEMPLATES.map((t) => templateDescription(t.id));
@@ -161,11 +221,11 @@ describe("alert wizard templates", () => {
 	});
 
 	it("accepts every type as first offered", () => {
-		for (const template of offeredTemplates(definitions)) {
-			expect(draftIssue(newDraft(template.id, definitions)), template.id).toBeNull();
+		for (const offered of offeredTemplates(definitions)) {
+			expect(draftIssue(newDraft(offered.id, definitions)), offered.id).toBeNull();
 		}
-		for (const template of offeredTemplates([])) {
-			expect(draftIssue(newDraft(template.id)), template.id).toBeNull();
+		for (const offered of offeredTemplates([])) {
+			expect(draftIssue(newDraft(offered.id)), offered.id).toBeNull();
 		}
 	});
 

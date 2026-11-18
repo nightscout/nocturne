@@ -117,6 +117,31 @@ public class AlertRulesController : ControllerBase
     }
 
     /// <summary>
+    /// The ready-made alerts, in the order they are offered: what the alert wizard lists and what
+    /// the setup hub starts a tenant with.
+    /// </summary>
+    [HttpGet("presets")]
+    [RequireScope(Scope.AlertsRead)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<AlertPresetResponse>), StatusCodes.Status200OK)]
+    public ActionResult<List<AlertPresetResponse>> GetPresets() =>
+        Ok(AlertPresets.All
+            .Select(p => new AlertPresetResponse
+            {
+                Id = p.Id,
+                Group = p.Group,
+                Severity = p.Severity,
+                CanWait = p.CanWait,
+                ConditionType = p.ConditionType,
+                ConditionParams = p.ConditionParams is null ? null : DeserializeJson(p.ConditionParams),
+                AutoResolve = p.AutoResolve,
+                TrackerCategories = [.. p.TrackerCategories],
+                TrackerOnlyAgeHours = p.TrackerOnlyAgeHours,
+                StarterKind = p.StarterKind,
+            })
+            .ToList());
+
+    /// <summary>
     /// Get a single alert rule with its flat channel list.
     /// </summary>
     [HttpGet("{id:guid}")]
@@ -663,6 +688,21 @@ public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds, s
 }
 
 #region DTOs
+
+/// <summary>An <see cref="AlertPreset"/>, with its condition as a JSON object.</summary>
+public class AlertPresetResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public AlertPresetGroup Group { get; set; }
+    public AlertRuleSeverity Severity { get; set; }
+    public bool CanWait { get; set; }
+    public AlertConditionType? ConditionType { get; set; }
+    public object? ConditionParams { get; set; }
+    public bool AutoResolve { get; set; }
+    public List<TrackerCategory> TrackerCategories { get; set; } = [];
+    public int? TrackerOnlyAgeHours { get; set; }
+    public StarterAlertKind? StarterKind { get; set; }
+}
 
 public class AlertRuleResponse
 {

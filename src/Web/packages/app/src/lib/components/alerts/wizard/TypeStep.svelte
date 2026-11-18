@@ -26,17 +26,20 @@
     offeredTemplates,
     templateDescription,
     templateLabel,
+    type TemplateDef,
     type TemplateId,
   } from "./templates.svelte";
 
   interface Props {
     selected: TemplateId | null;
     onPick: (id: TemplateId) => void;
+    /** The types there are, from the API's presets. */
+    templates: readonly TemplateDef[];
     /** The trackers there are; a type that reads only a tracker is listed when one matches. */
     trackerDefinitions?: readonly TrackerDefinitionDto[];
   }
 
-  let { selected, onPick, trackerDefinitions = [] }: Props = $props();
+  let { selected, onPick, templates, trackerDefinitions = [] }: Props = $props();
 
   // The padding is on the content, which sits above the paint.
   const ROW = cn(itemVariants({ variant: "row", interactive: true }), "p-0");
@@ -62,7 +65,7 @@
     custom: SlidersHorizontal,
   };
 
-  const offered = $derived(offeredTemplates(trackerDefinitions));
+  const offered = $derived(offeredTemplates(templates, trackerDefinitions));
   const common = $derived(offered.filter((t) => t.group === "common"));
   const more = $derived(offered.filter((t) => t.group === "more"));
 
