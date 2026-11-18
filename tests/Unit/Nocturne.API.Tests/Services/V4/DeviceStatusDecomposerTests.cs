@@ -2370,6 +2370,103 @@ public class DeviceStatusDecomposerTests : IDisposable
     #region LoopJson and AidVersion
 
     [Fact]
+    public async Task DecomposeAsync_OpenApsKeysTheModelDoesNotName_SurviveTheStoreAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "suggested": {
+                "timestamp": "2023-11-14T12:00:00Z",
+                "reason": "COB: 0",
+                "someNewField": { "nested": [1, 2] },
+                "predBGs": { "IOB": [100, 99], "aCOB": [100, 101] },
+                "requested": { "rate": 1.2, "requestedExtra": "x" }
+              },
+              "enacted": {
+                "timestamp": "2023-11-14T12:00:00Z",
+                "received": true,
+                "rate": 1.5,
+                "enactedExtra": 4,
+                "requested": { "rate": 1.5, "requestedExtra": "y" }
+              },
+              "iob": { "iob": 1.8, "basaliob": 0.4, "iobExtra": 7 },
+              "version": "0.7.0",
+              "openapsExtra": { "a": true }
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "openaps-unknown-keys",
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            OpenAps = JsonSerializer.Deserialize<OpenApsStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(aps.AdditionalProperties));
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(projected.OpenAps)).RootElement;
+
+        var suggested = read.GetProperty("suggested");
+        suggested.GetProperty("someNewField").GetProperty("nested").GetArrayLength().Should().Be(2);
+        suggested.GetProperty("predBGs").GetProperty("aCOB").GetArrayLength().Should().Be(2);
+        suggested.GetProperty("predBGs").GetProperty("IOB").GetArrayLength().Should().Be(2);
+        suggested.GetProperty("requested").GetProperty("requestedExtra").GetString().Should().Be("x");
+        var enacted = read.GetProperty("enacted");
+        enacted.GetProperty("enactedExtra").GetInt32().Should().Be(4);
+        enacted.GetProperty("requested").GetProperty("requestedExtra").GetString().Should().Be("y");
+        var iob = read.GetProperty("iob");
+        iob.GetProperty("iobExtra").GetInt32().Should().Be(7);
+        iob.GetProperty("iob").GetDouble().Should().Be(1.8);
+        read.GetProperty("openapsExtra").GetProperty("a").GetBoolean().Should().BeTrue();
+        read.GetProperty("version").GetString().Should().Be("0.7.0");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpKeysTheModelDoesNotName_SurviveTheStoreAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "clock": "2023-11-14T12:00:00Z",
+              "reservoir": 80,
+              "battery": { "percent": 70, "batteryExtra": 1 },
+              "status": { "status": "normal", "suspended": false, "statusExtra": "s" },
+              "iob": { "iob": 1.2, "bolusiob": 0.5, "iobExtra": 2 },
+              "extended": { "Version": "1.0", "ActiveProfile": "Default" },
+              "pumpExtra": { "a": [1] }
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "pump-unknown-keys",
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            Pump = JsonSerializer.Deserialize<PumpStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var pump = result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single();
+        pump.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(pump.AdditionalProperties));
+        var projected = ProjectPump(pump);
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(projected.Pump)).RootElement;
+
+        read.GetProperty("pumpExtra").GetProperty("a").GetArrayLength().Should().Be(1);
+        read.GetProperty("battery").GetProperty("batteryExtra").GetInt32().Should().Be(1);
+        read.GetProperty("battery").GetProperty("percent").GetInt32().Should().Be(70);
+        read.GetProperty("status").GetProperty("statusExtra").GetString().Should().Be("s");
+        read.GetProperty("iob").GetProperty("iobExtra").GetInt32().Should().Be(2);
+        var extended = read.GetProperty("extended");
+        extended.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("Version", "ActiveProfile");
+    }
+
+    private static DeviceStatus ProjectPump(V4Models.PumpSnapshot pump) =>
+        DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, null, null, null);
+
+    [Fact]
     public async Task DecomposeAsync_LoopKeysTheModelDoesNotName_SurviveIntoLoopJsonAndTheV1Read()
     {
         const string uploaded = """

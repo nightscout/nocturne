@@ -285,6 +285,9 @@ public class PumpStatus
     /// </summary>
     [JsonPropertyName("extended")]
     public Dictionary<string, object>? Extended { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpBattery
@@ -297,6 +300,9 @@ public class PumpBattery
 
     [JsonPropertyName("voltage")]
     public double? Voltage { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpStatusDetails
@@ -309,6 +315,9 @@ public class PumpStatusDetails
 
     [JsonPropertyName("suspended")]
     public bool? Suspended { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpIob
@@ -327,6 +336,9 @@ public class PumpIob
     /// </summary>
     [JsonPropertyName("iob")]
     public double? Iob { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class OpenApsStatus
@@ -363,6 +375,9 @@ public class OpenApsStatus
     /// </summary>
     [JsonPropertyName("version")]
     public string? Version { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -445,6 +460,9 @@ public class OpenApsSuggested
 
     [JsonPropertyName("consoleError")]
     public List<string>? ConsoleError { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -481,6 +499,9 @@ public class OpenApsRequested
 
     [JsonPropertyName("smb")]
     public double? Smb { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -499,6 +520,9 @@ public class OpenApsPredBGs
 
     [JsonPropertyName("UAM")]
     public List<double?>? UAM { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class OpenApsIobData
@@ -523,6 +547,9 @@ public class OpenApsIobData
 
     [JsonPropertyName("bolusiob")]
     public double? BolusIob { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
