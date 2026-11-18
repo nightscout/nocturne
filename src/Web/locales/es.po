@@ -41512,3 +41512,47 @@ msgstr "Este nombre está reservado. Utiliza otro nombre."
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 msgid "Link battery"
 msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Voltage A"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Voltage B"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Resistance"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Age (days)"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "Transmitter battery"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "CGM transmitter voltage, resistance, or days since activation (xDrip+ only)"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: p.value
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Transmitter voltage A {0} {1}"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: p.value
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Transmitter voltage B {0} {1}"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: p.value
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Transmitter resistance {0} {1}"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: formatDays(p.value ?? 0)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Transmitter age {0} {1}"
+msgstr ""
