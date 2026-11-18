@@ -286,7 +286,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         LegacyTreatmentRepositories repositories, NocturneDbContext context, DateTime? from, DateTime? to,
         ILogger logger, CancellationToken ct) =>
         count is null
-            ? await repository(repositories).CountAsync(from, to, ct)
+            ? await repository(repositories).CountAsync(from, to, null, null, ct)
             : await count(context, from, to, ct);
 
     /// <inheritdoc />

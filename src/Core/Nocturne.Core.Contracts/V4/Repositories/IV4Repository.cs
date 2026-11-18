@@ -118,10 +118,12 @@ public interface IV4Repository<T> where T : class, IV4Record
     Task<int> CountDeletedAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Count records within an optional time range.
+    /// Count the records <see cref="GetAsync"/> pages through for the same filters.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
-    /// <returns>Number of records in the range.</returns>
-    Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+    /// <param name="device">Optional device identifier filter.</param>
+    /// <param name="source">Optional data source filter.</param>
+    /// <returns>Number of matching records.</returns>
+    Task<int> CountAsync(DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct = default);
 }

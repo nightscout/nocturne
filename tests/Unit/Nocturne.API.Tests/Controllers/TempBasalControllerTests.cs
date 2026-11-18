@@ -248,7 +248,20 @@ public class TempBasalControllerTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TempBasal>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_IncludeTotal_CountsWithTheDeviceAndSourceTheDataQueryUses()
+    {
+        _repo.Setup(r => r.GetAsync(null, null, "pump-a", "tandem", 1, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TempBasal()]);
+        _repo.Setup(r => r.CountAsync(null, null, "pump-a", "tandem", It.IsAny<CancellationToken>())).ReturnsAsync(6);
+
+        var result = await _controller.GetAll(null, null, 1, 0, "timestamp_desc", "pump-a", "tandem", includeTotal: true);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TempBasal>>().Subject;
+        response.Pagination.Total.Should().Be(6);
     }
 
     private void VerifyFetched(int limit, int offset) =>

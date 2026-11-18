@@ -52,7 +52,7 @@ public class TempBasalController(
     /// <param name="sort">Order by span time: `timestamp_desc` or `timestamp_asc`. Defaults to `timestamp_desc`.</param>
     /// <param name="device">Return only spans from this device.</param>
     /// <param name="source">Return only spans from this data source.</param>
-    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RequireScope(Scope.TreatmentsRead)]
@@ -71,7 +71,7 @@ public class TempBasalController(
             return invalid;
 
         var data = (await repo.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, ct));
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, device, source, ct));
         return Ok(new PaginatedResponse<TempBasal> { Data = data, Pagination = pagination });
     }
 

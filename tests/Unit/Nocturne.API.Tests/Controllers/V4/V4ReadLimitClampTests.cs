@@ -242,7 +242,7 @@ public class V4ReadLimitClampTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TherapySettings>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static ProfileController CreateProfileController(Mock<ITherapySettingsRepository> repo) =>

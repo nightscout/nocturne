@@ -51,6 +51,23 @@ public interface ISensorGlucoseRepository
     );
 
     /// <summary>
+    /// Count the readings <see cref="GetAsync"/> pages through for the same filters.
+    /// </summary>
+    Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        GlucoseStreams streams = GlucoseStreams.All,
+        CancellationToken ct = default
+    );
+
+    Task<int> IV4Repository<SensorGlucose>.CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct)
+        => CountAsync(from, to, device, source, patientDeviceId: null, ct: ct);
+
+    /// <summary>
     /// Partial readings for statistics only; these must not be returned as raw records or projected
     /// into legacy entries. Includes the per-reading UTC offset.
     /// </summary>
