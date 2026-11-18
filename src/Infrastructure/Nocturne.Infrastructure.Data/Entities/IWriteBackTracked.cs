@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// <see cref="IUpstreamFingerprinted"/>; set on save under <see cref="LiveWriteScope"/>, never
 /// cleared.
 /// </summary>
-public interface IWriteBackTracked : IV4Entity, ISourcedEntity
+public interface IWriteBackTracked : ILegacyIdentified
 {
     bool WrittenLive { get; set; }
 }

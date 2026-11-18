@@ -23,6 +23,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -394,7 +395,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// sends a treatment under <see cref="MongoObjectId.Coerce"/> of its key, so a uuid-shaped
     /// legacy id comes back as its prefix and any other non-ObjectId one as its hash; earlier
     /// write-backs sent the record's served id, its own uuid or that uuid's prefix, whatever its
-    /// legacy id. A meal's bolus and carbs share a correlation id, so an adoption carries to both.
+    /// legacy id. A meal's bolus and carbs share a correlation id, so an adoption carries to both. An
+    /// override or temporary target is stored as a state span, and goes upstream under its key as any
+    /// treatment does.
     /// </summary>
     private IReadOnlyList<KeyedTable> TreatmentTables =>
     [
@@ -406,6 +409,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         Table(_bolusCalculationRepository, TreatmentWireForms),
         Table(_tempBasalRepository, TreatmentWireForms),
         Table(_profileActivationRepository, TreatmentWireForms),
+        Table(new StateSpanLegacyKeys(_contexts, TreatmentSpanCategories), TreatmentWireForms),
     ];
 
     private const WireForms TreatmentWireForms = WireForms.UuidPrefix | WireForms.Hashed | WireForms.KeyedOwnId;
@@ -1424,6 +1428,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             foreach (var (span, source) in sources)
                 result.SpanOwners[span] = source.CorrelationId;
 
+            // The span repository's writes take no origin, so a live batch marks its spans as the
+            // repositories mark their rows.
+            using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
             await spans.WriteAsync(_stateSpanService, result, result.SpanOwners, ct, (span, refusal) =>
             {
                 if (sources.TryGetValue(span, out var source))

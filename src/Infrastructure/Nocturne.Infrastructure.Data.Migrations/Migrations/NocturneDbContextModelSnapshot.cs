@@ -4722,6 +4722,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
 
+                    b.Property<bool>("WrittenLive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("written_live");
+
                     b.HasKey("TenantId", "Id");
 
                     b.HasIndex("Category")
