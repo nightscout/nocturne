@@ -540,6 +540,34 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
         (await CarbIntakesAsync(slot)).Should().Equal(carbs);
     }
 
+    /// <summary>
+    /// A meal held as one record and written back split, then posted again through v1 with its
+    /// preBolus, leaves its bolus and its carbs upstream, and pulled back, its one carb intake. Up to
+    /// 15.0.6 the carbs record's create is refused by the carbs the write-back split off, which the
+    /// meal's legacy id on the carbs record lets the sink remove.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AWrittenBackMealPostedAgainThroughV1_KeepsItsCarbsUpstream(bool v15_0_8)
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        Treatment Meal() => new()
+        {
+            Id = legacyId, EventType = "Meal Bolus", Insulin = 2, Carbs = 30, PreBolus = 15, CreatedAt = At(slot),
+        };
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync([Meal()]));
+
+        await WithWriteBackAsync(upstream, service => service.CreateV1TreatmentsAsync([Meal()]));
+
+        ShouldHoldTheMeal(upstream, slot, preBolus: 15, carbs: 30);
+        await PullBackAsync(upstream);
+        (await LiveBolusesAsync(slot)).Should().ContainSingle().Which.Insulin.Should().Be(2);
+        (await CarbIntakesAsync(slot)).Should().Equal((slot.AddMinutes(15), 30d));
+    }
+
     /// <summary>The live carb intakes from <paramref name="slot"/> to half an hour after it.</summary>
     private async Task<List<(DateTimeOffset, double)>> CarbIntakesAsync(DateTimeOffset slot)
     {

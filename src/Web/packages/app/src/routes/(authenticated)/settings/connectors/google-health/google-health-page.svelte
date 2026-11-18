@@ -3,13 +3,13 @@
   import { docsUrl } from "#lib/docs-url.js";
   import { resolve } from "$app/paths";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Unplug from "@lucide/svelte/icons/unplug";
   import { GoogleHealthConnectionState, type GoogleHealthStatus } from "#lib/api/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
   import ConfirmDialog from "#lib/components/ui/confirm-dialog/confirm-dialog.svelte";
   import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
 
@@ -222,7 +222,7 @@
   <header class="flex items-start justify-between gap-4">
     <div class="flex items-center gap-3">
       <div class="rounded-lg bg-primary/10 p-3">
-        <HeartPulse class="h-6 w-6 text-primary" />
+        <AppLogo icon="google-health" class="h-6 w-6" invertMode />
       </div>
       <div>
         <h1 class="text-3xl font-semibold">Google Health</h1>

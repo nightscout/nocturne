@@ -125,7 +125,8 @@ public static class ConnectorMetadataService
                         ServiceName = attr.ServiceName,
                         DefaultActiveThresholdMinutes = attr.DefaultActiveThresholdMinutes,
                         DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes,
-                        DocumentationUrl = attr.DocumentationUrl
+                        DocumentationUrl = attr.DocumentationUrl,
+                        IsImport = attr.IsImport,
                     };
 
                     ConnectorsByDataSourceId[attr.DataSourceId] = info;
@@ -157,6 +158,9 @@ public static class ConnectorMetadataService
 
         /// <inheritdoc cref="ConnectorRegistrationAttribute.DocumentationUrl"/>
         public string? DocumentationUrl { get; init; }
+
+        /// <inheritdoc cref="ConnectorRegistrationAttribute.IsImport"/>
+        public bool IsImport { get; init; }
 
         /// <summary>
         ///     Converts this connector info to an AvailableService for UI consumption.

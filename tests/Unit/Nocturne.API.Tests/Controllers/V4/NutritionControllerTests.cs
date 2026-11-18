@@ -212,7 +212,103 @@ public class NutritionControllerTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<CarbIntake>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetCarbIntakes_IncludeTotal_CountsWithTheDeviceAndSourceTheDataQueryUses()
+    {
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), "pump-a", "tandem",
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new CarbIntake()]);
+        _repoMock.Setup(r => r.CountAsync(null, null, "pump-a", "tandem", It.IsAny<CancellationToken>())).ReturnsAsync(4);
+
+        var result = await CreateController().GetCarbIntakes(null, null, 1, 0, "timestamp_desc", "pump-a", "tandem", includeTotal: true);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<CarbIntake>>().Subject;
+        response.Pagination.Total.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task GetCarbIntakes_FillsFoodTypeFromTheFoodLines_WithOneFoodReadForThePage()
+    {
+        var withLines = new CarbIntake { Id = Guid.NewGuid() };
+        var withoutLines = new CarbIntake { Id = Guid.NewGuid() };
+        var other = new CarbIntake { Id = Guid.NewGuid() };
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([withLines, withoutLines, other]);
+        _foodServiceMock
+            .Setup(f => f.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new TreatmentFood { CarbIntakeId = withLines.Id, FoodName = "Rice" },
+                new TreatmentFood { CarbIntakeId = withLines.Id, Note = "pasta" },
+                new TreatmentFood { CarbIntakeId = other.Id, Note = "taco" },
+            ]);
+
+        var result = await CreateController().GetCarbIntakes(null, null);
+
+        var data = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<CarbIntake>>().Subject.Data;
+        data.Select(c => c.FoodType).Should().Equal("Rice, pasta", null, "taco");
+        _foodServiceMock.Verify(
+            f => f.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetCarbIntakeById_FillsFoodTypeFromTheFoodLines()
+    {
+        var carbId = Guid.NewGuid();
+        _repoMock.Setup(r => r.GetByIdAsync(carbId, It.IsAny<CancellationToken>())).ReturnsAsync(new CarbIntake { Id = carbId });
+        _foodServiceMock
+            .Setup(f => f.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TreatmentFood { CarbIntakeId = carbId, Note = "taco" }]);
+
+        var result = await CreateController().GetCarbIntakeById(carbId);
+
+        ((OkObjectResult)result.Result!).Value.Should().BeOfType<CarbIntake>().Which.FoodType.Should().Be("taco");
+    }
+
+    [Fact]
+    public async Task GetCarbIntakeById_WithOnlyBlankNamesAndNotes_HasNoFoodType()
+    {
+        var carbId = Guid.NewGuid();
+        _repoMock.Setup(r => r.GetByIdAsync(carbId, It.IsAny<CancellationToken>())).ReturnsAsync(new CarbIntake { Id = carbId });
+        _foodServiceMock
+            .Setup(f => f.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new TreatmentFood { CarbIntakeId = carbId, FoodName = " ", Note = "x" },
+                new TreatmentFood { CarbIntakeId = carbId, Note = "" },
+                new TreatmentFood { CarbIntakeId = carbId },
+            ]);
+
+        var result = await CreateController().GetCarbIntakeById(carbId);
+
+        ((OkObjectResult)result.Result!).Value.Should().BeOfType<CarbIntake>().Which.FoodType.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateCarbIntake_FillsFoodTypeFromTheFoodLines()
+    {
+        var carbId = Guid.NewGuid();
+        _repoMock.Setup(r => r.GetByIdAsync(carbId, It.IsAny<CancellationToken>())).ReturnsAsync(new CarbIntake { Id = carbId });
+        _repoMock
+            .Setup(r => r.UpdateAsync(carbId, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CarbIntake { Id = carbId });
+        _foodServiceMock
+            .Setup(f => f.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TreatmentFood { CarbIntakeId = carbId, Note = "taco" }]);
+
+        var result = await CreateController().UpdateCarbIntake(
+            carbId, new UpdateCarbIntakeRequest { Timestamp = DateTimeOffset.UtcNow, Carbs = 10 });
+
+        ((OkObjectResult)result.Result!).Value.Should().BeOfType<CarbIntake>().Which.FoodType.Should().Be("taco");
     }
 
     private void VerifyCarbIntakesFetched(int limit, int offset) =>

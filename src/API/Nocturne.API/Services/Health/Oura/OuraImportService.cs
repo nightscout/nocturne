@@ -12,9 +12,6 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Health.Oura;
 
-/// <summary>The records one export added or updated.</summary>
-public sealed record OuraImportResult(int SleepSessions, int HeartRates, int StepDays);
-
 /// <summary>
 /// Writes an uploaded Oura data export into the current tenant, and removes what it wrote.
 /// </summary>
@@ -27,12 +24,13 @@ public sealed class OuraImportService(
 {
     private const int BatchSize = 1000;
 
+    /// <summary>Writes the export, counting each record into <paramref name="progress"/> as it is stored.</summary>
     /// <exception cref="OuraExportException">The stream is not an Oura export.</exception>
-    public async Task<OuraImportResult> ImportAsync(Stream zip, CancellationToken ct)
+    public async Task ImportAsync(Stream zip, OuraImportProgress progress, CancellationToken ct)
     {
         using var export = OuraExportArchive.Open(zip);
 
-        var sessions = 0;
+        progress.Phase = OuraImportPhase.Sleep;
         foreach (var session in export.ReadSleepSessions())
         {
             try
@@ -45,21 +43,20 @@ public sealed class OuraImportService(
                 continue;
             }
 
-            sessions++;
+            progress.AddSleepSessions(1);
         }
 
-        var readings = 0;
+        progress.Phase = OuraImportPhase.HeartRate;
         foreach (var batch in export.ReadHeartRates().Chunk(BatchSize))
-            readings += (await heartRates.CreateHeartRatesAsync(batch, ct)).Count();
+            progress.AddHeartRates((await heartRates.CreateHeartRatesAsync(batch, ct)).Count());
 
-        var days = 0;
+        progress.Phase = OuraImportPhase.Steps;
         foreach (var batch in export.ReadDailySteps().Chunk(BatchSize))
-            days += (await stepCounts.CreateStepCountsAsync(batch, ct)).Count();
+            progress.AddStepDays((await stepCounts.CreateStepCountsAsync(batch, ct)).Count());
 
         logger.LogInformation(
             "Imported an Oura export: {SleepSessions} sleep sessions, {HeartRates} heart rate readings, {StepDays} days of steps",
-            sessions, readings, days);
-        return new OuraImportResult(sessions, readings, days);
+            progress.SleepSessionCount, progress.HeartRateCount, progress.StepDayCount);
     }
 
     public string ConnectorName => OuraConnectorConfiguration.Name;

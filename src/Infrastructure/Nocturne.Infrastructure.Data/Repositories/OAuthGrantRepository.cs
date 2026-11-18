@@ -128,6 +128,19 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> ListAppGrantsOfClientsAsync(
+        IReadOnlyCollection<Guid> clientEntityIds, IReadOnlyCollection<string> softwareIds, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        return ToRecords(await GrantsWithClient(lease.Context)
+            .Where(g => g.GrantType == OAuthGrantTypes.App
+                && ((g.ClientEntityId != null && clientEntityIds.Contains(g.ClientEntityId.Value))
+                    || (g.Client != null && g.Client.SoftwareId != null && softwareIds.Contains(g.Client.SoftwareId))))
+            .OrderByDescending(g => g.CreatedAt)
+            .ToListAsync(ct));
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<OAuthGrantRecord?> FindOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
