@@ -98,6 +98,7 @@ public class ConnectionService(
             ],
             OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)], androidApsDevices),
             WindowDays = DataSourceService.DiscoveryWindowDays,
+            ActiveWithinMinutes = SenderActiveMinutes,
         };
     }
 
