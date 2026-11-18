@@ -12,6 +12,7 @@
   import TabletSmartphone from "@lucide/svelte/icons/tablet-smartphone";
   import XdripQuickConnect from "#lib/components/XdripQuickConnect.svelte";
   import PreludeQuickConnect from "#lib/components/PreludeQuickConnect.svelte";
+  import AapsClientSetupCode from "#lib/components/AapsClientSetupCode.svelte";
   import type { UploaderApp } from "#lib/api/generated/nocturne-api-client.js";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -109,6 +110,10 @@
         {:else if selectedUploader?.id === "prelude" && typeof window !== "undefined"}
           <div class="border-b pb-4 mb-4">
             <PreludeQuickConnect instanceUrl={window.location.origin} />
+          </div>
+        {:else if selectedUploader?.id === "aaps" && typeof window !== "undefined"}
+          <div class="border-b pb-4 mb-4">
+            <AapsClientSetupCode instanceUrl={window.location.origin} />
           </div>
         {/if}
 
