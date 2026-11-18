@@ -43,6 +43,8 @@ public class SensorContextEnricherTests
     private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
     private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepository = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly Mock<IProfileActivationResolver> _profileActivations = new();
@@ -58,8 +60,8 @@ public class SensorContextEnricherTests
     {
         // The repo never returns null; default the new DND-windows fetch to empty so the
         // unconditional enrichment block is exercised. Per-test setups override this.
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
     }
 
@@ -677,7 +679,7 @@ public class SensorContextEnricherTests
             _iobCalculator.Object, _cobCalculator.Object, _treatmentService.Object,
             _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
             apsRepo2.Object, _tempBasalRepository.Object, _uploaderSnapshotRepository.Object,
-            _stateSpanService.Object, _alertRepository.Object,
+            _stateSpanService.Object, _alertRepository.Object, _alertSettings.Object, _dndWindows.Object,
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
             _profileActivations.Object,
@@ -891,8 +893,8 @@ public class SensorContextEnricherTests
     public async Task LowsWindow_setsLowsScope_butNotActiveDnd()
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.Lows, StartedAt: now.AddMinutes(-5), EndsAt: null, ClearedAt: null, CreatedAt: now.AddMinutes(-5)),
@@ -913,8 +915,8 @@ public class SensorContextEnricherTests
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var startedAt = now.AddMinutes(-30);
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.All, StartedAt: startedAt, EndsAt: null, ClearedAt: null, CreatedAt: startedAt),
@@ -936,8 +938,8 @@ public class SensorContextEnricherTests
     {
         // FakeTimeProvider is 2026-03-22 12:00 UTC; a 00:00–23:00 schedule (UTC fallback, no tz)
         // is active, so scheduled DND is tenant-wide == scope=all.
-        _alertRepository
-            .Setup(r => r.GetTenantAlertSettingsAsync(It.IsAny<CancellationToken>()))
+        _alertSettings
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAlertSettingsSnapshot(
                 DndScheduleEnabled: true,
                 DndScheduleStart: new TimeOnly(0, 0),
@@ -960,14 +962,14 @@ public class SensorContextEnricherTests
         // precedence for the for_minutes anchor and source when both are active.
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var manualStartedAt = now.AddMinutes(-90);
-        _alertRepository
-            .Setup(r => r.GetTenantAlertSettingsAsync(It.IsAny<CancellationToken>()))
+        _alertSettings
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAlertSettingsSnapshot(
                 DndScheduleEnabled: true,
                 DndScheduleStart: new TimeOnly(0, 0),
                 DndScheduleEnd: new TimeOnly(23, 0)));
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.All, StartedAt: manualStartedAt, EndsAt: null, ClearedAt: null, CreatedAt: manualStartedAt),
@@ -1017,6 +1019,8 @@ public class SensorContextEnricherTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
             _profileActivations.Object,
