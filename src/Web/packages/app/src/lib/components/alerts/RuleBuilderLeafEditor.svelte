@@ -482,7 +482,7 @@
         if (isStringEnumMember(TransmitterBatteryMetric, v)) payload.metric = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-32">
+      <Select.Trigger size="sm" class="w-32" aria-label="Measure">
         {transmitterBatteryMetricLabel(payload.metric ?? TransmitterBatteryMetric.VoltageA)}
       </Select.Trigger>
       <Select.Content>
@@ -498,19 +498,20 @@
         payload.operator = v;
       }}
     >
-      <Select.Trigger size="xs" class="w-14">
-        {labelFor(opLabels, payload.operator ?? ">=")}
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.entries(opLabels) as [op, label] (op)}
-          <Select.Item value={op} {label} />
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
         {/each}
       </Select.Content>
     </Select.Root>
     <Input
       type="number"
+      aria-label="Value"
       step="1"
-      size="xs"
+      size="sm"
       class="w-20 text-right tabular-nums"
       value={payload.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
