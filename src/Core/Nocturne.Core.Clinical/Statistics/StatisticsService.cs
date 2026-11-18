@@ -2309,6 +2309,100 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             : windowStart - MaxOpenTempDuration;
 
     /// <summary>
+    /// The longest a basal injection's piece runs (<see cref="BasalInjectionPieces"/>): a DIA
+    /// recorded longer than this is taken as this.
+    /// </summary>
+    private static readonly TimeSpan MaxBasalInjectionDuration = TimeSpan.FromHours(72);
+
+    /// <summary>
+    /// Where to read basal injections for <see cref="BasalInjectionPieces"/> over a window: from
+    /// <see cref="MaxBasalInjectionDuration"/> before it, so a dose still running at its start is in
+    /// the input, to as long after it, so the last dose in it ends at the next one. Only for rates: a
+    /// total of units injected in a window counts the doses given in it.
+    /// </summary>
+    public static (DateTime From, DateTime To) BasalInjectionReadSpan(DateTime windowStart, DateTime windowEnd) =>
+        (
+            windowStart <= DateTime.MinValue + MaxBasalInjectionDuration
+                ? DateTime.MinValue
+                : windowStart - MaxBasalInjectionDuration,
+            windowEnd >= DateTime.MaxValue - MaxBasalInjectionDuration
+                ? DateTime.MaxValue
+                : windowEnd + MaxBasalInjectionDuration
+        );
+
+    /// <summary>
+    /// Basal injections as constant-rate <see cref="TempBasalOrigin.Scheduled"/> pieces, in start
+    /// order, so a steady daily dose reads as a flat rate and a missed dose as a gap. The rate is the
+    /// dosing, not the insulin's action.
+    /// </summary>
+    /// <remarks>
+    /// A dose runs until the next dose, and no longer than its insulin's DIA, or 24 hours when it has
+    /// none, or <see cref="MaxBasalInjectionDuration"/>. Doses given at the same instant are one dose
+    /// of their summed units, lasting the longest of their caps. Doses of no units are skipped.
+    /// The pieces are not cut to a window: <see cref="BasalInjectionsDeliveredWithin"/> does that.
+    /// </remarks>
+    public static List<TempBasal> BasalInjectionPieces(IEnumerable<BasalInjection> basalInjections)
+    {
+        var doses = basalInjections
+            .Where(bi => bi.Units > 0)
+            .GroupBy(bi => bi.Mills)
+            .OrderBy(g => g.Key)
+            .Select(g => (
+                Mills: g.Key,
+                Units: g.Sum(bi => bi.Units),
+                CapMs: g.Max(bi => (long)(BasalInjectionCap(bi).TotalMilliseconds))))
+            .ToList();
+
+        var pieces = new List<TempBasal>(doses.Count);
+        for (var i = 0; i < doses.Count; i++)
+        {
+            var (start, units, capMs) = doses[i];
+            var end = start + capMs;
+            if (i + 1 < doses.Count)
+                end = Math.Min(end, doses[i + 1].Mills);
+            pieces.Add(new TempBasal
+            {
+                StartTimestamp = start.ToUtcDateTime(),
+                EndTimestamp = end.ToUtcDateTime(),
+                Rate = units / ((double)(end - start) / LocalSlotBinning.HourMs),
+                Origin = TempBasalOrigin.Scheduled,
+            });
+        }
+
+        return pieces;
+    }
+
+    /// <summary>
+    /// The part of each of <see cref="BasalInjectionPieces"/> that lies inside the window from
+    /// <paramref name="startDate"/> to <paramref name="untilMills"/>.
+    /// </summary>
+    /// <remarks>
+    /// Not through <see cref="ClipOverlappingTempBasals"/>: an injection is not a pump stream, so it
+    /// neither replaces a temp basal running beside it nor is replaced by one. The pieces never
+    /// overlap each other.
+    /// </remarks>
+    public static List<TempBasal> BasalInjectionsDeliveredWithin(
+        IEnumerable<BasalInjection> basalInjections, DateTime startDate, long untilMills)
+    {
+        var startMills = startDate.ToMills();
+        var result = new List<TempBasal>();
+        foreach (var piece in BasalInjectionPieces(basalInjections))
+        {
+            var start = Math.Max(piece.StartMills, startMills);
+            var end = Math.Min(piece.EndMills!.Value, untilMills);
+            if (end > start)
+                result.Add(start == piece.StartMills && end == piece.EndMills ? piece : piece.WithSpan(start, end));
+        }
+
+        return result;
+    }
+
+    private static TimeSpan BasalInjectionCap(BasalInjection bi) =>
+        bi.InsulinContext?.Dia is double dia and > 0
+            ? TimeSpan.FromHours(Math.Min(dia, MaxBasalInjectionDuration.TotalHours))
+            : TimeSpan.FromHours(24);
+
+    /// <summary>
     /// Temp basals as delivered: each piece of a record during which it set the pump's rate, as a
     /// copy with the piece's start and end, in start order. Every reader of basal delivery reads
     /// temp basals through this.
@@ -2693,10 +2787,12 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         DateTime startDate,
         DateTime endDate,
         long untilMills,
-        TimeZoneInfo? userTimeZone = null
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null
     )
     {
         var tempBasalList = DeliveredWithin(tempBasals, startDate, untilMills);
+        var injectionPieces = BasalInjectionsDeliveredWithin(basalInjections ?? [], startDate, untilMills);
         var dayCount = WindowDays(startDate, endDate);
 
         var allRates = new List<double>();
@@ -2712,18 +2808,22 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var hourlyRates = new List<(double Rate, long WeightMs)>[24];
         for (int h = 0; h < 24; h++) hourlyRates[h] = new();
 
+        foreach (var segment in ConcurrentRates(tempBasalList, injectionPieces))
+        {
+            allRates.Add(segment.Rate);
+            var durationMs = segment.End - segment.Start;
+            totalDelivered += segment.Rate * (durationMs / (1000.0 * 60 * 60));
+            rateTimeMs += segment.Rate * durationMs;
+            totalDurationMs += durationMs;
+
+            if (userTimeZone is not null)
+                DistributeAcrossHourOfDay(segment.Start, segment.End, segment.Rate, userTimeZone, hourlyRates);
+        }
+
         foreach (var tb in tempBasalList)
         {
             if (tb.Rate is not { } rate)
                 continue;
-            allRates.Add(rate);
-            totalDelivered += GetTempBasalInsulin(tb) ?? 0;
-            var durationMs = tb.EndMills!.Value - tb.StartMills;
-            rateTimeMs += rate * durationMs;
-            totalDurationMs += durationMs;
-
-            if (userTimeZone is not null)
-                DistributeAcrossHourOfDay(tb.StartMills, tb.EndMills!.Value, rate, userTimeZone, hourlyRates);
 
             if (tb.Origin != TempBasalOrigin.Scheduled && tb.Origin != TempBasalOrigin.Inferred)
             {
@@ -2743,7 +2843,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
         var basalStats = new BasalStats
         {
-            Count = tempBasalList.Count,
+            Count = tempBasalList.Count + injectionPieces.Count,
             AvgRate = totalDurationMs > 0 ? Math.Round(rateTimeMs / totalDurationMs * 100) / 100 : 0,
             MinRate = allRates.Count > 0 ? Math.Round(allRates.Min() * 100) / 100 : 0,
             MaxRate = allRates.Count > 0 ? Math.Round(allRates.Max() * 100) / 100 : 0,
@@ -2794,6 +2894,44 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         };
     }
 
+    /// <summary>
+    /// The rate delivered at each instant where pump pieces or injection pieces run: the sum of the
+    /// pieces running then, as one segment per span between any two piece boundaries. Neither list
+    /// overlaps itself, so where only one runs its pieces come back unchanged. A piece of unknown
+    /// rate is left out.
+    /// </summary>
+    private static List<RateSegment> ConcurrentRates(List<TempBasal> pumpPieces, List<TempBasal> injectionPieces)
+    {
+        static List<RateSegment> Known(List<TempBasal> pieces) =>
+            [.. pieces.Where(p => p.Rate.HasValue).Select(p => new RateSegment(p.StartMills, p.EndMills!.Value, p.Rate!.Value))];
+
+        var pump = Known(pumpPieces);
+        var injections = Known(injectionPieces);
+        if (injections.Count == 0) return pump;
+        if (pump.Count == 0) return injections;
+
+        var boundaries = pump.Concat(injections)
+            .SelectMany(s => new[] { s.Start, s.End })
+            .Distinct()
+            .Order()
+            .ToList();
+        var result = new List<RateSegment>();
+        int p = 0, i = 0;
+        for (var b = 0; b + 1 < boundaries.Count; b++)
+        {
+            var (start, end) = (boundaries[b], boundaries[b + 1]);
+            while (p < pump.Count && pump[p].End <= start) p++;
+            while (i < injections.Count && injections[i].End <= start) i++;
+            var inPump = p < pump.Count && pump[p].Start <= start;
+            var inInjection = i < injections.Count && injections[i].Start <= start;
+            if (inPump || inInjection)
+                result.Add(new RateSegment(start, end,
+                    (inPump ? pump[p].Rate : 0) + (inInjection ? injections[i].Rate : 0)));
+        }
+
+        return result;
+    }
+
     /// <inheritdoc />
     public HourlyInsulinDeliveryResponse CalculateHourlyInsulinDelivery(
         IEnumerable<TempBasal> tempBasals,
@@ -2821,7 +2959,9 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         var basalDays = new HashSet<DateOnly>();
         var bolusDays = new HashSet<DateOnly>();
 
-        foreach (var tb in DeliveredWithin(tempBasals, startDate, untilMills))
+        var basal = DeliveredWithin(tempBasals, startDate, untilMills)
+            .Concat(BasalInjectionsDeliveredWithin(basalInjections ?? [], startDate, untilMills));
+        foreach (var tb in basal)
         {
             if (tb.Rate is not { } rate)
                 continue;
@@ -2852,23 +2992,6 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             automaticBolus[hour] += ab.Insulin;
             counts[hour]++;
             bolusDays.Add(LocalSlotBinning.LocalDay(ab.Mills, tz));
-        }
-
-        // Long-acting basal injections (MDI) provide baseline coverage across their duration
-        // of insulin action, so spread each dose evenly across that window as scheduled basal —
-        // the discrete-dose analogue of a pump's scheduled rate tiling the day. The coverage
-        // window is the injection's recorded DIA when present (e.g. ~42h for degludec), else 24h.
-        foreach (var bi in (basalInjections ?? Enumerable.Empty<BasalInjection>()).Where(bi => bi.Units > 0))
-        {
-            // Coverage window is the injection's recorded DIA when valid, else 24h.
-            // Clamp to a sane ceiling so a bad DIA can't smear one dose across days of buckets.
-            var dia = bi.InsulinContext?.Dia ?? 0.0;
-            var coverageHours = dia > 0 ? Math.Min(dia, 72.0) : 24.0;
-            var ratePerHour = bi.Units / coverageHours;
-            var endMills = bi.Mills + (long)(coverageHours * LocalSlotBinning.HourMs);
-            DistributeInsulinAcrossHourOfDay(
-                bi.Mills, endMills, ratePerHour, tz, scheduledBasal, basalDays);
-            counts[LocalHourOfDay(bi.Mills, tz)]++;
         }
 
         var profileUnits = new double[24];
