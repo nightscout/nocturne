@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Component } from "svelte";
+  import { untrack, type Component } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { DropGroup, DropSurface } from "water-ui";
@@ -8,6 +8,7 @@
   import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import type { TrackerDefinitionDto } from "#lib/api/generated/nocturne-api-client.js";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import Check from "@lucide/svelte/icons/check";
@@ -22,7 +23,7 @@
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import WifiOff from "@lucide/svelte/icons/wifi-off";
   import {
-    TEMPLATES,
+    offeredTemplates,
     templateDescription,
     templateLabel,
     type TemplateId,
@@ -31,9 +32,11 @@
   interface Props {
     selected: TemplateId | null;
     onPick: (id: TemplateId) => void;
+    /** The trackers there are; a type that reads only a tracker is listed when one matches. */
+    trackerDefinitions?: readonly TrackerDefinitionDto[];
   }
 
-  let { selected, onPick }: Props = $props();
+  let { selected, onPick, trackerDefinitions = [] }: Props = $props();
 
   // The padding is on the content, which sits above the paint.
   const ROW = cn(itemVariants({ variant: "row", interactive: true }), "p-0");
@@ -51,6 +54,7 @@
     urgent_low_soon: ChevronsDown,
     reservoir_low: Fuel,
     pump_battery_low: BatteryLow,
+    battery_change_due: CalendarClock,
     site_change_due: CalendarClock,
     sensor_change_due: CalendarClock,
     loop_not_running: RotateCcw,
@@ -58,11 +62,12 @@
     custom: SlidersHorizontal,
   };
 
-  const common = TEMPLATES.filter((t) => t.group === "common");
-  const more = TEMPLATES.filter((t) => t.group === "more");
+  const offered = $derived(offeredTemplates(trackerDefinitions));
+  const common = $derived(offered.filter((t) => t.group === "common"));
+  const more = $derived(offered.filter((t) => t.group === "more"));
 
   // A choice made earlier from the longer list stays in view on the way back.
-  let moreOpen = $state(more.some((t) => t.id === selected));
+  let moreOpen = $state(untrack(() => more.some((t) => t.id === selected)));
 </script>
 
 {#snippet row(id: TemplateId)}
