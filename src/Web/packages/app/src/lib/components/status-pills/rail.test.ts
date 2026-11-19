@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { RailItemId } from "#lib/api/generated/nocturne-api-client.js";
 import { effectiveRail, parseRailPreference, railOrder } from "./rail";
 
-const { Cob, Basal, Iob, Loop, Reservoir, Trackers } = RailItemId;
-const DEFAULT = [Cob, Basal, Iob, Loop, Reservoir, Trackers];
+const { Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers } = RailItemId;
+const DEFAULT = [Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers];
 
 describe("parseRailPreference", () => {
   it("is undefined for a value that is not an object", () => {
@@ -38,19 +38,19 @@ describe("effectiveRail", () => {
 
   it("puts the ordered items first and the rest after in default order", () => {
     expect(railOrder({ order: [Reservoir, Iob] })).toEqual([
-      Reservoir, Iob, Cob, Basal, Loop, Trackers,
+      Reservoir, Iob, Cob, Basal, Loop, LinkBattery, Trackers,
     ]);
   });
 
   it("leaves out hidden items", () => {
     expect(effectiveRail({ order: [Loop], hidden: [Cob, Trackers] }, true)).toEqual([
-      Loop, Basal, Iob, Reservoir,
+      Loop, Basal, Iob, Reservoir, LinkBattery,
     ]);
   });
 
   it("leaves out trackers while the tenant switch is off, whatever the user chose", () => {
     expect(effectiveRail({ order: [Trackers, Cob] }, false)).toEqual([
-      Cob, Basal, Iob, Loop, Reservoir,
+      Cob, Basal, Iob, Loop, Reservoir, LinkBattery,
     ]);
   });
 });

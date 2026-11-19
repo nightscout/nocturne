@@ -1,0 +1,61 @@
+---
+title: Labels and status
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Labels and status
+
+**Site settings > Connectors & Apps** lists each app, API token and connector as one connection.
+Open a connection to see what it sent.
+
+## Labels
+
+Every record carries a label that the sending app chose. One app can use more than one label. For
+example, an app can label its glucose readings with the name of the sensor and label everything
+else with its own name. Nocturne lists each label inside the connection that sent the records.
+The label is also the name that you see when you delete the data of one stream.
+
+Records that no connection is known to have sent are listed under **Other sources**.
+
+## Status
+
+Nocturne counts the records that a connection sent in the last 30 days. A connection that sent
+nothing in that time shows **No records**. Its older records stay in Nocturne.
+
+These statuses are for a connection that sends records.
+
+| Status | Meaning |
+| --- | --- |
+| Active | The connection sent a record in the last 15 minutes. |
+| Stopped | No record arrived in the last 15 minutes, and the connection sends glucose or device status all the time. It is possible that it stopped. |
+| Quiet | No record arrived in the last 15 minutes, and the connection sends only records that come from time to time, such as treatments. This is normal. |
+
+Other statuses:
+
+- **Waiting for first use**: an API token or app that no one has used yet.
+- **Error**: a connector that Nocturne fetches from reported an error.
+- **Imported**: records that came from a file. Nocturne does not fetch more.
+- **Off**: a connector that is turned off.
+- **Revoked**: you removed the access of the app or token.
+
+For a connection that only reads data, **Active** means that it read data in the last 24 hours.
+For a connector, the status is the state of its last sync.
+
+## Delete the data of a stream
+
+You can delete the records of one label. Nocturne deletes all the records with that label, not
+only the records of the last 30 days. A label with no record in the last 30 days is not listed.
+Its records stay in Nocturne.
+
+<Callout type="warning" title="You cannot undo a delete">
+
+  Nocturne never imports a deleted record again, even if the source sends it again. To allow
+  that, select **Allow re-import** before you delete. Then Nocturne imports the records that the
+  source sends again, including the records that you deleted.
+
+</Callout>
+
+This page is not medical advice. Ask your care team about any change to your therapy.

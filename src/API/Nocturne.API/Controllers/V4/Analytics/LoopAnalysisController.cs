@@ -14,11 +14,11 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// The Loop Analysis report: every page is computed server-side from one fetch per request and
-/// returned as <c>{ primary, comparison? }</c> inside the <see cref="LoopAnalysisResponse"/>
-/// envelope.
+/// Loop Analysis report pages. Each response contains a <c>primary</c> result and an optional
+/// <c>comparison</c> result.
 /// </summary>
 /// <remarks>
+/// Every page is computed server-side from one fetch per request.
 /// Every action binds a <see cref="LoopAnalysisQuery"/>, resolves it with <see cref="TryResolveAsync"/>
 /// and fills the envelope with <see cref="LoopAnalysisRequest.Fill"/>. Responses carry a 60-second
 /// client-only cache and nothing is cached server-side, because

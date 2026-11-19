@@ -17,7 +17,6 @@
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Copy from "@lucide/svelte/icons/copy";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import TabletSmartphone from "@lucide/svelte/icons/tablet-smartphone";
@@ -160,10 +159,16 @@
   {#if googleHealthUnavailable}
     <li>
       <Item variant="row">
-        <HeartPulse
-          class="mx-1.5 size-5 shrink-0 text-muted-foreground"
+        <span
+          class="flex size-8 shrink-0 items-center justify-center"
           aria-hidden="true"
-        />
+        >
+          <AppLogo
+            icon="google-health"
+            invertMode
+            class="size-8 object-contain"
+          />
+        </span>
         <span class="min-w-0 flex-1">
           <span class="block font-medium text-muted-foreground">
             Google Health
@@ -177,10 +182,16 @@
   {:else}
     <li>
       <Item variant="row" href={resolve("settings/connectors/google-health")}>
-        <HeartPulse
-          class="mx-1.5 size-5 shrink-0 text-muted-foreground"
+        <span
+          class="flex size-8 shrink-0 items-center justify-center"
           aria-hidden="true"
-        />
+        >
+          <AppLogo
+            icon="google-health"
+            invertMode
+            class="size-8 object-contain"
+          />
+        </span>
         <span class="min-w-0 flex-1">
           <span class="block font-medium">Google Health</span>
           <span class="block text-sm text-muted-foreground">

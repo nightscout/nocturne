@@ -223,4 +223,18 @@ describe("ConnectorDangerZone", () => {
       )
       .toBeInTheDocument();
   });
+
+  it("says an import, not a sync, holds the data of an import connector", async () => {
+    deleteDataImpl = () =>
+      Promise.reject({
+        status: 409,
+        body: { message: "An import is running for this connector.", code: "import_running" },
+      });
+
+    await attemptDeleteData();
+
+    await expect
+      .element(page.getByText(/An import is in progress for this connector/))
+      .toBeInTheDocument();
+  });
 });

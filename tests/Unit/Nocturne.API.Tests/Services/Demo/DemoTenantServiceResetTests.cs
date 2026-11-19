@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -220,6 +221,44 @@ public class DemoTenantServiceResetTests : IDisposable
                 "provisioning rewrites the Public grant from source, so a stale admin role must go");
             publicMember.DirectPermissions.Should().BeEquivalentTo(Scope.PublicShareScopes);
         }
+    }
+
+    [Fact]
+    public async Task ConfigureAccessAsync_RestoringADriftedDemoRole_AuditsThePermissionsItGainedAndLost()
+    {
+        var tenantId = SeedDemoTenant();
+        Guid roleId;
+        await using (var db = _db.CreateContext())
+        {
+            var role = await db.TenantRoles.SingleAsync(r => r.TenantId == tenantId && r.Slug == "demo-visitor");
+            roleId = role.Id;
+            role.Permissions = [Scope.DemoVisitorPermissions.First(), Scope.MembersManage];
+            await db.SaveChangesAsync();
+        }
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        await using var read = _db.CreateContext();
+        var row = await read.AuthAuditLog.AsNoTracking().SingleAsync(a => a.EventType == AuthAuditEventType.RolePermissionsChanged);
+        row.TenantId.Should().Be(tenantId);
+        var gained = string.Join(",", Scope.DemoVisitorPermissions.Skip(1).Order(StringComparer.Ordinal).Select(p => $"\"{p}\""));
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{roleId}}","role":"demo-visitor","gained":[{{gained}}],"lost":["{{Scope.MembersManage}}"],"kind":"tenant"}""");
+        row.ActorSubjectId.Should().BeNull();
+        row.ActorCredential.Should().Be("system");
+        row.TargetSubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConfigureAccessAsync_RunAgainOverAnUnchangedDemoRole_AuditsNothing()
+    {
+        var tenantId = SeedDemoTenant();
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        await using var db = _db.CreateContext();
+        (await db.AuthAuditLog.AsNoTracking().Where(a => a.EventType == AuthAuditEventType.RolePermissionsChanged).ToListAsync())
+            .Should().BeEmpty();
     }
 
     [Fact]

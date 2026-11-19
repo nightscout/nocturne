@@ -14,9 +14,11 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Profile controller that provides 1:1 compatibility with Nightscout profile endpoints.
-/// Implements the /api/v1/profile/* endpoints from the legacy JavaScript implementation.
+/// Nightscout profile documents. A client can list, read, create, update and delete profiles, and read the current profile.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/profile/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IProfileWriteService"/>
 [ApiController]

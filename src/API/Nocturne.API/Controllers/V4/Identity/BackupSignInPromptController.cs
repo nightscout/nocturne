@@ -9,7 +9,8 @@ using Nocturne.Core.Models.CoachMarks;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Says whether the caller should be prompted to add a backup way to sign in.
+/// Whether the signed-in account should be prompted to add a backup way to sign in. A caller
+/// can read the answer for its own account.
 /// </summary>
 /// <remarks>
 /// Never shown to platform-access operators or service credentials, whose subject is not the

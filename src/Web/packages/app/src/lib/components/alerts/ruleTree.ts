@@ -23,6 +23,19 @@ export function removeChild(parent: ConditionNode, index: number): void {
 	parent.composite.conditions.splice(index, 1);
 }
 
+/**
+ * Moves the child at `index` one place up (`-1`) or down (`1`) within its
+ * group: the reorder a person does without a pointer. Out of range is a no-op.
+ */
+export function moveChild(parent: ConditionNode, index: number, delta: -1 | 1): void {
+	if (!parent.composite) return;
+	const conditions = parent.composite.conditions;
+	const target = index + delta;
+	if (index < 0 || index >= conditions.length || target < 0 || target >= conditions.length) return;
+	const [moved] = conditions.splice(index, 1);
+	conditions.splice(target, 0, moved);
+}
+
 export type WrapKind = "and" | "or" | "not" | "sustained";
 
 /**

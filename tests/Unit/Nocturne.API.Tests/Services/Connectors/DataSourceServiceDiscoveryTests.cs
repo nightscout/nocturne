@@ -90,11 +90,11 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         db.SaveChanges();
     }
 
-    private void SeedSnapshot(string? dataSource, string? device, DateTime timestamp) =>
+    private void SeedSnapshot(string? dataSource, string? device, DateTime timestamp, string aidAlgorithm = "Loop") =>
         Seed(db => db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId,
-            DataSource = dataSource, Device = device, Timestamp = timestamp, AidAlgorithm = "Loop",
+            DataSource = dataSource, Device = device, Timestamp = timestamp, AidAlgorithm = aidAlgorithm,
         }));
 
     private void SeedSensorGlucose(string? dataSource, string? device, DateTime timestamp) =>
@@ -197,6 +197,22 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         var info = sources.Should().ContainSingle(s => s.DeviceId == "pump-42").Subject;
         info.Category.Should().Be("demo");
         info.SourceType.Should().Be("demo");
+    }
+
+    [Theory]
+    [InlineData("OpenAps", "AndroidAps", "AndroidAPS", "aaps")]
+    [InlineData("AndroidAps", "OpenAps", "OpenAPS", "openaps")]
+    public async Task Discovery_NamesASnapshotOnlyRigByItsNewestSnapshotsAlgorithm(
+        string older, string newer, string name, string sourceType)
+    {
+        SeedSnapshot(null, RigA, DateTime.UtcNow.AddMinutes(-10), older);
+        SeedSnapshot(null, RigA, DateTime.UtcNow, newer);
+
+        var info = (await DiscoverAsync()).Should().ContainSingle(d => d.DeviceId == RigA).Subject;
+
+        info.Name.Should().Be(name);
+        info.SourceType.Should().Be(sourceType);
+        info.Category.Should().Be("aid-system");
     }
 
     [Fact]

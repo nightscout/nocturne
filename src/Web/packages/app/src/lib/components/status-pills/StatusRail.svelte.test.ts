@@ -21,6 +21,7 @@ const { now, store, settings } = vi.hoisted(() => {
       demoMode: false,
       pillsData: { cob: null, basal: null, iob: null, loop: null },
       currentReservoir: 120 as number | null,
+      currentLinkBatteryVoltage: null as number | null,
       trackerInstances: [] as unknown[],
       trackerDefinitions: [] as unknown[],
       legacyFallbacks: [] as unknown[],
@@ -73,7 +74,7 @@ const MOBILE = "status-pills-mobile";
 const RAIL_STORAGE_KEY = "nocturne-dashboard-rail";
 const HIDDEN_STORAGE_KEY = "nocturne-hidden-legacy-fallbacks";
 
-const { Cob, Basal, Iob, Loop, Reservoir, Trackers } = RailItemId;
+const { Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers } = RailItemId;
 
 /** The rail items a rail renders, in the order it renders them. */
 function railItems(testId: string): string[] {
@@ -89,6 +90,7 @@ describe("StatusRail", () => {
     dashboardRail.presentFrom({});
     settings.features.trackerPills.enabled = true;
     store.currentReservoir = 120;
+    store.currentLinkBatteryVoltage = null;
     store.trackerDefinitions = [SENSOR_DEFINITION];
     store.trackerInstances = [SENSOR_INSTANCE];
     store.legacyFallbacks = [];
@@ -192,6 +194,14 @@ describe("StatusRail", () => {
 
     await expect.element(page.getByTestId(DESKTOP).getByText("COB")).toBeVisible();
     expect(railItems(DESKTOP)).not.toContain(Reservoir);
+  });
+
+  it("shows the link battery after the reservoir once a voltage is reported", async () => {
+    store.currentLinkBatteryVoltage = 2.93;
+    render(CurrentBGDisplay);
+
+    await expect.element(page.getByTestId(DESKTOP).getByText("2.93 V")).toBeVisible();
+    expect(railItems(DESKTOP)).toEqual([Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers]);
   });
 
   it("shows the same rail, trackers included, in the mobile layout", async () => {

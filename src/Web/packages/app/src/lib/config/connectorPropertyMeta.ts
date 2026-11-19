@@ -349,6 +349,12 @@ export const connectorPropertyMeta = {
     description: 'Skip basal entries that resolve to a near-zero rate',
     category: 'Advanced',
   },
+  TimeZoneId: {
+    label: 'Pump time zone',
+    description:
+      'The IANA time zone of the pump clock, for example America/Los_Angeles. Daylight saving time changes apply automatically. If you leave this empty, the timezone offset applies.',
+    category: 'General',
+  },
   // OAuth and Webhooks
   AccessToken: {
     label: 'Access token',

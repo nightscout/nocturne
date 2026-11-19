@@ -21,9 +21,14 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Tenant-level settings a tenant's own administrators control, as opposed to the platform-admin
-/// surface in <c>PlatformAdmin.TenantController</c>.
+/// Settings that the tenant's own administrators control. A caller can read the settings, update
+/// the public docs setting and the display name, and read and update the patient relationship, the
+/// units and the time zone. The patient relationship, the units and the time zone need full access.
 /// </summary>
+/// <remarks>
+/// Set by the tenant's own administrators, as opposed to the platform-admin surface in
+/// <c>PlatformAdmin.TenantController</c>.
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/tenant-settings")]
@@ -116,9 +121,7 @@ public class TenantSettingsController : ControllerBase
         if (!HttpContext.HasScope(Scope.TenantSettings))
             return Forbid();
 
-        var settings = await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct);
-        return Ok(new TenantSubdomainDto(
-            settings.Slug, _baseDomain.TenantOrigin(settings.Slug), _baseDomain.BaseDomain, await CanChangeSubdomainAsync(ct)));
+        return Ok(await ReadSubdomainAsync(ct));
     }
 
     /// <inheritdoc cref="ITenantService.ChangeSlugAsync"/>
@@ -138,8 +141,18 @@ public class TenantSettingsController : ControllerBase
         if (!result.IsValid)
             return Problem(detail: result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
 
-        var slug = request.Slug.Trim().ToLowerInvariant();
-        return Ok(new TenantSubdomainDto(slug, _baseDomain.TenantOrigin(slug), _baseDomain.BaseDomain, true));
+        return Ok(await ReadSubdomainAsync(ct));
+    }
+
+    private async Task<TenantSubdomainDto> ReadSubdomainAsync(CancellationToken ct)
+    {
+        var settings = await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct);
+        return new TenantSubdomainDto(
+            settings.Slug,
+            _baseDomain.TenantOrigin(settings.Slug),
+            _baseDomain.BaseDomain,
+            await CanChangeSubdomainAsync(ct),
+            settings.NextSlugChangeAt);
     }
 
     private async Task<bool> CanChangeSubdomainAsync(CancellationToken ct)
@@ -301,6 +314,10 @@ public record SetUnitsAndTimezoneRequest
 /// <param name="Address">The tenant's origin, or null when no base domain is configured.</param>
 /// <param name="BaseDomain">The domain every subdomain sits under.</param>
 /// <param name="CanChange">Whether the caller may change the subdomain.</param>
-public record TenantSubdomainDto(string Slug, string? Address, string BaseDomain, bool CanChange);
+/// <param name="NextChangeAt">
+/// When the subdomain may next change, while its last change is less than an hour old; otherwise
+/// null.
+/// </param>
+public record TenantSubdomainDto(string Slug, string? Address, string BaseDomain, bool CanChange, DateTime? NextChangeAt);
 
 public record ChangeSubdomainRequest(string Slug);

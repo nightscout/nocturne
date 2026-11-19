@@ -124,7 +124,7 @@ public class EversenseConnectorService
 
             var now = Clock.GetUtcNow().UtcDateTime;
             var history = await FetchHistoryAsync(config, patient, request, now, cancellationToken);
-            var records = MergeReadings(history, _mapper.Map(patient, now));
+            var records = MergeReadings(history, _mapper.Map(patient, config.Server, now));
             if (records.Count == 0)
             {
                 _logger.LogDebug(

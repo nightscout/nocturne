@@ -109,6 +109,7 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
         Payload::PumpBattery(p) => device::pump_battery(p, env),
         Payload::TempBasal(p) => insulin::temp_basal(p, env),
         Payload::UploaderBattery(p) => device::uploader_battery(p, env),
+        Payload::TransmitterBattery(p) => device::transmitter_battery(p, env),
         Payload::OverrideActive(p) => spans::override_active(p, env),
         Payload::SensitivityRatio(p) => device::sensitivity_ratio(p, env),
         Payload::DoNotDisturb(p) => spans::do_not_disturb(p, env),

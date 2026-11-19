@@ -24,6 +24,22 @@ public class TenantAlertSettingsRepository : ITenantAlertSettingsRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<TenantAlertSettingsSnapshot> GetAsync(CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+
+        var row = await db.TenantAlertSettings
+            .AsNoTracking()
+            .Select(s => new TenantAlertSettingsSnapshot(
+                s.DndScheduleEnabled,
+                s.DndScheduleStart,
+                s.DndScheduleEnd))
+            .FirstOrDefaultAsync(ct);
+
+        return row ?? TenantAlertSettingsSnapshot.Empty;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<TenantAlertSettingsSnapshot> GetOrCreateAsync(CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);

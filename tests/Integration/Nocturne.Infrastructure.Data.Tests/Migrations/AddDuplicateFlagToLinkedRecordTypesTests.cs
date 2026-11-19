@@ -74,6 +74,7 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
     [
         ("carb_intakes", "written_live", "boolean NOT NULL DEFAULT false"),
         ("sensor_glucose", "written_live", "boolean NOT NULL DEFAULT false"),
+        ("state_spans", "written_live", "boolean NOT NULL DEFAULT false"),
         ("carb_intakes", "writer_grant_id", "uuid"),
         ("sensor_glucose", "writer_grant_id", "uuid"),
         ("state_spans", "writer_grant_id", "uuid"),

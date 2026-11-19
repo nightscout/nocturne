@@ -63,15 +63,41 @@ public sealed class InsulinDeliveryReader(
     /// understates every total computed from it.
     /// <paramref name="alongside"/> holds reads the caller started before calling, joined into the
     /// same <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.
+    /// <see cref="InsulinRecords.BasalInjections"/> holds the doses given in the window, for totals.
     /// </remarks>
     public Task<InsulinRecords> ReadRecordsAsync(
         DateTime from, DateTime to, CancellationToken ct, params Task[] alongside) =>
         ReadRecordsCoreAsync(
             from,
             to,
-            bolusRepository.GetAsync(from, to, null, null, int.MaxValue, descending: false, kind: BolusKind.Manual, ct: ct),
+            ReadManualBolusesAsync(from, to, ct),
+            ReadBasalInjectionsGivenAsync(from, to, ct),
             ct,
             alongside);
+
+    /// <summary>
+    /// As <see cref="ReadRecordsAsync"/>, with <see cref="InsulinRecords.BasalInjections"/> read by
+    /// <see cref="ReadBasalInjectionsAsync"/>, for a reader of basal rates.
+    /// </summary>
+    public Task<InsulinRecords> ReadRecordsForRatesAsync(
+        DateTime from, DateTime to, CancellationToken ct, params Task[] alongside) =>
+        ReadRecordsCoreAsync(
+            from,
+            to,
+            ReadManualBolusesAsync(from, to, ct),
+            ReadBasalInjectionsAsync(from, to, ct),
+            ct,
+            alongside);
+
+    /// <summary>
+    /// The basal injections over <see cref="StatisticsService.BasalInjectionReadSpan"/> of the window,
+    /// for <see cref="StatisticsService.BasalInjectionPieces"/>.
+    /// </summary>
+    public Task<IEnumerable<BasalInjection>> ReadBasalInjectionsAsync(DateTime from, DateTime to, CancellationToken ct)
+    {
+        var span = StatisticsService.BasalInjectionReadSpan(from, to);
+        return basalInjectionRepository.GetAsync(span.From, span.To, null, null, int.MaxValue, 0, false, ct);
+    }
 
     /// <remarks>
     /// Reads from <see cref="StatisticsService.TempBasalReadStart"/>, not the window start: the
@@ -130,8 +156,13 @@ public sealed class InsulinDeliveryReader(
 
         treatments ??= TreatmentRangeReads.Start(bolusRepository, carbIntakeRepository, startDt, endDt, ct);
 
-        var (boluses, algorithmBoluses, tempBasals, basalInjections) =
-            await ReadRecordsCoreAsync(startDt, endDt, treatments.ManualBoluses, ct, treatments.Carbs);
+        var (boluses, algorithmBoluses, tempBasals, basalInjections) = await ReadRecordsCoreAsync(
+            startDt,
+            endDt,
+            treatments.ManualBoluses,
+            ReadBasalInjectionsGivenAsync(startDt, endDt, ct),
+            ct,
+            treatments.Carbs);
         var carbs = await treatments.Carbs;
         await FillMissingScheduledRatesAsync(tempBasals, startDt, endDt, ct);
 
@@ -148,12 +179,22 @@ public sealed class InsulinDeliveryReader(
         return new InsulinDeliveryRead(result, boluses);
     }
 
+    private Task<IEnumerable<Bolus>> ReadManualBolusesAsync(DateTime from, DateTime to, CancellationToken ct) =>
+        bolusRepository.GetAsync(from, to, null, null, int.MaxValue, descending: false, kind: BolusKind.Manual, ct: ct);
+
+    private Task<IEnumerable<BasalInjection>> ReadBasalInjectionsGivenAsync(DateTime from, DateTime to, CancellationToken ct) =>
+        basalInjectionRepository.GetAsync(from, to, null, null, int.MaxValue, 0, false, ct);
+
     private async Task<InsulinRecords> ReadRecordsCoreAsync(
-        DateTime from, DateTime to, Task<IEnumerable<Bolus>> manualTask, CancellationToken ct, params Task[] alongside)
+        DateTime from,
+        DateTime to,
+        Task<IEnumerable<Bolus>> manualTask,
+        Task<IEnumerable<BasalInjection>> injectionTask,
+        CancellationToken ct,
+        params Task[] alongside)
     {
         var algorithmTask = bolusRepository.GetAsync(from, to, null, null, int.MaxValue, descending: false, kind: BolusKind.Algorithm, ct: ct);
         var tempBasalTask = ReadTempBasalsAsync(from, to, ct);
-        var injectionTask = basalInjectionRepository.GetAsync(from, to, null, null, int.MaxValue, 0, false, ct);
 
         await Task.WhenAll([manualTask, algorithmTask, tempBasalTask, injectionTask, .. alongside]);
 

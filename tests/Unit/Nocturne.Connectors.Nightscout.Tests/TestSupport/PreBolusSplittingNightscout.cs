@@ -16,7 +16,10 @@ namespace Nocturne.Connectors.Nightscout.Tests.TestSupport;
 /// <remarks>
 /// <c>prepareData</c> moves the carbs of a document with a non-zero <c>preBolus</c> into
 /// <c>preBolusCarbs</c> and deletes them. A 15.0.6 POST whose upsert would change a stored document's
-/// <c>_id</c>, or insert one a document already holds, is refused, as MongoDB refuses it. A POST, an
+/// <c>_id</c>, or insert one a document already holds, is refused, as MongoDB refuses it, with the
+/// 500 <c>{status, message: 'Mongo Error', description: err}</c> that <c>lib/api/treatments/index.js</c>
+/// sends through <c>sendJSONStatus</c>, <c>err</c> being the driver's error for each refused document, of which serialization keeps only
+/// <c>driver</c>, <c>name</c>, <c>index</c> and <c>code</c>. A POST, an
 /// array one document at a time, then upserts a
 /// second document <c>{created_at: created_at + preBolus minutes, eventType, carbs: preBolusCarbs,
 /// notes}</c> by <c>created_at</c> and <c>eventType</c> under a minted <c>_id</c>, carbs or not. A PUT
@@ -37,11 +40,23 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
 
     public List<JsonObject> Documents { get; } = [];
 
+    /// <summary>The method of every request, in the order they came.</summary>
+    public List<HttpMethod> Methods { get; } = [];
+
+    /// <summary>When set, every POST is answered with this status and <see cref="FailPostsBody"/>, and stores nothing.</summary>
+    public HttpStatusCode? FailPostsWith { get; set; }
+
+    public string? FailPostsBody { get; set; }
+
+    /// <summary>When set, a DELETE is answered as done and removes nothing.</summary>
+    public bool KeepOnDelete { get; set; }
+
     /// <summary>Every document as a read serves it.</summary>
     public string Served() => Serve(Documents);
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
+        Methods.Add(request.Method);
         var uri = request.RequestUri!;
         if (request.Method == HttpMethod.Get && uri.AbsolutePath == Path + ".json")
             return Json(Serve(Find(Uri.UnescapeDataString(uri.Query))));
@@ -58,11 +73,17 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
         if (uri.AbsolutePath != Path)
             return new HttpResponseMessage(HttpStatusCode.NotFound);
 
+        if (request.Method == HttpMethod.Post && FailPostsWith is { } status)
+            return new HttpResponseMessage(status)
+            {
+                Content = new StringContent(FailPostsBody ?? "", Encoding.UTF8, "application/json"),
+            };
+
         var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         if (request.Method == HttpMethod.Post)
         {
-            if (!Post(body is JsonArray array ? array : new JsonArray(body.DeepClone())))
-                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            if (Post(body is JsonArray array ? array : new JsonArray(body.DeepClone())) is { Count: > 0 } errors)
+                return Refused(errors);
         }
         else if (request.Method == HttpMethod.Put)
             Save(body.DeepClone().AsObject());
@@ -72,23 +93,36 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
         return Json("[]");
     }
 
+    private static HttpResponseMessage Refused(JsonArray errors) => new(HttpStatusCode.InternalServerError)
+    {
+        Content = new StringContent(
+            new JsonObject { ["status"] = 500, ["message"] = "Mongo Error", ["description"] = errors }.ToJsonString(),
+            Encoding.UTF8,
+            "application/json"),
+    };
+
+    private static JsonObject MongoError(int code) =>
+        new() { ["driver"] = true, ["name"] = "MongoError", ["index"] = 0, ["code"] = code };
+
     private HttpResponseMessage Removed(List<JsonObject> removed)
     {
-        Documents.RemoveAll(removed.Contains);
+        if (!KeepOnDelete)
+            Documents.RemoveAll(removed.Contains);
         return Json($$"""{"n":{{removed.Count}}}""");
     }
 
-    /// <returns>Whether every document was stored.</returns>
-    public bool Post(JsonArray documents)
+    /// <returns>The driver's error for each document refused.</returns>
+    public JsonArray Post(JsonArray documents)
     {
-        var stored = true;
+        var errors = new JsonArray();
         foreach (var node in documents)
         {
             var obj = node!.DeepClone().AsObject();
             NormalizeId(obj);
             var (createdAt, preBolusCarbs) = PrepareData(obj);
             var eventType = obj["eventType"]?.GetValue<string>();
-            stored &= Upsert(v15_0_8 ? null : (createdAt, eventType), obj, createdAt);
+            if (Upsert(v15_0_8 ? null : (createdAt, eventType), obj, createdAt) is { } error)
+                errors.Add(error);
 
             if (obj["preBolus"] is { } preBolus)
             {
@@ -106,7 +140,7 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
             }
         }
 
-        return stored;
+        return errors;
     }
 
     private void Save(JsonObject obj)
@@ -128,7 +162,8 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
     }
 
     /// <param name="timeAndType">The key a 15.0.6 POST and every preBolus copy upsert by.</param>
-    private bool Upsert((string CreatedAt, string? EventType)? timeAndType, JsonObject obj, string createdAt)
+    /// <returns>The driver's error when the write is refused, else null.</returns>
+    private JsonObject? Upsert((string CreatedAt, string? EventType)? timeAndType, JsonObject obj, string createdAt)
     {
         Predicate<JsonObject> match;
         if (timeAndType is { } key)
@@ -154,21 +189,21 @@ internal sealed class PreBolusSplittingNightscout(bool v15_0_8 = true) : HttpMes
         if (stored >= 0)
         {
             if (timeAndType is not null && Id(obj) is { } sent && sent != Id(Documents[stored]))
-                return false;
+                return MongoError(66);
             obj["_id"] = Documents[stored]["_id"]!.DeepClone();
             if (_stringIds.Remove(Documents[stored]))
                 _stringIds.Add(obj);
             Documents[stored] = obj;
-            return true;
+            return null;
         }
 
         if (Id(obj) is { } held && Documents.Any(d => Id(d) == held))
-            return false;
+            return MongoError(11000);
         if (timeAndType is not null && Id(obj) is not null && !v15_0_8)
             _stringIds.Add(obj);
         obj["_id"] ??= Mint();
         Documents.Add(obj);
-        return true;
+        return null;
     }
 
     private void NormalizeId(JsonObject obj)

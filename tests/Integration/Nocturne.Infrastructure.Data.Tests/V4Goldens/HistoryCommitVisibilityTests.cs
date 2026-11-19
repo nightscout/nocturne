@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -46,7 +47,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
 
         using var deleteScope = scope.ServiceProvider.CreateScope();
         var delete = deleteScope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>()
-            .DeleteBySourceAsync("dexcom-connector", WriteOrigin.Live);
+            .DeleteAsync(RecordSelector.ForSource("dexcom-connector"), WriteOrigin.Live);
         await PostgresLockWaits.UntilBlockedAsync(fixture.AppConnectionString, delete);
 
         using var liveScope = scope.ServiceProvider.CreateScope();

@@ -32,6 +32,12 @@ public interface ISourceOwnedDataReader
     Task<IReadOnlyList<WriterBucket>> WriterBucketsAsync(
         DateTime windowStart, DateTime last24Hours, CancellationToken ct);
 
+    /// <summary>
+    /// Whether any table holds a row whose <c>DataSource</c> is <paramref name="dataSource"/> exactly.
+    /// Unlike the source filters it does not match <c>Device</c>, so an index serves it.
+    /// </summary>
+    Task<bool> HoldsRowsByDataSourceAsync(string dataSource, CancellationToken ct);
+
     /// <summary>Every row <paramref name="source"/> owns, counted by data type, non-zero only.</summary>
     Task<IReadOnlyDictionary<string, long>> CountsBySourceAsync(string source, CancellationToken ct);
 

@@ -41,8 +41,8 @@ public static class PreBolusSplit
         Split(treatment, t =>
         {
             identify(t);
-            return t.Id is { Length: > 0 } id ? CarbsId(id) : null;
-        });
+            return t.Id is { Length: > 0 } id ? id : null;
+        }, CarbsId);
 
     /// <summary>
     /// What Nightscout write-back sends for a stored treatment: <see cref="Split"/> of a copy of it,
@@ -54,7 +54,7 @@ public static class PreBolusSplit
     /// </summary>
     public static IReadOnlyList<Treatment> ForWriteBack(Treatment treatment) =>
         treatment.LegacyId is { Length: > 0 } legacyId
-        && Split(treatment.ShallowCopy(), _ => WriteBackCarbsId(legacyId)) is [_, _] halves
+        && Split(treatment.ShallowCopy(), _ => legacyId, WriteBackCarbsId) is [_, _] halves
             ? halves
             : [treatment];
 
@@ -82,9 +82,10 @@ public static class PreBolusSplit
         return carbsAt <= 0 || carbsAt > MaxMills ? null : carbsAt;
     }
 
-    private static IReadOnlyList<Treatment> Split(Treatment treatment, Func<Treatment, string?> carbsIdOf)
+    private static IReadOnlyList<Treatment> Split(
+        Treatment treatment, Func<Treatment, string?> mealIdOf, Func<string, string> carbsIdOf)
     {
-        if (CarbsAt(treatment) is not { } carbsAt || carbsIdOf(treatment) is not { } carbsId)
+        if (CarbsAt(treatment) is not { } carbsAt || mealIdOf(treatment) is not { } mealId)
             return [treatment];
 
         if (treatment.Insulin is not > 0)
@@ -103,7 +104,8 @@ public static class PreBolusSplit
 
         var carbs = new Treatment
         {
-            Id = carbsId,
+            Id = carbsIdOf(mealId),
+            PreBolusMealId = mealId,
             EventType = treatment.EventType,
             Mills = carbsAt,
             Carbs = treatment.Carbs,
@@ -146,6 +148,34 @@ public static class PreBolusSplit
         var carbsId = WriteBackCarbsId(legacyId);
         return name == carbsId || name == MongoObjectId.Coerce(carbsId);
     }
+
+    /// The key a carb intake keeps <see cref="Treatment.PreBolusMealId"/> under in its additional
+    /// properties, so the carbs record is announced with it when read back.
+    /// </summary>
+    public const string MealIdField = "preBolusMealId";
+
+    /// <summary>
+    /// <paramref name="record"/> with the <see cref="Treatment.PreBolusMealId"/> of
+    /// <paramref name="treatment"/> added, or unchanged when it carries none.
+    /// </summary>
+    public static Dictionary<string, object?>? AddMealId(Dictionary<string, object?>? record, Treatment treatment)
+    {
+        if (treatment.PreBolusMealId is not { Length: > 0 } mealId)
+            return record;
+
+        record ??= new();
+        record[MealIdField] = mealId;
+        return record;
+    }
+
+    /// <summary>The meal's legacy id a record's additional properties hold, or null.</summary>
+    public static string? MealIdOf(IReadOnlyDictionary<string, object?>? record) =>
+        record?.GetValueOrDefault(MealIdField) switch
+        {
+            string mealId => mealId,
+            JsonElement { ValueKind: JsonValueKind.String } mealId => mealId.GetString(),
+            _ => null,
+        };
 
     private static string Derived(string prefix, string id) =>
         prefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)))[..48];

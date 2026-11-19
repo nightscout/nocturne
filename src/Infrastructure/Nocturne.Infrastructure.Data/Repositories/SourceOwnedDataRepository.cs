@@ -55,7 +55,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     private Task ReportWrittenAsync(IReadOnlyCollection<Type> models) =>
         models.Count == 0 ? Task.CompletedTask : _legacyReads?.WrittenAsync(models) ?? Task.CompletedTask;
 
-    /// <summary>The tables a source purge deletes from (<see cref="SourceOwnedDataRepository"/>).</summary>
+    /// <summary>The tables a purge deletes from (<see cref="SourceOwnedDataRepository"/>).</summary>
     private static readonly IReadOnlyList<V4RecordTable> PurgedTables =
         [.. V4RecordTables.All.Where(t => t.Kind != V4RecordKind.Glucose)];
 
@@ -101,10 +101,11 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
                 Device = g.Key!,
                 DataSource = g.Max(ds => ds.DataSource),
                 Latest = g.Max(ds => ds.Timestamp),
+                AidAlgorithm = g.OrderByDescending(ds => ds.Timestamp).Select(ds => ds.AidAlgorithm).FirstOrDefault(),
             })
             .ToListAsync(ct);
 
-        return devices.Select(d => new ApsDeviceLastSeen(d.Device, d.DataSource, d.Latest)).ToList();
+        return devices.Select(d => new ApsDeviceLastSeen(d.Device, d.DataSource, d.Latest, d.AidAlgorithm)).ToList();
     }
 
     /// <inheritdoc/>
@@ -127,6 +128,19 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
         foreach (var table in V4RecordTables.All)
             buckets.AddRange(await table.WriterBucketsAsync(db, windowStart, last24Hours, ct));
         return buckets;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> HoldsRowsByDataSourceAsync(string dataSource, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        foreach (var table in V4RecordTables.All)
+        {
+            if (await table.HoldsDataSourceAsync(db, dataSource, ct))
+                return true;
+        }
+
+        return false;
     }
 
     /// <inheritdoc/>
@@ -181,8 +195,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     }
 
     /// <inheritdoc/>
-    public virtual async Task<SourcePurgeResult> SoftDeleteBySourceAsync(
-        string source, string scope, CancellationToken ct)
+    public virtual async Task<SourcePurgeResult> SoftDeleteAsync(RecordSelector selector, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var deleted = new Dictionary<string, long>();
@@ -191,14 +204,14 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
         {
             foreach (var table in PurgedTables)
             {
-                var count = await table.SoftDeleteAsync(db, source, _audit, scope, ct);
+                var count = await table.SoftDeleteAsync(db, selector, _audit, ct);
                 if (count <= 0) continue;
 
                 deleted[table.DataType] = deleted.GetValueOrDefault(table.DataType) + count;
                 written.Add(table.Model);
             }
 
-            await db.AuditedSoftDeleteAsync(V4RecordTables.StatusExtrasLeftBy(db, source), _audit, scope, ct);
+            await db.AuditedSoftDeleteAsync(V4RecordTables.StatusExtrasLeftBy(db, selector), _audit, selector.Scope, ct);
         }
         finally
         {
@@ -209,7 +222,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     }
 
     /// <inheritdoc/>
-    public virtual async Task AllowReimportBySourceAsync(string source, string scope, CancellationToken ct)
+    public virtual async Task AllowReimportAsync(RecordSelector selector, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var written = new HashSet<Type>();
@@ -217,11 +230,11 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
         {
             foreach (var table in V4RecordTables.All)
             {
-                if (await table.AllowReimportAsync(db, source, _audit, scope, ct) > 0)
+                if (await table.AllowReimportAsync(db, selector, _audit, ct) > 0)
                     written.Add(table.Model);
             }
 
-            await db.AuditedAllowReimportAsync(V4RecordTables.StatusExtrasLeftBy(db, source), _audit, scope, ct);
+            await db.AuditedAllowReimportAsync(V4RecordTables.StatusExtrasLeftBy(db, selector), _audit, selector.Scope, ct);
         }
         finally
         {

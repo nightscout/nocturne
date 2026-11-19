@@ -14,10 +14,9 @@ public static class UrlConstants
     public static class External
     {
         /// <summary>
-        /// Base URL of the Nocturne marketing/info website. Temporary path under
-        /// the Nightscout Foundation domain until a dedicated domain is provisioned.
+        /// Base URL of the Nocturne website.
         /// </summary>
-        public const string NocturneWebsite = "https://nightscoutfoundation.org/nocturne";
+        public const string NocturneWebsite = "https://getnocturne.dev";
 
         /// <summary>
         /// Base URL for all Nocturne documentation pages.
@@ -25,21 +24,15 @@ public static class UrlConstants
         public const string NocturneDocsBase = NocturneWebsite + "/docs";
 
         /// <summary>
-        /// Setup guide for the Dexcom Share connector.
+        /// Setup guide for the Google Health connector.
         /// </summary>
-        /// <seealso cref="DataSources.DexcomConnector"/>
-        public const string DocsDexcom = NocturneDocsBase + "/connectors/dexcom";
+        /// <seealso cref="DataSources.GoogleHealthConnector"/>
+        public const string DocsGoogleHealth = NocturneDocsBase + "/data-sources/google-health";
 
         /// <summary>
-        /// Setup guide for the FreeStyle Libre (LibreLinkUp) connector.
+        /// Setup guide for the Oura connector.
         /// </summary>
-        /// <seealso cref="DataSources.LibreConnector"/>
-        public const string DocsLibre = NocturneDocsBase + "/connectors/libre";
-
-        /// <summary>
-        /// Setup guide for the Glooko connector.
-        /// </summary>
-        /// <seealso cref="DataSources.GlookoConnector"/>
-        public const string DocsGlooko = NocturneDocsBase + "/connectors/glooko";
+        /// <seealso cref="DataSources.OuraConnector"/>
+        public const string DocsOura = NocturneDocsBase + "/data-sources/oura";
     }
 }

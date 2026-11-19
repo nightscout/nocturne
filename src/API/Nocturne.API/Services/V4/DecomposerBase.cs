@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services.V4;
 
@@ -128,13 +129,18 @@ public abstract class DecomposerBase
     }
 
     /// <summary>One table a legacy record decomposes into, for <see cref="PointAtStoredRecordsAsync"/>.</summary>
+    /// <param name="PulledOnly">
+    /// Whether only the documents the Nightscout connector pulled are looked up in the table: those of
+    /// a table whose records no other uploader names but by their legacy id, which the upserts match unaided.
+    /// </param>
     protected readonly record struct KeyedTable(
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IReadOnlySet<string>>> Held,
         IReadOnlyList<WireIdResolver> Resolvers,
         Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<UnkeyedOwnId>>> FindOwnIds,
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<IV4Record>>> AdoptOwnIds,
         Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation,
-        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<WriteBackSendable>>> WriteBackMaySend);
+        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<WriteBackSendable>>> WriteBackMaySend,
+        bool PulledOnly = false);
 
     /// <summary>
     /// One <see cref="WireForms"/> lookup. <paramref name="PulledOnly"/> keeps it to the ids of
@@ -159,24 +165,60 @@ public abstract class DecomposerBase
 
     protected static KeyedTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository, WireForms forms)
         where TRecord : class, IV4Record
-    {
-        var resolvers = new List<WireIdResolver>();
-        if (forms.HasFlag(WireForms.UuidPrefix))
-            resolvers.Add(new((ids, _, ct) => repository.ResolveUuidLegacyIdsAsync(ids, ct), PulledOnly: false));
-        if (forms.HasFlag(WireForms.Hashed))
-            resolvers.Add(new((ids, window, ct) => repository.ResolveHashedLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
-        if (forms.HasFlag(WireForms.PreBolusCarbs))
-            resolvers.Add(new((ids, window, ct) => repository.ResolvePreBolusCarbsLegacyIdsAsync(ids, window.From, window.To, ct), PulledOnly: true));
-        if (forms.HasFlag(WireForms.KeyedOwnId))
-            resolvers.Add(new((ids, _, ct) => repository.ResolveKeyedOwnIdsAsync(ids, ct), PulledOnly: false, TakesUuids: true));
-
-        return new(
+        => new(
             repository.GetHeldLegacyIdsAsync,
-            resolvers,
+            Resolvers(
+                forms,
+                repository.ResolveUuidLegacyIdsAsync,
+                repository.ResolveHashedLegacyIdsAsync,
+                repository.ResolvePreBolusCarbsLegacyIdsAsync,
+                repository.ResolveKeyedOwnIdsAsync),
             async (ids, source, ct) => await repository.FindUnkeyedOwnIdsAsync(ids, source, ct),
             async (ids, ct) => await repository.AdoptOwnIdsAsync(ids, ct),
             repository.AdoptLegacyIdsByCorrelationAsync,
             repository.GetLegacyIdsWriteBackMaySendAsync);
+
+    /// <summary>
+    /// The state spans a legacy treatment is stored as. A span is read back as a treatment only when it
+    /// carries a legacy id, so no copy can name one that has none, and none is adopted. Only write-back
+    /// sends a span under another form of its key, so only a pulled copy is looked up.
+    /// </summary>
+    protected static KeyedTable Table(StateSpanLegacyKeys spans, WireForms forms)
+        => new(
+            spans.GetHeldLegacyIdsAsync,
+            Resolvers(
+                forms,
+                spans.ResolveUuidLegacyIdsAsync,
+                spans.ResolveHashedLegacyIdsAsync,
+                preBolusCarbs: null,
+                spans.ResolveKeyedOwnIdsAsync),
+            (_, _, _) => Task.FromResult(Enumerable.Empty<UnkeyedOwnId>()),
+            (_, _) => Task.FromResult(Enumerable.Empty<IV4Record>()),
+            (_, _) => Task.FromResult(0),
+            spans.GetLegacyIdsWriteBackMaySendAsync,
+            PulledOnly: true);
+
+    private static List<WireIdResolver> Resolvers(
+        WireForms forms,
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<WireLegacyId>>> uuidPrefix,
+        Func<IReadOnlyCollection<string>, DateTime, DateTime, CancellationToken, Task<IEnumerable<WireLegacyId>>> hashed,
+        Func<IReadOnlyCollection<string>, DateTime, DateTime, CancellationToken, Task<IEnumerable<WireLegacyId>>>? preBolusCarbs,
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<WireLegacyId>>> keyedOwnId)
+    {
+        var resolvers = new List<WireIdResolver>();
+        if (forms.HasFlag(WireForms.UuidPrefix))
+            resolvers.Add(new((ids, _, ct) => uuidPrefix(ids, ct), PulledOnly: false));
+        if (forms.HasFlag(WireForms.Hashed))
+            resolvers.Add(new((ids, window, ct) => hashed(ids, window.From, window.To, ct), PulledOnly: true));
+        if (forms.HasFlag(WireForms.PreBolusCarbs))
+        {
+            if (preBolusCarbs is null)
+                throw new ArgumentException($"{WireForms.PreBolusCarbs} needs a lookup for it.", nameof(forms));
+            resolvers.Add(new((ids, window, ct) => preBolusCarbs(ids, window.From, window.To, ct), PulledOnly: true));
+        }
+        if (forms.HasFlag(WireForms.KeyedOwnId))
+            resolvers.Add(new((ids, _, ct) => keyedOwnId(ids, ct), PulledOnly: false, TakesUuids: true));
+        return resolvers;
     }
 
     /// <summary>
@@ -338,7 +380,11 @@ public abstract class DecomposerBase
 
         var held = new HashSet<string>(StringComparer.Ordinal);
         foreach (var table in tables)
-            held.UnionWith(await table.Held(names, ct));
+        {
+            var lookedUp = table.PulledOnly ? pulledNames : names;
+            if (lookedUp.Count > 0)
+                held.UnionWith(await table.Held(lookedUp, ct));
+        }
 
         var resolved = new Dictionary<string, string>(StringComparer.Ordinal);
         // A document whose identifier is held needs nothing looked up under its _id.
@@ -364,7 +410,7 @@ public abstract class DecomposerBase
                     continue;
                 var candidates = wireIds
                     .Where(n => !resolved.ContainsKey(n)
-                                && (!pulledOnly || pulledNames.Contains(n))
+                                && (!(pulledOnly || table.PulledOnly) || pulledNames.Contains(n))
                                 && (takesUuids || MongoObjectId.IsObjectId(n)))
                     .ToHashSet(StringComparer.Ordinal);
                 if (candidates.Count == 0)

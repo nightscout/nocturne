@@ -15,7 +15,7 @@ for a few minutes (a "compression low"), and a fresh sensor can be jumpy for its
 first day. An alert on every one of those readings teaches people to ignore
 alerts.
 
-**Make sustained**, in a row's **...** menu, adds a **for at least N min** box to
+**Add “for at least”**, in a row's **...** menu, adds a **for at least N min** box to
 the row. The row then only counts once its condition has been true **for that
 long without a break**.
 
@@ -89,7 +89,7 @@ every setup that relies on alerts should also have a **Signal loss** rule (see
 Every row's clock runs on its own, whatever the rows around it are doing, so
 the order of rows never changes when a rule alerts.
 
-In the rule editor, **Make sustained** is offered on a single condition row,
+In the rule editor, **Add “for at least”** is offered on a single condition row,
 not on a group. Two rows of "for at least 15 min" under **all of** alert once
 both have held for 15 minutes: after 15 minutes if both started together, later
 if one started later. To require that several conditions hold together for a

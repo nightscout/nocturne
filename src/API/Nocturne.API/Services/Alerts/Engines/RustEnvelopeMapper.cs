@@ -180,6 +180,10 @@ internal static class RustEnvelopeMapper
                 ? new WireTempBasal(tbasal.Rate, tbasal.ScheduledRate, Utc(tbasal.StartedAt)!.Value)
                 : null,
             UploaderBatteryPercent = ctx.UploaderBatteryPercent,
+            TransmitterVoltageA = ctx.TransmitterVoltageA,
+            TransmitterVoltageB = ctx.TransmitterVoltageB,
+            TransmitterResistance = ctx.TransmitterResistance,
+            TransmitterDays = ctx.TransmitterDays,
             ActiveOverride = ctx.ActiveOverride is { } ov
                 ? new WireStartedSpan(Utc(ov.StartedAt)!.Value)
                 : null,
@@ -302,6 +306,10 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("pump_battery_percent")] public decimal? PumpBatteryPercent { get; init; }
         [JsonPropertyName("active_temp_basal")] public WireTempBasal? ActiveTempBasal { get; init; }
         [JsonPropertyName("uploader_battery_percent")] public decimal? UploaderBatteryPercent { get; init; }
+        [JsonPropertyName("transmitter_voltage_a")] public decimal? TransmitterVoltageA { get; init; }
+        [JsonPropertyName("transmitter_voltage_b")] public decimal? TransmitterVoltageB { get; init; }
+        [JsonPropertyName("transmitter_resistance")] public decimal? TransmitterResistance { get; init; }
+        [JsonPropertyName("transmitter_days")] public decimal? TransmitterDays { get; init; }
         [JsonPropertyName("active_override")] public WireStartedSpan? ActiveOverride { get; init; }
         [JsonPropertyName("active_pump_suspension")] public WireStartedSpan? ActivePumpSuspension { get; init; }
         [JsonPropertyName("sensitivity_ratio")] public decimal? SensitivityRatio { get; init; }

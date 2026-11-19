@@ -17,5 +17,11 @@ public enum ApprovalStatus
     /// <summary>
     /// Subject has requested access and is awaiting admin approval
     /// </summary>
-    Pending
+    Pending,
+
+    /// <summary>
+    /// The owner of the tenant the subject asked to join denied the request. The subject stays
+    /// inactive.
+    /// </summary>
+    Denied
 }

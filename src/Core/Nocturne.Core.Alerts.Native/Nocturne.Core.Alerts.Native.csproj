@@ -112,7 +112,7 @@
             <Caution ParameterType="System.String" Output="true" />
         </ParameterGroup>
         <Task>
-            <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)build\NocturneAlertsResolveLibrary.cs" />
+            <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)build/NocturneAlertsResolveLibrary.cs" />
         </Task>
     </UsingTask>
 
@@ -123,7 +123,7 @@
             LocalLibrary="$(NocturneAlertsNativeDir)$(_NocturneAlertsHostFile)"
             FileName="$(_NocturneAlertsHostFile)"
             PublishedRid="$(_NocturneAlertsPublishedRid)"
-            CacheRoot="$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)alerts-native"
+            CacheRoot="$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)alerts-native"
             Repository="$(NocturneAlertsRepository)"
             Download="$([MSBuild]::ValueOrDefault('$(NocturneAlertsDownload)', 'true'))"
             VerifyAttestation="$([MSBuild]::ValueOrDefault('$(NocturneAlertsVerifyAttestation)', 'true'))">
