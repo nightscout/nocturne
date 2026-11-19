@@ -34,7 +34,8 @@ public class ReportSpecRepositoryPostgresTests(ReportSpecRepositoryPostgresTests
 
         public DbContextOptions<NocturneDbContext> Options =>
             new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(AppConnectionString)
+                // Retrying, as the API's contexts are: that strategy refuses a transaction begun outside it.
+                .UseNpgsql(AppConnectionString, o => o.EnableRetryOnFailure())
                 .AddInterceptors(new TenantConnectionInterceptor())
                 .Options;
 

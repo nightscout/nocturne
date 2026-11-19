@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { minutesAgo, postEntries, postTreatments, sgvSeries } from "../helpers/data.ts";
+import type { Page } from "@playwright/test";
 import { expect, signIn, test } from "./fixtures.ts";
 
 interface CustomReport {
@@ -14,6 +15,9 @@ interface Template {
 }
 
 const ID = /\/reports\/custom\/([0-9a-f-]{36})/;
+
+/** The workspace's blocks, in order. */
+const blocksOf = (page: Page) => page.getByTestId("report-blocks").locator(":scope > li");
 
 test.describe("custom report builder", () => {
   test("makes a report from a question, saves it with the workspace's state, and reopens it there", async ({ page, seed }) => {
@@ -46,7 +50,7 @@ test.describe("custom report builder", () => {
     await expect(page.getByTestId("chart-preview").getByTestId("report-layered-chart")).toBeVisible();
   });
 
-  test("opens a report made elsewhere in the form, and saves an edit to it", async ({ page, seed }) => {
+  test("opens a report made elsewhere in the workspace, and saves an edit to it", async ({ page, seed }) => {
     const tenant = await seed();
     // Every reading in range, so the report's time in range is 100%.
     await postEntries(tenant.api, sgvSeries({ count: 48, end: Date.now(), valueAt: (i) => 100 + (i % 12) * 5 }));
@@ -59,19 +63,29 @@ test.describe("custom report builder", () => {
     await expect(page.getByRole("heading", { name: "Builder e2e" })).toBeVisible();
     await page.getByRole("link", { name: "Edit" }).click();
     await expect(page).toHaveURL(new RegExp(`/reports/custom/${id}/edit`));
-    await expect(page.getByTestId("opened-in-form")).toBeVisible();
+    await expect(page.getByTestId("report-workspace")).toBeVisible();
+    await expect(blocksOf(page)).toHaveCount(agp.spec.panels.length);
+    await expect(page.getByTestId("spec-errors")).toHaveCount(0);
 
-    const figures = page.getByTestId("panel-card").first().getByTestId("panel-preview");
+    const figures = blocksOf(page).first().getByRole("region", { name: "Key figures" });
     await expect(figures.getByText("Time in range", { exact: true }).locator("..")).toContainText("100");
-    await page.getByLabel("Title", { exact: true }).fill("Two weeks of glucose");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByLabel("Report title").fill("Two weeks of glucose");
+    await page.getByTestId("save-trigger").click();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Builder e2e");
+    await page.getByRole("button", { name: "Save the report" }).click();
     await expect(page).toHaveURL(new RegExp(`/reports/custom/${id}(\\?.*)?$`));
     await expect(page.getByRole("heading", { name: "Two weeks of glucose" })).toBeVisible();
 
     const edited = await tenant.api.ok<CustomReport>("GET", `/api/v4/reports/custom/${id}`);
     expect(edited.id).toBe(id);
+    expect(edited.name).toBe("Builder e2e");
     expect(edited.spec.title).toBe("Two weeks of glucose");
     expect(edited.spec.panels).toEqual(agp.spec.panels);
+
+    // A save clears the changes this browser kept, so the report opens again as saved.
+    await page.goto(`${tenant.webUrl}/reports/custom/${id}/edit`);
+    await expect(page.getByLabel("Report title")).toHaveValue("Two weeks of glucose");
+    await expect(page.getByText("Restored your unsaved changes.")).toHaveCount(0);
   });
 
   test("opens a saved report whose spec is longer than a request line can carry", async ({ page, seed }) => {
@@ -98,9 +112,15 @@ test.describe("custom report builder", () => {
     await expect(page.getByText("Could not run the report")).toHaveCount(0);
 
     await page.goto(`${tenant.webUrl}/reports/custom/${saved.id}/edit`);
-    await expect(page.getByTestId("panel-card")).toHaveCount(4);
-    await expect(page.getByTestId("panel-preview").first().getByText("Correct the problems")).toHaveCount(0);
-    await expect(page.getByTestId("panel-preview").first().getByRole("heading", { name: "Meals 1" })).toBeVisible();
+    await expect(page.getByTestId("report-workspace")).toBeVisible();
+    await expect(blocksOf(page)).toHaveCount(4);
+    await expect(page.getByTestId("opening-failed")).toHaveCount(0);
+    await expect(page.getByTestId("spec-errors")).toHaveCount(0);
+    const preview = blocksOf(page).first().getByTestId("chart-preview");
+    await expect(preview.getByRole("heading", { name: "Meals 1" })).toBeVisible();
+    await expect(preview.getByRole("alert")).toHaveCount(0);
+    for (let i = 2; i <= 4; i++)
+      await expect(blocksOf(page).nth(i - 1).getByRole("heading", { name: `Meals ${i}` }).first()).toBeVisible();
   });
 
   test("opens a saved Insulin and glucose report, and downloads a chart of it as a PNG", async ({ page, seed }) => {
@@ -119,9 +139,13 @@ test.describe("custom report builder", () => {
 
     await signIn(page, tenant);
     await page.goto(`${tenant.webUrl}/reports/custom/${id}/edit`);
-    await expect(page.getByTestId("panel-card")).toHaveCount(2);
-    await expect(page.getByTestId("layer-row").first().getByTestId("layer-source").first()).toBeVisible();
-    await expect(page.getByTestId("panel-preview").first().getByTestId("report-layered-chart")).toBeVisible();
+    await expect(blocksOf(page)).toHaveCount(2);
+    const open = blocksOf(page).first();
+    await expect(open).toHaveAttribute("data-open", "true");
+    const rail = open.getByRole("group", { name: "On this chart" });
+    await expect(rail.getByRole("listitem").first()).toBeVisible();
+    await expect(rail.getByRole("button", { name: /^Remove .+ from the chart$/ }).first()).toBeVisible();
+    await expect(open.getByTestId("chart-preview").getByTestId("report-layered-chart").first()).toBeVisible();
 
     await page.goto(`${tenant.webUrl}/reports/custom/${id}`);
     await expect(page.getByRole("heading", { name: "Glucose against insulin on board" })).toBeVisible();

@@ -61,10 +61,28 @@ public sealed class ReportSpecRepository(INocturneDbContextFactory contexts) : I
         Guid id, string? name, string? specJson, int? version, DateTime? expectedUpdatedAt = null, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
-        await using var transaction = expectedUpdatedAt is null ? null : await db.Database.BeginTransactionAsync(ct);
-        if (transaction is not null && db.Database.IsNpgsql())
-            await db.Database.ExecuteSqlAsync($"SELECT 1 FROM report_specs WHERE id = {id} FOR UPDATE", ct);
+        if (expectedUpdatedAt is not { } expected)
+            return await WriteAsync(db, id, name, specJson, version, null, ct);
 
+        // The row is locked for the compare and the write, so the transaction runs under the context's
+        // retrying execution strategy, which refuses a transaction begun outside it.
+        return await db.ExecuteInTransactionAsync(
+            async token =>
+            {
+                if (db.Database.IsNpgsql())
+                    await db.Database.ExecuteSqlAsync($"SELECT 1 FROM report_specs WHERE id = {id} FOR UPDATE", token);
+                return await WriteAsync(db, id, name, specJson, version, expected, token);
+            },
+            // A commit that reported failure but landed moved updatedAt, so a replay would answer Changed.
+            async (written, token) =>
+                written.Report is { } saved &&
+                await db.ReportSpecs.AsNoTracking().AnyAsync(r => r.Id == id && r.UpdatedAt == saved.UpdatedAt, token),
+            ct: ct);
+    }
+
+    private static async Task<SavedReportSpecWrite> WriteAsync(
+        NocturneDbContext db, Guid id, string? name, string? specJson, int? version, DateTime? expectedUpdatedAt, CancellationToken ct)
+    {
         var row = await db.ReportSpecs.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (row is null)
             return new SavedReportSpecWrite(SavedReportSpecWriteStatus.NotFound);
@@ -86,8 +104,6 @@ public sealed class ReportSpecRepository(INocturneDbContextFactory contexts) : I
         try
         {
             await db.SaveChangesAsync(ct);
-            if (transaction is not null)
-                await transaction.CommitAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
