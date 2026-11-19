@@ -63,6 +63,7 @@ public class PredictionController : ControllerBase
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 404)]
     [ProducesResponseType(typeof(ProblemDetails), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<GlucosePredictionResponse>> GetPredictions(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
@@ -86,11 +87,6 @@ public class PredictionController : ControllerBase
             // tenant on the default DeviceStatus source. Not a client fault.
             _logger.LogWarning(ex, "No prediction data available");
             return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting predictions");
-            return Problem(detail: "Failed to calculate predictions", statusCode: 500, title: "Internal Server Error");
         }
     }
 
@@ -137,20 +133,13 @@ public class PredictionController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSnapshotResponse), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ProfileSnapshotResponse>> GetProfileSnapshot(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = await _profileSnapshotService.BuildAsync(profileId, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error building profile snapshot for profile: {ProfileId}", profileId ?? "default");
-            return Problem(detail: "Failed to build profile snapshot", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await _profileSnapshotService.BuildAsync(profileId, cancellationToken);
+        return Ok(result);
     }
 }
 

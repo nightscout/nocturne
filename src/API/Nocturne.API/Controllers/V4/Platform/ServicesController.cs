@@ -82,30 +82,23 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ServicesOverview), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ServicesOverview>> GetServicesOverview(
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogDebug("Getting services overview");
 
-        try
-        {
-            // Get base URL for API endpoint info
-            var baseUrl = GetBaseUrl();
-            var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+        // Get base URL for API endpoint info
+        var baseUrl = GetBaseUrl();
+        var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
 
-            var overview = await _dataSourceService.GetServicesOverviewAsync(
-                baseUrl,
-                isAuthenticated,
-                cancellationToken
-            );
-            return Ok(overview);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting services overview");
-            return Problem(detail: "Failed to get services overview", statusCode: 500, title: "Internal Server Error");
-        }
+        var overview = await _dataSourceService.GetServicesOverviewAsync(
+            baseUrl,
+            isAuthenticated,
+            cancellationToken
+        );
+        return Ok(overview);
     }
 
     /// <summary>
@@ -136,22 +129,15 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DataSourceInfo>), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<List<DataSourceInfo>>> GetActiveDataSources(
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogDebug("Getting active data sources");
 
-        try
-        {
-            var dataSources = await _dataSourceService.GetActiveDataSourcesAsync(cancellationToken);
-            return Ok(dataSources);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting active data sources");
-            return Problem(detail: "Failed to get active data sources", statusCode: 500, title: "Internal Server Error");
-        }
+        var dataSources = await _dataSourceService.GetActiveDataSourcesAsync(cancellationToken);
+        return Ok(dataSources);
     }
 
     /// <summary>
@@ -166,6 +152,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(DataSourceInfo), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceInfo>> GetDataSource(
         string id,
         CancellationToken cancellationToken = default
@@ -173,20 +160,12 @@ public class ServicesController : ControllerBase
     {
         _logger.LogDebug("Getting data source: {Id}", id);
 
-        try
+        var dataSource = await _dataSourceService.GetDataSourceInfoAsync(id, cancellationToken);
+        if (dataSource == null)
         {
-            var dataSource = await _dataSourceService.GetDataSourceInfoAsync(id, cancellationToken);
-            if (dataSource == null)
-            {
-                return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
-            }
-            return Ok(dataSource);
+            return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting data source: {Id}", id);
-            return Problem(detail: "Failed to get data source", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(dataSource);
     }
 
     /// <summary>
@@ -320,26 +299,19 @@ public class ServicesController : ControllerBase
     [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDemoData(
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogInformation("Deleting demo data via API");
 
-        try
+        var result = await _dataSourceService.DeleteDemoDataAsync(cancellationToken);
+        if (!result.Success)
         {
-            var result = await _dataSourceService.DeleteDemoDataAsync(cancellationToken);
-            if (!result.Success)
-            {
-                return StatusCode(500, result);
-            }
-            return Ok(result);
+            return StatusCode(500, result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting demo data");
-            return Problem(detail: "Failed to delete demo data", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(result);
     }
 
     /// <summary>
@@ -357,6 +329,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDataSourceData(
         string id,
         [FromQuery] bool allowReimport = false,
@@ -365,24 +338,16 @@ public class ServicesController : ControllerBase
     {
         _logger.LogWarning("Deleting all data for data source: {Id}", id);
 
-        try
+        var result = await _dataSourceService.DeleteDataSourceDataAsync(id, allowReimport, cancellationToken);
+        if (!result.Success)
         {
-            var result = await _dataSourceService.DeleteDataSourceDataAsync(id, allowReimport, cancellationToken);
-            if (!result.Success)
+            if (result.ErrorCode == DataSourceDeleteError.NotFound)
             {
-                if (result.ErrorCode == DataSourceDeleteError.NotFound)
-                {
-                    return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
-                }
-                return StatusCode(500, result);
+                return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
             }
-            return Ok(result);
+            return StatusCode(500, result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting data for data source: {Id}", id);
-            return Problem(detail: "Failed to delete data source data", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(result);
     }
 
     /// <summary>
@@ -431,6 +396,7 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorDataSummary), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ConnectorDataSummary>> GetConnectorDataSummary(
         string id,
         CancellationToken cancellationToken = default
@@ -438,19 +404,11 @@ public class ServicesController : ControllerBase
     {
         _logger.LogDebug("Getting data summary for connector: {Id}", id);
 
-        try
-        {
-            var summary = await _dataSourceService.GetConnectorDataSummaryAsync(
-                id,
-                cancellationToken
-            );
-            return Ok(summary);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting data summary for connector: {Id}", id);
-            return Problem(detail: "Failed to get connector data summary", statusCode: 500, title: "Internal Server Error");
-        }
+        var summary = await _dataSourceService.GetConnectorDataSummaryAsync(
+            id,
+            cancellationToken
+        );
+        return Ok(summary);
     }
 
     /// <summary>
@@ -472,6 +430,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(409)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectorData(
         string id,
         [FromQuery] bool allowReimport = false,
@@ -480,38 +439,30 @@ public class ServicesController : ControllerBase
     {
         _logger.LogWarning("Deleting all data for connector: {Id}", id);
 
-        try
-        {
-            var result = await _dataSourceService.DeleteConnectorDataAsync(id, allowReimport, cancellationToken);
+        var result = await _dataSourceService.DeleteConnectorDataAsync(id, allowReimport, cancellationToken);
 
-            if (!result.Success)
+        if (!result.Success)
+        {
+            if (result.ErrorCode == DataSourceDeleteError.NotFound)
             {
-                if (result.ErrorCode == DataSourceDeleteError.NotFound)
-                {
-                    return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
-                }
-                if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
-                {
-                    return ConnectorMetadataService.GetByConnectorId(id)?.IsImport == true
-                        ? this.ProblemWithCode(
-                            ImportRunningCode,
-                            "An import is running for this connector. Wait for it to end, then try again.",
-                            StatusCodes.Status409Conflict)
-                        : this.ProblemWithCode(
-                            SyncRunningCode,
-                            "A sync is running for this connector. Wait for it to end, then try again.",
-                            StatusCodes.Status409Conflict);
-                }
-                return StatusCode(500, result);
+                return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
             }
+            if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
+            {
+                return ConnectorMetadataService.GetByConnectorId(id)?.IsImport == true
+                    ? this.ProblemWithCode(
+                        ImportRunningCode,
+                        "An import is running for this connector. Wait for it to end, then try again.",
+                        StatusCodes.Status409Conflict)
+                    : this.ProblemWithCode(
+                        SyncRunningCode,
+                        "A sync is running for this connector. Wait for it to end, then try again.",
+                        StatusCodes.Status409Conflict);
+            }
+            return StatusCode(500, result);
+        }
 
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting data for connector: {Id}", id);
-            return Problem(detail: "Failed to delete connector data", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(result);
     }
 
     /// <summary>
@@ -638,6 +589,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ConnectorSyncStatus>> GetConnectorSyncStatus(
         string id,
         CancellationToken cancellationToken = default
@@ -655,56 +607,48 @@ public class ServicesController : ControllerBase
             return Problem(detail: $"Unknown connector '{id}'", statusCode: 404, title: "Not Found");
         }
 
-        try
-        {
-            // Get latest timestamps from V4 glucose tables
-            var entryTimestamp = await _dataSourceService.GetLatestGlucoseTimestampBySourceAsync(
+        // Get latest timestamps from V4 glucose tables
+        var entryTimestamp = await _dataSourceService.GetLatestGlucoseTimestampBySourceAsync(
+            dataSource,
+            cancellationToken
+        );
+
+        var oldestEntryTimestamp =
+            await _dataSourceService.GetOldestGlucoseTimestampBySourceAsync(
                 dataSource,
                 cancellationToken
             );
 
-            var oldestEntryTimestamp =
-                await _dataSourceService.GetOldestGlucoseTimestampBySourceAsync(
-                    dataSource,
-                    cancellationToken
-                );
+        var treatmentTimestamp = await _dataSourceService.GetLatestTreatmentTimestampBySourceAsync(
+            dataSource, cancellationToken);
+        var oldestTreatmentTimestamp = await _dataSourceService.GetOldestTreatmentTimestampBySourceAsync(
+            dataSource, cancellationToken);
 
-            var treatmentTimestamp = await _dataSourceService.GetLatestTreatmentTimestampBySourceAsync(
-                dataSource, cancellationToken);
-            var oldestTreatmentTimestamp = await _dataSourceService.GetOldestTreatmentTimestampBySourceAsync(
-                dataSource, cancellationToken);
+        // Get connector health/state
+        var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(
+            cancellationToken
+        );
+        var connectorStatus = connectorStatuses.FirstOrDefault(c =>
+            c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+        );
 
-            // Get connector health/state
-            var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(
-                cancellationToken
-            );
-            var connectorStatus = connectorStatuses.FirstOrDefault(c =>
-                c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
-            );
-
-            return Ok(
-                new ConnectorSyncStatus
-                {
-                    ConnectorId = id,
-                    DataSource = dataSource,
-                    LatestEntryTimestamp = entryTimestamp,
-                    OldestEntryTimestamp = oldestEntryTimestamp,
-                    LatestTreatmentTimestamp = treatmentTimestamp,
-                    OldestTreatmentTimestamp = oldestTreatmentTimestamp,
-                    HasEntries = entryTimestamp.HasValue,
-                    HasTreatments = treatmentTimestamp.HasValue,
-                    State = connectorStatus?.State ?? "Unknown",
-                    StateMessage = connectorStatus?.StateMessage,
-                    IsHealthy = connectorStatus?.IsHealthy ?? false,
-                    QueriedAt = DateTime.UtcNow,
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting sync status for connector: {Id}", id);
-            return Problem(detail: "Failed to get sync status", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(
+            new ConnectorSyncStatus
+            {
+                ConnectorId = id,
+                DataSource = dataSource,
+                LatestEntryTimestamp = entryTimestamp,
+                OldestEntryTimestamp = oldestEntryTimestamp,
+                LatestTreatmentTimestamp = treatmentTimestamp,
+                OldestTreatmentTimestamp = oldestTreatmentTimestamp,
+                HasEntries = entryTimestamp.HasValue,
+                HasTreatments = treatmentTimestamp.HasValue,
+                State = connectorStatus?.State ?? "Unknown",
+                StateMessage = connectorStatus?.StateMessage,
+                IsHealthy = connectorStatus?.IsHealthy ?? false,
+                QueriedAt = DateTime.UtcNow,
+            }
+        );
     }
 
     private ActionResult<Nocturne.Connectors.Core.Models.SyncResult> SyncOrConflict(
