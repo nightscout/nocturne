@@ -41,6 +41,40 @@ public class CareLinkConnectorServiceTests
     }
 
     /// <summary>
+    /// CareLink's newer payload wraps every field in <c>patientData</c>, so none of them bind.
+    /// Syncing it would store nothing and report success.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenCareLinkSendsThePatientDataFormat_ReportsFailure()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            PeriodicDataJson = """
+                {
+                  "metadata": { "kind": "Metadata" },
+                  "patientData": {
+                    "currentServerTime": 1767261600000,
+                    "pumpBatteryLevelPercent": 100,
+                    "sgs": [{ "sg": 120, "timestamp": "2026-01-01T10:00:00" }]
+                  }
+                }
+                """
+        };
+        var config = GlucoseOnlyConfiguration();
+        config.SyncDeviceStatus = true;
+        var fixture = new ServiceFixture(handler, config, withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.DeviceStatus] },
+            fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainMatch("*newer data format*");
+        fixture.PublishedGlucose.Should().BeEmpty();
+        fixture.PublishedDeviceStatuses.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// A token CareLink has rejected must not stay cached until its nominal expiry, or every sync
     /// until then fails. Only a 401 drops it: the other failures a data endpoint returns say
     /// nothing about the token.

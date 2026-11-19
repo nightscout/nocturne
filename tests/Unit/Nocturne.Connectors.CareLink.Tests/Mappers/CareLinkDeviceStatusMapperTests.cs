@@ -101,6 +101,60 @@ public class CareLinkDeviceStatusMapperTests
     }
 
     [Fact]
+    public void Map_CarriesSensorLifeCalibrationAndTransmitterBatteryOnTheCgm()
+    {
+        var data = CreatePumpData();
+        data.CgmInfo = new CareLinkCgmInfo { SensorType = "DURABLE" };
+        data.SensorDurationMinutes = 6266;
+        data.CalibStatus = "LESS_THAN_TWELVE_HRS";
+        data.GstBatteryLevel = 92;
+
+        var cgm = CareLinkDeviceStatusMapper.Map(data, Now)!.Cgm!;
+
+        cgm.SessionTimeRemaining.Should().Be(6266);
+        cgm.CalibrationStatus.Should().Be("LESS_THAN_TWELVE_HRS");
+        cgm.TransmitterBattery.Should().Be(92);
+    }
+
+    [Theory]
+    [InlineData(65535)]
+    [InlineData(-1)]
+    public void Map_ReadsAnUnknownSensorLifeAsNoReading(int minutes)
+    {
+        var data = CreatePumpData();
+        data.CgmInfo = new CareLinkCgmInfo { SensorType = "DURABLE" };
+        data.SensorDurationMinutes = minutes;
+
+        CareLinkDeviceStatusMapper.Map(data, Now)!.Cgm!.SessionTimeRemaining.Should().BeNull();
+    }
+
+    [Fact]
+    public void Map_KeepsReservoirPercentAsExtendedPumpData_WithoutDeviceInformation()
+    {
+        var data = CreatePumpData();
+        data.ReservoirLevelPercent = 33;
+
+        var extended = CareLinkDeviceStatusMapper.Map(data, Now)!.Pump!.Extended;
+
+        extended.Should().ContainKey("reservoirLevelPercent").WhoseValue.Should().Be(33);
+    }
+
+    [Fact]
+    public void Map_CarriesLinkStatesAndPhoneBatteryStatusOnTheConnectBlock()
+    {
+        var data = CreatePumpData();
+        data.PumpCommunicationState = true;
+        data.GstCommunicationState = false;
+        data.ConduitBatteryStatus = "HIGH";
+
+        var connect = System.Text.Json.JsonSerializer.SerializeToElement(CareLinkDeviceStatusMapper.Map(data, Now)!.Connect);
+
+        connect.GetProperty("pumpCommunicationState").GetBoolean().Should().BeTrue();
+        connect.GetProperty("gstCommunicationState").GetBoolean().Should().BeFalse();
+        connect.GetProperty("conduitBatteryStatus").GetString().Should().Be("HIGH");
+    }
+
+    [Fact]
     public void Map_SetsDeviceNameCorrectly()
     {
         var data = CreatePumpData();

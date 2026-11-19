@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Connectors.CareLink.Models;
@@ -61,14 +62,25 @@ public class CareLinkData
     [JsonPropertyName("conduitSensorInRange")]
     public bool? ConduitSensorInRange { get; set; }
 
+    [JsonPropertyName("pumpCommunicationState")]
+    public bool? PumpCommunicationState { get; set; }
+
+    [JsonPropertyName("gstCommunicationState")]
+    public bool? GstCommunicationState { get; set; }
+
     [JsonPropertyName("sensorState")]
     public string? SensorState { get; set; }
 
     [JsonPropertyName("calibStatus")]
     public string? CalibStatus { get; set; }
 
+    /// <summary>Hours of sensor life left; <see cref="SensorDurationMinutes"/> is the same span in minutes.</summary>
     [JsonPropertyName("sensorDurationHours")]
     public int? SensorDurationHours { get; set; }
+
+    /// <summary>Minutes of sensor life left. 65535 means CareLink does not know.</summary>
+    [JsonPropertyName("sensorDurationMinutes")]
+    public int? SensorDurationMinutes { get; set; }
 
     [JsonPropertyName("timeToNextCalibHours")]
     public int? TimeToNextCalibHours { get; set; }
@@ -78,6 +90,9 @@ public class CareLinkData
 
     [JsonPropertyName("reservoirAmount")]
     public double? ReservoirAmount { get; set; }
+
+    [JsonPropertyName("reservoirLevelPercent")]
+    public int? ReservoirLevelPercent { get; set; }
 
     [JsonPropertyName("activeInsulin")]
     public CareLinkActiveInsulin? ActiveInsulin { get; set; }
@@ -108,6 +123,17 @@ public class CareLinkData
 
     [JsonPropertyName("clientTimeZoneName")]
     public string? ClientTimeZoneName { get; set; }
+
+    /// <summary>
+    /// Set only when CareLink answered in the format its own app reads from
+    /// <c>/connect/carepartner/v11/display/message</c> and later: every field above sits inside
+    /// this object, some renamed (<c>pumpBatteryLevelPercent</c>, <c>pumpSuspended</c>), with
+    /// timestamps that carry no offset and markers nested under <c>data.dataValues</c>. Nothing
+    /// above binds from such a payload, so a sync that receives one must fail rather than store
+    /// nothing and report itself healthy.
+    /// </summary>
+    [JsonPropertyName("patientData")]
+    public JsonElement? PatientData { get; set; }
 }
 
 /// <summary>

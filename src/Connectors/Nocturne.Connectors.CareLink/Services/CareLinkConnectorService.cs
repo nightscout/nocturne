@@ -210,6 +210,16 @@ public class CareLinkConnectorService
             result.Success = false;
             result.Errors.Add("No data returned from any CareLink endpoint");
         }
+        else if (data.PatientData is not null)
+        {
+            // See CareLinkData.PatientData for why this payload cannot be read.
+            _logger.LogError(
+                "[{ConnectorSource}] CareLink answered in its newer patientData format, which this version cannot read",
+                ConnectorSource);
+            result.Success = false;
+            result.Errors.Add("CareLink sent its newer data format (patientData), which this version cannot read");
+            return null;
+        }
 
         return data;
     }
