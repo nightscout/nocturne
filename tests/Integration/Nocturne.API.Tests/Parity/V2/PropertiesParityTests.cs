@@ -26,14 +26,18 @@ public class PropertiesParityTests : ParityTestBase
     /// two requests, so only its display is compared. The unrounded cob and its display are compared
     /// to within <see cref="ComparisonOptions.ReloadLagToleranceTable"/>; the rest of the cob
     /// property (decayedBy, isDecaying, carbs_hr, rawCarbImpact, source, lastCarbs) does not move
-    /// with time while the carbs decay, so it is compared exactly.
+    /// with time while the carbs decay, so it is compared exactly. The dbsize sizes are those of each
+    /// side's own database, and its budget is each side's own setting (Nightscout defaults to 496
+    /// MiB, Nocturne to 2048). The last digit of the ar2 avgLoss comes from the platform's log and
+    /// pow, so it is compared by presence; <c>Ar2Tests</c> pins its value to Nightscout's.
     /// </summary>
     internal static readonly ComparisonOptions Options = ComparisonOptions.Default.WithIgnoredFields(
         "serverTime",
         "serverTimeEpoch",
         "uptime",
         "lastUpdated"
-    ).WithPresenceOnlyFields("activity", "iob").WithReloadLagTolerance();
+    ).WithPresenceOnlyFields("activity", "iob", "totalDataSize", "maxSize", "dataSize", "avgLoss")
+        .WithReloadLagTolerance();
 
     #region Helper Methods
 

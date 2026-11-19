@@ -13,8 +13,10 @@
   import type { GlucosePoint } from "../view/chart-data-view.svelte.js";
   import { glucoseValue } from "../format.js";
   import {
+    distinctRangeStops,
     getGlucoseColor,
     getGlucoseColorContinuous,
+    type GlucoseRangePalette,
   } from "../colors.js";
   import {
     lineStopsFor,
@@ -52,6 +54,8 @@
     pointColorMode?: LineColorMode;
     pointColor?: string;
     areaOpacity?: number;
+    /** The range palette the continuous colours follow; the chart context's when omitted, and the theme's own when that has none. */
+    rangePalette?: GlucoseRangePalette;
     /**
      * Draw only the readings in the chart's x domain. Two more on each side keep the curve and
      * the points at its edges as the whole series draws them: a monotone curve's segment reads
@@ -69,6 +73,7 @@
     pointColorMode,
     pointColor,
     areaOpacity = 0.5,
+    rangePalette,
     visibleOnly = false,
   }: Props = $props();
 
@@ -100,8 +105,21 @@
     areaMode === "off" ? undefined : areaY0Accessor(areaMode, thresholds),
   );
 
+  const rangeStops = $derived(
+    distinctRangeStops(
+      rangePalette ?? ctx.rangePalette ?? "theme",
+      thresholds,
+    ),
+  );
+
   const lineStops = $derived(
-    lineStopsFor(lineColorMode, thresholds, glucoseAxisScale, chartCtx.height),
+    lineStopsFor(
+      lineColorMode,
+      thresholds,
+      glucoseAxisScale,
+      chartCtx.height,
+      rangeStops,
+    ),
   );
 
   const fillStops = $derived(
@@ -111,7 +129,7 @@
   function pointFill(sgv: number): string {
     if (effectivePointMode === "single") return effectivePointColor;
     if (effectivePointMode === "continuous")
-      return getGlucoseColorContinuous(sgv);
+      return getGlucoseColorContinuous(sgv, rangeStops);
     return getGlucoseColor(sgv, thresholds);
   }
 

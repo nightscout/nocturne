@@ -239,7 +239,38 @@ public class DemoDataGenerator : IDemoDataGenerator
             end
         );
 
-        var currentDay = startDate.Date;
+        return Timeline(startDate.Date, endInstant, end);
+    }
+
+    /// <summary>
+    /// The timeline a <see cref="GenerateHistoricalTimeline"/> run that started on
+    /// <paramref name="firstLocalDay"/> and ended at <paramref name="seedEndUtc"/> streamed, carried on
+    /// past that end without limit. A generator with the seed's configuration and zone repeats the
+    /// seed's steps exactly, then continues as if the seed had not stopped: the interruptions the seed
+    /// kept clear of its end stay clear, and none later is held back. The caller stops enumerating at
+    /// the present.
+    /// </summary>
+    /// <param name="firstLocalDay">The local date of the seed's first step.</param>
+    /// <param name="seedEndUtc">The end the seed was generated to.</param>
+    public IEnumerable<DemoTimeStep> ContinueTimeline(DateTime firstLocalDay, DateTime seedEndUtc) =>
+        Timeline(firstLocalDay.Date, endInstant: null, quietAnchor: _clock.ToLocal(seedEndUtc), seedEndUtc);
+
+    /// <param name="firstDay">The local date the first step starts at midnight of.</param>
+    /// <param name="endInstant">The instant no step reaches; <c>null</c> for no end.</param>
+    /// <param name="quietAnchor">
+    /// The local end the loop interruptions keep clear of; see <see cref="DemoLoopInterruptions.On"/>.
+    /// </param>
+    /// <param name="seedEnd">
+    /// The end of the seed a continuation repeats. The step that spans it issues only what the seed's
+    /// last step did, and leaves the rest to the next step, so the simulation after it matches too.
+    /// </param>
+    private IEnumerable<DemoTimeStep> Timeline(
+        DateTime firstDay, DateTime? endInstant, DateTime quietAnchor, DateTime? seedEnd = null)
+    {
+        var end = quietAnchor;
+        var lastDay = endInstant is { } e ? _clock.ToLocal(e).Date : DateTime.MaxValue.Date;
+
+        var currentDay = firstDay;
         double? previousDayEndingGlucose = null;
         double previousDayMomentum = 0;
         var totalSteps = 0;
@@ -250,7 +281,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         DateTime? lastCarbsAt = null;
         var recentGlucose = new Queue<double>();
 
-        while (currentDay <= end.Date)
+        while (currentDay <= lastDay)
         {
             var dayScenario = SelectDayScenario(currentDay);
             var scenarioParams = GetScenarioParameters(dayScenario);
@@ -291,7 +322,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                 pending.Add((bolusTime, CreateBolusTreatment(
                     bolusTime,
                     bolus,
-                    meal.FoodType == "Snack" ? "Snack Bolus" : "Meal Bolus"
+                    meal.FoodType == "Snack" ? TreatmentTypes.SnackBolus : TreatmentTypes.MealBolus
                 )));
             }
 
@@ -309,8 +340,8 @@ public class DemoDataGenerator : IDemoDataGenerator
             var targetGlucose = _config.TargetGlucose;
             var instant = _clock.ToUtc(currentDay);
             // Cap endTime to now to prevent generating future data
-            var endTime = currentDay.Date == end.Date
-                ? endInstant
+            var endTime = currentDay == lastDay && endInstant is { } cap
+                ? cap
                 : _clock.ToUtc(currentDay.AddDays(1));
 
             while (instant < endTime)
@@ -320,6 +351,8 @@ public class DemoDataGenerator : IDemoDataGenerator
                 // The final (partial) step must not emit anything past "now" —
                 // a future-dated planned item would outrank the realtime stream.
                 var consumeUntil = stepEnd < endTime ? stepEnd : endTime;
+                if (seedEnd is { } cut && instant < cut && cut < consumeUntil)
+                    consumeUntil = cut;
                 var stepTreatments = new List<Treatment>();
                 double? tempRate = null;
                 int? tempDuration = null;
@@ -547,7 +580,7 @@ public class DemoDataGenerator : IDemoDataGenerator
 
             // Unconsumed items (late boluses past midnight) carry into the next
             // day. On the final day they would be future-dated — drop them.
-            if (currentDay != end.Date)
+            if (currentDay != lastDay)
                 carriedOver = pending;
 
             previousDayEndingGlucose = glucose;
@@ -1055,7 +1088,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Correction Bolus",
+            EventType = TreatmentTypes.CorrectionBolus,
             Insulin = insulin,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
@@ -1070,7 +1103,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "SMB", // Super Micro Bolus - algorithm-delivered bolus
+            EventType = TreatmentTypes.Smb, // Super Micro Bolus - algorithm-delivered bolus
             Insulin = insulin,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
@@ -1084,7 +1117,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Carb Correction",
+            EventType = TreatmentTypes.CarbCorrection,
             Carbs = carbs,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
@@ -1099,7 +1132,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Temp Basal",
+            EventType = TreatmentTypes.TempBasal,
             Rate = rate,
             Duration = duration,
             Mills = utc.ToMills(),
@@ -1149,7 +1182,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// </summary>
     private static List<CalibrationPlan> PlanCalibrations(DateTime day)
     {
-        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, "Sensor Start");
+        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart);
         if (sensorStart is null)
             return [];
 
@@ -1263,7 +1296,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "BG Check",
+            EventType = TreatmentTypes.BgCheck,
             Glucose = Math.Max(40, ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 8, 0)),
             GlucoseType = "Finger",
             Units = "mg/dl",
@@ -1321,7 +1354,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                     _realtimeSimulator.AddInsulinDose(nowUtc, treatment.Insulin.Value);
                 if (treatment.Carbs is > 0)
                     _realtimeSimulator.AddCarbs(nowUtc, treatment.Carbs.Value);
-                if (treatment.EventType == "Temp Basal" && treatment.Rate is { } rate)
+                if (treatment.EventType == TreatmentTypes.TempBasal && treatment.Rate is { } rate)
                 {
                     tempRate = rate;
                     tempDuration = treatment.Duration is > 0 ? (int)treatment.Duration.Value : null;

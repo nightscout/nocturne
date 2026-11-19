@@ -183,6 +183,19 @@ public class TreatmentsParityTests : ParityTestBase
     }
 
     [Fact]
+    public async Task GetTreatments_ZeroCount_ReturnsSameShape()
+    {
+        var treatments = Enumerable.Range(0, 12)
+            .Select(i => TestDataFactory.CreateTreatment(
+                timestamp: TestTimeProvider.GetTestTime().AddMinutes(-i * 15),
+                insulin: 1.0 + i * 0.5))
+            .ToArray();
+        await SeedTreatmentsAsync(treatments);
+
+        await AssertGetParityAsync("/api/v1/treatments?count=0");
+    }
+
+    [Fact]
     public async Task PostTreatment_MissingEventType_ReturnsSameShape()
     {
         var treatment = new

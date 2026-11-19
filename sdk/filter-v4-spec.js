@@ -101,20 +101,22 @@ for (const schema of Object.values(filteredSchemas)) {
   }
 }
 
-// Collapse NSwag's nullable-enum-ref query parameter idiom down to a plain
-// $ref. NSwag emits optional enum query params as a doubly-nested oneOf
-// ({ oneOf: [{ nullable: true, oneOf: [{ $ref }] }] }) instead of a plain
-// $ref. openapi-generator's swift6 target treats that shape as a oneOf
-// composition and generates a wrapper enum with no `asParameter`
-// conformance, so every such parameter fails to compile. The wrapper is
-// unnecessary here: the param is already optional (no `required: true`), so
-// nullability adds nothing and the $ref can stand alone.
+// Collapse NSwag's nullable-enum-ref query parameter idioms down to a plain
+// $ref. NSwag emits an optional enum query param either doubly nested
+// ({ oneOf: [{ nullable: true, oneOf: [{ $ref }] }] }) or, for a property of a
+// [FromQuery] DTO, singly nested ({ nullable: true, oneOf: [{ $ref }] }).
+// openapi-generator's swift6 target turns the first into a oneOf wrapper enum
+// with no `asParameter` conformance, and its rust target types the second as
+// `models::models::<Enum>`; neither compiles. The param is already optional
+// (no `required: true`), so nullability adds nothing and the $ref can stand alone.
 function unwrapNullableEnumParam(schema) {
-  if (schema?.oneOf?.length === 1) {
-    const inner = schema.oneOf[0];
-    if (inner?.nullable === true && inner.oneOf?.length === 1 && inner.oneOf[0]['$ref']) {
-      return { '$ref': inner.oneOf[0]['$ref'] };
-    }
+  const isNullableRef = s =>
+    s?.nullable === true && s.oneOf?.length === 1 && s.oneOf[0]['$ref'];
+  if (isNullableRef(schema)) {
+    return { '$ref': schema.oneOf[0]['$ref'] };
+  }
+  if (schema?.oneOf?.length === 1 && isNullableRef(schema.oneOf[0])) {
+    return { '$ref': schema.oneOf[0].oneOf[0]['$ref'] };
   }
   return schema;
 }
@@ -128,6 +130,20 @@ for (const operations of Object.values(filteredPaths)) {
     }
   }
 }
+
+// NSwag closes every object schema with `additionalProperties: false`, which makes generated
+// models reject any response field they do not know. SDKs outlive the server version they were
+// built against, so the filtered spec leaves objects open.
+function openObjectSchemas(node) {
+  if (node === null || typeof node !== 'object') return;
+  if (node.additionalProperties === false) delete node.additionalProperties;
+  for (const value of Object.values(node)) {
+    openObjectSchemas(value);
+  }
+}
+
+openObjectSchemas(filteredSchemas);
+openObjectSchemas(filteredPaths);
 
 const output = {
   openapi: spec.openapi,

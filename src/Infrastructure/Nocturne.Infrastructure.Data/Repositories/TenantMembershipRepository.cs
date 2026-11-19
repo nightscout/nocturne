@@ -85,7 +85,8 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             CreatedFromInviteId = member.CreatedFromInviteId,
         };
         db.TenantMembers.Add(entity);
-        foreach (var roleId in member.RoleIds.Distinct())
+        var roleIds = member.RoleIds.Distinct().ToList();
+        foreach (var roleId in roleIds)
         {
             db.TenantMemberRoles.Add(new TenantMemberRoleEntity
             {
@@ -94,6 +95,16 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 TenantRoleId = roleId,
             });
         }
+
+        var source = member.MadeBy switch
+        {
+            MembershipMadeBy.Member => new MemberAccessSource(member.SubjectId, member.CreatedFromInviteId),
+            MembershipMadeBy.System => MemberAccessSource.System,
+            _ => null,
+        };
+        MemberAccessAudit.StageRoles(db, member.TenantId, member.SubjectId, await SlugsOfAsync(db, roleIds, ct), [], source);
+        MemberAccessAudit.StagePermissions(db, member.TenantId, member.SubjectId, null, entity.DirectPermissions, source);
+        MemberAccessAudit.StageHistoryLimit(db, member.TenantId, member.SubjectId, false, entity.LimitTo24Hours, source);
 
         if (_unit is not null)
             return true;
@@ -221,13 +232,6 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsForAccessRequestAsync(Guid tenantId, CancellationToken ct)
-    {
-        await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
-        return await db.TenantMembers.AsNoTracking().OwnersOf(tenantId).Select(m => m.SubjectId).ToListAsync(ct);
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<string?> GetEarliestOwnerPreferencesAsync(Guid tenantId, CancellationToken ct)
     {
         await using var lease = await OpenForTenantAsync(tenantId, ct);
@@ -291,6 +295,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             if (member is null)
                 return OwnerGuardedChange.NotFound;
 
+            await StageRemovalAsync(db, member, token);
             db.TenantMemberRoles.RemoveRange(member.MemberRoles);
             db.TenantMembers.Remove(member);
             return OwnerGuardedChange.Changed;
@@ -322,9 +327,23 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             .Where(m => m.SubjectId == subjectId)
             .ToListAsync(ct);
 
+        foreach (var membership in memberships)
+            await StageRemovalAsync(db, membership, ct);
         db.TenantMemberRoles.RemoveRange(memberships.SelectMany(m => m.MemberRoles));
         db.TenantMembers.RemoveRange(memberships);
         return new SubjectMembershipsRemoval(memberships.Count, leftWithoutOwner);
+    }
+
+    /// <summary>
+    /// Stages the audit of a membership being removed: each role and direct permission it held is
+    /// removed. Its history limit is not, since the member keeps no access for it to apply to.
+    /// </summary>
+    private static async Task StageRemovalAsync(NocturneDbContext db, TenantMemberEntity member, CancellationToken ct)
+    {
+        MemberAccessAudit.StageRoles(
+            db, member.TenantId, member.SubjectId, [],
+            await SlugsOfAsync(db, member.MemberRoles.Select(mr => mr.TenantRoleId).ToList(), ct));
+        MemberAccessAudit.StagePermissions(db, member.TenantId, member.SubjectId, member.DirectPermissions, null);
     }
 
     /// <inheritdoc/>
@@ -336,6 +355,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (member is null)
             return false;
 
+        MemberAccessAudit.StagePermissions(lease.Context, tenantId, member.SubjectId, member.DirectPermissions, permissions);
         member.DirectPermissions = permissions?.ToList();
         member.SysUpdatedAt = now;
         await SaveAsync(lease.Context, ct);
@@ -350,6 +370,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (member is null)
             return false;
 
+        MemberAccessAudit.StageHistoryLimit(lease.Context, tenantId, member.SubjectId, member.LimitTo24Hours, limitTo24Hours);
         member.LimitTo24Hours = limitTo24Hours;
         member.SysUpdatedAt = now;
         await SaveAsync(lease.Context, ct);
@@ -407,6 +428,13 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (member is null)
             return false;
 
+        var before = member.MemberRoles.Select(mr => mr.TenantRoleId).ToHashSet();
+        var after = before.Where(id => !removedRoleIds.Contains(id)).Concat(addedRoleIds).ToHashSet();
+        MemberAccessAudit.StageRoles(
+            db, tenantId, member.SubjectId,
+            await SlugsOfAsync(db, after.Except(before).ToList(), ct),
+            await SlugsOfAsync(db, before.Except(after).ToList(), ct));
+
         db.TenantMemberRoles.RemoveRange(member.MemberRoles.Where(mr => removedRoleIds.Contains(mr.TenantRoleId)));
         foreach (var roleId in addedRoleIds)
         {
@@ -421,6 +449,11 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         member.SysUpdatedAt = now;
         return true;
     }
+
+    private static async Task<List<string>> SlugsOfAsync(NocturneDbContext db, IReadOnlyCollection<Guid> roleIds, CancellationToken ct) =>
+        roleIds.Count == 0
+            ? []
+            : await db.TenantRoles.AsNoTracking().Where(r => roleIds.Contains(r.Id)).Select(r => r.Slug).ToListAsync(ct);
 
     /// <inheritdoc/>
     public virtual async Task RecordUseAsync(
@@ -678,6 +711,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (entity is null)
             return null;
 
+        MemberAccessAudit.StageRolePermissions(lease.Context, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
         entity.Name = edit.Name;
         entity.Slug = edit.Slug;
         entity.Description = edit.Description;
@@ -693,11 +727,13 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         await using var lease = await OpenForTenantAsync(tenantId, ct);
         var db = lease.Context;
         var role = await db.TenantRoles
-            .Include(r => r.MemberRoles)
+            .Include(r => r.MemberRoles).ThenInclude(mr => mr.TenantMember)
             .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, ct);
         if (role is null)
             return false;
 
+        foreach (var holder in role.MemberRoles)
+            MemberAccessAudit.StageRoles(db, tenantId, holder.TenantMember.SubjectId, [], [role.Slug]);
         db.TenantMemberRoles.RemoveRange(role.MemberRoles);
         db.TenantRoles.Remove(role);
         await SaveAsync(db, ct);

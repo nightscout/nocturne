@@ -65,6 +65,12 @@ curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
   -H "Content-Type: application/json" \
   -d '{"slug":"test","displayName":"Test","ownerUsername":"dev","sampleData":true}'
 
+# Seeded sample data stays live: in run mode the API continues each seed's simulation every
+# minute (readings, treatments, loop status, heart rate, steps, sleep, device changes). The seed
+# records its timeline in the tenant's settings (`sample-data:timeline`); a tenant seeded
+# before that existed stays frozen until re-seeded. Turn it off to keep data as seeded:
+Dev__LiveSampleData=false aspire start
+
 # End-to-end smoke of the local stack (seed -> data -> login link -> tenant UI)
 dotnet run scripts/dev-smoke.cs
 
@@ -106,6 +112,8 @@ Files covered:
 
 The Docker Compose bundles (`deploy/docker-compose/`, `deploy/portainer/`) are tracked and not hidden; a checkout that hid them with an older `hide-generated` clears the bits with `pnpm run unhide-generated`. Regenerate them with `dotnet run scripts/publish-release.cs` in any PR that changes an input; the `compose-bundle-drift` job in `tests.yml` fails a PR whose bundle differs from a regeneration.
 
+The install scripts under `deploy/install/` and `deploy/oracle-cloud/` are generated the same way, by the `install-scripts` publish step (`InstallScriptPublisher`). Edit their sources in `src/Aspire/Nocturne.Aspire.Host/install/`, never the copies in `deploy/`. `install.sh` is the installer for any Linux server; `oracle-cloud-install.sh` embeds it whole, runs it on the instance and sources it for the shared DNS setup. The secrets `install.sh` generates are the AppHost's secret parameters that carry publish metadata.
+
 To stage translation changes after editing `.po` files or adding new strings, use `pnpm run translations:stage` (it unhides the locales files, then stages them).
 
 The `--skip-worktree` bits may be cleared by git during branch switches that touch those files. Re-run `hide-generated` if any of the above reappear in `git status`.
@@ -133,7 +141,7 @@ Nocturne follows Clean Architecture.
 ```
 src/
 ├── API/Nocturne.API             # ASP.NET Core REST API (controllers for v1-v4 + admin)
-├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, SourceGenerators)
+├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, Hosting)
 ├── Connectors/                  # Data source integrations (Dexcom, Glooko, Libre, etc.)
 ├── Core/
 │   ├── Nocturne.Core.Clinical   # Clinical calculators (statistics, IOB/COB, sleep)
@@ -173,6 +181,17 @@ Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) 
 - Tables use snake_case (`entries`, `treatments`)
 - UUID v7 for new records; `OriginalId` preserved for MongoDB migration compatibility
 - Row Level Security for multitenancy
+
+### Record writers
+
+Every table in `V4RecordTables.All` carries `writer_grant_id` (`IWriterStamped`): the
+`oauth_grants` id of the credential that inserted the row, stamped on insert by
+`NocturneDbContext` from the scope's audit actor (`AuditContextExtensions.GrantId`) and never
+changed afterwards. It is null for a row a connector, a background job or a signed-in member
+wrote. `data_source`, `device` and `app` hold what the uploader said about itself, which differs
+per record type for one app, so the connections list (`ConnectionService`,
+`GET /api/v4/services/connections`) groups by the writer and treats those strings as the streams
+inside a connection. A new record table implements `IWriterStamped`.
 
 ### Migration baseline
 

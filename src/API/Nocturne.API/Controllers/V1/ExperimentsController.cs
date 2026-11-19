@@ -5,10 +5,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Provides the Nightscout <c>/api/v1/experiments/test</c> endpoint used by AID apps —
-/// notably Loop — to verify their API secret while adding the Nightscout service.
+/// Nightscout experiments test: a connection check that AID apps, such as Loop, call to verify their API secret.
+/// A client receives a status of ok when the check passes.
 /// </summary>
 /// <remarks>
+/// Used while adding the Nightscout service to an app.
+///
 /// Loop's connection check issues an authenticated <c>GET /api/v1/experiments/test</c> and
 /// treats only a 200 as success (401 means "bad secret"). Without this endpoint Nocturne
 /// returns 404, so Loop reports a network error and aborts setup even though entries and

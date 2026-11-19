@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.API.Services.Realtime;
 
@@ -28,7 +30,9 @@ internal sealed record StorageDocumentEvent(
 
     /// <summary>
     /// The event with its document serialized as the hub sends payloads, less every <c>null</c>
-    /// property. A property that declares its own <see cref="JsonIgnoreCondition"/> keeps it.
+    /// property, and with the Loop target ranges as arrays
+    /// (<see cref="LoopTargetRangeArrayConverter.ServeAsArrays"/>). A property that declares its own
+    /// <see cref="JsonIgnoreCondition"/> keeps it.
     /// </summary>
     /// <param name="payloadOptions">
     /// <see cref="Microsoft.AspNetCore.SignalR.JsonHubProtocolOptions.PayloadSerializerOptions"/>.
@@ -40,6 +44,8 @@ internal sealed record StorageDocumentEvent(
             static payload => new JsonSerializerOptions(payload)
             {
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                TypeInfoResolver = (payload.TypeInfoResolver ?? new DefaultJsonTypeInfoResolver())
+                    .WithAddedModifier(LoopTargetRangeArrayConverter.ServeAsArrays),
             }
         );
 

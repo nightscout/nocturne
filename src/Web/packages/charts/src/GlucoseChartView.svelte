@@ -28,10 +28,13 @@
   import type { ChartFormat, GlucoseUnits } from "./format.js";
   import type { ChartLabels } from "./labels.js";
   import type { GlucoseLineAppearance, PredictionOptions } from "./options.js";
+  import type { GlucoseRangePalette } from "./colors.js";
 
   interface Props {
     view: ChartDataView;
     glucoseUnits: GlucoseUnits;
+    /** The range palette the continuous glucose colours follow; the theme's own when omitted. */
+    rangePalette?: GlucoseRangePalette;
     labels: ChartLabels;
     format: ChartFormat;
     /** The legend's toggles; the chart keeps its own when none is given. */
@@ -65,6 +68,7 @@
   let {
     view,
     glucoseUnits,
+    rangePalette,
     labels,
     format,
     legend: legendProp,
@@ -115,6 +119,7 @@
       {inspection}
       {legend}
       {glucoseUnits}
+      {rangePalette}
       {labels}
       {format}
       {printing}

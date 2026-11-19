@@ -162,6 +162,8 @@ public class V4WriteScopeGatingTests
         new Dictionary<string, string>(V4ScopeGuardExemptions.Controllers, StringComparer.Ordinal)
         {
             ["SubjectAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantCreationInviteAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["PlatformPolicyController"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["DeduplicationController"] = NotDataCategory.SuperuserAttribute,
             ["MigrationController"] = NotDataCategory.SuperuserAttribute,
@@ -178,6 +180,7 @@ public class V4WriteScopeGatingTests
             ["SetupController"] = NotDataCategory.Setup,
             ["PlatformController"] = NotDataCategory.Setup,
             ["MyTenantsController"] = NotDataCategory.Setup,
+            ["TenantCreationInviteController"] = NotDataCategory.Setup,
 
             ["AvatarController"] = NotDataCategory.IdentityAndDelegation,
             ["ChatIdentityController"] = NotDataCategory.IdentityAndDelegation,
@@ -349,6 +352,7 @@ public class V4WriteScopeGatingTests
             // configuration written from the Patient Record settings form alongside therapy settings.
             ["BodyWeightController"] = Scope.TherapyReadWrite,
             ["GoogleHealthController"] = Scope.TenantSettings,
+            ["OuraController"] = Scope.TenantSettings,
 
             // treatments: state_spans is the decomposed form of the legacy treatment events
             // (temporary target, profile switch, exercise, illness, travel) and of the temp-basal

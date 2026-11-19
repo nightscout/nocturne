@@ -1,6 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("#lib/api/generated/metadatas.generated.remote.js", () => ({
+  getV4ApiLimits: () => ({ current: { maxDateSpanDays: 366 } }),
+}));
+
 import Harness from "./ReportsFilterSidebar.test-harness.svelte";
 
 describe("ReportsFilterSidebar", () => {
@@ -52,5 +57,27 @@ describe("ReportsFilterSidebar", () => {
 
     await page.getByRole("button", { name: "Reset" }).click();
     await expect.poll(() => log).toEqual(["begin", "reset"]);
+  });
+
+  it("refuses to apply a custom range longer than the API limit", async () => {
+    render(Harness, {
+      props: { customFrom: "2025-01-01", customTo: "2026-01-02" },
+    });
+
+    await expect.element(page.getByRole("alert")).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Apply filters" }))
+      .toBeDisabled();
+  });
+
+  it("applies a custom range of exactly the API limit", async () => {
+    render(Harness, {
+      props: { customFrom: "2025-01-01", customTo: "2026-01-01" },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Apply filters" }))
+      .toBeEnabled();
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
 });

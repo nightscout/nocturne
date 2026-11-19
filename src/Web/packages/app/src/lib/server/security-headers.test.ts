@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CSP_REPORT_URI, KIT_CSP, REPORT_ONLY_DIRECTIVES } from "./content-security-policy";
 import { applySecurityHeaders, parseFrameAncestors } from "./security-headers";
 
 function apply(
@@ -67,6 +68,52 @@ describe("applySecurityHeaders", () => {
     const headers = apply("/", { isShareHost: true, initial: { "Referrer-Policy": "unsafe-url" } });
     expect(headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+  });
+});
+
+describe("report-only Content-Security-Policy", () => {
+  const REPORT_ONLY = "Content-Security-Policy-Report-Only";
+  const FROM_KIT = "script-src 'self' 'wasm-unsafe-eval' 'nonce-abc'; report-uri /api/otel/errors";
+
+  it("is left as SvelteKit wrote it, beside the enforced frame-ancestors", () => {
+    const headers = apply("/", {
+      frameAncestors: ["https://ha.example.com"],
+      initial: { [REPORT_ONLY]: FROM_KIT },
+    });
+    expect(headers.get(REPORT_ONLY)).toBe(FROM_KIT);
+    expect(headers.get("Content-Security-Policy")).toBe("frame-ancestors 'self' https://ha.example.com");
+  });
+
+  it("is left alone where framing is allowed and where it is forbidden", () => {
+    for (const [path, isShareHost] of [["/clock/abc", false], ["/", true], ["/settings", false]] as const) {
+      expect(apply(path, { isShareHost, initial: { [REPORT_ONLY]: FROM_KIT } }).get(REPORT_ONLY)).toBe(FROM_KIT);
+    }
+  });
+
+  it("is sent by SvelteKit as report-only with a nonce and never enforced", async () => {
+    (globalThis as { __SVELTEKIT_DEV__?: boolean }).__SVELTEKIT_DEV__ = false;
+    const { Csp } = await import(
+      // @ts-expect-error Kit publishes no declarations for its internal CSP module
+      "../../../node_modules/@sveltejs/kit/src/runtime/server/page/csp.js"
+    );
+    const csp = new Csp({ directives: {}, ...KIT_CSP, reportOnly: { ...KIT_CSP.reportOnly } }, { prerender: false });
+
+    await csp.add_script("hydrate()");
+
+    expect(csp.script_needs_nonce).toBe(true);
+    expect(csp.csp_provider.get_header()).toBe("");
+    const header = csp.report_only_provider.get_header();
+    expect(header).toMatch(/script-src 'self' 'wasm-unsafe-eval' 'nonce-[^']+'/);
+    expect(header).toContain("object-src 'none'");
+    expect(header).toContain("base-uri 'self'");
+    expect(header).toContain(`report-uri ${CSP_REPORT_URI}`);
+    expect(header).not.toContain("unsafe-inline");
+  });
+
+  it("is configured as report-only: no enforcing directives block", () => {
+    expect(KIT_CSP.mode).toBe("auto");
+    expect(KIT_CSP).not.toHaveProperty("directives");
+    expect(KIT_CSP.reportOnly).toBe(REPORT_ONLY_DIRECTIVES);
   });
 });
 

@@ -490,10 +490,10 @@ internal sealed record ReportThresholds(double VeryLow, double Low, double High,
     {
         var t = thresholds ?? new GlycemicThresholds();
         return new ReportThresholds(
-            GlucoseUnits.Scale(t.VeryLow, useMmol),
-            GlucoseUnits.Scale(t.Low, useMmol),
-            GlucoseUnits.Scale(t.High, useMmol),
-            GlucoseUnits.Scale(t.VeryHigh, useMmol),
+            ReportGlucose.Scale(t.VeryLow, useMmol),
+            ReportGlucose.Scale(t.Low, useMmol),
+            ReportGlucose.Scale(t.High, useMmol),
+            ReportGlucose.Scale(t.VeryHigh, useMmol),
             useMmol ? GlucoseConstants.MgdlPerMmol : 1);
     }
 }

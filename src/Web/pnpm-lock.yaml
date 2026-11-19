@@ -836,6 +836,27 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(happy-dom@20.9.0)(vite@8.0.12(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
 
+  packages/scalar-plugin:
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.3.1
+        version: 7.3.1(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
+      svelte:
+        specifier: 5.57.2
+        version: 5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3)
+      svelte-check:
+        specifier: ^4.7.7
+        version: 4.7.7(picomatch@4.0.7)(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.12
+        version: 8.0.12(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(happy-dom@20.9.0)(vite@8.0.12(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
+
   packages/screenshots:
     devDependencies:
       '@nocturne/eslint-config':

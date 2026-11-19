@@ -50,16 +50,41 @@ public class AlertSetupService(
 {
     private const decimal MinThresholdMgdl = 40;
     private const decimal MaxThresholdMgdl = 400;
-    private const int NoReadingsMinutes = 20;
 
-    private static readonly IReadOnlyDictionary<StarterAlertKind, (string Name, AlertRuleSeverity Severity, string? Direction, decimal DefaultMgdl)> Starters =
-        new Dictionary<StarterAlertKind, (string, AlertRuleSeverity, string?, decimal)>
+    /// <summary>
+    /// A starter rule as its preset in <see cref="AlertPresets"/> gives it. <paramref name="Direction"/>
+    /// is null for the one that is not a glucose threshold, which has no level to set.
+    /// </summary>
+    private sealed record Starter(string Name, AlertPreset Preset, string? Direction, decimal DefaultMgdl);
+
+    private static readonly IReadOnlyDictionary<StarterAlertKind, Starter> Starters =
+        Enum.GetValues<StarterAlertKind>().ToDictionary(kind => kind, StarterOf);
+
+    private static Starter StarterOf(StarterAlertKind kind)
+    {
+        var preset = AlertPresets.Starter(kind);
+        using var json = JsonDocument.Parse(preset.ConditionParams!);
+        var condition = json.RootElement;
+        return kind switch
         {
-            [StarterAlertKind.UrgentLow] = ("Urgent low", AlertRuleSeverity.Critical, "below", 55),
-            [StarterAlertKind.Low] = ("Low", AlertRuleSeverity.Warning, "below", 70),
-            [StarterAlertKind.High] = ("High", AlertRuleSeverity.Warning, "above", 250),
-            [StarterAlertKind.NoReadings] = ("No readings for 20 minutes", AlertRuleSeverity.Warning, null, 0),
+            StarterAlertKind.UrgentLow => Threshold("Urgent low"),
+            StarterAlertKind.Low => Threshold("Low"),
+            StarterAlertKind.High => Threshold("High"),
+            StarterAlertKind.NoReadings => new(
+                $"No readings for {condition.GetProperty("timeout_minutes").GetInt32()} minutes", preset, null, 0),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
+
+        Starter Threshold(string name) => new(
+            name, preset, condition.GetProperty("direction").GetString(), condition.GetProperty("value").GetDecimal());
+    }
+
+    /// <summary>
+    /// The resolve condition of a threshold starter whose preset closes on the opposite: glucose on
+    /// the other side of the same level, as the rule editor stores a resolve tree of one condition.
+    /// </summary>
+    private static string OppositeOf(string direction, decimal mgdl) => AutoResolveSuggestion.For(
+        JsonSerializer.Serialize(new { type = "threshold", threshold = new { direction, value = mgdl } }))!;
 
     /// <summary>What can be chosen instead of this device.</summary>
     private static readonly IReadOnlyList<ChannelType> ChannelTypesOffered = ChannelDestinations.Offered
@@ -168,7 +193,7 @@ public class AlertSetupService(
 
         foreach (var kind in Enum.GetValues<StarterAlertKind>())
         {
-            var (name, severity, direction, defaultMgdl) = Starters[kind];
+            var (name, preset, direction, defaultMgdl) = Starters[kind];
             var asked = request.Rules.FirstOrDefault(r => r.Kind == kind);
             var rule = starters.GetValueOrDefault(kind);
 
@@ -177,10 +202,11 @@ public class AlertSetupService(
             var mgdl = direction is null || asked is null || (asked.Threshold is null && !enabled)
                 ? stored
                 : ToMgdl(kind, asked.Threshold, stored, units);
-            var conditionType = direction is null ? AlertConditionType.SignalLoss : AlertConditionType.Threshold;
+            var conditionType = preset.ConditionType!.Value;
             var conditionParams = direction is null
-                ? JsonSerializer.Serialize(new { timeout_minutes = NoReadingsMinutes })
+                ? preset.ConditionParams!
                 : JsonSerializer.Serialize(new { direction, value = mgdl });
+            var autoResolve = preset.AutoResolve && direction is not null ? OppositeOf(direction, mgdl) : null;
 
             var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
             if (rule is null)
@@ -189,9 +215,10 @@ public class AlertSetupService(
                     new NewAlertRule(
                         new AlertRuleWrite(
                             name, null, conditionType, conditionParams,
-                            scopeClassifier.Classify(conditionType, conditionParams), severity,
+                            scopeClassifier.Classify(conditionType, conditionParams), preset.Severity,
                             IsEnabled: enabled, SortOrder: (int)kind, AllowThroughDnd: throughDnd,
-                            AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
+                            AutoResolveEnabled: autoResolve is not null, AutoResolveParams: autoResolve,
+                            ClientConfiguration: "{}"),
                         channelWrites,
                         StarterKind: kind),
                     ct);
@@ -203,9 +230,15 @@ public class AlertSetupService(
                 rearmed.Add(ruleId);
             if (rule.IsEnabled && !enabled)
                 retired.Add(ruleId);
+            // A resolve condition that is still the opposite of the stored threshold follows the new
+            // one. One the owner edited or switched off in the rule editor stays as they left it.
+            var resolveFollows = direction is not null
+                && rule.Rule.AutoResolveEnabled
+                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(direction, stored));
             await writer.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with
             {
                 ConditionParams = conditionParams,
+                AutoResolveParams = resolveFollows ? autoResolve : rule.Rule.AutoResolveParams,
                 ScopeClass = scopeClassifier.Classify(rule.Rule.ConditionType, conditionParams),
                 IsEnabled = enabled,
                 AllowThroughDnd = rule.Rule.AllowThroughDnd || throughDnd,

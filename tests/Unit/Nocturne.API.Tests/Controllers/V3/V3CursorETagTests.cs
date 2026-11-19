@@ -45,6 +45,7 @@ public class V3CursorETagTests
     {
         return new FoodController(
             foods.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

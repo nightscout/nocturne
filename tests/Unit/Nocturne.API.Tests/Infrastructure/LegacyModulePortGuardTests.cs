@@ -31,8 +31,14 @@ namespace Nocturne.API.Tests.Infrastructure;
 [Trait("Category", "Unit")]
 public class LegacyModulePortGuardTests
 {
-    private sealed record Module(string Folder, string Concept, string[] Ports)
+    /// <param name="ContractPorts">
+    /// Public Core contracts into the module's storage that only the module may take. Infrastructure
+    /// implements them, so they cannot be declared in the module's folder.
+    /// </param>
+    private sealed record Module(string Folder, string Concept, string[] Ports, string[]? ContractPorts = null)
     {
+        public string[] Contracts => ContractPorts ?? [];
+
         public bool Owns(string path) =>
             path.StartsWith($"src/API/Nocturne.API/Services/{Folder}/", StringComparison.Ordinal)
             || path.StartsWith($"src/API/Nocturne.API/Services/V4/{Concept}Decomposer", StringComparison.Ordinal)
@@ -45,7 +51,7 @@ public class LegacyModulePortGuardTests
     private static readonly Module[] Modules =
     [
         new("Entries", "Entry", ["IEntryStore", "IEntryCache", "IEntryDecomposer"]),
-        new("Treatments", "Treatment", ["ITreatmentStore", "ITreatmentCache", "ITreatmentDecomposer"]),
+        new("Treatments", "Treatment", ["ITreatmentStore", "ITreatmentCache", "ITreatmentDecomposer"], ["IDecomposedTreatmentKeys"]),
         new("DeviceStatuses", "DeviceStatus", ["IDeviceStatusStore", "IDeviceStatusDecomposer"]),
     ];
 
@@ -54,7 +60,14 @@ public class LegacyModulePortGuardTests
     private static readonly string[] ReflectedSources = ["src/API/Nocturne.API", "tests/Unit/Nocturne.API.Tests"];
 
     private static readonly IReadOnlyDictionary<string, Module> ModuleOfPort =
-        Modules.SelectMany(m => m.Ports.Select(p => (p, m))).ToDictionary(x => x.p, x => x.m);
+        Modules.SelectMany(m => m.Ports.Concat(m.Contracts).Select(p => (p, m))).ToDictionary(x => x.p, x => x.m);
+
+    private static readonly IReadOnlyDictionary<string, Module> ModuleOfContractPort =
+        Modules.SelectMany(m => m.Contracts.Select(p => (p, m))).ToDictionary(x => x.p, x => x.m);
+
+    /// <summary>The host sources a contract port may not be named in outside its module.</summary>
+    private static readonly string[] ContractPortScope =
+        ["src/API/Nocturne.API", "tests/Unit/Nocturne.API.Tests", "tests/Integration/Nocturne.API.Tests"];
 
     private static readonly IReadOnlyList<(string Name, Module Module)> Declared =
         Modules.SelectMany(m => RepoSources.Src
@@ -103,6 +116,10 @@ public class LegacyModulePortGuardTests
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/BatchResendMatchesSingleTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/BatchResendMatchesSingleTests.cs", "DeviceStatusDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/ResendKeepsCorrelationIdTests.cs", "EntryDecomposer", BuildsDecomposer),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/OwnIdAdoptionTests.cs", "EntryDecomposer", BuildsDecomposer),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/OwnIdAdoptionTests.cs", "DeviceStatusDecomposer", BuildsDecomposer),
+        InTest("tests/Integration/Nocturne.API.Tests/TreatmentWriteBackEditIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink"),
+        InTest("tests/Integration/Nocturne.API.Tests/StateSpanWriteBackEchoIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink, and pulls through a publisher over it"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/ResendKeepsCorrelationIdTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/PreBolusWriteBackPullBackTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/TreatmentRequiredColumnsTests.cs", "TreatmentDecomposer", CallsStaticMapper),
@@ -151,6 +168,26 @@ public class LegacyModulePortGuardTests
 
         string.Join(Environment.NewLine, namers).Should().BeEmpty("a consumer's test mocks the module's service");
     }
+
+    [Fact]
+    public void NothingNamesAContractPortOutsideItsModule()
+    {
+        var namers = ContractPortScope.SelectMany(RepoSources.Under)
+            .Where(s => s.Path != Registration)
+            .SelectMany(s => NamedContractPorts(s.Tree)
+                .Where(name => !ModuleOfContractPort[name].Owns(s.Path))
+                .Select(name => $"{s.Path}({name})"))
+            .Distinct();
+
+        string.Join(Environment.NewLine, namers).Should().BeEmpty("the module's storage is reached through the module's service");
+    }
+
+    [Theory]
+    [InlineData("class C { readonly Mock<IDecomposedTreatmentKeys> _keys = new(); }", "IDecomposedTreatmentKeys")]
+    [InlineData("class C { object M(IServiceProvider sp) => sp.GetRequiredService<IDecomposedTreatmentKeys>(); }", "IDecomposedTreatmentKeys")]
+    [InlineData("/// <see cref=\"IDecomposedTreatmentKeys\"/>\nclass C { string S = \"IDecomposedTreatmentKeys\"; }", "")]
+    public void DetectsANamedContractPort(string source, string expected) =>
+        string.Join(",", NamedContractPorts(CSharpSyntaxTree.ParseText(source))).Should().Be(expected);
 
     [Fact]
     public void EveryExemptionStillNamesItsType()
@@ -205,13 +242,16 @@ public class LegacyModulePortGuardTests
             .ToList();
 
         declared.Select(t => t.Name).Should().BeEquivalentTo(ModuleOfPort.Keys, "a renamed port would drop out of the guard");
-        declared.Should().OnlyContain(t => !t.IsPublic && t.Assembly == Api);
+        declared.Where(t => !ModuleOfContractPort.ContainsKey(t.Name))
+            .Should().OnlyContain(t => !t.IsPublic && t.Assembly == Api);
+        declared.Where(t => ModuleOfContractPort.ContainsKey(t.Name))
+            .Should().OnlyContain(t => t.IsPublic && t.Assembly == contracts, "a contract port is one Infrastructure implements");
     }
 
     [Fact]
     public void DerivesItsNamesFromTheTypesTheModuleFoldersDeclare()
     {
-        ModuleOfName.Keys.Should().Contain(["PreBolusSplit", "CarbFoodIndex", "StoredEntryMatch", "TreatmentDecomposer", "EntryService", "DeviceStatusService"]);
+        ModuleOfName.Keys.Should().Contain(["TreatmentService", "CarbFoodIndex", "StoredEntryMatch", "TreatmentDecomposer", "EntryService", "DeviceStatusService"]);
         ModuleOfName.Keys.Should().NotContain(["LegacyId", "IobCobReader", "BolusWizardService"], "a nested type is named through its declaring type, and these are not a module's");
     }
 
@@ -235,7 +275,7 @@ public class LegacyModulePortGuardTests
     [Theory]
     [InlineData("src/API/Nocturne.API/Helpers/X.cs", "partial class LegacyTreatmentTables { }", "src/API/Nocturne.API/Helpers/X.cs: LegacyTreatmentTables")]
     [InlineData("src/API/Nocturne.API/Helpers/X.cs", "namespace N { class EntryService { } }", "src/API/Nocturne.API/Helpers/X.cs: EntryService")]
-    [InlineData("tests/Unit/Nocturne.API.Tests/Helpers/X.cs", "enum PreBolusSplit { }", "tests/Unit/Nocturne.API.Tests/Helpers/X.cs: PreBolusSplit")]
+    [InlineData("tests/Unit/Nocturne.API.Tests/Helpers/X.cs", "enum CarbFoodIndex { }", "tests/Unit/Nocturne.API.Tests/Helpers/X.cs: CarbFoodIndex")]
     [InlineData("src/API/Nocturne.API/Services/Treatments/X.cs", "partial class LegacyTreatmentTables { }", "")]
     [InlineData("src/API/Nocturne.API/Services/Entries/X.cs", "partial class LegacyTreatmentTables { }", "src/API/Nocturne.API/Services/Entries/X.cs: LegacyTreatmentTables")]
     [InlineData("src/API/Nocturne.API/Helpers/X.cs", "class Unrelated { class EntryService { } }", "")]
@@ -331,6 +371,12 @@ public class LegacyModulePortGuardTests
         tree.GetRoot().DescendantNodes().OfType<SimpleNameSyntax>()
             .Where(name => ModuleOfName.ContainsKey(name.Identifier.ValueText))
             .Select(name => (MemberOf(name), name.Identifier.ValueText))
+            .Distinct();
+
+    private static IEnumerable<string> NamedContractPorts(SyntaxTree tree) =>
+        tree.GetRoot().DescendantNodes().OfType<SimpleNameSyntax>()
+            .Select(name => name.Identifier.ValueText)
+            .Where(ModuleOfContractPort.ContainsKey)
             .Distinct();
 
     /// <summary>

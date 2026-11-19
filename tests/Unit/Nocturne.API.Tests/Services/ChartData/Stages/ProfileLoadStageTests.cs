@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
@@ -24,6 +25,7 @@ public class ProfileLoadStageTests
             new TenantClockResolver(
                 _therapySettingsResolver.Object,
                 new CategoryReadContext(),
+                new ShareClockDouble(_therapySettingsResolver.Object),
                 NullLogger<TenantClockResolver>.Instance),
             NullLogger<ProfileLoadStage>.Instance
         );
@@ -34,7 +36,6 @@ public class ProfileLoadStageTests
             StartTime = 1700000000000L,
             EndTime = endTime,
             IntervalMinutes = 5,
-            BufferStartTime = 1700000000000L - 8L * 60 * 60 * 1000,
         };
 
     [Fact]

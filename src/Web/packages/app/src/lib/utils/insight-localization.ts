@@ -3,24 +3,7 @@
  * Maps insight keys to localized messages and formats them with context data
  */
 
-// Local type definition for insight keys
-export enum InsightKey {
-  TimeInRangeExcellent = "TimeInRangeExcellent",
-  NoSevereHypoglycemia = "NoSevereHypoglycemia",
-  VariabilityControlled = "VariabilityControlled",
-  AllTargetsMet = "AllTargetsMet",
-  ReduceSevereHypoglycemia = "ReduceSevereHypoglycemia",
-  ReduceHypoglycemia = "ReduceHypoglycemia",
-  IncreaseTIR = "IncreaseTIR",
-  ReduceSevereHyperglycemia = "ReduceSevereHyperglycemia",
-  ReduceVariability = "ReduceVariability",
-  TimeVeryLow = "TimeVeryLow",
-  TimeBelowRange = "TimeBelowRange",
-  TimeInRange = "TimeInRange",
-  TimeVeryHigh = "TimeVeryHigh",
-  Variability = "Variability",
-  AllTargetsAchieved = "AllTargetsAchieved",
-}
+import { insightMessage } from "./insight-messages.svelte.js";
 
 export interface LocalizedInsight {
   key?: string;
@@ -36,95 +19,6 @@ export interface FormattedInsight {
   priority: number;
 }
 
-type InsightTemplate = { title: string; description: string };
-
-// Observations only: each states a figure against its consensus reference and leaves the
-// conclusion to the reader (PRODUCT.md, "Data, not advice"). Bands are named rather than given
-// as mg/dL thresholds so the copy holds in either unit.
-const insightMessages: Record<string, InsightTemplate> = {
-  [InsightKey.TimeInRangeExcellent]: {
-    title: "Time in range at or above target",
-    description: "Time in range was {actual}% (consensus target: at least {target}%).",
-  },
-  [InsightKey.NoSevereHypoglycemia]: {
-    title: "No time very low",
-    description: "No readings in this period were very low.",
-  },
-  [InsightKey.VariabilityControlled]: {
-    title: "Variability within target",
-    description: "Coefficient of variation was {cv}%, within its consensus target.",
-  },
-  [InsightKey.AllTargetsMet]: {
-    title: "All consensus targets met",
-    description: "Every figure in this period was within its consensus target.",
-  },
-  [InsightKey.ReduceSevereHypoglycemia]: {
-    title: "Time very low above target",
-    description: "Time very low was above its consensus target.",
-  },
-  [InsightKey.ReduceHypoglycemia]: {
-    title: "Time below range above target",
-    description: "Time below range was above its consensus target.",
-  },
-  [InsightKey.IncreaseTIR]: {
-    title: "Time in range below target",
-    description: "Time in range was below its consensus target.",
-  },
-  [InsightKey.ReduceSevereHyperglycemia]: {
-    title: "Time very high above target",
-    description: "Time very high was above its consensus target.",
-  },
-  [InsightKey.ReduceVariability]: {
-    title: "Variability above target",
-    description: "Coefficient of variation was above its consensus target.",
-  },
-  [InsightKey.TimeVeryLow]: {
-    title: "Time very low",
-    description: "Time very low was {actual}% (consensus target: under {target}%).",
-  },
-  [InsightKey.TimeBelowRange]: {
-    title: "Time below range",
-    description: "Time below range was {actual}% (consensus target: under {target}%).",
-  },
-  [InsightKey.TimeInRange]: {
-    title: "Time in range",
-    description: "Time in range was {actual}% (consensus target: at least {target}%).",
-  },
-  [InsightKey.TimeVeryHigh]: {
-    title: "Time very high",
-    description: "Time very high was {actual}% (consensus target: under {target}%).",
-  },
-  [InsightKey.Variability]: {
-    title: "Variability",
-    description: "Coefficient of variation was {actual}% (consensus target: at most {target}%).",
-  },
-  [InsightKey.AllTargetsAchieved]: {
-    title: "All consensus targets met",
-    description: "Every figure in this period was within its consensus target.",
-  },
-};
-
-/**
- * Format context values for display (round to 1 decimal place)
- */
-function formatValue(value: number): string {
-  return value.toFixed(1);
-}
-
-/**
- * Replace placeholders in message template with context values
- * Example: "Time is {actual}% (target: {target}%)" with { actual: 75, target: 70 }
- * becomes "Time is 75% (target: 70%)"
- */
-function interpolateMessage(template: string, context: Record<string, number> | undefined): string {
-  if (!context) return template;
-
-  return template.replace(/{(\w+)}/g, (match, key) => {
-    const value = context[key];
-    return value !== undefined ? formatValue(value) : match;
-  });
-}
-
 /**
  * Convert a backend LocalizedInsight to a formatted insight for display
  */
@@ -135,12 +29,12 @@ export function formatInsight(
   priority: number
 ): FormattedInsight {
   const key = insight.key ?? "";
-  const templates = insightMessages[key] ?? { title: key, description: "" };
+  const message = insightMessage(key, insight.context) ?? { title: key, description: "" };
 
   return {
     key,
-    title: templates.title,
-    description: interpolateMessage(templates.description, insight.context),
+    title: message.title,
+    description: message.description,
     type,
     category,
     priority,

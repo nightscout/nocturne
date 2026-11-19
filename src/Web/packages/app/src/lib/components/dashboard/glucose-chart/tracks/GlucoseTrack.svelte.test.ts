@@ -1,5 +1,6 @@
 import { render } from "vitest-browser-svelte";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
+import { glucoseRangePalette } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./GlucoseTrackHarness.test.svelte";
 
 /**
@@ -157,5 +158,51 @@ describe("GlucoseTrack rendering contract", () => {
 
 		const circles = container.querySelectorAll("circle");
 		expect(circles.length).toBeGreaterThanOrEqual(3);
+	});
+
+	describe("with the distinct range palette", () => {
+		afterEach(() => glucoseRangePalette.forget());
+
+		it("continuous mode strokes the range colours, not the oklch spectrum", async () => {
+			glucoseRangePalette.current = "clarity";
+			const { container } = render(Harness, {
+				lineColorMode: "continuous",
+				areaMode: "off",
+				showPoints: false,
+			});
+
+			const colors = [...stopsIn(gradients(container)[0])].map((s) => s.getAttribute("stop-color") ?? "");
+			expect(colors.some((c) => c.startsWith("oklch("))).toBe(false);
+			expect(colors.every((c) => c.includes("--glucose-"))).toBe(true);
+			expect(colors.length).toBeGreaterThan(5);
+			expect(colors.some((c) => c.startsWith("color-mix(in oklch"))).toBe(true);
+		});
+
+		it("continuous points are filled from the range colours", async () => {
+			glucoseRangePalette.current = "clarity";
+			const { container } = render(Harness, {
+				lineColorMode: "continuous",
+				areaMode: "off",
+				showPoints: true,
+			});
+
+			const fills = Array.from(container.querySelectorAll("circle")).map((c) => c.getAttribute("fill") ?? "");
+			expect(fills.length).toBeGreaterThanOrEqual(3);
+			for (const fill of fills) expect(fill).toContain("--glucose-");
+		});
+
+		it("the theme palette keeps the oklch spectrum", async () => {
+			const { container } = render(Harness, {
+				lineColorMode: "continuous",
+				areaMode: "off",
+				showPoints: true,
+			});
+
+			const colors = [...stopsIn(gradients(container)[0])].map((s) => s.getAttribute("stop-color") ?? "");
+			expect(colors.every((c) => c.startsWith("oklch("))).toBe(true);
+			for (const c of container.querySelectorAll("circle")) {
+				expect(c.getAttribute("fill")).toMatch(/^oklch\(/);
+			}
+		});
 	});
 });

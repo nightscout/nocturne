@@ -29,9 +29,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for comprehensive glucose and treatment statistics.
-/// Provides endpoints for calculating various glucose metrics and analytics including
-/// time-in-range, glycemic variability, GMI, GRI, basal/bolus ratios, and AID system metrics.
+/// Glucose and treatment statistics: time in range, glycemic variability, GMI, GRI, basal and bolus
+/// ratios, AID system metrics, unit conversion and clinical targets.
 /// </summary>
 /// <remarks>
 /// <c>GET /periods</c> caches for five minutes through <see cref="ITenantCache"/>;
@@ -118,9 +117,10 @@ public class StatisticsController : ControllerBase
     /// <see cref="ScheduledBasal"/> when the pump reported none.
     /// </summary>
     /// <remarks>
-    /// <paramref name="recordedBasal"/> is basal delivered by a route other than TempBasals. A
-    /// non-empty one suppresses the fallback: a profile baseline on top of MDI injections would
-    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.
+    /// <paramref name="recordedBasal"/> is basal delivered by a route other than TempBasals. One
+    /// whose <see cref="StatisticsService.BasalInjectionsDeliveredWithin"/> reaches the window
+    /// suppresses the fallback: a profile baseline on top of MDI injections would double-count the
+    /// day's coverage. <c>null</c> where the caller does not read injections.
     /// <paramref name="profileSegments"/> is the schedule when the caller already read it, and
     /// <paramref name="overrides"/> the override scale factors when it already read those.
     /// </remarks>
@@ -133,8 +133,9 @@ public class StatisticsController : ControllerBase
         IReadOnlyList<BasalSegment>? profileSegments = null,
         IReadOnlyList<ScaleFactorInterval>? overrides = null)
     {
-        if (recordedBasal is { Count: > 0 }
-            || StatisticsService.DeliveredWithin(tempBasals, startUtc, UntilMills(endUtc)).Count > 0)
+        var untilMills = UntilMills(endUtc);
+        if (StatisticsService.BasalInjectionsDeliveredWithin(recordedBasal ?? [], startUtc, untilMills).Count > 0
+            || StatisticsService.DeliveredWithin(tempBasals, startUtc, untilMills).Count > 0)
             return;
 
         var scheduled = new ScheduledBasal(
@@ -144,8 +145,8 @@ public class StatisticsController : ControllerBase
         {
             tempBasals.Add(new TempBasal
             {
-                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(step.Start).UtcDateTime,
-                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(step.End).UtcDateTime,
+                StartTimestamp = step.Start.ToUtcDateTime(),
+                EndTimestamp = step.End.ToUtcDateTime(),
                 Rate = step.Rate,
                 Origin = TempBasalOrigin.Scheduled,
             });
@@ -377,6 +378,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         return Ok(await _rangeAnalytics.ReadAsync(startDate, endDate, population, patientDeviceId, cancellationToken));
     }
 
@@ -450,6 +454,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         if (clock.Zone is not { } tz)
             return Ok(new WeekdayAveragesResponse { TimeZoneUnavailableReason = clock.Reason });
@@ -484,6 +491,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
@@ -603,7 +613,7 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     public ActionResult<double> MgdlToMMOL(double mgdl)
     {
-        var result = _statisticsService.MgdlToMMOL(mgdl);
+        var result = GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol);
         return Ok(result);
     }
 
@@ -813,6 +823,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         if (clock.Zone is not { } tz)
             return Ok(new DailyBasalBolusRatioResponse { TimeZoneUnavailableReason = clock.Reason });
@@ -862,6 +875,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate.ToDateTime(TimeOnly.MinValue), endDate.ToDateTime(TimeOnly.MinValue)) is { } overlong)
+            return overlong;
+
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         if (clock.Zone is not { } tz)
             return Ok(new PunchCardResponse { TimeZoneUnavailableReason = clock.Reason });
@@ -913,6 +929,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var (result, boluses) = await _insulinDelivery.ReadAsync(startDate, endDate, cancellationToken);
         if (includeBoluses && AnalyticsReadScopes.Allows(HttpContext.GetGrantedScopes(), Scope.TreatmentsRead))
             result.ManualBoluses = StatisticsService.CountedBoluses(boluses).ToList();
@@ -920,7 +939,9 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
-    /// Calculate comprehensive basal analysis statistics for a date range
+    /// Calculate comprehensive basal analysis statistics for a date range. Basal injections count as
+    /// scheduled basal (<see cref="StatisticsService.BasalInjectionPieces"/>), and where there are
+    /// any the profile's schedule does not stand in.
     /// </summary>
     /// <param name="startDate">Start date of the analysis period</param>
     /// <param name="endDate">End date of the analysis period</param>
@@ -935,17 +956,24 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         // Force UTC kind to avoid DateTimeOffset throwing when the server's local
         // timezone offset would push DateTime.MinValue/MaxValue out of the valid range.
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
         // Uncapped for the reason given on InsulinDeliveryReader.ReadRecordsAsync.
-        var tempBasals = (await _insulinDelivery.ReadTempBasalsAsync(startUtc, endUtc, cancellationToken)).ToList();
+        var tempBasalTask = _insulinDelivery.ReadTempBasalsAsync(startUtc, endUtc, cancellationToken);
+        var injectionTask = _insulinDelivery.ReadBasalInjectionsAsync(startUtc, endUtc, cancellationToken);
+        await Task.WhenAll(tempBasalTask, injectionTask);
+        var tempBasals = (await tempBasalTask).ToList();
+        var basalInjections = (await injectionTask).ToList();
 
         await _insulinDelivery.FillMissingScheduledRatesAsync(tempBasals, startUtc, endUtc, cancellationToken);
 
-        await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, recordedBasal: null, cancellationToken);
+        await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, basalInjections, cancellationToken);
 
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
 
@@ -954,7 +982,8 @@ public class StatisticsController : ControllerBase
             startUtc,
             endUtc,
             UntilMills(endUtc),
-            clock.Zone
+            clock.Zone,
+            basalInjections
         );
         result.TimeZoneUnavailableReason = clock.Reason;
         return Ok(result);
@@ -962,8 +991,10 @@ public class StatisticsController : ControllerBase
 
     /// <summary>
     /// Calculates the average insulin delivered per hour of day, split by scheduled
-    /// basal, temp adjustments, and boluses, from pump-confirmed delivery records.
-    /// Basal insulin is duration-weighted across the user-local hours each TempBasal
+    /// basal, temp adjustments, and boluses, as <see cref="IStatisticsService.CalculateHourlyInsulinDelivery"/>
+    /// describes. Basal injections are read from <see cref="StatisticsService.BasalInjectionReadSpan"/>,
+    /// and the profile's schedule stands in only where neither temp basals nor injections reach the
+    /// window. Basal insulin is duration-weighted across the user-local hours each TempBasal
     /// overlaps, and averages are taken over the days that have delivery data — a
     /// window that extends before the first record does not distort the pattern. Also serves the
     /// profile's scheduled rate per hour and the period totals of total and basal delivery.
@@ -981,6 +1012,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
+
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
@@ -995,7 +1029,7 @@ public class StatisticsController : ControllerBase
 
         var profileSegmentsTask = _insulinDelivery.ReadProfileBasalSegmentsAsync(startUtc, endUtc, cancellationToken);
         var (boluses, algorithmBoluses, tempBasals, basalInjections) =
-            await _insulinDelivery.ReadRecordsAsync(startUtc, endUtc, cancellationToken, profileSegmentsTask);
+            await _insulinDelivery.ReadRecordsForRatesAsync(startUtc, endUtc, cancellationToken, profileSegmentsTask);
 
         var profileSegments = await profileSegmentsTask;
         await AddScheduledBasalFallbackAsync(

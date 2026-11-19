@@ -317,7 +317,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         // place it where its client meant it instead. A zone-less startDate is read as UTC where
         // Nightscout reads it in the server's zone, which is UTC in its container image.
         if (profile.Mills != 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
+            return profile.Mills.ToUtcDateTime();
 
         return UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt) ?? DateTime.UnixEpoch;
     }
@@ -554,6 +554,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 
     /// <summary>
     /// Whether a profile's units string denotes mmol/L (matching the forms Nightscout profiles use).
+    /// Not <see cref="V4Models.GlucoseUnits.Parse"/>: the write and the read must agree on stored rows,
+    /// and rows already stored were converted under this rule.
     /// </summary>
     internal static bool IsMmol(string? units) =>
         units is not null

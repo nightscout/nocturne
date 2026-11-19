@@ -48,7 +48,8 @@ public interface IProfileProjectionService
     /// <summary>
     /// Profiles whose <c>srvModified</c> — the newest write stamp among the therapy settings and the
     /// schedules they are assembled from — falls after <paramref name="cursorMills"/>, oldest first,
-    /// for the v3 <c>history/{lastModified}</c> endpoint.
+    /// for the v3 <c>history/{lastModified}</c> endpoint. AAPS activates the last profile of a page,
+    /// so another order switches the profile a user has active.
     /// </summary>
     /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
     /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>

@@ -1,3 +1,5 @@
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
@@ -27,6 +29,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public class AlertReplayServiceTests
 {
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     // Looping-fact mocks plumbed through the real SensorContextEnricher so replay walks
@@ -54,17 +58,18 @@ public class AlertReplayServiceTests
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
 
         // The repo never returns null; default the DND-window fetches to empty (no DND).
-        // Tests that exercise scoped suppression override GetDndWindowsAsOfAsync.
-        _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        // Tests that exercise scoped suppression override GetReceivedByAsync.
+        _dndWindows
+            .Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
-                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
@@ -75,6 +80,8 @@ public class AlertReplayServiceTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             new Mock<Nocturne.Core.Contracts.V4.Repositories.ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
@@ -91,6 +98,7 @@ public class AlertReplayServiceTests
 
         _sut = new AlertReplayService(
             _alertRepository.Object,
+            _dndWindows.Object,
             _glucoseRepository.Object,
             _enricher,
             _tenantAccessor.Object,
@@ -207,7 +215,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
 
         // A lows window received before the fire tick (created_at <= tick) and active across it.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows.Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null, CreatedAt: dayStart),
@@ -242,7 +250,7 @@ public class AlertReplayServiceTests
 
         // The window's intent (StartedAt) covers the fire, but it was *received* an hour after
         // the fire tick — receipt gating (created_at <= tick) must NOT retroactively suppress.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows.Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null,
@@ -280,7 +288,7 @@ public class AlertReplayServiceTests
 
         // A scope=all window active (and received) 02:00-03:00; replay must reconstruct
         // ActiveDoNotDisturb from it so the leaf evaluates true across exactly that span.
-        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows.Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 new DndWindowSnapshot(DndScope.All, StartedAt: dayStart.AddHours(2),
@@ -569,5 +577,117 @@ public class AlertReplayServiceTests
 
         result.Events.Should().ContainSingle().Which.Should().Be(new AlertReplayEvent(
             dayStart.AddHours(1), ruleId, "tightened", AlertRuleSeverity.Warning, AlertReplayEventKind.Fired));
+    }
+
+    // ── firing search ────────────────────────────────────────────────────────────────────────
+
+    private static readonly DateTime SearchNow = new(2026, 4, 28, 12, 0, 0, DateTimeKind.Utc);
+
+    private AlertReplayService FiringSearch(AlertEvaluationOptions? options = null) =>
+        new(
+            _alertRepository.Object,
+            _dndWindows.Object,
+            _glucoseRepository.Object,
+            _enricher,
+            _tenantAccessor.Object,
+            Options.Create(options ?? new AlertEvaluationOptions()),
+            new RustAlertReplayEngine(new AlertEngineErrors(
+                new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(SearchNow)));
+
+    /// <summary>Serves each replay window the readings inside it, as the repository does.</summary>
+    private void SetupReadingsByWindow(params SensorGlucose[] readings) =>
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .Returns((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _,
+                    DateTime? after, Guid? _, CancellationToken _, Guid? _, GlucoseStreams _) =>
+                Task.FromResult<IEnumerable<SensorGlucose>>(readings
+                    .Where(r => r.Timestamp >= from && r.Timestamp < to && (after is null || r.Timestamp > after))
+                    .OrderBy(r => r.Timestamp)
+                    .ToList()));
+
+    private static ReplayRuleOverride LowDraft() => new(
+        Id: null, "draft", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+        AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
+
+    [NativeFact]
+    public async Task FindFirings_ReportsEveryFiringNewestFirst()
+    {
+        var recent = SearchNow.AddHours(-2);
+        var older = SearchNow.AddDays(-3).AddHours(-2);
+        SetupReadingsByWindow(
+            Reading(older, 65), Reading(older.AddMinutes(30), 95),
+            Reading(recent, 60), Reading(recent.AddMinutes(30), 95));
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
+
+        result.Firings.Should().Equal(
+            new AlertFiring(recent, AlertReplayEventKind.Fired),
+            new AlertFiring(older, AlertReplayEventKind.Fired));
+        result.Total.Should().Be(2);
+        result.HasReadings.Should().BeTrue();
+        result.SearchedTo.Should().Be(SearchNow);
+        result.SearchedFrom.Should().Be(SearchNow.AddDays(-14));
+    }
+
+    /// <summary>
+    /// Each searched day is its own replay, which starts the rule from rest. A low that runs across
+    /// the boundary between two days is one firing, at the time it began.
+    /// </summary>
+    [NativeFact]
+    public async Task FindFirings_ALowAcrossADayBoundaryIsOneFiring()
+    {
+        var began = SearchNow.AddHours(-25);
+        var low = Enumerable.Range(0, 25).Select(i => Reading(began.AddMinutes(i * 5), 60));
+        SetupReadingsByWindow([.. low, Reading(began.AddMinutes(125), 95)]);
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
+
+        result.Firings.Should().Equal(new AlertFiring(began, AlertReplayEventKind.Fired));
+    }
+
+    [NativeFact]
+    public async Task FindFirings_EvaluatesTheDraftWithoutTheSavedRules()
+    {
+        SetupReadingsByWindow(Reading(SearchNow.AddHours(-2), 60));
+
+        await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
+
+        _alertRepository.Verify(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [NativeFact]
+    public async Task FindFirings_AReaderLimitedToADaySearchesThatDayOnly()
+    {
+        SetupReadingsByWindow(Reading(SearchNow.AddDays(-3), 60), Reading(SearchNow.AddHours(-2), 60));
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: true, CancellationToken.None);
+
+        result.SearchedFrom.Should().Be(SearchNow.AddDays(-1));
+        result.Firings.Should().Equal(new AlertFiring(SearchNow.AddHours(-2), AlertReplayEventKind.Fired));
+    }
+
+    [NativeFact]
+    public async Task FindFirings_OutOfTime_ReportsTheSpanItCovered()
+    {
+        SetupReadingsByWindow(Reading(SearchNow.AddDays(-3), 60));
+        var outOfTime = new AlertEvaluationOptions { FiringSearchBudget = TimeSpan.FromTicks(-1) };
+
+        var result = await FiringSearch(outOfTime).FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
+
+        result.SearchedFrom.Should().Be(SearchNow.AddDays(-1));
+        result.Firings.Should().BeEmpty();
+    }
+
+    [NativeFact]
+    public async Task FindFirings_NoReadings_SaysSo()
+    {
+        SetupReadingsByWindow();
+
+        var result = await FiringSearch().FindFiringsAsync(LowDraft(), lastDayOnly: false, CancellationToken.None);
+
+        result.HasReadings.Should().BeFalse();
+        result.Total.Should().Be(0);
     }
 }

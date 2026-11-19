@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode } from "#lib/api/index.js";
+import { MigrationJobState, MigrationMode, MigrationPhase } from "#lib/api/index.js";
 import type { MigrationJobInfo } from "#lib/api/index.js";
 
 let history: MigrationJobInfo[] = [];
@@ -16,6 +16,7 @@ const remote = vi.hoisted(() => ({
   status: {} as Record<string, unknown>,
   startResult: undefined as { id: string } | undefined,
   enhanceCallback: undefined as undefined | ((args: { submit: () => Promise<void> }) => Promise<void>),
+  onCancel: undefined as undefined | (() => void),
 }));
 
 // The factory is hoisted above every declaration in this file, so anything it evaluates eagerly
@@ -52,7 +53,10 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", async () => {
         return {};
       },
     },
-    cancelMigration: () => Promise.resolve(),
+    cancelMigration: () => {
+      remote.onCancel?.();
+      return Promise.resolve();
+    },
   };
 });
 
@@ -193,11 +197,16 @@ describe("settings/migration running job", () => {
     remote.status = {
       jobId: "22222222-2222-2222-2222-222222222222",
       state: MigrationJobState.Running,
-      progressPercentage: 42,
-      currentOperation: "Copying entries",
+      progressPercentage: 42.4242,
+      phase: MigrationPhase.Importing,
+      currentCollection: "entries",
+      collectionProgress: {
+        entries: { collectionName: "entries", totalDocuments: 1000, documentsMigrated: 424, progressPercentage: 42.4 },
+      },
     };
     remote.startResult = undefined;
     remote.enhanceCallback = undefined;
+    remote.onCancel = undefined;
   });
 
   it("renders the page with progress while the job is still running", async () => {
@@ -212,8 +221,55 @@ describe("settings/migration running job", () => {
 
     await expect.element(page.getByRole("tab", { name: /History/ })).toBeVisible();
     await page.getByRole("tab", { name: /Progress/ }).click();
-    await expect.element(page.getByText("Copying entries")).toBeVisible();
-    await expect.element(page.getByText("42%")).toBeVisible();
+    await expect.element(page.getByText("424 / 1,000 records")).toBeVisible();
+    await expect.element(page.getByText("42%").first()).toBeVisible();
+  });
+
+  // The server ends the run; the page has to stop showing it as running, or its Start button
+  // stays disabled until a reload.
+  it("shows a canceled run as ended", async () => {
+    history = [
+      entry({
+        id: "22222222-2222-2222-2222-222222222222",
+        state: MigrationJobState.Running,
+      }),
+    ];
+    remote.onCancel = () => {
+      remote.status = { ...remote.status, state: MigrationJobState.Cancelled, phase: undefined };
+    };
+
+    render(MigrationPage, {});
+    await page.getByRole("tab", { name: /Progress/ }).click();
+    await page.getByRole("button", { name: "Cancel migration" }).click();
+
+    await expect.element(page.getByText("Last migration")).toBeVisible();
+    await expect.element(page.getByText("Canceled")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Cancel migration" })).not.toBeInTheDocument();
+    await expect.element(page.getByText("Active", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("keeps a run that failed on the Progress tab with what went wrong", async () => {
+    history = [
+      entry({
+        id: "22222222-2222-2222-2222-222222222222",
+        state: MigrationJobState.Running,
+      }),
+    ];
+    remote.status = {
+      jobId: "22222222-2222-2222-2222-222222222222",
+      state: MigrationJobState.Completed,
+      hasFailures: true,
+      errorMessage: "1 of 2 collections imported, 1 failed.",
+      collectionProgress: {
+        treatments: { collectionName: "treatments", isComplete: true, failureReason: "Could not reach your Nightscout server." },
+      },
+    };
+
+    render(MigrationPage, {});
+    await page.getByRole("tab", { name: /Progress/ }).click();
+
+    await expect.element(page.getByText("1 of 2 collections imported, 1 failed.")).toHaveClass("text-destructive");
+    await expect.element(page.getByText("Could not reach your Nightscout server.")).toBeVisible();
   });
 
   it("switches to Progress as soon as a started job has an id", async () => {
@@ -228,7 +284,7 @@ describe("settings/migration running job", () => {
     await expect
       .element(page.getByRole("tab", { name: /Progress/ }))
       .toHaveAttribute("data-state", "active");
-    await expect.element(page.getByText("Copying entries")).toBeVisible();
+    await expect.element(page.getByText("424 / 1,000 records")).toBeVisible();
   });
 
   it("shows why the server refused to start the import", async () => {
@@ -293,8 +349,11 @@ describe("settings/migration running job", () => {
 
     render(MigrationPage, {});
 
-    await expect.element(page.getByText("Failed to read migration status")).toBeVisible();
-  });
+    await expect
+      .element(page.getByText("Failed to read migration status"), { timeout: 15000 })
+      .toBeVisible();
+    expect(remote.statusCalls).toBeGreaterThan(1);
+  }, 20000);
 });
 
 describe("settings/migration status", () => {

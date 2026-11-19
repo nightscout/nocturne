@@ -26,6 +26,7 @@ describe("visibleSettingsGroups", () => {
     expect(hrefs({ ...OWNER, isPlatformAdmin: true }).platform).toEqual([
       "/settings/admin",
       "/settings/admin/tenants",
+      "/settings/admin/invites",
       "/settings/access-requests",
       "/settings/admin/connector-cursors",
     ]);

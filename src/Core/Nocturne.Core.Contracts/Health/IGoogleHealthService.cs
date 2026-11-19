@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models.Health;
 using Nocturne.Core.Models;
 
@@ -75,7 +76,5 @@ public interface IGoogleHealthReadingWriter
     /// Counts the tenant's Google Health sleep sessions starting from <paramref name="since"/> on, or
     /// all of them when it is null. Returns null when there are none.
     /// </summary>
-    Task<GoogleHealthSleepStats?> DescribeSleepAsync(DateTime? since, DateTime last24Hours, CancellationToken ct);
+    Task<SleepSessionStats?> DescribeSleepAsync(DateTime? since, DateTime last24Hours, CancellationToken ct);
 }
-
-public sealed record GoogleHealthSleepStats(long Count, int CountLast24Hours, DateTime Latest, DateTime Oldest);

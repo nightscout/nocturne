@@ -1,3 +1,5 @@
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
@@ -32,6 +34,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public class AlertReplayServiceLeafLogTests
 {
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<IIobCalculator> _iobCalculator = new();
@@ -54,13 +58,14 @@ public class AlertReplayServiceLeafLogTests
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
 
         // The repo never returns null; default the DND-window fetch to empty (no DND).
-        _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
             new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
-                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, Mock.Of<ITherapyTimelineResolver>(), Mock.Of<IStateSpanRepository>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(),
+                TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
@@ -71,6 +76,8 @@ public class AlertReplayServiceLeafLogTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             new Mock<Nocturne.Core.Contracts.V4.Repositories.ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
@@ -87,6 +94,7 @@ public class AlertReplayServiceLeafLogTests
 
         _sut = new AlertReplayService(
             _alertRepository.Object,
+            _dndWindows.Object,
             _glucoseRepository.Object,
             enricher,
             _tenantAccessor.Object,

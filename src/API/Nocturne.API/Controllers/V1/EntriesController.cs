@@ -18,9 +18,12 @@ using Nocturne.Core.Contracts.Entries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Entries controller that provides 1:1 compatibility with Nightscout entries endpoints.
-/// Implements the /api/v1/entries/* endpoints from the legacy JavaScript implementation.
+/// Nightscout entries: sensor glucose, meter glucose and calibration documents. A client can read the current
+/// entry, query entries, and create, update and delete them.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/entries/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IDocumentProcessingService"/>
 /// <seealso cref="IAlertOrchestrator"/>
@@ -273,8 +276,8 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        // Nightscout returns an empty array for count=0 or a negative count.
-        if (count is <= 0)
+        count = LegacyReadLimits.ZeroAsAbsent(count);
+        if (count is < 0)
         {
             return [];
         }

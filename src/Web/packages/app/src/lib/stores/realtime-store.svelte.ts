@@ -82,7 +82,10 @@ import {
 } from "#lib/api/pills-processor.js";
 import { isEntryDocument, isRecordDocument } from "#lib/websocket/payloads.js";
 import { isRecord } from "#lib/utils/type-guards.js";
-import { SyncPhase } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  SyncPhase,
+  type V4BasalInjectionStatus,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import {
@@ -298,9 +301,18 @@ export class RealtimeStore {
   notes = $state.raw<Note[]>([]);
   deviceEvents = $state.raw<DeviceEvent[]>([]);
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
+  /** Server-calculated IOB for the IOB pill's fallback, set by the authenticated layout. */
+  calculatedIob = $state<number | undefined>();
+  /** Server-calculated COB for the COB pill's fallback, set by the authenticated layout. */
+  calculatedCob = $state<number | undefined>();
+  /** Server-read last long-acting dose for the Basal pill, set by the authenticated layout. */
+  calculatedBasalInjection = $state<V4BasalInjectionStatus | undefined>();
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
+
+  /** Latest battery voltage of the uploader's link to the pump, null when none is reported. */
+  currentLinkBatteryVoltage = $state<number | null>(null);
 
   /** Glucose thresholds in force now, from the current therapy state; null until its first load. */
   chartThresholds = $state.raw<ChartThresholdsDto | null>(null);
@@ -404,7 +416,12 @@ export class RealtimeStore {
       this.boluses,
       this.carbIntakes,
       this.profile,
-      { units: "mg/dL" }
+      {
+        units: "mg/dL",
+        calculatedIob: this.calculatedIob,
+        calculatedCob: this.calculatedCob,
+        basalInjection: this.calculatedBasalInjection,
+      }
     );
   });
 
@@ -539,6 +556,7 @@ export class RealtimeStore {
         }
         if (currentTherapyState) {
           this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.currentLinkBatteryVoltage = currentTherapyState.linkBatteryVoltage ?? null;
           this.chartThresholds = currentTherapyState.thresholds ?? null;
         }
         this.currentReadingLoaded = true;
@@ -1324,6 +1342,7 @@ export class RealtimeStore {
     try {
       const therapyState = await currentTherapyStateClient().getCurrentTherapyState();
       this.currentReservoir = therapyState?.reservoir ?? null;
+      this.currentLinkBatteryVoltage = therapyState?.linkBatteryVoltage ?? null;
       this.chartThresholds = therapyState?.thresholds ?? null;
     } catch {
       // Non-critical — the reservoir pill and thresholds keep their last values until the next refresh.

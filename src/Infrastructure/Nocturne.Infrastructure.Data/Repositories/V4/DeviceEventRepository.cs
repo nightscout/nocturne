@@ -18,8 +18,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <summary>
 /// Repository for managing device event records in the database. A deduplication participant on
 /// top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
-/// the extended <c>GetAsync</c> (duplicate filter), the read-visibility filter behind
-/// <c>CountAsync</c> and the event-type query helpers.
+/// the <c>GetAsync</c> overload that adds a patient device to the base read and the event-type query helpers.
 /// </summary>
 public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
@@ -128,6 +127,16 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceEvents.IncludingDeleted().AsNoTracking()
+            .Where(e => ids.Contains(e.Id))
+            .ToListAsync(ct);
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceEvent>> GetUserDeletedAsync(
         DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default)
     {
@@ -150,16 +159,6 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     protected override void ApplyUpdate(DeviceEventEntity target, DeviceEvent source) => DeviceEventMapper.UpdateEntity(target, source);
 
     /// <summary>
-    /// Routes the base 7-arg form through the extended device-event query (duplicate
-    /// filter + ordering), preserving the pre-base default-interface bridge behaviour.
-    /// </summary>
-    public override Task<IEnumerable<DeviceEvent>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-        => GetAsync(from, to, device, source, limit, offset, descending, patientDeviceId: null, ct: ct);
-
-    /// <summary>
     /// Gets device event records based on filter criteria.
     /// Hides the non-primary copies of duplicate groups.
     /// </summary>
@@ -171,6 +170,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single registered patient device.</param>
+    /// <param name="eventTypes">Optional filter restricting results to events of any of these types.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of device events.</returns>
     public async Task<IEnumerable<DeviceEvent>> GetAsync(
@@ -182,46 +182,47 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         int offset = 0,
         bool descending = true,
         Guid? patientDeviceId = null,
+        IReadOnlyCollection<DeviceEventType>? eventTypes = null,
         CancellationToken ct = default
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.DeviceEvents.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null)
-            query = query.Where(e => e.Device == device);
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        if (patientDeviceId.HasValue)
-            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
-
-        query = query.ExcludeDuplicates();
-
-        query = query.InObservationOrder(descending);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
+        var entities = await PagedRead(
+            ctx.DeviceEvents.AsNoTracking(), from, to, device, source, limit, offset, descending,
+            query => WithAttribution(query, patientDeviceId, eventTypes))
+            .ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
     }
 
-    /// <summary>
-    /// Gets device event records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of device events.</returns>
-    public async Task<IEnumerable<DeviceEvent>> GetByCorrelationIdAsync(
-        Guid correlationId,
+    /// <inheritdoc />
+    public async Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        IReadOnlyCollection<DeviceEventType>? eventTypes,
         CancellationToken ct = default
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .DeviceEvents.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(DeviceEventMapper.ToDomainModel);
+        return await Matching(
+            ctx.DeviceEvents.AsNoTracking(), from, to, device, source,
+            query => WithAttribution(query, patientDeviceId, eventTypes))
+            .CountAsync(ct);
+    }
+
+    private static IQueryable<DeviceEventEntity> WithAttribution(
+        IQueryable<DeviceEventEntity> query, Guid? patientDeviceId, IReadOnlyCollection<DeviceEventType>? eventTypes)
+    {
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+        if (eventTypes is { Count: > 0 })
+        {
+            var names = eventTypes.Select(t => t.ToString()).ToList();
+            query = query.Where(e => names.Contains(e.EventType));
+        }
+        return query;
     }
 
     /// <summary>

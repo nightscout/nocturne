@@ -81,7 +81,7 @@ internal static class ActiveSchedule
         CancellationToken ct)
         where TRecord : class, IV4Record, IProfileScoped
     {
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+        var timestamp = timeMills.ToUtcDateTime();
         var entries = snapshot is not null
             ? snapshotEntries(snapshot)
             : await versions.GetActiveAtAsync(repo, profileName, timestamp, ct) is { } stored ? storedEntries(stored) : null;

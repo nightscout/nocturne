@@ -311,27 +311,6 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
 
     private static readonly TimeSpan StampBatch = TimeSpan.FromDays(7);
 
-    /// <summary>
-    /// Gets APS snapshots by correlation IDs.
-    /// </summary>
-    /// <param name="correlationIds">The correlation IDs to match.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching APS snapshots.</returns>
-    public async Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
-    {
-        var ids = correlationIds.ToList();
-        if (ids.Count == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.ApsSnapshots
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-
-        return entities.Select(ApsSnapshotMapper.ToDomainModel);
-    }
-
     /// <inheritdoc />
     public async Task<DateTime?> GetLatestTimestampAsOfAsync(DateTime? asOf, CancellationToken ct = default)
     {

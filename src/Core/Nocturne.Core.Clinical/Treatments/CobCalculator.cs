@@ -316,8 +316,8 @@ public class CobCalculator(
     {
         var (from, to) = DeviceReportedValues.Window(time, live);
         var aps = (await apsSnapshotRepo.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            to: DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            from: from.ToUtcDateTime(),
+            to: to.ToUtcDateTime(),
             device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
             .Select(s => new DeviceReading(
                 s.Timestamp.ToMills(), DeviceSource.Aps, s.Iob, s.Cob,

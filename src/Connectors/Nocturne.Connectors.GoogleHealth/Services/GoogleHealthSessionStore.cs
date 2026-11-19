@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Core.Contracts.Connectors;
@@ -223,7 +224,7 @@ public sealed class GoogleHealthSessionStore(
         {
             return false;
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
         {
             return false;
         }

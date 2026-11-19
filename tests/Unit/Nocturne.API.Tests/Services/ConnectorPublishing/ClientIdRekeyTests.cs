@@ -141,7 +141,7 @@ public class ClientIdRekeyTests : IDisposable
         var span = new StateSpanEntity
         {
             Id = Guid.CreateVersion7(), TenantId = _context.TenantId, Category = "Override", State = "Active",
-            StartTimestamp = MealAt, Source = Source, OriginalId = TrioId, DeletedAt = DateTime.UtcNow,
+            StartTimestamp = MealAt, Source = Source, LegacyId = TrioId, DeletedAt = DateTime.UtcNow,
         };
         _context.StateSpans.Add(span);
         _context.Entry(span).Property("DeletedByUser").CurrentValue = true;
@@ -158,7 +158,7 @@ public class ClientIdRekeyTests : IDisposable
 
         var spans = await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().ToListAsync();
         spans.Should().OnlyContain(s => s.DeletedAt != null);
-        spans.Select(s => s.OriginalId).Should().BeEquivalentTo([TrioId, ObjectIdA, ObjectIdB, ObjectIdC]);
+        spans.Select(s => s.LegacyId).Should().BeEquivalentTo([TrioId, ObjectIdA, ObjectIdB, ObjectIdC]);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class ClientIdRekeyTests : IDisposable
         var calculations = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()), bolus, EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(), carbs, bgChecks, notes, deviceEvents, calculations,
             Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(), new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance,

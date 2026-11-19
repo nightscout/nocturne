@@ -89,8 +89,7 @@ public class OAuthClientRepository : IOAuthClientRepository
             await db.LockForTransactionAsync(SoftwareClientLockClass, tenantId, token);
 
             var entity = await db.OAuthClients
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.SoftwareId == softwareId, token);
+                .FirstOrDefaultAsync(c => c.SoftwareId == softwareId, token);
 
             if (entity is null)
             {

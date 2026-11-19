@@ -102,6 +102,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.HomeAssistant\Nocturne.Connectors.HomeAssistant.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.NocturneRemote\Nocturne.Connectors.NocturneRemote.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Oura\Nocturne.Connectors.Oura.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Twiist\Nocturne.Connectors.Twiist.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.CareLink\Nocturne.Connectors.CareLink.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tandem\Nocturne.Connectors.Tandem.csproj" />

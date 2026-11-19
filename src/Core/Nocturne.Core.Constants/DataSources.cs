@@ -59,6 +59,11 @@ public static class DataSources
     public const string GoogleHealthConnector = "google-health-connector";
 
     /// <summary>
+    /// Data imported from an Oura data export archive.
+    /// </summary>
+    public const string OuraConnector = "oura-connector";
+
+    /// <summary>
     /// Data fetched from Glooko API via the Glooko connector.
     /// </summary>
     public const string GlookoConnector = "glooko-connector";

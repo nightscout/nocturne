@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     ServiceNames.LibreConnector,
     "LIBRE",
     "ConnectSource.LibreLinkUp",
-    "libre-connector",
+    DataSources.LibreConnector,
     "libre",
     ConnectorCategory.Cgm,
     "Connect to LibreView for CGM data",

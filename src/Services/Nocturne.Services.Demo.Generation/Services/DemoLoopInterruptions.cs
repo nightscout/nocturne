@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 namespace Nocturne.Services.Demo.Services;
 
 /// <summary>What the sample loop is doing at a moment of the history.</summary>
@@ -51,9 +52,9 @@ public static class DemoLoopInterruptions
         var day = localDay.Date;
         var interruptions = new List<Interruption>();
 
-        if (DemoDeviceLifecycle.ChangeTimeOn(day, "Site Change") is { } siteChange)
+        if (DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SiteChange) is { } siteChange)
             interruptions.Add(new(DemoLoopState.SiteChange, siteChange, siteChange + SiteChangeLength));
-        if (DemoDeviceLifecycle.ChangeTimeOn(day, "Sensor Start") is { } sensorStart)
+        if (DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart) is { } sensorStart)
             interruptions.Add(new(DemoLoopState.SensorWarmUp, sensorStart, sensorStart + SensorWarmUpLength));
         if (ManualModeWindow(day, seedEnd) is { } manual)
             interruptions.Add(new(DemoLoopState.Manual, manual.Start, manual.End));

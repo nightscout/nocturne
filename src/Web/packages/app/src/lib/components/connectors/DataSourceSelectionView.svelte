@@ -44,8 +44,10 @@
     onSkip,
   }: Props = $props();
 
+  // Each of these is set up on its own page, not through the credential form this view leads to.
+  const SET_UP_ELSEWHERE = new Set(["googlehealth", "oura"]);
   const offeredConnectors = $derived(
-    connectors.filter((connector) => connector.id !== "googlehealth"),
+    connectors.filter((connector) => !SET_UP_ELSEWHERE.has(connector.id ?? "")),
   );
 
   type PlatformFilter = "all" | UploaderPlatform;

@@ -82,7 +82,7 @@ public class MetadataPublisherTests
             new ActivityDedupRepository(contexts),
             new ConnectorConfigurationRepository(contexts),
             Mock.Of<IProfileActivationRepository>(),
-            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance
@@ -167,7 +167,7 @@ public class MetadataPublisherTests
 
         result.Should().BeTrue();
         _mockFoodService.Verify(
-            s => s.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()),
+            s => s.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), FoodWriteMode.Native, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }

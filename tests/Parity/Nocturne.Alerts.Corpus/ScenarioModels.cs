@@ -136,6 +136,10 @@ public sealed record ScenarioContext
     [JsonPropertyName("pump_battery_percent")] public decimal? PumpBatteryPercent { get; init; }
     [JsonPropertyName("active_temp_basal")] public ScenarioTempBasal? ActiveTempBasal { get; init; }
     [JsonPropertyName("uploader_battery_percent")] public decimal? UploaderBatteryPercent { get; init; }
+    [JsonPropertyName("transmitter_voltage_a")] public decimal? TransmitterVoltageA { get; init; }
+    [JsonPropertyName("transmitter_voltage_b")] public decimal? TransmitterVoltageB { get; init; }
+    [JsonPropertyName("transmitter_resistance")] public decimal? TransmitterResistance { get; init; }
+    [JsonPropertyName("transmitter_days")] public decimal? TransmitterDays { get; init; }
     [JsonPropertyName("active_override")] public ScenarioStartedSpan? ActiveOverride { get; init; }
     [JsonPropertyName("active_pump_suspension")] public ScenarioStartedSpan? ActivePumpSuspension { get; init; }
     [JsonPropertyName("sensitivity_ratio")] public decimal? SensitivityRatio { get; init; }

@@ -10,7 +10,7 @@
     const SUPPORTING = [
         {
             title: "Your server, your data",
-            copy: "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure.",
+            copy: "Self-hosted with one install script, or with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure.",
         },
         {
             title: "One install, many people",
@@ -139,7 +139,7 @@
     <section class="border-t border-border py-20 max-w-[680px]">
         <h2 class="text-headline font-bold text-foreground m-0 mb-4">Start with the demo</h2>
         <p class="text-lead text-muted-foreground m-0 mb-8">
-            Poke around the demo, then run your own copy with Docker Compose.
+            Poke around the demo, then run your own copy with one install script.
             No account, no credit card, no waitlist.
         </p>
         <div class="flex flex-wrap gap-3">

@@ -200,7 +200,7 @@ internal static class ProfileActivationLegacyFields
         var endMills = span.OriginalEnd is { } originalEnd && originalEnd > startMills
             ? originalEnd
             : startMills + span.OriginalDuration.Value;
-        return DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+        return endMills.ToUtcDateTime();
     }
 
     /// <remarks>

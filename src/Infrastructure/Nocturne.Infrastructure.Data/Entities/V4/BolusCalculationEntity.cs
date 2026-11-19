@@ -8,12 +8,17 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BolusCalculation
 /// </summary>
 [Table("bolus_calculations")]
-public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerprinted, IDuplicateFlagged
+public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
 {
     /// <inheritdoc />
     [AuditIgnored]
     [Column("is_duplicate")]
     public bool IsDuplicate { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
 
     /// <inheritdoc />
     [AuditIgnored]

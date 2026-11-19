@@ -15,10 +15,13 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// The alarms a public clock face shows, for a face whose owner turned on
-/// <see cref="ClockSettings.ShowAlerts"/>.
+/// Alerts shown on a public clock face whose owner has chosen to show them. Read the alerts, and
+/// record that someone at the clock saw an alert. Recording this does not acknowledge or mute the
+/// alert. These endpoints need no sign-in: the id of the clock face gives access.
 /// </summary>
 /// <remarks>
+/// Shown when <see cref="ClockSettings.ShowAlerts"/> is on for the face.
+///
 /// The clock id is the capability, as for <see cref="ClockFacesController.GetGlucose"/>: a caller
 /// holding a valid id for the host's tenant gets what the face is set to show, read under tenant
 /// RLS as a reader who is not a share. The face serves alerts only while its owner may still read

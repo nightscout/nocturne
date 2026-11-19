@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
@@ -91,6 +92,30 @@ public class TandemAuthTokenProviderRetryTests
         provider.IsTokenExpired.Should().BeFalse();
         clock.Advance(TimeSpan.FromSeconds(2));
         provider.IsTokenExpired.Should().BeTrue();
+    }
+
+    /// <summary>
+    ///     A sync that could not sign in tells the tenant what the provider learned about why, rather
+    ///     than a bare "Authentication failed".
+    /// </summary>
+    [Fact]
+    public async Task Sync_LoginRefused_ReportsTheProvidersSignInReason()
+    {
+        var handler = new TandemLoginHandler { LoginStatus = HttpStatusCode.Unauthorized };
+        using var httpClient = new HttpClient();
+        using var provider = ProviderFor(handler, httpClient, TimeProvider.System);
+        var service = new TandemConnectorService(
+            new HttpClient(handler, disposeHandler: false),
+            new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
+            NullLogger<TandemConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            provider);
+
+        var result = await service.SyncDataAsync(new SyncRequest(), SignInConfig(3), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be(provider.SignInFailureReason);
+        result.Errors.Should().ContainSingle().Which.Should().Be(provider.SignInFailureReason);
     }
 
     private static async Task<string?> AuthenticateAsync(

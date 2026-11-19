@@ -12,6 +12,8 @@ using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -153,17 +155,38 @@ public class LegacyReadCountCapTests
         observedCount.Should().Be(expected);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public async Task Treatments_ExplicitNonPositiveCount_ReturnsEmptyWithoutQuerying(int requested)
+    [Fact]
+    public async Task Treatments_NegativeCount_ReturnsEmptyWithoutQuerying()
     {
         var treatmentService = new Mock<ITreatmentService>(MockBehavior.Strict);
         var controller = CreateTreatmentsController(treatmentService.Object, new DefaultHttpContext());
 
-        var result = await controller.GetTreatments(count: requested);
+        var result = await controller.GetTreatments(count: -1);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<Treatment[]>().Which.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("?find[eventType]=Meal Bolus")]
+    public async Task Treatments_ZeroCount_PassesNullSoTheServiceAppliesItsDefault(string? query)
+    {
+        int? observedCount = -1;
+        var treatmentService = new Mock<ITreatmentService>();
+        treatmentService
+            .Setup(x => x.GetTreatmentsAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .Callback((string? _, int? count, int? _, CancellationToken _) => observedCount = count)
+            .ReturnsAsync(Array.Empty<Treatment>());
+        var httpContext = new DefaultHttpContext();
+        if (query is not null)
+        {
+            httpContext.Request.QueryString = new QueryString(query);
+        }
+        var controller = CreateTreatmentsController(treatmentService.Object, httpContext);
+
+        await controller.GetTreatments(count: 0);
+
+        observedCount.Should().BeNull();
     }
 
     [Fact]
@@ -209,11 +232,11 @@ public class LegacyReadCountCapTests
                     It.IsAny<string?>(),
                     It.IsAny<int?>(),
                     It.IsAny<int?>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (string? _, int? count, int? _, CancellationToken _) => observedCount = count
+                (string? _, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) => observedCount = count
             )
             .ReturnsAsync(Array.Empty<Activity>());
 
@@ -224,20 +247,30 @@ public class LegacyReadCountCapTests
         observedCount.Should().Be(expected);
     }
 
-    /// <summary>
-    /// Zero and negative counts answer an empty array without reaching the service, matching the
-    /// Nightscout behaviour treatments and devicestatus already implement. Before this handling a
-    /// negative count reached <c>Take(-1)</c>.
-    /// </summary>
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public async Task Activity_ReturnsEmptyWithoutReadingForANonPositiveCount(int requested)
+    [Fact]
+    public async Task Activity_ZeroCount_ReadsTheSamePageAsAnAbsentCount()
+    {
+        var observed = new List<int?>();
+        var activityService = new Mock<IActivityService>();
+        activityService
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Callback((string? _, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) => observed.Add(count))
+            .ReturnsAsync(Array.Empty<Activity>());
+        var controller = NewActivityController(activityService.Object);
+
+        await controller.GetActivities(count: null);
+        await controller.GetActivities(count: 0);
+
+        observed.Should().Equal(AtMergedCap, AtMergedCap);
+    }
+
+    [Fact]
+    public async Task Activity_ReturnsEmptyWithoutReadingForANegativeCount()
     {
         var activityService = new Mock<IActivityService>(MockBehavior.Strict);
         var controller = NewActivityController(activityService.Object);
 
-        var result = await controller.GetActivities(count: requested);
+        var result = await controller.GetActivities(count: -1);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Subject.Value.Should().BeAssignableTo<IEnumerable<Activity>>()
@@ -267,11 +300,11 @@ public class LegacyReadCountCapTests
                     It.IsAny<string?>(),
                     It.IsAny<int?>(),
                     It.IsAny<int?>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (string? _, int? count, int? _, CancellationToken _) => observedCount = count
+                (string? _, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) => observedCount = count
             )
             .ReturnsAsync(Array.Empty<Activity>());
 
@@ -338,6 +371,106 @@ public class LegacyReadCountCapTests
         await controller.GetDeviceStatus(count: requested);
 
         observedLimit.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task DeviceStatus_ZeroCount_ReadsTheDefaultPage()
+    {
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        int? observedLimit = null;
+        deviceStatuses
+            .Setup(x =>
+                x.GetDeviceStatusesAsync(
+                    It.IsAny<FindQuery>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<ReadSortField>()
+                )
+            )
+            .Callback(
+                (FindQuery _, int limit, int _, CancellationToken _, bool _, ReadSortField _) =>
+                    observedLimit = limit
+            )
+            .ReturnsAsync([]);
+        var controller = new DeviceStatusController(
+            deviceStatuses.Object,
+            TimeProvider.System,
+            Mock.Of<ILogger<DeviceStatusController>>()
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
+        await controller.GetDeviceStatus(count: 0);
+
+        observedLimit.Should().Be(10);
+    }
+
+    [Theory]
+    [InlineData(false, 0, 10)]
+    [InlineData(false, -1, 1)]
+    [InlineData(true, 0, 10)]
+    [InlineData(true, -1, 1)]
+    public async Task Profile_ReadsTheDefaultPageForZeroAndOneProfileForANegativeCount(
+        bool history,
+        int requested,
+        int expected
+    )
+    {
+        var projection = new Mock<IProfileProjectionService>();
+        var observed = new List<int>();
+        projection
+            .Setup(x => x.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback((int count, int _, bool _, CancellationToken _) => observed.Add(count))
+            .ReturnsAsync(Enumerable.Range(0, 15).Select(_ => new Profile()).ToArray());
+        var controller = new ProfileController(
+            projection.Object,
+            Mock.Of<IProfileWriteService>(),
+            Mock.Of<ILogger<ProfileController>>()
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
+        if (history)
+        {
+            var result = await controller.GetProfileHistory(count: requested);
+            result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<Profile[]>().Which.Should().HaveCount(expected);
+        }
+        else
+        {
+            await controller.GetProfiles(count: requested);
+            observed.Should().Equal(expected);
+        }
+    }
+
+    [Fact]
+    public async Task TimesAndSlice_ZeroCount_ReturnTheDefaultPage()
+    {
+        var entries = Enumerable.Range(0, 15)
+            .Select(i => new Entry { Mills = 1_700_000_000_000 + i, Type = "sgv" })
+            .ToArray();
+        var timeQuery = new Mock<ITimeQueryService>();
+        timeQuery
+            .Setup(x => x.ExecuteTimeQueryAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+        timeQuery
+            .Setup(x => x.ExecuteSliceQueryAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+        var controller = new TimeQueryController(timeQuery.Object, Mock.Of<ILogger<TimeQueryController>>())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+        controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)
+            new HashSet<string> { Scope.GlucoseRead };
+
+        var times = await controller.GetTimeBasedEntriesWithPrefix("2023", count: 0);
+        var slice = await controller.GetSlicedData("entries", "dateString", count: 0);
+
+        times.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<Entry[]>().Which.Should().HaveCount(10);
+        slice.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<Entry[]>().Which.Should().HaveCount(10);
     }
 
     private static ActivityController NewActivityController(IActivityService activityService)

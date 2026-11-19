@@ -8,9 +8,8 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Status controller that provides extended status information with permissions and authorization.
-/// Returns system status in the Nightscout V3 format including authorization details, permissions,
-/// available collections, and supported API versions.
+/// Nightscout V3 status: the system status, including authorization details, permissions, available collections
+/// and supported API versions.
 /// </summary>
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="V3StatusResponse"/>
@@ -69,7 +68,8 @@ public class StatusController : ControllerBase
                     {
                         Status = "error",
                         Name = "Nocturne",
-                        Version = AppVersion.Current,
+                        Version = ApplicationConstants.NightscoutApi.CompatibleVersion,
+                        NocturneVersion = AppVersion.Current,
                         ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
                         ServerTime = DateTime.UtcNow,
                         Extended = new ExtendedStatusInfo

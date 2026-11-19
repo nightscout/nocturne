@@ -137,7 +137,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         var foodList = foods.ToList();
         try
         {
-            await _foodService.CreateFoodAsync(foodList, cancellationToken);
+            await _foodService.CreateFoodAsync(foodList, FoodWriteMode.Native, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -232,7 +232,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            activities, a => a.Id,
+            activities,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
             ids => _activityDedup.GetHeldIdsAsync(ids, cancellationToken));

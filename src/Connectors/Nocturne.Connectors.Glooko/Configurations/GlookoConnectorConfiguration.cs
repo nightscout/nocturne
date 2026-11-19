@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     ServiceNames.GlookoConnector,
     "GLOOKO",
     "ConnectSource.Glooko",
-    "glooko-connector",
+    DataSources.GlookoConnector,
     "glooko",
     ConnectorCategory.Sync,
     "Import data from Glooko platform",
@@ -87,7 +87,8 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     public bool AutoClockCorrection { get; set; } = false;
 
     /// <summary>
-    ///     How many days back a background sync reaches. Glooko receives pump data in batches, days
+    ///     How many days back a background sync reaches once per <see cref="GlookoConstants.LookbackReadInterval"/>;
+    ///     the runs between read <see cref="GlookoConstants.ShortWindow"/>. Glooko receives pump data in batches, days
     ///     after the fact, so the window is a fixed lookback rather than a resume point at the newest
     ///     stored record; anything that arrives later than this is picked up by the daily full walk
     ///     over <see cref="GlookoConstants.FullWalkMonths"/>. Ten days plus the one-day padding on

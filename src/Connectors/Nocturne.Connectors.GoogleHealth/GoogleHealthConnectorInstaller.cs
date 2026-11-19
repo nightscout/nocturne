@@ -15,9 +15,7 @@ public sealed class GoogleHealthConnectorInstaller : IConnectorInstaller
 
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddConnectorConfiguration<GoogleHealthConnectorConfiguration>(
-            configuration,
-            GoogleHealthConnectorService.ConnectorName);
+        services.AddConnectorConfiguration<GoogleHealthConnectorConfiguration>(configuration);
         services.AddSingleton<IConnectorServerResolver<GoogleHealthConnectorConfiguration>>(
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null));
         services.AddScoped<ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();

@@ -27,6 +27,18 @@ public static class TreatmentClientId
             ? new() { [Field] = id }
             : null;
 
+    public static void KeepInMetadata(Dictionary<string, object> metadata, Treatment treatment)
+    {
+        if (Present(treatment.AdditionalProperties?.GetValueOrDefault(Field)) is { } id)
+            metadata[Field] = id;
+    }
+
+    public static void RestoreFromMetadata(Treatment treatment, IDictionary<string, object>? metadata)
+    {
+        if (metadata is not null && metadata.TryGetValue(Field, out var stored) && Present(stored) is { } id)
+            (treatment.AdditionalProperties ??= new())[Field] = id;
+    }
+
     /// <summary>
     /// Gives <paramref name="update"/> the client id <paramref name="stored"/> holds when the update
     /// names none, so a replace that omits the field does not strand the record from its client.

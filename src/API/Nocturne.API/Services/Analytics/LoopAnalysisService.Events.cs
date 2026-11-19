@@ -77,11 +77,11 @@ internal sealed partial class LoopAnalysisService
     {
         var padded = new Window(range.From - lookbackMs, range.To + window.AfterMs + EventMarginMs);
         var sleepTask = reads.Sleep
-            ? sleepSessionRepository.GetSessionsAsync(ToUtc(range.From), ToUtc(range.To), limit: int.MaxValue, descending: false, cancellationToken: ct)
+            ? sleepSessionRepository.GetSessionsAsync(range.From.ToUtcDateTime(), range.To.ToUtcDateTime(), limit: int.MaxValue, descending: false, cancellationToken: ct)
             : Task.FromResult(Enumerable.Empty<SleepSession>());
         var sensorTask = reads.SensorStarts || reads.SiteChanges
             ? deviceEventRepository.GetAsync(
-                ToUtc(range.From - EventAnchors.SensorSessionMergeMs), ToUtc(range.To), null, null, int.MaxValue, descending: false, ct: ct)
+                (range.From - EventAnchors.SensorSessionMergeMs).ToUtcDateTime(), range.To.ToUtcDateTime(), null, null, int.MaxValue, descending: false, ct: ct)
             : Task.FromResult(Enumerable.Empty<Core.Models.V4.DeviceEvent>());
         var loaded = await LoadDailyProfileAsync(padded, zone, filter, ct);
         var foods = mealFoods ? await MealFoodsAsync(loaded.CarbIntakes, range, ct) : new Dictionary<long, IReadOnlyList<MealFood>>();

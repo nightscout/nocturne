@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { setupBridge } from "@nocturne/bridge";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { KIT_CSP } from "./src/lib/server/content-security-policy";
 import manifest from "./package.json" with { type: "json" };
 
 // @resend/chat-sdk-adapter (via @nocturne/bot) renders email cards with React
@@ -37,6 +38,7 @@ const reactAliases = {
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
 import { wuchale } from 'wuchale/vite'
+import { privateDevCatalogue } from './wuchale.dev.js'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -93,6 +95,8 @@ export default defineConfig(({ mode }) => {
         adapter: adapter({ out: "build", precompress: true }),
         // Turns off SvelteKit's form origin check; csrfHandle in hooks.server.ts runs it instead.
         csrf: { trustedOrigins: ["*"] },
+        // The dev server's HMR client needs inline scripts, eval and its own socket.
+        ...(mode === "development" ? {} : { csp: KIT_CSP }),
         experimental: { remoteFunctions: true },
         tracing: { server: true },
       }),
@@ -101,9 +105,7 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
-      // A .po write is source-triggered (no full reload) only while it lands within this many ms
-      // of the extraction that caused it; extraction across every locale takes longer than the
-      // 1000 ms default, so each later write reloaded the whole app.
+      privateDevCatalogue('app'),
       wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {

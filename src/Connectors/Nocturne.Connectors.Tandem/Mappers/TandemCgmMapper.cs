@@ -39,7 +39,7 @@ public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
             {
                 Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                UtcOffset = _time.OffsetMinutes,
+                UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
                 DataSource = TandemMapHelpers.Source,
                 SyncIdentifier = $"tandem_cgm_{ev.SeqNum}",

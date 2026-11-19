@@ -124,7 +124,7 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
     }
 
     [Fact]
-    public async Task A_share_gets_its_reason_and_no_curves()
+    public async Task A_share_gets_the_tenants_clock_and_no_curves()
     {
         await SeedProfileAsync("Australia/Sydney");
         await SeedWeekAsync(WeekStart, predicted: 130);
@@ -132,7 +132,7 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
 
         var body = await GetOkAsync(share, Query(Week));
 
-        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("Share");
+        Absent(body, "timeZoneUnavailableReason").Should().BeTrue();
         body.GetProperty("primary").GetProperty("curves").GetArrayLength().Should().Be(0);
     }
 

@@ -13,11 +13,12 @@ using Nocturne.API.Services.Caching;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for temporary basal rate spans.
-/// Provides read access plus a bulk write endpoint for native uploaders (e.g. Trio) —
-/// previously temp basals were only written by the legacy v1 treatment decomposer and connectors.
+/// Temporary basal insulin rates, each with a start and end time. Read temp basals, and write them in bulk.
 /// </summary>
 /// <remarks>
+/// Read access plus a bulk write endpoint for native uploaders. Previously temp basals were only written by the
+/// legacy v1 treatment decomposer and connectors.
+///
 /// Temp basals are span records (<see cref="TempBasal.StartTimestamp"/>/<see cref="TempBasal.EndTimestamp"/>),
 /// not point events. The write endpoint accepts both new spans and cancels: a cancel truncates the
 /// span active at its timestamp. Overlapping spans are not auto-truncated on create — the basal
@@ -27,6 +28,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="TempBasal"/>
 /// <seealso cref="CreateTempBasalRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Temp Basals")]
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
 [Produces("application/json")]
@@ -50,7 +52,7 @@ public class TempBasalController(
     /// <param name="sort">Order by span time: `timestamp_desc` or `timestamp_asc`. Defaults to `timestamp_desc`.</param>
     /// <param name="device">Return only spans from this device.</param>
     /// <param name="source">Return only spans from this data source.</param>
-    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet]
     [RequireScope(Scope.TreatmentsRead)]
@@ -65,15 +67,11 @@ public class TempBasalController(
         [FromQuery] bool includeTotal = false,
         CancellationToken ct = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = (await repo.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, ct));
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, device, source, ct));
         return Ok(new PaginatedResponse<TempBasal> { Data = data, Pagination = pagination });
     }
 

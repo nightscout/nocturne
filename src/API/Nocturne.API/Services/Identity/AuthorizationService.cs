@@ -171,6 +171,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             Sub = subject.Name,
             Iat = now.ToUnixTimeSeconds(),
             Exp = exp.ToUnixTimeSeconds(),
+            PermissionGroups = [[.. ScopeTranslator.ToPermissions(grant.Scopes).Order(StringComparer.Ordinal)]],
         };
     }
 

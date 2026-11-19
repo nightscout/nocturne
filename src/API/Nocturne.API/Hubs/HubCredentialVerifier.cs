@@ -24,6 +24,7 @@ namespace Nocturne.API.Hubs;
 /// lifetime says nothing about whether the access behind it does.
 /// </param>
 /// <param name="SessionId">The refresh-token family a session login belongs to.</param>
+/// <param name="CredentialFingerprint">The audit fingerprint of the credential, when it has one.</param>
 public sealed record HubCredentialSource(
     AuthType AuthType,
     Guid? SubjectId,
@@ -31,7 +32,8 @@ public sealed record HubCredentialSource(
     IReadOnlySet<string> CredentialScopes,
     bool LimitTo24Hours,
     DateTimeOffset? ExpiresAt,
-    string? SessionId = null);
+    string? SessionId = null,
+    string? CredentialFingerprint = null);
 
 /// <summary>
 /// The tenants an <see cref="OverviewHub"/> connection was admitted to, and the credential that

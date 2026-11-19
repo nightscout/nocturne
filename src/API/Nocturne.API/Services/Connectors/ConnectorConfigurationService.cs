@@ -343,6 +343,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default)
+    {
+        var configType = FindConfigurationType(connectorName, _logger);
+        return Task.FromResult<IReadOnlyDictionary<string, Type>?>(configType is null ? null : ConnectorConfigurationBinder.BoundKeyTypes(configType));
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default)
     {
         var allConnectors = ConnectorMetadataService.GetAll();
@@ -725,6 +732,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         if (connectorAttr.AllowedValues != null && connectorAttr.AllowedValues.Length > 0)
         {
             schema["enum"] = connectorAttr.AllowedValues;
+        }
+
+        if (connectorAttr.AllowedNumbers is { Length: > 0 })
+        {
+            schema["enum"] = connectorAttr.AllowedNumbers;
         }
 
         if (!string.IsNullOrEmpty(connectorAttr.Format))

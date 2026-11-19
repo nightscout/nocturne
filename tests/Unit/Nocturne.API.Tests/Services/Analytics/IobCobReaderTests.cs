@@ -26,12 +26,28 @@ public class IobCobReaderTests
     private readonly List<Bolus> _storedBoluses = [];
     private readonly List<TempBasal> _storedTempBasals = [];
     private readonly List<CarbIntake> _storedCarbs = [];
+    private readonly Mock<ITherapyTimelineResolver> _timelines = new();
+    private readonly Mock<IStateSpanRepository> _stateSpans = MockStateSpans.Empty();
+    private readonly Mock<IApsSnapshotRepository> _seriesAps = new();
+    private readonly Mock<IPumpSnapshotRepository> _seriesPump = new();
+
+    private static readonly TherapySnapshot FlatTherapy = new(
+        dia: 4.0, carbsPerHour: 30.0, timezone: null, ccpPercentage: null, ccpTimeshiftMs: 0,
+        sensitivityEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 50.0 }],
+        carbRatioEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 10.0 }],
+        basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 1.0 }]);
 
     public IobCobReaderTests()
     {
         _boluses
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => _storedBoluses.ToList());
+            .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int limit, int _, bool _, BolusKind? _, DateTime? _, Guid? _, CancellationToken _) =>
+                _storedBoluses
+                    .Where(b => b.Timestamp >= from && b.Timestamp <= to)
+                    .OrderBy(b => b.Timestamp)
+                    .Take(limit)
+                    .ToList()
+                    .AsEnumerable());
         _tempBasals
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int limit, int _, bool descending, CancellationToken _) =>
@@ -45,6 +61,16 @@ public class IobCobReaderTests
         _carbs
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _storedCarbs.ToList());
+        _timelines
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline([new TherapySegment(from, to, FlatTherapy)]));
+        _seriesAps
+            .Setup(r => r.GetIobCobPointsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _seriesPump
+            .Setup(r => r.GetIobPointsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
     }
 
     private IobCobReader NewReader(string? partition = "full", ICobCalculator? cobCalculator = null) =>
@@ -80,6 +106,7 @@ public class IobCobReaderTests
 
         return new IobCobReader(
             iob, cobCalculator ?? cob, _boluses.Object, _tempBasals.Object, _carbs.Object,
+            _timelines.Object, _stateSpans.Object, _seriesAps.Object, _seriesPump.Object,
             TestTenantCache.Create(partition: partition), NullLogger<IobCobReader>.Instance);
     }
 
@@ -326,5 +353,81 @@ public class IobCobReaderTests
 
         current.Iob.Iob.Should().Be(1.5);
         current.Cob.Should().BeNull();
+    }
+
+    private const long Minute = 60 * 1000;
+    private const long Hour = 60 * Minute;
+    private static readonly long SeriesFirstTick = new DateTimeOffset(2024, 1, 15, 10, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    private static readonly IobCobSeriesWindow Series = new(SeriesFirstTick, SeriesFirstTick + Hour, 5 * Minute);
+
+    private static DateTime Utc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+
+    [Fact]
+    public async Task ASeries_CountsAnOpenTempThatBeganTenHoursBeforeTheFirstTick()
+    {
+        _storedTempBasals.Add(new TempBasal
+        {
+            StartTimestamp = Utc(SeriesFirstTick - 10 * Hour),
+            Rate = 0,
+            Origin = TempBasalOrigin.Suspended,
+        });
+
+        var read = await NewReader().ReadSeriesAsync(Series, Series.LastTick, readCarbs: true);
+
+        read.TempBasals.Should().ContainSingle();
+        read.Ticks[0].BasalIob.Should().BeLessThan(0);
+    }
+
+    [Fact]
+    public async Task ASeries_CountsABolusInsideTheLookBack()
+    {
+        _storedBoluses.Add(new Bolus { Timestamp = Utc(SeriesFirstTick - 210 * Minute), Insulin = 2 });
+
+        var read = await NewReader().ReadSeriesAsync(Series, Series.LastTick, readCarbs: true);
+
+        read.Ticks[0].BolusIob.Should().BeGreaterThan(0);
+        read.Ticks.Should().HaveCount(13);
+    }
+
+    [Fact]
+    public async Task ASeries_ReadsExactlyTheWindowsBounds()
+    {
+        using var cts = new CancellationTokenSource();
+
+        await NewReader().ReadSeriesAsync(Series, Series.LastTick, readCarbs: true, cts.Token);
+
+        var insulinFrom = Utc(SeriesFirstTick - 8 * Hour);
+        var to = Utc(Series.LastTick);
+        _boluses.Verify(r => r.GetAsync(
+            insulinFrom, to, null, null, 5000, 0, false,
+            It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), cts.Token), Times.Once);
+        _tempBasals.Verify(r => r.GetAsync(
+            Utc(SeriesFirstTick - 32 * Hour), to, null, null, ChartDataService.TempBasalQueryLimit, 0, false, cts.Token), Times.Once);
+        _carbs.Verify(r => r.GetAsync(
+            insulinFrom, to, null, null, 5000, 0, false,
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), cts.Token), Times.Once);
+        _timelines.Verify(r => r.BuildAsync(
+            SeriesFirstTick - 8 * Hour, Series.LastTick + 1, It.IsAny<string?>(), cts.Token), Times.Once);
+        _stateSpans.Verify(r => r.GetByCategories(
+            It.Is<IEnumerable<StateSpanCategory>>(c => c.SequenceEqual(new[] { StateSpanCategory.Override })),
+            insulinFrom, to, cts.Token), Times.Once);
+        var deviceFrom = Utc(SeriesFirstTick - 30 * Minute);
+        var deviceTo = Utc(Series.LastTick + 5 * Minute);
+        _seriesAps.Verify(r => r.GetIobCobPointsAsync(deviceFrom, deviceTo, cts.Token), Times.Once);
+        _seriesPump.Verify(r => r.GetIobPointsAsync(deviceFrom, deviceTo, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task ASeriesWithoutCarbs_NeverReadsThem()
+    {
+        _storedCarbs.Add(new CarbIntake { Timestamp = Utc(SeriesFirstTick - Hour), Carbs = 30 });
+
+        var read = await NewReader().ReadSeriesAsync(Series, Series.LastTick, readCarbs: false);
+
+        read.CarbIntakes.Should().BeEmpty();
+        read.Ticks.Should().OnlyContain(t => t.Cob == 0);
+        _carbs.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

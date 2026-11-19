@@ -74,7 +74,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
 
     private void StoreSpan(StateSpan span)
     {
-        var entity = _context.StateSpans.SingleOrDefault(s => s.OriginalId == span.OriginalId);
+        var entity = _context.StateSpans.SingleOrDefault(s => s.LegacyId == span.OriginalId);
         if (entity is null)
         {
             entity = StateSpanMapper.ToEntity(span);
@@ -98,7 +98,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         return new TreatmentDecomposer(
-            _factory,
+            _factory, new DecomposedTreatmentKeys(_factory),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -252,7 +252,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         var statements = _statements.All.Count(s => s.Contains("\"state_spans\"") || s.Contains("\"linked_records\""));
 
         (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking()
-                .Where(s => ids.Contains(s.OriginalId!) && s.DeletedAt == null).CountAsync())
+                .Where(s => ids.Contains(s.LegacyId!) && s.DeletedAt == null).CountAsync())
             .Should().Be(0, "every reclassified span is dropped");
         return statements;
     }
@@ -261,7 +261,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     {
         var span = new StateSpanEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = originalId, Source = source,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = originalId, Source = source,
             Category = nameof(StateSpanCategory.Override), State = "Custom",
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(At).UtcDateTime,
             SupersededById = supersededBy,

@@ -17,7 +17,7 @@
         {
             href: resolve("/docs/installation"),
             title: "Installation guide",
-            desc: "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more.",
+            desc: "Step-by-step guides for deploying Nocturne with the install script, Docker Compose, Portainer, and more.",
         },
         {
             href: resolve("docs/configuration"),

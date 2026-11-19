@@ -138,7 +138,7 @@ internal static class LoopAnalysisDatasetRun
             .Select(f => new ReportOmittedField(f.Key, ScopeOf(f.Value)))];
 
     /// <summary>A mg/dL figure in the display unit, or null.</summary>
-    public static double? Glucose(double? mgdl, bool useMmol) => mgdl is { } v ? GlucoseUnits.Scale(v, useMmol) : null;
+    public static double? Glucose(double? mgdl, bool useMmol) => mgdl is { } v ? ReportGlucose.Scale(v, useMmol) : null;
 
     /// <summary>A figure rounded for the rows.</summary>
     public static double? Round(double? value, int digits = 2) => value is { } v ? Math.Round(v, digits) : null;

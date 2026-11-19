@@ -13,6 +13,7 @@ import {
   chartPointColor,
   chartPointColorMode,
   chartShowPoints,
+  glucoseRangePalette,
   glucoseUnits,
   predictionMinutes,
 } from "#lib/stores/appearance-store.svelte.js";
@@ -72,6 +73,7 @@ export function renderPlotSnapshot(options: {
           areaMode: chartAreaMode.resolve(layers),
           areaOpacity: chartAreaOpacity.resolve(layers),
           units: glucoseUnits.resolve(layers),
+          rangePalette: glucoseRangePalette.resolve(layers),
         },
       },
       // Its gradient and clip ids must not collide with the page's own.

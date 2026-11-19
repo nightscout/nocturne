@@ -251,7 +251,6 @@ public partial class CareLinkAuthFlowService : IDisposable
             var tokenUrl = $"{ssoConfig.GetBaseUrl()}{ssoConfig.SystemEndpoints.TokenEndpointPath}";
             return new SsoParameters(ssoConfig.Client.ClientId, tokenUrl, ssoConfig.Client.Audience);
         }
-        catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Could not resolve CareLink SSO parameters for region {Server}", server);

@@ -14,8 +14,12 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 DeviceStatus controller that provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// Nightscout device status documents. A client can list, read, create, update and delete them, and read changes
+/// since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -376,34 +380,21 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetDeviceStatusHistory(
+    public Task<ActionResult> GetDeviceStatusHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 devicestatus history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var deviceStatuses = (await _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(
+        =>
+        CreateV3ClockHistoryResponseAsync(
+            "devicestatus",
             lastModified,
             limit,
-            cancellationToken
-        )).ToList();
-
-        if (deviceStatuses.Count > 0)
-        {
-            SetHistoryCursorHeaders(deviceStatuses.Max(d => d.SrvModified ?? d.Mills));
-        }
-
-        var mappedData = deviceStatuses.Select(ToDocument);
-        return CreateV3SuccessResponse(mappedData);
-    }
+            (since, take) =>
+                _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(since, take, cancellationToken),
+            d => d.SrvModified ?? d.Mills,
+            records => records.Select(ToDocument)
+        );
 
     /// <summary>
     /// Process device status for creation/update (date parsing, validation, etc.)
