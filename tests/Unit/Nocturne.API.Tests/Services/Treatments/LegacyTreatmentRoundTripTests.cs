@@ -372,6 +372,46 @@ public class LegacyTreatmentRoundTripTests : IDisposable
             .RootElement.GetProperty("duration").GetRawText().Should().Be(served);
     }
 
+    [Theory]
+    [InlineData("Temp Basal", """{"notes":"walk"}""", "4.962561716636022")]
+    [InlineData("Temp Basal", """{"duration":10}""", "10")]
+    public async Task APatchThatNamesNoDuration_LeavesTheUploadedDuration(string eventType, string patch, string served)
+    {
+        var created = await UploadAsync(
+            $$"""{"eventType":"{{eventType}}","created_at":"{{At}}","duration":4.962561716636022,"absolute":0.5,"targetTop":120,"targetBottom":100}""");
+
+        await _service.PatchTreatmentAsync(created.Id!, JsonDocument.Parse(patch).RootElement);
+
+        var read = (await ReadAsync()).Should().ContainSingle().Subject;
+        JsonDocument.Parse(JsonSerializer.Serialize(read, NightscoutJsonOptions.Create()))
+            .RootElement.GetProperty("duration").GetRawText().Should().Be(served);
+    }
+
+    [Theory]
+    [InlineData("""{"reason":"walk"}""", 4.962561716636022)]
+    [InlineData("""{"duration":10}""", 10)]
+    public void AMergedPatch_KeepsAnUploadedDurationItDoesNotName(string patch, double merged)
+    {
+        var stored = new Treatment
+        {
+            EventType = "Temporary Target", Mills = 1700000000000, Duration = 4.962561716636022, DurationIsUploaded = true,
+        };
+
+        TreatmentService.ApplyJsonPatch(stored, JsonDocument.Parse(patch).RootElement);
+
+        stored.Duration.Should().Be(merged);
+    }
+
+    [Fact]
+    public void AMergedPatch_LeavesAComputedDurationWhole()
+    {
+        var stored = new Treatment { EventType = "Temp Basal", Mills = 1700000000000, Duration = 4.962561716636022 };
+
+        TreatmentService.ApplyJsonPatch(stored, JsonDocument.Parse("""{"notes":"walk"}""").RootElement);
+
+        stored.Duration.Should().Be(5);
+    }
+
     [Fact]
     public async Task NotesEditedAlone_HistoryResendsTheTreatmentWithTheNewNotes()
     {

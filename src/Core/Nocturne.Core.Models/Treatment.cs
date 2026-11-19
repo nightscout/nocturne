@@ -266,8 +266,9 @@ public class Treatment : ProcessableDocumentBase
 
     /// <summary>
     /// True when <see cref="Duration"/> is the value the uploader sent, which is then served exactly as
-    /// Nightscout serves it. Any other duration is computed here and serves whole: AAPS parses
-    /// <c>duration</c> as a Long and throws on a fractional value it did not upload itself.
+    /// Nightscout serves it, fraction included, whoever reads it. Any other duration is computed here
+    /// and serves whole: AAPS parses <c>duration</c> as a Long and throws on a fraction, so Nocturne
+    /// adds none of its own.
     /// </summary>
     [JsonIgnore]
     public bool DurationIsUploaded { get; set; }
