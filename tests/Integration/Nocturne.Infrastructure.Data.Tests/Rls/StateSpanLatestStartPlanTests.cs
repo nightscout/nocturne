@@ -53,7 +53,7 @@ public class StateSpanLatestStartPlanTests(RlsCompletenessFixture fx)
 
         var repository = new StateSpanRepository(
             new TestNocturneDbContextFactory(ctx),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<StateSpanRepository>.Instance);
         (await read(repository, Source)).Should().NotBeNull();

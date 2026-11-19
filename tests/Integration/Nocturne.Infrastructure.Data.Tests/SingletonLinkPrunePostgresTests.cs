@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -17,7 +18,7 @@ using Xunit;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>
-/// <see cref="DeduplicationService.PruneSingletonLinksAsync"/> and the reads that stand in for what it
+/// <see cref="DuplicateReconciler.PruneSingletonLinksAsync"/> and the reads that stand in for what it
 /// deletes, against real Postgres under the runtime role and Row Level Security.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -36,9 +37,9 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
 
         var singles = new List<Guid>();
         for (var i = 0; i < 3; i++)
-            singles.Add(await IngestGlucoseAsync(context, service, Event.AddHours(i), "dexcom-connector", 100 + i));
-        var reading = await IngestGlucoseAsync(context, service, Event.AddHours(5), "dexcom-connector", 150);
-        var copy = await IngestGlucoseAsync(context, service, Event.AddHours(5).AddSeconds(10), "glooko-connector", 150);
+            singles.Add(await IngestGlucoseAsync(context, Event.AddHours(i), "dexcom-connector", 100 + i));
+        var reading = await IngestGlucoseAsync(context, Event.AddHours(5), "dexcom-connector", 150);
+        var copy = await IngestGlucoseAsync(context, Event.AddHours(5).AddSeconds(10), "glooko-connector", 150);
         await AgeAsync(context);
 
         (await service.PruneSingletonLinksAsync(2, 10)).Should().Be(3);
@@ -55,11 +56,11 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         await using var context = await ContextAsync(provider, tenant);
         var service = Service(context);
 
-        var reading = await IngestGlucoseAsync(context, service, Event, "dexcom-connector", 120);
+        var reading = await IngestGlucoseAsync(context, Event, "dexcom-connector", 120);
         await AgeAsync(context);
         (await service.PruneSingletonLinksAsync(100, 1)).Should().Be(1);
 
-        var copy = await IngestGlucoseAsync(context, service, Event.AddSeconds(10), "glooko-connector", 121);
+        var copy = await IngestGlucoseAsync(context, Event.AddSeconds(10), "glooko-connector", 121);
 
         var links = await context.LinkedRecords.AsNoTracking().ToListAsync();
         links.Should().HaveCount(2);
@@ -75,7 +76,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         await using var provider = BuildProvider();
         await using var context = await ContextAsync(provider, tenant);
         var service = Service(context);
-        await IngestGlucoseAsync(context, service, Event, "dexcom-connector", 120);
+        await IngestGlucoseAsync(context, Event, "dexcom-connector", 120);
         await AgeAsync(context);
 
         await using var holder = await ContextAsync(provider, tenant);
@@ -84,7 +85,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         var holding = holder.ExecuteInTransactionAsync(async ct =>
         {
             await holder.Database.ExecuteSqlAsync(
-                $"SELECT pg_advisory_xact_lock(hashtextextended({DeduplicationService.WriteLockKey(tenant)}, 0))", ct);
+                $"SELECT pg_advisory_xact_lock(hashtextextended({LinkedRecordTypes.WriteLockKey(tenant)}, 0))", ct);
             locked.SetResult();
             await release.Task;
             return true;
@@ -100,11 +101,10 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         (await prune.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
     }
 
-    private static DeduplicationService Service(NocturneDbContext context) =>
-        new(context.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+    private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());
 
     private static async Task<Guid> IngestGlucoseAsync(
-        NocturneDbContext context, DeduplicationService service, DateTime at, string source, double mgdl)
+        NocturneDbContext context, DateTime at, string source, double mgdl)
     {
         var entity = new SensorGlucoseEntity
         {
@@ -112,7 +112,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         };
         context.SensorGlucose.Add(entity);
         await context.SaveChangesAsync();
-        await service.DeduplicateBatchAsync(
+        await DeduplicationModules.Linker(context.AsFactory()).DeduplicateBatchAsync(
             RecordType.SensorGlucose,
             [new DeduplicationInput(
                 entity.Id, new DateTimeOffset(at, TimeSpan.Zero).ToUnixTimeMilliseconds(), source,
@@ -126,7 +126,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         var old = DateTime.UtcNow.AddDays(-2);
         await context.SensorGlucose.ExecuteUpdateAsync(s => s.SetProperty(e => e.SysCreatedAt, old));
         await context.LinkedRecords.ExecuteUpdateAsync(s => s.SetProperty(l => l.SysCreatedAt, old));
-        await DeduplicationService.SetCursorAsync(
+        await DuplicateReconciler.SetCursorAsync(
             context, new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.Empty), CancellationToken.None);
         context.ChangeTracker.Clear();
     }

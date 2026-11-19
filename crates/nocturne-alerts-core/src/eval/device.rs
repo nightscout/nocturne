@@ -1,14 +1,17 @@
 //! Device/loop leaves: site_age, sensor_age, tracker_age, loop_stale,
 //! loop_enaction_stale, pump_suspended, pump_battery, uploader_battery,
-//! sensitivity_ratio.
+//! transmitter_battery, sensitivity_ratio.
 
 use chrono::{DateTime, TimeDelta, Utc};
 
 use super::Env;
 use crate::compare::Unit;
 use crate::context::TrackerReference;
-use crate::enums::{CmpOp, holds};
-use crate::model::{ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload};
+use crate::enums::{CmpOp, TransmitterBatteryMetric, holds};
+use crate::model::{
+    ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
+    TransmitterBatteryPayload,
+};
 
 /// Site age in hours; no site change is false.
 pub(super) fn site_age(p: &ComparePayload, env: &Env) -> bool {
@@ -94,6 +97,18 @@ pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> bool {
 pub(super) fn uploader_battery(p: &ComparePayload, env: &Env) -> bool {
     env.ctx.has_ever_uploader_snapshot
         && holds(p.operator, env.ctx.uploader_battery_percent, p.value)
+}
+
+/// No `has_ever_*` guard: a reading no uploader has reported is absent, which
+/// no operator holds for.
+pub(super) fn transmitter_battery(p: &TransmitterBatteryPayload, env: &Env) -> bool {
+    let actual = match p.metric {
+        TransmitterBatteryMetric::VoltageA => env.ctx.transmitter_voltage_a,
+        TransmitterBatteryMetric::VoltageB => env.ctx.transmitter_voltage_b,
+        TransmitterBatteryMetric::Resistance => env.ctx.transmitter_resistance,
+        TransmitterBatteryMetric::Days => env.ctx.transmitter_days,
+    };
+    holds(p.operator, actual, p.value)
 }
 
 pub(super) fn sensitivity_ratio(p: &ComparePayload, env: &Env) -> bool {

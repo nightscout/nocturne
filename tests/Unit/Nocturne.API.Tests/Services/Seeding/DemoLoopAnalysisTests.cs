@@ -69,7 +69,7 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
         therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var builder = new BasalSeriesBuilder(therapy.Object, segments.Object, NullLogger<BasalSeriesBuilder>.Instance);
 
-        var profile = DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow).Store[DemoTherapyProfile.ProfileName];
+        var profile = DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow, "Pacific/Auckland").Store[DemoTherapyProfile.ProfileName];
         static List<ScheduleEntry> Entries(IEnumerable<TimeValue> values) =>
             [.. values.Select(v => new ScheduleEntry { Time = v.Time, Value = v.Value, TimeAsSeconds = v.TimeAsSeconds })];
         var snapshot = new TherapySnapshot(

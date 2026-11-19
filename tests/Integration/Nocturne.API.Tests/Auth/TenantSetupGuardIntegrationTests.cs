@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// has no passkey credentials (setup required) or has orphaned subjects without
 /// passkeys or OIDC identities (recovery mode).
 /// </summary>
+[Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
 public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
 {

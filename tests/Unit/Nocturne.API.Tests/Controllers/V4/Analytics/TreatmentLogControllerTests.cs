@@ -48,7 +48,7 @@ public class TreatmentLogControllerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Note { Text = "Evening walk" }]);
         _deviceEvents.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
-                null, It.IsAny<CancellationToken>()))
+                null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DeviceEvent { EventType = DeviceEventType.SiteChange }]);
         _basalInjections.Setup(r => r.GetAsync(From, To, null, null, TreatmentLogController.RecordLimit, 0, true,
                 It.IsAny<CancellationToken>()))
@@ -56,7 +56,7 @@ public class TreatmentLogControllerTests
 
         _controller = new TreatmentLogController(
             _boluses.Object, _carbs.Object, _bgChecks.Object, _notes.Object,
-            _deviceEvents.Object, _basalInjections.Object, new StatisticsService());
+            _deviceEvents.Object, _basalInjections.Object, new StatisticsService(TimeProvider.System));
         Grant(Scope.ReportsRead, Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead);
     }
 

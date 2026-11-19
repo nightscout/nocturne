@@ -8,7 +8,7 @@ namespace Nocturne.API.Services.Realtime;
 /// </summary>
 /// <remarks>
 /// The four <see cref="V4"/> categories carry native V4 record shapes (with a <c>recordType</c>
-/// discriminator) and are additive: the four legacy <see cref="V1"/> collections — which the Node
+/// discriminator) and are additive: the five legacy <see cref="V1"/> collections — which the Node
 /// socket.io bridge subscribes to — keep their own broadcasts untouched. <c>care</c> is the
 /// treatment-family category, named distinctly so it never collides with the v1 <c>treatments</c> group.
 /// </remarks>
@@ -20,6 +20,12 @@ public static class RealtimeCategories
     public const string DeviceStatus = "devicestatus";
     public const string Profiles = "profiles";
 
+    /// <summary>
+    /// The v3 settings collection. AAPS client control travels through it: a paired client writes a
+    /// command document and the master acts on the <c>create</c>/<c>update</c> event, never polling.
+    /// </summary>
+    public const string Settings = "settings";
+
     // Native V4 categories (record shapes + recordType discriminator).
     public const string Glucose = "glucose";
     public const string Care = "care";
@@ -27,7 +33,7 @@ public static class RealtimeCategories
     public const string Therapy = "therapy";
 
     /// <summary>The legacy v1 collection names.</summary>
-    public static readonly string[] V1 = [Entries, Treatments, DeviceStatus, Profiles];
+    public static readonly string[] V1 = [Entries, Treatments, DeviceStatus, Profiles, Settings];
 
     /// <summary>The native V4 category names.</summary>
     public static readonly string[] V4 = [Glucose, Care, Device, Therapy];
@@ -46,8 +52,7 @@ public static class RealtimeCategories
     /// <see cref="ShareDataCategories.GoverningScopes"/>, which covers only the share-reachable
     /// categories — <c>profiles</c>/<c>therapy</c> here answer to <see cref="Scope.TherapyRead"/>,
     /// which no share link can hold. <c>care</c> and <c>treatments</c> are the treatment family, so
-    /// they answer to <see cref="Scope.TreatmentsRead"/> as a whole even though a BG check inside
-    /// <c>care</c> is governed by glucose.read for share links.
+    /// they answer to <see cref="Scope.TreatmentsRead"/>.
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> GoverningScopes =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -56,6 +61,7 @@ public static class RealtimeCategories
             [Treatments] = Scope.TreatmentsRead,
             [DeviceStatus] = Scope.DevicesRead,
             [Profiles] = Scope.TherapyRead,
+            [Settings] = Scope.TherapyRead,
             [Glucose] = Scope.GlucoseRead,
             [Care] = Scope.TreatmentsRead,
             [Device] = Scope.DevicesRead,

@@ -171,7 +171,7 @@
     {#if canManageAlerts}
       <div class="flex items-center gap-2">
         <Button onclick={newRule}>
-          <Plus class="h-4 w-4 mr-2" /> New rule
+          <Plus class="h-4 w-4 mr-2" /> New alert
         </Button>
       </div>
     {/if}
@@ -339,13 +339,13 @@
           <EmptyState
             art="alarm-bell"
             variant="outline"
-            title="No alert rules yet"
-            body="Add a rule so Nocturne can notify you when glucose goes out of range."
+            title="No alerts yet"
+            body="Add an alert so Nocturne can notify you when glucose goes out of range."
             action={canManageAlerts ? newRuleAction : undefined}
           />
           {#snippet newRuleAction()}
             <Button size="sm" onclick={newRule}>
-              <Plus class="h-4 w-4 mr-2" /> New rule
+              <Plus class="h-4 w-4 mr-2" /> New alert
             </Button>
           {/snippet}
         {:else}

@@ -14,8 +14,9 @@ Nocturne has two layers of configuration:
 
 - **Environment variables** set the infrastructure: the domain, the database
   connections, secrets, and optional telemetry and chat bots. You set these once,
-  before the first start, in your `.env` file (Docker Compose) or the guided form
-  (Portainer). This page covers them.
+  before the first start. The install script writes them to `/opt/nocturne/.env`
+  for you. With Docker Compose you write the `.env` file, and with Portainer you
+  fill in the guided form. This page covers them.
 - **The running app** handles everything per-tenant and per-user: data
   connectors, display preferences, sharing, alerts, and sign-in providers. These
   are managed in the Nocturne UI after the instance is up, with no restart. They
@@ -24,9 +25,11 @@ Nocturne has two layers of configuration:
 
 ## Environment variables
 
-Set these in the `.env` file you copy from `.env.example`
+The [install script](/docs/installation/install-script) sets the required ones
+and keeps them in `/opt/nocturne/.env`; edit that file to change the others.
+Otherwise set these in the `.env` file you copy from `.env.example`
 ([Docker Compose](/docs/installation/docker-compose)) or in the deployment form
-when you launch the [Portainer](/docs/installation/portainer) template. Both
+when you launch the [Portainer](/docs/installation/portainer) template. All
 methods use the same variables.
 
 Here is the `.env.example` that ships with every release, pulled in at build time
@@ -98,7 +101,6 @@ roles yourself and point Nocturne at them with connection strings.
 | **Slack** | `SLACK_*` | The Slack bot. See [Slack](/docs/bots/slack). |
 | **Telegram** | `TELEGRAM_*` | The Telegram bot. See [Telegram](/docs/bots/telegram). |
 | **WhatsApp** | `WHATSAPP_*` | The WhatsApp bot. See [WhatsApp](/docs/bots/whatsapp). |
-| **Google Health** | `GOOGLE_HEALTH_*` | The Google OAuth client every tenant connects Google Health through. See [Google Health](/docs/data-sources/google-health). |
 | **PostgreSQL storage** | `POSTGRES_DATA_PATH` | Optional Docker Compose bind-data override only. See [Docker Compose installation](/docs/installation/docker-compose). Portainer's stack editor does not apply Compose override files. |
 
 Leave any of these blank or commented out if you don't use them;

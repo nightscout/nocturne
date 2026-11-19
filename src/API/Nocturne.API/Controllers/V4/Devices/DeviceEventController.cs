@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
@@ -14,10 +16,13 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Controller for managing device event observations.
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+/// Device events for consumable and hardware changes, such as site changes, sensor starts and
+/// changes, reservoir changes, and battery changes. List, read, create (one or in bulk), update and
+/// delete events. List deleted events and restore them. Delete an event by its data source and sync
+/// identifier.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// Device events record consumable changes and hardware lifecycle events such as
 /// site changes (CAGE), sensor starts/changes (SAGE), reservoir changes (IAGE),
 /// and battery changes (BAGE). These records feed the <see cref="DeviceAgeController"/>
@@ -36,10 +41,12 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="UpsertDeviceEventRequest"/>
 /// <seealso cref="DeviceAgeController"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Device Events")]
+[Tags("Devices")]
 [Route("api/v4/observations/device-events")]
 [RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
+[ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class DeviceEventController(
     IDeviceEventRepository repo,
     IPatientDeviceRepository patientDevices,
@@ -58,35 +65,59 @@ public class DeviceEventController(
     protected override V4BulkNaming BulkNaming => new("Device event", "event", "events");
 
     /// <summary>
-    /// Lists device events. Adds an optional <c>patientDeviceId</c> query filter on top of the base list
-    /// surface: when set, only events linked to that registered device are returned. Pagination totals
-    /// match the base device/source behaviour (the count is unscoped by the device filters).
+    /// Lists device events. Adds optional <c>patientDeviceId</c> and <c>eventType</c> filters on top of the
+    /// base list surface: <c>patientDeviceId</c> keeps only events linked to that registered device, and
+    /// <c>eventType</c> keeps only events of the given types (repeat the parameter for several). An unknown
+    /// <c>eventType</c> or a malformed <c>patientDeviceId</c> is rejected with `400 Bad Request`.
+    /// `pagination.total` counts the events the same filters match.
     /// </summary>
     /// <remarks>
-    /// The <c>patientDeviceId</c> query parameter is read directly from the request because the base list
-    /// signature (shared by every V4 read controller) has no device-attribution concept — binding it here
-    /// keeps a single <c>GET</c> action while adding the device-event-only filter.
+    /// The base <see cref="V4ReadOnlyControllerBase{TModel, TRepository}.GetAll"/> signature is shared by
+    /// every V4 read controller and cannot carry these parameters, so this overload is the routed action and
+    /// the base one is withdrawn by <see cref="GetAll(DateTime?, DateTime?, int, int, string, string?, string?, bool, CancellationToken)"/>.
     /// </remarks>
-    public override async Task<ActionResult<PaginatedResponse<DeviceEvent>>> GetAll(
+    /// <param name="from">Inclusive start of the date range filter.</param>
+    /// <param name="to">Inclusive end of the date range filter.</param>
+    /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip for pagination. Defaults to `0`.</param>
+    /// <param name="sort">Sort order for results by timestamp. Defaults to `timestamp_desc`.</param>
+    /// <param name="device">Optional filter to restrict results to a specific device.</param>
+    /// <param name="source">Optional filter to restrict results to a specific data source.</param>
+    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="patientDeviceId">Optional filter to restrict results to events linked to this registered device.</param>
+    /// <param name="eventType">Optional filter to restrict results to events of any of these types.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(PaginatedResponse<DeviceEvent>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PaginatedResponse<DeviceEvent>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         [FromQuery] bool includeTotal = false,
+        [FromQuery] Guid? patientDeviceId = null,
+        [FromQuery] DeviceEventType[]? eventType = null,
         CancellationToken ct = default)
     {
         if (PrepareListQuery(from, to, sort, ref limit, ref offset, out var descending) is { } error)
             return error;
 
-        Guid? patientDeviceId = null;
-        if (Request.Query.TryGetValue("patientDeviceId", out var raw) && Guid.TryParse(raw, out var parsed))
-            patientDeviceId = parsed;
-
         var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending,
-            patientDeviceId: patientDeviceId, ct: ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, ct));
+            patientDeviceId: patientDeviceId, eventTypes: eventType, ct: ct)).ToList();
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal,
+            () => Repository.CountAsync(from, to, device, source, patientDeviceId, eventType, ct));
         return Ok(new PaginatedResponse<DeviceEvent> { Data = data, Pagination = pagination });
     }
+
+    /// <summary>The base list action, withdrawn so the overload with the device event filters is the only route.</summary>
+    [NonAction]
+    public override Task<ActionResult<PaginatedResponse<DeviceEvent>>> GetAll(
+        DateTime? from, DateTime? to, int limit = 100, int offset = 0, string sort = "timestamp_desc",
+        string? device = null, string? source = null, bool includeTotal = false,
+        CancellationToken ct = default)
+        => GetAll(from, to, limit, offset, sort, device, source, includeTotal, null, null, ct);
 
     /// <inheritdoc/>
     /// <remarks>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using NJsonSchema.Annotations;
 
 namespace Nocturne.Core.Models.V4;
@@ -28,7 +29,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="Bolus"/>
 /// <seealso cref="TempBasal"/>
 [JsonSchemaFlatten]
-public class ApsSnapshot : V4RecordBase
+public class ApsSnapshot : V4RecordBase, IPatientDeviceLinked
 {
     /// <summary>
     /// Foreign key to the <see cref="Device"/> table.
@@ -100,6 +101,33 @@ public class ApsSnapshot : V4RecordBase
 
     /// <summary>Full enacted JSON blob from the APS system</summary>
     public string? EnactedJson { get; set; }
+
+    /// <summary>
+    /// The algorithm's own explanation of this decision: the <c>reason</c> of the suggestion, else of
+    /// the enacted command. Null when neither carries one (Loop reports none).
+    /// </summary>
+    public string? Reason => ReadReason(SuggestedJson) ?? ReadReason(EnactedJson);
+
+    private static string? ReadReason(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("reason", out var reason)
+                && reason.ValueKind == JsonValueKind.String
+                && reason.GetString() is { Length: > 0 } text
+                ? text
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Default prediction curve (IOB for OpenAPS, values for Loop) as JSON array</summary>
     public string? PredictedDefaultJson { get; set; }

@@ -3,8 +3,10 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
@@ -76,11 +78,58 @@ public class TandemAuthTokenProviderRetryTests
         handler.LoginCalls.Should().Be(maxRetryAttempts, "the configured attempt budget is what gets spent");
     }
 
+    [Fact]
+    public async Task Token_ExpiresFiveMinutesBeforeItsLifetimeEnds()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        using var provider = ProviderFor(new TandemLoginHandler(), new HttpClient(), clock);
+
+        var token = await provider.GetValidTokenAsync(SignInConfig(3), CancellationToken.None);
+
+        token.Should().Be("access-token-1");
+        provider.TokenExpiresAt.Should().Be(clock.GetUtcNow().UtcDateTime.AddMinutes(55));
+        clock.Advance(TimeSpan.FromMinutes(55) - TimeSpan.FromSeconds(1));
+        provider.IsTokenExpired.Should().BeFalse();
+        clock.Advance(TimeSpan.FromSeconds(2));
+        provider.IsTokenExpired.Should().BeTrue();
+    }
+
+    /// <summary>
+    ///     A sync that could not sign in tells the tenant what the provider learned about why, rather
+    ///     than a bare "Authentication failed".
+    /// </summary>
+    [Fact]
+    public async Task Sync_LoginRefused_ReportsTheProvidersSignInReason()
+    {
+        var handler = new TandemLoginHandler { LoginStatus = HttpStatusCode.Unauthorized };
+        using var httpClient = new HttpClient();
+        using var provider = ProviderFor(handler, httpClient, TimeProvider.System);
+        var service = new TandemConnectorService(
+            new HttpClient(handler, disposeHandler: false),
+            new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
+            NullLogger<TandemConnectorService>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            provider);
+
+        var result = await service.SyncDataAsync(new SyncRequest(), SignInConfig(3), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be(provider.SignInFailureReason);
+        result.Errors.Should().ContainSingle().Which.Should().Be(provider.SignInFailureReason);
+    }
+
     private static async Task<string?> AuthenticateAsync(
         TandemLoginHandler handler, int maxRetryAttempts = 3)
     {
         using var httpClient = new HttpClient();
+        using var provider = ProviderFor(handler, httpClient, TimeProvider.System);
 
+        return await provider.GetValidTokenAsync(SignInConfig(maxRetryAttempts), CancellationToken.None);
+    }
+
+    private static TandemAuthTokenProvider ProviderFor(
+        TandemLoginHandler handler, HttpClient httpClient, TimeProvider clock)
+    {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.Setup(t => t.IsResolved).Returns(true);
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
@@ -88,25 +137,24 @@ public class TandemAuthTokenProviderRetryTests
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        using var provider = new FakeTransportTandemAuthTokenProvider(
+        return new FakeTransportTandemAuthTokenProvider(
             handler,
             httpClient,
-            new ConnectorTokenCache(),
+            new ConnectorTokenCache(clock),
             new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
             tenantAccessor.Object,
             NullLogger<TandemAuthTokenProvider>.Instance,
-            retryDelay.Object);
-
-        var config = new TandemConnectorConfiguration
-        {
-            Email = "someone@example.com",
-            Password = "hunter2",
-            Region = "US",
-            MaxRetryAttempts = maxRetryAttempts
-        };
-
-        return await provider.GetValidTokenAsync(config, CancellationToken.None);
+            retryDelay.Object,
+            clock);
     }
+
+    private static TandemConnectorConfiguration SignInConfig(int maxRetryAttempts) => new()
+    {
+        Email = "someone@example.com",
+        Password = "hunter2",
+        Region = "US",
+        MaxRetryAttempts = maxRetryAttempts
+    };
 
     /// <summary>Runs the real sign-in flow over a fake transport instead of the network.</summary>
     private sealed class FakeTransportTandemAuthTokenProvider(
@@ -116,8 +164,9 @@ public class TandemAuthTokenProviderRetryTests
         IConnectorServerResolver<TandemConnectorConfiguration> serverResolver,
         ITenantAccessor tenantAccessor,
         ILogger<TandemAuthTokenProvider> logger,
-        IRetryDelayStrategy retryDelayStrategy)
-        : TandemAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
+        IRetryDelayStrategy retryDelayStrategy,
+        TimeProvider timeProvider)
+        : TandemAuthTokenProvider(httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy, timeProvider)
     {
         // disposeHandler: false — the sign-in disposes its client per attempt, and the handler has to
         // outlive that to answer (and count) the next one.

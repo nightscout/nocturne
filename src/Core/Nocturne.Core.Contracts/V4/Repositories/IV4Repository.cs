@@ -38,6 +38,9 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <returns>The record, or <c>null</c> if not found.</returns>
     Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>The records <see cref="GetByIdAsync"/> finds for each of <paramref name="ids"/>, in one read.</summary>
+    Task<IReadOnlyList<T>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>
     /// Retrieve the first record whose UUID falls within <c>[low, high]</c>. Used to resolve a
     /// 24-hex Mongo ObjectId (the first 24 hex of a UUID, emitted on the legacy API) back to its
@@ -115,10 +118,12 @@ public interface IV4Repository<T> where T : class, IV4Record
     Task<int> CountDeletedAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Count records within an optional time range.
+    /// Count the records <see cref="GetAsync"/> pages through for the same filters.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
-    /// <returns>Number of records in the range.</returns>
-    Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+    /// <param name="device">Optional device identifier filter.</param>
+    /// <param name="source">Optional data source filter.</param>
+    /// <returns>Number of matching records.</returns>
+    Task<int> CountAsync(DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct = default);
 }

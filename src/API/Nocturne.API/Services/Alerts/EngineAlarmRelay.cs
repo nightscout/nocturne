@@ -1,13 +1,13 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Conditions;
-using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -58,7 +58,7 @@ public interface IEngineAlarmRelay
 internal sealed class EngineAlarmRelay(
     INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
-    ITenantAppearanceReader appearanceReader,
+    ITenantGlucoseUnits glucoseUnits,
     ICanonicalGlucoseService canonicalGlucose,
     ISignalRBroadcastService broadcastService,
     TimeProvider timeProvider,
@@ -71,7 +71,7 @@ internal sealed class EngineAlarmRelay(
 
         try
         {
-            var useMmol = payload.GlucoseValue is not null && await UsesMmolAsync(ct);
+            var useMmol = payload.GlucoseValue is not null && await glucoseUnits.UsesMmolAsync(ct);
             var alarm = Map(payload, useMmol, timeProvider.GetUtcNow())!;
             await broadcastService.BroadcastEngineAlarmAsync(alarm.EventName, alarm.Notify);
         }
@@ -141,9 +141,9 @@ internal sealed class EngineAlarmRelay(
         {
             AlertType = top.ConditionType,
             RuleName = top.RuleName,
-            GlucoseValue = fresh is null ? null : (decimal)fresh.Mgdl,
+            GlucoseValue = fresh?.Mgdl.ToDecimal(),
             Trend = null,
-            TrendRate = (decimal?)fresh?.TrendRate,
+            TrendRate = fresh?.TrendRate?.ToDecimal(),
             ReadingTimestamp = fresh?.Timestamp ?? now.UtcDateTime,
             ExcursionId = top.ExcursionId,
             InstanceId = top.InstanceId,
@@ -152,7 +152,7 @@ internal sealed class EngineAlarmRelay(
             ActiveExcursionCount = 0,
             Severity = top.Severity,
         };
-        return Map(payload, fresh is not null && await UsesMmolAsync(ct), now);
+        return Map(payload, fresh is not null && await glucoseUnits.UsesMmolAsync(ct), now);
     }
 
     private sealed record AlarmingExcursion(
@@ -178,9 +178,6 @@ internal sealed class EngineAlarmRelay(
                         && i.AlertExcursion.AlertRule!.IsEnabled
                         && i.AlertExcursion.AlertRule.Severity != AlertRuleSeverity.Info);
 
-    private Task<bool> UsesMmolAsync(CancellationToken ct) =>
-        GlucoseUnits.UsesMmolAsync(appearanceReader, tenantAccessor, ct);
-
     /// <summary>
     /// The Nightscout notify for a dispatched excursion, or null for an info rule, which raises no
     /// alarm. The group is the excursion id, which is how an <c>/alarm</c> ack names what to snooze
@@ -197,8 +194,8 @@ internal sealed class EngineAlarmRelay(
         // backend renders them, in the tenant's units.
         var message = payload.GlucoseValue is { } mgdl
             ? useMmol
-                ? $"BG Now: {GlucoseUnits.Scale((double)mgdl, useMmol: true).ToString("0.0", CultureInfo.InvariantCulture)} mmol/L"
-                : $"BG Now: {GlucoseUnits.Scale((double)mgdl, useMmol: false).ToString("0", CultureInfo.InvariantCulture)} mg/dL"
+                ? $"BG Now: {GlucoseUnits.FromMgdl((double)mgdl, GlucoseUnit.Mmol).ToString("0.0", CultureInfo.InvariantCulture)} mmol/L"
+                : $"BG Now: {GlucoseUnits.FromMgdl((double)mgdl, GlucoseUnit.MgDl).ToString("0", CultureInfo.InvariantCulture)} mg/dL"
             : payload.RuleName;
 
         return new EngineAlarm(

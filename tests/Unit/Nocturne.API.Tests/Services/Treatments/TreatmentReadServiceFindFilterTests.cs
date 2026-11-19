@@ -26,7 +26,6 @@ public class TreatmentReadServiceFindFilterTests
         _service = new TreatmentReadService(
             _projection.Object,
             new Mock<ITreatmentDecomposer>().Object,
-            new Mock<IDecompositionPipeline>().Object,
             new Mock<ITempBasalRepository>().Object,
             new Mock<IBolusRepository>().Object,
             new Mock<ICarbIntakeRepository>().Object,

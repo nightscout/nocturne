@@ -115,7 +115,7 @@ public class UISettingsControllerReadScopeTests
     private static UISettingsController Controller(
         NocturneDbContext database, params string[] scopes) =>
         NewController(
-            new UISettingsService(database.AsFactory(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(database.AsFactory(), TimeProvider.System, NullLogger<UISettingsService>.Instance),
             DemoMode(false),
             Mock.Of<IHttpClientFactory>(),
             scopes);

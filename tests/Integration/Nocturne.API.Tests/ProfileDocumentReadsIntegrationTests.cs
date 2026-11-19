@@ -21,6 +21,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Every legacy profile read serves one document per stored profile document, carrying all of its
 /// stores, and never serves the snapshot a Profile Switch treatment stored, on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
 {

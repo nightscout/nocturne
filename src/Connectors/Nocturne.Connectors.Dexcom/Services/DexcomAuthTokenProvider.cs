@@ -21,14 +21,12 @@ public class DexcomAuthTokenProvider(
     ILogger<DexcomAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
-    : AuthTokenProviderBase<DexcomConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<DexcomConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private const string DexcomApplicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db";
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     /// <summary>
     ///     Dexcom sessions typically last 24 hours, but we refresh at 23 hours.
@@ -61,7 +59,6 @@ public class DexcomAuthTokenProvider(
 
                 return (token, false);
             },
-            _retryDelayStrategy,
             maxRetries,
             "Dexcom authentication",
             cancellationToken

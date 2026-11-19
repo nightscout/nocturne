@@ -53,7 +53,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
             Audience = "nocturne-api",
             AccessTokenLifetimeMinutes = 15,
         });
-        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance);
+        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance, TimeProvider.System);
 
         _db = TestDbContextFactory.CreateSqlite();
         using (var ctx = _db.CreateContext())

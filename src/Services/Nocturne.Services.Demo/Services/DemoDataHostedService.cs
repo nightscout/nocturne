@@ -27,6 +27,7 @@ public class DemoDataHostedService : BackgroundService
     private readonly IDemoDataGenerator _generator;
     private readonly DemoServiceHealthCheck _healthCheck;
     private readonly DemoApiClient _apiClient;
+    private readonly TimeProvider _time;
 
     private volatile DemoServiceState _state = DemoServiceState.Stopped;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
@@ -39,6 +40,7 @@ public class DemoDataHostedService : BackgroundService
         IOptions<DemoModeConfiguration> config,
         IDemoDataGenerator generator,
         DemoServiceHealthCheck healthCheck,
+        TimeProvider time,
         ILogger<DemoDataHostedService> logger
     )
     {
@@ -47,6 +49,7 @@ public class DemoDataHostedService : BackgroundService
         _config = config.Value;
         _generator = generator;
         _healthCheck = healthCheck;
+        _time = time;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -87,9 +90,9 @@ public class DemoDataHostedService : BackgroundService
                 ? TimeSpan.FromMinutes(_config.ResetIntervalMinutes)
                 : (TimeSpan?)null;
 
-            var nextGenerationUtc = DateTime.UtcNow.Add(generationInterval);
+            var nextGenerationUtc = UtcNow.Add(generationInterval);
             DateTime? nextResetUtc = resetInterval.HasValue
-                ? DateTime.UtcNow.Add(resetInterval.Value)
+                ? UtcNow.Add(resetInterval.Value)
                 : null;
 
             while (!stoppingToken.IsCancellationRequested)
@@ -110,18 +113,8 @@ public class DemoDataHostedService : BackgroundService
                     }
                 }
 
-                var now = DateTime.UtcNow;
-                var nextWakeUtc = nextGenerationUtc;
-                if (nextResetUtc.HasValue && nextResetUtc.Value < nextWakeUtc)
-                {
-                    nextWakeUtc = nextResetUtc.Value;
-                }
-
-                var delay = nextWakeUtc - now;
-                if (delay < TimeSpan.Zero)
-                {
-                    delay = TimeSpan.Zero;
-                }
+                var now = UtcNow;
+                var delay = DelayUntilNextWake(now, nextGenerationUtc, nextResetUtc);
 
                 try
                 {
@@ -138,12 +131,12 @@ public class DemoDataHostedService : BackgroundService
 
                 try
                 {
-                    now = DateTime.UtcNow;
+                    now = UtcNow;
 
                     if (nextResetUtc.HasValue && now >= nextResetUtc.Value)
                     {
                         await RegenerateDataAsync(stoppingToken);
-                        now = DateTime.UtcNow;
+                        now = UtcNow;
                         nextResetUtc = now.Add(resetInterval!.Value);
 
                         try
@@ -182,6 +175,23 @@ public class DemoDataHostedService : BackgroundService
             ((DemoDataGenerator)_generator).IsRunning = false;
             _state = DemoServiceState.Stopped;
         }
+    }
+
+    private DateTime UtcNow => _time.GetUtcNow().UtcDateTime;
+
+    internal static TimeSpan DelayUntilNextWake(
+        DateTime now,
+        DateTime nextGenerationUtc,
+        DateTime? nextResetUtc)
+    {
+        var nextWakeUtc = nextGenerationUtc;
+        if (nextResetUtc.HasValue && nextResetUtc.Value < nextWakeUtc)
+        {
+            nextWakeUtc = nextResetUtc.Value;
+        }
+
+        var delay = nextWakeUtc - now;
+        return delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
     }
 
     /// <summary>
@@ -263,7 +273,7 @@ public class DemoDataHostedService : BackgroundService
             _logger.LogWarning(ex, "Failed to reset the demo tenant (may not exist yet), continuing with regeneration");
         }
 
-        var startTime = DateTime.UtcNow;
+        var startTime = UtcNow;
 
         // Seeding failure is non-fatal — realtime ticks keep building a live
         // chart even without history. The filter keeps real shutdown
@@ -288,7 +298,7 @@ public class DemoDataHostedService : BackgroundService
 
         _logger.LogInformation(
             "Completed demo data regeneration in {Duration}",
-            DateTime.UtcNow - startTime);
+            UtcNow - startTime);
     }
 
     private async Task GenerateAndPostEntryAsync(CancellationToken cancellationToken)

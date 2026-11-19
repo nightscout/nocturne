@@ -142,10 +142,6 @@ public class ConnectorCredentialVerifierTests
 
         [ConnectorProperty(ConnectorPropertyKey.AccessToken, Secret = true)]
         public string Token { get; set; } = string.Empty;
-
-        protected override void ValidateSourceSpecificConfiguration()
-        {
-        }
     }
 
     private sealed class RecordingVerifier(UrlConfig defaults, Mock<IConnectorConfigurationService>? configService = null)

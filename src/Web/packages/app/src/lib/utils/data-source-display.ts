@@ -33,6 +33,9 @@ const DATA_SOURCE_DISPLAY_NAMES: Record<string, string> = {
   // Food
   "myfitnesspal-connector": "MyFitnessPal",
 
+  // Wearables
+  "oura-connector": "Oura",
+
   // Import / migration
   "mongodb-import": "MongoDB import",
   "csv-import": "CSV import",

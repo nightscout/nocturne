@@ -28,8 +28,8 @@ public partial class StatisticsControllerTests
         { null, false, TimeZoneUnavailableReason.NotConfigured },
         { "  ", false, TimeZoneUnavailableReason.NotConfigured },
         { "Not/AZone", false, TimeZoneUnavailableReason.Unrecognised },
-        { null, true, TimeZoneUnavailableReason.Share },
-        { "Not/AZone", true, TimeZoneUnavailableReason.Share },
+        { null, true, TimeZoneUnavailableReason.NotConfigured },
+        { "Not/AZone", true, TimeZoneUnavailableReason.Unrecognised },
     };
 
     private StatisticsController ControllerOnClock(string? timezoneId, bool share)
@@ -40,7 +40,7 @@ public partial class StatisticsControllerTests
         var category = new CategoryReadContext();
         if (share)
             category.MarkShare();
-        return CreateController(statisticsService: new StatisticsService(), categoryReadContext: category);
+        return CreateController(statisticsService: new StatisticsService(TimeProvider.System), categoryReadContext: category);
     }
 
     private void SetupInsulinAtSydneyMorning()
@@ -376,7 +376,7 @@ public partial class StatisticsControllerTests
             .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("db down"));
 
-        var result = await CreateController(statisticsService: new StatisticsService())
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
             .GetWeekdayAverages(WindowStart, WindowEnd);
 
         var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject

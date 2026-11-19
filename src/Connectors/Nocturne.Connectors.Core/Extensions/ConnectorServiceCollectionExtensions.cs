@@ -2,11 +2,11 @@ using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Jobs;
 
 namespace Nocturne.Connectors.Core.Extensions;
 
@@ -15,11 +15,6 @@ namespace Nocturne.Connectors.Core.Extensions;
 /// </summary>
 public sealed class ConnectorOptions
 {
-    /// <summary>
-    ///     The connector name used in configuration paths (e.g., "Dexcom", "LibreLinkUp")
-    /// </summary>
-    public required string ConnectorName { get; init; }
-
     /// <summary>
     ///     Server mapping for region-based server resolution.
     ///     Key: region code (e.g., "US", "EU"), Value: server URL
@@ -69,17 +64,20 @@ public static class ConnectorServiceCollectionExtensions
     {
         public IServiceCollection AddBaseConnectorServices()
         {
-            // Default strategies
             services.TryAddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
-            services.TryAddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
 
             return services;
         }
 
-        public TConfig AddConnectorConfiguration<TConfig>(IConfiguration configuration,
-            string connectorName)
+        /// <summary>
+        ///     Binds the connector's startup configuration under the name its
+        ///     <see cref="ConnectorRegistrationAttribute"/> declares, and registers it as the frozen
+        ///     defaults the configuration loader starts from.
+        /// </summary>
+        public TConfig AddConnectorConfiguration<TConfig>(IConfiguration configuration)
             where TConfig : BaseConnectorConfiguration, new()
         {
+            var connectorName = ConnectorRegistrationAttribute.DeclaredOn(typeof(TConfig)).ConnectorName;
             var config = new TConfig();
             configuration.BindConnectorConfiguration(config, connectorName);
 
@@ -110,10 +108,7 @@ public static class ConnectorServiceCollectionExtensions
             where TTokenProvider : class
         {
             // Register configuration
-            var config = services.AddConnectorConfiguration<TConfig>(
-                configuration,
-                options.ConnectorName
-            );
+            var config = services.AddConnectorConfiguration<TConfig>(configuration);
 
             // Skip registration if disabled
             if (!config.Enabled)
@@ -239,7 +234,7 @@ public static class ConnectorServiceCollectionExtensions
         /// </summary>
         /// <param name="configuration">Application configuration</param>
         /// <param name="pollingService">
-        ///     Optional open generic hosted service over a connector's service and configuration
+        ///     Optional open generic scheduled job over a connector's service and configuration
         ///     types — the API's <c>ConnectorBackgroundService&lt;TService, TConfig&gt;</c>.
         ///     Supplying it schedules every installed connector.
         /// </param>
@@ -288,13 +283,13 @@ public static class ConnectorServiceCollectionExtensions
             if (pollingService is null)
                 return services;
 
-            void AddPollerIfEnabled(Type hostedService, Type configType)
+            void AddPollerIfEnabled(Type poller, Type configType)
             {
                 var connectorName = ConnectorRegistrationAttribute.DeclaredOn(configType).ConnectorName;
 
                 if (configuration.ConnectorEnabled(connectorName) ?? true)
                     services.TryAddEnumerable(
-                        ServiceDescriptor.Singleton(typeof(IHostedService), hostedService));
+                        ServiceDescriptor.Singleton(typeof(IScheduledJob), poller));
             }
 
             // Connectors that need more than polling — a realtime listener — subclass the poller and

@@ -5,7 +5,9 @@ namespace Nocturne.Core.Clinical.Schedules;
 /// <summary>
 /// The units a temporary target's bounds were uploaded in. Uploaders store them as entered, in
 /// either unit; Nightscout reads a target as mmol/L when its <c>units</c> say so or when either
-/// bound is below 20, which no mg/dL target can be.
+/// bound is below 20, which no mg/dL target can be. The units string is compared exactly, so a
+/// target labelled "mmol/L" with a bound of 20 or more is a mislabelled mg/dL value and stays
+/// unconverted, as Nightscout serves it.
 /// </summary>
 public static class TemporaryTargetUnits
 {

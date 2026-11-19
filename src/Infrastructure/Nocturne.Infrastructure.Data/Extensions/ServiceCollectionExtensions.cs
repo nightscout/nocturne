@@ -9,14 +9,24 @@ using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Storage;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Jobs;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Platform;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -73,13 +83,14 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(new HistoryCommitMargin(TimeSpan.FromMilliseconds(config.HistoryCommitMarginMilliseconds)));
         services.TryAddSingleton<TenantConnectionInterceptor>();
         services.TryAddSingleton<MutationAuditInterceptor>();
+        services.TryAddSingleton<PreparedStatementRepairInterceptor>();
 
         // Audit config cache (singleton — uses IDbContextFactory internally)
         services.TryAddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
-        // Register NpgsqlDataSource as a singleton - this manages the connection pool
         var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(config);
-        services.AddSingleton(dataSource);
+        services.AddSingleton(new ContextDataSource(dataSource));
+        services.AddSingleton(PostgresRuntimeOptions.BuildRawDataSource(config));
 
         // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
         // is never returned to a pool and reused, so a fault cannot poison later callers. Database
@@ -114,7 +125,8 @@ public static class ServiceCollectionExtensions
                 options.EnableServiceProviderCaching();
                 options.AddInterceptors(
                     sp.GetRequiredService<TenantConnectionInterceptor>(),
-                    sp.GetRequiredService<MutationAuditInterceptor>());
+                    sp.GetRequiredService<MutationAuditInterceptor>(),
+                    sp.GetRequiredService<PreparedStatementRepairInterceptor>());
             }
         );
 
@@ -145,13 +157,39 @@ public static class ServiceCollectionExtensions
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
-        // Register deduplication service (required by repositories)
-        services.AddScoped<IDeduplicationService, DeduplicationService>();
+        services.AddScoped<IDuplicateLinker, DuplicateLinker>();
+        services.AddScoped<DuplicateReconciler>();
+        services.AddScoped<IDuplicateReconciler>(sp => sp.GetRequiredService<DuplicateReconciler>());
+        services.AddScoped<IDeduplicationAdmin, DeduplicationAdmin>();
 
         // Register all repositories via their port interfaces
         services.AddScoped<IFoodRepository, FoodRepository>();
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
+        services.AddTransient<IOAuthTokenRepository, OAuthTokenRepository>();
+        services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
+        services.AddTransient<IOAuthClientRepository, OAuthClientRepository>();
+        services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
+        services.AddTransient<ITenantCreationInviteRepository, TenantCreationInviteRepository>();
+        services.AddTransient<IPlatformPolicyRepository, PlatformPolicyRepository>();
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddTransient<ITenantRepository, TenantRepository>();
+        services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
+        services.AddTransient<IRoleRepository, RoleRepository>();
+        services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
+        services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
+        services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
+        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();
+        services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddTransient<IJobLedger, JobLedgerRepository>();
+        services.AddScoped<SourceOwnedDataRepository>();
+        services.AddScoped<ISourceOwnedDataReader>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
+        services.AddScoped<ISourceOwnedDataPurge>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
+        services.AddScoped<IDemoDataPurge, DemoDataPurgeRepository>();
+        services.AddScoped<ICollectionLastModifiedReader, CollectionLastModifiedReader>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
@@ -180,9 +218,18 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAlertRepositories(this IServiceCollection services)
     {
         services.AddScoped<IAlertTrackerRepository, AlertTrackerRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
+        services.AddScoped<IDndWindowRepository, DndWindowRepository>();
+        services.AddScoped<ITenantAlertSettingsRepository, TenantAlertSettingsRepository>();
         services.AddScoped<ITrackerRepository, TrackerRepository>();
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
+        services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();
+        services.AddScoped<IActivityRecordRepository, ActivityRecordRepository>();
+        services.AddScoped<IHeartRateRepository, HeartRateRepository>();
+        services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
+        services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();
+        services.AddScoped<IHealthRecordTransactions, HealthRecordTransactions>();
         services.AddScoped<ISystemEventRepository, SystemEventRepository>();
         services.AddScoped<IUserFoodFavoriteRepository, UserFoodFavoriteRepository>();
         services.AddScoped<ITreatmentFoodRepository, TreatmentFoodRepository>();

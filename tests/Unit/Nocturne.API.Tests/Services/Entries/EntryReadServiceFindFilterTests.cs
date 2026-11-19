@@ -32,14 +32,13 @@ public class EntryReadServiceFindFilterTests
             _sgRepo.Object,
             _mgRepo.Object,
             _calRepo.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _demoMode.Object,
             Mock.Of<ILogger<EntryReadService>>());
 
         _sgRepo.Setup(r => r.GetForEntriesAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
         _mgRepo.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -56,7 +55,7 @@ public class EntryReadServiceFindFilterTests
         _sgRepo.Setup(r => r.GetForEntriesAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(readings);
     }
 
@@ -130,13 +129,13 @@ public class EntryReadServiceFindFilterTests
     [Fact]
     public async Task CountAsync_FindTypeEquality_CountsSingleRepo()
     {
-        _sgRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _sgRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(7);
 
         var count = await _sut.CountAsync(find: "find[type]=sgv");
 
         count.Should().Be(7);
-        _mgRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static SensorGlucose MakeSg(DateTime ts, double mgdl) => new()

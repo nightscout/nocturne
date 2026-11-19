@@ -19,7 +19,49 @@ public class ClockReadGuardTests
     [
         "src/API/Nocturne.API/Services/Seeding",
         "src/API/Nocturne.API/Services/Demo",
+        "src/API/Nocturne.API/Services/Sleep",
+        "src/API/Nocturne.API/Services/Treatments",
+        "src/API/Nocturne.API/Services/Glucose",
+        "src/API/Nocturne.API/Services/Profiles",
+        "src/API/Nocturne.API/Services/Timezones",
+        "src/API/Nocturne.API/Services/Devices",
+        "src/API/Nocturne.API/Services/Monitoring",
+        "src/API/Nocturne.API/Services/BackgroundServices",
+        "src/API/Nocturne.API/Services/Migration",
+        "src/API/Nocturne.API/Services/Alerts",
+        "src/API/Nocturne.API/Services/Health",
+        "src/API/Nocturne.API/Services/Notifications",
+        "src/API/Nocturne.API/Services/SetupHub",
+        "src/API/Nocturne.API/Services/Compatibility",
+        "src/API/Nocturne.API/Services/Platform",
+        "src/API/Nocturne.API/Services/Connectors",
+        "src/API/Nocturne.API/Services/Identity",
+        "src/API/Nocturne.API/Services/Analytics",
+        "src/API/Nocturne.API/Services/Legacy",
+        "src/API/Nocturne.API/Services/Chat",
+        "src/API/Nocturne.API/Services/V4",
+        "src/API/Nocturne.API/Services/ClientDevices",
+        "src/API/Nocturne.API/Services/CoachMarks",
+        "src/API/Nocturne.API/Services/Docs",
+        "src/API/Nocturne.API/Services/DevOnly",
+        "src/API/Nocturne.API/Services/Jobs",
     ];
+
+    /// <summary>Migrated files whose folder is not yet migrated as a whole.</summary>
+    private static readonly string[] Files =
+    [
+        "src/API/Nocturne.API/Services/Auth/JwtService.cs",
+    ];
+
+    /// <summary>
+    /// Files that read <see cref="DateTime.UtcNow"/> inside an EF query on purpose: Npgsql translates it
+    /// to the database's <c>now()</c>, so replicas whose clocks disagree still agree on what is recent.
+    /// Each is held to that, and to its count: a read outside a query lambda, or one more inside, fails.
+    /// </summary>
+    private static readonly Dictionary<string, int> DatabaseClockFiles = new()
+    {
+        ["src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs"] = 3,
+    };
 
     private static readonly HashSet<string> ClockTypes = [nameof(DateTime), nameof(DateTimeOffset)];
 
@@ -29,19 +71,37 @@ public class ClockReadGuardTests
     [Fact]
     public void A_migrated_folder_reads_no_static_clock()
     {
-        var root = RepositoryRoot();
         var reads = new List<string>();
 
         foreach (var folder in Folders)
         {
-            var directory = Path.Combine(root, folder);
-            Directory.Exists(directory).Should().BeTrue($"{folder} is listed in {nameof(Folders)}");
+            Directory.Exists(Path.Combine(RepoSources.Root, folder)).Should().BeTrue($"{folder} is listed in {nameof(Folders)}");
 
-            foreach (var path in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
+            foreach (var file in RepoSources.Under(folder))
             {
-                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                reads.AddRange(Violations(File.ReadAllText(path)).Select(v => $"{relative}:{v}"));
+                var relative = file.Path;
+                var source = file.Text;
+                var inQueryOnly = DatabaseClockFiles.TryGetValue(relative, out var permitted);
+                var violations = Violations(source, inQueryOnly);
+                reads.AddRange(violations.Select(v => $"{relative}:{v}"));
+                if (inQueryOnly && Violations(source).Count - violations.Count != permitted)
+                    reads.Add($"{relative}: holds {Violations(source).Count - violations.Count} query-lambda clock reads, not {permitted}");
             }
+        }
+
+        reads.Should().BeEmpty("these read a static clock or the system clock; inject TimeProvider instead");
+    }
+
+    [Fact]
+    public void A_migrated_file_reads_no_static_clock()
+    {
+        var reads = new List<string>();
+
+        foreach (var file in Files)
+        {
+            var source = RepoSources.Src.SingleOrDefault(s => s.Path == file);
+            source.Should().NotBeNull($"{file} is listed in {nameof(Files)}");
+            reads.AddRange(Violations(source!.Text).Select(v => $"{file}:{v}"));
         }
 
         reads.Should().BeEmpty("these read a static clock or the system clock; inject TimeProvider instead");
@@ -70,7 +130,19 @@ public class ClockReadGuardTests
         Violations(source).Should().HaveCount(expected);
     }
 
-    private static List<string> Violations(string source)
+    [Theory]
+    [InlineData("class C { void M() { q.Where(c => c.At > DateTime.UtcNow); } }", true, 0)]
+    [InlineData("class C { void M() { q.Update(s => s.Set(c => c.At, _ => DateTime.UtcNow)); } }", true, 0)]
+    [InlineData("class C { void M() { var t = DateTime.UtcNow; } }", true, 1)]
+    [InlineData("class C { void M() { q.Where(c => c.At > DateTime.UtcNow); } }", false, 1)]
+    [InlineData("class C { void M() { q.Select(c => TimeProvider.System.GetUtcNow()); } }", true, 1)]
+    public void A_database_clock_file_may_read_the_clock_only_inside_a_query_lambda(
+        string source, bool databaseClockFile, int expected)
+    {
+        Violations(source, databaseClockFile).Should().HaveCount(expected);
+    }
+
+    private static List<string> Violations(string source, bool allowInsideLambda = false)
     {
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetRoot();
@@ -96,8 +168,11 @@ public class ClockReadGuardTests
         {
             var type = LastName(access.Expression);
             var member = access.Name.Identifier.ValueText;
-            if ((clockTypes.Contains(type) && StaticClockMembers.Contains(member))
-                || (type == nameof(TimeProvider) && member == nameof(TimeProvider.System)))
+            var isStaticClockRead = clockTypes.Contains(type) && StaticClockMembers.Contains(member);
+            var isSystemProvider = type == nameof(TimeProvider) && member == nameof(TimeProvider.System);
+            var translatedToSql = isStaticClockRead && allowInsideLambda
+                && access.Ancestors().OfType<LambdaExpressionSyntax>().Any();
+            if ((isStaticClockRead || isSystemProvider) && !translatedToSql)
                 Report(access);
         }
 
@@ -112,19 +187,4 @@ public class ClockReadGuardTests
         MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
         _ => string.Empty,
     };
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
-    }
 }

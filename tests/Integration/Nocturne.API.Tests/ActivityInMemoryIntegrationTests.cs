@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for Activity endpoints using in-memory database
 /// Tests the complete request/response cycle with real database operations
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class ActivityInMemoryIntegrationTests : ApiIntegrationTestBase
 {

@@ -1,8 +1,10 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -12,6 +14,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -58,7 +61,10 @@ public class DataSourceServiceStatsTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new DemoDataPurgeRepository(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -176,6 +182,42 @@ public class DataSourceServiceStatsTests : IDisposable
         stats.TotalTreatments.Should().Be(1);
         stats.TreatmentsLast24Hours.Should().Be(1);
         stats.LastTreatmentTime.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Stats_TotalTheEightTreatmentTypesAndBreakDownEveryCountedTypeInOrder()
+    {
+        var now = DateTime.UtcNow;
+        using (var db = NewContext())
+        {
+            db.AddRange(
+                new SensorGlucoseEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Mgdl = 100 },
+                new MeterGlucoseEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Mgdl = 100 },
+                new CalibrationEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now },
+                new BolusEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Insulin = 1 },
+                new CarbIntakeEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Carbs = 10 },
+                new BolusCalculationEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now },
+                new NoteEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Text = "note" },
+                new DeviceEventEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, EventType = "SiteChange" },
+                new BGCheckEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Glucose = 100 },
+                new TempBasalEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Rate = 0.5, Origin = "pump" },
+                new BasalInjectionEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Units = 10 },
+                new ApsSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, AidAlgorithm = "Loop" },
+                new PumpSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now },
+                new UploaderSnapshotEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now },
+                new StateSpanEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Source = DataSource, StartTimestamp = now, Category = "PumpMode", State = "Automatic" },
+                new ProfileActivationEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSource, Timestamp = now, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Day" });
+            db.SaveChanges();
+        }
+
+        var stats = await StatsFor(DataSource);
+
+        stats.TotalTreatments.Should().Be(8);
+        stats.TreatmentsLast24Hours.Should().Be(8);
+        stats.TypeBreakdown.Select(t => (t.Key, t.Value)).Should().Equal(
+            ("Glucose", 1L), ("ManualBG", 1L), ("Boluses", 1L), ("CarbIntake", 1L), ("BolusCalculations", 1L),
+            ("Notes", 1L), ("DeviceEvents", 1L), ("BGChecks", 1L), ("TempBasals", 1L), ("StateSpans", 1L),
+            ("DeviceStatus", 1L), ("BasalInjections", 1L));
     }
 
     private void SeedBolus(string? dataSource, string? device, DateTime timestamp)

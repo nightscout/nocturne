@@ -28,7 +28,7 @@ public class GlookoV3User
     [JsonPropertyName("glookoCode")] public string? GlookoCode { get; set; }
 
     /// <summary>
-    ///     Meter units preference: "mgdl" or "mmol"
+    ///     Meter units preference: "mgdl" or "mmoll"
     /// </summary>
     [JsonPropertyName("meterUnits")]
     public string MeterUnits { get; set; } = "mgdl";
@@ -57,7 +57,7 @@ public class GlookoV3User
 public class GlookoV3Preference
 {
     /// <summary>
-    ///     Meter units preference: "mgdl" or "mmol"
+    ///     Meter units preference: "mgdl" or "mmoll"
     /// </summary>
     [JsonPropertyName("meterUnits")]
     public string MeterUnits { get; set; } = "mgdl";

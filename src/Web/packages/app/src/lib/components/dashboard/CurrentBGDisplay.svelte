@@ -27,6 +27,7 @@
   import { trackUnwashedFill } from "./glucose-tile-wash-state.svelte";
   import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
   import { showsCurrentGlucoseWidget } from "./top-widget-ids";
+  import LogEventButton from "#lib/components/entries/LogEventButton.svelte";
 
   interface ComponentProps {
     /** Show the status pills besides the tracker pills. */
@@ -192,9 +193,12 @@
       {/snippet}
     </StatusRail>
 
-    <div class="ml-auto flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
-      <Clock class="size-4" aria-hidden="true" />
-      {formattedLocalTime}
+    <div class="ml-auto flex shrink-0 items-center gap-4">
+      <LogEventButton />
+      <div class="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+        <Clock class="size-4" aria-hidden="true" />
+        {formattedLocalTime}
+      </div>
     </div>
   </div>
 </div>

@@ -17,6 +17,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// is refused when its host resolves to any other tenant, as it does once the slug it was opened for
 /// is deleted and created again.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class HubExpectedTenantIntegrationTests : ApiIntegrationTestBase
 {

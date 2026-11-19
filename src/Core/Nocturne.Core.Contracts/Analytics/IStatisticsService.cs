@@ -316,11 +316,6 @@ public interface IStatisticsService
 
     // Unit Conversions
 
-    /// <summary>Convert a glucose value from mg/dL to mmol/L.</summary>
-    /// <param name="mgdl">Glucose value in mg/dL.</param>
-    /// <returns>Glucose value in mmol/L.</returns>
-    double MgdlToMMOL(double mgdl);
-
     /// <summary>Convert a glucose value from mmol/L to mg/dL.</summary>
     /// <param name="mmol">Glucose value in mmol/L.</param>
     /// <returns>Glucose value in mg/dL.</returns>
@@ -405,7 +400,8 @@ public interface IStatisticsService
     /// Calculate comprehensive basal analysis statistics from TempBasals. Hourly percentiles are
     /// bucketed by <paramref name="userTimeZone"/>'s local hour-of-day (0–23) so the chart shows
     /// rates against the user's wall clock, not UTC. Null leaves them empty, since there is no local
-    /// hour to bucket on.
+    /// hour to bucket on. Basal injections count as scheduled basal, as in
+    /// <see cref="CalculateHourlyInsulinDelivery"/>.
     /// </summary>
     /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     BasalAnalysisResponse CalculateBasalAnalysis(
@@ -413,16 +409,19 @@ public interface IStatisticsService
         DateTime startDate,
         DateTime endDate,
         long untilMills,
-        TimeZoneInfo? userTimeZone = null);
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null);
 
     /// <summary>
-    /// Calculate the average insulin delivered per hour of day, from pump-confirmed
-    /// delivery records only. Algorithm boluses are reported as automatic bolus, not basal. Basal insulin is duration-weighted across the
+    /// Calculate the average insulin delivered per hour of day, from temp basals (with any profile
+    /// fallback the caller added), basal injections and boluses. Algorithm boluses are reported as
+    /// automatic bolus, not basal. Basal insulin is duration-weighted across the
     /// <paramref name="userTimeZone"/>-local hours each TempBasal overlaps; averages
     /// divide by the number of distinct local days that have delivery data, so a
     /// period that extends beyond the available data does not distort the pattern.
-    /// Long-acting basal injections (MDI) are spread evenly across the 24 hours
-    /// following each injection and counted as scheduled basal.
+    /// Basal injections count as scheduled basal, each dose at a constant rate until the next
+    /// (<c>StatisticsService.BasalInjectionPieces</c>), beside the temp basals rather than in
+    /// place of them, so read them from <c>StatisticsService.BasalInjectionReadSpan</c>.
     /// <paramref name="profileBasalSegments"/> is the profile's schedule over the window; it fills
     /// <see cref="HourlyInsulinDeliveryPoint.ProfileBasalRate"/> and is left at zero when absent.
     /// </summary>
@@ -439,11 +438,12 @@ public interface IStatisticsService
         IEnumerable<BasalSegment>? profileBasalSegments = null);
 
     /// <summary>
-    /// The registered CGMs that contributed <paramref name="readings"/>, each with its reading count,
-    /// then a nameless entry with no device id when any reading has no device.
+    /// The registered CGMs among <paramref name="readingCounts"/> (readings per device, a null device
+    /// for the unattributed ones), each with its reading count, then a nameless entry with no device
+    /// id when any reading has no device.
     /// </summary>
     IEnumerable<ContributingDevice> CalculateContributingDevices(
-        IReadOnlyCollection<SensorGlucose> readings,
+        IReadOnlyCollection<(Guid? PatientDeviceId, int Count)> readingCounts,
         IEnumerable<PatientDevice> devices);
 
     /// <summary>

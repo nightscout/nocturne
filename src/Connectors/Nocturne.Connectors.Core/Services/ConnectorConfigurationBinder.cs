@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Linq;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -22,34 +23,54 @@ public static class ConnectorConfigurationBinder
         foreach (var property in properties.Where(p => p.CanWrite))
         {
             var camelName = GetBoundKeyName(property);
-            if (!root.TryGetProperty(camelName, out var element))
+            if (!TryGetValue(root, camelName, out var element))
                 continue;
 
-            try
-            {
-                if (property.PropertyType == typeof(string)
-                    && element.ValueKind == JsonValueKind.String)
-                    property.SetValue(config, element.GetString());
-                else if (property.PropertyType == typeof(int)
-                    && element.ValueKind == JsonValueKind.Number)
-                    property.SetValue(config, element.GetInt32());
-                else if (property.PropertyType == typeof(double)
-                    && element.ValueKind == JsonValueKind.Number)
-                    property.SetValue(config, element.GetDouble());
-                else if (property.PropertyType == typeof(bool)
-                    && (element.ValueKind == JsonValueKind.True
-                        || element.ValueKind == JsonValueKind.False))
-                    property.SetValue(config, element.GetBoolean());
-            }
-            catch (TargetInvocationException)
-            {
-                // Skip properties that can't be set (e.g. setter throws)
-            }
-            catch (ArgumentException)
-            {
-                // Skip properties with type mismatches
-            }
+            if (TryConvert(element, property.PropertyType, out var value))
+                property.SetValue(config, value);
         }
+    }
+
+    /// <summary>
+    ///     Converts <paramref name="element"/> to <paramref name="targetType"/>, the one conversion
+    ///     binding and save validation share. An enum is read by member name, as the schema lists it.
+    /// </summary>
+    public static bool TryConvert(JsonElement element, Type targetType, out object? value)
+    {
+        value = null;
+        var type = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (type == typeof(string) && element.ValueKind == JsonValueKind.String)
+            value = element.GetString();
+        else if (type == typeof(int) && element.ValueKind == JsonValueKind.Number
+            && element.TryGetInt32(out var integer))
+            value = integer;
+        else if (type == typeof(double) && element.ValueKind == JsonValueKind.Number
+            && element.TryGetDouble(out var number))
+            value = number;
+        else if (type == typeof(bool)
+            && element.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            value = element.GetBoolean();
+        else if (type.IsEnum && element.ValueKind == JsonValueKind.String
+            && Enum.GetNames(type).Contains(element.GetString()))
+            value = Enum.Parse(type, element.GetString()!);
+
+        return value is not null;
+    }
+
+    /// <summary>
+    ///     The keys of <paramref name="root"/> in <paramref name="bound"/> whose value
+    ///     <see cref="TryConvert"/> refuses. A key not in the map is not reported.
+    /// </summary>
+    public static IReadOnlyList<string> UnbindableKeys(IReadOnlyDictionary<string, Type> bound, JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+            return [];
+
+        return root.EnumerateObject()
+            .Select(property => (Key: ConnectorEnabledKey.Matches(property.Name) ? "enabled" : property.Name, property.Value))
+            .Where(entry => bound.TryGetValue(entry.Key, out var type) && !TryConvert(entry.Value, type, out _))
+            .Select(entry => entry.Key)
+            .ToList();
     }
 
     public static void ApplySecretsToConfig<TConfig>(
@@ -68,6 +89,16 @@ public static class ConnectorConfigurationBinder
     }
 
     /// <summary>
+    ///     The keys <see cref="ApplyJsonToConfig{TConfig}"/> binds on <paramref name="configType"/>,
+    ///     each with its property type, whether or not the schema lists it. The enabled flag is in the
+    ///     map only as <c>enabled</c>; <see cref="ConnectorEnabledKey"/> matches its other casings.
+    /// </summary>
+    public static IReadOnlyDictionary<string, Type> BoundKeyTypes(Type configType) =>
+        configType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite)
+            .ToDictionary(GetBoundKeyName, p => p.PropertyType, StringComparer.Ordinal);
+
+    /// <summary>
     ///     The keys under which <paramref name="configType"/>'s secret properties are stored.
     /// </summary>
     public static IReadOnlySet<string> SecretKeyNames(Type configType) =>
@@ -75,6 +106,24 @@ public static class ConnectorConfigurationBinder
             .Where(p => p.GetCustomAttribute<ConnectorPropertyAttribute>()?.Secret == true)
             .Select(GetBoundKeyName)
             .ToHashSet(StringComparer.Ordinal);
+
+    private static bool TryGetValue(JsonElement root, string key, out JsonElement value)
+    {
+        if (!ConnectorEnabledKey.Matches(key))
+            return root.TryGetProperty(key, out value);
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!ConnectorEnabledKey.Matches(property.Name))
+                continue;
+
+            value = property.Value;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
 
     private static string GetBoundKeyName(PropertyInfo property)
     {

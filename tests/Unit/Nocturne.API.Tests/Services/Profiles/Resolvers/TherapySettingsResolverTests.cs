@@ -31,6 +31,7 @@ public class TherapySettingsResolverTests : IDisposable
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
             new ProfileVersionCache(TestTenantCache.Create(_cache)),
+            TimeProvider.System,
             NullLogger<TherapySettingsResolver>.Instance);
     }
 
@@ -311,7 +312,7 @@ public class TherapySettingsResolverTests : IDisposable
     [Fact]
     public async Task HasData_ReturnsTrue_WhenRecordsExist()
     {
-        _repo.Setup(r => r.CountAsync(null, null, default)).ReturnsAsync(5);
+        _repo.Setup(r => r.CountAsync(null, null, null, null, default)).ReturnsAsync(5);
 
         var result = await _sut.HasDataAsync();
 
@@ -321,7 +322,7 @@ public class TherapySettingsResolverTests : IDisposable
     [Fact]
     public async Task HasData_ReturnsFalse_WhenNoRecords()
     {
-        _repo.Setup(r => r.CountAsync(null, null, default)).ReturnsAsync(0);
+        _repo.Setup(r => r.CountAsync(null, null, null, null, default)).ReturnsAsync(0);
 
         var result = await _sut.HasDataAsync();
 
@@ -331,13 +332,13 @@ public class TherapySettingsResolverTests : IDisposable
     [Fact]
     public async Task HasData_CountsOncePerScope()
     {
-        _repo.Setup(r => r.CountAsync(null, null, default)).ReturnsAsync(0);
+        _repo.Setup(r => r.CountAsync(null, null, null, null, default)).ReturnsAsync(0);
 
         await _sut.HasDataAsync();
         await _sut.HasDataAsync();
         await _sut.HasDataAsync();
 
-        _repo.Verify(r => r.CountAsync(null, null, default), Times.Once);
+        _repo.Verify(r => r.CountAsync(null, null, null, null, default), Times.Once);
     }
 
     [Theory]

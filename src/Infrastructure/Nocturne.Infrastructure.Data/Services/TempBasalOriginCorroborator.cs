@@ -152,6 +152,10 @@ public static class TempBasalOriginCorroborator
     /// named no rate (oref's "no temp required"), or an enactment repeated from outside the window, is
     /// no evidence either way. With no evidence, or no rate to compare, <paramref name="uploaderDefault"/> stands.
     /// </summary>
+    /// <param name="uploaderDefault">The origin the uploader gave the temp basal.</param>
+    /// <param name="start">When the temp basal starts.</param>
+    /// <param name="rate">The temp basal's rate; null when it has none to compare.</param>
+    /// <param name="proposals">The proposals of its loop, from <see cref="ProposalsFor"/>.</param>
     /// <param name="otherDevice">
     /// The proposals are another device's (<see cref="ProposalsFor"/>), so a verdict rests on
     /// <see cref="TempBasalOriginEvidence.OtherDevice"/>.

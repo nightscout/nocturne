@@ -54,6 +54,8 @@
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
     showToggle?: boolean;
+    /** Show the configuration form. False for a connector that has nothing to configure. Default: true */
+    showConfiguration?: boolean;
     /** Show danger zone (delete config/data). Default: false */
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
@@ -62,6 +64,8 @@
     primaryAction?: "save-and-finish" | "save-only";
     /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /** See the config form's `saveLabel`. */
+    saveLabel?: string;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -73,10 +77,12 @@
     onComplete,
     onCancel,
     showToggle = connectorId !== undefined,
+    showConfiguration = true,
     showDangerZone = false,
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
+    saveLabel,
     extras,
   }: Props = $props();
 
@@ -369,7 +375,7 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage}
+        {#if canManage && showConfiguration}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -423,7 +429,7 @@
             </p>
           </CardContent>
         </Card>
-      {:else if hasRuntimeConfig}
+      {:else if showConfiguration && hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -431,9 +437,10 @@
           {effectiveConfig}
           {hasSecrets}
           {showEnvVarHints}
+          {saveLabel}
           onSave={handleSave}
         />
-      {:else}
+      {:else if showConfiguration}
         <EmptyState
           art="plug"
           variant="card"

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Translations;
 
 namespace Nocturne.API.Services;
@@ -29,7 +30,7 @@ public class GitHubPrClient(IHttpClientFactory httpClientFactory, ILogger<GitHub
         {
             var error = await response.Content.ReadAsStringAsync(ct);
             logger.LogError("GitHub API error fetching {Path}: {StatusCode} {Error}",
-                ContributionValidation.ForLog(path), response.StatusCode, ContributionValidation.ForLog(error));
+                LogText.Sanitize(path), response.StatusCode, LogText.Sanitize(error));
             throw new InvalidOperationException($"GitHub API error: {response.StatusCode}");
         }
 
@@ -59,7 +60,7 @@ public class GitHubPrClient(IHttpClientFactory httpClientFactory, ILogger<GitHub
         {
             var error = await response.Content.ReadAsStringAsync(ct);
             logger.LogError("GitHub API error creating branch: {StatusCode} {Error}",
-                response.StatusCode, ContributionValidation.ForLog(error));
+                response.StatusCode, LogText.Sanitize(error));
             throw new InvalidOperationException($"GitHub API error: {response.StatusCode}");
         }
     }
@@ -83,7 +84,7 @@ public class GitHubPrClient(IHttpClientFactory httpClientFactory, ILogger<GitHub
         {
             var error = await response.Content.ReadAsStringAsync(ct);
             logger.LogError("GitHub API error committing {Path}: {StatusCode} {Error}",
-                ContributionValidation.ForLog(path), response.StatusCode, ContributionValidation.ForLog(error));
+                LogText.Sanitize(path), response.StatusCode, LogText.Sanitize(error));
             throw new InvalidOperationException($"GitHub API error: {response.StatusCode}");
         }
     }
@@ -107,7 +108,7 @@ public class GitHubPrClient(IHttpClientFactory httpClientFactory, ILogger<GitHub
         {
             var error = await response.Content.ReadAsStringAsync(ct);
             logger.LogError("GitHub API error opening PR: {StatusCode} {Error}",
-                response.StatusCode, ContributionValidation.ForLog(error));
+                response.StatusCode, LogText.Sanitize(error));
             throw new InvalidOperationException($"GitHub API error: {response.StatusCode}");
         }
 
@@ -124,7 +125,7 @@ public class GitHubPrClient(IHttpClientFactory httpClientFactory, ILogger<GitHub
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
-            logger.LogWarning(ex, "Failed to clean up branch {Branch} after error", ContributionValidation.ForLog(branch));
+            logger.LogWarning(ex, "Failed to clean up branch {Branch} after error", LogText.Sanitize(branch));
         }
     }
 

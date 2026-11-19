@@ -7,13 +7,20 @@ type Window = { from: string; to: string };
 const requested: Window[] = [];
 const urlParams: Record<string, unknown> = { update: vi.fn() };
 
+vi.mock("#lib/api/generated/metadatas.generated.remote.js", () => ({
+  getV4ApiLimits: () => ({ current: { maxDateSpanDays: 366 } }),
+}));
+
 vi.mock("#lib/api/reports.remote.js", () => ({
   getReportsToday: () => remoteQuery(() => "2000-01-02"),
-  getReportsAnalysis: (input: Window) => {
-    requested.push(input);
-    return remoteQuery(() => ({ analysis: { basicStats: { count: 1 } } }));
+  getReportsComparison: (input: { a: Window; b: Window }) => {
+    requested.push(input.a, input.b);
+    return remoteQuery(() => ({
+      periodA: { hasData: true },
+      periodB: { hasData: true },
+      metrics: [],
+    }));
   },
-  getReportsInsulinDelivery: () => remoteQuery(() => ({ insulinEventCount: 0, carbCount: 0 })),
 }));
 
 vi.mock("runed/kit", () => ({ useSearchParams: () => urlParams }));

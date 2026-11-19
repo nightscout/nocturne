@@ -27,7 +27,7 @@ public class V3Envelope<T>
 public class V3VersionResult
 {
     /// <summary>
-    /// Nocturne release version
+    /// The Nightscout release Nocturne matches, <see cref="Nocturne.Core.Constants.ApplicationConstants.NightscoutApi.CompatibleVersion"/>
     /// </summary>
     public string Version { get; set; } = string.Empty;
 

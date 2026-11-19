@@ -23,6 +23,7 @@ public class Program
             .ConfigureCoreServices()
             .ConfigureServices(services =>
             {
+                services.AddSingleton(TimeProvider.System);
                 services.AddSingleton<McpServerConfiguration>();
                 services.AddTransient<IApiService, ApiService>();
                 services.AddSingleton<NocturneApiOptions>();

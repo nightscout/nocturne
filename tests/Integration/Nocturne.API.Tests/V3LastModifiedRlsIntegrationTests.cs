@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration;
 /// A last-modified stamp is read under the same Row Level Security as the rows it summarises, so a
 /// share or a history-clamped member learns nothing of a row it cannot read, not even when it changed.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class V3LastModifiedRlsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)

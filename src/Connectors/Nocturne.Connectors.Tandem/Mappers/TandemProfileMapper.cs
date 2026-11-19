@@ -18,7 +18,7 @@ public sealed class TandemProfileMapper(ILogger logger)
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>Builds a single profile document, or null when no usable settings are present.</summary>
-    public Profile? Map(TandemPumpSettings? settings)
+    public Profile? Map(TandemPumpSettings? settings, DateTime now)
     {
         if (settings?.Profiles?.Profile is not { Count: > 0 } pumpProfiles)
             return null;
@@ -31,7 +31,6 @@ public sealed class TandemProfileMapper(ILogger logger)
             return null;
 
         var active = pumpProfiles.FirstOrDefault(p => p.Idp == settings.Profiles.ActiveIdp);
-        var now = DateTime.UtcNow;
 
         _logger.LogDebug("Mapped Tandem profile with {Count} store entries", store.Count);
         return new Profile

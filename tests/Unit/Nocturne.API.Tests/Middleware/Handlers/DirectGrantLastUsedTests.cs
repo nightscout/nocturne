@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
 
@@ -69,7 +70,7 @@ public class DirectGrantLastUsedTests : IDisposable
     public async Task Records_when_where_and_by_what_the_grant_was_presented()
     {
         await DirectGrantTokenHandler.RecordLastUsedAsync(
-            _dbContextFactory.Object.AsNocturneFactory(), Mock.Of<ILogger>(), _grantId, _tenantId, "203.0.113.7", "xDrip4iOS");
+            new OAuthGrantRepository(_dbContextFactory.Object.AsNocturneFactory()), Mock.Of<ILogger>(), _grantId, _tenantId, "203.0.113.7", "xDrip4iOS");
 
         await using var ctx = _db.CreateContext(_tenantId);
         var grant = await ctx.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == _grantId);
@@ -89,7 +90,7 @@ public class DirectGrantLastUsedTests : IDisposable
             .ThrowsAsync(new InvalidOperationException("no connection"));
 
         var record = async () => await DirectGrantTokenHandler.RecordLastUsedAsync(
-            brokenFactory.Object.AsNocturneFactory(), logger.Object, _grantId, _tenantId, null, null);
+            new OAuthGrantRepository(brokenFactory.Object.AsNocturneFactory()), logger.Object, _grantId, _tenantId, null, null);
 
         await record.Should().NotThrowAsync();
     }

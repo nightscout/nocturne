@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Auth;
 
 namespace Nocturne.API.Authorization;
 
@@ -44,20 +43,12 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
         if (httpContext.GetAuthContext() is not { EffectiveSubjectId: { } subjectId })
             return false;
 
-        var factory = httpContext.RequestServices
-            .GetRequiredService<INocturneDbContextFactory>();
+        var subjects = httpContext.RequestServices.GetRequiredService<ISubjectRepository>();
 
-        await using var db = await factory.CreatePlatformAsync(httpContext.RequestAborted);
-
-        // Nullable projection so a missing row is distinguishable from false, and refuse it:
-        // an access token is a self-contained JWT with no revocation check, so a subject
-        // deleted mid-token — which every demo reset does — would otherwise read as "not a
-        // demo subject" and be waved through.
-        var isDemoSubject = await db.Subjects
-            .AsNoTracking()
-            .Where(s => s.Id == subjectId)
-            .Select(s => (bool?)s.IsDemoSubject)
-            .FirstOrDefaultAsync(httpContext.RequestAborted);
+        // A missing row is refused, not waved through: an access token is a self-contained JWT
+        // with no revocation check, so a subject deleted mid-token, which every demo reset does,
+        // would otherwise read as "not a demo subject".
+        var isDemoSubject = await subjects.IsDemoSubjectAsync(subjectId, httpContext.RequestAborted);
 
         return isDemoSubject is null or true;
     }

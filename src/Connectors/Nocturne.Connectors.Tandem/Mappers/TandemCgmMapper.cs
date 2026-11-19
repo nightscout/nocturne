@@ -22,9 +22,8 @@ public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public List<SensorGlucose> Map(IEnumerable<TandemPumpEvent> events)
+    public List<SensorGlucose> Map(IEnumerable<TandemPumpEvent> events, DateTime now)
     {
-        var now = DateTime.UtcNow;
         var records = new List<SensorGlucose>();
 
         foreach (var ev in events)
@@ -40,7 +39,7 @@ public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
             {
                 Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                UtcOffset = _time.OffsetMinutes,
+                UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
                 DataSource = TandemMapHelpers.Source,
                 SyncIdentifier = $"tandem_cgm_{ev.SeqNum}",

@@ -201,13 +201,13 @@ export function useResourceContext(config: {
  * ```svelte
  * <script>
  *   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
- *   import { getReportsData } from "#lib/api/reports.remote.js";
+ *   import { getReportsAnalysis } from "#lib/api/reports.remote.js";
  *   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
  *
  *   const reportsParams = requireDateParamsContext(14);
  *
  *   const reportsQuery = contextResource(
- *     () => getReportsData(reportsParams.dateRangeInput),
+ *     () => getReportsAnalysis(reportsParams.dateRangeInput),
  *     { errorTitle: "Error Loading AGP Report", dateParams: reportsParams }
  *   );
  *

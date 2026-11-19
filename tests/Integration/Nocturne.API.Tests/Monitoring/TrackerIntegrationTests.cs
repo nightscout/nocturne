@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// Integration tests for the v4 tracker endpoints at
 /// <c>/api/v4/trackers</c>.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class TrackerIntegrationTests : ApiIntegrationTestBase
 {

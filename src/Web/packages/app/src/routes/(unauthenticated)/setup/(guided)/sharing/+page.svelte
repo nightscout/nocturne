@@ -2,6 +2,8 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import Check from "@lucide/svelte/icons/check";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { FormError } from "#lib/forms/index.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
@@ -14,10 +16,11 @@
     setSetupHubItemState,
   } from "#lib/api/generated/setupHubs.generated.remote.js";
   import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
-  import { SetupHubItemKey, SetupHubItemState } from "#lib/api/index.js";
+  import { PatientRelationship, SetupHubItemKey, SetupHubItemState } from "#lib/api/index.js";
   import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import {
     familyRoleChoices,
+    handoverRoleChoices,
     sharingAudiences,
     sharingQuestion,
     type SharingAudience,
@@ -31,6 +34,11 @@
   const voice = $derived(patientVoice(relationshipQuery.current));
   const audiences = $derived(sharingAudiences(voice));
   const roleChoices = $derived(familyRoleChoices(rolesQuery.current ?? []));
+  const handingOver = $derived(
+    relationshipQuery.current?.relationship === PatientRelationship.Helper
+      && hubQuery.current?.handover?.callerIsHelper === true,
+  );
+  const ownerChoices = $derived(handoverRoleChoices(rolesQuery.current ?? []));
   const itemState = $derived(
     hubQuery.current?.items?.find((i) => i.key === SetupHubItemKey.Sharing)?.state,
   );
@@ -38,6 +46,7 @@
   let chosen = $state<SharingAudienceId[]>([]);
   let error = $state<string | undefined>(undefined);
   let keeping = $state(false);
+  let handoverInvited = $state(false);
 
   function toggle(audience: SharingAudience) {
     if (chosen.includes(audience.id)) {
@@ -54,6 +63,11 @@
 
   /** The item is done by what was just created, which only a fresh read of the hub reports. */
   const shared = () => void hubQuery.refresh();
+
+  function handoverCreated() {
+    handoverInvited = true;
+    shared();
+  }
 
   async function keepItToMe() {
     keeping = true;
@@ -74,6 +88,39 @@
   }
 </script>
 
+{#if handingOver}
+  <div class="flex flex-col gap-6" data-testid="sharing-handover">
+    <div class="flex flex-col gap-1">
+      <h2 class="text-lg font-semibold">Hand it over</h2>
+      <p class="text-sm text-muted-foreground">
+        Make a link for the person who will own Nocturne. When they accept the link, Nocturne is
+        theirs. Then they can choose who it is for and where alerts go.
+      </p>
+    </div>
+
+    {#if ownerChoices.length}
+      <CreateInviteCard
+        roles={rolesQuery.current ?? []}
+        roleChoices={ownerChoices}
+        singleUseOnly
+        offerHistoryLimit={false}
+        onCreated={handoverCreated}
+        onCancel={() => goto(resolve("setup"))}
+      />
+    {/if}
+
+    <Alert.Root variant="warning">
+      <TriangleAlert class="h-4 w-4" />
+      <Alert.Description>They can do everything you can do, including remove you.</Alert.Description>
+    </Alert.Root>
+
+    {#if handoverInvited && itemState !== SetupHubItemState.Done}
+      <p class="text-sm text-muted-foreground" data-testid="sharing-handover-waiting">
+        Waiting for them to accept.
+      </p>
+    {/if}
+  </div>
+{:else}
 <div class="flex flex-col gap-6">
   <div class="flex flex-col gap-1">
     <h2 class="text-lg font-semibold" id="sharing-question">{sharingQuestion(voice)}</h2>
@@ -146,3 +193,4 @@
     </section>
   {/each}
 </div>
+{/if}

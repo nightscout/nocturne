@@ -14,7 +14,7 @@ public partial class StatisticsControllerTests
 
     private async Task<PunchCardResponse> PunchCard(DateOnly from, DateOnly to)
     {
-        var result = await CreateController(statisticsService: new StatisticsService()).GetPunchCardData(from, to);
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System)).GetPunchCardData(from, to);
         return result.Result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<PunchCardResponse>().Subject;
     }
@@ -39,7 +39,7 @@ public partial class StatisticsControllerTests
         ]);
         SetupEmptyTreatments();
 
-        var result = await CreateController(statisticsService: new StatisticsService())
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
             .GetRangeAnalytics(June1, June1.AddDays(1));
 
         var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
@@ -63,7 +63,7 @@ public partial class StatisticsControllerTests
         SetupGlucose([new SensorGlucose { Timestamp = June1.AddMinutes(5), Mgdl = 100, PatientDeviceId = pump.Id }]);
         SetupEmptyTreatments();
 
-        var result = await CreateController(statisticsService: new StatisticsService())
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
             .GetRangeAnalytics(June1, June1.AddDays(1));
 
         result.Result.Should().BeOfType<OkObjectResult>().Subject
@@ -88,7 +88,7 @@ public partial class StatisticsControllerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([new CarbIntake { Timestamp = now.AddMinutes(-10), Carbs = 20 }]);
 
-        var result = await CreateController(statisticsService: new StatisticsService()).GetMultiPeriodStatistics();
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System)).GetMultiPeriodStatistics();
 
         var day = result.Result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<MultiPeriodStatistics>().Subject.LastDay!;
@@ -107,12 +107,12 @@ public partial class StatisticsControllerTests
     {
         SetupMultiPeriodWithProfile([]);
 
-        var result = await CreateController(statisticsService: new StatisticsService()).GetMultiPeriodStatistics();
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System)).GetMultiPeriodStatistics();
 
         var day = result.Result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<MultiPeriodStatistics>().Subject.LastDay!;
         day.HasSufficientData.Should().BeTrue();
-        day.Gmi!.Value.Should().Be(new StatisticsService().CalculateGMI(120).Value);
+        day.Gmi!.Value.Should().Be(new StatisticsService(TimeProvider.System).CalculateGMI(120).Value);
         day.Gmi.Reliability.Should().BeSameAs(day.Reliability);
         day.Reliability.Should().BeSameAs(day.Analytics!.Reliability);
     }

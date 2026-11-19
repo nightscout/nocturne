@@ -55,7 +55,7 @@ vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
 import AlertsPage from "./+page.svelte";
 
 const ruleName = () => page.getByText("Nighttime low");
-const newRuleButton = () => page.getByRole("button", { name: "New rule" });
+const newRuleButton = () => page.getByRole("button", { name: "New alert" });
 const enableSwitch = () => page.getByRole("switch", { name: "Enable rule" });
 const rowActions = () => page.getByRole("button", { name: "Row actions" });
 

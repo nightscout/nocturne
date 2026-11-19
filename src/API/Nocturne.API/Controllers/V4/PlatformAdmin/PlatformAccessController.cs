@@ -1,25 +1,26 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Mints a short-lived, tenant-pinned platform-admin access grant so a platform admin can enter a
-/// tenant they are not a member of. The grant is a JWT carrying a <c>platform_access</c> marker,
-/// stored in a dedicated <c>.basedomain</c> cookie and consumed by
-/// <see cref="Middleware.Handlers.PlatformAccessCookieHandler"/> on the target subdomain.
+/// Short-lived access that lets a platform admin enter a tenant they are not a member of. Call the
+/// grant route with a tenant slug to be redirected into that tenant.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The grant is a JWT carrying a <c>platform_access</c> marker, stored in a dedicated
+/// <c>.basedomain</c> cookie and consumed by <see cref="Middleware.Handlers.PlatformAccessCookieHandler"/>
+/// on the target subdomain.
+/// </para>
 /// <para>
 /// The endpoint is anonymous so it can bounce an unauthenticated operator through OIDC login and
 /// back. It authorizes via the operator's existing nocturne session (the <c>platform_admin</c>
@@ -45,7 +46,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 [Route("api/auth/platform-access")]
 [AllowAnonymous]
 public class PlatformAccessController(
-    INocturneDbContextFactory contexts,
+    ITenantRepository tenants,
     IJwtService jwtService,
     IAuthAuditService authAudit,
     IOptions<OidcOptions> oidcOptions,
@@ -65,7 +66,6 @@ public class PlatformAccessController(
     [HttpGet]
     public async Task<IActionResult> Access([FromQuery] string? tenant, CancellationToken ct)
     {
-        await using var db = await contexts.CreateAsync(ct);
         if (string.IsNullOrWhiteSpace(tenant))
             return Problem(detail: "No tenant slug was given.", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
 
@@ -90,10 +90,7 @@ public class PlatformAccessController(
         }
 
         // The tenants table is not RLS-scoped, so this resolves any tenant by slug.
-        var target = await db.Tenants.AsNoTracking()
-            .Where(t => t.Slug == tenant)
-            .Select(t => new { t.Id, t.Slug, t.IsActive })
-            .FirstOrDefaultAsync(ct);
+        var target = await tenants.FindBySlugAsync(tenant, ct);
 
         if (target is null)
             return Problem(detail: $"No tenant is registered under the slug '{tenant}'.", statusCode: StatusCodes.Status404NotFound, title: "Not Found");

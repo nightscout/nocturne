@@ -59,7 +59,6 @@ public class GlookoSignInFailureTests
             resolver,
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             provider);
 
         return await service.SyncDataAsync(

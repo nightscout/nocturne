@@ -19,15 +19,18 @@ public class TimezoneTimelineService : ITimezoneTimelineService
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly TimeProvider _time;
     private readonly ILogger<TimezoneTimelineService> _logger;
 
     public TimezoneTimelineService(
         INocturneDbContextFactory contexts,
         ITenantAccessor tenantAccessor,
+        TimeProvider timeProvider,
         ILogger<TimezoneTimelineService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
+        _time = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -73,8 +76,8 @@ public class TimezoneTimelineService : ITimezoneTimelineService
             // Cover all history before any later move/trip entry.
             EffectiveFrom = DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Unspecified),
             Timezone = ianaTimezone,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = _time.GetUtcNow().UtcDateTime,
+            UpdatedAt = _time.GetUtcNow().UtcDateTime,
         };
 
         db.TimezoneTimeline.Add(origin);
@@ -105,7 +108,7 @@ public class TimezoneTimelineService : ITimezoneTimelineService
         {
             entity.EffectiveFrom = DateTime.SpecifyKind(entry.EffectiveFrom, DateTimeKind.Unspecified);
             entity.Timezone = entry.Timezone;
-            entity.UpdatedAt = DateTime.UtcNow;
+            entity.UpdatedAt = _time.GetUtcNow().UtcDateTime;
         }
 
         await db.SaveChangesAsync(cancellationToken);

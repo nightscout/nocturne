@@ -7,5 +7,5 @@ namespace Nocturne.Connectors.Gluroo;
 
 public class GlurooConnectorInstaller()
     : TenantUrlConnectorInstaller<GlurooConnectorConfiguration, GlurooConnectorService>(
-        new ConnectorOptions { ConnectorName = "Gluroo" },
+        new ConnectorOptions(),
         config => config.Url);

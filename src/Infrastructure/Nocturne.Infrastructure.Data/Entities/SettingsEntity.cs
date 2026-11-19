@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.Settings
 /// </summary>
 [Table("settings")]
-public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
+public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped, IOriginalIdentified
 {
     /// <summary>
     /// Identifier of the tenant this setting belongs to

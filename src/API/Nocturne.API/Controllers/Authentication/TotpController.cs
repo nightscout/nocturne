@@ -12,13 +12,13 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for TOTP (Time-based One-Time Password) authenticator management and login.
-/// Handles setup, verification, credential listing/removal, and TOTP-based authentication.
+/// Authenticator app codes (TOTP) as a second step of sign-in. A caller can set up an
+/// authenticator, verify it, and list and remove authenticators. A code completes a sign-in that a
+/// passkey or an external provider started. A code alone never signs in.
 /// </summary>
 /// <remarks>
 /// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor
@@ -34,6 +34,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="IAuthAuditService"/>
 [ApiController]
 [Route("api/auth/totp")]
+[System.ComponentModel.DisplayName("TOTP")]
 [Tags("Authentication")]
 [AllowDuringSetup]
 public class TotpController : ControllerBase
@@ -95,7 +96,7 @@ public class TotpController : ControllerBase
         => Problem(detail: failure.ToString(), statusCode: 400, title: "Bad Request");
 
     /// <summary>
-    /// Generate TOTP setup data including provisioning URI and secret.
+    /// Generate TOTP setup data including provisioning URI and secret. Requires at least one primary auth factor (passkey or OIDC link) already configured.
     /// </summary>
     /// <returns>A <see cref="TotpSetupResponse"/> containing the provisioning URI, base32 secret, and challenge token.</returns>
     /// <remarks>
@@ -206,7 +207,7 @@ public class TotpController : ControllerBase
     }
 
     /// <summary>
-    /// Remove a TOTP credential by ID.
+    /// Remove a TOTP credential by ID. Allowed even when it is the last TOTP credential.
     /// </summary>
     /// <param name="id">The unique identifier of the TOTP credential to remove.</param>
     /// <returns>204 on success.</returns>
@@ -237,7 +238,7 @@ public class TotpController : ControllerBase
     }
 
     /// <summary>
-    /// Complete sign-in with a TOTP code after a primary factor has been verified.
+    /// Complete sign-in with a TOTP code after a primary factor has been verified. Requires the step-up token from that factor and takes no username. Issues session cookies on success. Rate-limited.
     /// </summary>
     /// <param name="request">A <see cref="TotpLoginRequest"/> containing the step-up token and 6-digit code.</param>
     /// <returns>A <see cref="TotpLoginResponse"/> with access token on success.</returns>
@@ -268,7 +269,7 @@ public class TotpController : ControllerBase
         var result = await _totpService.VerifyStepUpAsync(request.StepUpToken, request.Code);
         if (result == null)
         {
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectId: null, success: false,
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
                 ipAddress: ip, userAgent: ua,
                 detailsJson: JsonSerializer.Serialize(new { method = "totp" }));
             return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");

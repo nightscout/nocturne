@@ -17,6 +17,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// An AAPS Profile Switch and the effective switch that confirms it, uploaded as AAPS uploads them,
 /// read back on v1, v3 and v4 and through the profile resolvers.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class ProfileActivationIntegrationTests : ApiIntegrationTestBase
 {

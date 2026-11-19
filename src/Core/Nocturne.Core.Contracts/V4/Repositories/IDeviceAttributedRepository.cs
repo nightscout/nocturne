@@ -10,7 +10,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 public interface IDeviceAttributionWriter
 {
     /// <summary>
-    /// Persists <see cref="IDeviceAttributed.PatientDeviceId"/> for the given record ids in one batch.
+    /// Persists <see cref="IPatientDeviceLinked.PatientDeviceId"/> for the given record ids in one batch.
     /// Ids absent for this tenant are ignored.
     /// </summary>
     /// <returns>The number of rows updated.</returns>

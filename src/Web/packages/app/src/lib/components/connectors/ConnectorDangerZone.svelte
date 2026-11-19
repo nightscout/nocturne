@@ -60,8 +60,9 @@
     Notes: "notes",
     DeviceEvents: "device events",
     StateSpans: "state spans",
-    DeviceStatus: "device statuses",
+    DeviceStatus: "device status records",
     TempBasals: "temp basals",
+    BasalInjections: "basal injections",
     HeartRate: "heart rate readings",
     Steps: "step counts",
     BodyWeight: "body weights",
@@ -120,7 +121,10 @@
     } catch (e) {
       deleteDataResult = {
         success: false,
-        error: describeSubmitError(e, "Failed to delete data"),
+        error: describeSubmitError(e, "Failed to delete data", {
+          sync_running: "A sync is in progress for this connector. Wait until it is complete, then try again.",
+          import_running: "An import is in progress for this connector. Wait until it is complete, then try again.",
+        }),
       };
     }
   }

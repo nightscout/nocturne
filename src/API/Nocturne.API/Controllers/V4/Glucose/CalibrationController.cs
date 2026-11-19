@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
-using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -10,12 +9,12 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Controller for managing CGM calibration records — the slope, intercept, and scale values
-/// that a sensor transmitter applies to raw signal to produce glucose readings.
-/// Provides CRUD operations backed by <see cref="ICalibrationRepository"/>.
+/// Continuous glucose monitor (CGM) calibrations: the slope, intercept, and scale values that a
+/// sensor transmitter applies to the raw signal. List, read, create (one or in bulk), update and
+/// delete calibrations. List deleted calibrations and restore them.
 /// </summary>
 /// <remarks>
-/// Inherits standard list, get-by-ID, create, update, and delete operations from
+/// Backed by <see cref="ICalibrationRepository"/>. Inherits standard list, get-by-ID, create, update, and delete operations from
 /// <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// </remarks>
 /// <seealso cref="ICalibrationRepository"/>
@@ -23,11 +22,11 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="UpsertCalibrationRequest"/>
 /// <seealso cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Calibrations")]
 [Tags("Glucose")]
 [Route("api/v4/glucose/calibrations")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Entries)]
 public class CalibrationController(ICalibrationRepository repo)
     : V4CrudControllerBase<Calibration, UpsertCalibrationRequest, UpsertCalibrationRequest, ICalibrationRepository>(repo)
 {

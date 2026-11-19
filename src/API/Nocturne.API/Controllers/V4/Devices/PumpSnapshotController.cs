@@ -10,11 +10,13 @@ using Nocturne.Core.Contracts.V4.Repositories;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Controller for insulin pump snapshot data.
-/// Exposes standard V4 read operations via <see cref="V4ReadOnlyControllerBase{TModel,TRepository}"/>
-/// plus a bulk create-or-update endpoint for native uploaders (e.g. Trio).
+/// Insulin pump status snapshots, such as the reservoir level, active basal rate, and delivery status at a
+/// point in time. List and read snapshots, and create or update them in bulk.
 /// </summary>
 /// <remarks>
+/// Standard V4 read operations via <see cref="V4ReadOnlyControllerBase{TModel,TRepository}"/> plus a bulk
+/// create-or-update endpoint for native uploaders (e.g. Trio).
+///
 /// Pump snapshots capture the reported state of the insulin pump at a point in time
 /// (reservoir level, active basal rate, delivery status, etc.). Records are written
 /// by connector ingest pipelines or uploaded directly via the bulk endpoint.
@@ -23,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="PumpSnapshot"/>
 /// <seealso cref="UpsertPumpSnapshotRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Pump Snapshots")]
 [Tags("Devices")]
 [Route("api/v4/device-status/pump")]
 [RequireScope(Scope.DevicesRead)]
@@ -32,6 +35,9 @@ public class PumpSnapshotController(IPumpSnapshotRepository repo)
 {
     /// <summary>
     /// Create or update pump snapshots in bulk (max 1000).
+    /// A snapshot with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other snapshot is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
+    /// Omit `reservoir` when the level is unknown.
     /// </summary>
     /// <remarks>
     /// Array semantics are per-item upsert, not all-or-nothing: each snapshot carrying both

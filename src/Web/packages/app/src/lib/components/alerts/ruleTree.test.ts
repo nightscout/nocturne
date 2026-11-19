@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	addLeaf,
 	addGroup,
+	moveChild,
 	removeChild,
 	wrapChild,
 	unwrapChild,
@@ -48,6 +49,30 @@ describe("removeChild", () => {
 		const before = root.composite!.conditions.length;
 		removeChild(root, 1);
 		expect(root.composite!.conditions).toHaveLength(before - 1);
+	});
+});
+
+describe("moveChild", () => {
+	it("moves a condition one place up or down in its group", () => {
+		const root = newRoot();
+		addLeaf(root, "trend");
+		addLeaf(root, "iob");
+
+		moveChild(root, 2, -1);
+		expect(root.composite!.conditions.map((c) => c.type)).toEqual(["threshold", "iob", "trend"]);
+
+		moveChild(root, 0, 1);
+		expect(root.composite!.conditions.map((c) => c.type)).toEqual(["iob", "threshold", "trend"]);
+	});
+
+	it("leaves the first and the last where they are", () => {
+		const root = newRoot();
+		addLeaf(root, "trend");
+
+		moveChild(root, 0, -1);
+		moveChild(root, 1, 1);
+
+		expect(root.composite!.conditions.map((c) => c.type)).toEqual(["threshold", "trend"]);
 	});
 });
 

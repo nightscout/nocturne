@@ -13,8 +13,9 @@ using Nocturne.Core.Models.SetupHub;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The owner's setup hub: the items left to set up after onboarding, and the dashboard strip that
-/// offers them. Owner-only, like the onboarding answers it follows on from.
+/// The owner's setup checklist: the setup items still open, and the dashboard strip that offers
+/// them. A caller can read the checklist, update an item, confirm the About step and dismiss the
+/// strip. Only the owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
@@ -33,7 +34,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
         if (!HttpContext.HasScope(Scope.FullAccess))
             return Forbid();
 
-        return Ok(await setupHub.GetAsync(ct));
+        return Ok(await setupHub.GetAsync(HttpContext.GetSubjectId(), ct));
     }
 
     /// <summary>
@@ -60,7 +61,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
 
         try
         {
-            return Ok(await setupHub.SetStateAsync(key, request.State, ct));
+            return Ok(await setupHub.SetStateAsync(HttpContext.GetSubjectId(), key, request.State, ct));
         }
         catch (KeyNotFoundException)
         {
@@ -88,7 +89,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
 
         try
         {
-            return Ok(await setupHub.ConfirmAboutAsync(ct));
+            return Ok(await setupHub.ConfirmAboutAsync(HttpContext.GetSubjectId(), ct));
         }
         catch (KeyNotFoundException)
         {
@@ -112,7 +113,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
         if (!HttpContext.HasScope(Scope.FullAccess))
             return Forbid();
 
-        return Ok(await setupHub.DismissStripAsync(request.Revision, ct));
+        return Ok(await setupHub.DismissStripAsync(HttpContext.GetSubjectId(), request.Revision, ct));
     }
 }
 

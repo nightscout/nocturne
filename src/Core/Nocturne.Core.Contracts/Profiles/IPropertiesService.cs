@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Profiles;
@@ -10,6 +11,17 @@ public interface IPropertiesService
 {
     /// <returns>All available properties</returns>
     Task<Dictionary<string, object>> GetAllPropertiesAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// All properties, built from a <see cref="DData"/> and IOB/COB reading the caller already holds
+    /// </summary>
+    /// <param name="ddata">Every collection of the DData, loaded</param>
+    /// <param name="iobCob">The live IOB/COB reading, or null when it could not be read</param>
+    Task<Dictionary<string, object>> GetAllPropertiesAsync(
+        DData ddata,
+        IobCobReading? iobCob,
         CancellationToken cancellationToken = default
     );
 

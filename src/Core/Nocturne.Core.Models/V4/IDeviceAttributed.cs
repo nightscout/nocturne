@@ -12,7 +12,7 @@ namespace Nocturne.Core.Models.V4;
 /// span-based records it is the span start.
 /// </remarks>
 /// <seealso cref="PatientDevice"/>
-public interface IDeviceAttributed
+public interface IDeviceAttributed : IPatientDeviceLinked
 {
     /// <summary>Primary key of the record, used to persist a resolved attribution back to its row.</summary>
     Guid Id { get; }
@@ -31,7 +31,4 @@ public interface IDeviceAttributed
 
     /// <summary>Origin data source identifier (e.g. a connector name).</summary>
     string? DataSource { get; }
-
-    /// <summary>Foreign key to the <see cref="PatientDevice"/> this record is attributed to.</summary>
-    Guid? PatientDeviceId { get; set; }
 }

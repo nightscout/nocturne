@@ -31,6 +31,17 @@ public record AlertRuleChannelSnapshot(
     string? Secret = null);
 
 /// <summary>
+/// A channel that carries a signing secret, with the name of the rule it belongs to.
+/// </summary>
+/// <param name="Secret">The stored ciphertext.</param>
+public sealed record AlertChannelSecret(
+    Guid AlertRuleId,
+    string RuleName,
+    string Destination,
+    string? DestinationLabel,
+    string Secret);
+
+/// <summary>
 /// A stored <see cref="AlertRule"/>, enabled or not, with what the rule editor reads beside its
 /// evaluated fields.
 /// </summary>
@@ -62,8 +73,7 @@ public record AlertInstanceSnapshot(Guid Id, Guid TenantId, Guid AlertExcursionI
 /// <summary>
 /// Request to create a new alert instance when an <see cref="AlertExcursion"/> is first detected.
 /// </summary>
-public record CreateAlertInstanceRequest(Guid TenantId, Guid ExcursionId,
-    string Status, DateTime TriggeredAt);
+public record CreateAlertInstanceRequest(Guid ExcursionId, string Status, DateTime TriggeredAt);
 
 /// <summary>
 /// Request to update an existing alert instance (snooze, status change).
@@ -85,7 +95,7 @@ public record ExcursionRuleSnapshot(Guid AlertRuleId, string Name);
 /// Pairing of an open excursion with its owning rule, restricted to rules
 /// that have <see cref="AlertRule.AutoResolveEnabled"/> set. Returned by
 /// <see cref="Nocturne.Core.Contracts.Alerts.IAlertRepository.GetAutoResolveExcursionsAsync"/>
-/// for periodic auto-resolve evaluation by the sweep service.
+/// for periodic auto-resolve evaluation by the alert sweep.
 /// </summary>
 public record AutoResolveExcursionSnapshot(
     Guid ExcursionId,

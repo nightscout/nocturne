@@ -10,8 +10,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The setup hub's Alerts item: starter alert rules, where they send, and a test alert the owner
-/// confirms arrived. Owner-only, like the rest of the hub.
+/// The alerts step of setup. A caller can create starter alert rules, choose where they send, send
+/// a test alert, confirm that it arrived, and choose another member for urgent low alerts. Only the
+/// owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
@@ -32,7 +33,7 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
     [DenyDemoSubject]
     [RequireScope(Scope.AlertsReadWrite)]
     [HttpPut]
-    [RemoteCommand(Invalidates = ["GetAlertSetup", "GetSetupHub"])]
+    [RemoteCommand(Invalidates = ["GetAlertSetup", "SetupHub_GetSetupHub"])]
     [ProducesResponseType(typeof(AlertSetupStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -65,7 +66,7 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
     [DenyDemoSubject]
     [RequireScope(Scope.AlertsReadWrite)]
     [HttpPost("test/{instanceId:guid}/received")]
-    [RemoteCommand(Invalidates = ["GetAlertSetup", "GetSetupHub"])]
+    [RemoteCommand(Invalidates = ["GetAlertSetup", "SetupHub_GetSetupHub"])]
     [ProducesResponseType(typeof(AlertSetupStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

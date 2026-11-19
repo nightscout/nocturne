@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Seeding;
-using Nocturne.Services.Demo.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -51,32 +50,36 @@ public class SampleDataSeederTenantClockTests : IDisposable
     }
 
     [Fact]
-    public void The_host_frame_follows_the_providers_local_zone_not_the_tenants()
+    public void The_generator_frame_is_the_tenants_zone_not_the_hosts()
     {
         var time = new FakeTimeProvider(Instant);
         time.SetLocalTimeZone(TimeZoneInfo.Utc);
 
-        var clock = SeedingClock.Resolve(Auckland, time);
+        var demo = SeedingClock.Resolve(Auckland, time).Demo;
 
-        clock.HostNow.Should().Be(new DateTime(2026, 3, 14, 20, 0, 0));
-        clock.HostToday.Should().Be(new DateTime(2026, 3, 14));
-        clock.HostToUtc(new DateTime(2026, 3, 14, 20, 0, 0)).Should().Be(Instant.UtcDateTime);
-        clock.UtcToHost(Instant.UtcDateTime).Should().Be(new DateTime(2026, 3, 14, 20, 0, 0));
+        demo.LocalNow.Should().Be(new DateTime(2026, 3, 15, 9, 0, 0));
+        demo.ToUtc(new DateTime(2026, 3, 15, 9, 0, 0)).Should().Be(Instant.UtcDateTime);
     }
 
     [Fact]
-    public void An_unknown_recorded_zone_falls_back_to_the_zone_about_to_be_written()
+    public void An_unknown_recorded_zone_falls_back_to_the_providers_zone()
     {
-        var clock = SeedingClock.Resolve("Not/AZone", new FakeTimeProvider(Instant));
+        var time = new FakeTimeProvider(Instant);
+        time.SetLocalTimeZone(TimeZoneInfo.FindSystemTimeZoneById(Auckland));
 
-        clock.ZoneId.Should().Be(DemoTherapyProfile.LocalIanaTimezone());
+        var clock = SeedingClock.Resolve("Not/AZone", time);
+
+        clock.ZoneId.Should().Be(Auckland);
+        clock.LocalNow.Should().Be(new DateTime(2026, 3, 15, 9, 0, 0));
     }
 
     [Fact]
-    public void No_recorded_zone_falls_back_to_the_zone_about_to_be_written()
+    public void No_recorded_zone_falls_back_to_the_providers_zone_as_an_iana_id()
     {
-        SeedingClock.Resolve(null, new FakeTimeProvider(Instant))
-            .ZoneId.Should().Be(DemoTherapyProfile.LocalIanaTimezone());
+        var time = new FakeTimeProvider(Instant);
+        time.SetLocalTimeZone(TimeZoneInfo.FindSystemTimeZoneById("New Zealand Standard Time"));
+
+        SeedingClock.Resolve(null, time).ZoneId.Should().Be(Auckland);
     }
 
     [Fact]

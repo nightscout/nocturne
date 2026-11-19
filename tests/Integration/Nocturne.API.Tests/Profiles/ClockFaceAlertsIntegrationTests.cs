@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Profiles;
 /// A public clock face shows the alarm that is firing only when its owner turned alerts on, and the
 /// clock id is the only credential it needs.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class ClockFaceAlertsIntegrationTests : ApiIntegrationTestBase
 {

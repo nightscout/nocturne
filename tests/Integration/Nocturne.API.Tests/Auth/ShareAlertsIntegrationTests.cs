@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// A public share link granted alerts.read shows the alarm that is firing, through the share RLS
 /// policy on the alert tables, and nothing of the alert configuration behind it.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class ShareAlertsIntegrationTests : ApiIntegrationTestBase
 {

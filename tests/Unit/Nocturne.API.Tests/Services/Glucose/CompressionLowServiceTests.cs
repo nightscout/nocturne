@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Npgsql;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Services.Glucose;
 
@@ -61,6 +62,7 @@ public class CompressionLowServiceTests
             Mock.Of<IUISettingsService>(),
             _tenantOwnerResolver.Object,
             tenantAccessor.Object,
+            TimeProvider.System,
             NullLogger<CompressionLowService>.Instance);
     }
 
@@ -97,7 +99,7 @@ public class CompressionLowServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var context = new NocturneDbContext(options) { TenantId = TenantId };
-        var uiSettings = new UISettingsService(context.AsFactory(), NullLogger<UISettingsService>.Instance);
+        var uiSettings = new UISettingsService(context.AsFactory(), TimeProvider.System, NullLogger<UISettingsService>.Instance);
         await context.DisposeAsync();
 
         var sut = new CompressionLowService(
@@ -110,6 +112,7 @@ public class CompressionLowServiceTests
             uiSettings,
             _tenantOwnerResolver.Object,
             tenantAccessor.Object,
+            TimeProvider.System,
             NullLogger<CompressionLowService>.Instance);
 
         await sut.Invoking(s => s.GetSuggestionWithEntriesAsync(suggestion.Id))

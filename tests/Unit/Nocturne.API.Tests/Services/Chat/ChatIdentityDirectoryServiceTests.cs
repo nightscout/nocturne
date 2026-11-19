@@ -30,7 +30,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         _factory = _db.ContextFactory;
         _service = new ChatIdentityDirectoryService(
             _factory.AsNocturneFactory(),
-            Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
     }
 
     public void Dispose() => _db.Dispose();
@@ -324,7 +324,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             pending => InsertLink(UserA, stolen, pending.Label, isDefault: false),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "lily", "Ours", default);
@@ -348,7 +348,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, tenantId, "winner", isDefault: true, subjectId),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, tenantId, subjectId, "loser", "Loser", default);
@@ -369,7 +369,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, tenantId, "winner", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = () => service.CreateLinkAsync(
             Platform, UserA, tenantId, NewSubject(), "loser", "Loser", default);
@@ -392,7 +392,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, theirs, "theirs", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "ours", "Ours", default);
@@ -425,7 +425,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             interlopeCount: 1,
             beforeRetry: () => DeleteLink(UserA, "lily"));
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "lily", "Ours", default);
@@ -442,7 +442,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     {
         var factory = new BarrenFailureDbContextFactory(_db.Options);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = async () => await service.CreateLinkAsync(
             Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
@@ -462,7 +462,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             pending => InsertLink(UserA, NewTenant(), pending.Label, isDefault: false),
             interlopeCount: int.MaxValue);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = async () => await service.CreateLinkAsync(
             Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);

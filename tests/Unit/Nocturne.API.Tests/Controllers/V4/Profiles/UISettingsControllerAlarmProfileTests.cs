@@ -145,36 +145,33 @@ public class UISettingsControllerAlarmProfileTests
     }
 
     [Fact]
-    public async Task AddOrUpdateAlarmProfile_writesNothing_whenTheStoredConfigurationCannotBeRead()
+    public async Task AddOrUpdateAlarmProfile_reports500_whenTheServiceFails()
     {
-        var settingsService = UnreadableAlarmConfiguration();
-        var controller = NewController(settingsService.Object);
+        var settingsService = new Mock<IUISettingsService>();
+        settingsService
+            .Setup(s => s.AddOrUpdateAlarmProfileAsync(
+                It.IsAny<AlarmProfileConfiguration>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException());
 
-        var result = await controller.AddOrUpdateAlarmProfile(
+        var result = await NewController(settingsService.Object).AddOrUpdateAlarmProfile(
             new AlarmProfileConfiguration { Id = "night-high" });
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
-        settingsService.Verify(
-            s => s.SaveAlarmConfigurationAsync(
-                It.IsAny<UserAlarmConfiguration>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Fact]
-    public async Task DeleteAlarmProfile_writesNothing_whenTheStoredConfigurationCannotBeRead()
+    public async Task DeleteAlarmProfile_reports500_whenTheServiceFails()
     {
-        var settingsService = UnreadableAlarmConfiguration();
-        var controller = NewController(settingsService.Object);
+        var settingsService = new Mock<IUISettingsService>();
+        settingsService
+            .Setup(s => s.DeleteAlarmProfileAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException());
 
-        var result = await controller.DeleteAlarmProfile("night-high");
+        var result = await NewController(settingsService.Object).DeleteAlarmProfile("night-high");
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
-        settingsService.Verify(
-            s => s.SaveAlarmConfigurationAsync(
-                It.IsAny<UserAlarmConfiguration>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     // ----- helpers -----

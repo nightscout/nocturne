@@ -10,6 +10,7 @@ namespace Nocturne.API.Tests.Integration;
 /// <summary>
 /// Integration tests for authorization management endpoints
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Parity]
 public class AuthorizationManagementIntegrationTests : ApiIntegrationTestBase
 {

@@ -20,9 +20,17 @@ public class AuditContext : IAuditContext, ISystemAttributable
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
     public Guid? TokenId { get; set; }
+    public string? CredentialFingerprint { get; set; }
+    public string? UserAgent { get; set; }
     public string? TraceId { get; set; }
     public string? Endpoint { get; set; }
     public bool IsSystem { get; set; }
+
+    /// <summary>The writer a system-attributed stretch keeps (<see cref="SystemAuditScope"/>).</summary>
+    internal Guid? KeptWriterGrantId { get; set; }
+
+    /// <inheritdoc />
+    public Guid? WriterGrantId => KeptWriterGrantId ?? this.GrantId();
 
     /// <summary>Takes every actor field of <paramref name="source"/>.</summary>
     public void CopyFrom(IAuditContext source)
@@ -32,6 +40,8 @@ public class AuditContext : IAuditContext, ISystemAttributable
         AuthType = source.AuthType;
         IpAddress = source.IpAddress;
         TokenId = source.TokenId;
+        CredentialFingerprint = source.CredentialFingerprint;
+        UserAgent = source.UserAgent;
         TraceId = source.TraceId;
         Endpoint = source.Endpoint;
         IsSystem = source.IsSystem;
@@ -44,7 +54,10 @@ public class AuditContext : IAuditContext, ISystemAttributable
         SubjectId = null;
         SubjectName = null;
         TokenId = null;
+        CredentialFingerprint = null;
+        KeptWriterGrantId = null;
         IpAddress = null;
+        UserAgent = null;
         AuthType = system.AuthType;
         Endpoint = system.Endpoint;
         TraceId = system.TraceId;

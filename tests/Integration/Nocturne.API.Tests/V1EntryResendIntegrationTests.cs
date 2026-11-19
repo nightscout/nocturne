@@ -15,6 +15,7 @@ namespace Nocturne.API.Tests.Integration;
 /// <c>_id</c> and the recalculated value. Nightscout's v1 create upserts on <c>{sysTime, type}</c>,
 /// so the re-send updates the fields it carries.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class V1EntryResendIntegrationTests : ApiIntegrationTestBase
 {

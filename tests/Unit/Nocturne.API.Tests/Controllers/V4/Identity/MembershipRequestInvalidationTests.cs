@@ -25,11 +25,4 @@ public class MembershipRequestInvalidationTests
             $"{nameof(MemberInviteController).Replace("Controller", "")}_{nameof(MemberInviteController.GetMembers)}",
         ]);
     }
-
-    [Fact]
-    public void TheMemberListApprovingRefreshes_IsAQueryTheCommandCanRefresh()
-    {
-        RemoteAttributes.Query<MemberInviteController>(nameof(MemberInviteController.GetMembers))
-            .Should().NotBeNull();
-    }
 }

@@ -184,8 +184,8 @@ public static class SettingsEvidenceCalculator
         }
         return new SettingsEvidenceRange
         {
-            From = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime,
-            To = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime,
+            From = from.ToUtcDateTime(),
+            To = to.ToUtcDateTime(),
             Basal = basal,
             Isf = isf,
             CarbRatio = ObservedCarbRatio.Calculate(context, conversion, baseline),
@@ -613,8 +613,8 @@ internal sealed class SettingsEvidenceContext
         var (date, time) = LocalSlotBinning.DayInReview(start, Zone);
         return new T
         {
-            At = DateTimeOffset.FromUnixTimeMilliseconds(start).UtcDateTime,
-            End = DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime,
+            At = start.ToUtcDateTime(),
+            End = end.ToUtcDateTime(),
             Date = date,
             Time = time,
             Value = SlotSummary.Round(value),

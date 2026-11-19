@@ -13,6 +13,7 @@ using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Services.Demo.Services;
+using Nocturne.API.Tests.TestDoubles;
 using Xunit;
 using Aid = Nocturne.Core.Models.V4;
 
@@ -31,20 +32,23 @@ public class DemoLoopHealthTests
     internal static readonly DateTime End = new(2026, 10, 20, 20, 0, 0);
 
     internal sealed record Run(
-        List<DemoTimeStep> Steps,
-        List<Entry> Readings,
-        List<Aid.ApsSnapshot> Snapshots,
-        List<Aid.ApsLoopCycle> Cycles,
-        List<(Treatment Source, Aid.TempBasal Temp, Aid.TempBasalOrigin Default)> Temps,
+        IReadOnlyList<DemoTimeStep> Steps,
+        IReadOnlyList<Entry> Readings,
+        IReadOnlyList<Aid.ApsSnapshot> Snapshots,
+        IReadOnlyList<Aid.ApsLoopCycle> Cycles,
+        IReadOnlyList<(Treatment Source, Aid.TempBasal Temp, Aid.TempBasalOrigin Default)> Temps,
         LoopHealthRange Health);
 
     internal static Run Simulate() => Simulate(End);
+
+    /// <summary>One run at <see cref="End"/>, which the tests that only read it share.</summary>
+    private static readonly Lazy<Run> Sample = new(Simulate);
 
     internal static Run Simulate(DateTime end)
     {
         var config = SampleDataSeeder.ConfigurationFor(Days);
         var steps = new DemoDataGenerator(
-                Options.Create(config), NullLogger<DemoDataGenerator>.Instance, NullLoggerFactory.Instance)
+                Options.Create(config), DemoTestClock.Host, NullLogger<DemoDataGenerator>.Instance, NullLoggerFactory.Instance)
             .GenerateHistoricalTimeline(end)
             .ToList();
 
@@ -53,9 +57,9 @@ public class DemoLoopHealthTests
         foreach (var step in steps)
         {
             readings.AddRange(DemoCoverageSeeds.CgmReadings(step));
-            if (DemoDeviceStatusGenerator.ForStep(step, config.TargetGlucose, config.BasalRate) is not { } status)
+            if (DemoDeviceStatusGenerator.ForStep(step, DemoTestClock.Host, config.TargetGlucose, config.BasalRate) is not { } status)
                 continue;
-            var snapshot = DeviceStatusDecomposer.MapToApsSnapshot(status, status.Mills.ToString("x24"), SampleDataSeeder.DevSampleDataSource, null)!;
+            var snapshot = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(status, status.Mills.ToString("x24"), SampleDataSeeder.DevSampleDataSource, null)!;
             snapshot.Id = Guid.NewGuid();
             snapshots.Add(snapshot);
         }
@@ -154,7 +158,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_RecordsACycleEveryFiveMinutesWhileItCanRun()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         run.Steps.Select(s => s.Loop).Should().Contain(new[]
             { DemoLoopState.Manual, DemoLoopState.SiteChange, DemoLoopState.SensorWarmUp, DemoLoopState.PhoneOutOfRange });
@@ -164,7 +168,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_IsClosedForARealisticShareOfTheRange()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         var closedLoop = run.Health.Activity.ClosedLoop;
         closedLoop.Should().NotBeNull();
@@ -174,7 +178,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_InManualModeSuggestsAndEnactsNothing()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         var manual = run.Steps.Where(s => s.Loop == DemoLoopState.Manual).Select(s => Mills(s.Time)).ToHashSet();
         var cycles = run.Cycles.Where(c => manual.Contains(c.Mills)).ToList();
@@ -185,13 +189,13 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_NoTempRunsIntoAnInterruption()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         run.Temps.Should().NotBeEmpty();
         foreach (var (source, temp, _) in run.Temps)
         {
             var end = temp.EndTimestamp!.Value;
-            run.Steps.Where(s => s.Time.ToUniversalTime() >= temp.StartTimestamp && s.Time.ToUniversalTime() < end)
+            run.Steps.Where(s => s.Utc >= temp.StartTimestamp && s.Utc < end)
                 .Should().OnlyContain(s => s.Loop == DemoLoopState.Closed, $"the temp at {source.Created_at} ends by then");
         }
     }
@@ -199,7 +203,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_HasNoGlucoseWhileANewSensorWarmsUp()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         var warmUp = run.Steps.Where(s => s.Loop == DemoLoopState.SensorWarmUp).ToList();
         warmUp.Should().NotBeEmpty();
@@ -211,7 +215,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_TempsAreTheAlgorithmsAndLinkToTheirDevicesSnapshot()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         run.Temps.Should().NotBeEmpty();
         run.Temps.Should().OnlyContain(t => t.Default == Aid.TempBasalOrigin.Algorithm);
@@ -224,7 +228,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_SomeTempsAreCutToMaxSafeBasalAndAtCapIsJudged()
     {
-        var run = Simulate();
+        var run = Sample.Value;
 
         var capped = run.Temps.Where(t => t.Source.Rate == run.Steps[0].MaxSafeBasalRate).ToList();
         capped.Should().NotBeEmpty();
@@ -271,7 +275,7 @@ public class DemoLoopHealthTests
     [Fact]
     public void SampleLoop_IsTheSameOnEveryRun()
     {
-        var first = Simulate();
+        var first = Sample.Value;
         var second = Simulate();
 
         second.Temps.Select(t => (t.Source.Mills, t.Source.Rate))

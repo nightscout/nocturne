@@ -43,7 +43,7 @@ public class PasskeyRelyingPartyRegistrationTests
         // UriFormatException and takes every passkey endpoint down with it.
         var config = Resolve(baseDomain);
 
-        config.ServerDomain.Should().Be("localhost");
+        config.RPID.Should().Be("localhost");
         config.Origins.Should().Contain("https://localhost:1612");
     }
 
@@ -53,7 +53,7 @@ public class PasskeyRelyingPartyRegistrationTests
     {
         var config = Resolve("cgm.example.com");
 
-        config.ServerDomain.Should().Be("cgm.example.com");
+        config.RPID.Should().Be("cgm.example.com");
         config.Origins.Should().Contain("https://cgm.example.com");
     }
 }

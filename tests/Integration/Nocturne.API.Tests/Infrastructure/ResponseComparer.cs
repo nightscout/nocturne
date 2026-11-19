@@ -463,12 +463,16 @@ public class ComparisonOptions
 
     /// <summary>
     /// The body paths whose number may differ by the paired amount, a <c>*</c> segment standing for
-    /// any one key. Nightscout serves the properties it computed at its last data reload, up to a
-    /// few seconds before the request, where Nocturne computes at the request. A value derived from
-    /// now therefore lands one tick apart: an IOB near a rounding boundary a hundredth, and the
-    /// minutes within the hour of a device age one minute, whenever a minute ticks in that lag.
-    /// The age, days and hours of a device change only at an hour boundary, which that lag crosses
-    /// about once in 1,200 minute ticks, so they compare exactly. Every other path compares exactly.
+    /// any one key. Nightscout serves the properties it computed when its last reload finished, and
+    /// Nocturne computes them at the request. The parity wait reads at least a second after that
+    /// reload started, by design (<see cref="Parity.ParityTestBase.WaitForNightscoutBodyAsync"/>),
+    /// so the two are a second or two apart. A value derived from now therefore lands one tick
+    /// apart: an IOB near a rounding boundary a hundredth, a displayed COB a tenth, and the minutes
+    /// within the hour of a device age one minute, whenever a minute ticks in that lag. The
+    /// unrounded COB moves by what the carbs absorb in that lag: 0.02 g is 3.6 seconds at the test
+    /// profile's 20 g/h. The age, days and hours of a device change only at an hour boundary, which
+    /// a lag of a second or two crosses about once in 2,000 tests, so they compare exactly. Every
+    /// other path compares exactly.
     /// </summary>
     public static readonly IReadOnlyList<(string Path, decimal Tolerance)> ReloadLagToleranceTable =
     [
@@ -476,6 +480,10 @@ public class ComparisonOptions
         ("Body.state.bwp", 0.01m),
         ("Body.iob.display", 0.01m),
         ("Body.iob.displayLine", 0.01m),
+        ("Body.cob.cob", 0.02m),
+        ("Body.cob.treatmentCOB.cob", 0.02m),
+        ("Body.cob.display", 0.1m),
+        ("Body.cob.displayLine", 0.1m),
         ("Body.cage.minFractions", 1m),
         ("Body.iage.minFractions", 1m),
         ("Body.bage.minFractions", 1m),

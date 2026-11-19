@@ -1,4 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -6,7 +7,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
@@ -16,11 +16,13 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -167,14 +169,14 @@ public class WidgetSummaryServiceStatusTests
         return new WidgetSummaryService(
             entries.Object,
             TestIobCobReader.Empty(),
+            InsulinDeliveryReaders.Over(),
             Mock.Of<IApsSnapshotRepository>(),
             trackers.Object,
             Mock.Of<INotificationV1Service>(),
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
-            new AlertRepository(contextFactory.Object),
-            MockTenantAccessor.Create(tenantId: _tenantId).Object,
+            new AlertRepository(contextFactory.Object.AsNocturneFactory()),
             categoryReadContext.Object,
-            NullLogger<WidgetSummaryService>.Instance);
+            TimeProvider.System, NullLogger<WidgetSummaryService>.Instance);
     }
 }

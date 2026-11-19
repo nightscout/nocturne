@@ -42,9 +42,6 @@ public sealed record ProfileSpanMetadata
     public const string OriginalDurationKey = "originalDuration";
     public const string OriginalEndKey = "originalEnd";
 
-    public const string PumpIdKey = "pumpId";
-    public const string PumpTypeKey = "pumpType";
-    public const string PumpSerialKey = "pumpSerial";
     public const string AppKey = "app";
 
     private const double MillisPerHour = 3_600_000;
@@ -87,12 +84,6 @@ public sealed record ProfileSpanMetadata
     public long? OriginalEnd { get; init; }
 
     public long? DurationInMilliseconds { get; init; }
-
-    public long? PumpId { get; init; }
-
-    public string? PumpType { get; init; }
-
-    public string? PumpSerial { get; init; }
 
     public string? App { get; init; }
 
@@ -141,9 +132,6 @@ public sealed record ProfileSpanMetadata
             OriginalDuration = (long?)metadata.TryReadDecimal(OriginalDurationKey),
             OriginalEnd = (long?)metadata.TryReadDecimal(OriginalEndKey),
             DurationInMilliseconds = (long?)metadata.TryReadDecimal(DurationInMillisecondsKey),
-            PumpId = (long?)metadata.TryReadDecimal(PumpIdKey),
-            PumpType = metadata.TryReadString(PumpTypeKey),
-            PumpSerial = metadata.TryReadString(PumpSerialKey),
             App = metadata.TryReadString(AppKey),
         };
     }
@@ -171,7 +159,7 @@ public sealed record ProfileSpanMetadata
     }
 
     public static double ToHours(double timeshift, ProfileTimeshiftUnit unit) =>
-        unit == ProfileTimeshiftUnit.Milliseconds ? Math.Round(timeshift / MillisPerHour, 4) : timeshift;
+        unit == ProfileTimeshiftUnit.Milliseconds ? ScaledRounding.Round(timeshift / MillisPerHour, 4) : timeshift;
 
     public static string UnitName(ProfileTimeshiftUnit unit) =>
         unit == ProfileTimeshiftUnit.Milliseconds ? "ms" : "h";

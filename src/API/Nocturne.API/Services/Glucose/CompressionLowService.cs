@@ -2,7 +2,6 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -10,13 +9,14 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Services.Glucose;
 
 /// <summary>
 /// Domain service for compression low suggestion management. Provides retrieval, review, and
 /// dismissal of <see cref="CompressionLowSuggestion"/> records detected by
-/// <see cref="BackgroundServices.CompressionLowDetectionService"/>, including enrichment of
+/// <see cref="CompressionLowDetectionService"/>, including enrichment of
 /// suggestions with surrounding CGM entries for user review.
 /// </summary>
 /// <seealso cref="ICompressionLowService"/>
@@ -31,6 +31,7 @@ public class CompressionLowService : ICompressionLowService
     private readonly IUISettingsService _uiSettingsService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly TimeProvider _time;
     private readonly ILogger<CompressionLowService> _logger;
 
     public CompressionLowService(
@@ -43,6 +44,7 @@ public class CompressionLowService : ICompressionLowService
         IUISettingsService uiSettingsService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
+        TimeProvider timeProvider,
         ILogger<CompressionLowService> logger)
     {
         _repository = repository;
@@ -54,6 +56,7 @@ public class CompressionLowService : ICompressionLowService
         _uiSettingsService = uiSettingsService;
         _tenantOwnerResolver = tenantOwnerResolver;
         _tenantAccessor = tenantAccessor;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -121,8 +124,8 @@ public class CompressionLowService : ICompressionLowService
         {
             Category = StateSpanCategory.DataExclusion,
             State = "CompressionLow",
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
-            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime,
+            StartTimestamp = startMills.ToUtcDateTime(),
+            EndTimestamp = endMills.ToUtcDateTime(),
             Source = "compression-low-detection",
             Metadata = new Dictionary<string, object>
             {
@@ -138,7 +141,7 @@ public class CompressionLowService : ICompressionLowService
 
         // Update suggestion
         suggestion.Status = CompressionLowStatus.Accepted;
-        suggestion.ReviewedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        suggestion.ReviewedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
         suggestion.StateSpanId = Guid.TryParse(createdSpan.Id, out var spanId) ? spanId : null;
 
         await _repository.UpdateAsync(suggestion, cancellationToken);
@@ -165,7 +168,7 @@ public class CompressionLowService : ICompressionLowService
             throw new InvalidOperationException($"Suggestion {id} is not pending");
 
         suggestion.Status = CompressionLowStatus.Dismissed;
-        suggestion.ReviewedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        suggestion.ReviewedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
         await _repository.UpdateAsync(suggestion, cancellationToken);
 

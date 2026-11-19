@@ -87,14 +87,12 @@ public class IobCalculator(
     }
 
     /// <inheritdoc />
-    public IobContribution CalcBolus(Bolus bolus, long? time = null)
+    public IobContribution CalcBolus(Bolus bolus, long currentTime)
     {
         if (bolus.Insulin <= 0)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
-
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var dia = bolus.InsulinContext?.Dia
             ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
@@ -193,10 +191,8 @@ public class IobCalculator(
     }
 
     /// <inheritdoc />
-    public IobResult FromBoluses(List<Bolus> boluses, long? time = null)
+    public IobResult FromBoluses(List<Bolus> boluses, long currentTime)
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
         // Every bolus reads DIA and sensitivity at currentTime, so each is resolved once for the
         // batch rather than per bolus: a resolver call is several database round-trips, and an
         // automated-bolus history holds dozens of boluses inside one DIA window. Lazy, so a batch
@@ -423,8 +419,8 @@ public class IobCalculator(
     internal async Task<IobResult?> GetDeviceIobAsync(long time, bool live, CancellationToken ct = default)
     {
         var (from, to) = DeviceReportedValues.Window(time, live);
-        var fromTime = DateTimeOffset.FromUnixTimeMilliseconds(from).UtcDateTime;
-        var toTime = DateTimeOffset.FromUnixTimeMilliseconds(to).UtcDateTime;
+        var fromTime = from.ToUtcDateTime();
+        var toTime = to.ToUtcDateTime();
 
         var aps = (await apsSnapshotRepo.GetAsync(
             from: fromTime, to: toTime, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
@@ -453,7 +449,7 @@ public class IobCalculator(
     #region Helper Methods
 
     /// <summary>Nightscout's <c>roundToThreeDecimals</c>, which rounds a midpoint up; Nightscout's IOB is never negative.</summary>
-    private static double RoundToThreeDecimals(double num) => Math.Round(num, 3, MidpointRounding.AwayFromZero);
+    private static double RoundToThreeDecimals(double num) => ScaledRounding.Round(num, 3, MidpointRounding.AwayFromZero);
 
     #endregion
 }

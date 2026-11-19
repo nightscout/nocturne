@@ -160,7 +160,6 @@ public class DexcomConnectorServiceSyncTests
             resolver,
             NullLogger<DexcomConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new SignedInTokenProvider(resolver),
             publisher,
             clock);

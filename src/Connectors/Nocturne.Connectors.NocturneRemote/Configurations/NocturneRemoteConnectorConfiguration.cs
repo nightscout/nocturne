@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.NocturneRemote.Configurations;
     ServiceNames.NocturneRemoteConnector,
     "NOCTURNE_REMOTE",
     "ConnectSource.NocturneRemote",
-    "nocturne-remote-connector",
+    DataSources.NocturneRemoteConnector,
     "nocturne",
     ConnectorCategory.Sync,
     "Import data from a remote Nocturne instance",

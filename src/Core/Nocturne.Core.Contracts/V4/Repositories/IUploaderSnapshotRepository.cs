@@ -52,4 +52,12 @@ public interface IUploaderSnapshotRepository : ILegacyKeyedRepository<UploaderSn
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
     /// when <c>null</c>, returns the absolute latest snapshot per the lowest-battery rule.</param>
     Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the most recent <see cref="UploaderSnapshot"/> of one <see cref="UploaderSnapshot.Type"/>,
+    /// however old, or <c>null</c> if none exists.
+    /// </summary>
+    /// <param name="type">The uploader type to match exactly.</param>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    Task<UploaderSnapshot?> GetLatestOfTypeAsync(string type, DateTime? asOf, CancellationToken ct = default);
 }

@@ -132,6 +132,13 @@ public class DeviceStatus : ProcessableDocumentBase
     [Sanitizable]
     public string Device { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The connector the status was stored for, set when its creation is announced so a write-back can
+    /// tell it from an upload. Never serialized, so a client cannot set it and no response carries it.
+    /// </summary>
+    [JsonIgnore]
+    public string? DataSource { get; set; }
+
     [JsonPropertyName("isCharging")]
     public bool? IsCharging { get; set; }
 
@@ -191,9 +198,11 @@ public class DeviceStatus : ProcessableDocumentBase
 public class UploaderStatus
 {
     /// <summary>
-    /// Battery percentage (0-100)
+    /// Battery percentage (0-100). xDrip+ sends a sentence here for a transmitter
+    /// ("52 days (voltage: 296/281)"), which reads as no percentage.
     /// </summary>
     [JsonPropertyName("battery")]
+    [JsonConverter(typeof(FlexibleNullableIntConverter))]
     public int? Battery { get; set; }
 
     [JsonPropertyName("batteryVoltage")]
@@ -214,6 +223,13 @@ public class UploaderStatus
 
     [JsonPropertyName("type")]
     public string? Type { get; set; }
+
+    /// <summary>
+    /// Keys the uploader sends beyond the typed ones, e.g. the readings xDrip+ reports for a
+    /// transmitter (<see cref="V4.TransmitterStatus"/>).
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpStatus
@@ -269,6 +285,9 @@ public class PumpStatus
     /// </summary>
     [JsonPropertyName("extended")]
     public Dictionary<string, object>? Extended { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpBattery
@@ -281,6 +300,9 @@ public class PumpBattery
 
     [JsonPropertyName("voltage")]
     public double? Voltage { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpStatusDetails
@@ -293,6 +315,9 @@ public class PumpStatusDetails
 
     [JsonPropertyName("suspended")]
     public bool? Suspended { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class PumpIob
@@ -311,6 +336,9 @@ public class PumpIob
     /// </summary>
     [JsonPropertyName("iob")]
     public double? Iob { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class OpenApsStatus
@@ -347,6 +375,9 @@ public class OpenApsStatus
     /// </summary>
     [JsonPropertyName("version")]
     public string? Version { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -429,6 +460,9 @@ public class OpenApsSuggested
 
     [JsonPropertyName("consoleError")]
     public List<string>? ConsoleError { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -465,6 +499,9 @@ public class OpenApsRequested
 
     [JsonPropertyName("smb")]
     public double? Smb { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -483,6 +520,9 @@ public class OpenApsPredBGs
 
     [JsonPropertyName("UAM")]
     public List<double?>? UAM { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class OpenApsIobData
@@ -507,6 +547,9 @@ public class OpenApsIobData
 
     [JsonPropertyName("bolusiob")]
     public double? BolusIob { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -605,6 +648,9 @@ public class LoopStatus
 
     [JsonPropertyName("forecastError")]
     public object? ForecastError { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class RileyLinkStatus
@@ -626,6 +672,9 @@ public class RileyLinkStatus
 
     [JsonPropertyName("connected")]
     public bool? Connected { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopAutomaticDoseRecommendation
@@ -641,6 +690,9 @@ public class LoopAutomaticDoseRecommendation
 
     [JsonPropertyName("notice")]
     public string? Notice { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>Loop's carbs on board (COB).</summary>
@@ -651,6 +703,9 @@ public class LoopCob
 
     [JsonPropertyName("cob")]
     public double? Cob { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopPredicted
@@ -660,6 +715,9 @@ public class LoopPredicted
 
     [JsonPropertyName("startDate")]
     public string? StartDate { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopIob
@@ -675,6 +733,9 @@ public class LoopIob
 
     [JsonPropertyName("netbasalinsulin")]
     public double? NetBasalInsulin { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>
@@ -711,6 +772,9 @@ public class LoopEnacted
     /// </summary>
     [JsonPropertyName("received")]
     public bool? Received { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class LoopRecommendedTempBasal
@@ -729,6 +793,9 @@ public class LoopRecommendedTempBasal
 
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class XDripJsStatus
@@ -789,6 +856,9 @@ public class CorrectionRange
 
     [JsonPropertyName("minValue")]
     public double? MinValue { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class CgmStatus

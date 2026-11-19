@@ -29,13 +29,13 @@ public static class DemoHealthDataGenerator
 
     /// <summary>
     /// Heart rate samples (5-minute cadence) and hourly step-count deltas for
-    /// one local calendar day. <paramref name="localDay"/> is a local midnight;
-    /// timestamps are stored UTC. <paramref name="dataSource"/> stamps every
+    /// one local calendar day. <paramref name="localDay"/> is a local midnight
+    /// in the clock's zone; timestamps are stored UTC. <paramref name="dataSource"/> stamps every
     /// record and prefixes the deterministic sync identifiers, so re-seeding
     /// updates in place via the (DataSource, SyncIdentifier) dedup key.
     /// </summary>
     public static (List<HeartRate> HeartRates, List<StepCount> StepCounts) GenerateDailyActivity(
-        DateTime localDay, string dataSource)
+        DateTime localDay, string dataSource, DemoClock clock)
     {
         var scenario = DayScenarios.For(localDay);
         var rng = DayScenarios.RngFor(localDay, "activity");
@@ -45,8 +45,10 @@ public static class DemoHealthDataGenerator
         var hasWorkout = scenario == DayScenario.Exercise;
 
         var heartRates = new List<HeartRate>();
-        for (var t = localDay; t < localDay.AddDays(1); t = t.AddMinutes(5))
+        var dayEnd = clock.ToUtc(localDay.AddDays(1));
+        for (var utc = clock.ToUtc(localDay); utc < dayEnd; utc = utc.AddMinutes(5))
         {
+            var t = clock.ToLocal(utc);
             var bpm = BaselineHeartRate(t.Hour, rng);
             if (hasWorkout && t >= workoutStart && t < workoutEnd)
             {
@@ -67,7 +69,6 @@ public static class DemoHealthDataGenerator
                 _ => 0,
             };
 
-            var utc = t.ToUniversalTime();
             heartRates.Add(new HeartRate
             {
                 Timestamp = utc,
@@ -76,10 +77,13 @@ public static class DemoHealthDataGenerator
                 Device = WearableDevice,
                 EnteredBy = dataSource,
                 DataSource = dataSource,
-                // Keyed on local wall-clock, which the generation loop never
-                // repeats — a UTC key would collide across a DST spring-forward
-                // hour and silently drop samples via the sync-id upsert.
-                SyncIdentifier = $"{dataSource}:hr:{t:yyyyMMddTHHmmss}",
+                // Keyed on local wall-clock, as earlier seeds were, so a re-seed
+                // updates them in place. A fall-back hour repeats the wall clock:
+                // earlier seeds wrote it once, at the standard offset, so only the
+                // daylight occurrence carries a suffix.
+                SyncIdentifier = clock.Zone.IsAmbiguousTime(t) && clock.Zone.IsDaylightSavingTime(utc)
+                    ? $"{dataSource}:hr:{t:yyyyMMddTHHmmss}:dst"
+                    : $"{dataSource}:hr:{t:yyyyMMddTHHmmss}",
                 CreatedAt = utc.ToString("o"),
             });
         }
@@ -103,7 +107,7 @@ public static class DemoHealthDataGenerator
             if (steps <= 0)
                 continue;
 
-            var utc = t.AddMinutes(rng.Next(0, 50)).ToUniversalTime();
+            var utc = clock.ToUtc(t.AddMinutes(rng.Next(0, 50)));
             stepCounts.Add(new StepCount
             {
                 Timestamp = utc,
@@ -156,7 +160,7 @@ public static class DemoHealthDataGenerator
     /// Exercise deepens it. OriginalId is stable per night so re-seeding
     /// upserts via the (Source, OriginalId) dedup key.
     /// </summary>
-    public static SleepSession GenerateSleepSession(DateTime localMorning, string sourceApp)
+    public static SleepSession GenerateSleepSession(DateTime localMorning, string sourceApp, DemoClock clock)
     {
         var scenario = DayScenarios.For(localMorning);
         var rng = DayScenarios.RngFor(localMorning, "sleep");
@@ -164,7 +168,7 @@ public static class DemoHealthDataGenerator
         var deepMultiplier = scenario == DayScenario.Exercise ? 1.15 : 1.0;
 
         var bedtimeLocal = localMorning.AddDays(-1).AddHours(22).AddMinutes(rng.Next(0, 90));
-        var bedtime = bedtimeLocal.ToUniversalTime();
+        var bedtime = clock.ToUtc(bedtimeLocal);
 
         var stages = new List<SleepStageInterval>();
         long deepMs = 0, lightMs = 0, remMs = 0, awakeMs = 0;
@@ -237,11 +241,11 @@ public static class DemoHealthDataGenerator
                 Hrv = rng.Next(40, 90),
                 Spo2 = rng.Next(94, 99),
                 RespirationRate = rng.Next(12, 17),
-                Movement = (float)Math.Round(rng.NextDouble(), 2),
+                Movement = (float)ScaledRounding.Round(rng.NextDouble(), 2),
             });
         }
 
-        var efficiency = durationMs > 0 ? (float)Math.Round(100.0 * totalSleepMs / durationMs, 1) : 0f;
+        var efficiency = durationMs > 0 ? (float)ScaledRounding.Round(100.0 * totalSleepMs / durationMs, 1) : 0f;
         var restfulPct = totalSleepMs > 0 ? (deepMs + remMs) * 100.0 / totalSleepMs : 0;
         var score = (short)Math.Clamp((int)Math.Round(efficiency * 0.5 + restfulPct * 0.5), 50, 98);
 
@@ -265,11 +269,11 @@ public static class DemoHealthDataGenerator
             Efficiency = efficiency,
             RestlessPeriods = stages.Count(s => s.Stage == SleepStageType.Awake) - 1, // exclude sleep-onset latency
             SleepScore = score,
-            AvgHeartRate = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.HeartRate!.Value), 1) : null,
+            AvgHeartRate = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.HeartRate!.Value), 1) : null,
             MinHeartRate = samples.Count > 0 ? samples.Min(s => s.HeartRate!.Value) : null,
-            AvgHrv = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.Hrv!.Value), 1) : null,
-            AvgBreathRate = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.RespirationRate!.Value), 1) : null,
-            AvgSpo2 = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.Spo2!.Value), 1) : null,
+            AvgHrv = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.Hrv!.Value), 1) : null,
+            AvgBreathRate = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.RespirationRate!.Value), 1) : null,
+            AvgSpo2 = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.Spo2!.Value), 1) : null,
             // Stable per-night key so re-seeding upserts rather than duplicates.
             OriginalId = $"{sourceApp}:sleep:{start:yyyy-MM-dd}",
             Stages = stages,

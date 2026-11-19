@@ -22,6 +22,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// cannot read or write against another tenant, and that a tenant member without
 /// the platform_admin role cannot reach the platform-admin API.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 {
@@ -584,6 +585,22 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a tenant member without the platform_admin role must not access the platform-admin API");
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/v4/admin/platform-settings")]
+    [InlineData("GET", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("PUT", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("DELETE", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("GET", "/api/v4/admin/platform-settings/decrypted")]
+    public async Task Tenant_admin_cannot_read_or_change_instance_google_health_settings(string method, string path)
+    {
+        using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        if (method == "PUT")
+            request.Content = new StringContent("{\"enabled\":true,\"fields\":{}}", System.Text.Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

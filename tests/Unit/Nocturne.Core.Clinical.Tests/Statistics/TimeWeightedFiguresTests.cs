@@ -14,7 +14,7 @@ public class TimeWeightedFiguresTests
 {
     private static readonly DateTime Start = new(2026, 3, 2, 10, 0, 0, DateTimeKind.Utc);
 
-    private readonly StatisticsService _sut = new();
+    private readonly StatisticsService _sut = new(TimeProvider.System);
 
     private static SensorGlucose Reading(DateTime at, double mgdl) => new() { Timestamp = at, Mgdl = mgdl };
 

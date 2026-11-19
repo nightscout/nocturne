@@ -5,14 +5,17 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Services.Caching;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Demo;
 
@@ -27,6 +30,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly Mock<ITenantService> _tenantService = new();
+    private readonly Mock<ILogger<DemoTenantService>> _logger = new();
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2031, 5, 6, 7, 8, 9, TimeSpan.Zero));
     private readonly DemoTenantService _service;
 
@@ -45,12 +49,13 @@ public class DemoTenantServiceResetTests : IDisposable
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
         _service = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(),
+            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             _tenantService.Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             _time,
-            new Mock<ILogger<DemoTenantService>>().Object);
+            _logger.Object);
     }
 
     [Fact]
@@ -219,6 +224,44 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     [Fact]
+    public async Task ConfigureAccessAsync_RestoringADriftedDemoRole_AuditsThePermissionsItGainedAndLost()
+    {
+        var tenantId = SeedDemoTenant();
+        Guid roleId;
+        await using (var db = _db.CreateContext())
+        {
+            var role = await db.TenantRoles.SingleAsync(r => r.TenantId == tenantId && r.Slug == "demo-visitor");
+            roleId = role.Id;
+            role.Permissions = [Scope.DemoVisitorPermissions.First(), Scope.MembersManage];
+            await db.SaveChangesAsync();
+        }
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        await using var read = _db.CreateContext();
+        var row = await read.AuthAuditLog.AsNoTracking().SingleAsync(a => a.EventType == AuthAuditEventType.RolePermissionsChanged);
+        row.TenantId.Should().Be(tenantId);
+        var gained = string.Join(",", Scope.DemoVisitorPermissions.Skip(1).Order(StringComparer.Ordinal).Select(p => $"\"{p}\""));
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{roleId}}","role":"demo-visitor","gained":[{{gained}}],"lost":["{{Scope.MembersManage}}"],"kind":"tenant"}""");
+        row.ActorSubjectId.Should().BeNull();
+        row.ActorCredential.Should().Be("system");
+        row.TargetSubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConfigureAccessAsync_RunAgainOverAnUnchangedDemoRole_AuditsNothing()
+    {
+        var tenantId = SeedDemoTenant();
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        await using var db = _db.CreateContext();
+        (await db.AuthAuditLog.AsNoTracking().Where(a => a.EventType == AuthAuditEventType.RolePermissionsChanged).ToListAsync())
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ConfigureAccessAsync_DoesNotBindDemoMemberToAnUnrelatedSubjectNamedDemo()
     {
         // subjects.username carries no unique index and any operator or invitee can pick
@@ -360,6 +403,47 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     [Fact]
+    public async Task ResetAsync_RemovesTheDemoSubjectEvenWhenItIsTheOnlyOwnerOfAnotherTenant()
+    {
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        var otherTenantId = Guid.CreateVersion7();
+        var ownerRoleId = Guid.CreateVersion7();
+        var memberId = Guid.CreateVersion7();
+        using (var db = _db.CreateContext())
+        {
+            db.Add(new TenantEntity { Id = otherTenantId, Slug = "alice", DisplayName = "Alice", IsActive = true });
+            db.TenantRoles.Add(new TenantRoleEntity
+            {
+                Id = ownerRoleId, TenantId = otherTenantId, Name = "Owner", Slug = RoleSeeds.Owner, Permissions = [Scope.FullAccess], IsSystem = true,
+            });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = memberId, TenantId = otherTenantId, SubjectId = subjectId });
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantMemberId = memberId, TenantRoleId = ownerRoleId,
+            });
+            db.SaveChanges();
+        }
+
+        await _service.ResetAsync();
+
+        await using var check = _db.CreateContext();
+        (await check.TenantMembers.AnyAsync(m => m.SubjectId == subjectId))
+            .Should().BeFalse("a publicly-obtainable account keeps no membership, an owner's included");
+        (await check.Subjects.AnyAsync(s => s.Id == subjectId)).Should().BeFalse();
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state!.ToString()!.Contains("alice")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once,
+            "the tenant the retirement leaves without an owner is named in the log");
+    }
+
+    [Fact]
     public async Task ResetAsync_ReturnsNull_WhenNoDemoTenantExists()
     {
         var result = await _service.ResetAsync();
@@ -480,7 +564,7 @@ public class DemoTenantServiceResetTests : IDisposable
         }
 
         var publicSubject = await db.Subjects
-            .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public");
+            .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == PublicSubjectFilter.PublicSubjectName);
 
         if (publicSubject is null)
         {

@@ -13,6 +13,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Integration tests for the guest link lifecycle: creation, activation,
 /// session-based access, revocation, and listing.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
 {

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using FluentAssertions;
+using Nocturne.API.Tests.Integration.Parity.V2;
 using Xunit;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
@@ -35,6 +36,31 @@ public class ResponseComparerReloadLagToleranceTests
     public async Task A_difference_above_one_hundredth_on_an_IOB_path_does_not_match(string expected, string actual)
     {
         (await MatchesAsync(Tolerant, expected, actual)).Should().BeFalse();
+    }
+
+    private static readonly ResponseComparer Properties = new(PropertiesParityTests.Options);
+
+    [Theory]
+    [InlineData("""{"cob":{"display":26.3}}""", """{"cob":{"display":26.2}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 26.3g"}}""", """{"cob":{"displayLine":"COB: 26.2g"}}""")]
+    [InlineData("""{"cob":{"cob":26.253333}}""", """{"cob":{"cob":26.233333}}""")]
+    [InlineData("""{"cob":{"treatmentCOB":{"cob":26.253333}}}""", """{"cob":{"treatmentCOB":{"cob":26.243333}}}""")]
+    public async Task COB_within_the_reload_lag_matches_in_the_properties_comparison(string expected, string actual)
+    {
+        (await MatchesAsync(Properties, expected, actual)).Should().BeTrue();
+        (await MatchesAsync(Properties, actual, expected)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("""{"cob":{"display":26.3}}""", """{"cob":{"display":26.1}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 26.3g"}}""", """{"cob":{"displayLine":"COB: 26.1g"}}""")]
+    [InlineData("""{"cob":{"cob":26.253333}}""", """{"cob":{"cob":26.223333}}""")]
+    [InlineData("""{"cob":{"treatmentCOB":{"cob":26.253333}}}""", """{"cob":{"treatmentCOB":{"cob":26.2}}}""")]
+    [InlineData("""{"cob":{"rawCarbImpact":0.5}}""", """{"cob":{"rawCarbImpact":0.51}}""")]
+    [InlineData("""{"cob":{"treatmentCOB":{"isDecaying":1}}}""", """{"cob":{"treatmentCOB":{"isDecaying":0}}}""")]
+    public async Task COB_beyond_the_reload_lag_does_not_match_in_the_properties_comparison(string expected, string actual)
+    {
+        (await MatchesAsync(Properties, expected, actual)).Should().BeFalse();
     }
 
     [Theory]

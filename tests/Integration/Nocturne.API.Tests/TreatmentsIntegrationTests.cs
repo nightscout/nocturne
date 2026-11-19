@@ -20,6 +20,7 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for Treatment CRUD operations against the API running in-process on real PostgreSQL.
 /// Tests the complete request/response cycle for v1 treatment endpoints.
 /// </summary>
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 [Parity]
 public class TreatmentsIntegrationTests : ApiIntegrationTestBase

@@ -2,17 +2,22 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Controllers.V4.PlatformAdmin;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -21,6 +26,8 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers;
 
@@ -46,6 +53,9 @@ public class PasskeyControllerTests : IDisposable
     private readonly Mock<ISubjectService> _subjectService;
     private readonly Mock<ITenantAccessor> _tenantAccessor;
     private readonly Mock<ITenantService> _tenantService;
+    private readonly Mock<IInAppNotificationService> _notifications = new();
+    private readonly Mock<IAuthAuditService> _requestAudit = new();
+    private readonly Mock<IPasskeyCredentialRepository> _passkeyCredentials = new();
     private readonly PasskeyController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -93,7 +103,10 @@ public class PasskeyControllerTests : IDisposable
             _tenantService.Object,
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
             // property under test, and a mock would assert the mock.
-            new TenantMemberService((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new TenantMemberService(new TenantMembershipRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory())),
+            new SubjectRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new TenantRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new TenantMembershipRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
             (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
             logger.Object);
@@ -449,7 +462,7 @@ public class PasskeyControllerTests : IDisposable
     }
 
     private MemberRecoveryEligibility Eligibility() =>
-        new(new TenantMemberService(new SharedSqliteFactory(_db.Options).AsNocturneFactory()));
+        new(new TenantMemberService(new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory())));
 
     private Task<ActionResult<RecoveryModeRedeemResponse>> RedeemAsync(
         Mock<ILoginCodeService> loginCodes, string code = "issued-code") =>
@@ -574,7 +587,8 @@ public class PasskeyControllerTests : IDisposable
         var controller = new PasskeyController(
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
-            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(tenantContexts),
+            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts)),
+            new SubjectRepository(tenantContexts), new TenantRepository(tenantContexts), new TenantMembershipRepository(tenantContexts),
             tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
         {
             ControllerContext = _controller.ControllerContext,
@@ -608,7 +622,8 @@ public class PasskeyControllerTests : IDisposable
         var controller = new PasskeyController(
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
-            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(failingContexts.Object),
+            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object)),
+            new SubjectRepository(failingContexts.Object), new TenantRepository(failingContexts.Object), new TenantMembershipRepository(failingContexts.Object),
             failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
         {
             ControllerContext = _controller.ControllerContext,
@@ -763,7 +778,7 @@ public class PasskeyControllerTests : IDisposable
                 AttestationResponseJson = "{}",
                 ChallengeToken = "challenge-for-rhys",
             },
-            new Mock<IInAppNotificationService>().Object);
+            FilingScopes(), _passkeyCredentials.Object);
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         objectResult.StatusCode.Should().Be(400);
@@ -788,7 +803,7 @@ public class PasskeyControllerTests : IDisposable
                 AttestationResponseJson = "{}",
                 ChallengeToken = "challenge-for-sam",
             },
-            new Mock<IInAppNotificationService>().Object);
+            FilingScopes(), _passkeyCredentials.Object);
 
         Assert.IsType<OkResult>(result);
         _passkeyService.Verify(
@@ -798,7 +813,7 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task AccessRequestComplete_NotifiesTheStandingOwnersOnly()
+    public async Task AccessRequestComplete_TellsTheStandingOwnersOfTheFiledRequestOnly()
     {
         await AllowAccessRequestsAsync();
         var owner = await SeedOwnerAsync("owner");
@@ -807,21 +822,177 @@ public class PasskeyControllerTests : IDisposable
         var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
         StubRegistrationChallengeMintedFor(requestorId);
 
-        var notifications = new Mock<IInAppNotificationService>();
-        var result = await _controller.AccessRequestComplete(
-            new AccessRequestCompleteRequest
-            {
-                DisplayName = "Sam Smith",
-                AttestationResponseJson = "{}",
-                ChallengeToken = "challenge-for-sam",
-            },
-            notifications.Object);
+        Assert.IsType<OkResult>(await CompleteAccessRequestAsync("Sam Smith"));
 
-        Assert.IsType<OkResult>(result);
-        notifications.Invocations
+        var created = _notifications.Invocations
             .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync))
-            .Select(i => (string)i.Arguments[0]!)
-            .Should().Equal(owner.ToString());
+            .ToList();
+        created.Select(i => (string)i.Arguments[0]!).Should().Equal(owner.ToString());
+        created.Select(i => (string)i.Arguments[1]!).Should().Equal("membership.requested");
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WhenTheRequestIsNotFiled_RemovesTheCredential()
+    {
+        await AllowAccessRequestsAsync();
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        var credentialId = StubRegistrationChallengeMintedFor(requestorId);
+        var filer = new Mock<IMembershipRequestService>();
+        filer.Setup(f => f.CreateRequestAsync(_tenantId, requestorId, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreateMembershipRequestResult(CreateMembershipRequestOutcome.Refused, "This profile is not accepting membership requests."));
+
+        var result = await CompleteAccessRequestAsync("Sam Smith", filer.Object);
+
+        Assert.IsType<ObjectResult>(result).StatusCode.Should().Be(400);
+        _passkeyCredentials.Verify(p => p.RemoveAsync(credentialId, requestorId, It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WhenFilingThrows_RemovesTheCredential()
+    {
+        await AllowAccessRequestsAsync();
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        var credentialId = StubRegistrationChallengeMintedFor(requestorId);
+        var filer = new Mock<IMembershipRequestService>();
+        filer.Setup(f => f.CreateRequestAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the insert failed"));
+
+        await FluentActions.Awaiting(() => CompleteAccessRequestAsync("Sam Smith", filer.Object))
+            .Should().ThrowAsync<DbUpdateException>();
+
+        _passkeyCredentials.Verify(p => p.RemoveAsync(credentialId, requestorId, It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WhenTellingTheOwnerFailsAfterTheRequestIsStored_KeepsTheCredentialAndApprovalAdmitsTheRequester()
+    {
+        await AllowAccessRequestsAsync();
+        var owner = await SeedOwnerAsync("owner");
+        var ownerRole = (await _dbContext.TenantMemberRoles.AsNoTracking().FirstAsync()).TenantRoleId;
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+        _notifications
+            .Setup(n => n.CreateNotificationAsync(
+                owner.ToString(), "membership.requested", It.IsAny<string>(), It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the notification insert failed"));
+
+        Assert.IsType<OkResult>(await CompleteAccessRequestAsync("Sam Smith"));
+
+        _passkeyCredentials.Verify(
+            p => p.RemoveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never());
+        await ApproveTheOneRequestAndAssertTheRequesterIsAdmittedAsync(owner, ownerRole, requestorId);
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WhenTheVisitorDisconnectsAfterTheRequestIsStored_KeepsTheCredentialAndApprovalAdmitsTheRequester()
+    {
+        await AllowAccessRequestsAsync();
+        var owner = await SeedOwnerAsync("owner");
+        var ownerRole = (await _dbContext.TenantMemberRoles.AsNoTracking().FirstAsync()).TenantRoleId;
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+        using var disconnect = new CancellationTokenSource();
+        _controller.HttpContext.RequestAborted = disconnect.Token;
+        _notifications
+            .Setup(n => n.CreateNotificationAsync(
+                owner.ToString(), "membership.requested", It.IsAny<string>(), It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .Returns((string _, string _, string _, NotificationCategory? _, NotificationUrgency? _, string? _,
+                string? _, string? _, string? _, List<NotificationActionDto>? _, ResolutionConditions? _,
+                Dictionary<string, object>? _, CancellationToken token) =>
+            {
+                disconnect.Cancel();
+                token.ThrowIfCancellationRequested();
+                return Task.FromResult(new InAppNotificationDto());
+            });
+
+        Assert.IsType<OkResult>(await CompleteAccessRequestAsync("Sam Smith"));
+
+        disconnect.IsCancellationRequested.Should().BeTrue();
+        _passkeyCredentials.Verify(
+            p => p.RemoveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never());
+        await ApproveTheOneRequestAndAssertTheRequesterIsAdmittedAsync(owner, ownerRole, requestorId);
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WhenFilingThrowsAfterTheRequestIsStored_KeepsTheCredential()
+    {
+        await AllowAccessRequestsAsync();
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+        var stored = MembershipRequests();
+        var filer = new Mock<IMembershipRequestService>();
+        filer.Setup(f => f.CreateRequestAsync(_tenantId, requestorId, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(async (Guid tenant, Guid subject, string? message, CancellationToken token) =>
+            {
+                await stored.CreateRequestAsync(tenant, subject, message, token);
+                throw new DbUpdateException("the connection dropped after the commit");
+            });
+        filer.Setup(f => f.GetMyRequestAsync(_tenantId, requestorId, It.IsAny<CancellationToken>()))
+            .Returns((Guid tenant, Guid subject, CancellationToken token) => stored.GetMyRequestAsync(tenant, subject, token));
+
+        await FluentActions.Awaiting(() => CompleteAccessRequestAsync("Sam Smith", filer.Object))
+            .Should().ThrowAsync<DbUpdateException>();
+
+        _passkeyCredentials.Verify(
+            p => p.RemoveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    private async Task ApproveTheOneRequestAndAssertTheRequesterIsAdmittedAsync(Guid owner, Guid ownerRole, Guid requestorId)
+    {
+        var request = (await MembershipRequests().GetPendingRequestsAsync(_tenantId)).Should().ContainSingle().Which;
+        request.SubjectId.Should().Be(requestorId);
+        (await MembershipRequests().ApproveRequestAsync(request.Id, _tenantId, [ownerRole], owner, [Scope.FullAccess]))
+            .Success.Should().BeTrue();
+
+        (await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requestorId)).IsActive.Should().BeTrue();
+        (await new TenantMemberService(new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()))
+            .IsMemberAsync(requestorId, _tenantId)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_AfterAnEarlierAttemptFiledTheRequest_KeepsTheOneRequestAndTheCredential()
+    {
+        await AllowAccessRequestsAsync();
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+        (await MembershipRequests().CreateRequestAsync(_tenantId, requestorId, "first attempt")).Success.Should().BeTrue();
+
+        Assert.IsType<OkResult>(await CompleteAccessRequestAsync("Sam Smith"));
+
+        (await MembershipRequests().GetPendingRequestsAsync(_tenantId)).Should().ContainSingle()
+            .Which.Message.Should().Be("first attempt");
+        _passkeyCredentials.Verify(
+            p => p.RemoveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task AccessRequest_ApprovedByTheOwner_ActivatesTheRequesterWhoThenPassesTheMembershipGate()
+    {
+        await AllowAccessRequestsAsync();
+        var owner = await SeedOwnerAsync("owner");
+        var ownerRole = (await _dbContext.TenantMemberRoles.AsNoTracking().FirstAsync()).TenantRoleId;
+        var requestorId = await RequestAccessAsync("Sam Smith", "I am the school nurse");
+        var members = new TenantMemberService(new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()));
+        (await members.IsMemberAsync(requestorId, _tenantId)).Should().BeFalse();
+
+        var request = (await MembershipRequests().GetPendingRequestsAsync(_tenantId)).Should().ContainSingle().Which;
+        (await MembershipRequests().ApproveRequestAsync(request.Id, _tenantId, [ownerRole], owner, [Scope.FullAccess]))
+            .Success.Should().BeTrue();
+
+        var subject = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requestorId);
+        subject.IsActive.Should().BeTrue();
+        subject.ApprovalStatus.Should().Be("Approved");
+        (await members.IsMemberAsync(requestorId, _tenantId)).Should().BeTrue();
+        _requestAudit.Verify(a => a.LogAsync(
+            AuthAuditEventType.SubjectUpdated, requestorId, true, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.Is<string?>(d => d!.Contains("Approved")), It.IsAny<Guid?>(),
+            It.IsAny<AuthAuditActor?>(), _tenantId), Times.Once());
     }
 
     /// <summary>
@@ -1066,9 +1237,38 @@ public class PasskeyControllerTests : IDisposable
                 AttestationResponseJson = "{}",
                 ChallengeToken = "challenge-for-sam",
             },
-            new Mock<IInAppNotificationService>().Object);
+            FilingScopes(), _passkeyCredentials.Object);
 
         Assert.IsType<OkResult>(result);
+    }
+
+    [Fact]
+    public async Task AccessRequest_ByAVisitorWithNoMembership_IsListedForTheOwnerAndThePlatformAdminsWithItsMessage()
+    {
+        await AllowAccessRequestsAsync();
+        var otherTenant = Guid.CreateVersion7();
+        await EnsureTenantAsync(otherTenant);
+        var requestorId = await RequestAccessAsync("Sam Smith", "  I am the school nurse  ");
+
+        (await MembershipRequests().GetPendingRequestsAsync(_tenantId)).Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new { SubjectId = requestorId, SubjectName = "Sam Smith", Message = "I am the school nurse" });
+        (await MembershipRequests().GetPendingRequestsAsync(otherTenant)).Should().BeEmpty();
+
+        var adminList = new AccessRequestController(
+            new TenantMembershipRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            _subjectService.Object,
+            new Mock<IAccessRequestService>().Object,
+            _tenantAccessor.Object,
+            new Mock<IInAppNotificationService>().Object,
+            Mock.Of<ILogger<AccessRequestController>>());
+        var listed = Assert.IsType<OkObjectResult>((await adminList.GetPendingRequests(CancellationToken.None)).Result);
+
+        Assert.IsAssignableFrom<IEnumerable<AccessRequestDto>>(listed.Value).Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new { SubjectId = requestorId, Name = "Sam Smith", Message = "I am the school nurse" });
+        var stored = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requestorId);
+        stored.IsActive.Should().BeFalse();
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == requestorId)).Should().BeFalse();
     }
 
     /// <summary>
@@ -1104,16 +1304,19 @@ public class PasskeyControllerTests : IDisposable
     /// <paramref name="subjectId"/>: it accepts that subject as the enrolling one and refuses
     /// every other.
     /// </summary>
-    private void StubRegistrationChallengeMintedFor(Guid subjectId)
+    /// <returns>The id of the credential the stub reports stored.</returns>
+    private Guid StubRegistrationChallengeMintedFor(Guid subjectId)
     {
+        var credentialId = Guid.CreateVersion7();
         _passkeyService
             .Setup(s => s.CompleteRegistrationAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
             .ReturnsAsync((string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
                 expectedSubjectId == subjectId
-                    ? new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId)
+                    ? new PasskeyCredentialResult(credentialId, subjectId)
                     : throw new InvalidOperationException(
                         "Registration challenge was not issued for the enrolling subject."));
+        return credentialId;
     }
 
     private Mock<IMemberInviteService> StubValidInvite()
@@ -1195,6 +1398,66 @@ public class PasskeyControllerTests : IDisposable
         return await TestDatabaseSeeder.SeedMemberAsync(
             _dbContext, _tenantId, name: username,
             isActive: isActive, isSystemSubject: isSystemSubject);
+    }
+
+    /// <summary>Runs the options and complete steps as the dialog does; returns the requester.</summary>
+    private async Task<Guid> RequestAccessAsync(string displayName, string message)
+    {
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+        Assert.IsType<OkObjectResult>((await _controller.AccessRequestOptions(
+            new AccessRequestOptionsRequest { DisplayName = displayName, Message = message })).Result);
+        var requestorId = (await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Name == displayName)).Id;
+        StubRegistrationChallengeMintedFor(requestorId);
+        Assert.IsType<OkResult>(await CompleteAccessRequestAsync(displayName));
+        return requestorId;
+    }
+
+    private Task<ActionResult> CompleteAccessRequestAsync(string displayName, IMembershipRequestService? filer = null) =>
+        _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = displayName,
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge",
+            },
+            FilingScopes(filer), _passkeyCredentials.Object);
+
+    /// <summary>The service owners decide requests through, over this test's database.</summary>
+    private MembershipRequestService MembershipRequests()
+    {
+        var contexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory();
+        return new MembershipRequestService(
+            new TenantRepository(contexts),
+            new TenantMembershipRepository(contexts),
+            new SubjectRepository(contexts),
+            contexts,
+            new TenantRoleService(new TenantMembershipRepository(contexts), TimeProvider.System),
+            _notifications.Object,
+            _requestAudit.Object,
+            TimeProvider.System,
+            NullLogger<MembershipRequestService>.Instance);
+    }
+
+    private sealed class SettableTenantAccessor : ITenantAccessor
+    {
+        public TenantContext? Context { get; private set; }
+        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
+        public bool IsResolved => Context is not null;
+        public void SetTenant(TenantContext context) => Context = context;
+    }
+
+    /// <summary>
+    /// The scopes the complete step files its request in. Each starts unresolved, as a scope opened
+    /// in code does, so the step must pin the tenant itself.
+    /// </summary>
+    private IServiceScopeFactory FilingScopes(IMembershipRequestService? filer = null)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
+        services.AddScoped(_ => filer ?? MembershipRequests());
+        return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
     private async Task AllowAccessRequestsAsync()

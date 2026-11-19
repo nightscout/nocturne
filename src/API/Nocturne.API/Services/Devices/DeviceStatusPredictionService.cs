@@ -16,13 +16,16 @@ namespace Nocturne.API.Services.Devices;
 public class DeviceStatusPredictionService : IPredictionService
 {
     private readonly IApsSnapshotRepository _apsSnapshots;
+    private readonly TimeProvider _time;
     private readonly ILogger<DeviceStatusPredictionService> _logger;
 
     public DeviceStatusPredictionService(
         IApsSnapshotRepository apsSnapshots,
+        TimeProvider timeProvider,
         ILogger<DeviceStatusPredictionService> logger)
     {
         _apsSnapshots = apsSnapshots;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -37,7 +40,7 @@ public class DeviceStatusPredictionService : IPredictionService
         // bound rejects stale snapshots: consumers anchor the curve at the anchor instant
         // (alert evaluation measures offsets from "now"), so a forecast from an uploader that
         // stopped hours ago must read as "no predictions", not as a current one.
-        var anchor = asOf ?? DateTimeOffset.UtcNow;
+        var anchor = asOf ?? _time.GetUtcNow();
         var snapshots = await _apsSnapshots.GetAsync(
             from: anchor.UtcDateTime.AddMilliseconds(-DeviceReportedValues.RecencyThresholdMs),
             to: asOf?.UtcDateTime,

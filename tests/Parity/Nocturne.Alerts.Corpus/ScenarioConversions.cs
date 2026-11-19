@@ -74,6 +74,10 @@ public static class ScenarioConversions
                 ? new TempBasalSnapshot(tb.Rate, tb.ScheduledRate, Utc(tb.StartedAt)!.Value)
                 : null,
             UploaderBatteryPercent = ctx.UploaderBatteryPercent,
+            TransmitterVoltageA = ctx.TransmitterVoltageA,
+            TransmitterVoltageB = ctx.TransmitterVoltageB,
+            TransmitterResistance = ctx.TransmitterResistance,
+            TransmitterDays = ctx.TransmitterDays,
             ActiveOverride = ctx.ActiveOverride is { } ov
                 ? new OverrideSnapshot(Utc(ov.StartedAt)!.Value, null, null, null)
                 : null,

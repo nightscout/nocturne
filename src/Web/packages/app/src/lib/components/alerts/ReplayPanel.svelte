@@ -56,7 +56,10 @@
      * Run so edits made between presses are picked up.
      */
     rule?: ReplayRuleDefinition | (() => ReplayRuleDefinition);
-    /** Pinned to the top of the sidebar with an "(editing)" marker. */
+    /**
+     * Pinned to the top of the sidebar with an "(editing)" marker. For a rule not saved yet, the
+     * id `rule` carries: the replay lists that rule beside the saved ones under it.
+     */
     editingRuleId?: string;
     /**
      * Live tree of the rule under edit. Used when building the per-rule tree
@@ -148,6 +151,31 @@
   // Refreshed on every run, so the sidebar sees rules created since the parent loaded.
   let allRules = $state<AlertRuleResponse[]>([]);
 
+  /** `saved` with the rule under test first, when that rule is not one of them yet. */
+  function withUnsavedRule(
+    saved: AlertRuleResponse[],
+    tested: ReplayRuleDefinition | undefined,
+  ): AlertRuleResponse[] {
+    if (!tested?.id || saved.some((r) => r.id === tested.id)) return saved;
+    let conditionParams: unknown;
+    try {
+      conditionParams = tested.conditionParams ? JSON.parse(tested.conditionParams) : undefined;
+    } catch {
+      return saved;
+    }
+    return [
+      {
+        id: tested.id,
+        name: tested.name,
+        severity: tested.severity,
+        conditionType: tested.conditionType,
+        conditionParams,
+        isEnabled: true,
+      },
+      ...saved,
+    ];
+  }
+
   function dateLabel(d: DateValue | undefined): string {
     if (!d) return "Last 24 hours";
     return formatMediumDate(d.toDate(getLocalTimeZone()));
@@ -224,13 +252,14 @@
           (fresh) => (fresh && fresh.length > 0 ? fresh : availableRules),
           () => availableRules
         );
-      const replayResult = rule
+      const tested = typeof rule === "function" ? rule() : rule;
+      const replayResult = tested
         ? await replayDryRun({
             date,
             timezone: browserTimezone,
             from: range?.from.toISOString(),
             to: range?.to.toISOString(),
-            rule: typeof rule === "function" ? rule() : rule,
+            rule: tested,
           })
         : await replay({
             date,
@@ -239,7 +268,7 @@
             to: range?.to.toISOString(),
           });
 
-      allRules = await rulesList;
+      allRules = withUnsavedRule(await rulesList, tested);
       result = replayResult ?? null;
     } catch (err) {
       runError = describeSubmitError(err, "Failed to run replay. Try again.");

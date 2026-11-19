@@ -47,15 +47,15 @@ public class SyncKeyLookupPlanTests(RlsCompletenessFixture fx)
             async (factory, key) => await BGChecks(factory).FindBySyncIdentifierAsync(DataSource, key));
 
     private static NoteRepository Notes(TestNocturneDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<NoteRepository>.Instance);
 
     private static DeviceEventRepository DeviceEvents(TestNocturneDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance);
 
     private static BGCheckRepository BGChecks(TestNocturneDbContextFactory factory) =>
-        new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
+        new(factory, new Mock<IDuplicateLinker>().Object, new Mock<IAuditContext>().Object,
             NullLogger<BGCheckRepository>.Instance);
 
     private async Task AssertLookupAsync(

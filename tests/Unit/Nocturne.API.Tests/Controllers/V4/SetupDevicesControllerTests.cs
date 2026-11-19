@@ -33,6 +33,7 @@ public class SetupDevicesControllerTests
         var factory = new TestNocturneDbContextFactory(db);
         var service = new DeviceSetupService(
             factory,
+            new ConnectorConfigurationRepository(factory),
             new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             Mock.Of<IDeviceReattributionService>(),
@@ -45,6 +46,7 @@ public class SetupDevicesControllerTests
                 Mock.Of<IDeviceEventRepository>(), Mock.Of<ITrackerAlertRuleSyncService>(),
                 Mock.Of<IDeviceEventReactor>(), Mock.Of<ISignalRBroadcastService>(), TimeProvider.System,
                 NullLogger<ConsumableTrackerWriter>.Instance),
+            TimeProvider.System,
             NullLogger<DeviceSetupService>.Instance);
 
         var httpContext = new DefaultHttpContext();

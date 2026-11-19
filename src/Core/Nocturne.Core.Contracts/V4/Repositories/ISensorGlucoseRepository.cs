@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.Projections;
@@ -30,9 +32,10 @@ public interface ISensorGlucoseRepository
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="patientDeviceId">Optional filter restricting results to a single registered <see cref="PatientDevice"/>'s
-    /// attributed readings. Bypasses canonical stream selection at the caller — a filtered read returns that device raw.
+    /// attributed readings, read with <see cref="GlucoseStreams.All"/> so the device's own series is whole.
     /// Placed after <paramref name="ct"/> so it is additive: existing positional callers (which end at the token) are
     /// unaffected.</param>
+    /// <param name="streams">Which concurrent streams to return.</param>
     Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -44,28 +47,48 @@ public interface ISensorGlucoseRepository
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
         CancellationToken ct = default,
-        Guid? patientDeviceId = null
+        Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All
     );
 
     /// <summary>
-    /// Partial readings for statistics and canonical selection only; these must not be returned
-    /// as raw records or projected into legacy entries. Includes the per-reading UTC offset.
+    /// Count the readings <see cref="GetAsync"/> pages through for the same filters.
+    /// </summary>
+    Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        GlucoseStreams streams = GlucoseStreams.All,
+        CancellationToken ct = default
+    );
+
+    Task<int> IV4Repository<SensorGlucose>.CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct)
+        => CountAsync(from, to, device, source, patientDeviceId: null, ct: ct);
+
+    /// <summary>
+    /// Partial readings for statistics only; these must not be returned as raw records or projected
+    /// into legacy entries. Includes the per-reading UTC offset.
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null);
+        CancellationToken ct = default, Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All);
 
     /// <summary>
-    /// Partial readings for canonical selection and <see cref="EntryProjection.FromSensorGlucose"/>
-    /// only; omitted V4 fields must not leak into raw record responses.
+    /// Partial readings for <see cref="EntryProjection.FromSensorGlucose"/> only; omitted V4 fields
+    /// must not leak into raw record responses.
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null);
+        CancellationToken ct = default, Guid? patientDeviceId = null,
+        GlucoseStreams streams = GlucoseStreams.All);
 
     /// <summary>
     /// <see cref="GetForEntriesAsync"/> ordered by the reading's value, then by time in the same
@@ -73,7 +96,31 @@ public interface ISensorGlucoseRepository
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
         DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
-        CancellationToken ct = default);
+        CancellationToken ct = default, GlucoseStreams streams = GlucoseStreams.All);
+
+    /// <summary>
+    /// The visible readings in [<paramref name="from"/>, <paramref name="to"/>] of every stream, counted
+    /// per registered device, a null device counting the unattributed ones.
+    /// </summary>
+    Task<IReadOnlyList<(Guid? PatientDeviceId, int Count)>> CountByPatientDeviceAsync(
+        DateTime from, DateTime to, Guid? patientDeviceId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="ILegacyKeyedRepository{TRecord}.GetModifiedSinceAsync"/> over the canonical stream: a
+    /// live reading another stream's reading outranks in its bucket is left out, a deleted one is not.
+    /// </summary>
+    Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> GetCanonicalModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recomputes which stream every bucket of the tenant's history shows, writing only readings whose
+    /// stored decision is out of date.
+    /// </summary>
+    /// <returns>The number of readings whose decision changed.</returns>
+    Task<int> RecomputeStreamsAsync(CancellationToken ct = default);
+
+    /// <summary>The <c>job_ledger</c> name of the per-tenant job that runs <see cref="RecomputeStreamsAsync"/>.</summary>
+    const string RecomputeStreamsJob = "glucose-stream-recompute";
 
     /// <summary>Retrieve all <see cref="SensorGlucose"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
@@ -137,11 +184,11 @@ public interface ISensorGlucoseRepository
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete all <see cref="SensorGlucose"/> records matching the given data source.
+    /// Soft-deletes every <see cref="SensorGlucose"/> record <paramref name="selector"/> names, under its
+    /// <see cref="RecordSelector.Scope"/>.
     /// </summary>
-    /// <param name="source">Data source identifier (e.g., connector name).</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
+    Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Lists distinct <c>(DataSource, Device)</c> combinations among unattributed readings

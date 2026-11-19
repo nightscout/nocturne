@@ -5,11 +5,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
@@ -123,6 +123,7 @@ public class V3SearchLimitTests
             .ReturnsAsync(Array.Empty<Settings>());
         var controller = new SettingsController(
             settings.Object,
+            Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<SettingsController>.Instance)
         {
@@ -151,6 +152,7 @@ public class V3SearchLimitTests
             .ReturnsAsync(Enumerable.Range(0, 300).Select(i => new Food { Name = $"food {i}" }).ToList());
         var controller = new FoodController(
             repository.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

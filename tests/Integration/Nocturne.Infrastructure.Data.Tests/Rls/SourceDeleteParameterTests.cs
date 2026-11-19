@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Extensions;
 using Npgsql;
 
@@ -41,12 +42,12 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
         recorder.Statements.Clear();
 
         var deleted = await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            ctx.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(Groups);
         recorder.MaxParameters.Should().BeLessThan(10, "an id list is bound as one parameter, not one per id");
         recorder.Statements.Where(s => s.Contains("linked_records")).Should()
-            .HaveCount(1 + 3 * 3, "one lookup of the groups, then a read, a demote and a promote per chunk")
+            .HaveCount(2 + 3 * 5, "one lookup of the groups, one lock of them all, then per chunk a read, a lock, a demote, a promote and the flags")
             .And.OnlyContain(s => s.Contains("= ANY (@"), "every one filters by an array parameter");
         (await ctx.LinkedRecords.CountAsync(l => l.IsPrimary && l.DataSource == "source-b")).Should().Be(Groups);
     }

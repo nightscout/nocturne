@@ -17,9 +17,8 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public List<DeviceEvent> Map(IEnumerable<TandemPumpEvent> events)
+    public List<DeviceEvent> Map(IEnumerable<TandemPumpEvent> events, DateTime now)
     {
-        var now = DateTime.UtcNow;
         var records = new List<DeviceEvent>();
 
         foreach (var ev in events)
@@ -49,11 +48,13 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
             if (mapped == null)
                 continue;
 
+            var timestamp = _time.ToUtc(ev.RawTimestampSeconds);
+
             records.Add(new DeviceEvent
             {
                 Id = Guid.CreateVersion7(),
-                Timestamp = _time.ToUtc(ev.RawTimestampSeconds),
-                UtcOffset = _time.OffsetMinutes,
+                Timestamp = timestamp,
+                UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
                 DataSource = TandemMapHelpers.Source,
                 SyncIdentifier = $"tandem_devent_{ev.SeqNum}",

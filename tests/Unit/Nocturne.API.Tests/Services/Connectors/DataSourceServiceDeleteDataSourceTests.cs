@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
@@ -11,6 +13,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -62,7 +65,10 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new DemoDataPurgeRepository(context.AsFactory(), TimeProvider.System, Mock.Of<IServiceScopeFactory>()),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -75,7 +81,7 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
         NullLogger<DataSourceService>.Instance);
 
     /// <summary>The shape DeviceStatusDecomposer writes for a connector-imported snapshot.</summary>
-    private void SeedImportedSnapshot(string legacyId, string rig)
+    private void SeedImportedSnapshot(string legacyId, string rig, DateTime? timestamp = null)
     {
         using var db = NewContext();
         db.ApsSnapshots.Add(new ApsSnapshotEntity
@@ -85,7 +91,7 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
             LegacyId = legacyId,
             DataSource = ImportingConnector,
             Device = rig,
-            Timestamp = DateTime.UtcNow,
+            Timestamp = timestamp ?? DateTime.UtcNow,
             AidAlgorithm = "Loop",
         });
         db.SaveChanges();
@@ -121,6 +127,25 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
         await using var assert = NewContext();
         (await assert.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-2"))
             .DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteDataSourceData_DeletesASourceWhoseLastRecordIsOlderThanTheDiscoveryWindow()
+    {
+        SeedImportedSnapshot(
+            "aps-old", Rig, DateTime.UtcNow.AddDays(-(DataSourceService.DiscoveryWindowDays + 5)));
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx).DeleteDataSourceDataAsync(Rig);
+
+            result.Success.Should().BeTrue();
+            result.DeletedCounts.Should().Contain(new KeyValuePair<string, long>("DeviceStatus", 1));
+        }
+
+        await using var assert = NewContext();
+        (await assert.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-old"))
+            .DeletedAt.Should().NotBeNull();
     }
 
     [Fact]

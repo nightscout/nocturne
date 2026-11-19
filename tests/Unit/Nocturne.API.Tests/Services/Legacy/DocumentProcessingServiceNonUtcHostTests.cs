@@ -24,7 +24,7 @@ public sealed class DocumentProcessingServiceNonUtcHostTests : IDisposable
 {
     private readonly string? _previousTz = Environment.GetEnvironmentVariable("TZ");
     private readonly DocumentProcessingService _service =
-        new(NullLogger<DocumentProcessingService>.Instance);
+        new(TimeProvider.System, NullLogger<DocumentProcessingService>.Instance);
 
     public DocumentProcessingServiceNonUtcHostTests()
     {

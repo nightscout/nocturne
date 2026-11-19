@@ -2,9 +2,9 @@ using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Services;
 
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Services.Analytics;
 
@@ -28,13 +29,14 @@ public class WidgetSummaryService : IWidgetSummaryService
 {
     private readonly IEntryService _entryService;
     private readonly IIobCobReader _iobCobReader;
+    private readonly InsulinDeliveryReader _insulinDelivery;
     private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
     private readonly IGlucoseStatusClassifier _statusClassifier;
     private readonly IAlertRepository _alertRepository;
-    private readonly ITenantAccessor _tenantAccessor;
     private readonly ICategoryReadContext _categoryReadContext;
+    private readonly TimeProvider _time;
     private readonly ILogger<WidgetSummaryService> _logger;
 
     /// <summary>
@@ -42,27 +44,34 @@ public class WidgetSummaryService : IWidgetSummaryService
     /// </summary>
     private const long CgmIntervalMills = 5 * 60 * 1000;
 
+    /// <summary>
+    /// How far back a temp basal still marks the tenant as a pump user.
+    /// </summary>
+    private static readonly TimeSpan PumpLookback = TimeSpan.FromHours(24);
+
     public WidgetSummaryService(
         IEntryService entryService,
         IIobCobReader iobCobReader,
+        InsulinDeliveryReader insulinDelivery,
         IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
         IGlucoseStatusClassifier statusClassifier,
         IAlertRepository alertRepository,
-        ITenantAccessor tenantAccessor,
         ICategoryReadContext categoryReadContext,
+        TimeProvider timeProvider,
         ILogger<WidgetSummaryService> logger
     )
     {
+        _time = timeProvider;
         _entryService = entryService;
         _iobCobReader = iobCobReader;
+        _insulinDelivery = insulinDelivery;
         _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
         _statusClassifier = statusClassifier;
         _alertRepository = alertRepository;
-        _tenantAccessor = tenantAccessor;
         _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
@@ -74,7 +83,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         CancellationToken cancellationToken = default
     )
     {
-        var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var currentTime = _time.GetUtcNow().ToUnixTimeMilliseconds();
         var response = new V4SummaryResponse
         {
             ServerMills = currentTime,
@@ -92,6 +101,8 @@ public class WidgetSummaryService : IWidgetSummaryService
 
         // Calculate IOB and COB using v4 types
         await CalculateIobCobAsync(response, cancellationToken);
+
+        await ReadBasalInjectionAsync(response, currentTime, cancellationToken);
 
         // Process tracker statuses
         ProcessTrackers(response, trackerInstances);
@@ -158,13 +169,13 @@ public class WidgetSummaryService : IWidgetSummaryService
             var thresholds = _categoryReadContext.IsShare
                 ? _statusClassifier.Defaults
                 : _statusClassifier.ResolveThresholds(
-                    await _alertRepository.GetEnabledRulesAsync(_tenantAccessor.TenantId, cancellationToken));
+                    await _alertRepository.GetEnabledRulesAsync(cancellationToken));
             current.Status = _statusClassifier.Classify(
                 current.Sgv,
-                DateTimeOffset.FromUnixTimeMilliseconds(current.Mills).UtcDateTime,
+                current.Mills.ToUtcDateTime(),
                 lastReadingAt: null,
                 thresholds,
-                DateTimeOffset.FromUnixTimeMilliseconds(currentTime).UtcDateTime);
+                currentTime.ToUtcDateTime());
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -198,18 +209,65 @@ public class WidgetSummaryService : IWidgetSummaryService
     {
         try
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
             var reading = await _iobCobReader.ReadTotalAsync(now, live: true, cancellationToken);
-            response.Iob = Math.Round(reading.Iob.Iob * 100) / 100;
-            response.Cob = reading.Cob is null ? 0 : Math.Round(reading.Cob.Cob);
+            response.IobKnown = reading.HasIob;
+            response.Iob = reading.HasIob ? Math.Round(reading.Iob.Iob * 100) / 100 : 0;
+            response.CobKnown = reading.HasCob;
+            response.Cob = reading.HasCob ? Math.Round(reading.Cob!.Cob) : 0;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error calculating IOB/COB for widget summary");
             response.Iob = 0;
+            response.IobKnown = false;
             response.Cob = 0;
+            response.CobKnown = false;
         }
+    }
+
+    /// <summary>
+    /// Sets <see cref="V4SummaryResponse.BasalInjection"/> for a tenant with basal injections and no
+    /// temp basals in <see cref="PumpLookback"/>, the test
+    /// <c>StatisticsController.AddScheduledBasalFallbackAsync</c> applies. The rate is the piece of
+    /// <see cref="StatisticsService.BasalInjectionPieces"/> that covers now.
+    /// </summary>
+    private async Task ReadBasalInjectionAsync(
+        V4SummaryResponse response,
+        long now,
+        CancellationToken cancellationToken
+    )
+    {
+        var nowUtc = now.ToUtcDateTime();
+        var given = (await _insulinDelivery.ReadBasalInjectionsAsync(nowUtc, nowUtc, cancellationToken))
+            .Where(bi => bi.Units > 0 && bi.Mills <= now)
+            .ToList();
+        if (given.Count == 0)
+        {
+            return;
+        }
+
+        var pumpFrom = nowUtc - PumpLookback;
+        var temps = await _insulinDelivery.ReadTempBasalsAsync(pumpFrom, nowUtc, cancellationToken);
+        if (StatisticsService.DeliveredWithin(temps, pumpFrom, now).Count > 0)
+        {
+            return;
+        }
+
+        var lastDose = given.GroupBy(bi => bi.Mills).MaxBy(g => g.Key)!.ToList();
+        var covering = StatisticsService.BasalInjectionPieces(given)
+            .FirstOrDefault(p => p.StartMills <= now && p.EndMills > now);
+
+        response.BasalInjection = new V4BasalInjectionStatus
+        {
+            Units = ScaledRounding.Round(lastDose.Sum(bi => bi.Units), 2),
+            Mills = lastDose[0].Mills,
+            InsulinName = lastDose
+                .Select(bi => bi.InsulinContext?.InsulinName)
+                .FirstOrDefault(name => !string.IsNullOrEmpty(name)),
+            EstimatedRate = covering?.Rate is double rate ? ScaledRounding.Round(rate, 2) : null,
+        };
     }
 
     /// <summary>
@@ -267,7 +325,7 @@ public class WidgetSummaryService : IWidgetSummaryService
             }
             else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
             {
-                var hoursUntil = (instance.ScheduledAt.Value - DateTime.UtcNow).TotalHours;
+                var hoursUntil = (instance.ScheduledAt.Value - _time.GetUtcNow().UtcDateTime).TotalHours;
                 status.HoursUntilEvent = Math.Round(hoursUntil * 10) / 10;
             }
 
@@ -280,7 +338,7 @@ public class WidgetSummaryService : IWidgetSummaryService
     /// <summary>
     /// Calculate the current urgency level for a tracker instance based on notification thresholds
     /// </summary>
-    private static NotificationUrgency CalculateTrackerUrgency(
+    private NotificationUrgency CalculateTrackerUrgency(
         TrackerInstanceEntity instance,
         TrackerDefinitionEntity definition
     )
@@ -324,7 +382,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         // For Event mode, check against hours until scheduled time
         else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
         {
-            var hoursUntilEvent = (instance.ScheduledAt.Value - DateTime.UtcNow).TotalHours;
+            var hoursUntilEvent = (instance.ScheduledAt.Value - _time.GetUtcNow().UtcDateTime).TotalHours;
 
             foreach (var threshold in thresholds)
             {

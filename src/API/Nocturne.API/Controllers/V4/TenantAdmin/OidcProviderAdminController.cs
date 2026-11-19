@@ -5,15 +5,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing OIDC identity providers configured on the instance.
+/// OIDC sign-in providers for the instance. Create, read, update, delete, enable, disable and test providers.
 /// </summary>
 /// <remarks>
 /// Allows platform administrators to register, update, and remove OIDC providers (Google,
@@ -23,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// a provider before any passkeys exist.
 /// </remarks>
 [ApiController]
+[System.ComponentModel.DisplayName("OIDC Providers")]
 [Tags("TenantAdmin")]
 [Route("api/v4/admin/oidc-providers")]
 [Produces("application/json")]
@@ -31,16 +30,16 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 public class OidcProviderAdminController : ControllerBase
 {
     private readonly IOidcProviderService _providerService;
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly IHttpClientFactory _httpClientFactory;
 
     public OidcProviderAdminController(
         IOidcProviderService providerService,
-        INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         IHttpClientFactory httpClientFactory)
     {
         _providerService = providerService;
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _httpClientFactory = httpClientFactory;
     }
 
@@ -111,8 +110,7 @@ public class OidcProviderAdminController : ControllerBase
 
         if (existing.IsEnabled && !request.IsEnabled && !force)
         {
-            await using var db = await _contexts.CreateAsync();
-            var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
+            var conflict = await CheckWouldLockOutUsersAsync(id, disable: true);
             if (conflict is not null) return conflict;
         }
 
@@ -144,8 +142,7 @@ public class OidcProviderAdminController : ControllerBase
     {
         if (!force)
         {
-            await using var db = await _contexts.CreateAsync();
-            var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: false);
+            var conflict = await CheckWouldLockOutUsersAsync(id, disable: false);
             if (conflict is not null) return conflict;
         }
 
@@ -174,8 +171,7 @@ public class OidcProviderAdminController : ControllerBase
     {
         if (!force)
         {
-            await using var db = await _contexts.CreateAsync();
-            var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
+            var conflict = await CheckWouldLockOutUsersAsync(id, disable: true);
             if (conflict is not null) return conflict;
         }
 
@@ -265,7 +261,7 @@ public class OidcProviderAdminController : ControllerBase
 
     /// <summary>
     /// Refuses with 409 when deleting or disabling the provider would leave any account with no
-    /// sign-in method (<see cref="OrphanedSubjectFilter"/>): one whose only passkey-free way in is
+    /// sign-in method (<c>OrphanedSubjectFilter</c>): one whose only passkey-free way in is
     /// this provider. Returns <see langword="null"/> when the operation strands nobody.
     /// </summary>
     /// <remarks>
@@ -273,19 +269,9 @@ public class OidcProviderAdminController : ControllerBase
     /// provider. The stranded members then recover through a recovery code
     /// (<see cref="Identity.MemberRecoveryController"/>).
     /// </remarks>
-    private async Task<IActionResult?> CheckWouldLockOutUsersAsync(NocturneDbContext db, Guid providerId, bool disable)
+    private async Task<IActionResult?> CheckWouldLockOutUsersAsync(Guid providerId, bool disable)
     {
-        var strandedCount = await db.WorkingOidcIdentities()
-            .Where(i => i.ProviderId == providerId)
-            .Select(i => i.Subject!)
-            .Where(s => s.IsActive
-                && !s.IsSystemSubject
-                && !s.IsDemoSubject
-                && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
-                && !db.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id && o.ProviderId != providerId))
-            .Select(s => s.Id)
-            .Distinct()
-            .CountAsync();
+        var strandedCount = await _subjects.CountStrandedByProviderAsync(providerId, HttpContext.RequestAborted);
 
         if (strandedCount == 0)
             return null;

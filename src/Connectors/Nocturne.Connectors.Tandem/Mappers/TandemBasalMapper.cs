@@ -32,14 +32,13 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
     ///     never fetched — see <see cref="TandemBasalSpans.UnclosedFrom"/>.
     /// </param>
     public TandemBasalSpans Map(
-        IEnumerable<TandemPumpEvent> events, DateTime? fetchedThroughUtc, bool ignoreZeroUnitBasal)
+        IEnumerable<TandemPumpEvent> events, DateTime? fetchedThroughUtc, bool ignoreZeroUnitBasal, DateTime now)
     {
         var ordered = events
             .Select(ev => (Event: ev, Start: _time.ToUtc(ev.RawTimestampSeconds)))
             .OrderBy(x => x.Start)
             .ToList();
 
-        var now = DateTime.UtcNow;
         var records = new List<TempBasal>();
         DateTime? unclosedFrom = null;
 
@@ -63,7 +62,7 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
                 Id = Guid.CreateVersion7(),
                 StartTimestamp = start,
                 EndTimestamp = end > start ? end : null,
-                UtcOffset = _time.OffsetMinutes,
+                UtcOffset = _time.OffsetMinutesAt(start),
                 Device = TandemMapHelpers.Source,
                 DataSource = TandemMapHelpers.Source,
                 LegacyId = $"tandem_basal_{ev.SeqNum}",

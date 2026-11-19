@@ -54,6 +54,7 @@ public enum ConnectorPropertyKey
     RealtimeUrl,
     ApiSecret,
     MaxCount,
+    HistoryDays,
 
     // Glooko-specific
     UseV3Api,
@@ -93,6 +94,7 @@ public enum ConnectorPropertyKey
     PumpSerialNumber,
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
+    TimeZoneId,
 
     // Glooko-specific
     AutoClockCorrection,

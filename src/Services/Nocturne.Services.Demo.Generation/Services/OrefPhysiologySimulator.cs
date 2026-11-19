@@ -229,12 +229,14 @@ public class OrefPhysiologySimulator
     /// Simulate the next glucose value based on current physiological state.
     /// </summary>
     /// <param name="currentGlucose">Current glucose level (mg/dL)</param>
-    /// <param name="time">Current time</param>
+    /// <param name="time">Current time, on the axis doses and carbs are timed in</param>
+    /// <param name="localTime">Wall-clock time at <paramref name="time"/>, for the dawn effect</param>
     /// <param name="basalRate">Current basal rate (U/hr), null to use profile default</param>
     /// <returns>Predicted glucose after 5 minutes</returns>
     public double SimulateNextGlucose(
         double currentGlucose,
         DateTime time,
+        DateTime localTime,
         double? basalRate = null
     )
     {
@@ -252,7 +254,7 @@ public class OrefPhysiologySimulator
         var netBasalEffect = liverOutput * (1 - basalCoverage);
 
         // Dawn phenomenon (4-8 AM)
-        var hour = time.Hour + time.Minute / 60.0;
+        var hour = localTime.Hour + localTime.Minute / 60.0;
         var dawnEffect = 0.0;
         if (hour >= 4 && hour < 8)
         {

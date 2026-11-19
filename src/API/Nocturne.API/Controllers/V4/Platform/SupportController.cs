@@ -14,7 +14,15 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// <summary>How many screenshots a support submission may carry, and how large.</summary>
 internal sealed record SupportImageLimits(int MaxCount, long MaxBytesEach, long MaxTotalBytes);
 
+/// <summary>
+/// Support issues and diagnostics. Submit an issue. Read the diagnostics, the support
+/// configuration, or a pre-filled issue link for when the API is unavailable.
+/// </summary>
+/// <remarks>
+/// Issues are filed through <see cref="GitHubIssueService"/>.
+/// </remarks>
 [ApiController]
+[Tags("Platform")]
 [Authorize]
 [Route("api/v4/support")]
 public class SupportController(
@@ -269,6 +277,7 @@ public class SupportController(
 
     /// <summary>
     /// Returns the tenant configuration a reporter may attach to a support issue.
+    /// Requires the tenant settings scope.
     /// </summary>
     /// <remarks>
     /// Gated like <see cref="V4.ConnectorStatusController"/>, whose connector health this reports a
@@ -311,6 +320,7 @@ public class SupportController(
     /// <summary>
     /// Returns operator support configuration for the frontend.
     /// When no operator is configured, both channels are null and the default GitHub flow applies.
+    /// Does not require authentication.
     /// </summary>
     /// <remarks>
     /// Anonymous because the hosts that most need the operator's address — an inactive tenant's,

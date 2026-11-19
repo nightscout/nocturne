@@ -10,8 +10,14 @@ namespace Nocturne.Services.Demo.Services;
 /// </summary>
 public sealed record DemoTimeStep
 {
-    /// <summary>Step time (local, 5-minute cadence).</summary>
+    /// <summary>
+    /// The step's wall-clock time in the generator's zone, for the daily pattern. It repeats across a
+    /// fall-back hour; <see cref="Utc"/> does not.
+    /// </summary>
     public required DateTime Time { get; init; }
+
+    /// <summary>The step's instant, on a 5-minute cadence.</summary>
+    public required DateTime Utc { get; init; }
 
     /// <summary>The CGM entry for this step.</summary>
     public required Entry Entry { get; init; }

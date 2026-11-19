@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Tandem.Configurations;
 /// or Mobi pump. Feature parity reference: the open-source <c>tconnectsync</c> project.
 /// </summary>
 [ConnectorRegistration(
-    "Tandem",
+    TandemConstants.ConnectorName,
     ServiceNames.TConnectSyncConnector,
     "TANDEM",
     "ConnectSource.Tandem",
@@ -76,10 +76,11 @@ public class TandemConnectorConfiguration : BaseConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.IgnoreZeroUnitBasal, DefaultValue = "false")]
     public bool IgnoreZeroUnitBasal { get; set; }
 
-    protected override void ValidateSourceSpecificConfiguration()
-    {
-        if (!string.Equals(Region, "US", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(Region, "EU", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"Tandem: Region must be 'US' or 'EU' (was '{Region}')");
-    }
+    /// <summary>
+    /// IANA time zone the pump clock follows (e.g. <c>America/Los_Angeles</c>), mirroring
+    /// <c>tconnectsync</c>'s <c>TIMEZONE_NAME</c>. When empty or unknown, <see cref="BaseConnectorConfiguration.TimezoneOffset"/>
+    /// applies to every timestamp. See <see cref="EventParser.TandemTimeResolver"/>.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.TimeZoneId)]
+    public string? TimeZoneId { get; set; }
 }

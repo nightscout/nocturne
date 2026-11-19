@@ -1,7 +1,6 @@
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -14,7 +13,6 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
@@ -25,8 +23,6 @@ namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 public class TreatmentPublisherTests
 {
     private readonly Mock<ITreatmentService> _mockTreatmentService;
-    private readonly Mock<ITreatmentDecomposer> _mockDecomposer = new();
-    private readonly Mock<ITreatmentCache> _mockCache = new();
     private readonly Mock<IBolusRepository> _mockBolusRepository;
     private readonly Mock<ICarbIntakeRepository> _mockCarbIntakeRepository;
     private readonly Mock<IBGCheckRepository> _mockBGCheckRepository;
@@ -38,20 +34,14 @@ public class TreatmentPublisherTests
     private readonly Mock<IPatientInsulinRepository> _mockPatientInsulinRepository;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
-    private Mock<INocturneDbContextFactory> _mockContextFactory = null!;
     private readonly TreatmentPublisher _publisher;
-
-    private static readonly Guid TestTenantId = Guid.NewGuid();
-
-    private static NocturneDbContext NewDbContext() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options)
-        { TenantId = TestTenantId };
 
     public TreatmentPublisherTests()
     {
         _mockTreatmentService = new Mock<ITreatmentService>();
+        _mockTreatmentService
+            .Setup(s => s.ResolveStoredIdentitiesAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Treatment>());
         _mockBolusRepository = new Mock<IBolusRepository>();
         _mockCarbIntakeRepository = new Mock<ICarbIntakeRepository>();
         _mockBGCheckRepository = new Mock<IBGCheckRepository>();
@@ -80,16 +70,8 @@ public class TreatmentPublisherTests
 
     private TreatmentPublisher CreatePublisher(IAuditContext auditContext)
     {
-        _mockContextFactory = new Mock<INocturneDbContextFactory>();
-        _mockContextFactory
-            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => new ValueTask<NocturneDbContext>(NewDbContext()));
-
         return new TreatmentPublisher(
-            _mockContextFactory.Object,
             _mockTreatmentService.Object,
-            _mockDecomposer.Object,
-            _mockCache.Object,
             _mockBolusRepository.Object,
             _mockCarbIntakeRepository.Object,
             _mockBGCheckRepository.Object,
@@ -113,23 +95,79 @@ public class TreatmentPublisherTests
     {
         var treatments = new List<Treatment> { new() { Id = "1" } };
         _mockTreatmentService
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([.. treatments]);
 
         var result = await _publisher.PublishTreatmentsAsync(treatments, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockTreatmentService.Verify(
-            s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()),
+            s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
+    }
+
+    /// <summary>
+    /// A connector's initial sync is a backfill, which the treatment service writes without
+    /// announcing; see <c>TreatmentServiceTests.CreateTreatmentsAsync_AsABackfill_WritesWithThatOriginAndAnnouncesNothing</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(WriteOrigin.Live)]
+    [InlineData(WriteOrigin.Backfill)]
+    public async Task PublishTreatmentsAsync_WritesUnderItsOrigin(WriteOrigin origin)
+    {
+        _mockTreatmentService
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await _publisher.PublishTreatmentsAsync([new Treatment { Id = "1" }], "test-source", origin);
+
+        _mockTreatmentService.Verify(
+            s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), origin, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// The fingerprint scope and the write are keyed by the id each treatment is stored under, which
+    /// is resolved first, and a write-back echo is not handed on at all.
+    /// </summary>
+    [Fact]
+    public async Task PublishTreatmentsAsync_ResolvesStoredIdentitiesFirst_AndDropsEchoes()
+    {
+        var echo = new Treatment { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "loop-1", DataSource = "nightscout-connector" };
+        var moved = new Treatment { Id = "66f0a1b2c3d4e0f6a7b8c9d1", UpstreamIdentifier = "aaps-2", DataSource = "nightscout-connector" };
+        var calls = new List<string>();
+        _mockTreatmentService
+            .Setup(d => d.ResolveStoredIdentitiesAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                calls.Add("resolve");
+                echo.Id = echo.UpstreamIdentifier;
+                moved.Id = moved.UpstreamIdentifier;
+            })
+            .ReturnsAsync(new HashSet<Treatment>([echo], ReferenceEqualityComparer.Instance));
+        _mockTreatmentService
+            .Setup(d => d.RekeyClientIdRecordsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("rekey"))
+            .ReturnsAsync(0);
+        List<Treatment>? written = null;
+        _mockTreatmentService
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) => written = [.. t])
+            .ReturnsAsync((IEnumerable<Treatment> t, WriteOrigin _, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 0));
+
+        var result = await _publisher.PublishTreatmentsAsync([echo, moved], "nightscout-connector", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        calls.Should().Equal("resolve", "rekey");
+        written.Should().ContainSingle().Which.Id.Should().Be("aaps-2");
     }
 
     [Fact]
     public async Task PublishTreatmentsAsync_ReturnsFalse_OnException()
     {
         _mockTreatmentService
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
         var result = await _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source", WriteOrigin.Live);
@@ -460,7 +498,7 @@ public class TreatmentPublisherTests
         var publisher = CreatePublisher(auditContext);
 
         bool? systemDuringDelete = null;
-        _mockDecomposer
+        _mockTreatmentService
             .Setup(d => d.DeleteFromSourceAsync(
                 It.IsAny<string>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
             .Callback(() => systemDuringDelete = auditContext.IsSystem)
@@ -470,23 +508,21 @@ public class TreatmentPublisherTests
 
         systemDuringDelete.Should().BeTrue();
         auditContext.IsSystem.Should().BeFalse("the scope is restored once the delete returns");
-        _mockDecomposer.Verify(d => d.DeleteFromSourceAsync(
+        _mockTreatmentService.Verify(d => d.DeleteFromSourceAsync(
             "nightscout-connector", It.Is<IReadOnlySet<string>>(ids => ids.SetEquals(new[] { "t-1" })),
             It.IsAny<CancellationToken>()), Times.Once);
-        _mockCache.Verify(c => c.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once,
-            "reads served from the treatment cache would still show what was deleted");
     }
 
     [Fact]
-    public async Task PublishRecentTreatmentsAsync_WritesWhatTheDecomposerSelects()
+    public async Task PublishRecentTreatmentsAsync_WritesWhatTheServiceSelects()
     {
         var changed = new Treatment { Id = "changed" };
-        _mockDecomposer
+        _mockTreatmentService
             .Setup(d => d.SelectForRepublishAsync(
                 "nightscout-connector", It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([changed]);
         _mockTreatmentService
-            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BulkWrite<Treatment>([], 0));
 
         var written = await _publisher.PublishRecentTreatmentsAsync(
@@ -494,7 +530,7 @@ public class TreatmentPublisherTests
 
         written.Should().Be(1);
         _mockTreatmentService.Verify(s => s.CreateTreatmentsAsync(
-            It.Is<IEnumerable<Treatment>>(ts => ts.Single().Id == "changed"), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<IEnumerable<Treatment>>(ts => ts.Single().Id == "changed"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -581,6 +617,51 @@ public class TreatmentPublisherTests
             "only non-null incoming legacy ids form the keep-set");
         _mockTempBasalRepository.Verify(
             r => r.BulkCreateAsync(records, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishTempBasalsAsync_ReconcilesAndReclassifiesOnlyTheBatchsOwnSpan()
+    {
+        // A scheduled run that fetched a short window publishes only that window's records, so a
+        // record the full window would have kept, older than the batch, is outside both ranges.
+        DateTime? deleteFrom = null;
+        DateTime? deleteTo = null;
+        _mockTempBasalRepository
+            .Setup(r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, DateTime from, DateTime to, IReadOnlySet<string> _, CancellationToken _) =>
+            {
+                deleteFrom = from;
+                deleteTo = to;
+            })
+            .ReturnsAsync(0);
+
+        long? resolveFrom = null;
+        long? resolveTo = null;
+        _mockBasalRateResolver
+            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Callback((long from, long to, CancellationToken _) =>
+            {
+                resolveFrom = from;
+                resolveTo = to;
+            })
+            .ReturnsAsync((Func<long, double>)(_ => 1.0));
+
+        var first = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
+        var last = first.AddHours(6);
+        var records = new List<TempBasal>
+        {
+            new() { Id = Guid.NewGuid(), LegacyId = "a", StartTimestamp = first, Rate = 0.4, Origin = TempBasalOrigin.Scheduled, DataSource = "glooko-connector" },
+            new() { Id = Guid.NewGuid(), LegacyId = "b", StartTimestamp = last, Rate = 0.4, Origin = TempBasalOrigin.Scheduled, DataSource = "glooko-connector" },
+        };
+
+        await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
+
+        deleteFrom.Should().Be(first);
+        deleteTo.Should().Be(last);
+        resolveFrom.Should().Be(records[0].StartMills);
+        resolveTo.Should().Be(records[1].StartMills + 1);
     }
 
     [Fact]

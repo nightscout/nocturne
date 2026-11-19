@@ -44,7 +44,8 @@ public class SessionCookieRefreshFailureTests
                     Issuer = "nocturne",
                     Audience = "nocturne-api",
                 }),
-                NullLogger<JwtService>.Instance))
+                NullLogger<JwtService>.Instance,
+                TimeProvider.System))
             .AddSingleton(auth.Object)
             .BuildServiceProvider();
 

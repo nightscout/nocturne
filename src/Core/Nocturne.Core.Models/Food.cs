@@ -105,6 +105,22 @@ public class Food
     public List<QuickPickFood>? Foods { get; set; }
 
     /// <summary>
+    /// Restores <c>Unit</c> to "g" when blank, and <c>Gi</c> to 2 when outside 1-3.
+    /// </summary>
+    public void ApplyUnitAndGiDefaults()
+    {
+        if (string.IsNullOrWhiteSpace(Unit))
+        {
+            Unit = "g";
+        }
+
+        if (Gi < 1 || Gi > 3)
+        {
+            Gi = 2;
+        }
+    }
+
+    /// <summary>
     /// Whether to hide after use (only for type="quickpick")
     /// </summary>
     [JsonPropertyName("hideafteruse")]

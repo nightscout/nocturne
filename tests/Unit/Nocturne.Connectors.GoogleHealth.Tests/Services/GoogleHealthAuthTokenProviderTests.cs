@@ -2,7 +2,9 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
@@ -130,6 +132,26 @@ public class GoogleHealthAuthTokenProviderTests
     }
 
     [Fact]
+    public async Task Access_token_expires_one_minute_before_its_lifetime_ends()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var provider = CreateProvider(
+            new StubHandler(_ => Json("""{"access_token":"access","refresh_token":"refresh","expires_in":3600}""")),
+            clock: clock);
+        await provider.DiscardStaleCacheAsync(Configuration("refresh"));
+
+        await provider.GetValidTokenAsync(Configuration("refresh"));
+
+        provider.TokenExpiresAt.Should().Be(clock.GetUtcNow().UtcDateTime.AddMinutes(59));
+        (await provider.GetCurrentSessionAsync())!.AccessTokenExpiresAt
+            .Should().Be(clock.GetUtcNow().AddHours(1));
+        clock.Advance(TimeSpan.FromMinutes(59) - TimeSpan.FromSeconds(1));
+        provider.IsTokenExpired.Should().BeFalse();
+        clock.Advance(TimeSpan.FromSeconds(2));
+        provider.IsTokenExpired.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Refresh_and_exchange_present_the_instance_client()
     {
         var posted = new List<string>();
@@ -187,18 +209,21 @@ public class GoogleHealthAuthTokenProviderTests
     private static GoogleHealthAuthTokenProvider CreateProvider(
         HttpMessageHandler handler,
         ConnectorTokenCache? cache = null,
-        Guid? tenantId = null)
+        Guid? tenantId = null,
+        TimeProvider? clock = null)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(accessor => accessor.IsResolved).Returns(true);
         tenantAccessor.SetupGet(accessor => accessor.TenantId).Returns(tenantId ?? Guid.NewGuid());
         return new GoogleHealthAuthTokenProvider(
             new HttpClient(handler),
-            cache ?? new ConnectorTokenCache(),
+            cache ?? new ConnectorTokenCache(clock),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenantAccessor.Object,
             TestPlatform.Options(),
-            NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+            NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>(),
+            clock);
     }
 
     private static GoogleHealthConnectorConfiguration Configuration(string refreshToken) => new()

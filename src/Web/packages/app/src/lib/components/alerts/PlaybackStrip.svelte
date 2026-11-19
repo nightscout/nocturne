@@ -27,6 +27,8 @@
     onPlayPause: () => void;
     onReset: () => void;
     onSeek: (pct: number) => void;
+    /** The rule under edit. Its ticks run the full height of the strip. */
+    highlightRuleId?: string;
   }
 
   let {
@@ -41,6 +43,7 @@
     onPlayPause,
     onReset,
     onSeek,
+    highlightRuleId,
   }: Props = $props();
 
   const SPEED_OPTIONS: number[] = [0.25, 0.5, 1, 2];
@@ -148,17 +151,19 @@
       {@const dimmed = tick.xPct > playPct}
       {@const isResolved = tick.kind === AlertReplayEventKind.AutoResolved}
       {@const isSuppressed = tick.kind === AlertReplayEventKind.SuppressedByDnd}
+      {@const isHighlighted = highlightRuleId !== undefined && tick.ruleId === highlightRuleId}
       <line
         data-testid="event-tick"
+        data-highlighted={isHighlighted}
         data-rule-id={tick.ruleId ?? ""}
         data-kind={tick.kind ?? "fired"}
         x1={tick.xPct}
         x2={tick.xPct}
-        y1={isResolved ? "8" : "20"}
+        y1={isHighlighted ? "0" : isResolved ? "8" : "20"}
         y2="32"
         vector-effect="non-scaling-stroke"
         stroke={severityVar(tick.severity)}
-        stroke-width={isSuppressed ? "1.5" : "2"}
+        stroke-width={isHighlighted ? "3" : isSuppressed ? "1.5" : "2"}
         stroke-dasharray={isSuppressed ? "2 2" : null}
         opacity={dimmed ? 0.35 : isSuppressed ? 0.6 : 1}
       />

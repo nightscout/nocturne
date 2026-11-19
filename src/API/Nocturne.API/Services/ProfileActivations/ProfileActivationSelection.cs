@@ -17,6 +17,7 @@ namespace Nocturne.API.Services.ProfileActivations;
 /// </remarks>
 internal static class ProfileActivationSelection
 {
+    /// <param name="activations">The activations to pick from, of any source and phase.</param>
     /// <param name="firstEffectiveMills">
     /// The start of the earliest effective activation of each <see cref="ProfileActivationSource"/> key
     /// that has written one.

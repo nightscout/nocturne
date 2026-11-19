@@ -1,129 +1,76 @@
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Admin;
-using Nocturne.API.Services.Demo;
-using Nocturne.API.Tests.Infrastructure;
-using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Core.Models.Identity;
 using Xunit;
-using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Controllers.V4.Admin;
 
 /// <summary>
-/// The demo delete endpoints are what the demo service calls to empty the tenant before a
-/// regenerate, so they have to reach records a visitor deleted — those are soft-deleted rows, which
-/// the global filter hid from the purge.
+/// The demo delete endpoints purge the demo tenant they find, as that tenant, and answer 404 when
+/// there is none. What a purge deletes and reports is <c>DemoDataPurgeParityTests</c>' concern.
 /// </summary>
 [Trait("Category", "Unit")]
-public class DemoAdminPurgeTests : IDisposable
+public class DemoAdminPurgeTests
 {
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-0000000000de");
 
-    private readonly SqliteTestDatabase _db;
+    private readonly Mock<ITenantRepository> _tenants = new();
+    private readonly Mock<IDemoDataPurge> _purge = new();
 
-    public DemoAdminPurgeTests()
+    private DemoAdminController Controller() =>
+        new(Mock.Of<ITenantService>(), null!, _tenants.Object, Mock.Of<ITenantMembershipRepository>(), _purge.Object);
+
+    private void DemoTenantExists() =>
+        _tenants
+            .Setup(t => t.FindDemoTenantAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Record(TenantId));
+
+    private static TenantRecord Record(Guid id) =>
+        new(
+            id, "demo", "Nocturne Demo", true, true, false, false, null, null, null, null, null, null, null, null,
+            null, null, null, DateTime.UtcNow, DateTime.UtcNow, null);
+
+    [Fact]
+    public async Task DeleteEntries_PurgesTheDemoTenantAndReturnsTheCount()
     {
-        _db = TestDbContextFactory.CreateSqlite();
+        DemoTenantExists();
+        _purge
+            .Setup(p => p.PurgeEntriesAsync(It.Is<TenantContext>(t => t.TenantId == TenantId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(7);
 
-        using var db = NewContext();
-        db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "demo", IsDemo = true, IsActive = true });
-        db.SaveChanges();
-    }
+        var result = await Controller().DeleteEntries(CancellationToken.None);
 
-    public void Dispose()
-    {
-        _db.Dispose();
-        GC.SuppressFinalize(this);
-    }
-
-    private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
-
-    private DemoAdminController BuildController()
-    {
-        var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => _db.CreateContext());
-
-        var tenantService = new Mock<ITenantService>();
-        var demoTenantService = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(),
-            tenantService.Object,
-            TestPublicAccessCache.Create(),
-            Mock.Of<ITenantCache>(),
-            TimeProvider.System,
-            new Mock<ILogger<DemoTenantService>>().Object);
-
-        return new DemoAdminController(tenantService.Object, demoTenantService, dbFactory.Object.AsNocturneFactory(), TimeProvider.System);
+        ((DemoDeleteResultDto)((OkObjectResult)result).Value!).DeletedCount.Should().Be(7);
     }
 
     [Fact]
-    public async Task DeleteEntries_PurgesSoftDeletedGlucose()
+    public async Task DeleteTreatments_PurgesTheDemoTenantAndReturnsTheCount()
     {
-        var deletedAt = DateTime.UtcNow;
-        await using (var seed = NewContext())
-        {
-            seed.SensorGlucose.Add(new SensorGlucoseEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-                Timestamp = DateTime.UtcNow, Mgdl = 120, DeletedAt = deletedAt,
-            });
-            seed.MeterGlucose.Add(new MeterGlucoseEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-                Timestamp = DateTime.UtcNow, Mgdl = 110, DeletedAt = deletedAt,
-            });
-            seed.Calibrations.Add(new CalibrationEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-                Timestamp = DateTime.UtcNow, DeletedAt = deletedAt,
-            });
-            await seed.SaveChangesAsync();
-        }
+        DemoTenantExists();
+        _purge
+            .Setup(p => p.PurgeTreatmentsAsync(It.Is<TenantContext>(t => t.TenantId == TenantId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(11);
 
-        await BuildController().DeleteEntries(CancellationToken.None);
+        var result = await Controller().DeleteTreatments(CancellationToken.None);
 
-        await using var assert = NewContext();
-        (await assert.SensorGlucose.IgnoreQueryFilters().CountAsync()).Should().Be(0);
-        (await assert.MeterGlucose.IgnoreQueryFilters().CountAsync()).Should().Be(0);
-        (await assert.Calibrations.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        ((DemoDeleteResultDto)((OkObjectResult)result).Value!).DeletedCount.Should().Be(11);
     }
 
     [Fact]
-    public async Task DeleteTreatments_PurgesSoftDeletedTreatments()
+    public async Task WithNoDemoTenant_BothDeletesAnswerNotFoundAndPurgeNothing()
     {
-        var deletedAt = DateTime.UtcNow;
-        await using (var seed = NewContext())
-        {
-            seed.Boluses.Add(new BolusEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-                Timestamp = DateTime.UtcNow, Insulin = 1, DeletedAt = deletedAt,
-            });
-            seed.CarbIntakes.Add(new CarbIntakeEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-                Timestamp = DateTime.UtcNow, Carbs = 30, DeletedAt = deletedAt,
-            });
-            seed.ApsSnapshots.Add(new ApsSnapshotEntity
-            {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, Device = DataSources.DemoService,
-                Timestamp = DateTime.UtcNow, AidAlgorithm = "Loop", DeletedAt = deletedAt,
-            });
-            await seed.SaveChangesAsync();
-        }
+        _tenants
+            .Setup(t => t.FindDemoTenantAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TenantRecord?)null);
+        var controller = Controller();
 
-        await BuildController().DeleteTreatments(CancellationToken.None);
+        (await controller.DeleteEntries(CancellationToken.None)).Should().BeOfType<NotFoundResult>();
+        (await controller.DeleteTreatments(CancellationToken.None)).Should().BeOfType<NotFoundResult>();
 
-        await using var assert = NewContext();
-        (await assert.Boluses.IgnoreQueryFilters().CountAsync()).Should().Be(0);
-        (await assert.CarbIntakes.IgnoreQueryFilters().CountAsync()).Should().Be(0);
-        (await assert.ApsSnapshots.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        _purge.VerifyNoOtherCalls();
     }
 }

@@ -1,21 +1,25 @@
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Models.Identity;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages the tenant's single rotatable public share link ({token}.share.{baseDomain}).
-/// All operations require the <c>sharing.manage</c> permission.
+/// The tenant's public share link. A caller can read the link state, reveal the link, rotate the
+/// link, turn sharing off, choose full history or the last 24 hours, and set the scopes the link
+/// shares. All operations require the <c>sharing.manage</c> permission.
 /// </summary>
+/// <remarks>
+/// The link is served at {token}.share.{baseDomain}.
+/// </remarks>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/share")]
@@ -54,7 +58,7 @@ public class ShareLinkController : ControllerBase
     /// Show the live link in the clear. A command rather than a query so the secret travels only
     /// when the owner asks for it, instead of on every read of the sharing settings. Succeeds
     /// with a null URL and <c>canReveal</c> false in the cases
-    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists.
+    /// <see cref="TenantRecord.ShareTokenEncrypted"/> lists.
     /// </summary>
     [HttpPost("reveal")]
     [RequireInteractiveSession]

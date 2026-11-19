@@ -322,13 +322,6 @@ class Program
         var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
         var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
 
-        // The instance's Google OAuth client for the Google Health connector. Optional: empty
-        // leaves the connector unavailable to every tenant. The redirect URI defaults to the apex
-        // callback derived from BASE_DOMAIN.
-        var googleHealthClientId = builder.AddParameter("google-health-client-id", "", secret: false);
-        var googleHealthClientSecret = builder.AddParameter("google-health-client-secret", "", secret: true);
-        var googleHealthRedirectUri = builder.AddParameter("google-health-redirect-uri", "", secret: false);
-
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
         // an empty default means telemetry is collected in-process and dropped
@@ -412,10 +405,7 @@ class Program
         }
 
         var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
-        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey)
-            .WithEnvironment("GOOGLE_HEALTH_CLIENT_ID", googleHealthClientId)
-            .WithEnvironment("GOOGLE_HEALTH_CLIENT_SECRET", googleHealthClientSecret)
-            .WithEnvironment("GOOGLE_HEALTH_REDIRECT_URI", googleHealthRedirectUri);
+        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
@@ -532,9 +522,13 @@ class Program
         }
 
         IResourceBuilder<IResourceWithEndpoints> web;
+        var devOptions = DevOptions.From(builder.Configuration);
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            if (devOptions.LiveSampleData)
+                apiEnvironment.WithEnvironment("SampleData__Live", "true");
+
             var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
             var bridge = builder.AddPnpmApp(
                 "nocturne-bridge-build",
@@ -554,13 +548,17 @@ class Program
 
             ConfigureWebEnvironment(viteWeb);
 
-            // Dev auto-login, on unless NOCTURNE_DEV_AUTO_LOGIN is false (apphost
-            // appsettings or the host environment, e.g.
-            // `NOCTURNE_DEV_AUTO_LOGIN=false aspire start`): the web login page
-            // redirects through /api/v4/dev-only/auth/login instead of the
-            // passkey UI, since a seeded tenant's passkey is held by no one. Run
-            // mode only — the backing controller exists only in Development.
-            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", true))
+            // Waited for so the first page anyone opens is the seeded dashboard, never /setup.
+            if (devOptions.AutoSeed.Enabled)
+            {
+                var devSeed = builder.AddDevTenantSeed(
+                    "nocturne-dev-seed", api, devOptions.AutoSeed.SampleDataDays);
+                viteWeb.WaitForCompletion(devSeed);
+                devSeed.WithParentRelationship(viteWeb);
+            }
+
+            // Run mode only: the backing controller exists only in Development.
+            if (devOptions.AutoLogin)
             {
                 viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", "true");
             }
@@ -877,12 +875,12 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            // Explicit domain runs on 443, so URLs omit the port; the default
-            // local domain keeps the gateway port and must carry it in
-            // BASE_DOMAIN — consumers build URLs (and strip the port for the
-            // WebAuthn rp.id) from it.
+            // An explicit domain outside a worktree runs on 443, so URLs omit the
+            // port; otherwise the gateway port (1612, or dynamic in a worktree)
+            // must be carried in BASE_DOMAIN — consumers build URLs (and strip
+            // the port for the WebAuthn rp.id) from it.
             var gatewayEndpoint = gateway.GetEndpoint("https");
-            var baseDomainExpr = hasExplicitDomain
+            var baseDomainExpr = hasExplicitDomain && !isWorktree
                 ? ReferenceExpression.Create($"{customDomain}")
                 : ReferenceExpression.Create(
                     $"{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
@@ -906,7 +904,7 @@ class Program
 
             // Show the gateway URL on the web resource in the Aspire dashboard
             // so users can click through to the app via the HTTPS gateway.
-            if (hasExplicitDomain)
+            if (hasExplicitDomain && !isWorktree)
             {
                 web.WithUrl($"https://{customDomain}", customDomain);
             }
@@ -918,6 +916,19 @@ class Program
                     ),
                     "Gateway"
                 );
+            }
+
+            if (devOptions.AutoSeed.Enabled)
+            {
+                // Read from the allocated port: an explicit domain is on 443 only outside a worktree.
+                var devTenantHost = $"{DevTenantSeeder.Slug}.{customDomain}";
+                gateway.WithUrls(context => context.Urls.Add(new ResourceUrlAnnotation
+                {
+                    Url = gatewayEndpoint.Port == 443
+                        ? $"https://{devTenantHost}"
+                        : $"https://{devTenantHost}:{gatewayEndpoint.Port}",
+                    DisplayText = "Dev tenant (if seeded)",
+                }));
             }
 
             // Warn if custom domain doesn't resolve (no-op for *.localhost,
@@ -980,6 +991,7 @@ class Program
             builder.AddPortainerComposePublisher();
             builder.AddByoProxyComposePublisher();
             builder.AddPostgresDataComposePublisher();
+            builder.AddInstallScriptPublisher();
         }
 
         var app = builder.Build();

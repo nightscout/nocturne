@@ -12,11 +12,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Treatments controller that provides full V3 API compatibility with Nightscout treatments endpoints.
-/// Implements the /api/v3/treatments endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout treatments, with paging, field selection, sorting and filtering. A client can list, read, create,
+/// update, patch and delete treatments, add them in bulk, and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout treatments endpoints, at /api/v3/treatments.
+/// </remarks>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="ITreatmentStore"/>
 /// <seealso cref="Treatment"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -39,6 +41,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     /// <summary>
     /// Get treatments with V3 API features including pagination, field selection, and advanced filtering.
+    /// Honors <c>If-None-Match</c> and <c>If-Modified-Since</c>, returning 304 when nothing changed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
@@ -154,6 +157,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     /// <summary>
     /// Create a new treatment via V3 API.
+    /// A treatment whose ID already exists is not duplicated: the response is 200 with <c>isDeduplication: true</c>.
     /// </summary>
     /// <param name="treatment">The <see cref="Treatment"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -215,7 +219,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             // Route through TreatmentService which handles StateSpan creation for temp basals
             var created = await _treatmentService.CreateTreatmentsAsync(
                 [processedTreatment],
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             if (created.Rejected is [{ Reason: var reason }])
@@ -287,7 +291,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             // Save to database
             var createdTreatments = await _treatmentService.CreateTreatmentsAsync(
                 processedTreatments,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             var createdArray = TreatmentEcho.InSubmittedOrder(createdTreatments);
@@ -425,34 +429,21 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(500)]
     [RequireScope(Scope.TreatmentsRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetTreatmentHistory(
+    public Task<ActionResult> GetTreatmentHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 treatment history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var treatments = await _treatmentService.GetTreatmentsModifiedSinceAsync(
+        =>
+        CreateV3ClockHistoryResponseAsync(
+            "treatment",
             lastModified,
             limit,
-            cancellationToken
+            (since, take) =>
+                _treatmentService.GetTreatmentsModifiedSinceAsync(since, take, cancellationToken),
+            t => t.SrvModified ?? t.Mills,
+            records => records
         );
-
-        var treatmentsList = treatments.ToList();
-        if (treatmentsList.Count > 0)
-        {
-            SetHistoryCursorHeaders(treatmentsList.Max(t => t.SrvModified ?? t.Mills));
-        }
-
-        return CreateV3SuccessResponse(treatmentsList);
-    }
 
     /// <summary>
     /// Partially update a treatment via V3 API (JSON merge-patch).

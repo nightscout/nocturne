@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Core.Constants;
@@ -26,13 +27,14 @@ public sealed class GoogleHealthConnectorService(
     ITenantAccessor tenantAccessor,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ILogger<GoogleHealthConnectorService> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null)
-    : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
+    : BaseConnectorService<GoogleHealthConnectorConfiguration>(
+        httpClient, serverResolver, logger, retryDelayStrategy, publisher, timeProvider)
 {
     public const string ConnectorName = "GoogleHealth";
 
-    protected override string ConnectorSource => DataSources.GoogleHealthConnector;
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 
@@ -49,12 +51,12 @@ public sealed class GoogleHealthConnectorService(
         ISyncProgressReporter? progressReporter = null) =>
         since is { } requestedFrom
             ? base.SyncDataAsync(new SyncRequest { From = requestedFrom }, config, cancellationToken, progressReporter)
-            : base.SyncDataAsync(config, cancellationToken, DateTime.UtcNow, progressReporter);
+            : base.SyncDataAsync(config, cancellationToken, Clock.GetUtcNow().UtcDateTime, progressReporter);
 
     // Google Health owns its health cursors; a base glucose watermark must not become a repair bound.
     protected override SyncRequest CreateBackgroundSyncRequest(DateTime? since) => new();
 
-    // Matches GoogleHealthConnectorConfiguration's own validation floor for an explicit ImportFrom.
+    // Matches GoogleHealthService.ValidateOptions' floor for an explicit ImportFrom.
     private static readonly DateTimeOffset EarliestSupportedDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private const string BackfillCursorKey = "backfillCursorDate";
@@ -332,7 +334,7 @@ public sealed class GoogleHealthConnectorService(
                     await ReadWithRefreshAsync(
                         config, accessToken, active, window.From, window.To, tenantId, result, cancellationToken);
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
                 {
                     await TryReduceBackfillWindowAsync(window);
                     throw;
@@ -359,7 +361,7 @@ public sealed class GoogleHealthConnectorService(
                 ? string.Empty
                 : GoogleHealthErrorCode.Encode("partial_consent", missingConsent));
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             logger.LogInformation("Google Health import was cancelled for tenant {TenantId}", tenantId);
             throw;

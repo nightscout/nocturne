@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Health;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -12,10 +13,12 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// V2 DData controller providing direct data access endpoints.
-/// Implements the legacy /api/v2/ddata endpoints with 1:1 backwards compatibility.
+/// Nightscout ddata: glucose, treatments, profiles and device status in one response. A client can read the
+/// current data, the data at a timestamp, or raw data.
 /// </summary>
 /// <remarks>
+/// Implements the legacy /api/v2/ddata endpoints with 1:1 backwards compatibility.
+///
 /// The actions require only <c>glucose.read</c> while the response also carries treatments,
 /// profiles and device status. This is the accepted narrowing described on
 /// <see cref="PropertiesController"/>, which names the per-category follow-up. The one exception
@@ -25,6 +28,7 @@ namespace Nocturne.API.Controllers.V2;
 /// </remarks>
 /// <seealso cref="IDDataService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("DData")]
 [Tags("V2")]
 [Route("api/v2/ddata")]
 [Produces("application/json")]

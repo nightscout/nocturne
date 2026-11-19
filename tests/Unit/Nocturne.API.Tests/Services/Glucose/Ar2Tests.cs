@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services.BolusWizard;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Profiles;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
@@ -58,6 +58,21 @@ public class Ar2Tests
         Assert.NotNull(result.Forecast);
         Assert.Empty(result.Forecast.Predicted);
         Assert.Equal(0, result.Forecast.AvgLoss);
+    }
+
+    [Fact]
+    public async Task CalculateForecastAsync_AvgLoss_MatchesNightscoutForAKnownSeries()
+    {
+        var result = await _ar2Service.CalculateForecastAsync(
+            new DData(),
+            new Dictionary<string, object> { ["mean"] = 120d, ["mills"] = 1_795_013_482_087L },
+            new Dictionary<string, object> { ["mean5MinsAgo"] = 118d },
+            new Dictionary<string, object>(),
+            CancellationToken.None
+        );
+
+        Assert.Equal([122, 123, 124, 125, 126, 126], result.Forecast!.Predicted.Select(p => p.Mgdl));
+        Assert.Equal(0.0003163210880908826, result.Forecast.AvgLoss, 1e-12);
     }
 
     [Fact]
@@ -129,7 +144,7 @@ public class Ar2Tests
 
         var ddataService = new Mock<IDDataService>();
         ddataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
 
         var service = new PropertiesService(

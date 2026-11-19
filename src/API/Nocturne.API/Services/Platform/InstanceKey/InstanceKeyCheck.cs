@@ -117,6 +117,7 @@ public enum InstanceKeyState
     Superseded,
 }
 
+/// <param name="State">How this key stands against the check.</param>
 /// <param name="Generation">The check's generation as this key found it.</param>
 public readonly record struct InstanceKeyFinding(InstanceKeyState State, Guid Generation)
 {

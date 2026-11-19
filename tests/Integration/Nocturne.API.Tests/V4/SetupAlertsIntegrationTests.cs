@@ -16,6 +16,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// in mg/dL whatever the owner reads, route by who Nocturne is for, and the item is done only once
 /// a test alert is confirmed received.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
 {
@@ -150,6 +151,45 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
 
         await SaveAsync(Rules(55, 70, 250));
         (await AlertRulesByNameAsync()).Should().HaveCount(4, "saving again updates the starter rules rather than adding more");
+    }
+
+    private static (bool Enabled, string? Direction, decimal? Value) ResolveOf(JsonElement rule)
+    {
+        var enabled = rule.GetProperty("autoResolveEnabled").GetBoolean();
+        if (rule.GetProperty("autoResolveParams").ValueKind != JsonValueKind.Object)
+            return (enabled, null, null);
+        var threshold = rule.GetProperty("autoResolveParams").GetProperty("threshold");
+        return (enabled, threshold.GetProperty("direction").GetString(), threshold.GetProperty("value").GetDecimal());
+    }
+
+    [Fact]
+    public async Task AGlucoseStarterRule_ClosesOnTheOtherSideOfItsThreshold_UntilTheOwnerChangesThat()
+    {
+        await SaveAsync(Rules(55, 70, 250));
+
+        var rules = await AlertRulesByNameAsync();
+        ResolveOf(rules["Urgent low"]).Should().Be((true, "above", 55m));
+        ResolveOf(rules["Low"]).Should().Be((true, "above", 70m));
+        ResolveOf(rules["High"]).Should().Be((true, "below", 250m));
+        ResolveOf(rules["No readings for 20 minutes"]).Should().Be((false, null, null));
+
+        await SaveAsync(Rules(55, 80, 250));
+        ResolveOf((await AlertRulesByNameAsync())["Low"]).Should().Be((true, "above", 80m), "the resolve condition follows the threshold");
+
+        await using (var db = Fixture.CreateDbContext(Fixture.TenantId))
+        {
+            var high = await db.AlertRules.SingleAsync(r => r.Name == "High");
+            high.AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":180}}""";
+            var urgentLow = await db.AlertRules.SingleAsync(r => r.Name == "Urgent low");
+            urgentLow.AutoResolveEnabled = false;
+            await db.SaveChangesAsync();
+        }
+
+        await SaveAsync(Rules(60, 80, 240));
+        rules = await AlertRulesByNameAsync();
+        StoredValue(rules["High"]).Should().Be(240);
+        ResolveOf(rules["High"]).Should().Be((true, "below", 180m), "a resolve condition the owner edited stays");
+        ResolveOf(rules["Urgent low"]).Should().Be((false, "above", 55m), "one the owner switched off stays off and unchanged");
     }
 
     [Fact]

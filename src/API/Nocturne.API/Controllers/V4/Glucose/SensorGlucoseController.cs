@@ -18,11 +18,14 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Controller for managing CGM sensor glucose readings.
-/// Provides CRUD operations and bulk creation for <see cref="SensorGlucose"/> records.
-/// After creation, evaluates glucose alerts against the canonical stream via
-/// <see cref="ICanonicalAlertEvaluator"/>.
+/// Continuous glucose monitor (CGM) sensor readings. List, read, create (one or in bulk), update
+/// and delete readings. List deleted readings and restore them. Glucose alerts are checked after
+/// each creation.
 /// </summary>
+/// <remarks>
+/// CRUD operations and bulk creation for <see cref="SensorGlucose"/> records. After creation, glucose alerts
+/// are evaluated against the canonical stream via <see cref="ICanonicalAlertEvaluator"/>.
+/// </remarks>
 /// <seealso cref="ISensorGlucoseRepository"/>
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>
@@ -34,7 +37,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [Route("api/v4/glucose/sensor")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
-[ClearsTenantCache(TenantCacheFamily.Entries, TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c)]
+[ClearsTenantCache(TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c)]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
@@ -53,8 +56,8 @@ public class SensorGlucoseController(
     /// <summary>
     /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base
     /// list surface: when set, results are that registered device's raw readings (canonical stream selection is
-    /// bypassed); when unset, the caller sees every stored reading. Pagination totals match the base
-    /// device/source behaviour (the count is unscoped by the device filters).
+    /// bypassed); when unset, the caller sees every stored reading. Pagination totals count the
+    /// records the same filters match.
     /// </summary>
     /// <remarks>
     /// The <c>patientDeviceId</c> query parameter is read directly from the request because the base list
@@ -83,7 +86,7 @@ public class SensorGlucoseController(
 
         var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending,
             afterTimestamp: null, afterId: null, patientDeviceId: patientDeviceId, ct: ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, ct));
+        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, device, source, patientDeviceId, ct: ct));
         return Ok(new PaginatedResponse<SensorGlucose> { Data = data, Pagination = pagination });
     }
 

@@ -11,6 +11,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Multitenancy;
 
@@ -40,6 +41,7 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         services.AddSingleton(sp => new RootServiceProvider(sp));
         services.AddTransient<NocturneDbContextFactory>();
         services.AddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
+        services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddSingleton<ShareTokenCacheService>();
         services.AddMemoryCache();
         services.AddLogging();

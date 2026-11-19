@@ -73,6 +73,7 @@ public class DemoPhysiologyTests
     {
         var generator = new DemoDataGenerator(
             Options.Create(new DemoModeConfiguration { BackfillDays = 28, RandomSeed = 1234 }),
+            DemoTestClock.Host,
             NullLogger<DemoDataGenerator>.Instance,
             NullLoggerFactory.Instance);
 

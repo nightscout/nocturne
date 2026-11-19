@@ -21,7 +21,7 @@ public class BolusRepositoryTests : IDisposable
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<IDeduplicationService> _mockDeduplicationService;
+    private readonly Mock<IDuplicateLinker> _linker;
     private readonly BolusRepository _repo;
 
     public BolusRepositoryTests()
@@ -34,11 +34,11 @@ public class BolusRepositoryTests : IDisposable
         _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
-        _mockDeduplicationService = new Mock<IDeduplicationService>();
+        _linker = new Mock<IDuplicateLinker>();
 
         _repo = new BolusRepository(
             new TestNocturneDbContextFactory(_context),
-            _mockDeduplicationService.Object,
+            _linker.Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance);
     }
@@ -185,7 +185,7 @@ public class BolusRepositoryTests : IDisposable
         results.Should().ContainSingle(r => r.SyncIdentifier == "sync-2" && r.Insulin == 3.0);
 
         // The updated-in-place row is not handed to deduplication; only the insert is
-        _mockDeduplicationService.Verify(
+        _linker.Verify(
             d => d.DeduplicateBatchAsync(
                 RecordType.Bolus,
                 It.Is<IReadOnlyList<DeduplicationInput>>(inputs =>

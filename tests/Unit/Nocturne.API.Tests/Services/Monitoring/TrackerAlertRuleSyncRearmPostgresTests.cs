@@ -149,6 +149,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
             references.Object,
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
+            TimeProvider.System,
             NullLogger<TrackerAlertRuleSyncService>.Instance);
         await sync.SyncDefinitionAsync(definition.Id);
 

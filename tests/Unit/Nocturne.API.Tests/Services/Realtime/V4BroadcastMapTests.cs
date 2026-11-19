@@ -26,7 +26,7 @@ public class V4BroadcastMapTests
     [InlineData(typeof(Calibration), RealtimeCategories.Glucose, "calibration")]
     [InlineData(typeof(Bolus), RealtimeCategories.Care, "bolus")]
     [InlineData(typeof(CarbIntake), RealtimeCategories.Care, "carbIntake")]
-    [InlineData(typeof(BGCheck), RealtimeCategories.Care, "bgCheck")]
+    [InlineData(typeof(BGCheck), RealtimeCategories.Glucose, "bgCheck")]
     [InlineData(typeof(BolusCalculation), RealtimeCategories.Care, "bolusCalculation")]
     [InlineData(typeof(BasalInjection), RealtimeCategories.Care, "basalInjection")]
     [InlineData(typeof(TempBasal), RealtimeCategories.Care, "tempBasal")]
@@ -76,10 +76,6 @@ public class V4BroadcastMapTests
         { typeof(UploaderSnapshot), typeof(UploaderSnapshotController) },
     };
 
-    /// <remarks>
-    /// Every realtime reader holds glucose.read, the admission's own gate, so a category governed by
-    /// treatments.read may still carry a record whose HTTP read needs glucose.read (a BG check).
-    /// </remarks>
     [Theory]
     [MemberData(nameof(HttpReads))]
     public void A_category_subscriber_may_read_each_record_it_carries_over_HTTP(Type modelType, Type controller)
@@ -113,5 +109,19 @@ public class V4BroadcastMapTests
             HistoryClamped: false);
 
         treatmentsReader.MayReceiveCategory(category).Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_glucose_reader_receives_bg_checks()
+    {
+        V4BroadcastMap.TryGet(typeof(BGCheck), out var category, out _);
+        var glucoseReader = new HubAuthorization(
+            Guid.NewGuid(),
+            Scope.Normalize([Scope.GlucoseRead]),
+            HubCredentialKind.Subject,
+            Guid.NewGuid(),
+            HistoryClamped: false);
+
+        glucoseReader.MayReceiveCategory(category).Should().BeTrue();
     }
 }

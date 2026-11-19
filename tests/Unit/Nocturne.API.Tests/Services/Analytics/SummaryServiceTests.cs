@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Analytics;
@@ -52,10 +53,35 @@ public class SummaryServiceTests
             .ReturnsAsync([]);
         _mockLogger = new Mock<ILogger<SummaryService>>();
         Reading(NoInputs(), new IobResult(), new CobResult());
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData());
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, object>());
-        _service = new SummaryService(
+        _service = ServiceAt(TimeProvider.System);
+    }
+
+    [Fact]
+    public void ProcessSgvs_KeepsReadingsFromTheLastNHoursOfTheClock()
+    {
+        var now = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
+        var service = ServiceAt(new FakeTimeProvider(now));
+        var hoursAgo = (double hours) => now.AddHours(-hours).ToUnixTimeMilliseconds();
+        var sgvs = new List<Entry>
+        {
+            new() { Mgdl = 100, Mills = hoursAgo(6.01) },
+            new() { Mgdl = 110, Mills = hoursAgo(6) },
+            new() { Mgdl = 120, Mills = hoursAgo(1) },
+        };
+
+        var kept = service.ProcessSgvs(sgvs, 6);
+
+        kept.Select(k => k.Sgv).Should().Equal(110, 120);
+    }
+
+    private SummaryService ServiceAt(TimeProvider time) =>
+        new SummaryService(
             _mockDDataService.Object,
             _mockPropertiesService.Object,
             _mockIobCobReader.Object,
@@ -68,9 +94,8 @@ public class SummaryServiceTests
                 _mockSensitivity.Object,
                 _mockTargetRange.Object
             ),
-            _mockLogger.Object
+            time, _mockLogger.Object
         );
-    }
 
     [Fact]
     public async Task GetSummaryAsync_WithValidData_ReturnsProcessedSummary()
@@ -80,11 +105,11 @@ public class SummaryServiceTests
         var testProperties = CreateTestProperties();
 
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testDData);
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(testProperties);
 
         // Act
@@ -227,10 +252,10 @@ public class SummaryServiceTests
         ddata.Profiles = [];
         ConfigureStore(rows);
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<DDataCollections>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ddata);
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestProperties());
         _mockActiveProfileResolver
             .Setup(x => x.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
@@ -512,12 +537,12 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithValidProperties_ReturnsCorrectState()
+    public async Task SummaryState_WithValidProperties_ReturnsCorrectState()
     {
         // Arrange
         var properties = CreateTestProperties();
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         Reading(
@@ -527,7 +552,7 @@ public class SummaryServiceTests
         );
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.Should().NotBeNull();
@@ -543,25 +568,25 @@ public class SummaryServiceTests
     [InlineData(0.125, 0.13)]
     [InlineData(-0.125, -0.12)]
     [InlineData(-3.7067, -3.71)]
-    public async Task ConstructStateAsync_RoundsBwpAsJavaScriptMathRound(double bolusEstimate, double expected)
+    public async Task SummaryState_RoundsBwpAsJavaScriptMathRound(double bolusEstimate, double expected)
     {
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, object>
             {
                 ["bwp"] = new Dictionary<string, object> { ["bolusEstimate"] = bolusEstimate },
             });
 
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         result.Bwp.Should().Be(expected, "Nightscout's summary is Math.round(bolusEstimate * 100) / 100, which rounds a half up");
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithNoIobCobData_WritesNullIobNullCobAndZeroBwp()
+    public async Task SummaryState_WithNoIobCobData_WritesNullIobNullCobAndZeroBwp()
     {
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, object>());
 
         var json = await StateJsonAsync();
@@ -574,7 +599,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithZeroIobAndCobFromADevice_WritesZeroNotNull()
+    public async Task SummaryState_WithZeroIobAndCobFromADevice_WritesZeroNotNull()
     {
         Reading(
             NoInputs(),
@@ -589,7 +614,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithTreatmentsThatLeaveNothingOnBoard_WritesZeroNotNull()
+    public async Task SummaryState_WithTreatmentsThatLeaveNothingOnBoard_WritesZeroNotNull()
     {
         Reading(
             new IobCobInputs(
@@ -608,7 +633,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithTempBasalsButNoCarbs_WritesIobAndNullCob()
+    public async Task SummaryState_WithTempBasalsButNoCarbs_WritesIobAndNullCob()
     {
         Reading(
             new IobCobInputs([], [new TempBasal { StartTimestamp = DateTime.UtcNow, Rate = 1 }], []),
@@ -623,10 +648,10 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithAProfileAndInsulinButNoCarbs_WritesZeroCob()
+    public async Task SummaryState_WithAProfileAndInsulinButNoCarbs_WritesZeroCob()
     {
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, object> { ["profile"] = new Dictionary<string, object?>() });
         Reading(
             new IobCobInputs([new Bolus { Timestamp = DateTime.UtcNow, Insulin = 1 }], [], []),
@@ -640,10 +665,10 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithAProfileAndNoTreatments_WritesNullCob()
+    public async Task SummaryState_WithAProfileAndNoTreatments_WritesNullCob()
     {
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, object> { ["profile"] = new Dictionary<string, object?>() });
         Reading(NoInputs(), new IobResult(), new CobResult());
 
@@ -653,7 +678,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithAFailedCobCalculation_WritesNullCob()
+    public async Task SummaryState_WithAFailedCobCalculation_WritesNullCob()
     {
         Reading(
             new IobCobInputs([new Bolus { Timestamp = DateTime.UtcNow, Insulin = 1 }], [], [new CarbIntake { Timestamp = DateTime.UtcNow, Carbs = 10 }]),
@@ -673,7 +698,7 @@ public class SummaryServiceTests
     [InlineData(-0.125, 0.5, -0.12, 1)]
     [InlineData(0.015, 0.4, 0.02, 0)]
     [InlineData(2.344, 24.4, 2.34, 24)]
-    public async Task ConstructStateAsync_RoundsIobAndCobHalfUp_AsJavaScriptsMathRound(
+    public async Task SummaryState_RoundsIobAndCobHalfUp_AsJavaScriptsMathRound(
         double iob,
         double cob,
         double expectedIob,
@@ -707,7 +732,7 @@ public class SummaryServiceTests
             });
 
     [Fact]
-    public async Task ConstructStateAsync_WhenTheReaderThrows_WritesNullIobAndCobAndKeepsTheSummary()
+    public async Task SummaryState_WhenTheReaderThrows_WritesNullIobAndCobAndKeepsTheSummary()
     {
         _mockIobCobReader
             .Setup(r => r.ReadTotalAsync(It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
@@ -721,9 +746,11 @@ public class SummaryServiceTests
         json["cob"].Should().BeNull();
     }
 
+    private async Task<SummaryState> StateAsync() => (await _service.GetSummaryAsync(6)).State;
+
     private async Task<JsonObject> StateJsonAsync()
     {
-        var state = await _service.ConstructStateAsync(CancellationToken.None);
+        var state = await StateAsync();
         return JsonNode.Parse(JsonSerializer.Serialize(state, NightscoutJsonOptions.Create()))!.AsObject();
     }
 
@@ -892,7 +919,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithCalibrationAge_IncludesCalibrationAge()
+    public async Task SummaryState_WithCalibrationAge_IncludesCalibrationAge()
     {
         // Arrange
         var properties = new Dictionary<string, object>
@@ -901,35 +928,35 @@ public class SummaryServiceTests
         };
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.CalibAge.Should().Be(12);
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithoutCalibrationAge_CalibrationAgeIsNull()
+    public async Task SummaryState_WithoutCalibrationAge_CalibrationAgeIsNull()
     {
         // Arrange
         var properties = new Dictionary<string, object>();
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.CalibAge.Should().BeNull();
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithSensorAge_CalculatesSensorExpiration()
+    public async Task SummaryState_WithSensorAge_CalculatesSensorExpiration()
     {
         // Arrange
         var properties = new Dictionary<string, object>
@@ -938,11 +965,11 @@ public class SummaryServiceTests
         };
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.Sage.Should().Be(120);
@@ -950,7 +977,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithOldSensorAge_SensorExpiresInIsZero()
+    public async Task SummaryState_WithOldSensorAge_SensorExpiresInIsZero()
     {
         // Arrange
         var properties = new Dictionary<string, object>
@@ -959,11 +986,11 @@ public class SummaryServiceTests
         };
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.Sage.Should().Be(300);
@@ -971,17 +998,17 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithoutSensorAge_SensorExpiresInIsNull()
+    public async Task SummaryState_WithoutSensorAge_SensorExpiresInIsNull()
     {
         // Arrange
         var properties = new Dictionary<string, object>();
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.Sage.Should().BeNull();
@@ -989,7 +1016,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_WithAllNewProperties_IncludesAllValues()
+    public async Task SummaryState_WithAllNewProperties_IncludesAllValues()
     {
         // Arrange
         var properties = new Dictionary<string, object>
@@ -1003,11 +1030,11 @@ public class SummaryServiceTests
         };
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
         // Act
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         // Assert
         result.Cage.Should().Be(48);
@@ -1020,7 +1047,7 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task ConstructStateAsync_LeavesBatteryNull_WhenUpbatHasNoLevel()
+    public async Task SummaryState_LeavesBatteryNull_WhenUpbatHasNoLevel()
     {
         var properties = new Dictionary<string, object>
         {
@@ -1028,10 +1055,10 @@ public class SummaryServiceTests
         };
 
         _mockPropertiesService
-            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<DData>(), It.IsAny<IobCobReading?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(properties);
 
-        var result = await _service.ConstructStateAsync(CancellationToken.None);
+        var result = await StateAsync();
 
         result.Battery.Should().BeNull();
     }

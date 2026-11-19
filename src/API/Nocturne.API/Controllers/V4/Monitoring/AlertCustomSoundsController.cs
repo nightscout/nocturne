@@ -13,7 +13,7 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for managing custom alert sounds (upload, list, stream, delete).
+/// Custom sounds that alerts can play. Upload, list, stream and delete sound files.
 /// </summary>
 /// <remarks>
 /// Uploading and deleting require <see cref="Scope.AlertsReadWrite"/>: the stored audio is
@@ -23,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </remarks>
 /// <seealso cref="NocturneDbContext"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Alert Sounds")]
 [Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alert-sounds")]

@@ -13,6 +13,7 @@ internal static class MyLifeStateSpanFactory
     /// <param name="rate">U/h.</param>
     internal static TempBasal CreateTempBasal(
         MyLifeEvent ev,
+        DateTime now,
         double rate,
         TempBasalOrigin origin)
     {
@@ -31,8 +32,8 @@ internal static class MyLifeStateSpanFactory
             App = null,
             DataSource = DataSources.MyLifeConnector,
             LegacyId = eventKey,
-            CreatedAt = DateTime.UtcNow,
-            ModifiedAt = DateTime.UtcNow,
+            CreatedAt = now,
+            ModifiedAt = now,
         };
     }
 }

@@ -63,7 +63,7 @@ public sealed class LostCommitAcknowledgementPostgresTests(V4GoldenFixture fx)
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repository = new BolusRepository(
             new TestNocturneDbContextFactory(retrying),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);

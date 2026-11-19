@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -11,7 +12,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// The outcome of an audited soft delete: how many rows were soft-deleted, the entities
 /// materialized for the caller's realtime broadcast, and the duplicates promoted in their place.
 /// </summary>
-/// <param name="Count">Rows soft-deleted by the operation.</param>
+/// <param name="Count">
+/// Rows soft-deleted by the operation that the caller's history clamp shows it. A copy the clamp hides
+/// is deleted and audited too, and left out.
+/// </param>
 /// <param name="Entities">
 /// The soft-deleted entities, detached but still holding their loaded values — empty when the match
 /// set exceeded <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/>.
@@ -118,7 +122,7 @@ public static class AuditedBulkDeleteExtensions
                 return (Count: deleted, FirstId: ids[0]);
             },
             async (attempt, token) => attempt.Count > 0
-                && !await InTenant(context, context.Set<T>().IgnoreQueryFilters())
+                && !await context.Set<T>().IncludingDeleted()
                     .AnyAsync(e => EF.Property<Guid>(e, "Id") == attempt.FirstId, token),
             ct: ct);
 
@@ -142,7 +146,10 @@ public static class AuditedBulkDeleteExtensions
     /// </param>
     /// <param name="ct">The cancellation token.</param>
     /// <param name="duplicates">What happens to the other copies in the deleted rows' duplicate groups.</param>
-    /// <returns>The number of records soft-deleted.</returns>
+    /// <returns>
+    /// The number of records soft-deleted that the caller's history clamp shows it. The summary row
+    /// counts every record deleted.
+    /// </returns>
     public static async Task<int> AuditedSoftDeleteAsync<T>(
         this NocturneDbContext context,
         IQueryable<T> query,
@@ -155,9 +162,9 @@ public static class AuditedBulkDeleteExtensions
             async token =>
             {
                 var deletedAt = await HistoryHorizon.StampAsync(context, token);
-                var rows = await ScopeAsync(context, query, duplicates, token);
-                var deleted = await SoftDeleteRowsAsync(context, rows, auditContext, deletedAt, duplicates, token);
-                await WriteBulkDeleteSummaryAsync<T>(context, deleted.Count, scope, auditContext, token);
+                var (rows, hidden) = await ScopeAsync(context, query, duplicates, token);
+                var deleted = await SoftDeleteRowsAsync(context, rows, hidden, auditContext, deletedAt, duplicates, token);
+                await WriteBulkDeleteSummaryAsync<T>(context, deleted.Count + deleted.Hidden, scope, auditContext, token);
                 return (count: deleted.Count, deletedAt);
             },
             (attempt, token) => SoftDeleteLandedAsync<T>(context, attempt.count, attempt.deletedAt, token),
@@ -188,7 +195,8 @@ public static class AuditedBulkDeleteExtensions
     /// </summary>
     /// <remarks>
     /// Materializes at most <see cref="BroadcastMaterializationCap"/> entities. Under the cap the
-    /// entities are loaded anyway, so each gets its own <c>delete</c> audit row; over it nothing is
+    /// entities are loaded anyway, so each gets its own <c>delete</c> audit row, as does each copy the
+    /// caller's history clamp hides (<see cref="HiddenDeleteAuditEntriesAsync{T}"/>); over it nothing is
     /// returned and the operation records a single <c>bulk_delete</c> summary row for
     /// <paramref name="scope"/>, as <see cref="AuditedSoftDeleteAsync{T}"/> does.
     /// </remarks>
@@ -203,13 +211,17 @@ public static class AuditedBulkDeleteExtensions
         var (result, _) = await context.ExecuteInTransactionAsync(async token =>
         {
             var deletedAt = await HistoryHorizon.StampAsync(context, token);
-            var rows = await ScopeAsync(context, query, duplicates, token);
+            var (rows, hidden) = await ScopeAsync(context, query, duplicates, token);
             // One row past the cap is all it takes to know the match set exceeds it.
             var records = await rows.Take(BroadcastMaterializationCap + 1).ToListAsync(token);
             var collapsed = records.Count > BroadcastMaterializationCap;
 
-            List<MutationAuditLogEntity> auditEntries =
-                collapsed ? [] : BuildDeleteAuditEntries(context, records, auditContext);
+            List<MutationAuditLogEntity> auditEntries = collapsed
+                ? []
+                : [
+                    .. BuildDeleteAuditEntries(context, records, auditContext),
+                    .. await HiddenDeleteAuditEntriesAsync<T>(context, hidden, auditContext, token),
+                ];
 
             // Detach the loaded entities so they don't interfere with the bulk update
             foreach (var record in records)
@@ -224,10 +236,10 @@ public static class AuditedBulkDeleteExtensions
                 await context.SaveChangesAsync(token);
             }
 
-            var deleted = await SoftDeleteRowsAsync(context, rows, auditContext, deletedAt, duplicates, token);
+            var deleted = await SoftDeleteRowsAsync(context, rows, hidden, auditContext, deletedAt, duplicates, token);
 
             if (collapsed)
-                await WriteBulkDeleteSummaryAsync<T>(context, deleted.Count, scope, auditContext, token);
+                await WriteBulkDeleteSummaryAsync<T>(context, deleted.Count + deleted.Hidden, scope, auditContext, token);
 
             return (Result: new AuditedSoftDeleteResult<T>(deleted.Count, records, deleted.Promoted), DeletedAt: deletedAt);
         },
@@ -247,25 +259,18 @@ public static class AuditedBulkDeleteExtensions
     {
         if (count == 0)
             return false;
-        return await InTenant(context, context.Set<T>().IgnoreQueryFilters())
+        return await context.Set<T>().IncludingDeleted()
             .AnyAsync(e => e.DeletedAt == deletedAt, ct);
     }
-
-    /// <summary>
-    /// Narrows an unfiltered query to the context's tenant, so a check made under
-    /// <c>IgnoreQueryFilters()</c> does not rest on row level security alone.
-    /// </summary>
-    private static IQueryable<T> InTenant<T>(NocturneDbContext context, IQueryable<T> query) where T : class =>
-        context.Model.FindEntityType(typeof(T))?.FindProperty(nameof(ITenantScoped.TenantId)) is not null
-            ? query.Where(e => EF.Property<Guid>(e, nameof(ITenantScoped.TenantId)) == context.TenantId)
-            : query;
 
     /// <summary>
     /// Stamps <c>DeletedAt</c> and the dedup attribution flag: a user-initiated delete blocks resync
     /// re-creation, a system sweep leaves the row re-creatable (<see cref="SoftDeleteDedupExtensions"/>).
     /// Runs whether or not an audit row is written. Then, under
     /// <see cref="DuplicateDelete.PromoteSurvivor"/>, repoints the duplicate groups whose primary it
-    /// deleted, stamping each promoted copy after the deletes.
+    /// deleted, stamping each promoted copy after the deletes; their links are locked before the rows
+    /// are written (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), except for a glucose delete
+    /// that recomputes inline, whose lock order <see cref="GlucoseStreamFlags"/> states.
     /// </summary>
     /// <remarks>
     /// A delete is a write a v3 history client has to be told of, so it moves the row's update stamp
@@ -273,10 +278,14 @@ public static class AuditedBulkDeleteExtensions
     /// <c>UpdatedAt</c> on an <see cref="IEntityTimestamped"/> one), and like one it spreads the rows
     /// over successive milliseconds,
     /// <see cref="NocturneDbContext.SystemTimestampGroupSize"/> to each (see <see cref="HistoryPage"/>).
+    /// <paramref name="hidden"/> are copies the caller's history clamp hides, written by id with the
+    /// clamp lifted (<see cref="HistoryClampLiftExtensions"/>) and counted apart in <c>Hidden</c>: the
+    /// count a caller is given is what its clamp shows it, and the audit records every row written.
     /// </remarks>
-    private static async Task<(int Count, IReadOnlyList<Guid> Promoted)> SoftDeleteRowsAsync<T>(
+    private static async Task<(int Count, int Hidden, IReadOnlyList<Guid> Promoted)> SoftDeleteRowsAsync<T>(
         NocturneDbContext context,
         IQueryable<T> query,
+        IReadOnlyList<Guid> hidden,
         IAuditContext? auditContext,
         DateTime deletedAt,
         DuplicateDelete duplicates,
@@ -295,62 +304,107 @@ public static class AuditedBulkDeleteExtensions
             var updated = await query.ExecuteUpdateAsync(
                 s => s
                     .SetProperty(e => e.DeletedAt, deletedAt)
-                    .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete), ct);
-            return (updated, []);
+                    .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete), ct);
+            return (updated, 0, []);
         }
 
         // The match set is read once and then updated by primary key a group at a time: re-running
         // the filtered, ordered read for every group would rescan the remaining set each time.
         var live = query.Where(e => e.DeletedAt == null);
         var ids = await live.Select(e => EF.Property<Guid>(e, "Id")).OrderBy(id => id).ToListAsync(ct);
+        using var wide = typeof(T) == typeof(SensorGlucoseEntity)
+            ? await GlucoseStreamFlags.DeferIfWideAsync(context, ids.Count + hidden.Count, ct)
+            : null;
+        if (recordType is { } linked && duplicates == DuplicateDelete.PromoteSurvivor)
+            await DuplicateGroupPrimaries.LockGroupsOfAsync(context, linked, ids, ct);
         var groups = ids.Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
-        var total = 0;
-        foreach (var (group, index) in groups.Select((g, i) => (g, i)))
+        var total = await StampAsync(live, groups, 0, ct);
+        var hiddenTotal = 0;
+        if (hidden.Count > 0)
         {
-            var stamp = deletedAt.AddMilliseconds(index);
-            var rows = live.Where(e => group.Contains(EF.Property<Guid>(e, "Id")));
-            total += stampColumn switch
-            {
-                nameof(ISystemTimestamped.SysUpdatedAt) => await rows.ExecuteUpdateAsync(
-                    s => s
-                        .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete)
-                        .SetProperty(e => EF.Property<DateTime>(e, nameof(ISystemTimestamped.SysUpdatedAt)), stamp),
-                    ct),
-                nameof(IEntityTimestamped.UpdatedAt) => await rows.ExecuteUpdateAsync(
-                    s => s
-                        .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete)
-                        .SetProperty(e => EF.Property<DateTime>(e, nameof(IEntityTimestamped.UpdatedAt)), stamp),
-                    ct),
-                _ => await rows.ExecuteUpdateAsync(
-                    s => s
-                        .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete),
-                    ct),
-            };
+            var hiddenGroups = hidden.Order().Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
+            hiddenTotal = await context.WriteWithHistoryClampLiftedAsync(
+                token => StampAsync(context.Set<T>().Where(e => e.DeletedAt == null), hiddenGroups, groups.Count, token),
+                ct);
         }
 
+        List<Guid> written = [.. ids, .. hidden];
         if (typeof(T) == typeof(StateSpanEntity))
-            await context.ClearSupersededByAsync(ids, ct);
+            await context.ClearSupersededByAsync(written, ct);
 
         IReadOnlyList<Guid> promoted = recordType is { } type && duplicates == DuplicateDelete.PromoteSurvivor
             ? await DuplicateGroupPrimaries.RepointAwayFromAsync(
                 context, type, ids, deletedAt.AddMilliseconds(groups.Count), ct)
             : [];
-        return (total, promoted);
+        if (typeof(T) == typeof(SensorGlucoseEntity))
+            await GlucoseStreamFlags.AfterRowsChangedAsync(context, written, ct);
+        return (total, hiddenTotal, promoted);
+
+        async Task<int> StampAsync(IQueryable<T> source, List<Guid[]> idGroups, int firstGroup, CancellationToken token)
+        {
+            var stamped = 0;
+            foreach (var (group, index) in idGroups.Select((g, i) => (g, firstGroup + i)))
+            {
+                var stamp = deletedAt.AddMilliseconds(index);
+                var rows = source.Where(e => group.Contains(EF.Property<Guid>(e, "Id")));
+                stamped += stampColumn switch
+                {
+                    nameof(ISystemTimestamped.SysUpdatedAt) => await rows.ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(e => e.DeletedAt, deletedAt)
+                            .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete)
+                            .SetProperty(e => EF.Property<DateTime>(e, nameof(ISystemTimestamped.SysUpdatedAt)), stamp),
+                        token),
+                    nameof(IEntityTimestamped.UpdatedAt) => await rows.ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(e => e.DeletedAt, deletedAt)
+                            .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete)
+                            .SetProperty(e => EF.Property<DateTime>(e, nameof(IEntityTimestamped.UpdatedAt)), stamp),
+                        token),
+                    _ => await rows.ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(e => e.DeletedAt, deletedAt)
+                            .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete),
+                        token),
+                };
+            }
+
+            return stamped;
+        }
     }
 
     /// <summary>
     /// The rows a delete covers: <paramref name="query"/>, and under
-    /// <see cref="DuplicateDelete.EveryCopy"/> every other copy in the duplicate groups it matches.
+    /// <see cref="DuplicateDelete.EveryCopy"/> every other copy in the duplicate groups it matches,
+    /// with the copies the caller's history clamp hides apart
+    /// (<see cref="DuplicateGroupPrimaries.WithGroupMatesAsync{T}"/>).
     /// </summary>
-    private static async Task<IQueryable<T>> ScopeAsync<T>(
+    private static async Task<(IQueryable<T> Rows, IReadOnlyList<Guid> Hidden)> ScopeAsync<T>(
         NocturneDbContext context, IQueryable<T> query, DuplicateDelete duplicates, CancellationToken ct)
         where T : class, ISoftDeletable =>
         duplicates == DuplicateDelete.EveryCopy
             ? await DuplicateGroupPrimaries.WithGroupMatesAsync(context, query, ct)
-            : query;
+            : (query, []);
+
+    /// <summary>
+    /// The <c>delete</c> audit rows of <paramref name="hidden"/>, the copies the caller's history clamp
+    /// hides, snapshotted as the rows it can see are: a delete is recorded whatever its caller could
+    /// read. The rows are read with the clamp lifted
+    /// (<see cref="DuplicateGroupPrimaries.HiddenRowsAsync{TEntity}"/>) and reach only the audit log.
+    /// </summary>
+    private static async Task<List<MutationAuditLogEntity>> HiddenDeleteAuditEntriesAsync<T>(
+        NocturneDbContext context, IReadOnlyList<Guid> hidden, IAuditContext? auditContext, CancellationToken ct)
+        where T : class, IAuditable
+    {
+        if (hidden.Count == 0 || auditContext.IsSystemMutation())
+            return [];
+
+        var rows = await DuplicateGroupPrimaries.HiddenRowsAsync(context, context.Set<T>(), hidden, [], ct);
+        var entries = BuildDeleteAuditEntries(context, rows, auditContext);
+        foreach (var row in rows)
+            context.Entry(row).State = EntityState.Detached;
+        return entries;
+    }
 
     /// <summary>
     /// Clears <c>deleted_by_user</c> on the user tombstones among <paramref name="query"/>, so a resync
@@ -367,8 +421,8 @@ public static class AuditedBulkDeleteExtensions
         CancellationToken ct = default) where T : class, ITenantScoped, ISoftDeletable
         => await context.ExecuteInTransactionAsync(async token =>
         {
-            var released = await query.UserTombstones(context).ExecuteUpdateAsync(
-                s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), false), token);
+            var released = await query.UserTombstones().ExecuteUpdateAsync(
+                s => s.SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), false), token);
             await WriteBulkSummaryAsync<T>(context, "allow_reimport", released, scope, auditContext, token);
             return released;
         }, ct: ct);

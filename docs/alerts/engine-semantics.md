@@ -32,7 +32,8 @@ has exactly one spelling for every property name and enum value. Anything else i
 - an enum value is a JSON string that is **exactly** one member's wire name. Another case,
   surrounding whitespace, or an integer (ordinal) names no member
 - condition-only enums use snake_case wire names (`TempBasalMetric`: `rate` |
-  `percent_of_scheduled`; `GlucoseBucket`: `very_low` | `low` | `tight_range` | `in_range`
+  `percent_of_scheduled`; `TransmitterBatteryMetric`: `voltage_a` | `voltage_b` |
+  `resistance` | `days`; `GlucoseBucket`: `very_low` | `low` | `tight_range` | `in_range`
   | `high` | `very_high`; `AlertWeekday`: `sunday` … `saturday`; `TrendBucket`;
   `AlertComparisonOperator`: `>` `>=` `<` `<=` `==`; the composite operator, `direction`
   and `alert_state` `state` words)
@@ -92,7 +93,7 @@ this tick):
 | `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
 | `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained` |
 | `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4) |
-| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket` or `day_of_week` list member |
+| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket` or `day_of_week` list member |
 | `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets` or a `day_of_week` `days` that is absent, `null` or empty |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
 | `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
@@ -190,6 +191,7 @@ written. Every operand below is present and valid (§1.4).
 | `pump_battery` | `operator`, `value` (%) | `PumpBatteryPercent`, `HasEverPumpSnapshot` | `Compare` | guard false ⇒ false; percent null ⇒ false |
 | `temp_basal` | `metric` (`rate`\|`percent_of_scheduled`), `operator`, `value` | `ActiveTempBasal` | `rate`: compare `Rate` (U/hr). `percent_of_scheduled`: compare `Rate / ScheduledRate * 100` (decimal division) | no active temp ⇒ false (**no** HasEver guard, by design); `ScheduledRate` null or 0 ⇒ false |
 | `uploader_battery` | `operator`, `value` (%) | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `Compare` | guard false ⇒ false; percent null ⇒ false |
+| `transmitter_battery` | `metric` (`voltage_a`\|`voltage_b`\|`resistance`\|`days`), `operator`, `value` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `Compare` against the metric's reading, unscaled as the transmitter reports it | reading null ⇒ false (**no** HasEver guard) |
 | `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate) |
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ false; ratio null ⇒ false |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off |
@@ -289,7 +291,7 @@ A rule is wall-clock when its root kind, any node of its condition tree, or, whi
 auto-resolve is enabled, any node of its auto-resolve tree is a wall-clock kind. Every
 host must evaluate enabled wall-clock rules periodically as well as per reading, through
 the normal driver sequence (§7). Otherwise such a rule stays unfired for as long as no
-reading arrives. The backend does this from `AlertSweepService` every 30 s; Prelude needs
+reading arrives. The backend does this from `AlertSweepJob` every 30 s per tenant; Prelude needs
 an equivalent periodic evaluation. The crate's `wall_clock::references_wall_clock` reads
 a rule's kinds as §5.2 does, and the backend's sweep asks it which rules to evaluate.
 
@@ -336,6 +338,7 @@ reads a rule's kinds the same way.
 | `pump` | `ReservoirUnits`, `ReservoirIsLowerBound`, `PumpBatteryPercent`, `HasEverPumpSnapshot` | `reservoir`, `pump_battery`, `pump_suspended` |
 | `aps` | `LastApsCycleAt`, `LastApsEnactedAt`, `HasEverApsCycled`, `SensitivityRatio`, `HasEverApsSensitivity` | `loop_stale`, `loop_enaction_stale`, `sensitivity_ratio` |
 | `uploader` | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `uploader_battery` |
+| `transmitter` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `transmitter_battery` |
 | `state_spans` | `ActiveOverride`, `ActivePumpSuspension`, `ActivePumpState`, `ActiveStateSpans` | `override_active`, `pump_suspended`, `pump_state`, `state_span_active` |
 | `device_ages` | `LastSiteChangeAt`, `LastSensorStartAt` | `site_age`, `sensor_age` |
 | `trackers` | `ActiveTrackers` | `tracker_age` |

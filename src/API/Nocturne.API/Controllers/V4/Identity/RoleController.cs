@@ -8,7 +8,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Controller for querying and managing tenant-scoped roles.
+/// The roles that group permissions for the tenant's members. A caller can list roles, create a
+/// role, update a role and delete a role.
 /// </summary>
 /// <remarks>
 /// Roles determine what permissions a tenant member holds. Role data is maintained by
@@ -16,6 +17,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Roles")]
 [Tags("Identity")]
 [Route("api/v4/roles")]
 [Produces("application/json")]
@@ -33,6 +35,7 @@ public class RoleController : ControllerBase
 
     /// <summary>
     /// List roles for the current tenant.
+    /// A <c>roles.manage</c> caller gets every role; a <c>members.invite</c> or <c>members.manage</c> caller gets only the roles it can grant. <c>CanGrant</c> on each role says whether the caller may confer it.
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.GetRolesAsync"/>
     /// <remarks>
@@ -64,6 +67,7 @@ public class RoleController : ControllerBase
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.RolesManage))
@@ -74,9 +78,9 @@ public class RoleController : ControllerBase
         if (violation != null)
             return GrantProblem(violation);
 
-        var role = await _roleService.CreateRoleAsync(
+        var result = await _roleService.CreateRoleAsync(
             _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, grantedScopes, ct);
-        return StatusCode(StatusCodes.Status201Created, role);
+        return result.Role is null ? NameProblem(result) : StatusCode(StatusCodes.Status201Created, result.Role);
     }
 
     /// <summary>
@@ -88,6 +92,7 @@ public class RoleController : ControllerBase
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.RolesManage))
@@ -100,12 +105,12 @@ public class RoleController : ControllerBase
 
         try
         {
-            var role = await _roleService.UpdateRoleAsync(
+            var result = await _roleService.UpdateRoleAsync(
                 _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, grantedScopes, ct);
-            if (role == null)
+            if (result == null)
                 return NotFound();
 
-            return Ok(role);
+            return result.Role is null ? NameProblem(result) : Ok(result.Role);
         }
         catch (InvalidOperationException ex)
         {
@@ -133,6 +138,10 @@ public class RoleController : ControllerBase
 
         return NoContent();
     }
+
+    private ObjectResult NameProblem(SaveRoleResult result) =>
+        this.ProblemWithCode(
+            result.ErrorCode!, result.ErrorDescription, StatusCodes.Status409Conflict, title: result.ErrorCode);
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal.

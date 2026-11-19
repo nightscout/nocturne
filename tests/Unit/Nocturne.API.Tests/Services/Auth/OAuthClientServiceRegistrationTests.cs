@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -32,7 +33,7 @@ public class OAuthClientServiceRegistrationTests : IDisposable
         new(_options) { TenantId = _tenantId };
 
     private OAuthClientService CreateService(NocturneDbContext context) =>
-        new(context.AsFactory(), new RedirectUriValidator(), NullLogger<OAuthClientService>.Instance);
+        new(new OAuthClientRepository(context.AsFactory()), new RedirectUriValidator(), NullLogger<OAuthClientService>.Instance);
 
     private static Task<OAuthClientInfo> Register(
         OAuthClientService service, string? softwareId, params string[] uris) =>
