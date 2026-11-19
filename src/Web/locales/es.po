@@ -548,7 +548,6 @@ msgstr "Código de verificación"
 #: src/lib/components/trackers/ReservoirReportDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -795,6 +794,7 @@ msgstr "Actualiza los datos y permisos del rol."
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 #: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
@@ -853,7 +853,6 @@ msgstr "Crear"
 #: src/lib/components/meals/MealBolusDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/forms/FormActions.svelte
@@ -1080,6 +1079,7 @@ msgstr "Regla"
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+#: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Type"
 msgstr "Tipo"
 
@@ -1284,7 +1284,7 @@ msgstr "Crítica"
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Description (optional)"
 msgstr "Descripción (opcional)"
@@ -1388,6 +1388,7 @@ msgstr "Restaurar"
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/schedule/ScheduleView.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
@@ -1895,6 +1896,7 @@ msgstr "Seleccionar seguimiento"
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(authenticated)/alerts/new/+page.svelte
+#: src/routes/(authenticated)/trackers/new/+page.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "<0/> Back"
 msgstr "<0/> Atrás"
@@ -1977,7 +1979,6 @@ msgstr "Mostrar unidades"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
 msgid "Hours"
 msgstr "Horas"
 
@@ -2061,9 +2062,7 @@ msgstr "Umbral de visibilidad"
 
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Always show"
 msgstr "Mostrar siempre"
 
@@ -3447,7 +3446,6 @@ msgstr "Error al cargar las entradas recientes."
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/therapy/TherapyEntry.svelte
@@ -3501,6 +3499,7 @@ msgid "Portion"
 msgstr "Porción"
 
 #: src/lib/components/food/FoodFields.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Unit"
 msgstr "Unidad"
 
@@ -4205,6 +4204,7 @@ msgstr "Compatibilidad"
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 #: src/routes/(authenticated)/settings/+page.svelte
+#: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Settings"
 msgstr "Ajustes"
 
@@ -4459,7 +4459,7 @@ msgstr "Ninguna comida coincide con los filtros actuales."
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/status-pills/BasalPill.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerCoversField.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 #: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
@@ -6995,31 +6995,31 @@ msgid "{0} old · Started {1} <0/>"
 msgstr "Hace {0} · Iniciado {1} <0/>"
 
 #: src/lib/components/alerts/severityLabel.svelte.ts
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Info"
 msgstr "Información"
 
 #: src/lib/components/alerts/severityLabel.svelte.ts
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Warning"
 msgstr "Advertencia"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Hazard"
 msgstr "Riesgo"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Urgent"
 msgstr "Urgente"
 
@@ -7034,7 +7034,7 @@ msgstr "No hay umbrales de notificación configurados"
 msgid "Add thresholds to get notified as the tracker ages"
 msgstr "Añade umbrales para recibir notificaciones a medida que avanza el seguimiento"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Level"
 msgstr "Nivel"
 
@@ -7043,15 +7043,13 @@ msgstr "Nivel"
 msgid "Event"
 msgstr "Evento"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "After (hours)"
-msgstr "Después (horas)"
+#~ msgid "After (hours)"
+#~ msgstr "Después (horas)"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "Message shown when triggered"
-msgstr "Mensaje mostrado al activarse"
+#~ msgid "Message shown when triggered"
+#~ msgstr "Mensaje mostrado al activarse"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Remove notification"
 msgstr "Eliminar notificación"
 
@@ -7072,16 +7070,19 @@ msgstr "Cánula"
 #: src/lib/components/status-pills/ReservoirPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/legacy-kind-label.svelte.ts
+#: src/lib/components/trackers/wizard/templates.svelte.ts
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Reservoir"
 msgstr "Reservorio"
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/wizard/templates.svelte.ts
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Appointment"
 msgstr "Cita"
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/wizard/templates.svelte.ts
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Reminder"
 msgstr "Recordatorio"
@@ -7123,27 +7124,23 @@ msgstr "Los seguimientos de eventos se programan para una fecha y hora concretas
 #~ msgid "Off - Don't show on dashboard"
 #~ msgstr "Desactivado - No mostrar en el panel"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Show after Info threshold"
 msgstr "Mostrar después del umbral de información"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Show after Warn threshold"
 msgstr "Mostrar después del umbral de advertencia"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Show after Hazard threshold"
 msgstr "Mostrar después del umbral de riesgo"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Show after Urgent threshold"
 msgstr "Mostrar después del umbral urgente"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "When to show this tracker as a pill on the dashboard"
 msgstr "Cuándo mostrar este seguimiento como una etiqueta en el panel"
 
@@ -7162,14 +7159,14 @@ msgstr "Cuándo mostrar este seguimiento como una etiqueta en el panel"
 #~ msgid "Event Integration (Nightscout)"
 #~ msgstr "Integración de eventos (Nightscout)"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerEventIntegrationFields.svelte
 msgid "Create event on start"
 msgstr "Crear evento al iniciar"
 
 #~ msgid "None - don't create event"
 #~ msgstr "Ninguno - no crear evento"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerEventIntegrationFields.svelte
 msgid "Create event on completion"
 msgstr "Crear evento al completar"
 
@@ -7876,8 +7873,8 @@ msgstr "{0} menores"
 
 #: src/lib/components/admin/JobsTabContent.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerEventIntegrationFields.svelte
+#: src/lib/components/trackers/TrackerEventIntegrationFields.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "None"
@@ -11527,7 +11524,7 @@ msgstr "Patrones diarios de pasos con superposición de glucosa"
 #~ msgid "<0/> Step Count Actogram"
 #~ msgstr "<0/> Actograma del recuento de pasos"
 
-#: src/lib/components/alerts/wizard/WizardProgress.svelte
+#: src/lib/components/wizard/WizardProgress.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
@@ -16781,19 +16778,19 @@ msgstr "<0/> Registrar"
 #~ msgid "Each threshold is delivered through a managed alert rule. Channels can be configured on the Alerts page."
 #~ msgstr ""
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
 msgid "Low reservoir alert (units)"
 msgstr "Alerta de reservorio bajo (unidades)"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
 msgid "Alerts when the estimated reservoir level falls below this many units. Leave empty for no level alert."
 msgstr "Avisa cuando el nivel estimado del reservorio baja de este número de unidades. Déjalo vacío para no tener alerta por nivel."
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerReservoirFields.svelte
 msgid "Level alert urgency"
 msgstr "Urgencia de la alerta de nivel"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerEventIntegrationFields.svelte
 msgid "Optionally create treatment events when this tracker starts or completes. This maintains compatibility with existing CAGE/SAGE pills."
 msgstr "Opcionalmente, crea eventos de tratamiento cuando este seguimiento empiece o termine. Esto mantiene la compatibilidad con las píldoras CAGE/SAGE existentes."
 
@@ -17644,6 +17641,7 @@ msgstr "No se marcaron ventanas en este periodo."
 #: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "When"
 msgstr "Cuándo"
 
@@ -19959,8 +19957,9 @@ msgstr "resumen estandarizado para tu equipo sanitario"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/alerts/factText.svelte.ts
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerCoversField.svelte
 #: src/lib/components/trackers/legacy-kind-label.svelte.ts
+#: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "Pump battery"
 msgstr "Batería de la bomba"
 
@@ -20446,11 +20445,11 @@ msgstr "No se pudo completar el seguimiento"
 msgid "Failed to start tracker"
 msgstr "No se pudo iniciar el seguimiento"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Configure delivery channels for this threshold"
 msgstr "Configura canales de entrega para este umbral"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "<0/> Channels"
 msgstr "<0/> Canales"
 
@@ -24058,19 +24057,19 @@ msgstr "Insulina en bolo: {0} U"
 msgid "Edit {0}"
 msgstr "Editar {0}"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerAutomationFields.svelte
 msgid "Restart automatically on"
 msgstr "Reiniciar automáticamente al"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerAutomationFields.svelte
 msgid "When your pump, loop or a connector reports one of these, the running tracker is completed and a new one starts at that moment."
 msgstr "Cuando tu bomba, bucle o un conector informa de uno de estos eventos, el seguimiento en curso se completa y se inicia uno nuevo en ese momento."
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerAutomationFields.svelte
 msgid "Only when the event's notes contain (optional)"
 msgstr "Solo cuando las notas del evento contengan (opcional)"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerAutomationFields.svelte
 msgid "Use this to keep two trackers that listen for the same event apart, such as a left and a right site."
 msgstr "Úsalo para distinguir dos seguimientos que escuchan el mismo evento, como un sitio izquierdo y otro derecho."
 
@@ -30005,8 +30004,7 @@ msgstr "{0} falló {1}: hora, estado, página y mensaje"
 #~ msgid "Your report is filed as a public issue on GitHub. Anything you turn on here is published with it, and anyone can read it. Check the preview before you send."
 #~ msgstr ""
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Off - Do not show on dashboard"
 msgstr "Desactivado: no mostrar en el panel"
 
@@ -34894,28 +34892,26 @@ msgstr "Motivo de finalización"
 msgid "Tracker definitions"
 msgstr "Definiciones de seguimiento"
 
-#: src/lib/components/trackers/TrackerDefinitionsTab.svelte
-msgid "<0/> New definition"
-msgstr "<0/> Nueva definición"
+#~ msgid "<0/> New definition"
+#~ msgstr "<0/> Nueva definición"
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 msgid "Tracker mode"
 msgstr "Modo de seguimiento"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerVisibilityField.svelte
 msgid "Dashboard visibility"
 msgstr "Visibilidad en el panel"
 
 #~ msgid "Public visibility"
 #~ msgstr ""
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerEventIntegrationFields.svelte
 msgid "Event integration (Nightscout)"
 msgstr "Integración de eventos (Nightscout)"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-msgid "New tracker definition"
-msgstr "Nueva definición de seguimiento"
+#~ msgid "New tracker definition"
+#~ msgstr "Nueva definición de seguimiento"
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 msgid "Edit definition"
@@ -34953,13 +34949,11 @@ msgstr "Horario de notificaciones (ajustado)"
 msgid "Notification thresholds"
 msgstr "Umbrales de notificación"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "Negative = before event, positive = after event."
-msgstr "Negativo = antes del evento; positivo = después del evento."
+#~ msgid "Negative = before event, positive = after event."
+#~ msgstr "Negativo = antes del evento; positivo = después del evento."
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "Positive = after start, negative = before expiration."
-msgstr "Positivo = después del inicio; negativo = antes del vencimiento."
+#~ msgid "Positive = after start, negative = before expiration."
+#~ msgstr "Positivo = después del inicio; negativo = antes del vencimiento."
 
 #: src/lib/components/treatments/DataTableToolbar.svelte
 msgid "<0/> Delete selected"
@@ -37532,8 +37526,9 @@ msgstr "Vida útil: {0}. Comienza desde el último cambio: {1}."
 msgid "<0/> Create trackers"
 msgstr "<0/> Crear seguimientos"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerCoversField.svelte
 #: src/lib/components/trackers/legacy-kind-label.svelte.ts
+#: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "Infusion site"
 msgstr "Zona de infusión"
 
@@ -38376,23 +38371,24 @@ msgid "ICR"
 msgstr "ICR"
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/wizard/templates.svelte.ts
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Pod"
 msgstr "Pod"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerCoversField.svelte
 msgid "Replaced with this part"
 msgstr "Sustituido junto con esta pieza"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerCoversField.svelte
 msgid "Select what is new each time this tracker restarts. For a pod, select all three."
 msgstr "Selecciona qué componentes son nuevos cada vez que se reinicia este seguimiento. Para un pod, selecciona los tres."
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerAutomationFields.svelte
 msgid "Stop automatically on"
 msgstr "Detener automáticamente cuando se produzca"
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerAutomationFields.svelte
 msgid "When your pump, loop or a connector reports one of these, the running tracker is completed. A new one does not start until a restart event."
 msgstr "Cuando tu bomba, sistema automatizado o un conector comunica uno de estos eventos, finaliza el seguimiento en curso. No comienza otro hasta que se registre un evento de reinicio."
 
@@ -41569,6 +41565,7 @@ msgid "Add at least one place for the alert to go."
 msgstr "Añade al menos un destino para la alerta."
 
 #: src/routes/(authenticated)/alerts/new/+page.svelte
+#: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Enter a name."
 msgstr "Introduce un nombre."
 
@@ -41613,6 +41610,7 @@ msgid "<0/> Create alert"
 msgstr "<0/> Crear alerta"
 
 #: src/routes/(authenticated)/alerts/new/+page.svelte
+#: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Next <0/>"
 msgstr "Siguiente <0/>"
 
@@ -41843,12 +41841,12 @@ msgstr "Solo a determinadas horas"
 msgid "Ends the next day."
 msgstr "Termina al día siguiente."
 
-#: src/lib/components/alerts/wizard/WizardProgress.svelte
+#: src/lib/components/wizard/WizardProgress.svelte
 msgid "Done:"
 msgstr "Hecho:"
 
 #. 0: current + 1; 1: steps.length
-#: src/lib/components/alerts/wizard/WizardProgress.svelte
+#: src/lib/components/wizard/WizardProgress.svelte
 msgid "Step {0} of {1}: <0/>"
 msgstr "Paso {0} de {1}: <0/>"
 
@@ -42660,4 +42658,169 @@ msgstr ""
 #. 0: summarizeCondition(autoResolve)
 #: src/lib/components/alerts/wizard/CheckStep.svelte
 msgid "The alert closes when this is true: {0}."
+msgstr ""
+
+#: src/lib/components/trackers/TrackerDefinitionsTab.svelte
+msgid "<0/> New tracker"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
+msgid "Set how long the tracker lasts before you use a time before its end."
+msgstr ""
+
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
+msgid "This time is before the tracker starts. Use a time shorter than the tracker lasts."
+msgstr ""
+
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
+msgid "The text of the notification"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerThresholdRow.svelte
+msgid "Message (optional)"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "From a start"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "You start it, and it counts the time since then."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "To a date"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "You give it a date and a time, and it counts down to them."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "How it counts"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "How long it lasts"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "<0/> Enter days or hours, for example 10d or 72h. Leave it empty if there is no limit."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "You set the date and the time when you start the tracker."
+msgstr ""
+
+#. 0: eventList(draft.triggerEventTypes)
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "The tracker starts again when your pump, loop or a connector records one of these events: {0}."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "You start the tracker again yourself each time."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
+msgid "<0/> More settings"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/TrackerTypeStep.svelte
+msgid "Tracker types"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "CGM sensor"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "Something else"
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "The age of the sensor, and when to change it."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "The age of the infusion set, and when to change it."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "The age of the pod, and when to change it."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "The age of the insulin in the pump, and when to change it."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "The age of the pump battery, and when to change it."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "A date and a time, with a reminder before it."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "A task that you do again after a set time."
+msgstr ""
+
+#: src/lib/components/trackers/wizard/templates.svelte.ts
+msgid "A tracker with no settings filled in."
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Reminders"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Choose a tracker type."
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Change the time of the reminder that is marked."
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Could not create the tracker. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "The tracker is ready."
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Leave without creating this tracker?"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Name and settings"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "When does it remind you?"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "What do you want to track?"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "New tracker · Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Close and go back to trackers"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "New tracker"
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "Could not load the tracker types."
+msgstr ""
+
+#: src/routes/(authenticated)/trackers/new/+page.svelte
+msgid "<0/> Create tracker"
 msgstr ""
