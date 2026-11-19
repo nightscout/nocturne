@@ -44,7 +44,7 @@ import { ENERGY_UNITS, type EnergyUnit } from "@nocturne/ui/energy";
 // Type Definitions
 // ==========================================
 
-const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic"] as const;
+const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic", "nightscout"] as const;
 
 /** Color theme - visual styling */
 export type ColorTheme = (typeof COLOR_THEMES)[number];
@@ -562,7 +562,7 @@ export const hiddenLegacyFallbacks = new SyncedPref<LegacyConsumableKind[]>(
 // ==========================================
 
 /** All theme CSS classes that can be applied to the document root */
-const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme"] as const;
+const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme", "nightscout-theme"] as const;
 
 /**
  * Apply color theme class to document
@@ -576,6 +576,7 @@ function applyColorTheme(theme: ColorTheme): void {
   if (theme === "trio") root.classList.add("trio-theme");
   else if (theme === "aaps") root.classList.add("aaps-theme");
   else if (theme === "classic") root.classList.add("classic-theme");
+  else if (theme === "nightscout") root.classList.add("nightscout-theme");
 
   // Classic theme uses minimal border radius (2015 utilitarian aesthetic)
   if (theme === "classic") {
