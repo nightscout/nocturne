@@ -1,12 +1,15 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Alerts.Corpus;
 using Moq;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -271,5 +274,62 @@ public class CanonicalAlertEvaluatorTests
         var act = () => Evaluator(Tenant).EvaluateAsync();
 
         await act.Should().NotThrowAsync();
+    }
+
+    /// <summary>
+    /// A Dexcom or Glooko reading stores only its arrow. The pass judges it by the rate derived
+    /// from the previous reading of its stream, so a <c>rate_of_change</c> and a <c>trend</c> rule
+    /// fire over a fall of readings that carry no stored rate.
+    /// </summary>
+    [NativeFact]
+    public async Task EvaluateAsync_RateAndTrendRulesFireOverAFallWithNoStoredRate()
+    {
+        var latest = new SensorGlucose
+        {
+            Id = Guid.NewGuid(), Timestamp = Reading, Mgdl = 100, DataSource = "dexcom", Device = "g7",
+        };
+        LatestIs(latest);
+        _canonical
+            .Setup(c => c.GetStreamPredecessorAsync(latest, Reading - ReadingTrend.MaxGap, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorGlucose
+            {
+                Id = Guid.NewGuid(), Timestamp = Reading.AddMinutes(-5), Mgdl = 118, DataSource = "dexcom", Device = "g7",
+            });
+        SensorContext? seen = null;
+        _orchestrator
+            .Setup(o => o.EvaluateAsync(It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorContext, CancellationToken>((c, _) => seen = c)
+            .Returns(Task.CompletedTask);
+
+        await Evaluator(Tenant).EvaluateAsync();
+
+        seen!.TrendRate.Should().Be(-3.6m);
+        seen.TrendBucket.Should().Be(TrendBucket.FallingFast);
+        var time = new ManualTimeProvider();
+        time.SetUtcNow(Reading);
+        var engine = EngineTestHarness.BuildRustEngine(time, new InMemoryTrackerRepository([]));
+        foreach (var (type, json) in new[]
+                 {
+                     (AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}"""),
+                     (AlertConditionType.Trend, """{"bucket":"falling_fast"}"""),
+                 })
+        {
+            var rule = new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "fall", type, json,
+                AlertRuleSeverity.Warning, "{}", 0, AutoResolveEnabled: false, AutoResolveParams: null);
+            var evaluation = await engine.EvaluateRuleAsync(rule, seen, new AlertEngineOptions(), CancellationToken.None);
+            evaluation.ConditionMet.Should().BeTrue(type.ToString());
+        }
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_AStoredRateReadsNoEarlierReading()
+    {
+        LatestIs(Latest(Reading, trendRate: -1.5));
+
+        await Evaluator(Tenant).EvaluateAsync();
+
+        _canonical.Verify(
+            c => c.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

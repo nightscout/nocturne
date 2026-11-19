@@ -211,4 +211,26 @@ public interface ISensorGlucoseRepository
     /// </summary>
     Task<IReadOnlyList<SensorGlucose>> GetAttributedReadingTimesAsync(
         Guid patientDeviceId, DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// The newest live reading of <paramref name="reading"/>'s stream
+    /// (<see cref="CanonicalGlucoseStream.StreamKey"/>) and data source (a null and an empty one
+    /// being the same) with a glucose value, timestamped in
+    /// [<paramref name="since"/>, the reading's timestamp]. Unlike the canonical reads it includes
+    /// non-primary duplicate copies and readings of a stream that lost its bucket, but never a copy
+    /// in the reading's own duplicate group, which is the same reading and not an earlier one.
+    /// </summary>
+    Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default);
+
+    /// <summary>
+    /// The live readings in [<paramref name="from"/>, <paramref name="to"/>] a
+    /// <see cref="GlucoseStreams.Canonical"/> read leaves out (non-primary duplicate copies and
+    /// readings of a stream that lost its bucket), oldest first, keyset-paged on (timestamp, id).
+    /// <c>DuplicateOf</c> is the primary of the row's duplicate group when the row is a
+    /// non-primary copy, else null.
+    /// </summary>
+    Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetHiddenAsync(
+        DateTime from, DateTime to, int limit, DateTime? afterTimestamp, Guid? afterId,
+        CancellationToken ct = default);
 }

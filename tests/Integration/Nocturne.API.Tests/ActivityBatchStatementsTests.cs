@@ -59,7 +59,7 @@ public class ActivityBatchStatementsTests(ApiIntegrationTestFixture fixture, ITe
             .AddInterceptors(recorder)
             .Options) { TenantId = Fixture.TenantId };
         var decomposer = new ActivityDecomposer(
-            new ActivityRecordRepository(new TestNocturneDbContextFactory(context), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(),
+            new ActivityRecordRepository(new TestNocturneDbContextFactory(context), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System,
             NullLogger<ActivityDecomposer>.Instance);
 
         if (resend)

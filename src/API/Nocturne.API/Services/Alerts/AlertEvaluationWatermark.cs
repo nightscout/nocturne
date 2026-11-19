@@ -46,7 +46,10 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     /// True when a pass inside the last <see cref="MaxSkipWindow"/> already evaluated exactly this
     /// reading. Compares the three fields that make up the evaluated <c>SensorContext</c> rather
     /// than the row's identity: a corrected value or trend at an unchanged timestamp is a
-    /// different decision and must be evaluated, and a same-valued replacement row is not.
+    /// different decision and must be evaluated, and a same-valued replacement row is not. A
+    /// <see cref="ReadingTrend"/> derived from an earlier reading is not in the key: deriving it
+    /// costs the read a skipped repeat exists to save, and an earlier reading that lands late is
+    /// judged once <see cref="MaxSkipWindow"/> lapses or the next reading arrives.
     /// </summary>
     public bool AlreadyEvaluated(Guid tenantId, SensorGlucose reading) =>
         _lastPass.TryGetValue(tenantId, out var previous)

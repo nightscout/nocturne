@@ -21,8 +21,7 @@ public class StepCount : ProcessableDocumentBase
     /// ISO 8601 formatted creation timestamp
     /// </summary>
     [JsonPropertyName("created_at")]
-    public override string? CreatedAt { get; set; } =
-        DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+    public override string? CreatedAt { get; set; }
 
     /// <summary>
     /// Timestamp in milliseconds since Unix epoch.

@@ -194,7 +194,9 @@ internal sealed class AlertReplayService(
         // window is keyset-paged and consumed by the tick loop as a left-to-right fold, so the
         // readings are never all resident; the per-tick contexts built from them are.
         await using var readings = await ReadingCursor.CreateAsync(
-            StreamCanonicalReadingsAsync(windowStart, windowEnd, ct), ct);
+            StreamCanonicalReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
+            StreamHiddenReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
+            windowStart, ct);
 
         // Scoped DND (ADR 0004 D5): the tenant's windows received by the replay's end, resolved
         // per tick with WasActiveAt (receipt-gated) so replay reproduces what the live engine
@@ -223,13 +225,15 @@ internal sealed class AlertReplayService(
             await readings.AdvanceToAsync(tick);
             var current = readings.Current;
             var hasReadingForTick = current is not null && current.Timestamp <= tick;
+            var trend = hasReadingForTick ? ReadingTrend.Of(current!, readings.Earlier) : default;
             hasReadings |= hasReadingForTick;
 
             var baseContext = new SensorContext
             {
                 LatestValue = hasReadingForTick ? current!.Mgdl.ToDecimal() : null,
                 LatestTimestamp = hasReadingForTick ? current!.Timestamp : null,
-                TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? tr.ToDecimal() : null,
+                TrendRate = trend.Rate,
+                TrendBucket = trend.Bucket,
                 // A tick before the window's first reading reads as fresh rather than as never
                 // having had one (engine-semantics.md §8).
                 LastReadingAt = hasReadingForTick ? current!.Timestamp : tick,
@@ -278,9 +282,32 @@ internal sealed class AlertReplayService(
     /// Keyset-pages the window's canonical glucose rows in ascending time order, a page of
     /// <see cref="Configuration.AlertEvaluationOptions.ReplayGlucosePageSize"/> at a time.
     /// </summary>
-    private async IAsyncEnumerable<SensorGlucose> StreamCanonicalReadingsAsync(
-        DateTime windowStart,
-        DateTime windowEnd,
+    private IAsyncEnumerable<SensorGlucose> StreamCanonicalReadingsAsync(
+        DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
+        KeysetPagesAsync(
+            async (pageSize, afterTimestamp, afterId) => (IReadOnlyList<SensorGlucose>)(await glucoseRepository.GetAsync(
+                from: windowStart, to: windowEnd, device: null, source: null,
+                limit: pageSize, offset: 0, descending: false,
+                afterTimestamp: afterTimestamp, afterId: afterId, ct: ct,
+                streams: GlucoseStreams.Canonical)).ToList(),
+            reading => reading,
+            ct);
+
+    /// <summary>
+    /// Keyset-pages the window's glucose rows the canonical read leaves out, which only ever serve
+    /// as the earlier reading of a derived <see cref="ReadingTrend"/>.
+    /// </summary>
+    private IAsyncEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> StreamHiddenReadingsAsync(
+        DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
+        KeysetPagesAsync(
+            (pageSize, afterTimestamp, afterId) => glucoseRepository.GetHiddenAsync(
+                windowStart, windowEnd, pageSize, afterTimestamp, afterId, ct),
+            row => row.Reading,
+            ct);
+
+    private async IAsyncEnumerable<T> KeysetPagesAsync<T>(
+        Func<int, DateTime?, Guid?, Task<IReadOnlyList<T>>> fetchPage,
+        Func<T, SensorGlucose> readingOf,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var pageSize = Math.Max(1, evaluationOptions.Value.ReplayGlucosePageSize);
@@ -291,15 +318,11 @@ internal sealed class AlertReplayService(
         {
             ct.ThrowIfCancellationRequested();
 
-            var fetched = (await glucoseRepository.GetAsync(
-                from: windowStart, to: windowEnd, device: null, source: null,
-                limit: pageSize, offset: 0, descending: false,
-                afterTimestamp: afterTimestamp, afterId: afterId, ct: ct,
-                streams: GlucoseStreams.Canonical)).ToList();
+            var fetched = await fetchPage(pageSize, afterTimestamp, afterId);
 
             if (fetched.Count > 0)
             {
-                var last = fetched[^1];
+                var last = readingOf(fetched[^1]);
                 // Every non-empty page must end strictly past the cursor it was fetched with. A
                 // fetch that ignores the cursor returns the same full page forever, and the loop
                 // would never terminate; fail loudly instead of spinning.
@@ -316,8 +339,8 @@ internal sealed class AlertReplayService(
                 afterId = last.Id;
             }
 
-            foreach (var reading in fetched)
-                yield return reading;
+            foreach (var row in fetched)
+                yield return row;
 
             // A short page is the last one.
             if (fetched.Count < pageSize)
@@ -328,34 +351,60 @@ internal sealed class AlertReplayService(
     /// <summary>
     /// One-reading-lookahead cursor over the paged canonical stream. The tick loop needs the most
     /// recent reading at-or-before each tick, which a left-to-right fold over ascending readings
-    /// gets from the current reading plus a peek at the next one — so no reading older than the
-    /// playhead has to stay resident. <see cref="Current"/> is seeded with the first reading (as
-    /// the pre-paging list walk did, starting at index 0) and never advances past the last, so a
+    /// gets from the current reading plus a peek at the next one. <see cref="Current"/> is seeded
+    /// with the first reading at or after the window start and never advances past the last, so a
     /// window whose readings all post-date a tick reports no reading for it, and ticks after the
     /// final reading keep seeing that reading.
     /// </summary>
+    /// <remarks>
+    /// <see cref="Earlier"/> keeps the readings of the last <see cref="ReadingTrend.MaxGap"/> up to
+    /// <see cref="Current"/>, canonical and hidden, those before the window start included, so a
+    /// tick derives its trend from the readings already loaded, by the rule live evaluation reads by.
+    /// </remarks>
     private sealed class ReadingCursor : IAsyncDisposable
     {
         private readonly IAsyncEnumerator<SensorGlucose> _source;
+        private readonly IAsyncEnumerator<(SensorGlucose Reading, Guid? DuplicateOf)> _hidden;
+        private readonly List<(SensorGlucose Reading, Guid? DuplicateOf)> _earlier = [];
+        private (SensorGlucose Reading, Guid? DuplicateOf)? _nextHidden;
         private SensorGlucose? _next;
         private bool _exhausted;
+        private bool _hiddenExhausted;
 
-        private ReadingCursor(IAsyncEnumerator<SensorGlucose> source) => _source = source;
+        private ReadingCursor(
+            IAsyncEnumerator<SensorGlucose> source,
+            IAsyncEnumerator<(SensorGlucose Reading, Guid? DuplicateOf)> hidden)
+        {
+            _source = source;
+            _hidden = hidden;
+        }
 
         public SensorGlucose? Current { get; private set; }
 
+        public IEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> Earlier => _earlier;
+
         public static async Task<ReadingCursor> CreateAsync(
-            IAsyncEnumerable<SensorGlucose> source, CancellationToken ct)
+            IAsyncEnumerable<SensorGlucose> source,
+            IAsyncEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> hidden,
+            DateTime windowStart,
+            CancellationToken ct)
         {
-            var cursor = new ReadingCursor(source.GetAsyncEnumerator(ct));
+            var cursor = new ReadingCursor(source.GetAsyncEnumerator(ct), hidden.GetAsyncEnumerator(ct));
             try
             {
-                cursor.Current = await cursor.PullAsync();
+                var first = await cursor.PullAsync();
+                while (first is not null && first.Timestamp < windowStart)
+                {
+                    cursor._earlier.Add((first, null));
+                    first = await cursor.PullAsync();
+                }
+                cursor._nextHidden = await cursor.PullHiddenAsync();
+                await cursor.MoveToAsync(first);
                 cursor._next = await cursor.PullAsync();
             }
             catch
             {
-                // Seeding owns the enumerator before the caller's `await using` does.
+                // Seeding owns the enumerators before the caller's `await using` does.
                 await cursor.DisposeAsync();
                 throw;
             }
@@ -367,9 +416,23 @@ internal sealed class AlertReplayService(
         {
             while (_next is { } next && next.Timestamp <= tick)
             {
-                Current = next;
+                _earlier.Add((Current!, null));
+                await MoveToAsync(next);
                 _next = await PullAsync();
             }
+        }
+
+        private async Task MoveToAsync(SensorGlucose? reading)
+        {
+            Current = reading;
+            if (reading is null) return;
+
+            while (_nextHidden is { } hidden && hidden.Reading.Timestamp <= reading.Timestamp)
+            {
+                _earlier.Add(hidden);
+                _nextHidden = await PullHiddenAsync();
+            }
+            _earlier.RemoveAll(e => reading.Timestamp - e.Reading.Timestamp > ReadingTrend.MaxGap);
         }
 
         private async Task<SensorGlucose?> PullAsync()
@@ -380,7 +443,19 @@ internal sealed class AlertReplayService(
             return null;
         }
 
-        public ValueTask DisposeAsync() => _source.DisposeAsync();
+        private async Task<(SensorGlucose Reading, Guid? DuplicateOf)?> PullHiddenAsync()
+        {
+            if (_hiddenExhausted) return null;
+            if (await _hidden.MoveNextAsync()) return _hidden.Current;
+            _hiddenExhausted = true;
+            return null;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _source.DisposeAsync();
+            await _hidden.DisposeAsync();
+        }
     }
 
     /// <summary>

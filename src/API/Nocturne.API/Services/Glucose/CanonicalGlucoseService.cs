@@ -43,6 +43,11 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
     public Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default)
         => ReadAsync(since, RecentFetchLimit, ct);
 
+    /// <inheritdoc />
+    public Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default)
+        => _sensorGlucoseRepository.GetStreamPredecessorAsync(reading, since, ct);
+
     private async Task<IReadOnlyList<SensorGlucose>> ReadAsync(DateTime? from, int limit, CancellationToken ct)
     {
         var (source, streams) = _demoMode.IsEnabled

@@ -35,7 +35,8 @@ public record SensorContext
     public required DateTime? LastReadingAt { get; init; }
 
     /// <summary>
-    /// Coarse trend bucket derived from <see cref="TrendRate"/>. Used by the trend condition.
+    /// Coarse trend bucket of <see cref="TrendRate"/>, or of the reading's arrow when no rate is
+    /// known. Used by the trend condition.
     /// </summary>
     public TrendBucket? TrendBucket { get; init; }
 
@@ -259,7 +260,7 @@ public sealed record ActiveTrackerReference(DateTime ReferenceAt, DateTime? Reco
 public record PredictedGlucosePoint(int OffsetMinutes, decimal Mgdl);
 
 /// <summary>
-/// Coarse trend bucket derived from rate of change.
+/// Coarse trend bucket of the rate of change, or of the reading's arrow when no rate is known.
 /// </summary>
 public enum TrendBucket
 {
@@ -622,7 +623,7 @@ public class AlertTrackerState
     /// <summary>
     /// Timestamp of the last evaluation.
     /// </summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; }
 
     /// <summary>
     /// When the active excursion entered hysteresis; set only in the "hysteresis" state.
@@ -685,10 +686,10 @@ public class AlertRule
     /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
     public string? AutoResolveParams { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>When this rule was last modified.</summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; }
 }
 
 /// <summary>

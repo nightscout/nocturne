@@ -36,7 +36,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
     }
 
     private static ActivityDecomposer DecomposerFor(NocturneDbContext context) => new(
-        new ActivityRecordRepository(context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), NullLogger<ActivityDecomposer>.Instance);
+        new ActivityRecordRepository(context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
 
     public void Dispose()
     {

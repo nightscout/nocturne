@@ -461,6 +461,79 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A range of <c>ix_sensor_glucose_tenant_timestamp</c>, which unlike the partial list indexes
+    /// keeps the duplicate copies, filtered by stream and data source; the own-group test probes
+    /// <c>ix_linked_records_tenant_type_id</c>.
+    /// </remarks>
+    public async Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default)
+    {
+        var key = RecordTypeKeys.Key(RecordType.SensorGlucose);
+        var at = reading.Timestamp;
+        var id = reading.Id;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var dataSource = reading.DataSource ?? "";
+        var query = ctx.SensorGlucose.AsNoTracking()
+            .Where(e => e.Timestamp >= since && e.Timestamp <= at && e.Id != id && e.Mgdl > 0
+                && (e.DataSource ?? "") == dataSource);
+        if (reading.PatientDeviceId is { } deviceId)
+        {
+            query = query.Where(e => e.PatientDeviceId == deviceId);
+        }
+        else
+        {
+            var device = reading.Device ?? "";
+            query = query.Where(e => e.PatientDeviceId == null && (e.Device ?? "") == device);
+        }
+
+        var ownGroup = ctx.LinkedRecords
+            .Where(l => l.RecordType == key && l.RecordId == id)
+            .Select(l => l.CanonicalId);
+        var entity = await query
+            .Where(e => !ctx.LinkedRecords.Any(l =>
+                l.RecordType == key && l.RecordId == e.Id && ownGroup.Contains(l.CanonicalId)))
+            .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetHiddenAsync(
+        DateTime from, DateTime to, int limit, DateTime? afterTimestamp, Guid? afterId,
+        CancellationToken ct = default)
+    {
+        var key = RecordTypeKeys.Key(RecordType.SensorGlucose);
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.SensorGlucose.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to && (e.IsDuplicate || e.IsSecondaryStream));
+        if (afterTimestamp is { } cursorAt && afterId is { } cursorId)
+            query = query.Where(e => e.Timestamp > cursorAt || (e.Timestamp == cursorAt && e.Id > cursorId));
+
+        var rows = await query
+            .OrderBy(e => e.Timestamp)
+            .ThenBy(e => e.Id)
+            .Take(limit)
+            .Select(e => new
+            {
+                Entity = e,
+                DuplicateOf = e.IsDuplicate
+                    ? ctx.LinkedRecords
+                        .Where(p => p.RecordType == key && p.IsPrimary
+                            && ctx.LinkedRecords.Any(l =>
+                                l.RecordType == key && l.RecordId == e.Id && l.CanonicalId == p.CanonicalId))
+                        .Select(p => (Guid?)p.RecordId)
+                        .FirstOrDefault()
+                    : null,
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => (SensorGlucoseMapper.ToDomainModel(r.Entity), r.DuplicateOf)).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
