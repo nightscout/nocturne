@@ -10,9 +10,13 @@
 
   interface Props {
     displayMode?: PredictionDisplayMode;
+    /** "line" (default) or Nightscout's hollow "dots". */
+    markStyle?: "line" | "dots";
+    /** Radius of a forecast dot. */
+    dotRadius?: number;
   }
 
-  let { displayMode }: Props = $props();
+  let { displayMode, markStyle, dotRadius }: Props = $props();
 
   const ctx = getGlucoseChartContext();
 
@@ -38,5 +42,7 @@
       to: ctx.engine.displayDateRangeWithPredictions.to,
     }}
     glucoseData={ctx.engine.glucoseData}
+    {markStyle}
+    {dotRadius}
   />
 </ChartClipPath>

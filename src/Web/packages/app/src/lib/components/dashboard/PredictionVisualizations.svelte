@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Area, Spline, getChartContext } from "layerchart";
+  import { Area, Circle, Spline, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
+  import { tv } from "tailwind-variants";
   import type { PredictionData } from "#lib/api/predictions.remote.js";
   import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -16,6 +17,13 @@
     glucoseTrackTop: number;
     chartXDomain: { from: Date; to: Date };
     glucoseData: { time: Date; sgv: number }[];
+    /**
+     * "line" draws each forecast as a dashed curve; "dots" as hollow 2px-stroked dots,
+     * one per forecast step, as cgm-remote-monitor does.
+     */
+    markStyle?: "line" | "dots";
+    /** Radius of a forecast dot. */
+    dotRadius?: number;
   }
 
   let {
@@ -28,7 +36,33 @@
     glucoseTrackTop,
     chartXDomain,
     glucoseData,
+    markStyle = "line",
+    dotRadius = 3,
   }: Props = $props();
+
+  /** Nightscout leaves forecast points under 13 mg/dL undrawn. */
+  const MIN_DOT_MGDL = 13;
+
+  type CurveTone = "main" | "iob" | "zt" | "uam" | "cob";
+  type CurveWeight = "strong" | "faint";
+
+  // A forecast in focus is drawn strong; the others beside it in the "lines" mode, faint.
+  // Dots are always stroked 2px at full opacity.
+  const curveMark = tv({
+    base: "fill-none",
+    variants: {
+      tone: {
+        main: "stroke-pred-main",
+        iob: "stroke-pred-iob",
+        zt: "stroke-pred-zt",
+        uam: "stroke-pred-uam",
+        cob: "stroke-pred-cob",
+      },
+      weight: { strong: "stroke-2", faint: "stroke-1 opacity-80" },
+      style: { line: "", dots: "stroke-2 opacity-100" },
+    },
+  });
+  const CURVE_DASH: Record<CurveWeight, string> = { strong: "6,3", faint: "4,2" };
 
   const chartCtx = getChartContext();
 
@@ -115,6 +149,30 @@
   });
 </script>
 
+<!-- Outside the boundary: a snippet declared inside it would be read as one of its props. -->
+{#snippet mark(data: { time: Date; sgv: number }[], tone: CurveTone, weight: CurveWeight)}
+  {#if markStyle === "dots"}
+    <Circle
+      data={data.filter((d) => d.sgv >= MIN_DOT_MGDL)}
+      key={(d) => d.time.getTime()}
+      cx={(d) => d.time}
+      cy={(d) => glucoseScale(d.sgv)}
+      r={dotRadius}
+      class={curveMark({ tone, weight, style: "dots" })}
+    />
+  {:else}
+    <Spline
+      {data}
+      x={(d) => d.time}
+      y={(d) => glucoseScale(d.sgv)}
+      curve={curveMonotoneX}
+      motion="spring"
+      class={curveMark({ tone, weight, style: "line" })}
+      stroke-dasharray={CURVE_DASH[weight]}
+    />
+  {/if}
+{/snippet}
+
 <svelte:boundary
   onerror={(error) => (failureMessage = remoteErrorMessage(error, PREDICTIONS_UNAVAILABLE))}
 >
@@ -179,110 +237,30 @@
       />
     {:else if predictionDisplayMode === "lines"}
       {#if predictionCurveData.length > 0}
-        <Spline
-          data={predictionCurveData}
-          x={(d) => d.time}
-          y={(d) => glucoseScale(d.sgv)}
-          curve={curveMonotoneX}
-          motion="spring"
-          class="stroke-pred-main stroke-2 fill-none"
-          stroke-dasharray="6,3"
-        />
+        {@render mark(predictionCurveData, "main", "strong")}
       {/if}
       {#if iobPredictionData.length > 0}
-        <Spline
-          data={iobPredictionData}
-          x={(d) => d.time}
-          y={(d) => glucoseScale(d.sgv)}
-          curve={curveMonotoneX}
-          motion="spring"
-          class="stroke-pred-iob stroke-1 fill-none opacity-80"
-          stroke-dasharray="4,2"
-        />
+        {@render mark(iobPredictionData, "iob", "faint")}
       {/if}
       {#if zeroTempPredictionData.length > 0}
-        <Spline
-          data={zeroTempPredictionData}
-          x={(d) => d.time}
-          y={(d) => glucoseScale(d.sgv)}
-          curve={curveMonotoneX}
-          motion="spring"
-          class="stroke-pred-zt stroke-1 fill-none opacity-80"
-          stroke-dasharray="4,2"
-        />
+        {@render mark(zeroTempPredictionData, "zt", "faint")}
       {/if}
       {#if uamPredictionData.length > 0}
-        <Spline
-          data={uamPredictionData}
-          x={(d) => d.time}
-          y={(d) => glucoseScale(d.sgv)}
-          curve={curveMonotoneX}
-          motion="spring"
-          class="stroke-pred-uam stroke-1 fill-none opacity-80"
-          stroke-dasharray="4,2"
-        />
+        {@render mark(uamPredictionData, "uam", "faint")}
       {/if}
       {#if cobPredictionData.length > 0}
-        <Spline
-          data={cobPredictionData}
-          x={(d) => d.time}
-          y={(d) => glucoseScale(d.sgv)}
-          motion="spring"
-          curve={curveMonotoneX}
-          class="stroke-pred-cob stroke-1 fill-none opacity-80"
-          stroke-dasharray="4,2"
-        />
+        {@render mark(cobPredictionData, "cob", "faint")}
       {/if}
     {:else if predictionDisplayMode === "main" && predictionCurveData.length > 0}
-      <Spline
-        data={predictionCurveData}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        motion="spring"
-        curve={curveMonotoneX}
-        class="stroke-pred-main stroke-2 fill-none"
-        stroke-dasharray="6,3"
-      />
+      {@render mark(predictionCurveData, "main", "strong")}
     {:else if predictionDisplayMode === "iob" && iobPredictionData.length > 0}
-      <Spline
-        data={iobPredictionData}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        motion="spring"
-        curve={curveMonotoneX}
-        class="stroke-pred-iob stroke-2 fill-none"
-        stroke-dasharray="6,3"
-      />
+      {@render mark(iobPredictionData, "iob", "strong")}
     {:else if predictionDisplayMode === "zt" && zeroTempPredictionData.length > 0}
-      <Spline
-        data={zeroTempPredictionData}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        motion="spring"
-        curve={curveMonotoneX}
-        class="stroke-pred-zt stroke-2 fill-none"
-        stroke-dasharray="6,3"
-      />
+      {@render mark(zeroTempPredictionData, "zt", "strong")}
     {:else if predictionDisplayMode === "uam" && uamPredictionData.length > 0}
-      <Spline
-        data={uamPredictionData}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        motion="spring"
-        curve={curveMonotoneX}
-        class="stroke-pred-uam stroke-2 fill-none"
-        stroke-dasharray="6,3"
-      />
+      {@render mark(uamPredictionData, "uam", "strong")}
     {:else if predictionDisplayMode === "cob" && cobPredictionData.length > 0}
-      <Spline
-        data={cobPredictionData}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        motion="spring"
-        curve={curveMonotoneX}
-        class="stroke-pred-cob stroke-2 fill-none"
-        stroke-dasharray="6,3"
-      />
+      {@render mark(cobPredictionData, "cob", "strong")}
     {/if}
   {/if}
   {#if showPredictions && predictionError}
