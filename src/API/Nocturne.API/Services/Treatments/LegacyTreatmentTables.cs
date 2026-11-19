@@ -286,7 +286,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         LegacyTreatmentRepositories repositories, NocturneDbContext context, DateTime? from, DateTime? to,
         ILogger logger, CancellationToken ct) =>
         count is null
-            ? await repository(repositories).CountAsync(from, to, ct)
+            ? await repository(repositories).CountAsync(from, to, null, null, ct)
             : await count(context, from, to, ct);
 
     /// <inheritdoc />
@@ -571,12 +571,7 @@ internal sealed class LegacyStateSpanTable(
         treatment.LegacyId = span.LegacyId;
         treatment.RecordId = span.Id;
         treatment.Mills = span.StartTimestamp.ToMills();
-        treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
-        treatment.EnteredBy = metadata.TryReadString("enteredBy");
-        treatment.Notes = metadata.TryReadString(LegacyTreatmentTables.NotesKey);
-        treatment.SyncIdentifier = metadata.TryReadString(LegacyTreatmentTables.SyncIdentifierKey);
-        treatment.InsulinType = metadata.TryReadString(LegacyTreatmentTables.InsulinTypeKey);
-        treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
+        LegacyTreatmentTables.RestoreServedFields(treatment, metadata);
         return treatment;
     }
 }
@@ -786,11 +781,12 @@ internal static class LegacyTreatmentTables
             s => s.LegacyId != null && EF.Functions.JsonContains(s.MetadataJson!, TreatmentsCollectionJson),
             (s, metadata) => new Treatment
             {
-                EventType = "Temporary Override",
+                EventType = TreatmentTypes.TemporaryOverride,
                 RawTimestamp = TreatmentUploadedTimestamp.OfSpan(metadata)
                     ?? JsonSerializer.SerializeToElement(NightscoutKitTimestamp(s.StartTimestamp)),
                 Duration = UploadedDuration(metadata)
                     ?? (metadata.TryReadString("durationType") == "indefinite" ? null : DurationMinutes(s)),
+                DurationIsUploaded = UploadedDuration(metadata) is not null,
                 Reason = metadata.TryReadString("reason"),
                 ReasonDisplay = metadata.TryReadString("reasonDisplay"),
                 TargetTop = (double?)metadata.TryReadDecimal("targetTop"),
@@ -804,9 +800,10 @@ internal static class LegacyTreatmentTables
                 && EF.Functions.JsonExists(s.MetadataJson!, StateSpanMetadataExtensions.UtcOffsetKey),
             (s, metadata) => new Treatment
             {
-                EventType = metadata.TryReadString(UploadedEventTypeKey) ?? "Temporary Target",
+                EventType = metadata.TryReadString(UploadedEventTypeKey) ?? TreatmentTypes.TemporaryTarget,
                 Duration = UploadedDuration(metadata)
                     ?? (s.State == nameof(TemporaryTargetState.Cancelled) ? 0 : DurationMinutes(s)),
+                DurationIsUploaded = UploadedDuration(metadata) is not null,
                 TargetTop = (double?)metadata.TryReadDecimal("targetTop"),
                 TargetBottom = (double?)metadata.TryReadDecimal("targetBottom"),
                 Reason = metadata.TryReadString("reason"),
@@ -1026,6 +1023,7 @@ internal static class LegacyTreatmentTables
             {
                 EventType = TreatmentTypes.ProfileSwitch,
                 Duration = duration,
+                DurationIsUploaded = UploadedDuration(metadata) is not null,
                 DurationInMilliseconds = span.DurationInMilliseconds
                     ?? (duration is { } minutes ? (long)Math.Round(minutes * 60_000) : null),
                 Profile = span.ProfileName,
@@ -1038,9 +1036,6 @@ internal static class LegacyTreatmentTables
             };
         }
 
-        treatment.PumpId = span.PumpId;
-        treatment.PumpType = span.PumpType;
-        treatment.PumpSerial = span.PumpSerial;
         if (span.App is { } app)
             treatment.AdditionalProperties = new Dictionary<string, object> { [ProfileSpanMetadata.AppKey] = app };
 
@@ -1049,13 +1044,24 @@ internal static class LegacyTreatmentTables
         treatment.RecordId = activation.Id;
         treatment.Mills = activation.Mills;
         treatment.DataSource = activation.DataSource;
+        RestoreServedFields(treatment, metadata);
+        return treatment;
+    }
+
+    /// <summary>
+    /// Sets the upload fields a span's or activation's metadata keeps for every treatment it is served
+    /// as, as <c>TreatmentDecomposer.AddServedTreatmentFields</c> wrote them.
+    /// </summary>
+    internal static void RestoreServedFields(Treatment treatment, IDictionary<string, object>? metadata)
+    {
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
         treatment.EnteredBy = metadata.TryReadString(ProfileActivationLegacyFields.EnteredByKey);
         treatment.Notes = metadata.TryReadString(NotesKey);
         treatment.SyncIdentifier = metadata.TryReadString(SyncIdentifierKey);
         treatment.InsulinType = metadata.TryReadString(InsulinTypeKey);
         treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
-        return treatment;
+        SpanUploadedFields.Restore(treatment, metadata);
+        TreatmentClientId.RestoreFromMetadata(treatment, metadata);
     }
 
     /// <summary>The tables whose records pair into a Meal Bolus.</summary>
@@ -1295,7 +1301,7 @@ internal static class LegacyTreatmentTables
             Insulin = bolus.Insulin,
             PreBolus = TreatmentUploadedPreBolus.Of(bolus.AdditionalProperties),
             Carbs = carb.Carbs,
-            FoodType = DeriveFoodType(foods),
+            FoodType = TreatmentFood.DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
@@ -1338,12 +1344,13 @@ internal static class LegacyTreatmentTables
             Id = carb.Id.ToString(),
             LegacyId = carb.LegacyId,
             RecordId = carb.Id,
+            PreBolusMealId = PreBolusSplit.MealIdOf(carb.AdditionalProperties),
             AdditionalProperties = TreatmentClientId.ToTreatment(carb.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(carb.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(carb.AdditionalProperties) ?? TreatmentTypes.CarbCorrection,
             Mills = carb.Mills,
             Carbs = carb.Carbs,
-            FoodType = DeriveFoodType(foods),
+            FoodType = TreatmentFood.DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
@@ -1353,18 +1360,6 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = carb.SyncIdentifier,
             UtcOffset = carb.UtcOffset,
         };
-
-    private static string? DeriveFoodType(List<TreatmentFood> foods)
-    {
-        if (foods.Count == 0) return null;
-
-        var names = foods
-            .Select(f => f.FoodName ?? f.Note)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .ToList();
-
-        return names.Count > 0 ? string.Join(", ", names) : null;
-    }
 
     private static double? DeriveTotalFat(List<TreatmentFood> foods)
     {
@@ -1411,7 +1406,7 @@ internal static class LegacyTreatmentTables
             RecordId = note.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(note.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(note.AdditionalProperties),
-            EventType = note.EventType ?? "Note",
+            EventType = note.EventType ?? TreatmentTypes.Note,
             Mills = note.Mills,
             Notes = note.Text,
             IsAnnouncement = note.IsAnnouncement,

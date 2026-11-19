@@ -33,6 +33,8 @@ public class HistoryClampLiftAllowlistTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.RecomputeAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/SoftDeleteRestoreExtensions.cs: SoftDeleteRestoreExtensions.FindLiveKeyClashesAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.ClearSupersededByAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.ClearedBeforeTheClampAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.CreateAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.LoadRecordInfoAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.UnlinkedAsync",

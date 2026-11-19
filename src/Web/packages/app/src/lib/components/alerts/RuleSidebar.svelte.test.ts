@@ -145,4 +145,56 @@ describe("RuleSidebar", () => {
 		const pip = document.querySelector('[data-testid="rule-status-pip"]');
 		expect(pip?.getAttribute("data-truth")).toBe("false");
 	});
+
+	it("sets the alert under edit apart from the saved ones", async () => {
+		const editingTree = and("g", leaf("a"));
+		const otherTree = and("h", leaf("b"));
+		const rules = [makeRule("R1", "Saved one", otherTree), makeRule("R2", "Night low", editingTree)];
+
+		render(RuleSidebar, {
+			rules,
+			editingRuleId: "R2",
+			treeByRule: new Map([
+				["R1", otherTree],
+				["R2", editingTree],
+			]),
+			leafIdsByRule: new Map([
+				["R1", assignLeafIds(otherTree)],
+				["R2", assignLeafIds(editingTree)],
+			]),
+			leafLog: new LeafTransitionLog({}),
+			currentTimeMs: 100,
+			disabledRuleIds: new Set<string>(),
+			availableRules: [],
+		});
+
+		const editing = document.querySelectorAll('[data-testid="rule-sidebar-editing"]');
+		expect(editing.length).toBe(1);
+		expect(editing[0].textContent).toContain("Night low");
+		expect(editing[0].textContent).toContain("This alert");
+
+		// Listed first, under its own heading, with the saved ones after theirs.
+		const text = document.querySelector('[data-testid="rule-sidebar"]')?.textContent ?? "";
+		expect(text.indexOf("The alert you are editing")).toBeLessThan(text.indexOf("Night low"));
+		expect(text.indexOf("Night low")).toBeLessThan(text.indexOf("Your other alerts"));
+		expect(text.indexOf("Your other alerts")).toBeLessThan(text.indexOf("Saved one"));
+	});
+
+	it("names no alert as under edit when none is", async () => {
+		const tree = and("g", leaf("a"));
+
+		render(RuleSidebar, {
+			rules: [makeRule("R1", "Saved one", tree)],
+			treeByRule: new Map([["R1", tree]]),
+			leafIdsByRule: new Map([["R1", assignLeafIds(tree)]]),
+			leafLog: new LeafTransitionLog({}),
+			currentTimeMs: 100,
+			disabledRuleIds: new Set<string>(),
+			availableRules: [],
+		});
+
+		const text = document.querySelector('[data-testid="rule-sidebar"]')?.textContent ?? "";
+		expect(text).not.toContain("The alert you are editing");
+		expect(text).not.toContain("Your other alerts");
+	});
 });

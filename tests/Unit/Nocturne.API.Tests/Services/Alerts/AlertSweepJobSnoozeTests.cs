@@ -41,6 +41,7 @@ public class AlertSweepJobSnoozeTests
 
     private readonly Mock<IAlertRepository> _repository = AlertSweepRuns.Repository(Tenant, () => Now.AddMinutes(-1));
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
+    private readonly Mock<IAlertOrchestrator> _orchestrator = new();
     private readonly List<UpdateAlertInstanceRequest> _updates = [];
     private readonly List<SensorContext> _enricherInputs = [];
     private readonly List<(Guid InstanceId, Guid TenantId, string? AuditEndpoint)> _resumed = [];
@@ -59,6 +60,11 @@ public class AlertSweepJobSnoozeTests
         _canonical
             .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _readings.MaxBy(r => r.Timestamp));
+        _canonical
+            .Setup(c => c.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorGlucose reading, DateTime since, CancellationToken _) => _readings
+                .Where(r => r.Timestamp < reading.Timestamp && r.Timestamp >= since)
+                .MaxBy(r => r.Timestamp));
     }
 
     private static SnoozedInstanceSnapshot Instance(
@@ -71,6 +77,7 @@ public class AlertSweepJobSnoozeTests
 
     private static SensorGlucose Reading(double minutesAgo, double mgdl, double? trendRate = null) => new()
     {
+        Id = Guid.NewGuid(),
         Timestamp = Now.AddMinutes(-minutesAgo),
         Mgdl = mgdl,
         TrendRate = trendRate,
@@ -105,6 +112,7 @@ public class AlertSweepJobSnoozeTests
         services.AddSingleton(_repository.Object);
         services.AddSingleton(_canonical.Object);
         services.AddSingleton(enricher.Object);
+        services.AddSingleton(_orchestrator.Object);
         services.AddSingleton<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(
             new InMemoryTrackerRepository(instances.Select(i => new AlertRule
             {
@@ -315,6 +323,47 @@ public class AlertSweepJobSnoozeTests
         context.LatestValue.Should().Be(72m);
         context.LatestTimestamp.Should().Be(Now.AddMinutes(-2));
         context.TrendRate.Should().Be(1.5m);
+    }
+
+    [NativeFact]
+    public async Task Conditions_SeeTheRateDerivedFromThePreviousReading()
+    {
+        _readings = [Reading(7, 82), Reading(2, 72)];
+        var instance = Instance(ExtendWhileAbove65);
+
+        await SweepAsync(instance);
+
+        var context = _enricherInputs.Should().ContainSingle().Subject;
+        context.TrendRate.Should().Be(-2m);
+        context.TrendBucket.Should().Be(TrendBucket.Falling);
+    }
+
+    [NativeFact]
+    public async Task The_snooze_and_wall_clock_contexts_share_one_previous_reading_read()
+    {
+        _readings = [Reading(7, 82), Reading(2, 72)];
+        _repository
+            .Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "Signal loss", AlertConditionType.SignalLoss,
+                    """{"timeout_minutes": 15}""", AlertRuleSeverity.Warning, "{}", 0, false, null),
+            ]);
+        SensorContext? wallClock = null;
+        _orchestrator
+            .Setup(o => o.EvaluateRulesAsync(
+                It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(), It.IsAny<IReadOnlySet<Guid>>(),
+                It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<AlertRuleSnapshot>, IReadOnlySet<Guid>, SensorContext, CancellationToken>(
+                (_, _, context, _) => wallClock = context)
+            .Returns(Task.CompletedTask);
+
+        await SweepAsync(Instance(ExtendWhileAbove65));
+
+        _enricherInputs.Should().ContainSingle().Which.TrendRate.Should().Be(-2m);
+        wallClock!.TrendRate.Should().Be(-2m);
+        _canonical.Verify(
+            c => c.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [NativeFact]

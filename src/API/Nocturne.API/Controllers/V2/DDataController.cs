@@ -13,10 +13,12 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// V2 DData controller providing direct data access endpoints.
-/// Implements the legacy /api/v2/ddata endpoints with 1:1 backwards compatibility.
+/// Nightscout ddata: glucose, treatments, profiles and device status in one response. A client can read the
+/// current data, the data at a timestamp, or raw data.
 /// </summary>
 /// <remarks>
+/// Implements the legacy /api/v2/ddata endpoints with 1:1 backwards compatibility.
+///
 /// The actions require only <c>glucose.read</c> while the response also carries treatments,
 /// profiles and device status. This is the accepted narrowing described on
 /// <see cref="PropertiesController"/>, which names the per-category follow-up. The one exception
@@ -26,32 +28,30 @@ namespace Nocturne.API.Controllers.V2;
 /// </remarks>
 /// <seealso cref="IDDataService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("DData")]
 [Tags("V2")]
 [Route("api/v2/ddata")]
 [Produces("application/json")]
 [ClientPropertyName("v2DData")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class DDataController : ControllerBase
 {
     private readonly IDDataService _ddataService;
     private readonly IActivityDecomposer _activityDecomposer;
-    private readonly ILogger<DDataController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="DDataController"/>.
     /// </summary>
     /// <param name="ddataService">Service for assembling the combined DData response.</param>
     /// <param name="activityDecomposer">Classifier mapping each activity to its required read scope.</param>
-    /// <param name="logger">Logger instance.</param>
     public DDataController(
         IDDataService ddataService,
-        IActivityDecomposer activityDecomposer,
-        ILogger<DDataController> logger
+        IActivityDecomposer activityDecomposer
     )
     {
         _ddataService = ddataService;
         _activityDecomposer = activityDecomposer;
-        _logger = logger;
     }
 
     /// <summary>
@@ -70,20 +70,12 @@ public class DDataController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var result = await _ddataService.GetDDataWithRecentStatusesAsync(
-                currentTime,
-                cancellationToken
-            );
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting current DData");
-            return StatusCode(500, new { error = "Internal server error" });
-        }
+        var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var result = await _ddataService.GetDDataWithRecentStatusesAsync(
+            currentTime,
+            cancellationToken
+        );
+        return Ok(result);
     }
 
     /// <summary>
@@ -105,21 +97,13 @@ public class DDataController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        if (!TryResolveTimestamp(timestamp, out var unixTimestamp, out var error))
         {
-            if (!TryResolveTimestamp(timestamp, out var unixTimestamp, out var error))
-            {
-                return BadRequest(error);
-            }
+            return BadRequest(error);
+        }
 
-            var result = await _ddataService.GetDDataFrameAsync(unixTimestamp, cancellationToken);
-            return Ok(WithReadableActivity(result));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting DData for timestamp {Timestamp}", timestamp);
-            return StatusCode(500, new { error = "Internal server error" });
-        }
+        var result = await _ddataService.GetDDataFrameAsync(unixTimestamp, cancellationToken);
+        return Ok(WithReadableActivity(result));
     }
 
     /// <summary>
@@ -142,21 +126,13 @@ public class DDataController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        if (!TryResolveTimestamp(timestamp, out var unixTimestamp, out var error))
         {
-            if (!TryResolveTimestamp(timestamp, out var unixTimestamp, out var error))
-            {
-                return BadRequest(error);
-            }
+            return BadRequest(error);
+        }
 
-            var result = await _ddataService.GetDDataAsync(unixTimestamp, cancellationToken);
-            return Ok(WithReadableActivity(result));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting raw DData for timestamp {Timestamp}", timestamp);
-            return StatusCode(500, new { error = "Internal server error" });
-        }
+        var result = await _ddataService.GetDDataAsync(unixTimestamp, cancellationToken);
+        return Ok(WithReadableActivity(result));
     }
 
     private T WithReadableActivity<T>(T ddata) where T : DData

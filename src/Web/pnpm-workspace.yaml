@@ -39,6 +39,7 @@ patchedDependencies:
   "@microsoft/signalr@8.0.17": patches/@microsoft__signalr@8.0.17.patch
   "bits-ui@2.18.1": patches/bits-ui@2.18.1.patch
   "layerchart@2.9.1": patches/layerchart@2.9.1.patch
+  pofile@1.1.4: patches/pofile@1.1.4.patch
   "svelte@5.57.2": patches/svelte@5.57.2.patch
 
 # Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
@@ -47,7 +48,7 @@ overrides:
   # copies side by side (this tree had 5.45.2, 5.50.0 and 5.55.5 at once), and svelte's `Snippet`
   # is branded with a `unique symbol` declared per copy. Two copies in one type-check program
   # therefore make every snippet-to-snippet assignment fail with "Two different types with this
-  # name exist, but they are unrelated" — 20 such errors in glucose-chart's dialogs alone, and the
+  # name exist, but they are unrelated" — 20 such errors in one package's dialogs alone, and the
   # same trap for anything consuming these packages by path. One copy, one brand.
   svelte: "5.57.2"
 

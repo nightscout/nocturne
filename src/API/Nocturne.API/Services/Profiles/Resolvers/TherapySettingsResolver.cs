@@ -137,7 +137,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     public async Task<bool> HasDataAsync(CancellationToken ct = default)
     {
         // Scoped resolver: the memo lives for one request and never crosses tenants.
-        return _hasData ??= await _repo.CountAsync(null, null, ct) > 0;
+        return _hasData ??= await _repo.CountAsync(null, null, null, null, ct) > 0;
     }
 
     private Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(

@@ -1,18 +1,5 @@
 import type { EventMetrics, EventMetricsSummary, EventResponseEvent } from "#lib/api/index.js";
-import type { BandColors } from "#lib/components/reports/percentile-band-colors.js";
 import { covers } from "./daily-profile-view";
-
-/** One hue per cohort, in cohort order, so a cohort reads the same in every panel, the table and the list. */
-const COHORT_HUES = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)"];
-
-export function cohortBands(index: number): BandColors {
-  const hue = COHORT_HUES[index % COHORT_HUES.length];
-  return {
-    outer: `oklch(from ${hue} l c h / 0.2)`,
-    inner: `oklch(from ${hue} l c h / 0.4)`,
-    median: hue,
-  };
-}
 
 export type EventMetricKey = keyof EventMetrics & keyof EventMetricsSummary;
 

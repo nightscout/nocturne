@@ -29,14 +29,13 @@ public class RuleDataNeedsTests
     }
 
     [NativeFact]
-    public void Trend_leaf_at_top_level_sets_trend_bucket_need()
+    public void Trend_leaf_needs_no_fetch()
     {
         var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"rising_fast"}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.NeedsTrendBucket.Should().BeTrue();
-        result.NeedsIob.Should().BeFalse();
+        result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
     [NativeFact]
@@ -79,7 +78,6 @@ public class RuleDataNeedsTests
         result.NeedsIob.Should().BeTrue();
         result.NeedsCob.Should().BeTrue();
         result.NeedsPredicted.Should().BeTrue();
-        result.NeedsTrendBucket.Should().BeTrue();
         result.NeedsActiveAlerts.Should().BeTrue();
         result.NeedsReservoir.Should().BeFalse();
         result.NeedsSiteAge.Should().BeFalse();
@@ -131,12 +129,12 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Multiple_rules_are_unioned()
     {
-        var trendRule = MakeRule(AlertConditionType.Trend, """{"bucket":"flat"}""");
+        var cobRule = MakeRule(AlertConditionType.Cob, """{"operator":">","value":10}""");
         var iobRule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":1}""");
 
-        var result = RuleDataNeeds.Walk(new[] { trendRule, iobRule });
+        var result = RuleDataNeeds.Walk(new[] { cobRule, iobRule });
 
-        result.NeedsTrendBucket.Should().BeTrue();
+        result.NeedsCob.Should().BeTrue();
         result.NeedsIob.Should().BeTrue();
     }
 
@@ -214,6 +212,18 @@ public class RuleDataNeedsTests
         var result = RuleDataNeeds.Walk(new[] { rule });
 
         result.NeedsUploaderStatus.Should().BeTrue();
+    }
+
+    [NativeFact]
+    public void TransmitterBattery_rule_sets_TransmitterStatus_only()
+    {
+        var rule = MakeRule(AlertConditionType.TransmitterBattery,
+            """{"metric":"voltage_a","operator":"<","value":290}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsTransmitterStatus.Should().BeTrue();
+        result.NeedsUploaderStatus.Should().BeFalse();
     }
 
     [NativeFact]

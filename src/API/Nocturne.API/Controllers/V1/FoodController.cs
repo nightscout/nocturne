@@ -14,15 +14,18 @@ using Nocturne.Core.Contracts.Treatments;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Food controller that provides 1:1 compatibility with Nightscout food endpoints.
-/// Implements the /api/v1/food/* endpoints from the legacy JavaScript implementation.
+/// Nightscout food: food records and quick picks. A client can list, read, create, update and delete food records.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/food/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IFoodService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class FoodController : ControllerBase
 {
     private readonly IFoodRepository _foodRepository;
@@ -58,36 +61,23 @@ public class FoodController : ControllerBase
     [RequireScope(Scope.FoodRead)]
     public async Task<ActionResult<Food[]>> GetFood(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "Food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
+        var foods = await _foodRepository.GetFoodAsync(cancellationToken);
+        var foodList = foods.ToList();
 
-        try
-        {
-            var foods = await _foodRepository.GetFoodAsync(cancellationToken);
-            var foodList = foods.ToList();
+        // Note: Nightscout V1 GET /api/v1/food DOES NOT support find query parameters
+        // It ignores any query parameters and returns all foods
+        // We match this behavior for parity
 
-            // Note: Nightscout V1 GET /api/v1/food DOES NOT support find query parameters
-            // It ignores any query parameters and returns all foods
-            // We match this behavior for parity
+        // Sort by created_at to ensure consistent ordering (Nightscout uses insertion order)
+        foodList = foodList.OrderBy(f => f.CreatedAt).ToList();
 
-            // Sort by created_at to ensure consistent ordering (Nightscout uses insertion order)
-            foodList = foodList.OrderBy(f => f.CreatedAt).ToList();
+        _logger.LogDebug("Successfully retrieved {Count} food records", foodList.Count);
 
-            _logger.LogDebug("Successfully retrieved {Count} food records", foodList.Count);
+        // Set response headers for caching
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
 
-            // Set response headers for caching
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
-
-            return Ok(foodList.ToArray());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving food records");
-            return StatusCode(500, "Internal server error while retrieving food records");
-        }
+        return Ok(foodList.ToArray());
     }
 
     /// <summary>
@@ -104,32 +94,19 @@ public class FoodController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        var foods = await _foodRepository.GetFoodByTypeAsync("food", cancellationToken);
+        var foodArray = foods.ToArray();
+
         _logger.LogDebug(
-            "Regular food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            "Successfully retrieved {Count} regular food records",
+            foodArray.Length
         );
 
-        try
-        {
-            var foods = await _foodRepository.GetFoodByTypeAsync("food", cancellationToken);
-            var foodArray = foods.ToArray();
+        // Set response headers for caching
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
 
-            _logger.LogDebug(
-                "Successfully retrieved {Count} regular food records",
-                foodArray.Length
-            );
-
-            // Set response headers for caching
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
-
-            return Ok(foodArray);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving regular food records");
-            return StatusCode(500, "Internal server error while retrieving regular food records");
-        }
+        return Ok(foodArray);
     }
 
     /// <summary>
@@ -147,39 +124,26 @@ public class FoodController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        var foods = await _foodRepository.GetFoodByTypeAsync("quickpick", cancellationToken);
+
+        // Nightscout's listquickpicks filters by hidden='false' (string in MongoDB)
+        // Since we use boolean Hidden, filter where Hidden == false
+        // Also sort by position ascending (Nightscout's sort({'position': 1}))
+        var foodArray = foods
+            .Where(f => !f.Hidden)
+            .OrderBy(f => f.Position)
+            .ToArray();
+
         _logger.LogDebug(
-            "Quickpick food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            "Successfully retrieved {Count} quickpick food records",
+            foodArray.Length
         );
 
-        try
-        {
-            var foods = await _foodRepository.GetFoodByTypeAsync("quickpick", cancellationToken);
+        // Set response headers for caching
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
 
-            // Nightscout's listquickpicks filters by hidden='false' (string in MongoDB)
-            // Since we use boolean Hidden, filter where Hidden == false
-            // Also sort by position ascending (Nightscout's sort({'position': 1}))
-            var foodArray = foods
-                .Where(f => !f.Hidden)
-                .OrderBy(f => f.Position)
-                .ToArray();
-
-            _logger.LogDebug(
-                "Successfully retrieved {Count} quickpick food records",
-                foodArray.Length
-            );
-
-            // Set response headers for caching
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
-
-            return Ok(foodArray);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving quickpick food records");
-            return StatusCode(500, "Internal server error while retrieving quickpick food records");
-        }
+        return Ok(foodArray);
     }
 
     /// <summary>
@@ -206,34 +170,26 @@ public class FoodController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Invalid food ID: {Id}", id);
-                return BadRequest("Food ID cannot be null or empty");
-            }
-
-            var food = await _foodRepository.GetFoodByIdAsync(id, cancellationToken);
-            if (food == null)
-            {
-                _logger.LogDebug("Food record not found with ID: {Id}", id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully retrieved food record with ID: {Id}", id);
-
-            // Set response headers for caching
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
-
-            return Ok(food);
+            _logger.LogWarning("Invalid food ID: {Id}", id);
+            return BadRequest("Food ID cannot be null or empty");
         }
-        catch (Exception ex)
+
+        var food = await _foodRepository.GetFoodByIdAsync(id, cancellationToken);
+        if (food == null)
         {
-            _logger.LogError(ex, "Error retrieving food record with ID: {Id}", id);
-            return StatusCode(500, $"Internal server error while retrieving food record {id}");
+            _logger.LogDebug("Food record not found with ID: {Id}", id);
+            return NotFound();
         }
+
+        _logger.LogDebug("Successfully retrieved food record with ID: {Id}", id);
+
+        // Set response headers for caching
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+
+        return Ok(food);
     }
 
     /// <summary>
@@ -254,11 +210,6 @@ public class FoodController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Create food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var foodsToCreate = NightscoutJsonBody.ReadObjects<Food>(foods);
@@ -317,11 +268,6 @@ public class FoodController : ControllerBase
             _logger.LogWarning(ex, "Invalid JSON in create food request");
             return BadRequest("Invalid JSON format");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating food records");
-            return StatusCode(500, "Internal server error while creating food records");
-        }
     }
 
     /// <summary>
@@ -351,55 +297,47 @@ public class FoodController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Invalid food ID: {Id}", id);
-                return BadRequest("Food ID cannot be null or empty");
-            }
-
-            if (food == null)
-            {
-                _logger.LogWarning("Food data is null for update");
-                return BadRequest("Food data cannot be null");
-            }
-
-            // Ensure the food has the correct ID
-            food.Id = id;
-
-            // Validate type
-            if (food.Type != "food" && food.Type != "quickpick")
-            {
-                return BadRequest(
-                    $"Invalid food type: '{food.Type}'. Must be 'food' or 'quickpick'."
-                );
-            }
-
-            // Validate required fields
-            if (string.IsNullOrWhiteSpace(food.Name))
-            {
-                return BadRequest("Food name is required");
-            }
-
-            food.ApplyUnitAndGiDefaults();
-
-            var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
-            if (updatedFood == null)
-            {
-                _logger.LogDebug("Food record not found for update with ID: {Id}", id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully updated food record with ID: {Id}", id);
-
-            return Ok(updatedFood);
+            _logger.LogWarning("Invalid food ID: {Id}", id);
+            return BadRequest("Food ID cannot be null or empty");
         }
-        catch (Exception ex)
+
+        if (food == null)
         {
-            _logger.LogError(ex, "Error updating food record with ID: {Id}", id);
-            return StatusCode(500, $"Internal server error while updating food record {id}");
+            _logger.LogWarning("Food data is null for update");
+            return BadRequest("Food data cannot be null");
         }
+
+        // Ensure the food has the correct ID
+        food.Id = id;
+
+        // Validate type
+        if (food.Type != "food" && food.Type != "quickpick")
+        {
+            return BadRequest(
+                $"Invalid food type: '{food.Type}'. Must be 'food' or 'quickpick'."
+            );
+        }
+
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(food.Name))
+        {
+            return BadRequest("Food name is required");
+        }
+
+        food.ApplyUnitAndGiDefaults();
+
+        var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
+        if (updatedFood == null)
+        {
+            _logger.LogDebug("Food record not found for update with ID: {Id}", id);
+            return NotFound();
+        }
+
+        _logger.LogDebug("Successfully updated food record with ID: {Id}", id);
+
+        return Ok(updatedFood);
     }
 
     /// <summary>
@@ -421,11 +359,6 @@ public class FoodController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Legacy update food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         if (food?.Id == null)
         {
             _logger.LogWarning("Food ID is null in legacy update request");
@@ -460,30 +393,22 @@ public class FoodController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Invalid food ID: {Id}", id);
-                return BadRequest("Food ID cannot be null or empty");
-            }
-
-            var deleted = await _foodService.DeleteFoodAsync(id, cancellationToken);
-            if (!deleted)
-            {
-                _logger.LogDebug("Food record not found for deletion with ID: {Id}", id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully deleted food record with ID: {Id}", id);
-
-            return NoContent();
+            _logger.LogWarning("Invalid food ID: {Id}", id);
+            return BadRequest("Food ID cannot be null or empty");
         }
-        catch (Exception ex)
+
+        var deleted = await _foodService.DeleteFoodAsync(id, cancellationToken);
+        if (!deleted)
         {
-            _logger.LogError(ex, "Error deleting food record with ID: {Id}", id);
-            return StatusCode(500, $"Internal server error while deleting food record {id}");
+            _logger.LogDebug("Food record not found for deletion with ID: {Id}", id);
+            return NotFound();
         }
+
+        _logger.LogDebug("Successfully deleted food record with ID: {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -503,40 +428,27 @@ public class FoodController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Bulk delete food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
+        var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+        var query = FindQuery.Parse(find);
 
-        try
+        if (query.IsEmpty)
         {
-            var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
-            var query = FindQuery.Parse(find);
-
-            if (query.IsEmpty)
-            {
-                _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
-                return BadRequest(
-                    "Find query parameter is required for bulk delete to prevent accidental data loss"
-                );
-            }
-
-            if (Food.FindRefusal(query) is { } refusal)
-            {
-                _logger.LogWarning("Bulk delete food refused: the find names a condition it cannot apply");
-                return BadRequest(refusal);
-            }
-
-            var deletedCount = await _foodService.BulkDeleteFoodAsync(find, cancellationToken);
-
-            _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, find);
-
-            return Ok(new { });
+            _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
+            return BadRequest(
+                "Find query parameter is required for bulk delete to prevent accidental data loss"
+            );
         }
-        catch (Exception ex)
+
+        if (Food.FindRefusal(query) is { } refusal)
         {
-            _logger.LogError(ex, "Error bulk deleting food records");
-            return StatusCode(500, "Internal server error while deleting food records");
+            _logger.LogWarning("Bulk delete food refused: the find names a condition it cannot apply");
+            return BadRequest(refusal);
         }
+
+        var deletedCount = await _foodService.BulkDeleteFoodAsync(find, cancellationToken);
+
+        _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, find);
+
+        return Ok(new { });
     }
 }

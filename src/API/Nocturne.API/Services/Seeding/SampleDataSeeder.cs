@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Glucose;
@@ -97,7 +98,7 @@ public class SampleDataSeeder
     private readonly ILogger<SampleDataSeeder> _logger;
 
     private const int BatchSize = 500;
-    private const int MaxDays = 90;
+    private const int MaxDays = 365;
 
     /// <summary>A fixed seed, so seeding the same range again writes the same history.</summary>
     private const int RandomSeed = 1;
@@ -316,7 +317,7 @@ public class SampleDataSeeder
                 foreach (var treatment in records.Treatments)
                 {
                     treatmentBatch.Add(treatment);
-                    if (treatment.EventType == "Carbs" && treatment.FoodType is { Length: > 0 })
+                    if (treatment.EventType == TreatmentTypes.Carbs && treatment.FoodType is { Length: > 0 })
                         mealCarbLinks.Add((treatment.Mills.ToUtcDateTime(), treatment.FoodType));
                 }
 

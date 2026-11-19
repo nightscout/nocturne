@@ -1,16 +1,11 @@
 <script lang="ts">
+  import { appChartContext } from "../app-chart-context.svelte";
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
-  import IobCobTrack from "./IobCobTrack.svelte";
-  import { partialEngine, setGlucoseChartContext } from "../chart-context.svelte";
-  import { computeNightscoutTrackLayout, computeTrackLayout } from "../engine/track-layout";
-  import type { GlucoseChartContext } from "../chart-context.svelte";
-  import type {
-    BolusMarkerData,
-    CarbMarkerData,
-    GlucosePoint,
-    SeriesPoint,
-  } from "../engine/chart-data-view.svelte";
+  import { IobCobTrack } from "@nocturne/charts";
+  import { partialView, setGlucoseChartContext } from "@nocturne/charts";
+  import { computeNightscoutTrackLayout, computeTrackLayout } from "@nocturne/charts/core";
+  import type { BolusMarkerData, CarbMarkerData, GlucosePoint, SeriesPoint } from "@nocturne/charts";
 
   interface Props {
     carbMarkers?: CarbMarkerData[];
@@ -38,7 +33,7 @@
   const height = 300;
   const xDomain: [Date, Date] = [new Date(baseTime), new Date(baseTime + 3 * 60 * 60 * 1000)];
 
-  const engineStub = partialEngine({
+  const engineStub = partialView({
     get iobData() {
       return iobData;
     },
@@ -58,24 +53,24 @@
     variant === "nightscout"
       ? computeNightscoutTrackLayout(height, 400, 1)
       : computeTrackLayout(
-      height,
-      400,
-      1,
-      maxIob,
-      { basal: false, iob: true, cob: true },
-      { pumpMode: false, override: false, profile: false, activity: false },
-      minIob,
-    )
+          height,
+          400,
+          1,
+          maxIob,
+          { basal: false, iob: true, cob: true },
+          { pumpMode: false, override: false, profile: false, activity: false },
+          minIob,
+        )
   );
 
-  const ctx: GlucoseChartContext = {
-    get engine() {
+  const ctx = appChartContext({
+    get view() {
       return engineStub;
     },
     get layout() {
       return layout;
     },
-  };
+  });
   setGlucoseChartContext(ctx);
 </script>
 

@@ -16,16 +16,20 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Controller for managing Nightscout activity data.
-/// Delegates to <see cref="IActivityService"/> which routes sensor data (heart rate, step count)
-/// to dedicated tables and regular activities to StateSpans.
+/// Nightscout activity: heart rate, step count and other activity records. A client can list, read, create,
+/// update and delete them.
 /// </summary>
+/// <remarks>
+/// Delegates to <see cref="IActivityService"/>, which routes sensor data (heart rate, step count) to dedicated
+/// tables and regular activities to StateSpans.
+/// </remarks>
 /// <seealso cref="IActivityService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class ActivityController : ControllerBase
 {
     private readonly IActivityService _activityService;
@@ -84,59 +88,48 @@ public class ActivityController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        // Normalize skip parameter (negative is not valid)
+        if (skip < 0)
         {
-            // Normalize skip parameter (negative is not valid)
-            if (skip < 0)
+            skip = 0; // Normalize to 0 for Nightscout compatibility
+        }
+
+        // An empty array covers both a negative count (Nightscout behavior) and a page
+        // starting past the merged paging window.
+        var pageCount = LegacyReadLimits.ClampMergedPage(
+            LegacyReadLimits.ZeroAsAbsent(count) ?? LegacyReadLimits.MaxMergedCount, skip);
+        if (pageCount <= 0)
+        {
+            return Ok(Array.Empty<Activity>());
+        }
+
+        var find = LegacyFindDateWindow.Apply(
+            LegacyFindQueryString.Resolve(Request, null),
+            _timeProvider.GetUtcNow(),
+            windowUnfiltered: true);
+
+        var activities = await _activityService.GetActivitiesAsync(
+            find: find,
+            count: pageCount,
+            skip: skip,
+            cancellationToken: cancellationToken
+        );
+
+        var activitiesList = ActivityReadScopeGuard.Filter(
+            activities, _activityDecomposer, HttpContext.GetGrantedScopes());
+        if (activitiesList.Count > 0)
+        {
+            var latestActivity = activitiesList.FirstOrDefault();
+            if (latestActivity != null && !string.IsNullOrEmpty(latestActivity.CreatedAt))
             {
-                skip = 0; // Normalize to 0 for Nightscout compatibility
-            }
-
-            // An empty array covers both a negative count (Nightscout behavior) and a page
-            // starting past the merged paging window.
-            var pageCount = LegacyReadLimits.ClampMergedPage(
-                LegacyReadLimits.ZeroAsAbsent(count) ?? LegacyReadLimits.MaxMergedCount, skip);
-            if (pageCount <= 0)
-            {
-                return Ok(Array.Empty<Activity>());
-            }
-
-            var find = LegacyFindDateWindow.Apply(
-                LegacyFindQueryString.Resolve(Request, null),
-                _timeProvider.GetUtcNow(),
-                windowUnfiltered: true);
-
-            var activities = await _activityService.GetActivitiesAsync(
-                find: find,
-                count: pageCount,
-                skip: skip,
-                cancellationToken: cancellationToken
-            );
-
-            var activitiesList = ActivityReadScopeGuard.Filter(
-                activities, _activityDecomposer, HttpContext.GetGrantedScopes());
-            if (activitiesList.Count > 0)
-            {
-                var latestActivity = activitiesList.FirstOrDefault();
-                if (latestActivity != null && !string.IsNullOrEmpty(latestActivity.CreatedAt))
+                if (UploaderTimestamp.TryParse(latestActivity.CreatedAt, out var createdDate))
                 {
-                    if (UploaderTimestamp.TryParse(latestActivity.CreatedAt, out var createdDate))
-                    {
-                        Response.Headers.Append("Last-Modified", createdDate.ToString("R"));
-                    }
+                    Response.Headers.Append("Last-Modified", createdDate.ToString("R"));
                 }
             }
+        }
 
-            return Ok(activitiesList);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving activities");
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while retrieving activities" }
-            );
-        }
+        return Ok(activitiesList);
     }
 
     /// <summary>
@@ -163,25 +156,14 @@ public class ActivityController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var activity = ActivityReadScopeGuard.FirstReadable(
-                await _activityService.GetStoredActivitiesAsync(id, cancellationToken),
-                _activityDecomposer,
-                HttpContext.GetGrantedScopes());
-            if (activity == null)
-                return NotFound(new { error = $"Activity with ID {id} not found" });
+        var activity = ActivityReadScopeGuard.FirstReadable(
+            await _activityService.GetStoredActivitiesAsync(id, cancellationToken),
+            _activityDecomposer,
+            HttpContext.GetGrantedScopes());
+        if (activity == null)
+            return NotFound(new { error = $"Activity with ID {id} not found" });
 
-            return Ok(activity);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving activity with ID {Id}", id);
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while retrieving the activity" }
-            );
-        }
+        return Ok(activity);
     }
 
     /// <summary>
@@ -244,14 +226,6 @@ public class ActivityController : ControllerBase
             _logger.LogWarning(ex, "Invalid JSON in create activities request");
             return BadRequest(new { error = "Invalid activity data format" });
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating activities");
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while creating activities" }
-            );
-        }
     }
 
     /// <summary>
@@ -310,26 +284,11 @@ public class ActivityController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (activity == null)
-                return BadRequest(new { error = "Activity data is required" });
+        if (activity == null)
+            return BadRequest(new { error = "Activity data is required" });
 
-            activity.Id = id;
-            return await SaveAsync(activity, cancellationToken);
-        }
-        catch (RecreationBlockedException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating activity with ID {Id}", id);
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while updating the activity" }
-            );
-        }
+        activity.Id = id;
+        return await SaveAsync(activity, cancellationToken);
     }
 
     /// <summary>
@@ -345,19 +304,8 @@ public class ActivityController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var deleted = await _activityService.DeleteActivityAsync(id, cancellationToken);
-            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting activity with ID {Id}", id);
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while deleting the activity" }
-            );
-        }
+        var deleted = await _activityService.DeleteActivityAsync(id, cancellationToken);
+        return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
     }
 
     /// <summary>
@@ -398,9 +346,6 @@ public class ActivityController : ControllerBase
         var created = await _activityService.CreateActivitiesAsync([activity], cancellationToken);
         return created.FirstOrDefault() is { } saved
             ? Ok(saved)
-            : StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while saving the activity" }
-            );
+            : throw new InvalidOperationException("An error occurred while saving the activity");
     }
 }

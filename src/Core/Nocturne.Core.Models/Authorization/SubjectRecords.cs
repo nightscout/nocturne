@@ -1,7 +1,7 @@
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>A subject to store.</summary>
-/// <param name="ApprovalStatus">"Approved" or "Pending", as the access-request flow spells them.</param>
+/// <param name="ApprovalStatus">An <see cref="Authorization.ApprovalStatus"/> member name.</param>
 /// <param name="Id">The id to store under; null lets the store choose one.</param>
 /// <param name="RoleNames">
 /// Global roles to assign on creation, by name. A name no role carries is skipped; duplicates,
@@ -73,7 +73,16 @@ public sealed record SubjectEdit(
     string? ApprovalStatus = null,
     string? PreferredLanguage = null,
     string? Preferences = null,
-    DateTime? LastLoginAt = null);
+    DateTime? LastLoginAt = null)
+{
+    /// <summary>Grants a subject that asked for access: it becomes active and can sign in.</summary>
+    public static readonly SubjectEdit AccessApproved =
+        new(IsActive: true, ApprovalStatus: nameof(Authorization.ApprovalStatus.Approved));
+
+    /// <summary>Refuses a subject that asked for access. It stays inactive.</summary>
+    public static readonly SubjectEdit AccessDenied =
+        new(ApprovalStatus: nameof(Authorization.ApprovalStatus.Denied));
+}
 
 /// <summary>The profile fields an administrator's edit replaces together, null members included.</summary>
 public sealed record SubjectProfile(string Name, string? Email, string? Notes);

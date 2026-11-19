@@ -248,11 +248,14 @@ public class DemoTimelineTests
 
         foreach (var day in exerciseDays)
         {
-            var (start, _) = DemoHealthDataGenerator.WorkoutWindowFor(day);
+            var (start, end) = DemoHealthDataGenerator.WorkoutWindowFor(day);
             spans.Should().Contain(s =>
                 s.Category == StateSpanCategory.Override
                 && s.StartLocal == start.AddMinutes(-10),
                 $"exercise day {day:yyyy-MM-dd} carries a workout override at the workout window");
+            spans.Should().ContainSingle(s => s.Category == StateSpanCategory.Exercise && s.StartLocal.Date == day)
+                .Which.Should().Match<DemoLifestyleSeeds.SpanSeed>(s => s.StartLocal == start && s.EndLocal == end,
+                    $"exercise day {day:yyyy-MM-dd} records the workout as an exercise span, which the day filters read");
         }
     }
 

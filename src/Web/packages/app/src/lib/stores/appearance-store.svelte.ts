@@ -586,7 +586,7 @@ function applyColorTheme(theme: ColorTheme): void {
   }
 }
 
-const RANGE_PALETTE_CLASS = "range-palette-clarity";
+export const RANGE_PALETTE_CLASS = "range-palette-clarity";
 
 function applyGlucoseRangePalette(palette: GlucoseRangePalette): void {
   if (!browser) return;
@@ -632,7 +632,6 @@ if (browser) {
   // Use setTimeout to ensure DOM is ready
   setTimeout(() => {
     applyColorTheme(colorTheme.current);
-    applyGlucoseRangePalette(glucoseRangePalette.current);
   }, 0);
 }
 
@@ -924,6 +923,11 @@ export function collectPreferences(): UserDisplayPreferences {
   };
 }
 
+function hydratePreferences(prefs: UserDisplayPreferences): void {
+  for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
+  hydrateResolvedEnergyUnit(prefs);
+}
+
 /**
  * Apply a server- (or cookie-) sourced preference payload to the store without
  * echoing back to the backend. Only fields present in `prefs` are applied.
@@ -935,8 +939,7 @@ export function applyPreferences(
 ): void {
   if (!prefs) return;
 
-  for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
-  hydrateResolvedEnergyUnit(prefs);
+  hydratePreferences(prefs);
 
   if (browser) {
     applyColorTheme(colorTheme.current);
@@ -958,6 +961,7 @@ export function applyTenantPresentation(prefs: UserDisplayPreferences | null | u
   if (prefs) hydrateResolvedEnergyUnit(prefs);
   for (const pref of syncedRegistry.values()) pref.fallBackTo(prefs ?? {});
   applyColorTheme(colorTheme.current);
+  applyGlucoseRangePalette(glucoseRangePalette.current);
 }
 
 /**
@@ -1027,6 +1031,7 @@ export function presentOwnerPreferences(prefs: UserDisplayPreferences | null | u
   if (prefs) hydrateResolvedEnergyUnit(prefs);
   for (const pref of syncedRegistry.values()) pref.presentFrom(prefs ?? {});
   applyColorTheme(colorTheme.current);
+  applyGlucoseRangePalette(glucoseRangePalette.current);
 }
 
 /** True if any synced preference has a stored value on this device (legacy localStorage / prior sync). */
@@ -1167,7 +1172,10 @@ if (browser) {
   const devicePreferences = readDevicePreferences();
   // localStorage can hold units another tenant's cookie put there, which SSR never sees.
   if (!devicePreferences?.glucoseUnits) glucoseUnits.forget();
-  applyPreferences(devicePreferences);
+  if (devicePreferences) {
+    hydratePreferences(devicePreferences);
+    applyColorTheme(colorTheme.current);
+  }
   mirrorColorScheme();
 
   // Cross-tab sync: mirror another tab's change into this tab's store.

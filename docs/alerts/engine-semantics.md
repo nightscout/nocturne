@@ -32,7 +32,8 @@ has exactly one spelling for every property name and enum value. Anything else i
 - an enum value is a JSON string that is **exactly** one member's wire name. Another case,
   surrounding whitespace, or an integer (ordinal) names no member
 - condition-only enums use snake_case wire names (`TempBasalMetric`: `rate` |
-  `percent_of_scheduled`; `GlucoseBucket`: `very_low` | `low` | `tight_range` | `in_range`
+  `percent_of_scheduled`; `TransmitterBatteryMetric`: `voltage_a` | `voltage_b` |
+  `resistance` | `days`; `GlucoseBucket`: `very_low` | `low` | `tight_range` | `in_range`
   | `high` | `very_high`; `AlertWeekday`: `sunday` … `saturday`; `TrendBucket`;
   `AlertComparisonOperator`: `>` `>=` `<` `<=` `==`; the composite operator, `direction`
   and `alert_state` `state` words)
@@ -92,7 +93,7 @@ this tick):
 | `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
 | `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained` |
 | `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4) |
-| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket` or `day_of_week` list member |
+| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket` or `day_of_week` list member |
 | `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets` or a `day_of_week` `days` that is absent, `null` or empty |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
 | `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
@@ -173,10 +174,10 @@ written. Every operand below is present and valid (§1.4).
 | Kind | Payload | Inputs | Semantics | Null / cold-start behaviour |
 |---|---|---|---|---|
 | `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false |
-| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
+| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null ⇒ **false** (cold start); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false |
+| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ false |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ false |
@@ -190,6 +191,7 @@ written. Every operand below is present and valid (§1.4).
 | `pump_battery` | `operator`, `value` (%) | `PumpBatteryPercent`, `HasEverPumpSnapshot` | `Compare` | guard false ⇒ false; percent null ⇒ false |
 | `temp_basal` | `metric` (`rate`\|`percent_of_scheduled`), `operator`, `value` | `ActiveTempBasal` | `rate`: compare `Rate` (U/hr). `percent_of_scheduled`: compare `Rate / ScheduledRate * 100` (decimal division) | no active temp ⇒ false (**no** HasEver guard, by design); `ScheduledRate` null or 0 ⇒ false |
 | `uploader_battery` | `operator`, `value` (%) | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `Compare` | guard false ⇒ false; percent null ⇒ false |
+| `transmitter_battery` | `metric` (`voltage_a`\|`voltage_b`\|`resistance`\|`days`), `operator`, `value` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `Compare` against the metric's reading, unscaled as the transmitter reports it | reading null ⇒ false (**no** HasEver guard) |
 | `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate) |
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ false; ratio null ⇒ false |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off |
@@ -222,6 +224,24 @@ The context is assembled host-side (enricher in the backend; local assembler in
 Prelude). For the crate it is pure input data. Fields and their consumers are the table
 in §3 plus:
 
+- `TrendRate` is the reading's stored (vendor) rate, used unchanged. Without one, it is
+  derived as `(mgdl - previous.mgdl) / minutes between them` from the nearest earlier
+  reading of the same stream and the same uploader with a glucose value. A stream is the
+  registered device the reading is attributed to, else its `(data_source, device)` pair. The
+  uploader is the reading's `data_source`; a null and an empty one are the same uploader and
+  match nothing else. So when two apps upload one registered CGM, another app's copy of a
+  reading is never the earlier reading, linked by deduplication or not. That earlier reading
+  may be a copy deduplication hides or a reading of a bucket its stream lost to another
+  stream, but never a copy in the reading's own duplicate group (one uploader can send a
+  reading twice under two ids at one timestamp). A pair under **30 seconds** apart
+  (a duplicate timestamp included) or over **15 minutes** apart gives null; exactly 30
+  seconds and exactly 15 minutes derive. A reading without a glucose value derives nothing.
+  Replay derives by the same rule from the readings it loads.
+- `TrendBucket` is the bucket of `TrendRate` (`>= 3` rising_fast, `>= 1` rising, `>= -1`
+  flat, `>= -3` falling, else falling_fast, mg/dL/min). With `TrendRate` null it is the
+  bucket of the reading's stored arrow (`DoubleUp` rising_fast, `SingleUp`/`FortyFiveUp`
+  rising, `Flat` flat, `FortyFiveDown`/`SingleDown` falling, `DoubleDown` falling_fast;
+  any other arrow, or none, gives null). The arrow never becomes a `TrendRate`.
 - `CurrentRuleId` / `CurrentPath`: threading state for sustained timers; provided by the
   driver (orchestrator/sweep/replay), maintained by the container evaluators as they
   descend.
@@ -336,6 +356,7 @@ reads a rule's kinds the same way.
 | `pump` | `ReservoirUnits`, `ReservoirIsLowerBound`, `PumpBatteryPercent`, `HasEverPumpSnapshot` | `reservoir`, `pump_battery`, `pump_suspended` |
 | `aps` | `LastApsCycleAt`, `LastApsEnactedAt`, `HasEverApsCycled`, `SensitivityRatio`, `HasEverApsSensitivity` | `loop_stale`, `loop_enaction_stale`, `sensitivity_ratio` |
 | `uploader` | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `uploader_battery` |
+| `transmitter` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `transmitter_battery` |
 | `state_spans` | `ActiveOverride`, `ActivePumpSuspension`, `ActivePumpState`, `ActiveStateSpans` | `override_active`, `pump_suspended`, `pump_state`, `state_span_active` |
 | `device_ages` | `LastSiteChangeAt`, `LastSensorStartAt` | `site_age`, `sensor_age` |
 | `trackers` | `ActiveTrackers` | `tracker_age` |

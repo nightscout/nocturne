@@ -46,7 +46,7 @@ public class ActivityStoredRecordScopeTests
         _decomposer = new(
             new ActivityRecordRepository(Mock.Of<INocturneDbContextFactory>(), TimeProvider.System),
             Mock.Of<IStateSpanRepository>(),
-            _sleep.Object, NullLogger<ActivityDecomposer>.Instance);
+            _sleep.Object, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
         var documents = new Mock<IDocumentProcessingService>();
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns((IEnumerable<Activity> a) => a);

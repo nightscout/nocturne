@@ -23,6 +23,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -259,13 +260,13 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             isProfileSwitch = true;
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, "Temporary Override", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.TemporaryOverride, StringComparison.OrdinalIgnoreCase))
         {
             isOverride = true;
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, TemporaryTargetEventType, StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.TemporaryTarget, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.TemporaryTargetCancel, StringComparison.OrdinalIgnoreCase))
         {
             isTemporaryTarget = true;
             delegateToStateSpan = true;
@@ -287,7 +288,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
               || string.Equals(eventType, TreatmentTypes.Smb, StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, TreatmentTypes.AutomaticBolus, StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, TreatmentTypes.Bolus, StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
+              || string.Equals(eventType, TreatmentTypes.ExternalInsulin, StringComparison.OrdinalIgnoreCase))
         {
             // As with a meal half, a dose type carrying only carbs is a carb intake, and a Carb
             // Correction carrying only insulin is a bolus, so neither drops what it was uploaded with.
@@ -303,13 +304,13 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             produceBGCheck = true;
         }
-        else if (string.Equals(eventType, "Announcement", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.Announcement, StringComparison.OrdinalIgnoreCase))
         {
             produceNote = true;
             isAnnouncement = true;
         }
-        else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Exercise", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.Note, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.Exercise, StringComparison.OrdinalIgnoreCase))
         {
             produceNote = true;
         }
@@ -394,7 +395,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// sends a treatment under <see cref="MongoObjectId.Coerce"/> of its key, so a uuid-shaped
     /// legacy id comes back as its prefix and any other non-ObjectId one as its hash; earlier
     /// write-backs sent the record's served id, its own uuid or that uuid's prefix, whatever its
-    /// legacy id. A meal's bolus and carbs share a correlation id, so an adoption carries to both.
+    /// legacy id. A meal's bolus and carbs share a correlation id, so an adoption carries to both. An
+    /// override or temporary target is stored as a state span, and goes upstream under its key as any
+    /// treatment does.
     /// </summary>
     private IReadOnlyList<KeyedTable> TreatmentTables =>
     [
@@ -406,6 +409,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         Table(_bolusCalculationRepository, TreatmentWireForms),
         Table(_tempBasalRepository, TreatmentWireForms),
         Table(_profileActivationRepository, TreatmentWireForms),
+        Table(new StateSpanLegacyKeys(_contexts, TreatmentSpanCategories), TreatmentWireForms),
     ];
 
     private const WireForms TreatmentWireForms = WireForms.UuidPrefix | WireForms.Hashed | WireForms.KeyedOwnId;
@@ -536,7 +540,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static StateSpan BuildTemporaryTargetSpan(Treatment treatment)
     {
         var isCancelled = treatment.Duration is null or 0
-            || string.Equals(treatment.EventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(treatment.EventType, TreatmentTypes.TemporaryTargetCancel, StringComparison.OrdinalIgnoreCase);
 
         return new StateSpan
         {
@@ -750,9 +754,11 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.CarbIntake
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedEventType(
-                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-                treatment, keepEventType, TreatmentTypes.CarbCorrection),
+            AdditionalProperties = PreBolusSplit.AddMealId(
+                UploadedEventType(
+                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    treatment, keepEventType, TreatmentTypes.CarbCorrection),
+                treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             Carbs = treatment.Carbs ?? 0,
             Device = UploadedDevice(treatment),
@@ -1178,7 +1184,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (treatment.DurationInMilliseconds is { } durationMs)
             metadata[ProfileSpanMetadata.DurationInMillisecondsKey] = durationMs;
 
-        AddPumpFields(metadata, treatment);
+        AddUploadedApp(metadata, treatment);
         AddServedTreatmentFields(metadata, treatment);
         AddInsulinContext(metadata, treatment);
 
@@ -1188,24 +1194,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static Dictionary<string, object> BuildEffectiveProfileMetadata(Treatment treatment)
     {
         var metadata = EffectiveProfileSwitch.Metadata(treatment);
-        AddPumpFields(metadata, treatment);
+        AddUploadedApp(metadata, treatment);
         AddServedTreatmentFields(metadata, treatment);
         AddInsulinContext(metadata, treatment);
         return metadata;
     }
 
-    /// <summary>The pump record ids and uploading app AAPS reads a profile switch back with.</summary>
-    private static void AddPumpFields(Dictionary<string, object> metadata, Treatment treatment)
+    private static void AddUploadedApp(Dictionary<string, object> metadata, Treatment treatment)
     {
-        if (treatment.PumpId is { } pumpId)
-            metadata[ProfileSpanMetadata.PumpIdKey] = pumpId;
-
-        if (!string.IsNullOrEmpty(treatment.PumpType))
-            metadata[ProfileSpanMetadata.PumpTypeKey] = treatment.PumpType;
-
-        if (!string.IsNullOrEmpty(treatment.PumpSerial))
-            metadata[ProfileSpanMetadata.PumpSerialKey] = treatment.PumpSerial;
-
         if (UploadedString(treatment, ProfileSpanMetadata.AppKey) is { Length: > 0 } app)
             metadata[ProfileSpanMetadata.AppKey] = app;
     }
@@ -1222,8 +1218,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             metadata["insulinCurve"] = icfg.Curve;
         }
     }
-
-    private const string TemporaryTargetEventType = "Temporary Target";
 
     private static Dictionary<string, object>? BuildOverrideMetadata(Treatment treatment)
     {
@@ -1270,7 +1264,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         // Nightscout stores a "Temporary Target Cancel" under that eventType, and finds it by it.
         if (treatment.EventType is { } eventType
-            && !string.Equals(eventType, TemporaryTargetEventType, StringComparison.Ordinal))
+            && !string.Equals(eventType, TreatmentTypes.TemporaryTarget, StringComparison.Ordinal))
             metadata[LegacyTreatmentTables.UploadedEventTypeKey] = eventType;
 
         if (treatment.Duration is { } duration)
@@ -1295,8 +1289,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     /// <summary>
     /// The upload fields every span <see cref="LegacyTreatmentTables.StateSpanTables"/> serves, and every
-    /// activation <see cref="LegacyProfileActivationTable"/> serves, reads back. <c>notes</c> lives here rather than in a Note of its own, which would serve the treatment
-    /// twice.
+    /// activation <see cref="LegacyProfileActivationTable"/> serves, reads back
+    /// (<see cref="LegacyTreatmentTables.RestoreServedFields"/>). <c>notes</c> lives here rather than in a
+    /// Note of its own, which would serve the treatment twice.
     /// </summary>
     private static void AddServedTreatmentFields(Dictionary<string, object> metadata, Treatment treatment)
     {
@@ -1314,6 +1309,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         if (TreatmentUploadedTimestamp.Uploaded(treatment) is { } timestamp)
             metadata[LegacyTreatmentTables.UploadedTimestampKey] = timestamp;
+
+        SpanUploadedFields.Keep(metadata, treatment);
+        TreatmentClientId.KeepInMetadata(metadata, treatment);
 
         metadata[StateSpanMetadataExtensions.UtcOffsetKey] = treatment.UtcOffset ?? 0;
     }
@@ -1424,6 +1422,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             foreach (var (span, source) in sources)
                 result.SpanOwners[span] = source.CorrelationId;
 
+            // The span repository's writes take no origin, so a live batch marks its spans as the
+            // repositories mark their rows.
+            using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
             await spans.WriteAsync(_stateSpanService, result, result.SpanOwners, ct, (span, refusal) =>
             {
                 if (sources.TryGetValue(span, out var source))

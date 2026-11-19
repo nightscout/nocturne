@@ -16,14 +16,12 @@ namespace Nocturne.API.Tests.Controllers.V2;
 public class SummaryControllerTests
 {
     private readonly Mock<ISummaryService> _mockSummaryService;
-    private readonly Mock<ILogger<SummaryController>> _mockLogger;
     private readonly SummaryController _controller;
 
     public SummaryControllerTests()
     {
         _mockSummaryService = new Mock<ISummaryService>();
-        _mockLogger = new Mock<ILogger<SummaryController>>();
-        _controller = new SummaryController(_mockSummaryService.Object, _mockLogger.Object);
+        _controller = new SummaryController(_mockSummaryService.Object);
     }
 
     [Fact]
@@ -107,7 +105,7 @@ public class SummaryControllerTests
     }
 
     [Fact]
-    public async Task GetSummary_WhenServiceThrows_ReturnsInternalServerError()
+    public async Task GetSummary_WhenServiceThrows_TheExceptionEscapes()
     {
         // Arrange
         _mockSummaryService
@@ -115,13 +113,10 @@ public class SummaryControllerTests
             .ThrowsAsync(new Exception("Test exception"));
 
         // Act
-        var result = await _controller.GetSummary(cancellationToken: CancellationToken.None);
+        var act = () => _controller.GetSummary(cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Result.Should().BeOfType<ObjectResult>();
-        var objectResult = result.Result as ObjectResult;
-        objectResult!.StatusCode.Should().Be(500);
-        objectResult.Value.Should().BeEquivalentTo(new { error = "Internal server error" });
+        await act.Should().ThrowAsync<Exception>().WithMessage("Test exception");
     }
 
     [Fact]

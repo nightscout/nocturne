@@ -1,4 +1,5 @@
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
+import { clearIfSignedOut } from "#lib/stores/member-storage.js";
 
 const PRELOAD_RELOAD_KEY = "nocturne:preload-error-reload";
 const PRELOAD_RELOAD_WINDOW_MS = 10_000;
@@ -9,6 +10,7 @@ const PRELOAD_RELOAD_WINDOW_MS = 10_000;
  * chunk that is genuinely missing cannot reload the tab in a loop.
  */
 export const init: ClientInit = () => {
+  clearIfSignedOut();
   window.addEventListener("vite:preloadError", () => {
     try {
       const last = Number(sessionStorage.getItem(PRELOAD_RELOAD_KEY));

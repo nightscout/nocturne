@@ -6,6 +6,7 @@ import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 const state = vi.hoisted(() => ({
   url: new URL("http://sam.localhost/auth/login"),
   isAuthenticated: false,
+  unreadable: false,
   goto: vi.fn(async (_url: string, _options?: unknown) => {}),
 }));
 
@@ -26,12 +27,16 @@ vi.mock("../auth.remote", () => ({
   getAuthState: () =>
     remoteQuery(() =>
       state.isAuthenticated
-        ? { isAuthenticated: true, user: { subjectId: "s" } }
-        : { isAuthenticated: false, user: null },
+        ? { isAuthenticated: true, unreadable: false, user: { subjectId: "s" } }
+        : { isAuthenticated: false, unreadable: state.unreadable, user: null },
     ),
 }));
 vi.mock("#lib/api/generated/index.js", () => ({
   getAuthStatus: () => remoteQuery(() => ({ allowAccessRequests: true })),
+}));
+vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
+  accessRequestOptions: vi.fn(),
+  accessRequestComplete: vi.fn(),
 }));
 vi.mock("#lib/components/auth/LoginForm.svelte", () => import("#lib/test-stubs/Empty.test-stub.svelte"));
 vi.mock("#lib/components/auth/GuestCodeForm.svelte", () => import("#lib/test-stubs/Empty.test-stub.svelte"));
@@ -47,39 +52,24 @@ function loginWith(returnUrl: string) {
   return render(LoginPage, { data: {} } as never);
 }
 
+const DRAFT_KEY = "nocturne.member.custom-report-draft.dev.s.new";
+
 beforeEach(() => {
-  sessionStorage.clear();
   state.isAuthenticated = false;
+  state.unreadable = false;
+  localStorage.clear();
   state.goto.mockClear();
 });
 
 describe("Login page", () => {
-  it("sends a membership request to sign-in with the page's own destination and a flow id", async () => {
+  it("opens the membership request dialog in place, without leaving for sign-in", async () => {
     loginWith("/calendar");
 
     await page.getByTestId("request-membership-link").click();
-    await page.getByRole("textbox").fill("hello");
-    await page.getByRole("button", { name: "Continue to sign up" }).click();
 
-    await vi.waitFor(() => expect(state.goto).toHaveBeenCalledOnce());
-    const target = new URL(String(state.goto.mock.calls[0][0]), "http://sam.localhost");
-    expect(target.searchParams.get("returnUrl")).toMatch(/^\/calendar\?membershipRequest=[0-9a-f-]{36}$/);
-  });
-
-  it("refuses a destination that is not a same-origin path", async () => {
-    for (const returnUrl of ["https://evil.test/x", "//evil.test/x", "javascript:alert(1)"]) {
-      state.goto.mockClear();
-      const login = loginWith(returnUrl);
-
-      await page.getByTestId("request-membership-link").click();
-      await page.getByRole("textbox").fill("hello");
-      await page.getByRole("button", { name: "Continue to sign up" }).click();
-
-      await vi.waitFor(() => expect(state.goto).toHaveBeenCalledOnce());
-      const target = new URL(String(state.goto.mock.calls[0][0]), "http://sam.localhost");
-      expect(target.searchParams.get("returnUrl")).toMatch(/^\/\?membershipRequest=/);
-      login.unmount();
-    }
+    await expect.element(page.getByTestId("request-membership-dialog")).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Send request" })).toBeInTheDocument();
+    expect(state.goto).not.toHaveBeenCalled();
   });
 
   it("sends a visitor who is already signed in home rather than off-site", async () => {
@@ -88,5 +78,33 @@ describe("Login page", () => {
     loginWith("https://evil.test/x");
 
     await vi.waitFor(() => expect(state.goto).toHaveBeenCalledWith("/", { replace: true }));
+  });
+
+  it("clears what the browser kept for a member once the server says nobody is signed in", async () => {
+    localStorage.setItem(DRAFT_KEY, "{}");
+
+    loginWith("/calendar");
+
+    await vi.waitFor(() => expect(localStorage.getItem(DRAFT_KEY)).toBeNull());
+  });
+
+  it("keeps the drafts of a member who is still signed in", async () => {
+    state.isAuthenticated = true;
+    localStorage.setItem(DRAFT_KEY, "{}");
+
+    loginWith("/calendar");
+
+    await vi.waitFor(() => expect(state.goto).toHaveBeenCalled());
+    expect(localStorage.getItem(DRAFT_KEY)).toBe("{}");
+  });
+
+  it("keeps the drafts when the server could not read the session", async () => {
+    state.unreadable = true;
+    localStorage.setItem(DRAFT_KEY, "{}");
+
+    loginWith("/calendar");
+
+    await expect.element(page.getByTestId("sign-in-card")).toBeInTheDocument();
+    expect(localStorage.getItem(DRAFT_KEY)).toBe("{}");
   });
 });

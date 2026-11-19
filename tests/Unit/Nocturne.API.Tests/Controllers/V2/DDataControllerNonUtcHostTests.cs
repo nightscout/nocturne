@@ -36,8 +36,7 @@ public sealed class DDataControllerNonUtcHostTests : IDisposable
 
         _controller = new DDataController(
             _service.Object,
-            Mock.Of<IActivityDecomposer>(),
-            NullLogger<DDataController>.Instance
+            Mock.Of<IActivityDecomposer>()
         );
         _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
     }

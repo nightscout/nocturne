@@ -18,9 +18,12 @@ using Nocturne.Core.Contracts.Entries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Entries controller that provides 1:1 compatibility with Nightscout entries endpoints.
-/// Implements the /api/v1/entries/* endpoints from the legacy JavaScript implementation.
+/// Nightscout entries: sensor glucose, meter glucose and calibration documents. A client can read the current
+/// entry, query entries, and create, update and delete them.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/entries/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IDocumentProcessingService"/>
 /// <seealso cref="IAlertOrchestrator"/>
@@ -83,11 +86,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Current entry endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
 
         Entry[] current = currentEntry is null ? [] : [currentEntry];
@@ -386,10 +384,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Create entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (!TryParseEntries(entryData, out var entriesToCreate))
@@ -781,11 +775,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Bulk delete entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
         return await DeleteMatchingEntriesAsync(findQuery, findQuery, cancellationToken);

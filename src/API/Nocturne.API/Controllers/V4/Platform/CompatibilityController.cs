@@ -15,7 +15,8 @@ using Nocturne.Infrastructure.Data.Abstractions;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// API controller for compatibility dashboard data.
+/// Compatibility dashboard data. Read the proxy configuration, metrics and endpoints, list and read
+/// discrepancy analyses, and run a manual test.
 /// </summary>
 /// <seealso cref="IDiscrepancyPersistenceService"/>
 /// <seealso cref="IDiscrepancyAnalysisRepository"/>
@@ -74,26 +75,19 @@ public class CompatibilityController : ControllerBase
     [HttpGet("metrics")]
     [RequireSuperuser]
     [ProducesResponseType(typeof(CompatibilityMetrics), StatusCodes.Status200OK)]
+    [ErrorEnvelope]
     public async Task<ActionResult<CompatibilityMetrics>> GetMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
         [FromQuery] DateTimeOffset? toDate = null,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var metrics = await _persistenceService.GetCompatibilityMetricsAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
-            return Ok(metrics);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving compatibility metrics");
-            return Problem(detail: "Failed to retrieve metrics", statusCode: 500, title: "Internal Server Error");
-        }
+        var metrics = await _persistenceService.GetCompatibilityMetricsAsync(
+            fromDate,
+            toDate,
+            cancellationToken
+        );
+        return Ok(metrics);
     }
 
     /// <summary>
@@ -102,26 +96,19 @@ public class CompatibilityController : ControllerBase
     [HttpGet("endpoints")]
     [RequireSuperuser]
     [ProducesResponseType(typeof(IEnumerable<EndpointMetrics>), StatusCodes.Status200OK)]
+    [ErrorEnvelope]
     public async Task<ActionResult<IEnumerable<EndpointMetrics>>> GetEndpointMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
         [FromQuery] DateTimeOffset? toDate = null,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var metrics = await _persistenceService.GetEndpointMetricsAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
-            return Ok(metrics);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving endpoint metrics");
-            return Problem(detail: "Failed to retrieve endpoint metrics", statusCode: 500, title: "Internal Server Error");
-        }
+        var metrics = await _persistenceService.GetEndpointMetricsAsync(
+            fromDate,
+            toDate,
+            cancellationToken
+        );
+        return Ok(metrics);
     }
 
     /// <summary>
@@ -130,6 +117,7 @@ public class CompatibilityController : ControllerBase
     [HttpGet("analyses")]
     [RequireSuperuser]
     [ProducesResponseType(typeof(AnalysesListResponse), StatusCodes.Status200OK)]
+    [ErrorEnvelope]
     public async Task<ActionResult<AnalysesListResponse>> GetAnalyses(
         [FromQuery] string? requestPath = null,
         [FromQuery] ResponseMatchType? overallMatch = null,
@@ -144,50 +132,42 @@ public class CompatibilityController : ControllerBase
         count = V4ReadLimits.ClampLimit(count);
         skip = V4ReadLimits.ClampOffset(skip);
 
-        try
-        {
-            var analyses = await _repository.GetAnalysesAsync(
-                requestPath,
-                overallMatch.HasValue ? (int)overallMatch.Value : null,
-                fromDate,
-                toDate,
-                count,
-                skip,
-                cancellationToken
-            );
+        var analyses = await _repository.GetAnalysesAsync(
+            requestPath,
+            overallMatch.HasValue ? (int)overallMatch.Value : null,
+            fromDate,
+            toDate,
+            count,
+            skip,
+            cancellationToken
+        );
 
-            var analysisItems = analyses
-                .Select(a => new AnalysisListItemDto
-                {
-                    Id = a.Id,
-                    TraceId = a.TraceId,
-                    AnalysisTimestamp = a.AnalysisTimestamp,
-                    RequestMethod = a.RequestMethod,
-                    RequestPath = a.RequestPath,
-                    OverallMatch = a.OverallMatch,
-                    StatusCodeMatch = a.StatusCodeMatch,
-                    BodyMatch = a.BodyMatch,
-                    NightscoutStatusCode = a.NightscoutStatusCode,
-                    NocturneStatusCode = a.NocturneStatusCode,
-                    NightscoutResponseTimeMs = a.NightscoutResponseTimeMs,
-                    NocturneResponseTimeMs = a.NocturneResponseTimeMs,
-                    TotalProcessingTimeMs = a.TotalProcessingTimeMs,
-                    Summary = a.Summary,
-                    CriticalDiscrepancyCount = a.CriticalDiscrepancyCount,
-                    MajorDiscrepancyCount = a.MajorDiscrepancyCount,
-                    MinorDiscrepancyCount = a.MinorDiscrepancyCount,
-                    NightscoutMissing = a.NightscoutMissing,
-                    NocturneMissing = a.NocturneMissing,
-                })
-                .ToList();
+        var analysisItems = analyses
+            .Select(a => new AnalysisListItemDto
+            {
+                Id = a.Id,
+                TraceId = a.TraceId,
+                AnalysisTimestamp = a.AnalysisTimestamp,
+                RequestMethod = a.RequestMethod,
+                RequestPath = a.RequestPath,
+                OverallMatch = a.OverallMatch,
+                StatusCodeMatch = a.StatusCodeMatch,
+                BodyMatch = a.BodyMatch,
+                NightscoutStatusCode = a.NightscoutStatusCode,
+                NocturneStatusCode = a.NocturneStatusCode,
+                NightscoutResponseTimeMs = a.NightscoutResponseTimeMs,
+                NocturneResponseTimeMs = a.NocturneResponseTimeMs,
+                TotalProcessingTimeMs = a.TotalProcessingTimeMs,
+                Summary = a.Summary,
+                CriticalDiscrepancyCount = a.CriticalDiscrepancyCount,
+                MajorDiscrepancyCount = a.MajorDiscrepancyCount,
+                MinorDiscrepancyCount = a.MinorDiscrepancyCount,
+                NightscoutMissing = a.NightscoutMissing,
+                NocturneMissing = a.NocturneMissing,
+            })
+            .ToList();
 
-            return Ok(new AnalysesListResponse { Analyses = analysisItems, Total = analysisItems.Count });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving analyses");
-            return Problem(detail: "Failed to retrieve analyses", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(new AnalysesListResponse { Analyses = analysisItems, Total = analysisItems.Count });
     }
 
     /// <summary>
@@ -197,66 +177,59 @@ public class CompatibilityController : ControllerBase
     [RequireSuperuser]
     [ProducesResponseType(typeof(AnalysisDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ErrorEnvelope]
     public async Task<ActionResult<AnalysisDetailDto>> GetAnalysisDetail(
         Guid id,
         CancellationToken cancellationToken = default
     )
     {
-        try
+        var analysis = await _repository.GetAnalysisByIdAsync(id, cancellationToken);
+
+        if (analysis == null)
         {
-            var analysis = await _repository.GetAnalysisByIdAsync(id, cancellationToken);
-
-            if (analysis == null)
-            {
-                return Problem(detail: "Analysis not found", statusCode: 404, title: "Not Found");
-            }
-
-            var detail = new AnalysisDetailDto
-            {
-                Id = analysis.Id,
-                TraceId = analysis.TraceId,
-                AnalysisTimestamp = analysis.AnalysisTimestamp,
-                RequestMethod = analysis.RequestMethod,
-                RequestPath = analysis.RequestPath,
-                OverallMatch = analysis.OverallMatch,
-                StatusCodeMatch = analysis.StatusCodeMatch,
-                BodyMatch = analysis.BodyMatch,
-                NightscoutStatusCode = analysis.NightscoutStatusCode,
-                NocturneStatusCode = analysis.NocturneStatusCode,
-                NightscoutResponseTimeMs = analysis.NightscoutResponseTimeMs,
-                NocturneResponseTimeMs = analysis.NocturneResponseTimeMs,
-                TotalProcessingTimeMs = analysis.TotalProcessingTimeMs,
-                Summary = analysis.Summary,
-                SelectedResponseTarget = analysis.SelectedResponseTarget,
-                SelectionReason = analysis.SelectionReason,
-                CriticalDiscrepancyCount = analysis.CriticalDiscrepancyCount,
-                MajorDiscrepancyCount = analysis.MajorDiscrepancyCount,
-                MinorDiscrepancyCount = analysis.MinorDiscrepancyCount,
-                NightscoutMissing = analysis.NightscoutMissing,
-                NocturneMissing = analysis.NocturneMissing,
-                ErrorMessage = analysis.ErrorMessage,
-                Discrepancies = analysis
-                    .Discrepancies.Select(d => new DiscrepancyDetailDto
-                    {
-                        Id = d.Id,
-                        DiscrepancyType = d.DiscrepancyType,
-                        Severity = d.Severity,
-                        Field = d.Field,
-                        NightscoutValue = d.NightscoutValue,
-                        NocturneValue = d.NocturneValue,
-                        Description = d.Description,
-                        RecordedAt = d.RecordedAt,
-                    })
-                    .ToList(),
-            };
-
-            return Ok(detail);
+            return Problem(detail: "Analysis not found", statusCode: 404, title: "Not Found");
         }
-        catch (Exception ex)
+
+        var detail = new AnalysisDetailDto
         {
-            _logger.LogError(ex, "Error retrieving analysis detail for {Id}", id);
-            return Problem(detail: "Failed to retrieve analysis detail", statusCode: 500, title: "Internal Server Error");
-        }
+            Id = analysis.Id,
+            TraceId = analysis.TraceId,
+            AnalysisTimestamp = analysis.AnalysisTimestamp,
+            RequestMethod = analysis.RequestMethod,
+            RequestPath = analysis.RequestPath,
+            OverallMatch = analysis.OverallMatch,
+            StatusCodeMatch = analysis.StatusCodeMatch,
+            BodyMatch = analysis.BodyMatch,
+            NightscoutStatusCode = analysis.NightscoutStatusCode,
+            NocturneStatusCode = analysis.NocturneStatusCode,
+            NightscoutResponseTimeMs = analysis.NightscoutResponseTimeMs,
+            NocturneResponseTimeMs = analysis.NocturneResponseTimeMs,
+            TotalProcessingTimeMs = analysis.TotalProcessingTimeMs,
+            Summary = analysis.Summary,
+            SelectedResponseTarget = analysis.SelectedResponseTarget,
+            SelectionReason = analysis.SelectionReason,
+            CriticalDiscrepancyCount = analysis.CriticalDiscrepancyCount,
+            MajorDiscrepancyCount = analysis.MajorDiscrepancyCount,
+            MinorDiscrepancyCount = analysis.MinorDiscrepancyCount,
+            NightscoutMissing = analysis.NightscoutMissing,
+            NocturneMissing = analysis.NocturneMissing,
+            ErrorMessage = analysis.ErrorMessage,
+            Discrepancies = analysis
+                .Discrepancies.Select(d => new DiscrepancyDetailDto
+                {
+                    Id = d.Id,
+                    DiscrepancyType = d.DiscrepancyType,
+                    Severity = d.Severity,
+                    Field = d.Field,
+                    NightscoutValue = d.NightscoutValue,
+                    NocturneValue = d.NocturneValue,
+                    Description = d.Description,
+                    RecordedAt = d.RecordedAt,
+                })
+                .ToList(),
+        };
+
+        return Ok(detail);
     }
 
 

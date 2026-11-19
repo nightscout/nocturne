@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -149,6 +150,50 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
         var save = () => db.SaveChangesAsync();
 
         await save.Should().ThrowAsync<DbUpdateConcurrencyException>("an update keeps the clamp, so a hidden row is not found");
+    }
+
+    [Fact]
+    public async Task ClampedMember_BackdatesADndWindowThatTruncatesAnOpenOne()
+    {
+        var open = await SeedDndWindowAsync(DateTime.UtcNow.AddDays(-5), clearedAt: null);
+        await using var scope = ClampedScope();
+        var repository = new DndWindowRepository(Factory(scope));
+        var startedAt = DateTime.UtcNow.AddDays(-2);
+
+        var created = await repository.CreateAsync(new NewDndWindow(Guid.CreateVersion7(), DndScope.All, startedAt, null, "test"), default);
+
+        created.Outcome.Should().Be(DndWindowCreateOutcome.Created, "truncating the open window is not a clash of ids");
+        await using var owner = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);
+        (await owner.DndWindows.SingleAsync(w => w.Id == open)).EndsAt.Should().BeCloseTo(startedAt, TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
+    public async Task ClampedMember_RetriesTheClearOfAWindowClearedBeforeTheWindow_AndGetsItAsStored()
+    {
+        var clearedAt = DateTime.UtcNow.AddDays(-3);
+        var cleared = await SeedDndWindowAsync(DateTime.UtcNow.AddDays(-5), clearedAt);
+        var expired = await SeedDndWindowAsync(DateTime.UtcNow.AddDays(-5), clearedAt: null, endsAt: DateTime.UtcNow.AddDays(-4));
+        await using var scope = ClampedScope();
+        var repository = new DndWindowRepository(Factory(scope));
+
+        var retried = await repository.ClearAsync(cleared, default);
+
+        retried.Should().NotBeNull();
+        retried!.ClearedAt.Should().BeCloseTo(clearedAt, TimeSpan.FromMilliseconds(1), "the first clear is not rewritten");
+        (await repository.ClearAsync(expired, default)).Should().BeNull("a hidden window that was never cleared is not cleared now");
+        (await repository.ClearAsync(Guid.CreateVersion7(), default)).Should().BeNull();
+    }
+
+    private async Task<Guid> SeedDndWindowAsync(DateTime startedAt, DateTime? clearedAt, DateTime? endsAt = null)
+    {
+        await using var owner = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);
+        var window = new DndWindowEntity
+        {
+            Id = Guid.CreateVersion7(), Scope = DndScope.All, StartedAt = startedAt, EndsAt = endsAt, ClearedAt = clearedAt, CreatedAt = startedAt,
+        };
+        owner.DndWindows.Add(window);
+        await owner.SaveChangesAsync();
+        return window.Id;
     }
 
     private async Task<(Guid Definition, Guid Running)> SeedRunningTrackerAsync()

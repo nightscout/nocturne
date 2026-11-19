@@ -54,7 +54,7 @@ COPY --from=build /app/packages/bot/package.json packages/bot/
 COPY --from=build /app/packages/portal/package.json packages/portal/
 RUN pnpm install --frozen-lockfile --prod
 # Fail the build, not the container start, when server.js imports a module that was not copied.
-RUN cd packages/app && node -e "import('./server-origin-warning.js')"
+RUN cd packages/app && node -e "import('./server-origin-warning.js'); import('@napi-rs/canvas').then((c) => c.createCanvas(2, 2).toBuffer('image/png')); import('./build/report-image-worker/worker.mjs')"
 
 EXPOSE 3000
 ENV PORT=3000

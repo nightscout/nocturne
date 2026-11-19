@@ -117,6 +117,26 @@ public class FoodFindTests : IDisposable
     }
 
     [Fact]
+    public async Task GetByIds_ReadsTheNamedFoodsAndSkipsUnknownIds()
+    {
+        var apple = _context.Foods.Single(f => f.Name == "apple").Id;
+        var bread = _context.Foods.Single(f => f.Name == "synthetic bread").Id;
+
+        var foods = await _foods.GetFoodsByIdsAsync([apple, bread, Guid.NewGuid()]);
+
+        foods.Keys.Should().BeEquivalentTo([apple, bread]);
+        foods[apple].Name.Should().Be("apple");
+        (await _foods.GetFoodsByIdsAsync([])).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Search_IgnoresCase()
+    {
+        (await _foods.SearchFoodAsync("BREAD", 10, 0)).Select(f => f.Name).Should().Equal("synthetic bread");
+        (await _foods.SearchFoodAsync("Fruit", 10, 0)).Should().HaveCount(2);
+    }
+
+    [Fact]
     public async Task Search_MatchesCategoryAndSubcategory()
     {
         (await _foods.SearchFoodAsync("fruit", 10, 0)).Should().HaveCount(2);

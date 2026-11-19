@@ -13,7 +13,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for meal matching operations.
+/// Suggested matches between imported food entries and carb intake records. Accept a suggested match to link
+/// the food entry to a treatment, or dismiss it.
 /// </summary>
 /// <remarks>
 /// Meal matching surfaces suggested pairings between raw connector food entries
@@ -42,18 +43,15 @@ public class MealMatchingController : ControllerBase
     private readonly IMealMatchingService _mealMatchingService;
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly IInAppNotificationService _notificationService;
-    private readonly ILogger<MealMatchingController> _logger;
 
     public MealMatchingController(
         IMealMatchingService mealMatchingService,
         IConnectorFoodEntryRepository foodEntryRepository,
-        IInAppNotificationService notificationService,
-        ILogger<MealMatchingController> logger)
+        IInAppNotificationService notificationService)
     {
         _mealMatchingService = mealMatchingService;
         _foodEntryRepository = foodEntryRepository;
         _notificationService = notificationService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -136,6 +134,7 @@ public class MealMatchingController : ControllerBase
     [RemoteCommand(Invalidates = ["GetSuggestions", "Nutrition_GetMeals"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ErrorEnvelope]
     public async Task<ActionResult> AcceptMatch([FromBody] AcceptMatchRequest request)
     {
         var userId = HttpContext.GetSubjectIdString();
@@ -144,31 +143,22 @@ public class MealMatchingController : ControllerBase
             return Unauthorized();
         }
 
-        try
-        {
-            await _mealMatchingService.AcceptMatchAsync(
-                request.FoodEntryId,
-                request.CarbIntakeId,
-                request.Carbs,
-                request.TimeOffsetMinutes,
-                HttpContext.RequestAborted);
+        await _mealMatchingService.AcceptMatchAsync(
+            request.FoodEntryId,
+            request.CarbIntakeId,
+            request.Carbs,
+            request.TimeOffsetMinutes,
+            HttpContext.RequestAborted);
 
-            // Archive the notification
-            await _notificationService.ArchiveBySourceAsync(
-                userId,
-                "meal_matching.suggested_match",
-                request.FoodEntryId.ToString(),
-                NotificationArchiveReason.Completed,
-                HttpContext.RequestAborted);
+        // Archive the notification
+        await _notificationService.ArchiveBySourceAsync(
+            userId,
+            "meal_matching.suggested_match",
+            request.FoodEntryId.ToString(),
+            NotificationArchiveReason.Completed,
+            HttpContext.RequestAborted);
 
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to accept meal match for food entry {FoodEntryId} and carb intake {CarbIntakeId}",
-                request.FoodEntryId, request.CarbIntakeId);
-            return Problem(detail: ex.Message, statusCode: 500, title: "Internal Server Error");
-        }
+        return NoContent();
     }
 
     /// <summary>

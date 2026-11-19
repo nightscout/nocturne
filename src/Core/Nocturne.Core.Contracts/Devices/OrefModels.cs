@@ -281,7 +281,7 @@ public class OrefTreatment
             NsCarbs = carbs,
             Date = timestamp.ToUnixTimeMilliseconds(),
             Timestamp = timestamp.ToString("O"),
-            EventType = "Carbs",
+            EventType = TreatmentTypes.Carbs,
         };
 }
 

@@ -17,7 +17,7 @@ import { mintDemoSession } from "#lib/server/demo-session.js";
 import { sequence, type Handle, type HandleServerError } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
-import { buildProxyHeaders } from "#lib/server/api-proxy-headers.js";
+import { buildProxyHeaders, buildProxyResponseHeaders } from "#lib/server/api-proxy-headers.js";
 import { clientAddressHeaders } from "#lib/server/client-address.js";
 
 import {
@@ -42,7 +42,7 @@ import * as main from '../../../locales/main.loader.server.svelte.js'
 import * as js from '../../../locales/js.loader.server.js'
 import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
-import { renderColorScheme } from "#lib/server/color-scheme-html.js";
+import { renderRootClasses } from "#lib/server/root-class-html.js";
 import { dropModulepreloads } from "#lib/server/link-header.js";
 import { LANGUAGE_COOKIE_NAME } from "#lib/stores/appearance-store.svelte.js";
 
@@ -352,7 +352,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     return new Response(proxyResponse.body, {
       status: proxyResponse.status,
       statusText: proxyResponse.statusText,
-      headers: proxyResponse.headers,
+      headers: buildProxyResponseHeaders(proxyResponse.headers),
     });
   }
 
@@ -583,9 +583,9 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
 };
 
 // The head keeps its modulepreload tags; only the header is trimmed, so Early Hints carry CSS and fonts.
-const colorSchemeHandle: Handle = async ({ event, resolve }) => {
+const rootClassHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event, {
-    transformPageChunk: ({ html }) => renderColorScheme(html, event.cookies),
+    transformPageChunk: ({ html }) => renderRootClasses(html, event.cookies, event.locals),
   });
   const link = response.headers.get("link");
   if (link === null) return response;
@@ -626,4 +626,4 @@ const csrfHandle: Handle = async ({ event, resolve }) => {
 // none of the locals they set and the API authenticates it and answers its setup/recovery state
 // itself, so running them first cost every browser /api call three serial API round-trips, and let
 // a session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, csrfHandle, proxyHandle, resetBitsId, colorSchemeHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, csrfHandle, proxyHandle, resetBitsId, rootClassHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);

@@ -143,7 +143,7 @@ internal sealed class EngineAlarmRelay(
             RuleName = top.RuleName,
             GlucoseValue = fresh?.Mgdl.ToDecimal(),
             Trend = null,
-            TrendRate = fresh?.TrendRate?.ToDecimal(),
+            TrendRate = null,
             ReadingTimestamp = fresh?.Timestamp ?? now.UtcDateTime,
             ExcursionId = top.ExcursionId,
             InstanceId = top.InstanceId,

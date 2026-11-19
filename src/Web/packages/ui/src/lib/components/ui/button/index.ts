@@ -23,6 +23,9 @@ export const buttonVariants = tv({
       link: "text-primary underline-offset-4 hover:underline",
       // A link that must read as one at rest, where an action sits among form controls.
       "link-underlined": "text-primary underline underline-offset-4",
+      // A part of a sentence that is also a control, e.g. a chart caption whose parts go to their settings: set as the text around it until hovered or focused.
+      prose:
+        "inline whitespace-normal text-left text-current text-[1em] font-normal leading-[inherit] decoration-dotted underline-offset-4 hover:underline focus-visible:underline rounded-sm",
       // A quiet secondary action.
       "ghost-muted":
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",

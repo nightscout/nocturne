@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -42,18 +43,12 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     protected override void ApplyUpdate(CalibrationEntity target, Calibration source) =>
         CalibrationMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Deletes all calibration records for the given data source.
-    /// </summary>
-    /// <param name="source">Data source identifier.</param>
-    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await AuditedSoftDeleteAndBroadcastAsync(
-            ctx, ctx.Calibrations.FromSource(source), $"data_source={source}", DuplicateDelete.PromoteSurvivor, origin, ct);
+            ctx, ctx.Calibrations.Selected(selector), selector.Scope, DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 
     /// <summary>

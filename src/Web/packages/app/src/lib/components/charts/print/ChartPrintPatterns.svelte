@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import { chartAlwaysShowPatterns } from "#lib/stores/appearance-store.svelte.js";
-	import { patternTiles, textureStylesheet } from "./chart-print-patterns";
+	import { patternTiles, textureStylesheet } from "@nocturne/charts/core";
 	import { PrintMode } from "./print-mode.svelte";
 
 	const tiles = patternTiles();

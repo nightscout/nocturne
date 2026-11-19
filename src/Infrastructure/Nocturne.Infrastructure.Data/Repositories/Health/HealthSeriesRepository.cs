@@ -72,6 +72,31 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
     }
 
     /// <inheritdoc />
+    public async Task<bool> AnyObservedInAsync(DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await ObservedIn(Set(lease.Context).AsNoTracking(), from, to).AnyAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountObservedInAsync(DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await ObservedIn(Set(lease.Context).AsNoTracking(), from, to).CountAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TModel>> GetObservedInNewestFirstAsync(
+        DateTime from, DateTime to, int count, CancellationToken ct = default)
+    {
+        await using var lease = await OpenAsync(ct);
+        var entities = await NewestFirst(ObservedIn(Set(lease.Context).AsNoTracking(), from, to))
+            .Take(count)
+            .ToListAsync(ct);
+        return entities.Select(ToDomain).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<TModel>> UpsertAsync(IReadOnlyCollection<TModel> records, CancellationToken ct = default)
     {
         await using var lease = await OpenAsync(ct);

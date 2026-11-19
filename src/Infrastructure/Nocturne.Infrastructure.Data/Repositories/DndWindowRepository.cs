@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -75,6 +76,55 @@ public class DndWindowRepository : IDndWindowRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredSnapshotsAsync(
+        DateTime nowUtc, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+
+        var rows = await CouldBeActive(lease.Context.DndWindows.AsNoTracking(), scope: null, nowUtc)
+            .ToListAsync(ct);
+
+        return rows.Select(ToSnapshot).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetReceivedByAsync(
+        DateTime asOfReceiptUtc, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+
+        var rows = await lease.Context.DndWindows
+            .AsNoTracking()
+            .Where(w => w.CreatedAt <= asOfReceiptUtc)
+            .ToListAsync(ct);
+
+        return rows.Select(ToSnapshot).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowRecord>> GetOverlappingAsync(
+        DateTime from, DateTime to, int limit, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+
+        var rows = await lease.Context.DndWindows.AsNoTracking()
+            .Where(w => w.StartedAt < to && (w.EndsAt == null || w.EndsAt > from) && (w.ClearedAt == null || w.ClearedAt > from))
+            .OrderBy(w => w.StartedAt).Take(limit)
+            .ToListAsync(ct);
+
+        return rows.Select(ToRecord).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> AnyTouchingAsync(DateTime from, DateTime to, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+
+        return await lease.Context.DndWindows.AsNoTracking()
+            .AnyAsync(w => w.StartedAt < to && (w.EndsAt == null || w.EndsAt >= from) && (w.ClearedAt == null || w.ClearedAt >= from), ct);
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<DndWindowCreateResult> CreateAsync(NewDndWindow window, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -99,9 +149,17 @@ public class DndWindowRepository : IDndWindowRepository
 
         try
         {
-            await SaveAsync(db, ct);
+            // Lifted so a clamped member can record a window that began before the window of the clamp: truncating
+            // an earlier window to end there leaves that row outside what the clamp shows, which PostgreSQL refuses
+            // (42501) for an update checked against the SELECT policies. The save inserts this window and updates
+            // only the overlapping windows read above under the clamp.
+            await db.WriteWithHistoryClampLiftedAsync(async token =>
+            {
+                await SaveAsync(db, token);
+                return true;
+            }, ct);
         }
-        catch (DbUpdateException) when (_unit is null)
+        catch (DbUpdateException ex) when (_unit is null && ex.InnerException is not System.Data.Common.DbException { SqlState: Npgsql.PostgresErrorCodes.InsufficientPrivilege })
         {
             // dnd_windows.id is the global key, but the lookup above runs under the tenant filter,
             // so an id another tenant owns is invisible there and the insert hits the key. A
@@ -124,7 +182,7 @@ public class DndWindowRepository : IDndWindowRepository
 
         var window = await db.DndWindows.FirstOrDefaultAsync(w => w.Id == id, ct);
         if (window is null)
-            return null;
+            return await ClearedBeforeTheClampAsync(db, id, ct);
 
         if (window.ClearedAt is null)
         {
@@ -134,6 +192,18 @@ public class DndWindowRepository : IDndWindowRepository
 
         return ToRecord(window);
     }
+
+    /// <summary>
+    /// A window the caller names that a history-clamped reader cannot see because it was cleared before the clamp's
+    /// window, so a retried clear answers as the first one did; null when there is none, or it was not cleared.
+    /// </summary>
+    private static Task<DndWindowRecord?> ClearedBeforeTheClampAsync(NocturneDbContext db, Guid id, CancellationToken ct) =>
+        !db.HistoryClamped
+            ? Task.FromResult<DndWindowRecord?>(null)
+            : db.WriteWithHistoryClampLiftedAsync(async token =>
+                await db.DndWindows.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id && w.ClearedAt != null, token) is { } cleared
+                    ? ToRecord(cleared)
+                    : null, ct);
 
     /// <inheritdoc/>
     public virtual async Task EnsureManualAsync(DateTime? endsAt, CancellationToken ct)
@@ -204,10 +274,8 @@ public class DndWindowRepository : IDndWindowRepository
 
     private static Task<List<DndWindowEntity>> OverlappingAsync(
         NocturneDbContext db, NewDndWindow window, CancellationToken ct) =>
-        db.DndWindows
-            .Where(w => w.Scope == window.Scope && w.ClearedAt == null
-                        && (w.EndsAt == null || w.EndsAt > window.StartedAt)
-                        && (window.EndsAt == null || w.StartedAt < window.EndsAt))
+        CouldBeActive(db.DndWindows, window.Scope, window.StartedAt)
+            .Where(w => window.EndsAt == null || w.StartedAt < window.EndsAt)
             .ToListAsync(ct);
 
     private static void SupersedeOverlapping(List<DndWindowEntity> overlapping, DateTime startedAt, DateTime now)
@@ -225,6 +293,15 @@ public class DndWindowRepository : IDndWindowRepository
             }
         }
     }
+
+    // Npgsql can read a `timestamp` column back as Unspecified, which would compare wrongly
+    // against a Utc `now` in the snapshot's naive comparison.
+    private static DndWindowSnapshot ToSnapshot(DndWindowEntity w) =>
+        new(w.Scope,
+            DateTime.SpecifyKind(w.StartedAt, DateTimeKind.Utc),
+            w.EndsAt is { } ends ? DateTime.SpecifyKind(ends, DateTimeKind.Utc) : null,
+            w.ClearedAt is { } cleared ? DateTime.SpecifyKind(cleared, DateTimeKind.Utc) : null,
+            DateTime.SpecifyKind(w.CreatedAt, DateTimeKind.Utc));
 
     private static DndWindowRecord ToRecord(DndWindowEntity w) =>
         new(w.Id, w.Scope, w.StartedAt, w.EndsAt, w.ClearedAt, w.ClearedBy, w.Source, w.CreatedAt);

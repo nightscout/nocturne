@@ -45,7 +45,7 @@
     setReportPrintMeta,
     setReportPrintPreparation,
   } from "#lib/components/reports/print/report-print.svelte.js";
-  import type { TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import type { TextureKey } from "@nocturne/charts/core";
   import { fresh } from "#lib/api/fresh-query.js";
 
   // =========================================================================

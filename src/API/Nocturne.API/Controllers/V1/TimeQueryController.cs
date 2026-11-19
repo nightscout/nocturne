@@ -14,11 +14,13 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Time query controller that provides 1:1 compatibility with Nightscout time-based endpoints.
-/// Supports bash-style brace expansion for complex time pattern matching.
+/// Nightscout time queries: find documents by time pattern, with bash-style brace expansion. A client can query
+/// by time pattern and slice documents by field.
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
 /// <remarks>
+/// Provides 1:1 compatibility with Nightscout time-based endpoints.
+///
 /// The <c>slice</c> and <c>echo</c> actions take the collection as a route or query value, so
 /// their governing scope is resolved per request through <see cref="LegacyStorageReadScopes"/>; a
 /// class-level OR would let a caller holding one category read another's records. The <c>times</c>
@@ -27,6 +29,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
+[ErrorEnvelope]
 public class TimeQueryController : ControllerBase
 {
     /// <summary>
@@ -172,25 +175,6 @@ public class TimeQueryController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error executing time-based query with prefix: {Prefix}, regex: {Regex}",
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
     }
 
     /// <summary>
@@ -305,25 +289,6 @@ public class TimeQueryController : ControllerBase
         catch (TimePatternRejectedException ex)
         {
             return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error generating time query echo with prefix: {Prefix}, regex: {Regex}",
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
         }
     }
 
@@ -561,28 +526,6 @@ public class TimeQueryController : ControllerBase
         catch (TimePatternRejectedException ex)
         {
             return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error executing slice query - storage: {Storage}, field: {Field}, type: {Type}, prefix: {Prefix}, regex: {Regex}",
-                storage,
-                field,
-                type,
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
         }
     }
 

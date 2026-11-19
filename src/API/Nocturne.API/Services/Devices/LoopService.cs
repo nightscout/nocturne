@@ -2,6 +2,7 @@ using System.Globalization;
 using dotAPNS;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Notifications;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 
@@ -325,12 +326,12 @@ public class LoopService : ILoopService, IDisposable
         // Process based on event type (matches legacy switch logic exactly)
         switch (data.EventType)
         {
-            case "Temporary Override Cancel":
+            case TreatmentTypes.TemporaryOverrideCancel:
                 payload["cancel-temporary-override"] = "true";
                 alert = "Cancel Temporary Override";
                 break;
 
-            case "Temporary Override":
+            case TreatmentTypes.TemporaryOverride:
                 payload["override-name"] = data.Reason ?? string.Empty;
                 if (ParseLeadingInteger(data.Duration) is > 0 and var duration)
                 {

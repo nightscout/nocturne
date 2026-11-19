@@ -2,7 +2,7 @@
   import { resolve } from "$app/paths";
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { GLUCOSE_WINDOW_HOURS } from "#lib/stores/initial-reads.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
@@ -12,8 +12,7 @@
   import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import { GlucoseTrack, ThresholdRules } from "@nocturne/charts";
   import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";

@@ -23,6 +23,8 @@ public static class TempBasalUploadedFields
             (record ??= new())[PumpType] = pumpType;
         if (treatment.PumpSerial is { } pumpSerial)
             (record ??= new())[PumpSerial] = pumpSerial;
+        if (treatment.HasSetDuration && treatment.Duration is { } duration)
+            (record ??= new())[StateSpanMetadataExtensions.UploadedDurationKey] = duration;
 
         return record;
     }
@@ -40,6 +42,15 @@ public static class TempBasalUploadedFields
         treatment.PumpType = StringOf(record, PumpType);
         treatment.PumpSerial = StringOf(record, PumpSerial);
     }
+
+    /// <summary>The <c>duration</c> in minutes the uploader sent, when the record kept it.</summary>
+    public static double? UploadedDuration(IReadOnlyDictionary<string, object?>? record) =>
+        record?.GetValueOrDefault(StateSpanMetadataExtensions.UploadedDurationKey) switch
+        {
+            double minutes => minutes,
+            JsonElement { ValueKind: JsonValueKind.Number } je => je.GetDouble(),
+            _ => null,
+        };
 
     private static string? StringOf(IReadOnlyDictionary<string, object?>? record, string key) =>
         record?.GetValueOrDefault(key) switch

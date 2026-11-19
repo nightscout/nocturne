@@ -12,12 +12,15 @@ using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Mints a short-lived, tenant-pinned platform-admin access grant so a platform admin can enter a
-/// tenant they are not a member of. The grant is a JWT carrying a <c>platform_access</c> marker,
-/// stored in a dedicated <c>.basedomain</c> cookie and consumed by
-/// <see cref="Middleware.Handlers.PlatformAccessCookieHandler"/> on the target subdomain.
+/// Short-lived access that lets a platform admin enter a tenant they are not a member of. Call the
+/// grant route with a tenant slug to be redirected into that tenant.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The grant is a JWT carrying a <c>platform_access</c> marker, stored in a dedicated
+/// <c>.basedomain</c> cookie and consumed by <see cref="Middleware.Handlers.PlatformAccessCookieHandler"/>
+/// on the target subdomain.
+/// </para>
 /// <para>
 /// The endpoint is anonymous so it can bounce an unauthenticated operator through OIDC login and
 /// back. It authorizes via the operator's existing nocturne session (the <c>platform_admin</c>

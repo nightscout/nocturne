@@ -12,9 +12,12 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Profile controller that provides full V3 API compatibility with Nightscout profile endpoints.
-/// Implements the /api/v3/profile endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout profile documents, with paging, field selection, sorting and filtering. A client can list, read,
+/// create, update and delete profiles, and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout profile endpoints, at /api/v3/profile.
+/// </remarks>
 /// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IProfileWriteService"/>
 /// <seealso cref="Profile"/>
@@ -60,11 +63,6 @@ public class ProfileController : BaseV3Controller<Profile>
     [ErrorEnvelope]
     public async Task<ActionResult> GetProfiles(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 profile endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -205,10 +203,6 @@ public class ProfileController : BaseV3Controller<Profile>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 profile create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             var profiles = ParseCreateRequestFromJsonElement(profileData);

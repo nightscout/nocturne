@@ -16,16 +16,20 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// UI Settings controller providing frontend configuration data.
-/// This endpoint provides aggregated settings for all frontend settings pages.
-/// Supports GET (read), PUT (whole configuration) and PATCH (one section) operations for settings persistence.
+/// Web app settings for all settings pages. Read the whole configuration or one section, replace the whole
+/// configuration, update one section, and manage alarm profiles.
 /// </summary>
+/// <remarks>
+/// Aggregated settings for all frontend settings pages. Supports GET (read), PUT (whole configuration) and
+/// PATCH (one section) operations for settings persistence.
+/// </remarks>
 /// <seealso cref="IUISettingsService"/>
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/ui-settings")]
 [ClientPropertyName("uiSettings")]
 [Authorize]
+[ErrorEnvelope]
 public class UISettingsController : ControllerBase, IWriteScopedController
 {
     /// <summary>
@@ -106,41 +110,33 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        if (_demoMode.IsEnabled)
+            return Ok(await _demoSettings.GetAsync(cancellationToken) ?? GenerateDemoSettings());
+
+        // Read what was persisted by SaveUISettings; the service falls back to
+        // defaults when the tenant has never saved. Returning freshly generated
+        // defaults here instead meant a saved setting never came back on the
+        // next load, so every settings page appeared to revert on reload.
+        //
+        // A null is a read the service could not make. Serving defaults instead would not
+        // merely mislead the reader: a client that saves the whole document writes a defaults
+        // document handed out here back over every section the tenant owns. 503 keeps that
+        // write from ever being composed, and says the condition is transient.
+        var settings = await _settingsService.GetSettingsAsync(cancellationToken);
+        if (settings == null)
         {
-            if (_demoMode.IsEnabled)
-                return Ok(await _demoSettings.GetAsync(cancellationToken) ?? GenerateDemoSettings());
-
-            // Read what was persisted by SaveUISettings; the service falls back to
-            // defaults when the tenant has never saved. Returning freshly generated
-            // defaults here instead meant a saved setting never came back on the
-            // next load, so every settings page appeared to revert on reload.
-            //
-            // A null is a read the service could not make. Serving defaults instead would not
-            // merely mislead the reader: a client that saves the whole document writes a defaults
-            // document handed out here back over every section the tenant owns. 503 keeps that
-            // write from ever being composed, and says the condition is transient.
-            var settings = await _settingsService.GetSettingsAsync(cancellationToken);
-            if (settings == null)
-            {
-                return Problem(
-                    detail: "Settings could not be read and have not been changed. Try again.",
-                    statusCode: StatusCodes.Status503ServiceUnavailable,
-                    title: "Settings Unavailable"
-                );
-            }
-
-            // The connector catalog is static metadata, not persisted tenant state.
-            settings.Services ??= new ServicesSettings();
-            settings.Services.AvailableServices = GenerateAvailableServices();
-
-            return Ok(settings);
+            return Problem(
+                detail: "Settings could not be read and have not been changed. Try again.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Settings Unavailable"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving UI settings");
-            return Problem(detail: "Failed to retrieve UI settings", statusCode: 500, title: "Internal Server Error");
-        }
+
+        // The connector catalog is static metadata, not persisted tenant state.
+        settings.Services ??= new ServicesSettings();
+        settings.Services.AvailableServices = GenerateAvailableServices();
+
+        return Ok(settings);
     }
 
     /// <summary>
@@ -201,27 +197,19 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        if (_demoMode.IsEnabled)
         {
-            if (_demoMode.IsEnabled)
-            {
-                _logger.LogWarning(
-                    "Attempted to save settings in demo mode - returning input unchanged"
-                );
-                return Ok(settings);
-            }
-
-            var savedSettings = await _settingsService.SaveSettingsAsync(
-                settings,
-                cancellationToken
+            _logger.LogWarning(
+                "Attempted to save settings in demo mode - returning input unchanged"
             );
-            return Ok(savedSettings);
+            return Ok(settings);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving UI settings");
-            return Problem(detail: "Failed to save UI settings", statusCode: 500, title: "Internal Server Error");
-        }
+
+        var savedSettings = await _settingsService.SaveSettingsAsync(
+            settings,
+            cancellationToken
+        );
+        return Ok(savedSettings);
     }
 
     /// <summary>
@@ -334,11 +322,6 @@ public class UISettingsController : ControllerBase, IWriteScopedController
         {
             return Problem(detail: $"Invalid {section} patch: {ex.Message}", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error patching {Section} settings", section);
-            return Problem(detail: $"Failed to save {section} settings", statusCode: 500, title: "Internal Server Error");
-        }
     }
 
     /// <summary>
@@ -357,22 +340,14 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     {
         _logger.LogDebug("Getting alarm configuration");
 
-        try
+        if (_demoMode.IsEnabled)
         {
-            if (_demoMode.IsEnabled)
-            {
-                return Ok(GenerateDemoAlarmConfiguration());
-            }
-
-            var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
-
-            return config == null ? AlarmConfigurationUnavailable() : Ok(config);
+            return Ok(GenerateDemoAlarmConfiguration());
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving alarm configuration");
-            return Problem(detail: "Failed to retrieve alarm configuration", statusCode: 500, title: "Internal Server Error");
-        }
+
+        var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
+
+        return config == null ? AlarmConfigurationUnavailable() : Ok(config);
     }
 
     /// <summary>
@@ -396,25 +371,17 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             config.Profiles?.Count ?? 0
         );
 
-        try
+        if (_demoMode.IsEnabled)
         {
-            if (_demoMode.IsEnabled)
-            {
-                return Ok(config);
-            }
-
-            var savedConfig = await _settingsService.SaveAlarmConfigurationAsync(
-                config,
-                cancellationToken
-            );
-
-            return Ok(savedConfig);
+            return Ok(config);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving alarm configuration");
-            return Problem(detail: "Failed to save alarm configuration", statusCode: 500, title: "Internal Server Error");
-        }
+
+        var savedConfig = await _settingsService.SaveAlarmConfigurationAsync(
+            config,
+            cancellationToken
+        );
+
+        return Ok(savedConfig);
     }
 
     /// <summary>
@@ -435,27 +402,19 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     {
         _logger.LogDebug("Adding/updating alarm profile: {ProfileName}", profile.Name);
 
-        try
+        if (_demoMode.IsEnabled)
         {
-            if (_demoMode.IsEnabled)
-            {
-                return Ok(
-                    new UserAlarmConfiguration
-                    {
-                        Profiles = new List<AlarmProfileConfiguration> { profile },
-                    }
-                );
-            }
-
             return Ok(
-                await _settingsService.AddOrUpdateAlarmProfileAsync(profile, cancellationToken)
+                new UserAlarmConfiguration
+                {
+                    Profiles = new List<AlarmProfileConfiguration> { profile },
+                }
             );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving alarm profile");
-            return Problem(detail: "Failed to save alarm profile", statusCode: 500, title: "Internal Server Error");
-        }
+
+        return Ok(
+            await _settingsService.AddOrUpdateAlarmProfileAsync(profile, cancellationToken)
+        );
     }
 
     /// <summary>
@@ -476,33 +435,25 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     {
         _logger.LogDebug("Deleting alarm profile: {ProfileId}", profileId);
 
-        try
+        if (_demoMode.IsEnabled)
         {
-            if (_demoMode.IsEnabled)
-            {
-                return Ok(
-                    new UserAlarmConfiguration { Profiles = new List<AlarmProfileConfiguration>() }
-                );
-            }
-
-            var config = await _settingsService.DeleteAlarmProfileAsync(
-                profileId,
-                cancellationToken
+            return Ok(
+                new UserAlarmConfiguration { Profiles = new List<AlarmProfileConfiguration>() }
             );
+        }
 
-            return config == null
-                ? Problem(
-                    detail: $"Alarm profile not found: {profileId}",
-                    statusCode: 404,
-                    title: "Not Found"
-                )
-                : Ok(config);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting alarm profile");
-            return Problem(detail: "Failed to delete alarm profile", statusCode: 500, title: "Internal Server Error");
-        }
+        var config = await _settingsService.DeleteAlarmProfileAsync(
+            profileId,
+            cancellationToken
+        );
+
+        return config == null
+            ? Problem(
+                detail: $"Alarm profile not found: {profileId}",
+                statusCode: 404,
+                title: "Not Found"
+            )
+            : Ok(config);
     }
 
     /// <summary>

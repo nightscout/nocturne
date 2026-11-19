@@ -1,0 +1,16 @@
+diff --git a/lib/po.js b/lib/po.js
+index 0e2e35d8ffb4d1119a02714c684ae45200ab0a7d..3d96ba3c083d8443023f13138354d39b28259e22 100644
+--- a/lib/po.js
++++ b/lib/po.js
+@@ -182,8 +182,9 @@ PO.parse = function (data) {
+         return string;
+     }
+ 
+-    while (lines.length > 0) {
+-        var line = trim(lines.shift());
++    var lineIndex = 0;
++    while (lineIndex < lines.length) {
++        var line = trim(lines[lineIndex++]);
+         var lineObsolete = false;
+         var add = false;
+ 

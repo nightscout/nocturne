@@ -21,6 +21,37 @@ public class CareLinkDataJsonTests
         data!.BgUnits.Should().Be("MMOL/L");
     }
 
+    [Fact]
+    public void Deserialize_BindsTheDeviceHealthFields()
+    {
+        const string json = """
+            {
+              "sensorDurationMinutes": 6266,
+              "reservoirLevelPercent": 33,
+              "pumpCommunicationState": true,
+              "gstCommunicationState": true
+            }
+            """;
+
+        var data = JsonSerializer.Deserialize<CareLinkData>(json, JsonDefaults.CaseInsensitive)!;
+
+        data.SensorDurationMinutes.Should().Be(6266);
+        data.ReservoirLevelPercent.Should().Be(33);
+        data.PumpCommunicationState.Should().BeTrue();
+        data.GstCommunicationState.Should().BeTrue();
+        data.PatientData.Should().BeNull();
+    }
+
+    [Fact]
+    public void Deserialize_MarksThePatientDataFormat()
+    {
+        var data = JsonSerializer.Deserialize<CareLinkData>(
+            """{"metadata":{},"patientData":{"pumpBatteryLevelPercent":100}}""", JsonDefaults.CaseInsensitive)!;
+
+        data.PatientData.Should().NotBeNull();
+        data.MedicalDeviceBatteryLevelPercent.Should().BeNull();
+    }
+
     /// <summary>
     /// Every CareLink model must be usable with the connector's case-insensitive options. Two
     /// <see cref="System.Text.Json.Serialization.JsonPropertyNameAttribute"/> values that differ

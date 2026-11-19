@@ -101,31 +101,31 @@ export const getOidcProviders = query(async () => {
 
 /**
  * Get current authentication state
- * Used to check if user is already logged in
+ * Used to check if user is already logged in. `unreadable` is set when the API could not be asked,
+ * so "not signed in" is then not an answer.
  */
 export const getAuthState = query(async () => {
   const event = getRequestEvent();
   if (!event) {
-    return { isAuthenticated: false, user: null };
+    return { isAuthenticated: false, unreadable: true, user: null };
   }
 
   return {
     isAuthenticated: event.locals.isAuthenticated ?? false,
+    unreadable: event.locals.sessionUnreadable === true,
     user: event.locals.user ?? null,
   };
 });
 
 /**
  * Get current session info
- * Used by client-side store to check authentication state
+ * Used by client-side store to check authentication state. `unavailable` is set when the API could
+ * not answer, so an error is never read as "signed out".
  */
 export const getSessionInfo = query(async () => {
   const event = getRequestEvent();
   if (!event) {
-    return {
-      isAuthenticated: false,
-      user: null,
-    };
+    return { isAuthenticated: false, unavailable: true, user: null };
   }
 
   const api = getApiClient();
@@ -134,6 +134,7 @@ export const getSessionInfo = query(async () => {
     const session = await api.oidc.getSession();
     return {
       isAuthenticated: session?.isAuthenticated ?? false,
+      unavailable: false,
       subjectId: session?.subjectId,
       name: session?.name,
       email: session?.email,
@@ -144,10 +145,7 @@ export const getSessionInfo = query(async () => {
     };
   } catch (error) {
     console.error("Failed to get session:", error);
-    return {
-      isAuthenticated: false,
-      user: null,
-    };
+    return { isAuthenticated: false, unavailable: true, user: null };
   }
 });
 
@@ -175,12 +173,14 @@ export const getProvidersInfo = query(async () => {
 });
 
 /**
- * Refresh the current session tokens
+ * Refresh the current session tokens. `refused` is true only when the API refused the refresh token
+ * (401); any other failure (an outage, a timeout) leaves it false. A refusal alone does not say the
+ * session is gone: another tab can have rotated the token first.
  */
 export const refreshSession = command(async () => {
   const event = getRequestEvent();
   if (!event) {
-    return { success: false };
+    return { success: false as const, refused: false };
   }
 
   const api = getApiClient();
@@ -196,12 +196,12 @@ export const refreshSession = command(async () => {
     // being sent on subsequent requests.
 
     return {
-      success: true,
+      success: true as const,
       expiresAt: result.expiresAt,
     };
   } catch (error) {
     console.error("Failed to refresh session:", error);
-    return { success: false };
+    return { success: false as const, refused: errorStatus(error) === 401 };
   }
 });
 

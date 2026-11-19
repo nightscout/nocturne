@@ -8,13 +8,13 @@ using Nocturne.Core.Contracts.Multitenancy;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// On-demand TLS authorization for the bundled Caddy reverse proxy.
-/// Caddy calls this before requesting a certificate for a hostname (its
-/// <c>on_demand_tls.ask</c> endpoint) so that certificates are only issued for
-/// the apex domain, real tenant subdomains, and live public share hosts —
-/// preventing unbounded issuance for arbitrary hostnames pointed at the server.
+/// Checks whether a hostname may get a TLS certificate from the bundled reverse proxy. Certificates
+/// are issued only for the apex domain, tenant subdomains, and live public share hosts.
 /// </summary>
 /// <remarks>
+/// Caddy calls this before requesting a certificate for a hostname, through its
+/// <c>on_demand_tls.ask</c> endpoint. The allowlist prevents unbounded issuance for arbitrary
+/// hostnames pointed at the server.
 /// Anonymous and tenantless by design: it lives under the <c>/api/v4/platform/</c>
 /// prefix, which <see cref="TenantResolutionMiddleware"/> allows through without a
 /// resolved tenant.
@@ -29,6 +29,8 @@ namespace Nocturne.API.Controllers.V4;
 /// </para>
 /// </remarks>
 [ApiController]
+[System.ComponentModel.DisplayName("TLS Authorization")]
+[Tags("Platform")]
 [AllowAnonymous]
 [Route("api/v4/platform/tls-authorize")]
 [Produces("application/json")]

@@ -35,7 +35,8 @@ public record SensorContext
     public required DateTime? LastReadingAt { get; init; }
 
     /// <summary>
-    /// Coarse trend bucket derived from <see cref="TrendRate"/>. Used by the trend condition.
+    /// Coarse trend bucket of <see cref="TrendRate"/>, or of the reading's arrow when no rate is
+    /// known. Used by the trend condition.
     /// </summary>
     public TrendBucket? TrendBucket { get; init; }
 
@@ -116,6 +117,25 @@ public record SensorContext
     /// <summary>Latest uploader (phone) battery level in percent, when available.</summary>
     [ReplayFact("uploader_battery_percent", Scope.DevicesRead, decimals: 0)]
     public decimal? UploaderBatteryPercent { get; init; }
+
+    /// <summary>
+    /// The CGM transmitter's latest reported battery readings (<see cref="V4.TransmitterStatus"/>), each
+    /// null until an uploader reports it.
+    /// </summary>
+    [ReplayFact("transmitter_voltage_a", Scope.DevicesRead, decimals: 0)]
+    public decimal? TransmitterVoltageA { get; init; }
+
+    /// <inheritdoc cref="TransmitterVoltageA"/>
+    [ReplayFact("transmitter_voltage_b", Scope.DevicesRead, decimals: 0)]
+    public decimal? TransmitterVoltageB { get; init; }
+
+    /// <inheritdoc cref="TransmitterVoltageA"/>
+    [ReplayFact("transmitter_resistance", Scope.DevicesRead, decimals: 0)]
+    public decimal? TransmitterResistance { get; init; }
+
+    /// <inheritdoc cref="TransmitterVoltageA"/>
+    [ReplayFact("transmitter_days", Scope.DevicesRead, decimals: 0)]
+    public decimal? TransmitterDays { get; init; }
 
     /// <summary>Currently active override projection, or null when no override is active.</summary>
     public OverrideSnapshot? ActiveOverride { get; init; }
@@ -240,7 +260,7 @@ public sealed record ActiveTrackerReference(DateTime ReferenceAt, DateTime? Reco
 public record PredictedGlucosePoint(int OffsetMinutes, decimal Mgdl);
 
 /// <summary>
-/// Coarse trend bucket derived from rate of change.
+/// Coarse trend bucket of the rate of change, or of the reading's arrow when no rate is known.
 /// </summary>
 public enum TrendBucket
 {
@@ -402,6 +422,10 @@ public record TempBasalCondition(TempBasalMetric Metric, string Operator, decima
 /// <summary>Uploader (phone) battery comparison (percent).</summary>
 public record UploaderBatteryCondition(string Operator, decimal Value);
 
+/// <summary>CGM transmitter battery comparison. Metric selects the reading; a reading no uploader
+/// has reported is false.</summary>
+public record TransmitterBatteryCondition(TransmitterBatteryMetric Metric, string Operator, decimal Value);
+
 /// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
 public record OverrideActiveCondition(
     [property: JsonPropertyName("is_active")] bool IsActive,
@@ -505,10 +529,21 @@ public enum TempBasalMetric
     [JsonStringEnumMemberName("percent_of_scheduled")] PercentOfScheduled,
 }
 
+/// <summary>Selects which <see cref="V4.TransmitterStatus"/> reading a TransmitterBatteryCondition compares.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<TransmitterBatteryMetric>))]
+public enum TransmitterBatteryMetric
+{
+    [JsonStringEnumMemberName("voltage_a")] VoltageA,
+    [JsonStringEnumMemberName("voltage_b")] VoltageB,
+    [JsonStringEnumMemberName("resistance")] Resistance,
+    /// <summary>Days since the transmitter was activated.</summary>
+    [JsonStringEnumMemberName("days")] Days,
+}
+
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
@@ -545,7 +580,8 @@ public record ConditionNode(
     [property: JsonPropertyName("pump_state")] PumpStateCondition? PumpState = null,
     [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null,
     [property: JsonPropertyName("sleep_session_active")] SleepSessionActiveCondition? SleepSessionActive = null,
-    [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null
+    [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null,
+    [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null
 );
 
 /// <summary>
@@ -587,7 +623,7 @@ public class AlertTrackerState
     /// <summary>
     /// Timestamp of the last evaluation.
     /// </summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; }
 
     /// <summary>
     /// When the active excursion entered hysteresis; set only in the "hysteresis" state.
@@ -650,10 +686,10 @@ public class AlertRule
     /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
     public string? AutoResolveParams { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>When this rule was last modified.</summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; }
 }
 
 /// <summary>

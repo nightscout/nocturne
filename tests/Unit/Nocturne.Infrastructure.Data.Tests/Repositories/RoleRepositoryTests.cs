@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -24,6 +26,9 @@ public class RoleRepositoryTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private RoleRepository Roles() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)));
+
+    private RoleRepository RolesActingAs(IAuditContext actor, Guid? tenant = null) =>
+        new(new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? Guid.Empty).ActingAs(actor)));
 
     [Fact]
     public async Task ACreatedRoleReadsBackByIdAndNameInNameOrder()
@@ -54,6 +59,52 @@ public class RoleRepositoryTests : IDisposable
         updated!.Permissions.Should().Equal("careportal:*", "api:treatments:*");
         updated.UpdatedAt.Should().BeAfter(Past);
         (await Roles().UpdateAsync(Guid.CreateVersion7(), "x", null, [], CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AnUpdateThatChangesThePermissionsAuditsTheGainedAndLostAgainstTheCaller()
+    {
+        var caller = Guid.CreateVersion7();
+        var role = await Roles().CreateAsync(new NewRole("careportal", null, ["careportal:*", "api:entries:read"], IsSystemRole: false), CancellationToken.None);
+
+        await RolesActingAs(new TestAuditActor { SubjectId = caller })
+            .UpdateAsync(role.Id, "careportal", null, ["api:entries:read", "api:treatments:*"], CancellationToken.None);
+
+        await using var db = _db.CreateContext();
+        var row = await db.AuthAuditLog.AsNoTracking().SingleAsync();
+        row.EventType.Should().Be(AuthAuditEventType.RolePermissionsChanged);
+        row.ActorSubjectId.Should().Be(caller);
+        row.TargetSubjectId.Should().BeNull();
+        row.TenantId.Should().BeNull();
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{role.Id}}","role":"careportal","gained":["api:treatments:*"],"lost":["careportal:*"],"kind":"global"}""");
+    }
+
+    [Fact]
+    public async Task AnUpdateMadeUnderATenantRecordsThatTenantAndNamesTheRoleByItsNewName()
+    {
+        var role = await Roles().CreateAsync(new NewRole("careportal", null, ["careportal:*"], IsSystemRole: false), CancellationToken.None);
+
+        await RolesActingAs(new TestAuditActor { SubjectId = Guid.CreateVersion7() }, _tenant)
+            .UpdateAsync(role.Id, "care", null, ["api:entries:read"], CancellationToken.None);
+
+        await using var db = _db.CreateContext();
+        var row = await db.AuthAuditLog.AsNoTracking().SingleAsync();
+        row.TenantId.Should().Be(_tenant);
+        row.DetailsJson.Should().Contain("\"role\":\"care\"");
+    }
+
+    [Fact]
+    public async Task AnUpdateThatLeavesThePermissionsAsTheyWereAuditsNothing()
+    {
+        var role = await Roles().CreateAsync(new NewRole("careportal", null, ["careportal:*", "api:entries:read"], IsSystemRole: false), CancellationToken.None);
+
+        await RolesActingAs(new TestAuditActor { SubjectId = Guid.CreateVersion7() })
+            .UpdateAsync(role.Id, "care", "renamed", ["api:entries:read", "careportal:*"], CancellationToken.None);
+
+        await using var db = _db.CreateContext();
+        (await db.AuthAuditLog.AsNoTracking().ToListAsync()).Should().BeEmpty();
+        (await db.Roles.AsNoTracking().SingleAsync()).Name.Should().Be("care");
     }
 
     [Fact]

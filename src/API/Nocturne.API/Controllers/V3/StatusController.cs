@@ -8,9 +8,8 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Status controller that provides extended status information with permissions and authorization.
-/// Returns system status in the Nightscout V3 format including authorization details, permissions,
-/// available collections, and supported API versions.
+/// Nightscout V3 status: the system status, including authorization details, permissions, available collections
+/// and supported API versions.
 /// </summary>
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="V3StatusResponse"/>
@@ -44,11 +43,6 @@ public class StatusController : ControllerBase
     [ProducesResponseType(typeof(V3Envelope<V3StatusResponse>), 200)]
     public async Task<ActionResult<V3Envelope<V3StatusResponse>>> GetStatus()
     {
-        _logger.LogDebug(
-            "V3 status endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         try
         {
             var status = await _statusService.GetV3SystemStatusAsync();

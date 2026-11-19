@@ -6,7 +6,7 @@
     formatGlucoseDelta,
   } from "#lib/utils/formatting.js";
   import { getDirectionInfo } from "#lib/utils/index.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
   import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
 

@@ -12,9 +12,12 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Treatments controller that provides full V3 API compatibility with Nightscout treatments endpoints.
-/// Implements the /api/v3/treatments endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout treatments, with paging, field selection, sorting and filtering. A client can list, read, create,
+/// update, patch and delete treatments, add them in bulk, and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout treatments endpoints, at /api/v3/treatments.
+/// </remarks>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="Treatment"/>
 /// <seealso cref="BaseV3Controller{T}"/>
@@ -63,11 +66,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ErrorEnvelope]
     public async Task<ActionResult> GetTreatments(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 treatments endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();

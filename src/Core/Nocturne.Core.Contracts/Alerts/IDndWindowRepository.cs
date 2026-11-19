@@ -19,6 +19,38 @@ public interface IDndWindowRepository
     Task<IReadOnlyList<DndWindowRecord>> GetActiveAsync(DndScope? scope, CancellationToken ct);
 
     /// <summary>
+    /// The windows that can still take effect at or after <paramref name="nowUtc"/>: uncleared and
+    /// not past their expiry, of every scope. Every <see cref="DateTime"/> is
+    /// <see cref="DateTimeKind.Utc"/>, so <see cref="DndWindowSnapshot.IsActiveAt"/> is sound.
+    /// </summary>
+    /// <remarks>
+    /// The expiry bound keeps this bounded. A window that runs out is never cleared, so filtering
+    /// on <c>cleared_at</c> alone would return every timed mute the tenant has ever set, on a path
+    /// that runs once per glucose reading.
+    /// </remarks>
+    Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredSnapshotsAsync(DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>
+    /// Every window received by <paramref name="asOfReceiptUtc"/> (<c>created_at &lt;= asOfReceiptUtc</c>),
+    /// cleared and expired ones included, for replay. Replay decides each window per tick with
+    /// <see cref="DndWindowSnapshot.WasActiveAt"/>, which reads <c>cleared_at</c>. Every
+    /// <see cref="DateTime"/> is <see cref="DateTimeKind.Utc"/>.
+    /// </summary>
+    Task<IReadOnlyList<DndWindowSnapshot>> GetReceivedByAsync(DateTime asOfReceiptUtc, CancellationToken ct);
+
+    /// <summary>
+    /// The first <paramref name="limit"/> windows in effect at some instant of <c>(from, to)</c>, earliest started
+    /// first: started before <paramref name="to"/>, and neither expired nor cleared by <paramref name="from"/>.
+    /// </summary>
+    Task<IReadOnlyList<DndWindowRecord>> GetOverlappingAsync(DateTime from, DateTime to, int limit, CancellationToken ct);
+
+    /// <summary>
+    /// Whether any window touches <c>[from, to)</c>: started before <paramref name="to"/>, and neither expired nor
+    /// cleared before <paramref name="from"/>. Reads one row at most.
+    /// </summary>
+    Task<bool> AnyTouchingAsync(DateTime from, DateTime to, CancellationToken ct);
+
+    /// <summary>
     /// Stores <paramref name="window"/> unless the tenant already holds its id, and reconciles the
     /// same-scope windows whose span overlaps it so one scope is never active twice at an instant.
     /// An earlier window is truncated to end where this one begins, and one that starts at or after

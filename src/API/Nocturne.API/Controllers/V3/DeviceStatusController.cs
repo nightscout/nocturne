@@ -14,8 +14,12 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 DeviceStatus controller that provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// Nightscout device status documents. A client can list, read, create, update and delete them, and read changes
+/// since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -50,11 +54,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ErrorEnvelope]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 devicestatus endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -162,10 +161,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 devicestatus create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (

@@ -21,8 +21,7 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     MaxHistoricalDays = 7,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents],
-    SensorReadingIntervalSeconds = 300,
-    DocumentationUrl = UrlConstants.External.DocsLibre
+    SensorReadingIntervalSeconds = 300
 )]
 public class LibreLinkUpConnectorConfiguration : BaseConnectorConfiguration
 {

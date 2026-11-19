@@ -228,7 +228,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IActivityRecordRepository, ActivityRecordRepository>();
         services.AddScoped<IHeartRateRepository, HeartRateRepository>();
         services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
-        services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();
+        services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
+        services.AddScoped<IHealthSeriesRepository<BodyWeight>>(sp => sp.GetRequiredService<IBodyWeightRepository>());
         services.AddScoped<IHealthRecordTransactions, HealthRecordTransactions>();
         services.AddScoped<ISystemEventRepository, SystemEventRepository>();
         services.AddScoped<IUserFoodFavoriteRepository, UserFoodFavoriteRepository>();

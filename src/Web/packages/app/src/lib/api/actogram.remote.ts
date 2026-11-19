@@ -13,8 +13,8 @@ import { DateRangeSchema, resolveReportRange } from "#lib/api/report-range.js";
 import { ACTOGRAM_PADDING_DAYS } from "#lib/components/actogram/actogram.js";
 import { getLocalDayBoundariesUtc } from "#lib/utils/timezone.js";
 import { getActogram } from "#lib/api/generated/actograms.generated.remote.js";
-import { getGlucoseColor } from "#lib/utils/chart-colors.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { getGlucoseColor } from "@nocturne/charts/core";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 
 const DEFAULT_DAYS = 14;
 

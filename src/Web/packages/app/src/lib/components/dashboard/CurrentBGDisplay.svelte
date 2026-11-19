@@ -25,7 +25,7 @@
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,

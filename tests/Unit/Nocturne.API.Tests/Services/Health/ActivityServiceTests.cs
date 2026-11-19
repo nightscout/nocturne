@@ -37,6 +37,7 @@ public class ActivityServiceTests
         Mock.Of<Nocturne.Core.Contracts.Repositories.IActivityRecordRepository>(),
         Mock.Of<Nocturne.Core.Contracts.Repositories.IStateSpanRepository>(),
         Mock.Of<ISleepService>(),
+        TimeProvider.System,
         Microsoft.Extensions.Logging.Abstractions.NullLogger<Nocturne.API.Services.V4.ActivityDecomposer>.Instance);
 
     public ActivityServiceTests()

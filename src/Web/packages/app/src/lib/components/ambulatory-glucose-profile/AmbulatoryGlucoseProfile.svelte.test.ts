@@ -10,7 +10,7 @@ const realtime = vi.hoisted(() => ({
 }));
 
 vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
-	const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
+	const { resolveChartThresholds } = await import("@nocturne/charts/core");
 	return {
 		tenantChartThresholds: () => ({
 			get current() {

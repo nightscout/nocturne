@@ -10,7 +10,8 @@ using Nocturne.Core.Models.Battery;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Controller for tracking and analyzing device battery status across all connected devices.
+/// Battery status of connected devices. Read the latest battery levels, readings over a date range, battery
+/// statistics, charge cycles, and the devices that report battery data.
 /// </summary>
 /// <remarks>
 /// Battery readings are derived from uploader device status records ingested by connectors.

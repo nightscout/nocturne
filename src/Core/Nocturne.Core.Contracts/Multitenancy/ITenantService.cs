@@ -46,9 +46,17 @@ public interface ITenantService
     Task<TenantSettingsDto> SetDisplayNameAsync(Guid id, string displayName, CancellationToken ct = default);
 
     /// <summary>
+    /// How long a tenant keeps its subdomain after a change before it may change again. Every
+    /// change breaks the uploaders and followers on the old address, so a tenant cannot move
+    /// repeatedly while its owner is still updating them.
+    /// </summary>
+    static readonly TimeSpan SlugChangeInterval = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Moves the tenant to the subdomain <paramref name="newSlug"/>, after the checks
-    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/> makes. The old subdomain stops
-    /// resolving at once: nothing redirects from it.
+    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/> makes, at most once per
+    /// <see cref="SlugChangeInterval"/>. The old subdomain stops resolving at once: nothing
+    /// redirects from it.
     /// </summary>
     /// <returns>The refusal, or a valid result once the tenant has moved.</returns>
     Task<SlugValidationResult> ChangeSlugAsync(Guid id, string newSlug, CancellationToken ct = default);
@@ -124,7 +132,12 @@ public interface ITenantService
 
 public record TenantDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 
-public record TenantSettingsDto(bool AllowPublicDocs, string Slug, string DisplayName, DateTime SysCreatedAt);
+/// <param name="NextSlugChangeAt">
+/// When the subdomain may next change, while the last change is less than
+/// <see cref="ITenantService.SlugChangeInterval"/> old; otherwise null.
+/// </param>
+public record TenantSettingsDto(
+    bool AllowPublicDocs, string Slug, string DisplayName, DateTime SysCreatedAt, DateTime? NextSlugChangeAt = null);
 
 public record TenantCreatedDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 

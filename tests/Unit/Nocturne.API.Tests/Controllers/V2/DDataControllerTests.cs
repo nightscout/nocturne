@@ -22,18 +22,15 @@ public class DDataControllerTests
 {
     private readonly Mock<IDDataService> _mockDDataService;
     private readonly Mock<IActivityDecomposer> _mockDecomposer;
-    private readonly Mock<ILogger<DDataController>> _mockLogger;
     private readonly DDataController _controller;
 
     public DDataControllerTests()
     {
         _mockDDataService = new Mock<IDDataService>();
         _mockDecomposer = new Mock<IActivityDecomposer>();
-        _mockLogger = new Mock<ILogger<DDataController>>();
         _controller = new DDataController(
             _mockDDataService.Object,
-            _mockDecomposer.Object,
-            _mockLogger.Object
+            _mockDecomposer.Object
         );
         Grant();
     }
@@ -256,7 +253,7 @@ public class DDataControllerTests
     }
 
     [Fact]
-    public async Task GetDData_WhenServiceThrows_ShouldReturn500()
+    public async Task GetDData_WhenServiceThrows_TheExceptionEscapes()
     {
         // Arrange
         _mockDDataService
@@ -266,10 +263,9 @@ public class DDataControllerTests
             .ThrowsAsync(new Exception("Test exception"));
 
         // Act
-        var result = await _controller.GetDData(CancellationToken.None);
+        var act = () => _controller.GetDData(CancellationToken.None);
 
         // Assert
-        var statusResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(500, statusResult.StatusCode);
+        await Assert.ThrowsAsync<Exception>(act);
     }
 }

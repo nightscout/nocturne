@@ -246,10 +246,7 @@ public sealed class EventEpisode
     /// <returns>Null when no reading stands for the start glucose.</returns>
     public static EventEpisode? Build(EventAnchor anchor, EventSeries series, EventWindow window, bool isolated)
     {
-        var startGlucose = anchor.Kind == EventAnchorKind.SensorStart
-            ? series.FirstGlucose(anchor.Mills, anchor.Mills + SensorWarmUpMs)
-            : series.GlucoseAt(anchor.Mills);
-        if (startGlucose is not { } start)
+        if (StartGlucoseOf(anchor, series) is not { } start)
             return null;
 
         var slots = new EpisodeSlot[window.SlotCount];
@@ -272,6 +269,15 @@ public sealed class EventEpisode
 
         return new EventEpisode(anchor, isolated, slots, Measure(anchor, isolated, start, series, window));
     }
+
+    /// <summary>
+    /// The glucose an episode starts from (<see cref="EventMetrics.StartGlucose"/>): the reading at
+    /// the anchor, or for a sensor start the first reading after its warm-up.
+    /// </summary>
+    public static double? StartGlucoseOf(EventAnchor anchor, EventSeries series) =>
+        anchor.Kind == EventAnchorKind.SensorStart
+            ? series.FirstGlucose(anchor.Mills, anchor.Mills + SensorWarmUpMs)
+            : series.GlucoseAt(anchor.Mills);
 
     private static NetInsulin Sum(NetInsulin a, NetInsulin b) => new(
         a.AlgorithmTemp + b.AlgorithmTemp,

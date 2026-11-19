@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -110,11 +111,16 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         => ds.Pump != null || ds.OpenAps != null || ds.Loop != null
             || ds.Uploader != null || ds.UploaderBattery.HasValue;
 
-    /// <summary>AAPS sends <c>date</c> instead of <c>mills</c>; normalize before decomposition.</summary>
-    private static void NormalizeMills(DeviceStatus ds)
+    /// <summary>
+    /// AAPS sends <c>date</c> instead of <c>mills</c>. A status without <c>created_at</c> is dated
+    /// by its receipt; see <see cref="ResolveTimestamp"/>.
+    /// </summary>
+    private void NormalizeMills(DeviceStatus ds)
     {
         if (ds.Mills == 0 && ds.Date is > 0)
             ds.Mills = ds.Date.Value;
+
+        ds.CreatedAt ??= _time.GetUtcNow().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 
     private Task StampLoopAsync(V4Models.DecompositionResult result, CancellationToken ct) =>
@@ -1040,6 +1046,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 ? openAps.Enacted.Smb
                 : openAps.Enacted?.Units,
             AidVersion = openAps.Version,
+            AdditionalProperties = UploadedExtras.OfOpenAps(openAps),
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
         snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
@@ -1101,9 +1108,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             Clock = ds.Pump.Clock,
             Iob = ds.Pump.Iob?.Iob,
             BolusIob = ds.Pump.Iob?.BolusIob,
-            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
-                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
-                : null,
+            AdditionalProperties = UploadedExtras.OfPump(ds.Pump),
         };
     }
 
@@ -1124,6 +1129,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             IsCharging = ds.IsCharging ?? ds.Uploader?.IsCharging,
             Temperature = ds.Uploader?.Temperature,
             Type = ds.Uploader?.Type,
+            AdditionalProperties = ds.Uploader?.ExtensionData is { Count: > 0 } reported
+                ? reported.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
         };
     }
 
@@ -1162,7 +1170,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// Resolves the best available timestamp for a device status record.
     /// Priority: Mills (already normalized from date) > OpenAPS IOB time >
     /// <see cref="ApsSnapshotCurves.FreshestOpenApsCommand"/> timestamp > Loop timestamp > Pump clock > CreatedAt >
-    /// Loop predicted start date > now.
+    /// Loop predicted start date > now. <see cref="NormalizeMills"/> sets CreatedAt to the receipt time
+    /// when the upload has none, as Nightscout does, so the last two are reached only when CreatedAt
+    /// does not parse.
     /// </summary>
     internal DateTime ResolveTimestamp(DeviceStatus ds)
     {

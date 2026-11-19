@@ -10,15 +10,18 @@ using Nocturne.Core.Models.JsonConverters;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Manually-entered lab HbA1c results (typically one or two a year), stored purely for comparison
-/// against the computed eHbA1c estimate on the eHbA1c report. Not part of the V4 sync/dedup family:
-/// these rows are typed in once, never uploaded by a device or connector, and never read by the
-/// eHbA1c calculation itself.
+/// Lab HbA1c results entered by hand, usually one or two a year. Callers can list, add and delete them.
+/// The results are compared with the estimated eHbA1c on the eHbA1c report.
 /// </summary>
+/// <remarks>
+/// Not part of the V4 sync/dedup family: these rows are typed in once, never uploaded by a device or
+/// connector, and never read by the eHbA1c calculation itself.
+/// </remarks>
 /// <seealso cref="ILabHbA1cResultRepository"/>
 /// <seealso cref="LabHbA1cResult"/>
 [ApiController]
-[Tags("LabResults")]
+[System.ComponentModel.DisplayName("Lab HbA1c")]
+[Tags("Health")]
 [Route("api/v4/lab-results/hba1c")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]

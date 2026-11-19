@@ -61,6 +61,21 @@ public class Ar2Tests
     }
 
     [Fact]
+    public async Task CalculateForecastAsync_AvgLoss_MatchesNightscoutForAKnownSeries()
+    {
+        var result = await _ar2Service.CalculateForecastAsync(
+            new DData(),
+            new Dictionary<string, object> { ["mean"] = 120d, ["mills"] = 1_795_013_482_087L },
+            new Dictionary<string, object> { ["mean5MinsAgo"] = 118d },
+            new Dictionary<string, object>(),
+            CancellationToken.None
+        );
+
+        Assert.Equal([122, 123, 124, 125, 126, 126], result.Forecast!.Predicted.Select(p => p.Mgdl));
+        Assert.Equal(0.0003163210880908826, result.Forecast.AvgLoss, 1e-12);
+    }
+
+    [Fact]
     public async Task PropertiesForecast_FromTwoReadingsInRange_PredictsWithoutAlarm()
     {
         var ar2 = await GetAr2PropertyAsync(100, 105);

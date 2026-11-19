@@ -14,14 +14,12 @@ namespace Nocturne.API.Tests.Controllers.V2;
 public class PropertiesControllerTests
 {
     private readonly Mock<IPropertiesService> _mockPropertiesService;
-    private readonly Mock<ILogger<PropertiesController>> _mockLogger;
     private readonly PropertiesController _controller;
 
     public PropertiesControllerTests()
     {
         _mockPropertiesService = new Mock<IPropertiesService>();
-        _mockLogger = new Mock<ILogger<PropertiesController>>();
-        _controller = new PropertiesController(_mockPropertiesService.Object, _mockLogger.Object);
+        _controller = new PropertiesController(_mockPropertiesService.Object);
     }
 
     [Fact]
@@ -184,7 +182,7 @@ public class PropertiesControllerTests
     }
 
     [Fact]
-    public async Task GetAllProperties_WhenServiceThrows_ReturnsInternalServerError()
+    public async Task GetAllProperties_WhenServiceThrows_TheExceptionEscapes()
     {
         // Arrange
         _mockPropertiesService
@@ -192,16 +190,14 @@ public class PropertiesControllerTests
             .ThrowsAsync(new Exception("Service error"));
 
         // Act
-        var result = await _controller.GetAllProperties(cancellationToken: CancellationToken.None);
+        var act = () => _controller.GetAllProperties(cancellationToken: CancellationToken.None);
 
         // Assert
-        var statusResult = Assert.IsType<ActionResult<Dictionary<string, object>>>(result);
-        var objectResult = Assert.IsType<ObjectResult>(statusResult.Result);
-        Assert.Equal(500, objectResult.StatusCode);
+        await Assert.ThrowsAsync<Exception>(act);
     }
 
     [Fact]
-    public async Task GetSpecificProperties_WhenServiceThrows_ReturnsInternalServerError()
+    public async Task GetSpecificProperties_WhenServiceThrows_TheExceptionEscapes()
     {
         // Arrange
         _mockPropertiesService
@@ -211,14 +207,10 @@ public class PropertiesControllerTests
             .ThrowsAsync(new Exception("Service error"));
 
         // Act
-        var result = await _controller.GetSpecificProperties(
-            "bgnow",
-            cancellationToken: CancellationToken.None
-        );
+        var act = () =>
+            _controller.GetSpecificProperties("bgnow", cancellationToken: CancellationToken.None);
 
         // Assert
-        var statusResult = Assert.IsType<ActionResult<Dictionary<string, object>>>(result);
-        var objectResult = Assert.IsType<ObjectResult>(statusResult.Result);
-        Assert.Equal(500, objectResult.StatusCode);
+        await Assert.ThrowsAsync<Exception>(act);
     }
 }

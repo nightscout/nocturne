@@ -66,7 +66,8 @@
     </PackageReference>
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="ShiroTrie" />
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <PackageReference Include="SocketIOClient" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Yarp.ReverseProxy" />
@@ -76,6 +77,7 @@
     <!-- Source for the Scalar docs theme; see NocturneScalarTheme. -->
     <EmbeddedResource Include="..\..\Web\packages\ui\src\theme.css" LogicalName="Nocturne.API.ScalarTheme.theme.css" />
     <EmbeddedResource Include="..\..\Web\packages\ui\src\styles\nocturne-theme.css" LogicalName="Nocturne.API.ScalarTheme.nocturne-theme.css" />
+    <EmbeddedResource Include="..\..\Web\packages\charts\src\themes\nocturne.css" LogicalName="Nocturne.API.ScalarTheme.charts-theme.css" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" />

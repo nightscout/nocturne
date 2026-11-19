@@ -153,6 +153,56 @@ public static class TreatmentTypes
     public const string TransmitterSensorInsert = "Transmitter Sensor Insert";
 
     /// <summary>
+    /// Temporary override (Loop and Trio) in force for a span of time.
+    /// </summary>
+    public const string TemporaryOverride = "Temporary Override";
+
+    /// <summary>
+    /// Cancels the temporary override in force.
+    /// </summary>
+    public const string TemporaryOverrideCancel = "Temporary Override Cancel";
+
+    /// <summary>
+    /// Temporary glucose target in force for a span of time.
+    /// </summary>
+    public const string TemporaryTarget = "Temporary Target";
+
+    /// <summary>
+    /// Cancels the temporary target in force.
+    /// </summary>
+    public const string TemporaryTargetCancel = "Temporary Target Cancel";
+
+    /// <summary>
+    /// Free-text note.
+    /// </summary>
+    public const string Note = "Note";
+
+    /// <summary>
+    /// Announcement: a note that Nightscout shows as an alert.
+    /// </summary>
+    public const string Announcement = "Announcement";
+
+    /// <summary>
+    /// Exercise, recorded as a note.
+    /// </summary>
+    public const string Exercise = "Exercise";
+
+    /// <summary>
+    /// Insulin delivered outside the pump, such as a pen dose.
+    /// </summary>
+    public const string ExternalInsulin = "External Insulin";
+
+    /// <summary>
+    /// Carbs as oref treatments and the demo data carry them. The careportal sends <see cref="CarbCorrection"/> for carbs with no bolus.
+    /// </summary>
+    public const string Carbs = "Carbs";
+
+    /// <summary>
+    /// OpenAPS offline: the loop was not running for the span of the event.
+    /// </summary>
+    public const string OpenApsOffline = "OpenAPS Offline";
+
+    /// <summary>
     /// Temp basal start recorded under its own name.
     /// </summary>
     public const string TempBasalStart = "Temp Basal Start";

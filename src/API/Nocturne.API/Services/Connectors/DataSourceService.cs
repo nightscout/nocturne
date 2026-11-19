@@ -753,6 +753,25 @@ public class DataSourceService : IDataSourceService
 
 
     /// <inheritdoc />
+    public async Task<bool> ConnectorHoldsDataAsync(string connectorId, CancellationToken cancellationToken = default)
+    {
+        if (ConnectorMetadataService.GetByConnectorId(connectorId) is not { } metadata)
+            return false;
+
+        if (await _sourceData.HoldsRowsByDataSourceAsync(metadata.DataSourceId, cancellationToken))
+            return true;
+
+        var last24Hours = _time.GetUtcNow().UtcDateTime.AddHours(-24);
+        foreach (var purge in PurgesOf(metadata))
+        {
+            if ((await purge.DescribeAsync(null, last24Hours, cancellationToken)).Count > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc />
     public async Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
         string connectorId,
         CancellationToken cancellationToken = default
@@ -896,7 +915,7 @@ public class DataSourceService : IDataSourceService
     {
         await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
 
-        var deletedCounts = await DeleteAllSourceDataAsync(metadata.DataSourceId, allowReimport, cancellationToken);
+        var deletedCounts = await DeleteAllAsync(RecordSelector.ForSource(metadata.DataSourceId), allowReimport, cancellationToken);
         foreach (var purge in PurgesOf(metadata))
         {
             foreach (var (type, count) in await purge.PurgeAsync(allowReimport, _auditContext, cancellationToken))
@@ -910,25 +929,24 @@ public class DataSourceService : IDataSourceService
         _dataPurges.Where(p => p.ConnectorName.Equals(metadata.ConnectorName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Deletes every data type attributable to <paramref name="source"/>: glucose through its V4
-    /// repositories, everything else through <see cref="ISourceOwnedDataPurge"/>, whose remarks give
-    /// the path each table takes. Returns the per-type deleted counts (non-zero only).
+    /// Deletes every data type <paramref name="selector"/> names: glucose through its V4 repositories,
+    /// everything else through <see cref="ISourceOwnedDataPurge"/>, whose remarks give the path each
+    /// table takes. Returns the per-type deleted counts (non-zero only).
     /// </summary>
     /// <remarks>
-    /// With <paramref name="allowReimport"/>, every user tombstone of the source is released after the
-    /// delete, including those of earlier deletes, so the source can send its records again.
+    /// With <paramref name="allowReimport"/>, every user tombstone the selector names is released after
+    /// the delete, including those of earlier deletes, so their sender can send the records again.
     /// </remarks>
-    private async Task<Dictionary<string, long>> DeleteAllSourceDataAsync(
-        string source,
+    private async Task<Dictionary<string, long>> DeleteAllAsync(
+        RecordSelector selector,
         bool allowReimport,
         CancellationToken cancellationToken
     )
     {
-        var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
-        var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
-        var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
+        var sensorGlucoseDeleted = await _sensorGlucose.DeleteAsync(selector, WriteOrigin.Live, cancellationToken);
+        var meterGlucoseDeleted = await _meterGlucose.DeleteAsync(selector, WriteOrigin.Live, cancellationToken);
+        var calibrationsDeleted = await _calibrations.DeleteAsync(selector, WriteOrigin.Live, cancellationToken);
 
-        var scope = $"data_source={source}";
         var deletedCounts = new Dictionary<string, long>();
         void Add(string type, long deleted)
         {
@@ -938,31 +956,25 @@ public class DataSourceService : IDataSourceService
         Add(nameof(SyncDataType.Glucose), sensorGlucoseDeleted);
         Add(nameof(SyncDataType.ManualBG), meterGlucoseDeleted);
         Add(nameof(SyncDataType.Calibrations), calibrationsDeleted);
-        var purged = await _sourcePurge.SoftDeleteBySourceAsync(source, scope, cancellationToken);
+        var purged = await _sourcePurge.SoftDeleteAsync(selector, cancellationToken);
         foreach (var (type, deleted) in purged.DeletedCounts)
             Add(type, deleted);
         await _profileActivationWriter.AfterBulkRemovalAsync(cancellationToken);
 
         if (allowReimport)
-            await _sourcePurge.AllowReimportBySourceAsync(source, scope, cancellationToken);
+            await _sourcePurge.AllowReimportAsync(selector, cancellationToken);
 
         return deletedCounts;
     }
 
     /// <summary>
-    /// The source <paramref name="key"/> names among the records no credential is recorded as the
-    /// writer of, which the connections list shows under either origin handle.
+    /// The source <paramref name="key"/> names under either origin handle, however long ago it last
+    /// wrote: the connections list drops a source after the discovery window but keeps its records.
     /// </summary>
-    private async Task<DataSourceInfo?> FindUnwrittenSourceAsync(string key, CancellationToken ct)
-    {
-        var now = _time.GetUtcNow();
-        var buckets = await _sourceData.WriterBucketsAsync(
-            now.AddDays(-DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
-
-        return buckets.Any(b => b.WriterGrantId is null && (b.DataSource == key || b.Device == key))
+    private async Task<DataSourceInfo?> FindStoredSourceAsync(string key, CancellationToken ct) =>
+        (await _sourceData.CountsBySourceAsync(key, ct)).Count > 0
             ? CreateDataSourceInfo(key, key, SourceHandle.Unknown)
             : null;
-    }
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
@@ -1003,7 +1015,7 @@ public class DataSourceService : IDataSourceService
                 s.Id == dataSourceId || s.DeviceId == dataSourceId
             );
 
-            source ??= await FindUnwrittenSourceAsync(dataSourceId, cancellationToken);
+            source ??= await FindStoredSourceAsync(dataSourceId, cancellationToken);
 
             if (source == null)
             {
@@ -1020,7 +1032,7 @@ public class DataSourceService : IDataSourceService
             if (connector is not null)
                 return await PurgeConnectorDataAsync(connector, connector.ConnectorName, allowReimport, cancellationToken);
 
-            var deletedCounts = await DeleteAllSourceDataAsync(deviceId, allowReimport, cancellationToken);
+            var deletedCounts = await DeleteAllAsync(RecordSelector.ForSource(deviceId), allowReimport, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for {DeviceId}: {DeletedCounts}",
@@ -1047,6 +1059,30 @@ public class DataSourceService : IDataSourceService
                 DataSourceDeleteError.DeleteFailed,
                 "Failed to delete data source data");
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<DataSourceDeleteResult> DeleteWrittenDataAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        bool allowReimport = false,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var selector = RecordSelector.ForWriters(grantIds);
+        var deletedCounts = await DeleteAllAsync(selector, allowReimport, cancellationToken);
+
+        _logger.LogInformation(
+            "Deleted data for {Scope}: {DeletedCounts}",
+            selector.Scope,
+            string.Join(", ", deletedCounts.Select(kv => $"{kv.Value} {kv.Key}"))
+        );
+
+        return new DataSourceDeleteResult
+        {
+            Success = true,
+            DataSource = selector.Scope,
+            DeletedCounts = deletedCounts,
+        };
     }
 
     /// <inheritdoc />

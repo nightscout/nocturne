@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
 import { MealPeriod } from "#lib/api/index.js";
 import Harness from "./IobCobTrackHarness.test.svelte";
-import { computeNightscoutTrackLayout } from "../engine/track-layout";
+import { computeNightscoutTrackLayout } from "@nocturne/charts/core";
 
 const baseTime = new Date("2026-01-01T12:00:00Z").getTime();
 const minutes = (n: number) => new Date(baseTime + n * 60 * 1000);
@@ -122,7 +122,7 @@ describe("IobCobTrack Nightscout bubbles", () => {
 		expect(h.insulin).toHaveLength(1);
 		expect(h.carbOutlines).toHaveLength(0);
 		expect(h.insulinOutlines).toHaveLength(0);
-		expect(labels(container)).toEqual(expect.arrayContaining(["40 g", "2 U"]));
+		expect(labels(container)).toEqual(expect.arrayContaining(["40g", "2U"]));
 
 		// Both halves take the entry's size from its carbs.
 		const carbHalf = h.carbs[0].getBoundingClientRect();
@@ -142,7 +142,7 @@ describe("IobCobTrack Nightscout bubbles", () => {
 		const h = halves(container);
 		expect(h.insulinOutlines).toHaveLength(1);
 		expect(h.carbOutlines).toHaveLength(1);
-		expect(labels(container)).toEqual(expect.arrayContaining(["12 g", "0.35 U"]));
+		expect(labels(container)).toEqual(expect.arrayContaining(["12g", "0.35U"]));
 	});
 
 	it("pins an entry to the reading nearest its time", async () => {

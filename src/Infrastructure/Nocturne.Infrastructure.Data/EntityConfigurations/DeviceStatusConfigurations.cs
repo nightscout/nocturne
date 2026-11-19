@@ -54,6 +54,15 @@ internal sealed class UploaderSnapshotEntityConfiguration : IEntityTypeConfigura
 {
     public void Configure(EntityTypeBuilder<UploaderSnapshotEntity> entity)
     {
+        // The newest snapshot of one uploader type is read on every alert pass of a tenant with
+        // a transmitter rule; see UploaderSnapshotRepository.GetLatestOfTypeAsync. Without type
+        // in an index, a tenant with no such snapshot has every one it holds read to find none.
+        entity
+            .HasIndex(e => new { e.TenantId, e.Type, e.Timestamp })
+            .HasDatabaseName("ix_uploader_snapshots_tenant_type_timestamp")
+            .IsDescending(false, false, true)
+            .HasFilter("deleted_at IS NULL");
+
         entity
             .HasOne<DeviceEntity>()
             .WithMany()

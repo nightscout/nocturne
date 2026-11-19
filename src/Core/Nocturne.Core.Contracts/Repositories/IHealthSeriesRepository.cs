@@ -20,6 +20,16 @@ public interface IHealthSeriesRepository<T>
     /// <summary>The record with the given route id, or <see langword="null"/>.</summary>
     Task<T?> GetByIdAsync(string id, CancellationToken ct = default);
 
+    /// <summary>Whether any record was observed in <c>[from, to)</c>. Reads one row at most.</summary>
+    Task<bool> AnyObservedInAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>The number of records observed in <c>[from, to)</c>.</summary>
+    Task<int> CountObservedInAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>The latest <paramref name="count"/> records observed in <c>[from, to)</c>, newest first.</summary>
+    Task<IReadOnlyList<T>> GetObservedInNewestFirstAsync(
+        DateTime from, DateTime to, int count, CancellationToken ct = default);
+
     /// <summary>
     /// Stores <paramref name="records"/> and returns what was stored. A record whose
     /// (DataSource, SyncIdentifier) or id is held by a live row updates it in place; one held by a
@@ -92,6 +102,28 @@ public interface IObservedHealthSeriesRepository<T> : IHealthSeriesRepository<T>
     /// <see langword="null"/> when that source has written none.
     /// </summary>
     Task<DateTime?> GetLatestTimestampAsync(string source, CancellationToken ct = default);
+}
+
+/// <summary><see cref="IHealthSeriesRepository{T}"/> for body weight.</summary>
+public interface IBodyWeightRepository : IHealthSeriesRepository<BodyWeight>
+{
+    /// <summary>
+    /// Whether any record observed in <c>[from, to)</c> carries <paramref name="measure"/>. Reads one row at most.
+    /// </summary>
+    Task<bool> AnyMeasuredInAsync(DateTime from, DateTime to, BodyWeightMeasure measure, CancellationToken ct = default);
+}
+
+/// <summary>A figure a body weight record may carry.</summary>
+public enum BodyWeightMeasure
+{
+    /// <summary>The weight, which every record carries.</summary>
+    Weight,
+
+    /// <summary>The body fat percent, where the scale measures it.</summary>
+    BodyFat,
+
+    /// <summary>The lean mass, where the scale measures it.</summary>
+    LeanMass,
 }
 
 /// <summary><see cref="IObservedHealthSeriesRepository{T}"/> for heart rate.</summary>
