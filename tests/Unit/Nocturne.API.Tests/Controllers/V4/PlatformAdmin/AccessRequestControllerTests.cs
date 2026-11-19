@@ -35,6 +35,7 @@ public sealed class AccessRequestControllerTests : IDisposable
     private readonly AccessRequestController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
+    private readonly Guid _approverId = Guid.CreateVersion7();
 
     public AccessRequestControllerTests()
     {
@@ -50,7 +51,13 @@ public sealed class AccessRequestControllerTests : IDisposable
             _notifications.Object,
             NullLogger<AccessRequestController>.Instance)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    Items = { ["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = _approverId } },
+                },
+            },
         };
 
         _dbContext.Tenants.Add(new TenantEntity
@@ -116,7 +123,25 @@ public sealed class AccessRequestControllerTests : IDisposable
         _accessRequests.Verify(
             s => s.ApproveAsync(
                 subjectId, _tenantId, It.IsAny<List<Guid>>(), It.Is<List<string>?>(p => p!.SequenceEqual(new[] { "api:*:read" })),
-                limitTo24Hours, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+                limitTo24Hours, It.IsAny<IReadOnlyCollection<string>>(), _approverId, It.IsAny<CancellationToken>()),
+            Times.Once());
+    }
+
+    [Fact]
+    public async Task Approve_byAnAdministratorCredentialThatNamesNoSubject_isApprovedWithNoDecider()
+    {
+        var subjectId = Guid.CreateVersion7();
+        SetupApprove(new ApproveAccessRequestResult(ApproveAccessRequestOutcome.Approved));
+        _controller.HttpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, IsPlatformAdmin = true };
+
+        var result = await _controller.Approve(
+            subjectId, new ApproveAccessRequestRequest { DirectPermissions = ["api:*:read"] }, CancellationToken.None);
+
+        result.Should().BeOfType<OkResult>();
+        _accessRequests.Verify(
+            s => s.ApproveAsync(
+                subjectId, _tenantId, It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(), It.IsAny<bool>(),
+                It.IsAny<IReadOnlyCollection<string>>(), null, It.IsAny<CancellationToken>()),
             Times.Once());
     }
 
@@ -124,7 +149,7 @@ public sealed class AccessRequestControllerTests : IDisposable
         _accessRequests
             .Setup(s => s.ApproveAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
-                It.IsAny<bool>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(result);
 
     [Fact]

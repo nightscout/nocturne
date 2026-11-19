@@ -13,8 +13,9 @@ using Nocturne.Core.Models.SetupHub;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The owner's setup hub: the items left to set up after onboarding, and the dashboard strip that
-/// offers them. Owner-only, like the onboarding answers it follows on from.
+/// The owner's setup checklist: the setup items still open, and the dashboard strip that offers
+/// them. A caller can read the checklist, update an item, confirm the About step and dismiss the
+/// strip. Only the owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]

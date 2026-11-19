@@ -218,7 +218,7 @@ public class SourceOwnedDataTableListTests : IDisposable
     {
         Seed(Now);
 
-        var result = await Repository().SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository().SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         result.DeletedCounts.Select(c => (c.Key, c.Value)).Should().Equal(
             (SourceDataTypes.Boluses, 1L),
@@ -254,7 +254,7 @@ public class SourceOwnedDataTableListTests : IDisposable
     {
         Seed(Now, tombstone: true);
 
-        await Repository().AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository().AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().ContainSingle().Which.Should().BeEquivalentTo([
             typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration),

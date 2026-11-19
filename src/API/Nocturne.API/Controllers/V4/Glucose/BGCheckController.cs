@@ -9,11 +9,11 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Controller for managing blood glucose check observations recorded via a fingerstick or other
-/// manual measurement method. Provides full CRUD operations backed by <see cref="IBGCheckRepository"/>.
+/// Blood glucose checks taken by fingerstick or another manual method. List, read, create (one or
+/// in bulk), update and delete checks. List deleted checks and restore them.
 /// </summary>
 /// <remarks>
-/// Inherits standard list, get-by-ID, create, update, and delete operations from
+/// Backed by <see cref="IBGCheckRepository"/>. Inherits standard list, get-by-ID, create, update, and delete operations from
 /// <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// Both create and update use the same <see cref="UpsertBGCheckRequest"/> shape.
 /// The <c>SyncIdentifier</c> field on create is preserved verbatim; updates retain the
@@ -24,6 +24,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="UpsertBGCheckRequest"/>
 /// <seealso cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>
 [ApiController]
+[System.ComponentModel.DisplayName("BG Checks")]
 [Tags("Glucose")]
 [Route("api/v4/observations/bg-checks")]
 [RequireScope(Scope.GlucoseRead)]

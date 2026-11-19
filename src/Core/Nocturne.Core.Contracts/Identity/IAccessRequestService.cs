@@ -24,11 +24,17 @@ public interface IAccessRequestService
 {
     /// <summary>
     /// Approves the pending subject and adds it to the tenant, in one commit: a membership that
-    /// cannot be written leaves the subject pending. The owners' notifications for the request
-    /// are archived after the commit. With no tenant the subject is approved and joins none.
+    /// cannot be written leaves the subject pending. The subject's pending membership request on
+    /// that tenant is decided as approved in the same commit. The owners' notifications for the
+    /// request are archived after the commit. With no tenant the subject is approved and joins
+    /// none; a request it filed stays pending for that tenant's owner to decide.
     /// </summary>
     /// <param name="granterScopes">
     /// The approving caller's resolved scopes: the grant ceiling the requested roles are checked against.
+    /// </param>
+    /// <param name="decidedBySubjectId">
+    /// The approving caller, recorded on the membership request it decides; null for a platform
+    /// administrator credential that names no subject.
     /// </param>
     Task<ApproveAccessRequestResult> ApproveAsync(
         Guid subjectId,
@@ -37,5 +43,6 @@ public interface IAccessRequestService
         List<string>? directPermissions,
         bool limitTo24Hours,
         IReadOnlyCollection<string> granterScopes,
+        Guid? decidedBySubjectId,
         CancellationToken ct = default);
 }

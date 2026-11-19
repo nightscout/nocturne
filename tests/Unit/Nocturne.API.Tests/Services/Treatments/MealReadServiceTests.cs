@@ -106,6 +106,25 @@ public class MealReadServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CarbIntakesCarryTheLabelOfTheirFoodLines()
+    {
+        var now = DateTime.UtcNow;
+        var labelled = SeedCarbIntake(now.AddHours(-2), 20);
+        var plain = SeedCarbIntake(now.AddHours(-1), 10);
+        _foodServiceMock
+            .Setup(f => f.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new TreatmentFood { CarbIntakeId = labelled.Id, FoodName = "Rice" },
+                new TreatmentFood { CarbIntakeId = labelled.Id, Note = "taco" },
+            ]);
+
+        var events = await GetMeals(now.AddHours(-12), now);
+
+        events.SelectMany(e => e.CarbIntakes).ToDictionary(c => c.Id, c => c.FoodType)
+            .Should().Equal(new Dictionary<Guid, string?> { [labelled.Id] = "Rice, taco", [plain.Id] = null });
+    }
+
+    [Fact]
     public async Task EmptyDatabase_ReturnsEmptyArray()
     {
         var from = DateTime.UtcNow.AddHours(-12);

@@ -29,11 +29,11 @@
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Database from "@lucide/svelte/icons/database";
   import Download from "@lucide/svelte/icons/download";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Plus from "@lucide/svelte/icons/plus";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Wifi from "@lucide/svelte/icons/wifi";
+  import { docsUrl } from "#lib/docs-url.js";
   import X from "@lucide/svelte/icons/x";
   import { EmptyState } from "#lib/components/shared/index.js";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
@@ -94,6 +94,7 @@
   const connections = $derived(overview?.connections ?? []);
   const otherSources = $derived(overview?.otherSources ?? []);
   const windowDays = $derived(overview?.windowDays);
+  const activeWithinMinutes = $derived(overview?.activeWithinMinutes);
   const loadError = $derived(
     connectionsQuery.error == null
       ? null
@@ -422,10 +423,14 @@
   <li>
     <Item variant="row" href={resolve("settings/connectors/google-health")}>
       <span
-        class="flex size-8 shrink-0 items-center justify-center text-muted-foreground"
+        class="flex size-8 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
-        <HeartPulse class="size-5" />
+        <AppLogo
+          icon="google-health"
+          invertMode
+          class="size-8 object-contain"
+        />
       </span>
       <span class="min-w-0 flex-1 space-y-0.5">
         <span class="block font-medium">Google Health</span>
@@ -473,6 +478,16 @@
           The apps, API tokens, and connectors that send data to Nocturne or
           read data from it
         </p>
+        <!-- eslint-disable svelte/no-navigation-without-resolve -- an absolute URL to the docs site, not an app route -->
+        <a
+          class="text-sm underline"
+          href={docsUrl("/docs/data-sources/labels", "connections-labels")}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Why one app can show more than one source
+        </a>
+        <!-- eslint-enable svelte/no-navigation-without-resolve -->
       </div>
     </div>
     <Button variant="outline" size="sm" onclick={refreshAll}>
@@ -726,6 +741,7 @@
   bind:open={showDetailDialog}
   connection={selectedConnection}
   {windowDays}
+  {activeWithinMinutes}
   {canManage}
   syncing={isSyncing(selectedConnection)}
   quickSyncing={!!selectedConnectorId && quickSyncingById[selectedConnectorId] === true}

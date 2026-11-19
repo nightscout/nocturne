@@ -79,7 +79,7 @@ and how many fired this week.
 
 <Screenshot id="alerts-configuration" />
 
-A new site may start with no rules at all. Press **New rule** to write one, or
+A new site may start with no rules at all. Press **New alert** to make one, or
 see [Example rules](/docs/alerts/recipes) for common starting points.
 
 ## In this section

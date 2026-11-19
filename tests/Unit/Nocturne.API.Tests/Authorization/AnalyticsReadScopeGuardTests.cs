@@ -562,7 +562,8 @@ public partial class AnalyticsReadScopeGuardTests
             Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(),
-            Mock.Of<INoteRepository>())
+            Mock.Of<INoteRepository>(),
+            Mock.Of<ITreatmentFoodService>())
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };
@@ -580,9 +581,12 @@ public partial class AnalyticsReadScopeGuardTests
         Current = new V4GlucoseReading { Sgv = 120 },
         History = [new V4GlucoseReading { Sgv = 118 }],
         Iob = 2,
+        IobKnown = true,
         Cob = 20,
+        CobKnown = true,
         Alarm = new V4AlarmState(),
         Predictions = new V4Predictions(),
+        BasalInjection = new V4BasalInjectionStatus { Units = 18, EstimatedRate = 0.75 },
         Trackers = [new V4TrackerStatus()],
     };
 
@@ -596,6 +600,9 @@ public partial class AnalyticsReadScopeGuardTests
         data.Predictions.Should().NotBeNull();
         data.Iob.Should().Be(0);
         data.Cob.Should().Be(0);
+        data.IobKnown.Should().BeFalse();
+        data.CobKnown.Should().BeFalse();
+        data.BasalInjection.Should().BeNull();
         data.Alarm.Should().BeNull();
     }
 
@@ -609,6 +616,18 @@ public partial class AnalyticsReadScopeGuardTests
         data.History.Should().BeEmpty();
         data.Predictions.Should().BeNull();
         data.Iob.Should().Be(0);
+        data.BasalInjection.Should().BeNull();
+    }
+
+    [Fact]
+    public void WidgetSummary_TreatmentsGrant_KeepsTheBasalInjection()
+    {
+        var data = WidgetSummaryReadScopeGuard.Redact(Summary(), Granted(Scope.TreatmentsRead));
+
+        data.BasalInjection.Should().NotBeNull();
+        data.IobKnown.Should().BeTrue();
+        data.CobKnown.Should().BeTrue();
+        data.BasalInjection!.EstimatedRate.Should().Be(0.75);
     }
 
     /// <summary>
@@ -673,6 +692,7 @@ public partial class AnalyticsReadScopeGuardTests
         Reservoir = 42,
         PumpBatteryPercent = 80,
         PumpBatteryVoltage = 1.4,
+        LinkBatteryVoltage = 2.9,
         Thresholds = new ChartThresholdsDto { Low = 70, High = 180, TargetLow = 90, TargetHigh = 140 },
     };
 
@@ -685,6 +705,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().Be(42);
         data.PumpBatteryPercent.Should().Be(80);
         data.PumpBatteryVoltage.Should().Be(1.4);
+        data.LinkBatteryVoltage.Should().Be(2.9);
         data.SensitivityPercent.Should().BeNull();
     }
 
@@ -698,6 +719,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().BeNull();
         data.PumpBatteryPercent.Should().BeNull();
         data.PumpBatteryVoltage.Should().BeNull();
+        data.LinkBatteryVoltage.Should().BeNull();
     }
 
     [Fact]

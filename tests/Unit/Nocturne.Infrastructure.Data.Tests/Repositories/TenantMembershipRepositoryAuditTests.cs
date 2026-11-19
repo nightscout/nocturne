@@ -242,6 +242,70 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     }
 
     [Fact]
+    public async Task EditingARolesPermissionsAuditsTheGainedAndLostOnTheRoleWithTheActor()
+    {
+        var changed = new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.DevicesRead]);
+
+        await Repository(new TestAuditActor { SubjectId = _actor })
+            .UpdateRoleAsync(_tenant, _viewer, changed, Now, CancellationToken.None);
+
+        var row = (await RowsAsync()).Should().ContainSingle().Subject;
+        row.EventType.Should().Be(AuthAuditEventType.RolePermissionsChanged);
+        row.ActorSubjectId.Should().Be(_actor);
+        row.TargetSubjectId.Should().BeNull();
+        row.TenantId.Should().Be(_tenant);
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{_viewer}}","role":"viewer","gained":["devices.read","treatments.read"],"lost":["glucose.read"],"kind":"tenant"}""");
+    }
+
+    [Fact]
+    public async Task EditingARoleWithoutChangingItsPermissionsAuditsNothing()
+    {
+        await Repository(new TestAuditActor { SubjectId = _actor }).UpdateRoleAsync(
+            _tenant, _viewer, new TenantRoleEdit("Renamed", "renamed", "described", [Scope.GlucoseRead]), Now, CancellationToken.None);
+
+        (await RowsAsync()).Should().BeEmpty();
+        await using var db = _db.CreateContext(_tenant);
+        (await db.TenantRoles.AsNoTracking().SingleAsync(r => r.Id == _viewer)).Name.Should().Be("Renamed");
+    }
+
+    [Fact]
+    public async Task ReorderingARolesPermissionsAuditsNothing()
+    {
+        await using (var db = _db.CreateContext(_tenant))
+        {
+            (await db.TenantRoles.SingleAsync(r => r.Id == _viewer)).Permissions = [Scope.GlucoseRead, Scope.TreatmentsRead];
+            await db.SaveChangesAsync();
+        }
+
+        await Repository(new TestAuditActor { SubjectId = _actor }).UpdateRoleAsync(
+            _tenant, _viewer, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.GlucoseRead]), Now, CancellationToken.None);
+
+        (await RowsAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARoleEditThatIsRolledBackLeavesNoAuditRow()
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(
+            new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
+        var repository = new TenantMembershipRepository(unit);
+
+        var act = () => unit.CommitAsync(async token =>
+        {
+            await repository.UpdateRoleAsync(
+                _tenant, _viewer, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.DevicesRead]), Now, token);
+            await unit.Context.SaveChangesAsync(token);
+            throw new InvalidOperationException("the rest of the unit failed");
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        (await RowsAsync()).Should().BeEmpty();
+        await using var db = _db.CreateContext(_tenant);
+        (await db.TenantRoles.AsNoTracking().SingleAsync(r => r.Id == _viewer)).Permissions.Should().BeEquivalentTo([Scope.GlucoseRead]);
+    }
+
+    [Fact]
     public async Task DeletingARoleAuditsItsRemovalFromEveryHolder()
     {
         await SeedMemberAsync();

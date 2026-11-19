@@ -39,7 +39,8 @@
     "pump_state",
     "state_span_active",
     "sleep_session_active",
-    "tracker_age"
+    "tracker_age",
+    "transmitter_battery"
   ],
   "AlertWeekday": [
     "sunday",
@@ -85,6 +86,12 @@
   "TempBasalMetric": [
     "rate",
     "percent_of_scheduled"
+  ],
+  "TransmitterBatteryMetric": [
+    "voltage_a",
+    "voltage_b",
+    "resistance",
+    "days"
   ],
   "TrendBucket": [
     "unknown",
@@ -221,6 +228,11 @@
       "minutes",
       "operator",
       "tracker_definition_id"
+    ],
+    "transmitter_battery": [
+      "metric",
+      "operator",
+      "value"
     ],
     "trend": [
       "bucket"

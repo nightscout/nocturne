@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
-import { buildProxyHeaders } from "./api-proxy-headers";
+import { buildProxyHeaders, buildProxyResponseHeaders } from "./api-proxy-headers";
 import {
   CLIENT_IP_HEADER,
   CLIENT_IP_SIGNATURE_HEADER,
@@ -135,5 +135,98 @@ describe("buildProxyHeaders", () => {
     });
 
     expect(headers.has("X-Forwarded-Host")).toBe(false);
+  });
+});
+
+const HOP_BY_HOP = ["Connection", "Keep-Alive", "Proxy-Connection", "TE", "Transfer-Encoding", "Upgrade"];
+
+describe("hop-by-hop headers", () => {
+  it.each(HOP_BY_HOP)("drops %s from the request", (name) => {
+    const headers = buildProxyHeaders({
+      requestHeaders: new Headers({ [name]: "chunked", Accept: "application/json" }),
+      effectiveHost: "acme.nocturne.run",
+      proto: "https",
+      isShareHost: false,
+      cookies: emptyCookies,
+    });
+
+    expect(headers.has(name)).toBe(false);
+    expect(headers.get("Accept")).toBe("application/json");
+  });
+
+  it("drops every header the Connection header names", () => {
+    const headers = buildProxyHeaders({
+      requestHeaders: new Headers({
+        Connection: "close, X-Custom-Hop",
+        "X-Custom-Hop": "1",
+        "X-Kept": "1",
+      }),
+      effectiveHost: "acme.nocturne.run",
+      proto: "https",
+      isShareHost: false,
+      cookies: emptyCookies,
+    });
+
+    expect(headers.has("X-Custom-Hop")).toBe(false);
+    expect(headers.get("X-Kept")).toBe("1");
+  });
+
+  it("drops the incoming Content-Length because the buffered body sets its own", () => {
+    const headers = buildProxyHeaders({
+      requestHeaders: new Headers({ "Content-Length": "12" }),
+      effectiveHost: "acme.nocturne.run",
+      proto: "https",
+      isShareHost: false,
+      cookies: emptyCookies,
+    });
+
+    expect(headers.has("Content-Length")).toBe(false);
+  });
+
+  it("drops Expect because the proxy sends a buffered body", () => {
+    const headers = buildProxyHeaders({
+      requestHeaders: new Headers({ Expect: "100-continue" }),
+      effectiveHost: "acme.nocturne.run",
+      proto: "https",
+      isShareHost: false,
+      cookies: emptyCookies,
+    });
+
+    expect(headers.has("Expect")).toBe(false);
+  });
+
+  it("keeps Content-Encoding on the request so the API can inflate the body", () => {
+    const headers = buildProxyHeaders({
+      requestHeaders: new Headers({ "Content-Encoding": "gzip" }),
+      effectiveHost: "acme.nocturne.run",
+      proto: "https",
+      isShareHost: false,
+      cookies: emptyCookies,
+    });
+
+    expect(headers.get("Content-Encoding")).toBe("gzip");
+  });
+});
+
+describe("buildProxyResponseHeaders", () => {
+  it("drops the hop-by-hop set and the encoding of a body fetch decoded", () => {
+    const headers = buildProxyResponseHeaders(
+      new Headers({
+        Connection: "keep-alive, X-Custom-Hop",
+        "Keep-Alive": "timeout=5",
+        "Transfer-Encoding": "chunked",
+        "X-Custom-Hop": "1",
+        "Content-Encoding": "gzip",
+        "Content-Length": "40",
+        "Content-Type": "application/json",
+        "Set-Cookie": "a=b",
+      })
+    );
+
+    for (const name of [...HOP_BY_HOP, "X-Custom-Hop", "Content-Encoding", "Content-Length"]) {
+      expect(headers.has(name)).toBe(false);
+    }
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("Set-Cookie")).toBe("a=b");
   });
 });

@@ -23,16 +23,38 @@ public class V4SummaryResponse
     public List<V4GlucoseReading> History { get; set; } = [];
 
     /// <summary>
-    /// Current insulin on board in units.
+    /// Current insulin on board in units. 0 when <see cref="IobKnown"/> is false.
     /// </summary>
     [JsonPropertyName("iob")]
     public double Iob { get; set; }
 
     /// <summary>
-    /// Current carbs on board in grams.
+    /// Whether <see cref="Iob"/> is a calculated value. False when no insulin stood in the window,
+    /// the calculation failed, or the caller may not read treatments, so a 0 there is not a real zero.
+    /// </summary>
+    [JsonPropertyName("iobKnown")]
+    public bool IobKnown { get; set; }
+
+    /// <summary>
+    /// Current carbs on board in grams. 0 when <see cref="CobKnown"/> is false.
     /// </summary>
     [JsonPropertyName("cob")]
     public double Cob { get; set; }
+
+    /// <summary>
+    /// Whether <see cref="Cob"/> is a calculated value. False when no carbs stood in the window and no
+    /// device reported a total, the calculation failed, or the caller may not read treatments, so a 0
+    /// there is not a real zero.
+    /// </summary>
+    [JsonPropertyName("cobKnown")]
+    public bool CobKnown { get; set; }
+
+    /// <summary>
+    /// The last long-acting dose, present when the tenant records basal injections and no temp
+    /// basals in the last 24 hours. Null otherwise.
+    /// </summary>
+    [JsonPropertyName("basalInjection")]
+    public V4BasalInjectionStatus? BasalInjection { get; set; }
 
     /// <summary>
     /// Current status of active trackers.

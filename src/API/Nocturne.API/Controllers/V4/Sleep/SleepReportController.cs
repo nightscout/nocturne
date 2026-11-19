@@ -13,13 +13,12 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Sleep;
 
 /// <summary>
-/// On-demand sleep report endpoints: single-night detail and multi-night trends.
-/// Both endpoints join CGM data with the session window at request time, so callers
-/// need glucose.read in addition to sleep.read.
+/// Sleep reports for a single night or as a trend across nights. Each report joins glucose readings
+/// with the sleep session window, so callers need both <c>glucose.read</c> and <c>sleep.read</c>.
 /// </summary>
 /// <seealso cref="ISleepReportService"/>
 [ApiController]
-[Tags("Sleep")]
+[Tags("Health")]
 [Route("api/v4/sleep/report")]
 [Authorize]
 [RequireScope(requireAll: true, Scope.SleepRead, Scope.GlucoseRead)]

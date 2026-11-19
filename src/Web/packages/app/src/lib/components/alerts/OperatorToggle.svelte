@@ -38,7 +38,7 @@
     if (next === "and" || next === "or") onChange(next);
   }}
   variant="segmented"
-  size="xs"
+  size="sm"
   data-testid="alert-operator-toggle"
 >
   <ToggleGroup.Item

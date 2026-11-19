@@ -9,7 +9,7 @@ import {
 import DashboardRailConfigurator from "./DashboardRailConfigurator.svelte";
 import DashboardRailConfiguratorHost from "./DashboardRailConfigurator.test-host.svelte";
 
-const { Cob, Basal, Iob, Loop, Reservoir, Trackers } = RailItemId;
+const { Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers } = RailItemId;
 
 function setup(value: DashboardRailPreference, trackerPillsEnabled = true) {
   const writes: DashboardRailPreference[] = [];
@@ -41,7 +41,7 @@ describe("DashboardRailConfigurator", () => {
     setup({ order: [Iob, Cob], hidden: [Loop] });
 
     await expect.element(list()).toBeVisible();
-    expect(rowOrder()).toEqual([Iob, Cob, Basal, Loop, Reservoir, Trackers]);
+    expect(rowOrder()).toEqual([Iob, Cob, Basal, Loop, Reservoir, LinkBattery, Trackers]);
     const children = [...list().element().children];
     expect(children.every((child) => child.getAttribute("role") === "listitem")).toBe(true);
     await expect.element(page.getByRole("switch", { name: "Show Loop status" })).not.toBeChecked();
@@ -63,7 +63,7 @@ describe("DashboardRailConfigurator", () => {
 
     await down.click();
 
-    expect(writes.at(-1)).toEqual({ order: [Basal, Cob, Iob, Loop, Reservoir, Trackers], hidden: [] });
+    expect(writes.at(-1)).toEqual({ order: [Basal, Cob, Iob, Loop, Reservoir, LinkBattery, Trackers], hidden: [] });
     await expect.poll(() => rowOrder()[1]).toBe(Cob);
     await expect.element(down).toHaveFocus();
   });
@@ -86,7 +86,7 @@ describe("DashboardRailConfigurator", () => {
 
     await rows.nth(2).dropTo(rows.nth(0));
 
-    expect(writes.at(-1)?.order).toEqual([Iob, Cob, Basal, Loop, Reservoir, Trackers]);
+    expect(writes.at(-1)?.order).toEqual([Iob, Cob, Basal, Loop, Reservoir, LinkBattery, Trackers]);
   });
 
   it("hides and shows an item and keeps focus on its switch", async () => {

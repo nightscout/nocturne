@@ -14,7 +14,7 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.Audit;
 
 /// <summary>
-/// Endpoints for querying mutation and read audit logs and managing audit configuration.
+/// Mutation and read audit logs. Query the logs, and manage the audit configuration.
 /// </summary>
 [ApiController]
 [Tags("Platform")]

@@ -14,9 +14,13 @@ using Nocturne.Core.Models.Extensions;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Entries controller that provides full V3 API compatibility with Nightscout entries endpoints.
-/// Implements the /api/v3/entries endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout entries: sensor glucose, meter glucose and calibration documents, with paging, field selection,
+/// sorting and filtering. A client can list, read, create, update, patch and delete entries, add them in bulk,
+/// and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout entries endpoints, at /api/v3/entries.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="Entry"/>

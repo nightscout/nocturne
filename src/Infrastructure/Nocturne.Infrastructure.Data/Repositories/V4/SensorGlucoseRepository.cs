@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -260,6 +261,18 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, Guid? patientDeviceId,
+        GlucoseStreams streams = GlucoseStreams.All, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await Matching(
+            ctx.SensorGlucose.AsNoTracking(), from, to, device, source,
+            query => WithAttribution(query, patientDeviceId, streams))
+            .CountAsync(ct);
+    }
+
     public async Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
@@ -292,25 +305,29 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         return PagedRead(
             ctx.SensorGlucose.AsNoTracking(), from, to, device, source, limit, offset, descending,
-            query =>
-            {
-                if (patientDeviceId.HasValue)
-                    query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
-                if (streams != GlucoseStreams.All)
-                    query = query.Where(e => !e.IsSecondaryStream);
-                if (streams != GlucoseStreams.All || countedOnly)
-                    query = query.CountedInStatistics();
-                if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
-                    query = query.Where(e => e.DataSource == null
-                        || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
-                return query;
-            },
+            query => WithAttribution(query, patientDeviceId, streams, countedOnly),
             afterTimestamp, afterId,
             query => orderByValue
                 ? descending
                     ? query.OrderByDescending(e => e.Mgdl).ThenByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
                     : query.OrderBy(e => e.Mgdl).ThenBy(e => e.Timestamp).ThenBy(e => e.Id)
                 : query.InObservationOrder(descending));
+    }
+
+    private static IQueryable<SensorGlucoseEntity> WithAttribution(
+        IQueryable<SensorGlucoseEntity> query, Guid? patientDeviceId, GlucoseStreams streams,
+        bool countedOnly = false)
+    {
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+        if (streams != GlucoseStreams.All)
+            query = query.Where(e => !e.IsSecondaryStream);
+        if (streams != GlucoseStreams.All || countedOnly)
+            query = query.CountedInStatistics();
+        if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
+            query = query.Where(e => e.DataSource == null
+                || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));
+        return query;
     }
 
     /// <inheritdoc />
@@ -427,18 +444,12 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         return query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id);
     }
 
-    /// <summary>
-    /// Deletes all sensor glucose records for the given data source.
-    /// </summary>
-    /// <param name="source">Data source identifier.</param>
-    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await AuditedSoftDeleteAndBroadcastAsync(
-            ctx, ctx.SensorGlucose.FromSource(source), $"data_source={source}", DuplicateDelete.PromoteSurvivor, origin, ct);
+            ctx, ctx.SensorGlucose.Selected(selector), selector.Scope, DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 
     /// <inheritdoc />

@@ -214,6 +214,19 @@ percent.
 - **Good to know:** not true until the pump or phone has reported a battery
   level at least once.
 
+### Transmitter battery
+
+A battery reading from the CGM transmitter: voltage A, voltage B, resistance,
+or the number of days since the transmitter was activated.
+
+- **Settings:** the reading, a comparison, and a number. The voltages and the
+  resistance are the numbers that xDrip+ shows on its status page, for example
+  290 for voltage A.
+- **Good to know:** xDrip+ uploads these readings only when **Upload Dexcom
+  battery** is on in its Nightscout sync settings, and only when voltage A
+  changes. The condition uses the last upload, and is not true for a reading
+  that xDrip+ did not upload.
+
 ### Loop has stopped
 
 Minutes since your loop last ran a cycle.
