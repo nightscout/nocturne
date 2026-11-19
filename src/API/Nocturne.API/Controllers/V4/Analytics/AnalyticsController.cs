@@ -52,28 +52,21 @@ public class AnalyticsController : ControllerBase
     [HttpGet("status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public ActionResult<object> GetAnalyticsStatus()
     {
-        try
-        {
-            var config = _analyticsService.GetAnalyticsConfig();
-            var systemInfo = _analyticsService.GetSystemInfo();
+        var config = _analyticsService.GetAnalyticsConfig();
+        var systemInfo = _analyticsService.GetSystemInfo();
 
-            return Ok(
-                new
-                {
-                    enabled = _analyticsService.IsAnalyticsEnabled(),
-                    configuration = config,
-                    system_info = systemInfo,
-                    message = "Analytics collects local usage data for system monitoring. No data is transmitted externally.",
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving analytics status");
-            return StatusCode(500, new { error = "Failed to retrieve analytics status" });
-        }
+        return Ok(
+            new
+            {
+                enabled = _analyticsService.IsAnalyticsEnabled(),
+                configuration = config,
+                system_info = systemInfo,
+                message = "Analytics collects local usage data for system monitoring. No data is transmitted externally.",
+            }
+        );
     }
 
     /// <summary>
@@ -84,18 +77,11 @@ public class AnalyticsController : ControllerBase
     [HttpGet("metrics/performance")]
     [ProducesResponseType(typeof(PerformanceMetrics), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public ActionResult<PerformanceMetrics> GetPerformanceMetrics()
     {
-        try
-        {
-            var metrics = _analyticsService.GetPerformanceMetrics();
-            return Ok(metrics);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving performance metrics");
-            return StatusCode(500, new { error = "Failed to retrieve performance metrics" });
-        }
+        var metrics = _analyticsService.GetPerformanceMetrics();
+        return Ok(metrics);
     }
 
     /// <summary>
@@ -106,18 +92,11 @@ public class AnalyticsController : ControllerBase
     [HttpGet("metrics/usage")]
     [ProducesResponseType(typeof(UsageStatistics), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public ActionResult<UsageStatistics> GetUsageStatistics()
     {
-        try
-        {
-            var stats = _analyticsService.GetUsageStatistics();
-            return Ok(stats);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving usage statistics");
-            return StatusCode(500, new { error = "Failed to retrieve usage statistics" });
-        }
+        var stats = _analyticsService.GetUsageStatistics();
+        return Ok(stats);
     }
 
     /// <summary>
@@ -129,24 +108,17 @@ public class AnalyticsController : ControllerBase
     [HttpGet("data/pending")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<AnalyticsBatch?>> GetPendingAnalyticsData()
     {
-        try
-        {
-            var pendingData = await _analyticsService.GetPendingAnalyticsDataAsync();
+        var pendingData = await _analyticsService.GetPendingAnalyticsDataAsync();
 
-            if (pendingData == null)
-            {
-                return Ok(new { message = "No pending analytics data", data = (object?)null });
-            }
-
-            return Ok(new { message = "Pending analytics data", data = pendingData });
-        }
-        catch (Exception ex)
+        if (pendingData == null)
         {
-            _logger.LogError(ex, "Error retrieving pending analytics data");
-            return StatusCode(500, new { error = "Failed to retrieve pending analytics data" });
+            return Ok(new { message = "No pending analytics data", data = (object?)null });
         }
+
+        return Ok(new { message = "Pending analytics data", data = pendingData });
     }
 
     /// <summary>
@@ -158,29 +130,22 @@ public class AnalyticsController : ControllerBase
     [HttpPut("config")]
     [ProducesResponseType(typeof(AnalyticsCollectionConfig), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<AnalyticsCollectionConfig>> UpdateAnalyticsConfig(
         [FromBody] AnalyticsCollectionConfig config
     )
     {
-        try
-        {
-            await _analyticsService.UpdateAnalyticsConfigAsync(config);
+        await _analyticsService.UpdateAnalyticsConfigAsync(config);
 
-            _logger.LogInformation("Analytics configuration updated");
+        _logger.LogInformation("Analytics configuration updated");
 
-            return Ok(
-                new
-                {
-                    message = "Analytics configuration updated successfully",
-                    configuration = config,
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating analytics configuration");
-            return StatusCode(500, new { error = "Failed to update analytics configuration" });
-        }
+        return Ok(
+            new
+            {
+                message = "Analytics configuration updated successfully",
+                configuration = config,
+            }
+        );
     }
 
     /// <summary>
@@ -191,21 +156,14 @@ public class AnalyticsController : ControllerBase
     [HttpDelete("data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult> ClearAnalyticsData()
     {
-        try
-        {
-            await _analyticsService.ClearAnalyticsDataAsync();
+        await _analyticsService.ClearAnalyticsDataAsync();
 
-            _logger.LogInformation("Analytics data cleared by user request");
+        _logger.LogInformation("Analytics data cleared by user request");
 
-            return Ok(new { message = "All analytics data has been cleared" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error clearing analytics data");
-            return StatusCode(500, new { error = "Failed to clear analytics data" });
-        }
+        return Ok(new { message = "All analytics data has been cleared" });
     }
 
     /// <summary>
@@ -267,23 +225,16 @@ public class AnalyticsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult> TrackCustomEvent([FromBody] AnalyticsEvent eventData)
     {
-        try
+        if (!_analyticsService.IsAnalyticsEnabled())
         {
-            if (!_analyticsService.IsAnalyticsEnabled())
-            {
-                return Problem(detail: "Analytics collection is disabled", statusCode: 400, title: "Bad Request");
-            }
-
-            await _analyticsService.TrackCustomEventAsync(eventData);
-
-            return Ok(new { message = "Custom event tracked successfully" });
+            return Problem(detail: "Analytics collection is disabled", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error tracking custom analytics event");
-            return StatusCode(500, new { error = "Failed to track custom event" });
-        }
+
+        await _analyticsService.TrackCustomEventAsync(eventData);
+
+        return Ok(new { message = "Custom event tracked successfully" });
     }
 }

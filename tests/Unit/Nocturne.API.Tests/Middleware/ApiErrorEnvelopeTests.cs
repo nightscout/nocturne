@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Profiles;
 using Xunit;
 using Nocturne.Core.Contracts.Entries;
 
@@ -112,6 +113,29 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
     }
 
     /// <summary>
+    /// A V4 controller that answers its 500 through the handler rather than a catch of its own:
+    /// the body is the handler's one shape and does not carry what the service threw.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/v4/ui-settings")]
+    [InlineData("/api/v4/ui-settings/features")]
+    [InlineData("/api/v4/admin/deduplication/status/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")]
+    public async Task V4_ConvertedController_AnswersProblemDetailsWithoutTheExceptionMessage(string route)
+    {
+        var response = await _client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        var raw = await response.Content.ReadAsStringAsync();
+        using var body = JsonDocument.Parse(raw);
+        var root = body.RootElement;
+        Assert.Equal("Internal Server Error", root.GetProperty("title").GetString());
+        Assert.Equal("Internal server error", root.GetProperty("detail").GetString());
+        Assert.Equal(500, root.GetProperty("status").GetInt32());
+        Assert.DoesNotContain(BoomMessage, raw);
+    }
+
+    /// <summary>
     /// V2 routes carry the V4 <c>ProblemDetails</c> body, serialised by
     /// <c>ApiErrorEnvelopeHandler</c> under the Nightscout options its remarks explain — no result
     /// filter can run once the pipeline has unwound to the exception handler.
@@ -189,6 +213,18 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
                     )
                     .ThrowsAsync(new InvalidOperationException(BoomMessage));
                 services.AddSingleton(bodyWeight.Object);
+
+                var uiSettings = new Mock<IUISettingsService>();
+                uiSettings
+                    .Setup(s => s.GetSettingsAsync(It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                services.AddSingleton(uiSettings.Object);
+
+                var deduplication = new Mock<IDeduplicationAdmin>();
+                deduplication
+                    .Setup(s => s.GetRunStatusAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                services.AddSingleton(deduplication.Object);
 
                 var authorization = new Mock<IAuthorizationService>();
                 authorization

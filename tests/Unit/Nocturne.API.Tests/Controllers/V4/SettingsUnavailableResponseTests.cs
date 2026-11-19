@@ -60,8 +60,7 @@ public class SettingsUnavailableResponseTests
         var controller = new MealMatchingController(
             service.Object,
             Mock.Of<IConnectorFoodEntryRepository>(),
-            Mock.Of<IInAppNotificationService>(),
-            NullLogger<MealMatchingController>.Instance
+            Mock.Of<IInAppNotificationService>()
         )
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

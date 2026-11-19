@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models;
 
 
@@ -17,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 [Route("api/v4/debug")]
 [Produces("application/json")]
 [Authorize]
+[ErrorEnvelope]
 public class DebugController : ControllerBase
 {
     private readonly IWebHostEnvironment _environment;
@@ -102,81 +104,70 @@ public class DebugController : ControllerBase
         string? spec = null
     )
     {
-        try
+        _logger.LogDebug(
+            "Echo query for storage: {Echo}, model: {Model}, spec: {Spec}",
+            echo,
+            model,
+            spec
+        );
+
+        // Extract query parameters from the request
+        var queryParams = new Dictionary<string, object>();
+        foreach (var param in Request.Query)
         {
-            _logger.LogDebug(
-                "Echo query for storage: {Echo}, model: {Model}, spec: {Spec}",
-                echo,
-                model,
-                spec
-            );
-
-            // Extract query parameters from the request
-            var queryParams = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
+            if (param.Value.Count == 1)
             {
-                if (param.Value.Count == 1)
-                {
-                    queryParams[param.Key] = param.Value.ToString();
-                }
-                else
-                {
-                    queryParams[param.Key] = param.Value.ToArray();
-                }
+                queryParams[param.Key] = param.Value.ToString();
             }
-
-            // Default count if not specified
-            if (!queryParams.ContainsKey("count"))
+            else
             {
-                queryParams["count"] = "10";
+                queryParams[param.Key] = param.Value.ToArray();
             }
-
-            // Validate storage type
-            var validStorageTypes = new[]
-            {
-                "entries",
-                "treatments",
-                "devicestatus",
-                "activity",
-                "profile",
-                "food",
-            };
-            if (!validStorageTypes.Contains(echo.ToLowerInvariant()))
-            {
-                return BadRequest(
-                    new
-                    {
-                        error = $"Invalid storage type: {echo}. Valid types are: {string.Join(", ", validStorageTypes)}",
-                    }
-                );
-            }
-
-            // Build the response with query information
-            var response = new
-            {
-                query = BuildMongoQuery(queryParams, echo),
-                input = queryParams,
-                @params = new
-                {
-                    echo = echo,
-                    model = model,
-                    spec = spec,
-                },
-                storage = echo,
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                queryString = Request.QueryString.ToString(),
-            };
-
-            return Ok(response);
         }
-        catch (Exception ex)
+
+        // Default count if not specified
+        if (!queryParams.ContainsKey("count"))
         {
-            _logger.LogError(ex, "Error processing echo query for storage: {Storage}", echo);
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "An error occurred while processing the echo query" }
+            queryParams["count"] = "10";
+        }
+
+        // Validate storage type
+        var validStorageTypes = new[]
+        {
+            "entries",
+            "treatments",
+            "devicestatus",
+            "activity",
+            "profile",
+            "food",
+        };
+        if (!validStorageTypes.Contains(echo.ToLowerInvariant()))
+        {
+            return BadRequest(
+                new
+                {
+                    error = $"Invalid storage type: {echo}. Valid types are: {string.Join(", ", validStorageTypes)}",
+                }
             );
         }
+
+        // Build the response with query information
+        var response = new
+        {
+            query = BuildMongoQuery(queryParams, echo),
+            input = queryParams,
+            @params = new
+            {
+                echo = echo,
+                model = model,
+                spec = spec,
+            },
+            storage = echo,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            queryString = Request.QueryString.ToString(),
+        };
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -198,118 +189,105 @@ public class DebugController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        _logger.LogDebug("Previewing entries without persistence");
+
+        if (entries == null)
         {
-            _logger.LogDebug("Previewing entries without persistence");
+            return Task.FromResult<ActionResult<object>>(
+                Problem(detail: "Entry data is required", statusCode: 400, title: "Bad Request")
+            );
+        }
 
-            if (entries == null)
+        List<Entry> entryList;
+        var validationResults = new List<object>();
+
+        // Handle both single entry and array of entries
+        if (entries is JsonElement jsonElement)
+        {
+            if (jsonElement.ValueKind == JsonValueKind.Array)
             {
-                return Task.FromResult<ActionResult<object>>(
-                    Problem(detail: "Entry data is required", statusCode: 400, title: "Bad Request")
-                );
-            }
-
-            List<Entry> entryList;
-            var validationResults = new List<object>();
-
-            // Handle both single entry and array of entries
-            if (entries is JsonElement jsonElement)
-            {
-                if (jsonElement.ValueKind == JsonValueKind.Array)
+                try
                 {
-                    try
-                    {
-                        entryList =
-                            JsonSerializer.Deserialize<List<Entry>>(jsonElement.GetRawText())
-                            ?? new List<Entry>();
-                    }
-                    catch (JsonException ex)
-                    {
-                        return Task.FromResult<ActionResult<object>>(
-                            BadRequest(
-                                new
-                                {
-                                    error = "Invalid JSON format for entry array",
-                                    details = ex.Message,
-                                }
-                            )
-                        );
-                    }
+                    entryList =
+                        JsonSerializer.Deserialize<List<Entry>>(jsonElement.GetRawText())
+                        ?? new List<Entry>();
                 }
-                else
+                catch (JsonException ex)
                 {
-                    try
-                    {
-                        var singleEntry = JsonSerializer.Deserialize<Entry>(
-                            jsonElement.GetRawText()
-                        );
-                        entryList =
-                            singleEntry != null
-                                ? new List<Entry> { singleEntry }
-                                : new List<Entry>();
-                    }
-                    catch (JsonException ex)
-                    {
-                        return Task.FromResult<ActionResult<object>>(
-                            BadRequest(
-                                new
-                                {
-                                    error = "Invalid JSON format for entry",
-                                    details = ex.Message,
-                                }
-                            )
-                        );
-                    }
+                    return Task.FromResult<ActionResult<object>>(
+                        BadRequest(
+                            new
+                            {
+                                error = "Invalid JSON format for entry array",
+                                details = ex.Message,
+                            }
+                        )
+                    );
                 }
             }
             else
             {
-                return Task.FromResult<ActionResult<object>>(
-                    Problem(detail: "Invalid entry data format", statusCode: 400, title: "Bad Request")
-                );
-            }
-
-            // Validate each entry and build validation results
-            foreach (var entry in entryList)
-            {
-                var validation = ValidateEntry(entry);
-                validationResults.Add(
-                    new
-                    {
-                        entry = entry,
-                        validation = validation,
-                        preview = true,
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            var response = new
-            {
-                entries = entryList,
-                validationResults = validationResults,
-                summary = new
+                try
                 {
-                    totalEntries = entryList.Count,
-                    validEntries = validationResults.Count(v => ((dynamic)v).validation.isValid),
-                    invalidEntries = validationResults.Count(v => !((dynamic)v).validation.isValid),
-                    preview = true,
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                },
-            };
-
-            return Task.FromResult<ActionResult<object>>(Ok(response));
+                    var singleEntry = JsonSerializer.Deserialize<Entry>(
+                        jsonElement.GetRawText()
+                    );
+                    entryList =
+                        singleEntry != null
+                            ? new List<Entry> { singleEntry }
+                            : new List<Entry>();
+                }
+                catch (JsonException ex)
+                {
+                    return Task.FromResult<ActionResult<object>>(
+                        BadRequest(
+                            new
+                            {
+                                error = "Invalid JSON format for entry",
+                                details = ex.Message,
+                            }
+                        )
+                    );
+                }
+            }
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "Error previewing entries");
             return Task.FromResult<ActionResult<object>>(
-                StatusCode(
-                    StatusCodes.Status500InternalServerError,
-                    new { error = "An error occurred while previewing entries" }
-                )
+                Problem(detail: "Invalid entry data format", statusCode: 400, title: "Bad Request")
             );
         }
+
+        // Validate each entry and build validation results
+        foreach (var entry in entryList)
+        {
+            var validation = ValidateEntry(entry);
+            validationResults.Add(
+                new
+                {
+                    entry = entry,
+                    validation = validation,
+                    preview = true,
+                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                }
+            );
+        }
+
+        var response = new
+        {
+            entries = entryList,
+            validationResults = validationResults,
+            summary = new
+            {
+                totalEntries = entryList.Count,
+                validEntries = validationResults.Count(v => ((dynamic)v).validation.isValid),
+                invalidEntries = validationResults.Count(v => !((dynamic)v).validation.isValid),
+                preview = true,
+                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            },
+        };
+
+        return Task.FromResult<ActionResult<object>>(Ok(response));
     }
 
     /// <summary>
