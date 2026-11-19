@@ -33,7 +33,7 @@
   import DeliveryStep from "#lib/components/alerts/wizard/DeliveryStep.svelte";
   import SettingsStep from "#lib/components/alerts/wizard/SettingsStep.svelte";
   import TypeStep from "#lib/components/alerts/wizard/TypeStep.svelte";
-  import WizardProgress from "#lib/components/alerts/wizard/WizardProgress.svelte";
+  import WizardProgress from "#lib/components/wizard/WizardProgress.svelte";
   import {
     draftCondition,
     draftIssue,

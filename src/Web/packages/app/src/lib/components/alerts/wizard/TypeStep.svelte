@@ -2,19 +2,13 @@
   import { untrack, type Component } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { DropGroup, DropSurface } from "water-ui";
-  import { itemVariants } from "#lib/components/ui/item/index.js";
-  import { cn } from "#lib/utils/index.js";
-  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import WizardOptionList from "#lib/components/wizard/WizardOptionList.svelte";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import type { TrackerDefinitionDto } from "#lib/api/generated/nocturne-api-client.js";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
-  import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsDown from "@lucide/svelte/icons/chevrons-down";
   import Fuel from "@lucide/svelte/icons/fuel";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -36,19 +30,19 @@
     onPick: (id: TemplateId) => void;
     /** The types there are, from the API's presets. */
     templates: readonly TemplateDef[];
-    /** The presets have not arrived yet. */
-    loading?: boolean;
     /** The trackers there are; a type that reads only a tracker is listed when one matches. */
     trackerDefinitions?: readonly TrackerDefinitionDto[];
+    /** Whether the presets are still on their way. */
+    loading?: boolean;
   }
 
-  let { selected, onPick, templates, loading = false, trackerDefinitions = [] }: Props = $props();
+  let { selected, onPick, templates, trackerDefinitions = [], loading = false }: Props = $props();
 
-  // The padding is on the content, which sits above the paint.
-  const ROW = cn(itemVariants({ variant: "row", interactive: true }), "p-0");
-
-  // Absolutely positioned over the row, so the list lays out the same before it arrives.
-  const selectionEdge = stillArtwork(() => import("#lib/watercolour/selection-edge.js"));
+  const option = (t: TemplateDef) => ({
+    id: t.id,
+    label: templateLabel(t.id),
+    description: templateDescription(t.id),
+  });
 
   const ICONS: Record<TemplateId, Component> = {
     urgent_low: ChevronsDown,
@@ -76,55 +70,21 @@
   let moreOpen = $state(untrack(() => more.some((t) => t.id === selected)));
 </script>
 
-{#snippet row(id: TemplateId)}
+{#snippet icon(id: TemplateId)}
   {@const Icon = ICONS[id]}
-  {@const isSelected = selected === id}
-  <li class="relative">
-    <!-- The row is the surface, so the paint lands under its copy; the chosen row has the edge
-         and stays plain. -->
-    <DropSurface
-      as="button"
-      type="button"
-      name={id}
-      shown={isSelected ? false : undefined}
-      data-testid="alert-type-{id}"
-      aria-current={isSelected ? "true" : undefined}
-      onclick={() => onPick(id)}
-      class={ROW}
-      contentClass="flex w-full items-center gap-3 p-3"
-    >
-      <Icon data-drop-obstacle class="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span class="min-w-0 flex-1">
-        <span data-drop-obstacle class="block font-medium">{templateLabel(id)}</span>
-        <span data-drop-obstacle class="block text-sm text-muted-foreground">
-          {templateDescription(id)}
-        </span>
-      </span>
-      {#if isSelected}
-        <Check class="size-4 shrink-0 text-primary" aria-hidden="true" />
-      {:else}
-        <ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      {/if}
-    </DropSurface>
-    {#if selectionEdge.component}
-      <selectionEdge.component active={isSelected} />
-    {/if}
-  </li>
+  <Icon class="size-5" />
 {/snippet}
 
 <div class="space-y-3">
-  <DropGroup name="alert types">
-    <ul class="divide-y border-y" aria-label="Alert types" aria-busy={loading}>
-      {#if loading}
-        {#each { length: 6 }, index (index)}
-          <li class="p-3"><Skeleton class="h-11 w-full" /></li>
-        {/each}
-      {/if}
-      {#each common as template (template.id)}
-        {@render row(template.id)}
-      {/each}
-    </ul>
-  </DropGroup>
+  <WizardOptionList
+    label="Alert types"
+    testIdPrefix="alert-type-"
+    options={common.map(option)}
+    {selected}
+    {onPick}
+    {icon}
+    {loading}
+  />
 
   <Collapsible.Root bind:open={moreOpen}>
     <Collapsible.Trigger>
@@ -145,13 +105,15 @@
       {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content>
-      <DropGroup name="more alert types">
-        <ul class="mt-1 divide-y border-y" aria-label="More alert types">
-          {#each more as template (template.id)}
-            {@render row(template.id)}
-          {/each}
-        </ul>
-      </DropGroup>
+      <WizardOptionList
+        label="More alert types"
+        testIdPrefix="alert-type-"
+        options={more.map(option)}
+        {selected}
+        {onPick}
+        {icon}
+        class="mt-1"
+      />
     </Collapsible.Content>
   </Collapsible.Root>
 </div>
