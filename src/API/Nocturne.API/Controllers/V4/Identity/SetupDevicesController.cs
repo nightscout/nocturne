@@ -14,8 +14,9 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The setup hub's Devices item: device guesses with their evidence, and the writes that record
-/// what the owner confirms. Owner-only, like the rest of the setup hub.
+/// The devices step of setup. A caller can read device suggestions with their evidence, confirm a
+/// device, record an insulin or tracker, answer that no insulin is used, and remove an insulin or
+/// tracker that setup added. Only the owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]

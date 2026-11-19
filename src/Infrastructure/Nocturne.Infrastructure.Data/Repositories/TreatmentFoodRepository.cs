@@ -79,6 +79,7 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
             .Include(tf => tf.Food)
             .Where(tf => ids.Contains(tf.CarbIntakeId))
             .OrderBy(tf => tf.SysCreatedAt)
+            .ThenBy(tf => tf.Id)
             .ToListAsync(cancellationToken);
 
         return entities

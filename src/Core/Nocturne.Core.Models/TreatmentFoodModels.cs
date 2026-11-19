@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
@@ -51,6 +52,29 @@ public class TreatmentFood
     /// <summary>Denormalized protein per portion from the <see cref="Food"/> record.</summary>
     [JsonPropertyName("proteinPerPortion")]
     public decimal? ProteinPerPortion { get; set; }
+
+    /// <summary>
+    /// The label a carb intake shows for its food lines: each line's <see cref="FoodName"/>, else its
+    /// <see cref="Note"/>, joined with ", ". Null when no line has a name.
+    /// </summary>
+    public static string? DeriveFoodType(IReadOnlyCollection<TreatmentFood> foods)
+    {
+        if (foods.Count == 0) return null;
+
+        var names = foods
+            .Select(f => f.FoodName ?? f.Note)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToList();
+
+        return names.Count > 0 ? string.Join(", ", names) : null;
+    }
+
+    /// <summary>Sets <see cref="CarbIntake.FoodType"/> on each intake from the lines in <paramref name="foodsByCarbIntake"/>.</summary>
+    public static void ApplyFoodTypes(IEnumerable<CarbIntake> carbIntakes, ILookup<Guid, TreatmentFood> foodsByCarbIntake)
+    {
+        foreach (var carbIntake in carbIntakes)
+            carbIntake.FoodType = DeriveFoodType(foodsByCarbIntake[carbIntake.Id].ToList());
+    }
 }
 
 /// <summary>

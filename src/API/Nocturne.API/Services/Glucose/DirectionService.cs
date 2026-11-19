@@ -30,7 +30,7 @@ namespace Nocturne.API.Services.Glucose;
 public static class DirectionService
 {
     private const int BucketCount = 4;
-    private const long BucketWidthMills = 5 * 60 * 1000;
+    internal const long BucketWidthMills = 5 * 60 * 1000;
     private const long BucketHalfWidthMills = BucketWidthMills / 2;
     private const double ErrorCodeCeiling = 39;
 
@@ -88,15 +88,13 @@ public static class DirectionService
 
     /// <summary>
     /// Builds the 5 minute buckets <c>bgnow.js</c> reads, newest first. The newest reading anchors
-    /// bucket 0 at 2.5 minutes either side of it, and each older bucket sits 5 minutes earlier.
+    /// bucket 0 at 2.5 minutes either side of it, and each older bucket sits 5 minutes earlier. With
+    /// no readings the buckets are empty and have no window.
     /// </summary>
     public static IReadOnlyList<BgNowBucket> BuildBuckets(IEnumerable<Entry> entries)
     {
         var sorted = entries.OrderBy(e => e.Mills).ToList();
-        if (sorted.Count == 0)
-            return [];
-
-        var last = sorted[^1].Mills;
+        long? last = sorted.Count == 0 ? null : sorted[^1].Mills;
         var buckets = new List<BgNowBucket>(BucketCount);
         for (var i = 0; i < BucketCount; i++)
         {
@@ -252,12 +250,14 @@ public static class DirectionService
 /// below 39 are sensor error codes and land in <see cref="Errors"/>, and 39 itself is in neither.
 /// </summary>
 public sealed record BgNowBucket(
-    long FromMills,
+    long? FromMills,
     IReadOnlyList<Entry> Entries,
     IReadOnlyList<Entry> Valid,
     IReadOnlyList<Entry> Errors
 )
 {
+    public long? ToMills => FromMills + DirectionService.BucketWidthMills;
+
     public Entry? Last => Valid.Count > 0 ? Valid[^1] : null;
 
     public double? Mean => Valid.Count > 0 ? Valid.Average(e => e.GlucoseMgdl()) : null;

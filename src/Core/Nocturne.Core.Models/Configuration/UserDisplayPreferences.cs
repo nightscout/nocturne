@@ -359,6 +359,7 @@ public enum RailItemId
     Iob,
     Loop,
     Reservoir,
+    LinkBattery,
     Trackers,
 }
 

@@ -1,6 +1,8 @@
-Biometric and activity data beyond glucose.
+Health data other than glucose, and the record of the person the data belongs to.
 
-- **Heart Rate** — Heart rate readings from diabetes apps and wearables.
-- **Step Count** — Step count data from diabetes apps and wearables.
-- **Body Weight** — Weight and body composition time-series.
-- **Patient Record** — Patient metadata: records, devices, and insulin formulations in use.
+```resources Health
+```
+
+## Good to know
+
+- The devices and insulins in the [Patient Record](#nocturne/tag/patient-record) are the lists a person maintains. The fixed lists of known hardware and insulin types are in the **Metadata** group.

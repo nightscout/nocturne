@@ -15,7 +15,8 @@ using Nocturne.Infrastructure.Data.Abstractions;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// API controller for compatibility dashboard data.
+/// Compatibility dashboard data. Read the proxy configuration, metrics and endpoints, list and read
+/// discrepancy analyses, and run a manual test.
 /// </summary>
 /// <seealso cref="IDiscrepancyPersistenceService"/>
 /// <seealso cref="IDiscrepancyAnalysisRepository"/>

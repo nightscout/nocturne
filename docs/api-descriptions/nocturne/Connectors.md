@@ -1,3 +1,12 @@
-Configuration management for data source connectors (Dexcom, Glooko, Libre, etc.).
+---
+displayName: Data Sources
+---
+What sends data to a tenant: connectors that pull data in, and uploader apps that push it.
 
-> **Internal only.** These endpoints are intended for server-to-server use by connector services via mTLS. They are not designed for end-user consumption and will eventually be gated behind mTLS authentication.
+```resources Data Sources
+```
+
+## Good to know
+
+- [Syncing](#nocturne/tag/syncing) explains how a connector resumes, how to start a sync or a reset, and why a second sync creates no duplicates.
+- Deleting the data of a source or a connector cannot be undone.

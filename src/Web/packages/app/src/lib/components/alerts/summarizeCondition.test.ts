@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AlertWeekday, defaultPayload, GlucoseBucket, PumpModeState, StateSpanCategory, type ConditionNode } from "./types";
+import { AlertWeekday, defaultPayload, GlucoseBucket, PumpModeState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode } from "./types";
 import { alertWeekdayLabel, summarizeCondition } from "./summarizeCondition.svelte";
 import { LEAF_FACTS } from "./factCatalog";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -16,6 +16,15 @@ describe("summarizeCondition", () => {
 		}
 	});
 
+
+	it("names the transmitter reading a rule compares", () => {
+		const reading = (metric: TransmitterBatteryMetric, operator: string, value: number): ConditionNode => ({
+			type: "transmitter_battery",
+			transmitter_battery: { metric, operator, value },
+		});
+		expect(summarizeCondition(reading(TransmitterBatteryMetric.VoltageA, "<", 290))).toBe("Transmitter voltage A < 290");
+		expect(summarizeCondition(reading(TransmitterBatteryMetric.Resistance, ">=", 1400))).toBe("Transmitter resistance ≥ 1400");
+	});
 
 	it("renders day-of-week days by name", () => {
 		const node: ConditionNode = {

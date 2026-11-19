@@ -15,8 +15,10 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for managing V4 profile data: therapy settings, basal schedules,
-/// carb ratio schedules, sensitivity schedules, and target range schedules.
+/// Therapy profiles: their settings, and their basal, carb ratio, sensitivity, and target range
+/// schedules. Read the profile summary, active schedules, and profile records. Create, update, and
+/// delete settings and schedules, and set the default profile. Deleting a profile by name removes
+/// its settings and all of its schedules.
 /// </summary>
 /// <seealso cref="ITherapySettingsRepository"/>
 /// <seealso cref="IBasalScheduleRepository"/>
@@ -24,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// <seealso cref="ISensitivityScheduleRepository"/>
 /// <seealso cref="ITargetRangeScheduleRepository"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Therapy Profiles")]
 [Tags("Profiles")]
 [Route("api/v4/profile")]
 [Authorize]
@@ -362,7 +365,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <param name="sort">Order by timestamp: `timestamp_desc` or `timestamp_asc`. Any other value is a 400. Defaults to `timestamp_desc`.</param>
     /// <param name="device">Return only records from this device.</param>
     /// <param name="source">Return only records from this data source.</param>
-    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
+    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet("settings")]
     [RequireScope(Scope.TherapyRead)]
@@ -399,7 +402,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             offset,
             data.Count,
             includeTotal,
-            () => _therapyRepo.CountAsync(from, to, ct)
+            () => _therapyRepo.CountAsync(from, to, device, source, ct)
         );
         return Ok(new PaginatedResponse<TherapySettings> { Data = data, Pagination = pagination });
     }

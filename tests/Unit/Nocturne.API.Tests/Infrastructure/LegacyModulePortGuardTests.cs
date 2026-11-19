@@ -121,6 +121,7 @@ public class LegacyModulePortGuardTests
         InTest("tests/Integration/Nocturne.API.Tests/TreatmentWriteBackEditIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink"),
         InTest("tests/Integration/Nocturne.API.Tests/WriteBackUpstreamEditIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink"),
         InTest("tests/Integration/Nocturne.API.Tests/TreatmentWriteBackDeleteIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink and upstream deletion"),
+        InTest("tests/Integration/Nocturne.API.Tests/StateSpanWriteBackEchoIntegrationTests.cs", "TreatmentService", "builds the service over the Nightscout write-back sink as its event sink, and pulls through a publisher over it"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/ResendKeepsCorrelationIdTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/PreBolusWriteBackPullBackTests.cs", "TreatmentDecomposer", BuildsDecomposer),
         InTest("tests/Unit/Nocturne.API.Tests/Services/V4/TreatmentRequiredColumnsTests.cs", "TreatmentDecomposer", CallsStaticMapper),

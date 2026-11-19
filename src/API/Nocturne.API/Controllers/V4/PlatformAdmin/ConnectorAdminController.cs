@@ -7,7 +7,8 @@ using Nocturne.Connectors.Core.Models;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for cross-tenant connector operations.
+/// Connector sync state and cursor resets for any tenant. List a tenant's connectors, start a cursor
+/// reset, and read or cancel reset jobs.
 /// </summary>
 /// <remarks>
 /// The per-tenant connector endpoints (<c>/api/v4/services/connectors/...</c>) only act on the

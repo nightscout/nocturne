@@ -232,13 +232,6 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsForAccessRequestAsync(Guid tenantId, CancellationToken ct)
-    {
-        await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
-        return await db.TenantMembers.AsNoTracking().OwnersOf(tenantId).Select(m => m.SubjectId).ToListAsync(ct);
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<string?> GetEarliestOwnerPreferencesAsync(Guid tenantId, CancellationToken ct)
     {
         await using var lease = await OpenForTenantAsync(tenantId, ct);
@@ -718,6 +711,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (entity is null)
             return null;
 
+        MemberAccessAudit.StageRolePermissions(lease.Context, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
         entity.Name = edit.Name;
         entity.Slug = edit.Slug;
         entity.Description = edit.Description;

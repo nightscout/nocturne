@@ -10,10 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Endpoints for membership request lifecycle: users request to join a tenant,
-/// and members with <c>members.manage</c> permission approve or deny them.
+/// Requests to join the tenant, and their approval. A caller can ask to join and read its own
+/// request. Members with the <c>members.manage</c> permission can list, approve and deny requests,
+/// and read or change the request settings.
 /// </summary>
 [ApiController]
+[System.ComponentModel.DisplayName("Membership Requests")]
 [Tags("Identity")]
 [Route("api/v4/membership-requests")]
 [Produces("application/json")]
@@ -30,6 +32,7 @@ public class MembershipRequestController(
     [RemoteCommand(Invalidates = ["GetMyRequest"])]
     [ProducesResponseType(typeof(CreateMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRequest(
         [FromBody] CreateMembershipRequestRequest request,
         CancellationToken ct)
@@ -41,6 +44,9 @@ public class MembershipRequestController(
 
         var result = await membershipRequestService.CreateRequestAsync(
             tenantId, subjectId.Value, request.Message, ct);
+
+        if (result.Outcome == CreateMembershipRequestOutcome.AlreadyMember)
+            return Problem(detail: result.Error, statusCode: StatusCodes.Status409Conflict, title: "Conflict");
 
         if (!result.Success)
             return BadRequest(result);

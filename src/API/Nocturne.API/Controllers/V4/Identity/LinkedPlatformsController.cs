@@ -10,7 +10,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Returns the set of chat platforms (Discord, Telegram, etc.) that are linked to the current tenant.
+/// The chat platforms, such as Discord or Telegram, with at least one linked account in the tenant.
+/// A caller can read this list to see which platforms are connected.
 /// </summary>
 /// <remarks>
 /// This endpoint is a thin read-only view over the <see cref="ChatIdentityDirectoryService"/> that

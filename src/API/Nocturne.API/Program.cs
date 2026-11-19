@@ -28,7 +28,6 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Scalar.AspNetCore;
-using Nocturne.Aspire.Scalar;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -145,6 +144,8 @@ builder.Services.AddNocturneMemoryCache();
 // Add response caching for GET endpoints
 builder.Services.AddResponseCaching();
 
+builder.Services.AddRequestDecompression();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddScheduledJob<AuditRetentionJob>();
@@ -161,6 +162,8 @@ builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddScoped<OuraImportService>();
 builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<OuraImportService>());
+builder.Services.AddSingleton<OuraImportJobService>();
+builder.Services.AddScoped<IConnectorPurgeGuard, OuraImportPurgeGuard>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
@@ -203,11 +206,12 @@ builder.Services.AddOpenApi("nocturne", options =>
 {
     options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
+    options.AddOperationTransformer<ControllerTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
-    options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<IntroductionDocumentTransformer>();
     options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
@@ -215,11 +219,12 @@ builder.Services.AddOpenApi("nightscout", options =>
 {
     options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
+    options.AddOperationTransformer<ControllerTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
-    options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<IntroductionDocumentTransformer>();
     options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
@@ -395,6 +400,7 @@ app.UseMiddleware<V2FallbackMiddleware>();
 // Here rather than where minimal hosting would insert it, so the middleware below see the
 // matched endpoint.
 app.UseRouting();
+app.UseRequestDecompression();
 
 // The policies are attached to endpoints, so this needs UseRouting to have run. Everything
 // without a policy passes through untouched, and no policy partitions on anything this position
@@ -468,7 +474,11 @@ app.MapScalarApiReference((options, httpContext) =>
     options.WithOperationTitleSource(OperationTitleSource.Path);
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
-    options.AddHeadContent(MermaidLazyLoader.HeadContent);
+    // Built from src/Web/packages/scalar-plugin; renders the diagrams and the other fenced blocks
+    // of the reference pages.
+    // A path: this page loads Scalar from its own host, so the import resolves against the page and
+    // does not depend on the forwarded scheme or host.
+    options.AddPluginUrl("/scalar/nocturne-plugin.js");
     if (!string.IsNullOrEmpty(scalarCss))
         options.WithCustomCss(scalarCss);
     options.EnablePersistentAuthentication();

@@ -27,9 +27,9 @@ each would have fired. Nothing is sent to anyone.
 
 There are two ways in:
 
-- From a rule's editor, press **Replay against history**. This replays the rule
+- From a rule's editor, press **Replay a past day**. This replays the rule
   as it is in the editor, including changes you have not saved yet, alongside
-  your other rules. Pick a time from **Historic firings** to open the day it
+  your other rules. Pick a time from **Past alerts** to open the day it
   really fired.
 - From **Alerts > Simulator**, which replays all your switched-on rules over a
   day you choose.

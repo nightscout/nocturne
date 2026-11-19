@@ -112,7 +112,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
     }
 
     [Fact]
-    public async Task SystemPinned_TheSetupGateAndTheOwnersAnswerForThePinnedTenantFromAnyScope()
+    public async Task SystemPinned_TheSetupGateAnswersForThePinnedTenantFromAnyScope()
     {
         var a = await SeedTenantAsync("a");
         var b = await SeedTenantAsync("b");
@@ -123,13 +123,12 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var unknown = Guid.NewGuid();
 
         (await fromB.ReadSetupGateAsync(a.Tenant, CancellationToken.None)).Should().Be(new SetupGate(true, true));
-        (await fromB.GetOwnerSubjectIdsForAccessRequestAsync(a.Tenant, CancellationToken.None)).Should().Equal(a.Owner);
         (await fromNoOne.ReadSetupGateAsync(a.Tenant, CancellationToken.None)).Should().Be(new SetupGate(true, true));
         (await fromNoOne.CountSetupCredentialsAsync(a.Tenant, CancellationToken.None)).Should().Be(new SetupCredentialCounts(2, 1, 0));
         (await fromNoOne.ListOrphanedMembersAsync(a.Tenant, CancellationToken.None)).Select(o => o.SubjectId).Should().Equal(a.Orphan);
         (await fromNoOne.ReadSetupGateAsync(unknown, CancellationToken.None)).Should().BeNull();
 
-        readingAsB.SystemPinnedTo.Should().Equal(new[] { a.Tenant, a.Tenant }, "the gate and the owner read each took the system pin");
+        readingAsB.SystemPinnedTo.Should().Equal(new[] { a.Tenant }, "the gate read took the system pin");
         readingAsNoOne.SystemPinnedTo.Should().Equal(a.Tenant, a.Tenant, a.Tenant, unknown);
     }
 

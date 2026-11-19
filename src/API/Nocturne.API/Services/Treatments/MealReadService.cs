@@ -35,9 +35,8 @@ public sealed class MealReadService : IMealReadService
             return [];
 
         var foodEntries = await _treatmentFoods.GetByCarbIntakeIdsAsync(carbIntakes.Select(c => c.Id), ct);
-        var foodsByCarbIntake = foodEntries
-            .GroupBy(f => f.CarbIntakeId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        var foodsByCarbIntake = foodEntries.ToLookup(f => f.CarbIntakeId);
+        TreatmentFood.ApplyFoodTypes(carbIntakes, foodsByCarbIntake);
 
         var correlationIds = carbIntakes
             .Where(c => c.CorrelationId.HasValue)
@@ -74,10 +73,10 @@ public sealed class MealReadService : IMealReadService
         Guid? correlationId,
         IReadOnlyList<CarbIntake> carbIntakes,
         Bolus[] boluses,
-        IReadOnlyDictionary<Guid, List<TreatmentFood>> foodsByCarbIntake)
+        ILookup<Guid, TreatmentFood> foodsByCarbIntake)
     {
         var foods = carbIntakes
-            .SelectMany(c => foodsByCarbIntake.TryGetValue(c.Id, out var list) ? list : [])
+            .SelectMany(c => foodsByCarbIntake[c.Id])
             .ToArray();
 
         var totalCarbs = carbIntakes.Sum(c => c.Carbs);

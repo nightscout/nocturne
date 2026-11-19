@@ -62,7 +62,7 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
                 Id = Guid.CreateVersion7(),
                 StartTimestamp = start,
                 EndTimestamp = end > start ? end : null,
-                UtcOffset = _time.OffsetMinutes,
+                UtcOffset = _time.OffsetMinutesAt(start),
                 Device = TandemMapHelpers.Source,
                 DataSource = TandemMapHelpers.Source,
                 LegacyId = $"tandem_basal_{ev.SeqNum}",

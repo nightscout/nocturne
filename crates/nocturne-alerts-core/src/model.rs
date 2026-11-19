@@ -18,7 +18,8 @@ use uuid::Uuid;
 
 use crate::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
-    StateSpanCategory, TempBasalMetric, ThresholdDirection, TrendBucket, WireEnum,
+    StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
+    WireEnum,
 };
 use crate::paths::child_path;
 
@@ -245,6 +246,7 @@ condition_kinds! {
     StateSpanActive = "state_span_active" => StateSpanPayload,
     SleepSessionActive = "sleep_session_active" => SleepSessionPayload,
     TrackerAge = "tracker_age" => TrackerAgePayload,
+    TransmitterBattery = "transmitter_battery" => TransmitterBatteryPayload,
 }
 
 impl ConditionKind {
@@ -628,6 +630,7 @@ enum_operands!(
     CmpOp,
     TrendBucket,
     TempBasalMetric,
+    TransmitterBatteryMetric,
     PumpMode,
     StateSpanCategory,
 );
@@ -649,6 +652,7 @@ operand_fields!(
     CmpOp,
     TrendBucket,
     TempBasalMetric,
+    TransmitterBatteryMetric,
     PumpMode,
     StateSpanCategory,
 );
@@ -830,6 +834,13 @@ payload!(
 
 payload!(TempBasalPayload {
     metric: TempBasalMetric,
+    operator: CmpOp,
+    #[serde(serialize_with = "exact_decimal")]
+    value: Decimal,
+});
+
+payload!(TransmitterBatteryPayload {
+    metric: TransmitterBatteryMetric,
     operator: CmpOp,
     #[serde(serialize_with = "exact_decimal")]
     value: Decimal,
