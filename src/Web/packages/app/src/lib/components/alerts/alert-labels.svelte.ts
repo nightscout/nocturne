@@ -1,4 +1,4 @@
-import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "#lib/api/generated/nocturne-api-client.js";
 import { isTrendBucket } from "./types";
 
 const RATE_DIRECTIONS = ["falling", "rising"] as const;
@@ -134,6 +134,21 @@ export function rateDirectionLabel(direction: string): string {
 			return "Rising";
 		default:
 			return unknownValue(direction);
+	}
+}
+
+export function transmitterBatteryMetricLabel(metric: TransmitterBatteryMetric): string {
+	switch (metric) {
+		case TransmitterBatteryMetric.VoltageA:
+			return "Voltage A";
+		case TransmitterBatteryMetric.VoltageB:
+			return "Voltage B";
+		case TransmitterBatteryMetric.Resistance:
+			return "Resistance";
+		case TransmitterBatteryMetric.Days:
+			return "Age (days)";
+		default:
+			return unknownValue(metric);
 	}
 }
 

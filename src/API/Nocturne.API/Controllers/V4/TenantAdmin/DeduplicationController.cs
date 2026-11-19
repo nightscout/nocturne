@@ -7,8 +7,8 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Admin controller for managing data deduplication.
-/// Provides endpoints to run deduplication jobs and check their status.
+/// Data deduplication. Run a deduplication job, check or cancel it, and list the linked records in a
+/// duplicate group.
 /// </summary>
 /// <seealso cref="IDeduplicationAdmin"/>
 [ApiController]

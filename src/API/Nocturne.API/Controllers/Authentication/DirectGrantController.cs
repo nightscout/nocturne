@@ -10,10 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for managing direct grant tokens (programmatic API tokens without an OAuth client).
-/// These tokens use the <c>noc_</c> prefix and are validated by <see cref="DirectGrantTokenHandler"/>.
+/// Programmatic API tokens for scripts and automation, issued without an OAuth client. A caller can create,
+/// list and delete direct grant tokens. Tokens use the <c>noc_</c> prefix.
 /// </summary>
 /// <remarks>
+/// Tokens are validated by <see cref="DirectGrantTokenHandler"/>.
+///
 /// Direct grants are bearer tokens tied to a specific user but issued outside the standard
 /// OAuth 2.0 consent flow. They are intended for scripts, automation, and server-to-server
 /// integrations where launching an authorization-code flow is impractical.
@@ -33,6 +35,7 @@ namespace Nocturne.API.Controllers.Authentication;
 [ApiController]
 [Route("api/auth/direct-grants")]
 [RequireInteractiveSession]
+[System.ComponentModel.DisplayName("API Tokens")]
 [Tags("Authentication")]
 public class DirectGrantController : ControllerBase
 {

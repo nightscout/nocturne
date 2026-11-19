@@ -13,7 +13,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for clock face configuration management.
+/// Public clock faces that show a tenant's glucose to anyone holding the link. List, read, create, update,
+/// and delete faces. Read a face's glucose, and read the starter configuration for a new face.
 /// </summary>
 /// <remarks>
 /// A face serves glucose to anyone holding its link, so creating, changing or deleting one is

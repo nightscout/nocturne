@@ -48,11 +48,13 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
             if (mapped == null)
                 continue;
 
+            var timestamp = _time.ToUtc(ev.RawTimestampSeconds);
+
             records.Add(new DeviceEvent
             {
                 Id = Guid.CreateVersion7(),
-                Timestamp = _time.ToUtc(ev.RawTimestampSeconds),
-                UtcOffset = _time.OffsetMinutes,
+                Timestamp = timestamp,
+                UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
                 DataSource = TandemMapHelpers.Source,
                 SyncIdentifier = $"tandem_devent_{ev.SeqNum}",

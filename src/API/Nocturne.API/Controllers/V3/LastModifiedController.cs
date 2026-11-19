@@ -7,9 +7,12 @@ using System.Linq;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// LastModified controller that provides timestamps for when collections were last modified.
-/// Used by clients (particularly AAPS) to determine which collections need syncing.
+/// Nightscout lastModified: the time each collection was last modified, so a client can decide which
+/// collections to sync.
 /// </summary>
+/// <remarks>
+/// Used by clients (particularly AAPS).
+/// </remarks>
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="LastModifiedResponse"/>
 [ApiController]

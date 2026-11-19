@@ -8,6 +8,8 @@
   import Timer from "@lucide/svelte/icons/timer";
   import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Droplet from "@lucide/svelte/icons/droplet";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import Syringe from "@lucide/svelte/icons/syringe";
@@ -40,6 +42,7 @@
   import { conditionLabel } from "./conditionLabel.svelte";
   import {
     eyebrow,
+    moveChild,
     removeChild,
     rowLeafKind,
     rowLeafNode,
@@ -131,6 +134,8 @@
         : null,
   );
   let label = $derived(eyebrow(index, operator));
+  let isFirst = $derived(index === 0);
+  let isLast = $derived(index === parent.composite!.conditions.length - 1);
 
   // Drag-and-drop wiring. Rows are draggable as a whole; a thin "above-this-
   // row" zone reorders within the same group, while dropping anywhere on a
@@ -229,7 +234,7 @@
       <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
       <button
         type="button"
-        class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
+        class="grid size-6 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
         aria-label="Drag to reorder"
         tabindex="-1"
       >
@@ -249,7 +254,7 @@
             <Button
               {...props}
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               class="shrink-0"
               aria-label="Group actions"
             >
@@ -259,11 +264,22 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
           <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
-            <Ban class="h-4 w-4 mr-2" /> Wrap in NOT
+            <Ban class="h-4 w-4 mr-2" /> Make it the opposite (NOT)
           </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
-            Unwrap (when single child)
-          </DropdownMenu.Item>
+          {#if child.composite?.conditions.length === 1}
+            <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
+              Remove the group and keep its condition
+            </DropdownMenu.Item>
+          {/if}
+          {#if !isFirst || !isLast}
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item disabled={isFirst} onclick={() => moveChild(parent, index, -1)}>
+              <ArrowUp class="h-4 w-4 mr-2" /> Move up
+            </DropdownMenu.Item>
+            <DropdownMenu.Item disabled={isLast} onclick={() => moveChild(parent, index, 1)}>
+              <ArrowDown class="h-4 w-4 mr-2" /> Move down
+            </DropdownMenu.Item>
+          {/if}
           <DropdownMenu.Separator />
           <DropdownMenu.Item onclick={() => removeChild(parent, index)}>
             <X class="h-4 w-4 mr-2" /> Remove group
@@ -286,7 +302,7 @@
     <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
     <button
       type="button"
-      class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
+      class="grid size-6 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
       aria-label="Drag to reorder"
       tabindex="-1"
     >
@@ -321,8 +337,9 @@
       <Input
         type="number"
         min="1"
-        size="xs"
+        size="sm"
         class="w-16 text-right tabular-nums"
+        aria-label="Minutes"
         data-testid="alert-sustained-minutes"
         value={sustainedNode.sustained.minutes ?? 15}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -341,7 +358,7 @@
       <Button
         type="button"
         variant="ghost-destructive"
-        size="icon-xs"
+        size="icon-sm"
         class="shrink-0 hidden group-hover/row:inline-flex"
         aria-label="Remove condition (hold shift and select)"
         onclick={() => removeChild(parent, index)}
@@ -355,9 +372,9 @@
           <Button
             {...props}
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             class="shrink-0"
-            aria-label="Row actions"
+            aria-label="Condition actions"
             data-testid="alert-row-actions"
           >
             <MoreHorizontal class="h-4 w-4" />
@@ -365,24 +382,33 @@
         {/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" data-testid="alert-row-actions-menu">
-        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "and")}>
-          <Brackets class="h-4 w-4 mr-2" /> Wrap in AND group
-        </DropdownMenu.Item>
-        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "or")}>
-          <Brackets class="h-4 w-4 mr-2" /> Wrap in OR group
-        </DropdownMenu.Item>
-        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
-          <Ban class="h-4 w-4 mr-2" /> Wrap in NOT
-        </DropdownMenu.Item>
         {#if !isSustained}
           <DropdownMenu.Item onclick={() => wrapChild(parent, index, "sustained")}>
-            <Timer class="h-4 w-4 mr-2" /> Make sustained
+            <Timer class="h-4 w-4 mr-2" /> Add “for at least”
           </DropdownMenu.Item>
         {/if}
+        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
+          <Ban class="h-4 w-4 mr-2" /> Make it the opposite (NOT)
+        </DropdownMenu.Item>
+        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "and")}>
+          <Brackets class="h-4 w-4 mr-2" /> Put in an “all of” group
+        </DropdownMenu.Item>
+        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "or")}>
+          <Brackets class="h-4 w-4 mr-2" /> Put in an “any of” group
+        </DropdownMenu.Item>
         {#if isNot || isSustained}
           <DropdownMenu.Separator />
           <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
-            Remove wrapper
+            {isNot ? "Remove NOT" : "Remove “for at least”"}
+          </DropdownMenu.Item>
+        {/if}
+        {#if !isFirst || !isLast}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item disabled={isFirst} onclick={() => moveChild(parent, index, -1)}>
+            <ArrowUp class="h-4 w-4 mr-2" /> Move up
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled={isLast} onclick={() => moveChild(parent, index, 1)}>
+            <ArrowDown class="h-4 w-4 mr-2" /> Move down
           </DropdownMenu.Item>
         {/if}
         <DropdownMenu.Separator />

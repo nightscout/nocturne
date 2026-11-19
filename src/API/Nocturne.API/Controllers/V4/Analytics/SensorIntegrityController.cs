@@ -9,8 +9,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Detects clusters of physiologically-implausible ("noisy") CGM readings and the hypoglycemia
-/// events they may have driven, over a tenant's data for a time window.
+/// Finds clusters of implausible CGM readings and the hypoglycemia events they may have caused,
+/// over a time window.
 /// </summary>
 /// <remarks>
 /// Read-only, post-hoc analysis: it computes on the existing deduplicated glucose and insulin

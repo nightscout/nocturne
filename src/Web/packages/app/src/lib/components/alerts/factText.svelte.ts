@@ -38,6 +38,8 @@ export function factLabel(kind: LeafKind): string {
       return "Pump battery";
     case "uploader_battery":
       return "Phone battery";
+    case "transmitter_battery":
+      return "Transmitter battery";
     case "loop_stale":
       return "Loop has stopped";
     case "loop_enaction_stale":
@@ -72,65 +74,67 @@ export function factLabel(kind: LeafKind): string {
 export function factDescription(kind: LeafKind): string {
   switch (kind) {
     case "threshold":
-      return "Current CGM reading vs. a threshold";
+      return "The current glucose is above or below a level";
     case "glucose_bucket":
-      return "Current reading falls in selected buckets (very-low … very-high)";
+      return "The current glucose is in one of the ranges you select";
     case "predicted":
-      return "AAPS or oref forecast crossing a threshold";
+      return "The forecast from the loop goes above or below a level";
     case "rate_of_change":
-      return "Glucose rising or falling faster than a rate";
+      return "Glucose increases or decreases faster than a rate";
     case "trend":
-      return "Coarse direction bucket (rising fast, falling, …)";
+      return "The direction of the trend arrow, such as falling or rising fast";
     case "staleness":
-      return "No CGM reading for N minutes";
+      return "The newest glucose reading is older than a number of minutes";
     case "iob":
-      return "Units of insulin still active";
+      return "The units of insulin that are still active";
     case "temp_basal":
-      return "Active temp basal rate or % of scheduled";
+      return "The temp basal that is active, as a rate or a percentage of the schedule";
     case "sensitivity_ratio":
-      return "Autosens ratio (AAPS / Trio only)";
+      return "The sensitivity ratio from AndroidAPS or Trio";
     case "cob":
-      return "Grams of carbs still being absorbed";
+      return "The grams of carbs that are not absorbed yet";
     case "time_since_last_carb":
-      return "Minutes elapsed since the last recorded carb entry";
+      return "The minutes since the last carb entry";
     case "time_since_last_bolus":
-      return "Minutes elapsed since the last recorded bolus";
+      return "The minutes since the last bolus";
     case "reservoir":
-      return "Pump reservoir level (units)";
+      return "The units of insulin left in the pump";
     case "site_age":
-      return "Hours since last infusion site change";
+      return "The hours since the last infusion site change";
     case "sensor_age":
-      return "Days since CGM sensor start";
+      return "The days since the sensor started";
     case "tracker_age":
       return "Time since a tracker's start (Duration) or scheduled time (Event), negative before the event. A tracker with no active instance never matches";
     case "pump_battery":
-      return "Pump battery percent";
+      return "The battery level of the pump";
     case "uploader_battery":
-      return "Uploader phone battery percent";
+      return "The battery level of the phone that uploads the data";
+    case "transmitter_battery":
+      return "The voltage, resistance or age of the CGM transmitter (xDrip+ only)";
     case "loop_stale":
-      return "No APS cycle for N minutes";
+      return "The loop did not run for a number of minutes";
     case "loop_enaction_stale":
-      return "No enacted cycle for N minutes (closed loop)";
+      return "The loop did not change the insulin delivery for a number of minutes";
     case "signal_loss":
-      return "No CGM data received for N minutes";
+      return "No glucose data arrived for a number of minutes";
     case "pump_suspended":
-      return "Pump suspension state";
+      return "The pump is suspended, or is not";
     case "override_active":
-      return "An override profile is active";
+      return "An override is active, or is not";
     case "do_not_disturb":
-      return "Tenant DND state (manual or scheduled)";
+      return "Do not disturb is on, or is not";
     case "pump_state":
-      return "Pump operational mode (automatic, manual, boost, …)";
+      return "The pump is in a mode such as automatic, manual or boost";
     case "state_span_active":
-      return "Generic state span (override, sleep, exercise, …)";
+      return "A state such as an override, exercise or illness is active";
     case "sleep_session_active":
       return "A recorded sleep session is in progress";
     case "time_of_day":
-      return "Current local time falls in a window";
+      return "The time is between two times of day";
     case "day_of_week":
-      return "Current local day matches selected weekdays";
+      return "The day is one of the weekdays you select";
     case "alert_state":
-      return "Reference another alert rule's state";
+      return "A different alert is active, or acknowledged";
     default: {
       const unhandled: never = kind;
       return unhandled;

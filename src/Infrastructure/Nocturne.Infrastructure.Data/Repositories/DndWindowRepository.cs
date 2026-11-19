@@ -75,6 +75,32 @@ public class DndWindowRepository : IDndWindowRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredSnapshotsAsync(
+        DateTime nowUtc, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+
+        var rows = await CouldBeActive(lease.Context.DndWindows.AsNoTracking(), scope: null, nowUtc)
+            .ToListAsync(ct);
+
+        return rows.Select(ToSnapshot).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetReceivedByAsync(
+        DateTime asOfReceiptUtc, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+
+        var rows = await lease.Context.DndWindows
+            .AsNoTracking()
+            .Where(w => w.CreatedAt <= asOfReceiptUtc)
+            .ToListAsync(ct);
+
+        return rows.Select(ToSnapshot).ToList();
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<DndWindowCreateResult> CreateAsync(NewDndWindow window, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -204,10 +230,8 @@ public class DndWindowRepository : IDndWindowRepository
 
     private static Task<List<DndWindowEntity>> OverlappingAsync(
         NocturneDbContext db, NewDndWindow window, CancellationToken ct) =>
-        db.DndWindows
-            .Where(w => w.Scope == window.Scope && w.ClearedAt == null
-                        && (w.EndsAt == null || w.EndsAt > window.StartedAt)
-                        && (window.EndsAt == null || w.StartedAt < window.EndsAt))
+        CouldBeActive(db.DndWindows, window.Scope, window.StartedAt)
+            .Where(w => window.EndsAt == null || w.StartedAt < window.EndsAt)
             .ToListAsync(ct);
 
     private static void SupersedeOverlapping(List<DndWindowEntity> overlapping, DateTime startedAt, DateTime now)
@@ -225,6 +249,15 @@ public class DndWindowRepository : IDndWindowRepository
             }
         }
     }
+
+    // Npgsql can read a `timestamp` column back as Unspecified, which would compare wrongly
+    // against a Utc `now` in the snapshot's naive comparison.
+    private static DndWindowSnapshot ToSnapshot(DndWindowEntity w) =>
+        new(w.Scope,
+            DateTime.SpecifyKind(w.StartedAt, DateTimeKind.Utc),
+            w.EndsAt is { } ends ? DateTime.SpecifyKind(ends, DateTimeKind.Utc) : null,
+            w.ClearedAt is { } cleared ? DateTime.SpecifyKind(cleared, DateTimeKind.Utc) : null,
+            DateTime.SpecifyKind(w.CreatedAt, DateTimeKind.Utc));
 
     private static DndWindowRecord ToRecord(DndWindowEntity w) =>
         new(w.Id, w.Scope, w.StartedAt, w.EndsAt, w.ClearedAt, w.ClearedBy, w.Source, w.CreatedAt);

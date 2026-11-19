@@ -24,7 +24,7 @@ public class SensorGlucoseControllerTests
     private readonly Mock<IPatientDeviceRepository> _patientDevicesMock = new();
     private readonly Mock<IPatientDeviceStamper> _deviceStamperMock = new();
 
-    private SensorGlucoseController CreateController()
+    private SensorGlucoseController CreateController(IQueryCollection? query = null)
     {
         var controller = new SensorGlucoseController(
             _repoMock.Object,
@@ -33,10 +33,11 @@ public class SensorGlucoseControllerTests
             _patientDevicesMock.Object,
             _deviceStamperMock.Object);
 
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
+        var httpContext = new DefaultHttpContext();
+        if (query is not null)
+            httpContext.Request.Query = query;
+
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         return controller;
     }
@@ -500,6 +501,35 @@ public class SensorGlucoseControllerTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<SensorGlucose>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+    [Fact]
+    public async Task GetAll_CountsWithTheFiltersTheDataQueryUses()
+    {
+        var patientDeviceId = Guid.NewGuid();
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync([new SensorGlucose()]);
+        _repoMock
+            .Setup(r => r.CountAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(9);
+        var query = new QueryCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>
+        {
+            ["patientDeviceId"] = patientDeviceId.ToString(),
+        });
+
+        var result = await CreateController(query).GetAll(
+            from: null, to: null, device: "g7", source: "dexcom", includeTotal: true);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<SensorGlucose>>().Subject;
+        response.Pagination.Total.Should().Be(9);
+        _repoMock.Verify(r => r.CountAsync(
+            null, null, "g7", "dexcom", patientDeviceId, GlucoseStreams.All, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -6,7 +6,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Controller for browsing the static insulin formulation catalog.
+/// Known insulin formulations. Read the full catalog, or the formulations in one category.
 /// </summary>
 /// <remarks>
 /// The insulin catalog is a read-only in-memory registry of known insulin formulations

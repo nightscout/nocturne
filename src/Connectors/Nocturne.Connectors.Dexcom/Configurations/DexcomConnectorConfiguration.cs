@@ -21,8 +21,7 @@ namespace Nocturne.Connectors.Dexcom.Configurations;
     MaxHistoricalDays = 90,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
-    SensorReadingIntervalSeconds = 300,
-    DocumentationUrl = UrlConstants.External.DocsDexcom
+    SensorReadingIntervalSeconds = 300
 )]
 public class DexcomConnectorConfiguration : BaseConnectorConfiguration
 {

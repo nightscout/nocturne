@@ -121,7 +121,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceEvent>());
 
         _mockTempBasalRepo
@@ -321,7 +321,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<DeviceEvent>>(Array.Empty<DeviceEvent>()));
         _mockTempBasalRepo
             .Setup(r => r.GetAsync(

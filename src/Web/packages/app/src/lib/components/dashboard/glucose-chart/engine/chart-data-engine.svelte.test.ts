@@ -23,8 +23,23 @@ vi.mock("#lib/websocket/websocket-client.svelte.js", () => ({
     disconnect() {}
   },
 }));
+// A query double: awaiting it answers with what it last fetched, as a cached SvelteKit
+// query does, and only `refresh` asks the server again.
+const forecast = vi.hoisted(() => ({ fetches: 0 }));
 vi.mock("#lib/api/predictions.remote.js", () => ({
-  getPredictions: vi.fn(async () => null),
+  getPredictions: vi.fn(() => {
+    if (forecast.fetches === 0) forecast.fetches = 1;
+    const query = {
+      refresh: async () => {
+        forecast.fetches++;
+      },
+      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve(
+          forecast.fetches > 0 ? { eventualBg: forecast.fetches } : null
+        ).then(resolve, reject),
+    };
+    return query;
+  }),
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
@@ -271,6 +286,59 @@ describe("chart data engine — predictions", () => {
     });
 
     await vi.waitFor(() => expect(getPredictions).toHaveBeenCalledTimes(1));
+  });
+
+  it("fetches the forecast afresh when a newer reading arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(getPredictionStatus).mockImplementation((() => new Promise(() => {})) as never);
+      forecast.fetches = 0;
+      const withReading = (minutesAgo: number) =>
+        transformChartData({ glucoseData: [{ time: Date.now() - minutesAgo * MINUTE, sgv: 120 }] } as never);
+      vi.mocked(getChartData).mockImplementation((() => {
+        const result = Promise.resolve(withReading(1)) as Promise<typeof served> & {
+          refresh: () => Promise<void>;
+        };
+        result.refresh = () => result.then(() => undefined);
+        return result;
+      }) as never);
+
+      let engine!: ChartDataEngine;
+      let store!: RealtimeStore;
+      render(Harness, {
+        props: {
+          entries: [],
+          options: { focusHours: 3, initialChartData: withReading(6) },
+          onengine: (e: ChartDataEngine) => (engine = e),
+          onstore: (s: RealtimeStore) => {
+            store = s;
+            s.isReady = false;
+            s.deviceStatuses = [];
+          },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      store.isReady = true;
+      flushSync();
+      await vi.advanceTimersByTimeAsync(0);
+      const first = engine.predictionData?.eventualBg;
+
+      store.deviceStatuses = [{ _id: "loop-cycle" }] as never;
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(first).toBeDefined();
+      expect(engine.predictionData?.eventualBg).toBeGreaterThan(first!);
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(getChartData).mockReset();
+      vi.mocked(getChartData).mockImplementation((() => {
+        const result = Promise.resolve(served) as Promise<typeof served> & {
+          refresh: () => Promise<void>;
+        };
+        result.refresh = () => result.then(() => undefined);
+        return result;
+      }) as never);
+    }
   });
 });
 
