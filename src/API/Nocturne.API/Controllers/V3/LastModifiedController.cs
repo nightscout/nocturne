@@ -48,11 +48,6 @@ public class LastModifiedController : ControllerBase
     [ProducesResponseType(typeof(V3Envelope<V3LastModifiedResult>), 200)]
     public async Task<ActionResult<V3Envelope<V3LastModifiedResult>>> GetLastModified()
     {
-        _logger.LogDebug(
-            "LastModified endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         try
         {
             var lastModified = await _statusService.GetLastModifiedAsync();

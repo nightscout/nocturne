@@ -63,11 +63,6 @@ public class SettingsController : BaseV3Controller<Settings>
     [ErrorEnvelope]
     public async Task<ActionResult> GetSettings(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 settings endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             // CHECKME: Legacy API v3 requires api:settings:admin permission for settings access
@@ -182,11 +177,6 @@ public class SettingsController : BaseV3Controller<Settings>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 settings create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             // CHECKME: Should validate admin permissions here

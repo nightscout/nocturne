@@ -83,11 +83,6 @@ public class StatusController : ControllerBase
     [NightscoutEndpoint("/api/v1/status")]
     public async Task<IActionResult> GetStatus()
     {
-        _logger.LogDebug(
-            "Status endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         Response.Headers.Append(HeaderNames.Vary, "Accept");
 
         var format = NegotiateFormat();

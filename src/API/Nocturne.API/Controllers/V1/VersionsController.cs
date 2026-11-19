@@ -43,11 +43,6 @@ public class VersionsController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<ApiVersionEntry>), 200)]
     public async Task<ActionResult<IReadOnlyList<ApiVersionEntry>>> GetVersions()
     {
-        _logger.LogDebug(
-            "Versions endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         return Ok(await _versionService.GetSupportedVersionsAsync());
     }
 }

@@ -54,11 +54,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ErrorEnvelope]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 devicestatus endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -166,10 +161,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 devicestatus create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (

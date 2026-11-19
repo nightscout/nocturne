@@ -27,10 +27,10 @@ namespace Nocturne.API.Controllers.V2;
 [Produces("application/json")]
 [ClientPropertyName("v2Summary")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class SummaryController : ControllerBase
 {
     private readonly ISummaryService _summaryService;
-    private readonly ILogger<SummaryController> _logger;
 
     private const int DefaultHours = 6;
 
@@ -38,11 +38,9 @@ public class SummaryController : ControllerBase
     /// Initializes a new instance of <see cref="SummaryController"/>.
     /// </summary>
     /// <param name="summaryService">Service for assembling summary data for a time window.</param>
-    /// <param name="logger">Logger instance.</param>
-    public SummaryController(ISummaryService summaryService, ILogger<SummaryController> logger)
+    public SummaryController(ISummaryService summaryService)
     {
         _summaryService = summaryService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -65,23 +63,15 @@ public class SummaryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        var hoursToUse = hours ?? DefaultHours;
+
+        if (hoursToUse <= 0)
         {
-            var hoursToUse = hours ?? DefaultHours;
-
-            if (hoursToUse <= 0)
-            {
-                return BadRequest(new { error = "Hours parameter must be greater than 0" });
-            }
-
-            var result = await _summaryService.GetSummaryAsync(hoursToUse, cancellationToken);
-
-            return Ok(result);
+            return BadRequest(new { error = "Hours parameter must be greater than 0" });
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting summary for {Hours} hours", hours);
-            return StatusCode(500, new { error = "Internal server error" });
-        }
+
+        var result = await _summaryService.GetSummaryAsync(hoursToUse, cancellationToken);
+
+        return Ok(result);
     }
 }

@@ -75,11 +75,6 @@ public class EntriesController : BaseV3Controller<Entry>
     [ErrorEnvelope]
     public async Task<ActionResult> GetEntries(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();

@@ -108,7 +108,7 @@ public class FoodControllerTests
     }
 
     [Fact]
-    public async Task GetFood_WhenServiceThrows_ShouldReturnInternalServerError()
+    public async Task GetFood_WhenServiceThrows_TheExceptionEscapes()
     {
         // Arrange
         _mockFoodRepository
@@ -116,10 +116,10 @@ public class FoodControllerTests
             .ThrowsAsync(new Exception("Database error"));
 
         // Act
-        var result = await _controller.GetFood(CancellationToken.None);
+        var act = () => _controller.GetFood(CancellationToken.None);
 
         // Assert
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        await act.Should().ThrowAsync<Exception>().WithMessage("Database error");
     }
 
     [Fact]

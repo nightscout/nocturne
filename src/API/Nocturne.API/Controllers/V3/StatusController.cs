@@ -43,11 +43,6 @@ public class StatusController : ControllerBase
     [ProducesResponseType(typeof(V3Envelope<V3StatusResponse>), 200)]
     public async Task<ActionResult<V3Envelope<V3StatusResponse>>> GetStatus()
     {
-        _logger.LogDebug(
-            "V3 status endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         try
         {
             var status = await _statusService.GetV3SystemStatusAsync();

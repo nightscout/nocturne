@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,14 +8,20 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Middleware;
+using Nocturne.API.Services.Health;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Xunit;
 using Nocturne.Core.Contracts.Entries;
 
@@ -26,13 +33,15 @@ namespace Nocturne.API.Tests.Middleware;
 /// <remarks>
 /// The three shapes are wire contracts, not implementation detail: V1 and V3 are what Nightscout
 /// clients (AAPS, xDrip, Loop) parse, and the V1 body carries <c>ex.Message</c> that uploaders
-/// surface to users. Nothing pinned them before, so they were free to drift apart.
+/// surface to users, for an authenticated caller only. Nothing pinned them before, so they were
+/// free to drift apart.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.ThrowingServiceFactory>
 {
     private const string BoomMessage = "boom from the service layer";
     private const string TwentyFourHexId = "aaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string DeletedActivityId = "deleted-activity";
 
     private readonly HttpClient _client;
     private readonly ThrowingServiceFactory _factory;
@@ -76,6 +85,41 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal(
             $$"""{"status":500,"message":"Internal server error","type":"internal","error":"{{BoomMessage}}"}""",
+            await response.Content.ReadAsStringAsync()
+        );
+    }
+
+    [Fact]
+    public async Task V1_ThrowingActionOutsideEntries_AnswersTheNightscoutV1Envelope()
+    {
+        var response = await _client.GetAsync("/api/v1/iob");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(
+            $$"""{"status":500,"message":"Internal server error","type":"internal","error":"{{BoomMessage}}"}""",
+            await response.Content.ReadAsStringAsync()
+        );
+    }
+
+    [Fact]
+    public async Task V1_ActivityPutOfADeletedId_Answers409WithTheV1Envelope()
+    {
+        var response = await _client.PutAsJsonAsync(
+            $"/api/v1/activity/{DeletedActivityId}",
+            new { type = "Walking" }
+        );
+
+        var blocked = new RecreationBlockedException(
+            nameof(Activity),
+            RecreationBlockedException.LegacyIdIdentity(DeletedActivityId)
+        );
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(
+            JsonSerializer.Serialize(
+                new { status = 409, message = blocked.Message, type = "conflict", error = blocked.Message }
+            ),
             await response.Content.ReadAsStringAsync()
         );
     }
@@ -144,6 +188,7 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
     [InlineData("/api/v2/authorization/request/some-access-token")]
     [InlineData("/api/v2/authorization/subjects")]
     [InlineData("/api/v2/authorization/roles")]
+    [InlineData("/api/v2/summary")]
     public async Task V2_ThrowingAction_AnswersProblemDetailsWithoutTheExceptionMessage(string route)
     {
         var response = await _client.GetAsync(route);
@@ -237,6 +282,41 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
                     .Setup(s => s.GetAllRolesAsync())
                     .ThrowsAsync(new InvalidOperationException(BoomMessage));
                 services.AddSingleton(authorization.Object);
+
+                var iobCobReader = new Mock<IIobCobReader>();
+                iobCobReader
+                    .Setup(s =>
+                        s.ReadTotalAsync(
+                            It.IsAny<long>(),
+                            It.IsAny<bool>(),
+                            It.IsAny<CancellationToken>()
+                        )
+                    )
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                services.AddSingleton(iobCobReader.Object);
+
+                var summary = new Mock<ISummaryService>();
+                summary
+                    .Setup(s =>
+                        s.GetSummaryAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())
+                    )
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                services.AddSingleton(summary.Object);
+
+                var activities = new Mock<IActivityService>();
+                activities
+                    .Setup(s => s.GetStoredActivitiesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync([]);
+                services.AddSingleton(activities.Object);
+
+                var decomposer = new Mock<IActivityDecomposer>();
+                decomposer
+                    .Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
+                    .Returns(Scope.TreatmentsReadWrite);
+                decomposer
+                    .Setup(d => d.IsDeletedByUserAsync(DeletedActivityId, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(true);
+                services.AddSingleton(decomposer.Object);
             });
         }
     }
