@@ -4,7 +4,7 @@
   import ThresholdRule from "./ThresholdRule.svelte";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import { dashOf } from "#lib/components/charts/print/chart-print-patterns.js";
-  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 
   interface Props {
     /**
@@ -17,7 +17,8 @@
   let { variant = "default" }: Props = $props();
 
   const ctx = getGlucoseChartContext();
-  const realtimeStore = getRealtimeStore();
+  // A server render (PlotSnapshot) has no realtime store; it draws "now" at the render time.
+  const realtimeStore = tryGetRealtimeStore();
   const targetLow = $derived(ctx.engine.thresholds.targetLow);
   const targetHigh = $derived(ctx.engine.thresholds.targetHigh);
 
@@ -39,7 +40,7 @@
   <ThresholdRule level="high" class={rule({ kind: "nightscoutRange" })} strokeDasharray="3,3" />
   <ThresholdRule level="low" class={rule({ kind: "nightscoutRange" })} strokeDasharray="3,3" />
   <ThresholdRule level="veryLow" class={rule({ kind: "nightscoutUrgent" })} strokeDasharray="1,6" />
-  <Rule x={new Date(realtimeStore.now)} class={rule({ kind: "nightscoutRange" })} dashArray="3,3" />
+  <Rule x={new Date(realtimeStore?.now ?? Date.now())} class={rule({ kind: "nightscoutRange" })} dashArray="3,3" />
 {:else}
   <!-- Fixed clinical in-range band boundaries. -->
   <ThresholdRule level="high" class={rule({ kind: "high" })} />
