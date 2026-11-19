@@ -289,7 +289,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), NullLogger<ActivityDecomposer>.Instance);
+            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {
