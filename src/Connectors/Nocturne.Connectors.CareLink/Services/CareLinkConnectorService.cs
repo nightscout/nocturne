@@ -98,6 +98,10 @@ public class CareLinkConnectorService
             return AuthenticationFailedResult();
         }
 
+        // Authentication is where Auth0 rotates the refresh token, and a sync that then finds no
+        // readable data still has to keep the new one: the old one is spent.
+        await PersistRefreshTokenIfChangedAsync(cancellationToken);
+
         var userInfo = await FetchUserInfoAsync(config, cancellationToken);
         var role = userInfo?.Role ?? string.Empty;
         var isCarePartner = role.Equals(CareLinkConstants.CarePartnerRoles.CarePartner, StringComparison.OrdinalIgnoreCase)
@@ -120,9 +124,6 @@ public class CareLinkConnectorService
         await PublishDeviceStatusStepAsync(data, config, activeTypes, now, result, cancellationToken);
         await PublishAlarmStepAsync(data, config, activeTypes, now, result, cancellationToken);
         await PublishTreatmentsStepAsync(data, config, activeTypes, now, result, cancellationToken);
-
-        // Persist refresh token if it changed during sync
-        await PersistRefreshTokenIfChangedAsync(cancellationToken);
 
         return result;
     }
@@ -719,7 +720,7 @@ public class CareLinkConnectorService
     }
 
     /// <summary>
-    ///     Persists the refresh token to secrets storage if it changed during the sync cycle.
+    ///     Persists the refresh token to secrets storage if it changed since the secrets were loaded.
     /// </summary>
     private async Task PersistRefreshTokenIfChangedAsync(CancellationToken ct)
     {

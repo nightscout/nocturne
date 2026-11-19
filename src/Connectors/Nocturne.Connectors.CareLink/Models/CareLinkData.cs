@@ -78,7 +78,7 @@ public class CareLinkData
     [JsonPropertyName("sensorDurationHours")]
     public int? SensorDurationHours { get; set; }
 
-    /// <summary>Minutes of sensor life left. 65535 means CareLink does not know.</summary>
+    /// <summary>Minutes of sensor life left.</summary>
     [JsonPropertyName("sensorDurationMinutes")]
     public int? SensorDurationMinutes { get; set; }
 

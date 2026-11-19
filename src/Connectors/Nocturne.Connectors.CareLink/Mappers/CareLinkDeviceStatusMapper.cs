@@ -154,8 +154,8 @@ public static class CareLinkDeviceStatusMapper
             extended["hardwareRevision"] = info.HardwareRevision;
         if (!string.IsNullOrEmpty(info?.SoftwareRevision))
             extended["softwareRevision"] = info.SoftwareRevision;
-        if (data.ReservoirLevelPercent is >= 0 and <= 100)
-            extended["reservoirLevelPercent"] = data.ReservoirLevelPercent.Value;
+        if (data.ReservoirLevelPercent is { } reservoirPercent)
+            extended["reservoirLevelPercent"] = reservoirPercent;
 
         return extended.Count > 0 ? extended : null;
     }

@@ -117,15 +117,16 @@ public class CareLinkDeviceStatusMapperTests
     }
 
     [Theory]
-    [InlineData(65535)]
-    [InlineData(-1)]
-    public void Map_ReadsAnUnknownSensorLifeAsNoReading(int minutes)
+    [InlineData(65535, null)]
+    [InlineData(-1, null)]
+    [InlineData(0, 0)]
+    public void Map_ReadsSensorLifeLeft_WithTheUnknownMarkerAsNoReading(int minutes, int? expected)
     {
         var data = CreatePumpData();
         data.CgmInfo = new CareLinkCgmInfo { SensorType = "DURABLE" };
         data.SensorDurationMinutes = minutes;
 
-        CareLinkDeviceStatusMapper.Map(data, Now)!.Cgm!.SessionTimeRemaining.Should().BeNull();
+        CareLinkDeviceStatusMapper.Map(data, Now)!.Cgm!.SessionTimeRemaining.Should().Be(expected);
     }
 
     [Fact]

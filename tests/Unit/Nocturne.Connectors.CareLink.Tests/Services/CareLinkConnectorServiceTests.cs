@@ -40,26 +40,21 @@ public class CareLinkConnectorServiceTests
         result.Errors.Should().ContainMatch("*No data returned from any CareLink endpoint*");
     }
 
-    /// <summary>
-    /// CareLink's newer payload wraps every field in <c>patientData</c>, so none of them bind.
-    /// Syncing it would store nothing and report success.
-    /// </summary>
+    private const string PatientDataPayload = """
+        {
+          "metadata": { "kind": "Metadata" },
+          "patientData": {
+            "currentServerTime": 1767261600000,
+            "pumpBatteryLevelPercent": 100,
+            "sgs": [{ "sg": 120, "timestamp": "2026-01-01T10:00:00" }]
+          }
+        }
+        """;
+
     [Fact]
     public async Task SyncDataAsync_WhenCareLinkSendsThePatientDataFormat_ReportsFailure()
     {
-        var handler = new CareLinkFakeHandler
-        {
-            PeriodicDataJson = """
-                {
-                  "metadata": { "kind": "Metadata" },
-                  "patientData": {
-                    "currentServerTime": 1767261600000,
-                    "pumpBatteryLevelPercent": 100,
-                    "sgs": [{ "sg": 120, "timestamp": "2026-01-01T10:00:00" }]
-                  }
-                }
-                """
-        };
+        var handler = new CareLinkFakeHandler { PeriodicDataJson = PatientDataPayload };
         var config = GlucoseOnlyConfiguration();
         config.SyncDeviceStatus = true;
         var fixture = new ServiceFixture(handler, config, withPublisher: true);
@@ -498,6 +493,26 @@ public class CareLinkConnectorServiceTests
             It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
             It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         handler.Requests.Count(r => r.Url == CareLinkFakeHandler.TokenUrl).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SyncDataAsync_KeepsTheRotatedRefreshToken_WhenNoReadableDataArrives(bool patientDataFormat)
+    {
+        var handler = patientDataFormat
+            ? new CareLinkFakeHandler { PeriodicDataJson = PatientDataPayload }
+            : new CareLinkFakeHandler();
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        fixture.ConfigService.Verify(s => s.SaveRuntimeSecretsAsync(
+            "CareLink",
+            It.Is<Dictionary<string, string>>(secrets => secrets["refresh_token"] == "rotated-refresh-token"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>Leaves only the alarm step able to publish, so its failure cannot be confused for another step's.</summary>
