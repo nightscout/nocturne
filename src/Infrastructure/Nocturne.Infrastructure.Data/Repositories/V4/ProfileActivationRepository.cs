@@ -23,9 +23,8 @@ public class ProfileActivationRepository
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<ProfileActivationRepository> logger,
-        IV4RecordBroadcaster<ProfileActivation>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

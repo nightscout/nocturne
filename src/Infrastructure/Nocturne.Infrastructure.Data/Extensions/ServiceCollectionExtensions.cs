@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Identity;
@@ -158,6 +159,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
         services.AddScoped<IDuplicateLinker, DuplicateLinker>();
+        services.AddScoped<IRecordChangePublisher, Repositories.V4.RecordChangePublisher>();
         services.AddScoped<DuplicateReconciler>();
         services.AddScoped<IDuplicateReconciler>(sp => sp.GetRequiredService<DuplicateReconciler>());
         services.AddScoped<IDeduplicationAdmin, DeduplicationAdmin>();

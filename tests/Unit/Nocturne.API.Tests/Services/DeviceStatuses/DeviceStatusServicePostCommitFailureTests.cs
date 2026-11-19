@@ -55,9 +55,12 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
     [Fact]
     public async Task ABroadcastCancelledAfterTheCommit_StillAnnouncesTheCommittedStatuses()
     {
-        var broadcaster = new Mock<IV4RecordBroadcaster<UploaderSnapshot>>();
+        var broadcaster = new Mock<IRecordChangePublisher>();
         broadcaster
-            .Setup(b => b.BroadcastCreatedAsync(It.IsAny<IReadOnlyList<UploaderSnapshot>>(), It.IsAny<CancellationToken>()))
+            .Setup(b => b.PublishAsync(
+                It.Is<RecordsChanged>(batch => batch.Changes.Any(c =>
+                    c.Origin == WriteOrigin.Live && c.RecordType == typeof(UploaderSnapshot) && c.Created.Count > 0)),
+                It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException("the client went away"));
         var service = Service(Decomposer(uploaderBroadcaster: broadcaster.Object, spans: Mock.Of<IStateSpanService>()));
 
@@ -105,7 +108,7 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
             It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single().Id == First), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private DeviceStatusDecomposer Decomposer(IV4RecordBroadcaster<UploaderSnapshot>? uploaderBroadcaster, IStateSpanService spans)
+    private DeviceStatusDecomposer Decomposer(IRecordChangePublisher? uploaderBroadcaster, IStateSpanService spans)
     {
         var factory = _context.AsFactory();
         var audit = new SystemAuditContext();

@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
@@ -27,7 +26,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
     private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     private readonly NocturneDbContext _context;
-    private readonly RecordingBroadcaster _broadcaster = new();
+    private readonly RecordingV4RecordBroadcaster<TherapySettings> _broadcaster = new();
     private readonly Mock<ILogger<TherapySettingsRepository>> _logger = new();
     private readonly TherapySettingsRepository _repository;
 
@@ -225,29 +224,5 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         outcomes.Outcomes.Should().ContainSingle();
         outcomes.Outcomes["p1:Default"].Record.Dia.Should().Be(2.0);
         _context.TherapySettings.Count().Should().Be(1);
-    }
-
-    private sealed class RecordingBroadcaster : IV4RecordBroadcaster<TherapySettings>
-    {
-        public List<TherapySettings> Created { get; } = [];
-        public List<TherapySettings> Updated { get; } = [];
-
-        public Task BroadcastCreatedAsync(IReadOnlyList<TherapySettings> items, CancellationToken ct = default)
-        {
-            Created.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public Task BroadcastUpdatedAsync(IReadOnlyList<TherapySettings> items, CancellationToken ct = default)
-        {
-            Updated.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public void Clear()
-        {
-            Created.Clear();
-            Updated.Clear();
-        }
     }
 }

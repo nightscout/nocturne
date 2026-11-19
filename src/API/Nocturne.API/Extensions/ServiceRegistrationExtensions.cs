@@ -741,6 +741,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<CacheFlights>();
         services.AddScoped<ITenantCache, TenantCache>();
         services.AddScoped<ILegacyReadCacheInvalidation, LegacyReadCacheInvalidation>();
+        services.AddScoped<IRecordChangeSubscriber, LegacyReadCacheSubscriber>();
 
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 
@@ -1051,10 +1052,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
 
-        // Native V4 record broadcasting (companion + Prelude) over the glucose/care/device/therapy
-        // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
-        // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
-        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
+        services.AddScoped<IRecordChangeSubscriber, SignalRRecordChangeSubscriber>();
         services.AddScoped<IGlucoseReadingBroadcaster, HomeAssistantGlucoseBroadcaster>();
 
         // Push notifications

@@ -29,10 +29,9 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<BolusCalculationRepository> logger,
-        IV4RecordBroadcaster<BolusCalculation>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null
+        IRecordChangePublisher? changes = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
     }
 
