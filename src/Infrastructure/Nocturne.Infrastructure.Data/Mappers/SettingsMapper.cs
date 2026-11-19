@@ -55,6 +55,8 @@ public static class SettingsMapper
             }
         }
 
+        var additional = DeserializeAdditionalProperties(entity.AdditionalPropertiesJson);
+
         return new Settings
         {
             Id = entity.OriginalId ?? entity.Id.ToString(),
@@ -71,9 +73,8 @@ public static class SettingsMapper
             Version = entity.Version,
             IsActive = entity.IsActive,
             Notes = entity.Notes,
-            AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, JsonElement>>(
-                entity.AdditionalPropertiesJson
-            ),
+            AdditionalProperties = additional.Fields,
+            DocumentKey = additional.DocumentKey,
         };
     }
 
@@ -101,8 +102,34 @@ public static class SettingsMapper
     private static DateTimeOffset? FromMills(long? mills) =>
         mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value) : null;
 
-    private static string? SerializeAdditionalProperties(Settings settings) =>
-        settings.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(settings.AdditionalProperties)
-            : null;
+    /// <summary>
+    /// The document's other fields as stored, with its own <c>key</c> field among them when it has
+    /// one: the column of that name holds the settings key.
+    /// </summary>
+    private static string? SerializeAdditionalProperties(Settings settings)
+    {
+        var fields = settings.AdditionalProperties is { Count: > 0 } additional
+            ? new Dictionary<string, JsonElement>(additional)
+            : new Dictionary<string, JsonElement>();
+        if (settings.DocumentKey is { } documentKey)
+        {
+            fields[DocumentKeyField] = documentKey;
+        }
+
+        return fields.Count > 0 ? JsonSerializer.Serialize(fields) : null;
+    }
+
+    private static (Dictionary<string, JsonElement>? Fields, JsonElement? DocumentKey) DeserializeAdditionalProperties(
+        string? json)
+    {
+        var fields = MapperHelpers.DeserializeJson<Dictionary<string, JsonElement>>(json);
+        if (fields is null || !fields.Remove(DocumentKeyField, out var documentKey))
+        {
+            return (fields, null);
+        }
+
+        return (fields.Count > 0 ? fields : null, documentKey);
+    }
+
+    private const string DocumentKeyField = "key";
 }

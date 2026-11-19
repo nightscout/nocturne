@@ -16,10 +16,45 @@ public class Settings : ProcessableDocumentBase
     [JsonPropertyName("_id")]
     public override string? Id { get; set; }
 
-    [JsonPropertyName("key")]
+    /// <summary>
+    /// The settings key, which is also the document's V3 identifier.
+    /// </summary>
+    [JsonIgnore]
     [Required]
     [Sanitizable]
     public string Key { get; set; } = string.Empty;
+
+    /// <summary>
+    /// A document's own <c>key</c> field when it is not a string, such as the answer AAPS writes
+    /// to a client-control key exchange (<c>aaps_clientcontrol_key_&lt;clientId&gt;</c>). Such a
+    /// document is addressed by its identifier, and its <c>key</c> field holds data.
+    /// </summary>
+    [JsonIgnore]
+    public JsonElement? DocumentKey { get; set; }
+
+    /// <summary>
+    /// The <c>key</c> field on the wire: the document's own <see cref="DocumentKey"/> when it has
+    /// one, otherwise the settings <see cref="Key"/>. A string read here is the settings key; an
+    /// object or array is kept as the document's own field.
+    /// </summary>
+    [JsonPropertyName("key")]
+    public JsonElement KeyField
+    {
+        get => DocumentKey ?? JsonSerializer.SerializeToElement(Key);
+        set
+        {
+            switch (value.ValueKind)
+            {
+                case JsonValueKind.String:
+                    Key = value.GetString() ?? string.Empty;
+                    DocumentKey = null;
+                    break;
+                case JsonValueKind.Object or JsonValueKind.Array:
+                    DocumentKey = value.Clone();
+                    break;
+            }
+        }
+    }
 
     /// <summary>
     /// The setting value (can be any JSON value)
