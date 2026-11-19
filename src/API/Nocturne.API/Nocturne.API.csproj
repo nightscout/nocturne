@@ -66,7 +66,8 @@
     </PackageReference>
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="ShiroTrie" />
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <PackageReference Include="SocketIOClient" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Yarp.ReverseProxy" />
