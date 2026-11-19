@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Serializers;
 
@@ -53,6 +54,18 @@ public static class EntryResponseExtensions
     {
         return entries.Select(e => e.ToV3Response());
     }
+
+    /// <summary>
+    /// Reads a string extra key of <paramref name="entry"/>: a value <see cref="Projections.EntryProjection"/>
+    /// set, or one a v1/v3 upload carried.
+    /// </summary>
+    internal static string? ExtraString(Entry entry, string key) =>
+        entry.AdditionalProperties?.GetValueOrDefault(key) switch
+        {
+            string value => value,
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
+            _ => null,
+        };
 
     /// <summary>
     /// Formats Unix milliseconds to ISO 8601 date string.
@@ -172,6 +185,14 @@ public class EntryV1Response
     [JsonPropertyName("rssi")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Rssi => _entry.Rssi;
+
+    [JsonPropertyName("quality")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Quality => EntryResponseExtensions.ExtraString(_entry, "quality");
+
+    [JsonPropertyName("sensorStatus")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SensorStatus => EntryResponseExtensions.ExtraString(_entry, "sensorStatus");
 
     [JsonPropertyName("slope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -328,6 +349,14 @@ public class EntryV3Response
     [JsonPropertyName("rssi")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Rssi => _entry.Rssi;
+
+    [JsonPropertyName("quality")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Quality => EntryResponseExtensions.ExtraString(_entry, "quality");
+
+    [JsonPropertyName("sensorStatus")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SensorStatus => EntryResponseExtensions.ExtraString(_entry, "sensorStatus");
 
     [JsonPropertyName("slope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

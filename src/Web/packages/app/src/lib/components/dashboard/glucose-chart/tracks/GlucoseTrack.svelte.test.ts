@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { afterEach, describe, it, expect } from "vitest";
 import { glucoseRangePalette } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./GlucoseTrackHarness.test.svelte";
+import { SensorGlucoseQuality } from "#lib/api/generated/nocturne-api-client.js";
 
 /**
  * These tests lock down the rendering contract of GlucoseTrack:
@@ -145,6 +146,27 @@ describe("GlucoseTrack rendering contract", () => {
 		for (const c of circles) {
 			expect(c.getAttribute("fill")).toBe("rgb(100, 150, 200)");
 		}
+	});
+
+	it("outlines an invalid reading on the line, even with points off", async () => {
+		const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 12, minutes));
+		const { container } = render(Harness, {
+			lineColorMode: "single",
+			areaMode: "off",
+			showPoints: false,
+			glucoseData: [
+				{ time: at(0), sgv: 120, color: "var(--glucose-in-range)" },
+				{ time: at(5), sgv: 45, color: "var(--glucose-low)", quality: SensorGlucoseQuality.Invalid },
+				{ time: at(10), sgv: 118, color: "var(--glucose-in-range)" },
+			],
+		});
+
+		const circles = container.querySelectorAll("circle");
+		expect(circles.length).toBe(1);
+		expect(circles[0].getAttribute("class")).toContain("stroke-foreground");
+		// The line runs through it: three readings, two segments.
+		const line = container.querySelector("path.fill-none")?.getAttribute("d") ?? "";
+		expect(line.match(/C/g)?.length ?? line.match(/L/g)?.length).toBe(2);
 	});
 
 	it("renders points when showPoints is explicitly true", async () => {

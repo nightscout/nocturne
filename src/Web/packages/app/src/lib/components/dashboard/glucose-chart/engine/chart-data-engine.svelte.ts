@@ -76,6 +76,11 @@ export interface ChartDataEngineOptions {
   glucoseSource?: "chart-data" | "realtime";
   /** Fired once when `serverChartData` first becomes non-null. */
   onDataReady?: () => void;
+  /**
+   * Ask the chart data for the readings the sensor marked invalid as well, for a chart that
+   * marks them. Off by default, so the dashboard draws only the readings that count.
+   */
+  includeInvalidReadings?: boolean;
 }
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -336,6 +341,7 @@ export function createChartDataEngine(
       startTime: range.startTime,
       endTime: range.endTime,
       intervalMinutes: 5,
+      includeInvalidReadings: options.includeInvalidReadings ?? false,
     })
       .then((data) => {
         if (cancelled) return;
@@ -409,7 +415,12 @@ export function createChartDataEngine(
 
     const seq = ++refreshSeq;
     const { startTime, endTime } = recentWindow();
-    fresh(getChartData({ startTime, endTime, intervalMinutes: 5 }))
+    fresh(getChartData({
+      startTime,
+      endTime,
+      intervalMinutes: 5,
+      includeInvalidReadings: options.includeInvalidReadings ?? false,
+    }))
       .then((recent) => {
         if (seq !== refreshSeq) return;
         refreshedAt = Date.now();

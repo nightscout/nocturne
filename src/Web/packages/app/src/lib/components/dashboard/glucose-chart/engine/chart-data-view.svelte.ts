@@ -8,6 +8,7 @@ import type {
   ProfileActivationDto,
   MealPeriod,
 } from "#lib/api/generated/nocturne-api-client.js";
+import { SensorGlucoseQuality } from "#lib/api/generated/nocturne-api-client.js";
 import type { PredictionData } from "#lib/api/prediction-data.js";
 import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
 import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
@@ -26,6 +27,8 @@ export interface GlucosePoint {
   sgv: number;
   direction?: string;
   dataSource?: string;
+  /** The sensor's verdict, which sorts the reading into `glucoseData` or `invalidGlucoseData`. */
+  quality?: SensorGlucoseQuality;
   color: string;
 }
 
@@ -214,7 +217,15 @@ export interface ChartDataEngine {
   readonly serverChartData: TransformedChartData | null;
 
   // Glucose (merged with realtime)
+  /**
+   * The readings that count. One the sensor marked invalid (`invalidGlucoseData`) is drawn on the
+   * line and in the overview, but feeds nothing else: not the median, the legend's ranges, the
+   * point dialogs or a tooltip's delta.
+   */
   readonly glucoseData: GlucosePoint[];
+  readonly invalidGlucoseData: GlucosePoint[];
+  /** Both series in time order: the line, the overview, and the tooltip's search. */
+  readonly allGlucoseData: GlucosePoint[];
 
   // Predictions
   readonly predictionData: PredictionData | null;
@@ -345,7 +356,12 @@ export function createChartDataView(
       onDataReady?.();
     }
   });
-  const glucoseData = $derived(source.glucoseData);
+  const glucoseData = $derived(
+    source.glucoseData.filter((d) => d.quality !== SensorGlucoseQuality.Invalid)
+  );
+  const invalidGlucoseData = $derived(
+    source.glucoseData.filter((d) => d.quality === SensorGlucoseQuality.Invalid)
+  );
   const fullDataRange = $derived(source.fullDataRange);
   const displayDateRange = $derived(source.displayDateRange);
 
@@ -640,6 +656,12 @@ export function createChartDataView(
     },
     get glucoseData() {
       return glucoseData;
+    },
+    get invalidGlucoseData() {
+      return invalidGlucoseData;
+    },
+    get allGlucoseData() {
+      return source.glucoseData;
     },
     get predictionData() {
       return source.predictionData;

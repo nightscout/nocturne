@@ -264,7 +264,8 @@ public class ClockFacesControllerTests
             r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(),
+                It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()),
             Times.Never);
     }
 
@@ -297,7 +298,8 @@ public class ClockFacesControllerTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(),
+                It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { newest, previous });
 
         var result = await CreateController().GetGlucose(id);
@@ -315,7 +317,7 @@ public class ClockFacesControllerTests
     }
 
     [Fact]
-    public async Task GetGlucose_RequestsOnlyTheLatestTwoReadings_NewestFirst()
+    public async Task GetGlucose_RequestsOnlyTheLatestTwoCanonicalReadings_NewestFirst()
     {
         var id = Guid.NewGuid();
         _clockFaceServiceMock
@@ -325,7 +327,8 @@ public class ClockFacesControllerTests
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(),
+                It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         await CreateController().GetGlucose(id);
@@ -334,7 +337,8 @@ public class ClockFacesControllerTests
             r => r.GetAsync(
                 null, null, null, null,
                 2, 0, true,
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(),
+                null, GlucoseStreams.Canonical),
             Times.Once);
     }
 }

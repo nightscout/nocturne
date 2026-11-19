@@ -13,6 +13,7 @@ namespace Nocturne.API.Validators.V4;
 /// <item><description>SyncIdentifier capped at 256 characters, the column's width, and requires DataSource.</description></item>
 /// <item><description>Mgdl must be between 0 and 10,000 (mg/dL range guard).</description></item>
 /// <item><description>Direction, when provided, must be a valid <see cref="Core.Models.V4.GlucoseDirection"/> enum value.</description></item>
+/// <item><description>Quality, when provided, must be a valid <see cref="Core.Models.V4.SensorGlucoseQuality"/>; SensorStatus is capped at 64 characters, the column's width.</description></item>
 /// </list>
 /// </remarks>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>
@@ -36,6 +37,8 @@ public class UpsertSensorGlucoseRequestValidator : AbstractValidator<UpsertSenso
             .WithMessage("DataSource is required when SyncIdentifier is supplied.");
         RuleFor(x => x.Mgdl).InclusiveBetween(0, 10000).WithMessage("Mgdl must be between 0 and 10000");
         RuleFor(x => x.Direction).IsInEnum().When(x => x.Direction is not null);
+        RuleFor(x => x.Quality).IsInEnum().When(x => x.Quality is not null);
+        RuleFor(x => x.SensorStatus).MaximumLength(64).When(x => x.SensorStatus is not null);
         RuleFor(x => x.GlucoseProcessing)
             .Must(v => Enum.TryParse<Core.Models.V4.GlucoseProcessing>(v, ignoreCase: true, out _))
             .When(x => x.GlucoseProcessing is not null)

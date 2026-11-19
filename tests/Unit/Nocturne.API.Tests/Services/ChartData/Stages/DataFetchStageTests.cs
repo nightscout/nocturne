@@ -619,6 +619,29 @@ public class DataFetchStageTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ForAChartThatMarksThem_ReadsTheInvalidReadingsToo()
+    {
+        var invalid = new SensorGlucose
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime + 60_000).UtcDateTime,
+            Mgdl = 45,
+            Quality = SensorGlucoseQuality.Invalid,
+        };
+        _mockSensorGlucoseRepo
+            .Setup(r => r.GetCanonicalWithUncountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([invalid]);
+
+        var marked = await _stage.ExecuteAsync(
+            Window(includeHealthSeries: false) with { IncludeInvalidReadings = true }, CancellationToken.None);
+        var plain = await _stage.ExecuteAsync(Window(includeHealthSeries: false), CancellationToken.None);
+
+        marked.SensorGlucoseList.Should().ContainSingle().Which.Quality.Should().Be(SensorGlucoseQuality.Invalid);
+        plain.SensorGlucoseList.Should().BeEmpty();
+    }
+
     private static ChartDataContext Window(bool includeHealthSeries) => new()
     {
         StartTime = StartTime,

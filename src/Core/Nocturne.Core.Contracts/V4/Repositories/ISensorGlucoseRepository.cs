@@ -70,7 +70,9 @@ public interface ISensorGlucoseRepository
 
     /// <summary>
     /// Partial readings for statistics only; these must not be returned as raw records or projected
-    /// into legacy entries. Includes the per-reading UTC offset.
+    /// into legacy entries. Includes the per-reading UTC offset. Leaves out the readings that don't
+    /// count (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>) for every
+    /// <see cref="GlucoseStreams"/>, one device's own series included.
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -78,6 +80,14 @@ public interface ISensorGlucoseRepository
         DateTime? afterTimestamp = null, Guid? afterId = null,
         CancellationToken ct = default, Guid? patientDeviceId = null,
         GlucoseStreams streams = GlucoseStreams.All);
+
+    /// <summary>
+    /// Partial readings of the canonical stream that keep the ones that don't count, with their
+    /// <see cref="SensorGlucose.Quality"/> and <see cref="SensorGlucose.SensorStatus"/>, for a chart
+    /// or a list that marks them. Not for statistics or alerts.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetCanonicalWithUncountedAsync(
+        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default);
 
     /// <summary>
     /// Partial readings for <see cref="EntryProjection.FromSensorGlucose"/> only; omitted V4 fields
@@ -108,6 +118,9 @@ public interface ISensorGlucoseRepository
     /// <summary>
     /// <see cref="ILegacyKeyedRepository{TRecord}.GetModifiedSinceAsync"/> over the canonical stream: a
     /// live reading another stream's reading outranks in its bucket is left out, a deleted one is not.
+    /// A reading that doesn't count (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>) is
+    /// delivered as deleted: a sync client can't see the quality field, and it may hold the reading
+    /// from before backfill marked it.
     /// </summary>
     Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> GetCanonicalModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default);

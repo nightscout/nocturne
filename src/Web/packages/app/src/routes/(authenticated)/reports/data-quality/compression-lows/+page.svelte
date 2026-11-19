@@ -25,14 +25,7 @@
 		triggerDetection as triggerCompressionLowDetection
 	} from '#lib/api/generated/compressionLows.generated.remote.js';
 	import { contextResource } from '#lib/hooks/resource-context.svelte.js';
-	import { createChartDataEngine } from '#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js';
-	import GlucoseChartShell from '#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
-	import GlucoseTrack from '#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
-	import BasalTrack from '#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
-	import IobCobTrack from '#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
-	import ThresholdRules from '#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
-	import ChartTooltip from '#lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
-	import { openDayInReview } from '#lib/components/dashboard/glucose-chart/day-in-review.js';
+	import ReportGlucoseChart from '#lib/components/reports/ReportGlucoseChart.svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -527,32 +520,15 @@
 							</CardHeader>
 							<CardContent>
 								{#if suggestionDetail?.entries && suggestionDetail.entries.length > 0 && chartDateRange}
-									{#key chartDateRange.from.getTime() + '-' + chartDateRange.to.getTime()}
-										{@const chartEngine = createChartDataEngine({
-											dateRange: chartDateRange,
-											enablePredictions: false,
-										})}
-										<div class="mb-6 h-64 w-full">
-											<GlucoseChartShell
-												engine={chartEngine}
-												heightClass="h-64"
-												selectionDomain={brushDomain}
-												onSelectionChange={isPending && canReviewSuggestions
-													? handleSelectionChange
-													: undefined}
-											>
-												{#snippet tracks(_ctx)}
-													<ThresholdRules />
-													<GlucoseTrack />
-													<BasalTrack />
-													<IobCobTrack />
-												{/snippet}
-												{#snippet overlays(_ctx)}
-													<ChartTooltip onTimeClick={openDayInReview} />
-												{/snippet}
-											</GlucoseChartShell>
-										</div>
-									{/key}
+									<ReportGlucoseChart
+										class="mb-6"
+										from={chartDateRange.from}
+										to={chartDateRange.to}
+										selectionDomain={brushDomain}
+										onSelectionChange={isPending && canReviewSuggestions
+											? handleSelectionChange
+											: undefined}
+									/>
 								{/if}
 
 								<dl class="m-0 mb-6 grid grid-cols-3 divide-x divide-border border-y border-border">

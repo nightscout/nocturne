@@ -50,7 +50,7 @@ export interface DeviceStatus extends PillsDeviceStatus {
   _id?: string;
   uploader?: Record<string, unknown>;
 }
-import { NotificationUrgency, TrackerRealtimeAction } from "#lib/api/index.js";
+import { NotificationUrgency, SensorGlucoseQuality, TrackerRealtimeAction } from "#lib/api/index.js";
 import { reachedStep } from "#lib/components/trackers/schedule.js";
 import {
   mergeEntryRecords,
@@ -128,20 +128,20 @@ export const RECENT_READINGS = 5;
  * sparkline's window ({@link GLUCOSE_WINDOW_HOURS}), the only reader of the store's history. The
  * window is left open-ended so a reading stamped ahead of the browser's clock is still the current
  * one. An uploader that has been quiet for most of the window still has a current reading, delta and
- * recent list to show, so a sparse window is topped up with the newest readings.
+ * recent list to show, so a sparse window is topped up with the newest readings. Readings the sensor
+ * marked invalid are left out, as the live feed leaves them out, so a false value is never the
+ * current reading: during an error episode the last trusted one ages.
  */
 export async function loadInitialGlucose(
   sensorGlucose: SensorGlucoseClient,
   from: string
 ): Promise<Entry[]> {
+  const trusted = (readings: SensorGlucose[] | undefined) =>
+    (readings ?? []).filter((sg) => sg.quality !== SensorGlucoseQuality.Invalid).map(sensorGlucoseToEntry);
   try {
-    const recent = ((await sensorGlucose.getAll(from, undefined, 1000)).data ?? []).map(
-      sensorGlucoseToEntry
-    );
+    const recent = trusted((await sensorGlucose.getAll(from, undefined, 1000)).data);
     if (recent.length >= RECENT_READINGS) return recent;
-    const latest = ((await sensorGlucose.getAll(undefined, undefined, RECENT_READINGS)).data ?? []).map(
-      sensorGlucoseToEntry
-    );
+    const latest = trusted((await sensorGlucose.getAll(undefined, undefined, RECENT_READINGS)).data);
     return [...recent, ...unseenEntries(recent, latest)];
   } catch {
     return [];

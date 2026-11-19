@@ -8,7 +8,11 @@ public enum GlucoseStreams
     /// <summary>Every stream: a V4 multi-stream read, or one device's own series.</summary>
     All,
 
-    /// <summary>The stream each bucket shows (<see cref="CanonicalGlucoseStream"/>).</summary>
+    /// <summary>
+    /// The stream each bucket shows (<see cref="CanonicalGlucoseStream"/>), less the readings that
+    /// don't count (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>): what statistics,
+    /// alerts and single-stream clients read.
+    /// </summary>
     Canonical,
 
     /// <summary>

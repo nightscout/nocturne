@@ -418,6 +418,10 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
       title: "Compression lows",
       description: "Glucose drops during sleep that can come from pressure on the sensor",
     },
+    "/reports/data-quality/erroneous-readings": {
+      title: "Erroneous readings",
+      description: "Readings that the sensor marked as not reliable. Only some uploaders can send them.",
+    },
     "/reports/data-quality/sensor-integrity": {
       title: "Signal integrity",
       description: "Days and windows where the sensor signal was unreliable",

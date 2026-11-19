@@ -301,6 +301,8 @@ public class DemoDataGenerator : IDemoDataGenerator
                 scenarioParams.DawnPhenomenonStrength = DawnHighStrength;
                 mealPlan = LateBreakfast(currentDay, mealPlan);
             }
+            if (DemoCoverageSeeds.SensorErrorOn(currentDay) is { } sensorError)
+                mealPlan = PinnedLunch(currentDay.Add(sensorError.Lunch.ToTimeSpan()), mealPlan);
 
             // Pre-populate the simulator with the day's meals and boluses, and
             // bucket the corresponding treatments by their actual timestamps.
@@ -328,7 +330,7 @@ public class DemoDataGenerator : IDemoDataGenerator
 
             pending.AddRange(PlanNotes(currentDay).Select(n => (_clock.ToUtc(n.Time), n.Treatment)));
             pending.Sort((a, b) => a.Time.CompareTo(b.Time));
-            var fingerstickTimes = PlanFingersticks(currentDay).Select(_clock.ToUtc).ToList();
+            var fingerstickTimes = PlanFingersticks(currentDay).Where(t => !DemoCoverageSeeds.IsAnchored(t)).Select(_clock.ToUtc).ToList();
             var calibrations = PlanCalibrations(currentDay).Select(c => c with { Time = _clock.ToUtc(c.Time) }).ToList();
 
             var effectiveIsf =
@@ -1518,6 +1520,18 @@ public class DemoDataGenerator : IDemoDataGenerator
                 }),
         ];
     }
+
+    /// <summary>
+    /// The meal plan with lunch at <paramref name="lunchAt"/> and its bolus on time, so a planted
+    /// sensor failure (<see cref="DemoCoverageSeeds.PlantedSensorError"/>) starts at a known point
+    /// after the meal. No other meal falls in the three hours after it.
+    /// </summary>
+    private static List<MealEvent> PinnedLunch(DateTime lunchAt, List<MealEvent> meals) =>
+    [
+        .. meals
+            .Where(m => m.FoodType == "Lunch" || m.MealTime < lunchAt || m.MealTime >= lunchAt.AddHours(3))
+            .Select(m => m.FoodType == "Lunch" ? m with { MealTime = lunchAt, BolusOffsetMinutes = 0 } : m),
+    ];
 
     /// <summary>
     /// How long after carbs the loop may give automatic boluses, as Trio's enableSMB_after_carbs:

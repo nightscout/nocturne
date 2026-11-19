@@ -61,11 +61,16 @@
 
   let chartHeight = $state(0);
 
-  // GlucoseTrack reads only `glucoseData` and `thresholds`.
+  // GlucoseTrack reads only the glucose series and `thresholds`. The entries
+  // carry no quality, so none is drawn as invalid.
   const engineStub = partialEngine({
     get glucoseData() {
       return glucoseData;
     },
+    get allGlucoseData() {
+      return glucoseData;
+    },
+    invalidGlucoseData: [],
     get thresholds() {
       return thresholds;
     },

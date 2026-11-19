@@ -12,6 +12,7 @@ const chartDataSchema = z.object({
   startTime: z.number(),
   endTime: z.number(),
   intervalMinutes: z.number().optional().default(5),
+  includeInvalidReadings: z.boolean().optional().default(false),
 });
 
 export const getChartData = query(

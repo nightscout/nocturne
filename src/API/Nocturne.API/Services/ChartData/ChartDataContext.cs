@@ -43,6 +43,12 @@ public sealed record ChartDataContext
     /// </summary>
     public bool IncludeHealthSeries { get; init; } = true;
 
+    /// <summary>
+    /// Whether the glucose series keeps the readings the sensor marked invalid, with their quality,
+    /// for a chart that marks them. They count in nothing else the pipeline computes.
+    /// </summary>
+    public bool IncludeInvalidReadings { get; init; }
+
     // === Zone and profile-derived config (set by ProfileLoadStage) ===
 
     /// <summary>The tenant's local zone, or null when it has no usable one (see <see cref="Analytics.TenantClockResolver"/>).</summary>

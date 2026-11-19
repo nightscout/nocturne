@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
+  import { SensorGlucoseQuality } from "#lib/api/generated/nocturne-api-client.js";
   import GlucoseTrack from "./GlucoseTrack.svelte";
   import { partialEngine, setGlucoseChartContext } from "../chart-context.svelte";
   import { computeTrackLayout } from "../engine/track-layout";
@@ -65,11 +66,17 @@
     targetHigh: null,
   };
 
-  // Minimal stub of ChartDataEngine — GlucoseTrack only reads `glucoseData`
-  // and `thresholds` from the engine (other fields like `width`/`height` come
-  // from layerchart's own context, not the engine).
+  // Minimal stub of ChartDataEngine — GlucoseTrack only reads the glucose
+  // series and `thresholds` from the engine (other fields like `width`/`height`
+  // come from layerchart's own context, not the engine). Split as the engine does.
   const engineStub = partialEngine({
     get glucoseData() {
+      return glucoseData.filter((d) => d.quality !== SensorGlucoseQuality.Invalid);
+    },
+    get invalidGlucoseData() {
+      return glucoseData.filter((d) => d.quality === SensorGlucoseQuality.Invalid);
+    },
+    get allGlucoseData() {
       return glucoseData;
     },
     thresholds,

@@ -402,6 +402,7 @@ public static class ServiceRegistrationExtensions
 
         services.AddScoped<IStatisticsService, StatisticsService>();
         services.AddScoped<ISensorIntegrityService, SensorIntegrityService>();
+        services.AddScoped<IErroneousReadingsService, ErroneousReadingsService>();
 
         // Analytics
         services.Configure<AnalyticsConfiguration>(

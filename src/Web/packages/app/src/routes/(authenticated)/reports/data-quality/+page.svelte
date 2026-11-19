@@ -117,6 +117,20 @@
 				</li>
 				<li>
 					<a
+						href={resolve('reports/data-quality/erroneous-readings')}
+						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
+					>
+						<div class="min-w-0 flex-1">
+							<div class="font-medium text-foreground">Erroneous readings</div>
+							<div class="text-sm text-muted-foreground">
+								{reportDescription("/reports/data-quality/erroneous-readings")}
+							</div>
+						</div>
+						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
+					</a>
+				</li>
+				<li>
+					<a
 						href={resolve('reports/data-quality/sensor-integrity')}
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
