@@ -48,7 +48,43 @@ public interface IAlertReplayService
         DateTime? toUtc,
         ReplayRuleOverride ruleOverride,
         CancellationToken ct);
+
+    /// <summary>
+    /// Finds the times <paramref name="ruleOverride"/> would have fired over the recent past, newest
+    /// first, so the author of a rule sees the last occasion it applies to before saving it. Only
+    /// that rule is evaluated, with the saved rules beside it when its condition reads their state.
+    /// </summary>
+    /// <param name="lastDayOnly">
+    /// Search the last day only, for a reader limited to the last 24 hours: no earlier reading is
+    /// shown to them, so an earlier day would be searched empty and reported as a day the alert
+    /// did not start in.
+    /// </param>
+    Task<AlertFiringSearchResult> FindFiringsAsync(ReplayRuleOverride ruleOverride, bool lastDayOnly, CancellationToken ct);
 }
+
+/// <summary>A time a rule would have fired.</summary>
+/// <param name="At">The instant, UTC.</param>
+/// <param name="Kind">
+/// <see cref="AlertReplayEventKind.Fired"/>, or <see cref="AlertReplayEventKind.SuppressedByDnd"/>
+/// when Do Not Disturb would have kept it silent.
+/// </param>
+public record AlertFiring(DateTime At, AlertReplayEventKind Kind);
+
+/// <summary>Result of <see cref="IAlertReplayService.FindFiringsAsync"/>. Timestamps are UTC.</summary>
+/// <param name="SearchedFrom">
+/// Start of the span that was searched. Later than the configured lookback when the search ran
+/// out of time.
+/// </param>
+/// <param name="SearchedTo">End of the span that was searched.</param>
+/// <param name="HasReadings">Whether the span holds any glucose reading.</param>
+/// <param name="Total">How many times the rule would have fired in the span.</param>
+/// <param name="Firings">The most recent of them, newest first.</param>
+public record AlertFiringSearchResult(
+    DateTime SearchedFrom,
+    DateTime SearchedTo,
+    bool HasReadings,
+    int Total,
+    IReadOnlyList<AlertFiring> Firings);
 
 /// <summary>
 /// Thrown when a replay request's resolved window is longer than the configured maximum

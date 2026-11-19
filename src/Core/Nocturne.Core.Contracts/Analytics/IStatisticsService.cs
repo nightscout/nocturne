@@ -400,7 +400,8 @@ public interface IStatisticsService
     /// Calculate comprehensive basal analysis statistics from TempBasals. Hourly percentiles are
     /// bucketed by <paramref name="userTimeZone"/>'s local hour-of-day (0–23) so the chart shows
     /// rates against the user's wall clock, not UTC. Null leaves them empty, since there is no local
-    /// hour to bucket on.
+    /// hour to bucket on. Basal injections count as scheduled basal, as in
+    /// <see cref="CalculateHourlyInsulinDelivery"/>.
     /// </summary>
     /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     BasalAnalysisResponse CalculateBasalAnalysis(
@@ -408,16 +409,19 @@ public interface IStatisticsService
         DateTime startDate,
         DateTime endDate,
         long untilMills,
-        TimeZoneInfo? userTimeZone = null);
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null);
 
     /// <summary>
-    /// Calculate the average insulin delivered per hour of day, from pump-confirmed
-    /// delivery records only. Algorithm boluses are reported as automatic bolus, not basal. Basal insulin is duration-weighted across the
+    /// Calculate the average insulin delivered per hour of day, from temp basals (with any profile
+    /// fallback the caller added), basal injections and boluses. Algorithm boluses are reported as
+    /// automatic bolus, not basal. Basal insulin is duration-weighted across the
     /// <paramref name="userTimeZone"/>-local hours each TempBasal overlaps; averages
     /// divide by the number of distinct local days that have delivery data, so a
     /// period that extends beyond the available data does not distort the pattern.
-    /// Long-acting basal injections (MDI) are spread evenly across the 24 hours
-    /// following each injection and counted as scheduled basal.
+    /// Basal injections count as scheduled basal, each dose at a constant rate until the next
+    /// (<c>StatisticsService.BasalInjectionPieces</c>), beside the temp basals rather than in
+    /// place of them, so read them from <c>StatisticsService.BasalInjectionReadSpan</c>.
     /// <paramref name="profileBasalSegments"/> is the profile's schedule over the window; it fills
     /// <see cref="HourlyInsulinDeliveryPoint.ProfileBasalRate"/> and is left at zero when absent.
     /// </summary>

@@ -14,7 +14,8 @@ namespace Nocturne.Connectors.GoogleHealth.Configurations;
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Steps, SyncDataType.HeartRate, SyncDataType.BodyWeight, SyncDataType.Sleep],
     DefaultActiveThresholdMinutes = 30,
-    DefaultStaleThresholdMinutes = 180)]
+    DefaultStaleThresholdMinutes = 180,
+    DocumentationUrl = UrlConstants.External.DocsGoogleHealth)]
 public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfiguration
 {
     public GoogleHealthConnectorConfiguration()

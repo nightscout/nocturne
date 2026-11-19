@@ -13,15 +13,20 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing tenants on the instance.
+/// Tenants on the instance. List, read, create, provision and update tenants. Deleting a tenant
+/// removes it and all of its data, and cannot be undone. To deactivate a tenant, update it. Add and
+/// remove members, manage their sign-in credentials, and issue login and recovery codes. Reading or
+/// updating one tenant, and the member actions, also need the caller to be an owner of that tenant,
+/// or the instance key.
 /// </summary>
 /// <remarks>
 /// In multi-tenant deployments, platform administrators can create new tenants, update tenant
-/// settings (display name, access-request flag), and deactivate tenants. Restricted to users
+/// settings (display name, access-request flag, active flag), and delete tenants. Restricted to users
 /// with the <c>platform_admin</c> role.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Tenants")]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/tenants")]
 [Produces("application/json")]

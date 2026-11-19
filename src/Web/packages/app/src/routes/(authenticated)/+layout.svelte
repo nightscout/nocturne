@@ -2,6 +2,9 @@
   import { Key } from "@nocturne/ui/keys";
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
+    calculatedBasalInjection,
+    calculatedCob,
+    calculatedIob,
     displayedGlucose,
     refreshSummaryOnNewReading,
   } from "#lib/stores/current-glucose-status.svelte.js";
@@ -36,7 +39,6 @@
   import { createImportWatcher } from "#lib/migration/background-import.svelte.js";
   import { MigrationJobState } from "#lib/api/index.js";
   import { toast } from "svelte-sonner";
-  import MembershipRequestAutoSubmit from "#lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
@@ -89,6 +91,16 @@
     () => realtimeStore.currentEntry?.mills,
     () => data.canViewRealtimeData
   );
+  $effect(() => {
+    const canViewTreatments =
+      data.canViewRealtimeData &&
+      satisfiesScope(data.effectivePermissions ?? [], "treatments.read");
+    realtimeStore.calculatedIob = canViewTreatments ? calculatedIob() : undefined;
+    realtimeStore.calculatedCob = canViewTreatments ? calculatedCob() : undefined;
+    realtimeStore.calculatedBasalInjection = canViewTreatments
+      ? calculatedBasalInjection()
+      : undefined;
+  });
   const authStore = createAuthStore(); // Initialize auth store in context
   refreshOnVisible(
     createShellRevalidator(
@@ -335,10 +347,6 @@
         <ImportInBackgroundNotice watcher={importWatcher} />
       {/if}
       {#if !tenantless}
-        <MembershipRequestAutoSubmit
-          isAuthenticated={!!data.user}
-          isGuestSession={data.isGuestSession}
-        />
         {#if satisfiesScope(data.effectivePermissions ?? [], "alerts.read")}
           <AlertSurfaces />
         {/if}

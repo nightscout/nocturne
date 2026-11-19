@@ -34,6 +34,7 @@ export const logoExtensions: Record<string, string> = {
   glucotracker: "png",
   gluroo: "png",
   "google-chat": "png",
+  "google-health": "png",
   "home-assistant": "png",
   iaps: "png",
   juggluco: "png",

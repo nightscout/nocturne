@@ -1,5 +1,6 @@
-# Diagrams rendered into OpenAPI info.description for Scalar docs.
-# Order here = display order in the docs.
+# Diagrams of the Scalar API reference. A diagram with `tags` is appended to those tags'
+# descriptions under "Data Model". Any diagram can also be placed inline in a page of
+# docs/api-descriptions with `<!-- diagram: name.mmd -->`.
 diagrams:
   - source: project-dependencies.mmd
     title: Project Dependencies
@@ -49,7 +50,7 @@ diagrams:
     description: OAuth clients, grants, tokens, authorization codes, and device codes.
     auto: efcore
     module: oauth
-    tags: [Authentication, OIDC Discovery]
+    tags: [Authentication]
 
   - source: er-glucose-readings.mmd
     title: "ER: Glucose & Readings"

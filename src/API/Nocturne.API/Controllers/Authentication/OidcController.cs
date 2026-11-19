@@ -18,8 +18,8 @@ using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for OIDC authentication flows.
-/// Handles login initiation, OAuth callback, logout, session management, and identity linking.
+/// Sign-in with an external OpenID Connect provider. A caller can list the configured providers, sign in,
+/// link and unlink provider identities, refresh the session, log out, and read the current session.
 /// </summary>
 /// <remarks>
 /// This controller orchestrates the full OIDC lifecycle:
@@ -37,6 +37,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="OidcOptions"/>
 [ApiController]
 [Route("api/auth/oidc")]
+[System.ComponentModel.DisplayName("OIDC Sign-In")]
 [Tags("Authentication")]
 public class OidcController : ControllerBase
 {

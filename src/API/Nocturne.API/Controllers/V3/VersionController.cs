@@ -10,12 +10,15 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// Version controller that provides 1:1 compatibility with the Nightscout v3 version endpoint.
+/// Nightscout V3 version: the server version information. A client can read it without signing in.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with the Nightscout v3 version endpoint.
+/// </remarks>
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="V3VersionResult"/>
 [ApiController]
-[Tags("V3 Version")]
+[Tags("V3")]
 [Route("api/v3/[controller]")]
 [AllowAnonymous]
 public class VersionController : ControllerBase

@@ -94,6 +94,7 @@ public enum ConnectorPropertyKey
     PumpSerialNumber,
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
+    TimeZoneId,
 
     // Glooko-specific
     AutoClockCorrection,

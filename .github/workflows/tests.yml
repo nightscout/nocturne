@@ -54,6 +54,9 @@ jobs:
               - 'tests/**'
               - 'nocturne.sln'
               - 'docs/postgres/**'
+              # The pages and diagrams of the API reference, which RuntimeOpenApiDocumentTests reads.
+              - 'docs/api-descriptions/**'
+              - 'docs/diagrams/**'
               - &alert-crates 'crates/nocturne-alerts-*/**'
               - &crates-workspace 'crates/Cargo.*'
               - 'crates/clippy.toml'
@@ -422,6 +425,18 @@ jobs:
       - name: Charts unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/charts exec vitest run
+      - name: Scalar plugin typecheck and unit tests
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm --filter @nocturne/scalar-plugin run check
+          pnpm --filter @nocturne/scalar-plugin run test
+      # The API serves the built plugin from wwwroot, where no .NET build can produce it, so the
+      # bundle is tracked. This fails a change to the package that did not rebuild it.
+      - name: Scalar plugin bundle is current
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm --filter @nocturne/scalar-plugin run build
+          git diff --exit-code -- ../API/Nocturne.API/wwwroot/scalar/nocturne-plugin.js
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.

@@ -82,7 +82,10 @@ import {
 } from "#lib/api/pills-processor.js";
 import { isEntryDocument, isRecordDocument } from "#lib/websocket/payloads.js";
 import { isRecord } from "#lib/utils/type-guards.js";
-import { SyncPhase } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  SyncPhase,
+  type V4BasalInjectionStatus,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import {
@@ -298,6 +301,12 @@ export class RealtimeStore {
   notes = $state.raw<Note[]>([]);
   deviceEvents = $state.raw<DeviceEvent[]>([]);
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
+  /** Server-calculated IOB for the IOB pill's fallback, set by the authenticated layout. */
+  calculatedIob = $state<number | undefined>();
+  /** Server-calculated COB for the COB pill's fallback, set by the authenticated layout. */
+  calculatedCob = $state<number | undefined>();
+  /** Server-read last long-acting dose for the Basal pill, set by the authenticated layout. */
+  calculatedBasalInjection = $state<V4BasalInjectionStatus | undefined>();
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
@@ -407,7 +416,12 @@ export class RealtimeStore {
       this.boluses,
       this.carbIntakes,
       this.profile,
-      { units: "mg/dL" }
+      {
+        units: "mg/dL",
+        calculatedIob: this.calculatedIob,
+        calculatedCob: this.calculatedCob,
+        basalInjection: this.calculatedBasalInjection,
+      }
     );
   });
 

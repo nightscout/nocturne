@@ -18,6 +18,7 @@ import type {
 	StatusPillsConfig
 } from '#lib/types/status-pills.js';
 import type { Bolus, CarbIntake, ApsSnapshot, ProfileSummary } from '#lib/api/index.js';
+import type { V4BasalInjectionStatus } from '#lib/api/generated/nocturne-api-client.js';
 
 /**
  * DeviceStatus represents device state data from Loop, OpenAPS, or pump systems
@@ -127,6 +128,23 @@ export interface PillsProcessorConfig extends StatusPillsConfig {
 	now?: number;
 	/** BG units ('mg/dL' or 'mmol/L') */
 	units?: string;
+	/**
+	 * IOB the server calculated from treatments (the widget summary's `iob`). Shown only when no
+	 * APS snapshot or device status reported IOB within the recency threshold, as for a pump whose
+	 * history reaches the server through a cloud connector.
+	 */
+	calculatedIob?: number | null;
+	/**
+	 * COB the server calculated from treatments (the widget summary's `cob`). Shown only when no
+	 * APS snapshot or device status reported COB within the recency threshold.
+	 */
+	calculatedCob?: number | null;
+	/**
+	 * The last long-acting dose the server read (the widget summary's `basalInjection`). Shown
+	 * only when no APS snapshot or device status reported a temp basal, as for a tenant on
+	 * multiple daily injections.
+	 */
+	basalInjection?: V4BasalInjectionStatus | null;
 }
 
 /**
@@ -275,7 +293,7 @@ function processBasalFromSnapshot(
 		isComboActive: false,
 		tempBasal: { rate: enactedRate, duration, remaining: Math.max(0, remaining), startTime },
 		activeProfile: profileName ?? undefined,
-		display: `${enactedRate.toFixed(3)}U`,
+		display: `${enactedRate.toFixed(3)}U/h`,
 		label: 'BASAL',
 		info: [],
 		level: 'none',
@@ -441,19 +459,28 @@ export function processIOB(
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
 
-	if (iobFromDevice) {
-		if (lastBolus) {
-			iobFromDevice.lastBolus = {
-				mills: lastBolus.mills ?? 0,
-				insulin: lastBolus.insulin ?? 0,
-			};
-		}
-		return iobFromDevice;
-	}
+	const calculated = config.calculatedIob;
+	const iobData: IOBPillData | null =
+		iobFromDevice ??
+		(typeof calculated === 'number'
+			? {
+					iob: calculated,
+					source: 'Calculated',
+					display: `${calculated.toFixed(2)}U`,
+					label: 'IOB',
+					info: [],
+					level: 'none',
+					lastUpdated: now
+				}
+			: null);
 
-	// If no device status, we could calculate IOB from boluses
-	// For now, return null if no device data
-	return null;
+	if (iobData && lastBolus) {
+		iobData.lastBolus = {
+			mills: lastBolus.mills ?? 0,
+			insulin: lastBolus.insulin ?? 0,
+		};
+	}
+	return iobData;
 }
 
 /**
@@ -550,43 +577,29 @@ export function processCOB(
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
 
-	if (cobFromDevice) {
-		if (lastCarbs) {
-			cobFromDevice.lastCarbs = {
-				mills: lastCarbs.mills ?? 0,
-				carbs: lastCarbs.carbs ?? 0,
-				food: undefined,
-			};
-		}
-		return cobFromDevice;
-	}
+	const calculated = config.calculatedCob;
+	const cobData: COBPillData | null =
+		cobFromDevice ??
+		(typeof calculated === 'number'
+			? {
+					cob: calculated,
+					source: 'Calculated',
+					display: `${Math.round(calculated * 10) / 10}g`,
+					label: 'COB',
+					info: [],
+					level: 'none',
+					lastUpdated: now
+				}
+			: null);
 
-	// If no device data but we have recent carbs, show that
-	if (lastCarbs) {
-		// Simple COB estimation (not accurate, just for display)
-		const carbTime = lastCarbs.mills ?? 0;
-		const hoursSinceCarbs = (now - carbTime) / HOURS(1);
-		// Assume 30g/hr absorption rate
-		const estimatedCOB = Math.max(0, (lastCarbs.carbs ?? 0) - hoursSinceCarbs * 30);
-
-		return {
-			cob: estimatedCOB,
-			source: 'Care Portal',
-			display: `${Math.round(estimatedCOB * 10) / 10}g`,
-			label: 'COB',
-			info: [],
-			level: 'none',
-			lastCarbs: {
-				mills: lastCarbs.mills ?? 0,
-				carbs: lastCarbs.carbs ?? 0,
-				food: undefined,
-			},
-			isDecaying: estimatedCOB > 0,
-			lastUpdated: now
+	if (cobData && lastCarbs) {
+		cobData.lastCarbs = {
+			mills: lastCarbs.mills ?? 0,
+			carbs: lastCarbs.carbs ?? 0,
+			food: undefined,
 		};
 	}
-
-	return null;
+	return cobData;
 }
 
 /**
@@ -652,9 +665,9 @@ export function processBasal(
 	profile: ProfileSummary | null,
 	now: number,
 	_units: string,
-	_config: Partial<PillsProcessorConfig> = {}
+	config: Partial<PillsProcessorConfig> = {}
 ): BasalPillData | null {
-	if (!profile && deviceStatuses.length === 0) {
+	if (!profile && deviceStatuses.length === 0 && !config.basalInjection) {
 		return null;
 	}
 
@@ -725,6 +738,22 @@ export function processBasal(
 		}
 	}
 
+	if (!isTempBasal && config.basalInjection) {
+		return {
+			totalBasal: config.basalInjection.estimatedRate ?? 0,
+			scheduledBasal,
+			isTempBasal: false,
+			isComboActive,
+			injection: config.basalInjection,
+			activeProfile: profileName ?? undefined,
+			display: `${config.basalInjection.units ?? 0} U`,
+			label: 'BASAL',
+			info: [],
+			level: 'none',
+			lastUpdated: config.basalInjection.mills ?? now
+		};
+	}
+
 	// If we have no basal data at all, return null
 	if (totalBasal === 0 && scheduledBasal === 0 && !profile) {
 		return null;
@@ -737,7 +766,7 @@ export function processBasal(
 		isComboActive,
 		tempBasal: tempBasalInfo,
 		activeProfile: profileName ?? undefined,
-		display: `${totalBasal.toFixed(3)}U`,
+		display: `${totalBasal.toFixed(3)}U/h`,
 		label: 'BASAL',
 		info: [],
 		level: 'none',

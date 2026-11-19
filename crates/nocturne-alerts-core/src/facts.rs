@@ -21,6 +21,7 @@ wire_enum! {
         Pump = "pump",
         Aps = "aps",
         Uploader = "uploader",
+        Transmitter = "transmitter",
         StateSpans = "state_spans",
         DeviceAges = "device_ages",
         Trackers = "trackers",
@@ -54,6 +55,7 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
         | ConditionKind::LoopEnactionStale
         | ConditionKind::SensitivityRatio => &[F::Aps],
         ConditionKind::UploaderBattery => &[F::Uploader],
+        ConditionKind::TransmitterBattery => &[F::Transmitter],
         ConditionKind::OverrideActive
         | ConditionKind::PumpState
         | ConditionKind::StateSpanActive => &[F::StateSpans],
@@ -472,6 +474,10 @@ mod tests {
             has_ever_aps_sensitivity: aps,
             uploader_battery_percent: uploader.then(|| Decimal::from(15)),
             has_ever_uploader_snapshot: uploader,
+            transmitter_voltage_a: has(F::Transmitter).then(|| Decimal::from(280)),
+            transmitter_voltage_b: has(F::Transmitter).then(|| Decimal::from(270)),
+            transmitter_resistance: has(F::Transmitter).then(|| Decimal::from(1500)),
+            transmitter_days: has(F::Transmitter).then(|| Decimal::from(100)),
             active_override: span(F::StateSpans),
             active_pump_suspension: span(F::StateSpans),
             active_pump_state: spans.then(|| PumpStateSnapshot {
@@ -546,6 +552,9 @@ mod tests {
                 json!({"operator": "<", "value": 20})
             }
             ConditionKind::TempBasal => json!({"metric": "rate", "operator": ">", "value": 1}),
+            ConditionKind::TransmitterBattery => {
+                json!({"metric": "voltage_a", "operator": "<", "value": 290})
+            }
             ConditionKind::SensitivityRatio => json!({"operator": ">", "value": 1}),
             ConditionKind::GlucoseBucket => json!({"buckets": ["low"]}),
             ConditionKind::TimeSinceLastCarb | ConditionKind::TimeSinceLastBolus => {

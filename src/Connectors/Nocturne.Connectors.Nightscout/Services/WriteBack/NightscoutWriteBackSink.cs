@@ -116,6 +116,15 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         => Task.FromResult(batch);
 
     /// <summary>
+    /// Removes what an earlier write left upstream that refused a create of <paramref name="batch"/>
+    /// with <paramref name="refusal"/>, which is then sent once more.
+    /// </summary>
+    /// <returns>Whether anything was removed.</returns>
+    protected virtual Task<bool> ClearRefusalAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<T> batch, string refusal, CancellationToken ct)
+        => Task.FromResult(false);
+
+    /// <summary>
     /// Runs once upstream has accepted <paramref name="items"/>, to tidy what an earlier write left there.
     /// </summary>
     protected virtual Task AfterWrittenAsync(
@@ -203,7 +212,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return filtered;
     }
 
-    private async Task<bool> SendCreatedAsync(NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct)
+    private async Task<bool> SendCreatedAsync(
+        NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct, bool cleared = false)
     {
         if (await TrySendAsync(config, HttpMethod.Post, await PrepareAsync(config, batch, ct), SerializerOptions, ct) is not { } outcome)
             return false;
@@ -211,10 +221,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
             return true;
 
         if (!IsAlreadyStored(refusal))
-        {
-            RecordFailure(null, HttpMethod.Post);
-            return false;
-        }
+            return await ClearAndResendAsync(config, batch, refusal, cleared, () => SendCreatedAsync(config, batch, ct, cleared: true), ct);
 
         if (batch.Count == 1)
         {
@@ -226,6 +233,42 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         foreach (var item in batch)
             written &= await SendCreatedAsync(config, [item], ct);
         return written;
+    }
+
+    /// <summary>
+    /// POSTs <paramref name="payload"/>, a create of <paramref name="batch"/>. A refusal
+    /// <see cref="ClearRefusalAsync"/> clears sends it once more.
+    /// </summary>
+    /// <returns>Whether upstream accepted it.</returns>
+    protected async Task<bool> SendCreateAsync<TPayload>(
+        NightscoutConnectorConfiguration config,
+        TPayload payload,
+        IReadOnlyList<T> batch,
+        JsonSerializerOptions? options,
+        CancellationToken ct)
+    {
+        if (await TrySendAsync(config, HttpMethod.Post, payload, options, ct) is not { } outcome)
+            return false;
+        if (outcome.Refusal is not { } refusal)
+            return true;
+
+        return await ClearAndResendAsync(
+            config, batch, refusal, cleared: false, () => SendAsync(config, HttpMethod.Post, payload, options, ct), ct);
+    }
+
+    private async Task<bool> ClearAndResendAsync(
+        NightscoutConnectorConfiguration config,
+        IReadOnlyList<T> batch,
+        string refusal,
+        bool cleared,
+        Func<Task<bool>> resend,
+        CancellationToken ct)
+    {
+        if (!cleared && await ClearRefusalAsync(config, batch, refusal, ct))
+            return await resend();
+
+        RecordFailure(null, HttpMethod.Post);
+        return false;
     }
 
     /// <summary>Sends <paramref name="payload"/> to <see cref="Endpoint"/>, recording the outcome on the circuit breaker.</summary>

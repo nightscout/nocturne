@@ -25,6 +25,7 @@ public class ConnectionService(
     IOAuthGrantRepository grants,
     IConnectorHealthService connectorHealth,
     IClientDeviceService devices,
+    IDataSourceService dataSources,
     TimeProvider time) : IConnectionService
 {
     private const int SenderActiveMinutes = 15;
@@ -68,20 +69,40 @@ public class ConnectionService(
             }
         }
 
+        var folded = await FoldedGrantsAsync(grantRecords, ct);
         var connections = grantRecords
             .GroupBy(KeyOf)
-            .Select(group => FromGrants(
-                group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts, viewerSubjectId, now,
-                androidApsDevices))
+            .Select(group =>
+            {
+                var connection = FromGrants(
+                    group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts,
+                    viewerSubjectId, now, androidApsDevices);
+                connection.CanDeleteRecords =
+                    viewerSubjectId is { } viewer && AllOwnedBy(folded[group.Key], viewer);
+                return connection;
+            })
             .ToList();
 
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
         {
+            if (ConnectorMetadataService.GetByConnectorId(status.Id)?.IsImport == true)
+                continue;
+
             var owned = connectorBuckets.GetValueOrDefault(status.Id) ?? [];
-            if (!status.IsEnabled && !status.HasDatabaseConfig && owned.Count == 0)
+            if (owned.Count == 0 && !status.IsEnabled && !status.HasDatabaseConfig)
                 continue;
 
             connections.Add(FromConnector(status, owned, androidApsDevices));
+        }
+
+        foreach (var import in ConnectorMetadataService.GetAll().Where(c => c.IsImport))
+        {
+            if (!await dataSources.ConnectorHoldsDataAsync(import.ConnectorName, ct))
+                continue;
+
+            var summary = await dataSources.GetConnectorDataSummaryAsync(import.ConnectorName, ct);
+            if (summary.Total > 0)
+                connections.Add(FromImport(import, summary));
         }
 
         return new ConnectionsOverview
@@ -96,7 +117,61 @@ public class ConnectionService(
             ],
             OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)], androidApsDevices),
             WindowDays = DataSourceService.DiscoveryWindowDays,
+            ActiveWithinMinutes = SenderActiveMinutes,
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<DataSourceDeleteResult> DeleteRecordsAsync(
+        Guid viewerSubjectId, IReadOnlyCollection<Guid> grantIds, bool allowReimport, CancellationToken ct = default)
+    {
+        var named = new List<OAuthGrantRecord>();
+        foreach (var grantId in grantIds.Distinct())
+        {
+            if (await grants.FindOfSubjectAsync(grantId, viewerSubjectId, ct) is not
+                { GrantType: OAuthGrantTypes.App or OAuthGrantTypes.Direct } grant)
+                return NotOwn(grantIds);
+            named.Add(grant);
+        }
+
+        if (named.Select(KeyOf).Distinct().ToList() is not [var key])
+            return NotOwn(grantIds);
+
+        var connection = (await FoldedGrantsAsync(named, ct))[key];
+        if (!AllOwnedBy(connection, viewerSubjectId))
+            return NotOwn(grantIds);
+
+        return await dataSources.DeleteWrittenDataAsync([.. connection.Select(g => g.Id)], allowReimport, ct);
+    }
+
+    private static DataSourceDeleteResult NotOwn(IReadOnlyCollection<Guid> grantIds) =>
+        DataSourceDeleteResult.Failed(
+            string.Join(',', grantIds), DataSourceDeleteError.NotFound,
+            "A credential of the connection is not yours, or it is gone.");
+
+    private static bool AllOwnedBy(IEnumerable<OAuthGrantRecord> credentials, Guid subjectId) =>
+        credentials.All(g => g.SubjectId == subjectId);
+
+    /// <summary>
+    /// Every grant folded under the <see cref="KeyOf"/> key of each of <paramref name="grantsOfKeys"/>, in
+    /// any state and of any subject, by key. The connections list shows only the unrevoked ones and those
+    /// that wrote inside its window; a token's key holds that token alone.
+    /// </summary>
+    private async Task<Dictionary<string, List<OAuthGrantRecord>>> FoldedGrantsAsync(
+        IReadOnlyCollection<OAuthGrantRecord> grantsOfKeys, CancellationToken ct)
+    {
+        var apps = grantsOfKeys.Where(g => g.GrantType == OAuthGrantTypes.App).ToList();
+        IReadOnlyList<OAuthGrantRecord> clients = apps.Count == 0
+            ? []
+            : await grants.ListAppGrantsOfClientsAsync(
+                [.. apps.Where(g => g.ClientEntityId.HasValue).Select(g => g.ClientEntityId!.Value).Distinct()],
+                [.. apps.Select(g => g.Client?.SoftwareId).OfType<string>().Distinct()],
+                ct);
+        var keys = grantsOfKeys.Select(KeyOf).ToHashSet();
+        return grantsOfKeys
+            .UnionBy(clients.Where(g => keys.Contains(KeyOf(g))), g => g.Id)
+            .GroupBy(KeyOf)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     private static void Add(Dictionary<string, List<WriterBucket>> map, string key, WriterBucket bucket)
@@ -219,6 +294,31 @@ public class ConnectionService(
         ApplyRecords(connection, buckets, androidApsDevices);
         foreach (var stream in connection.Streams)
             stream.CanDelete = true;
+        return connection;
+    }
+
+    /// <summary>
+    /// An import connector is its records alone, of any age, counted as the detail dialog counts them
+    /// (<see cref="IDataSourceService.GetConnectorDataSummaryAsync"/>): a configuration row or a health
+    /// status is not a connection.
+    /// </summary>
+    private static Connection FromImport(
+        ConnectorMetadataService.ConnectorDisplayInfo import, ConnectorDataSummary summary)
+    {
+        var id = import.ConnectorName.ToLowerInvariant();
+        var connection = new Connection
+        {
+            Id = $"connector:{id}",
+            Kind = ConnectionKind.Connector,
+            Direction = ConnectionDirection.Imports,
+            Status = ConnectionStatus.Imported,
+            Name = import.DisplayName,
+            Icon = import.Icon,
+            ConnectorId = id,
+            TotalRecords = summary.Total,
+        };
+        foreach (var (type, count) in summary.RecordCounts)
+            connection.RecordCounts[type] = count;
         return connection;
     }
 

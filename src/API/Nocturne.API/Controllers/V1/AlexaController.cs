@@ -9,9 +9,11 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Alexa controller that provides voice assistant integration.
-/// Maintains 1:1 compatibility with legacy Nightscout Alexa API.
+/// Nightscout Alexa: voice assistant requests. A client posts a voice assistant request to this endpoint.
 /// </summary>
+/// <remarks>
+/// Maintains 1:1 compatibility with legacy Nightscout Alexa API.
+/// </remarks>
 /// <seealso cref="IAlexaService"/>
 /// <seealso cref="IAuthorizationService"/>
 [ApiController]

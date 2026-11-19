@@ -12,8 +12,8 @@ using Nocturne.API.Services.Glucose;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// V4 Summary controller providing widget-friendly summary data.
-/// Designed for mobile widgets, watch faces, and other constrained displays.
+/// Compact summary for widgets and small displays, such as watch faces and mobile widgets. Returns
+/// current glucose, IOB, COB, active tracker states and alarm status in one response.
 /// </summary>
 /// <remarks>
 /// Returns a compact <see cref="V4SummaryResponse"/> that aggregates current glucose,

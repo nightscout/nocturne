@@ -25,12 +25,15 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// CRUD controller for alert rules. Each rule owns a flat list of delivery channels;
-/// time-of-day gating, quiet-hours, and escalation chains are expressed inside the rule's
-/// condition tree (<c>time_of_day</c>, <c>do_not_disturb</c>, <c>alert_state</c>) rather
-/// than as side-channel schedule/step structures.
+/// Alert rules for the tenant. Each rule sets the conditions that trigger an alert and the delivery
+/// channels that receive it. Create, read, update, delete, turn on or off, and test-fire rules.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Each rule owns a flat list of delivery channels. Time-of-day gating, quiet-hours, and escalation
+/// chains are expressed inside the rule's condition tree (<c>time_of_day</c>, <c>do_not_disturb</c>,
+/// <c>alert_state</c>) rather than as side-channel schedule/step structures.
+/// </para>
 /// <para>
 /// Every write action requires <see cref="Scope.AlertsReadWrite"/>: a rule decides whether a
 /// low-glucose alert reaches anyone, and the class-level <c>[Authorize]</c> alone is satisfied by
@@ -114,6 +117,50 @@ public class AlertRulesController : ControllerBase
     {
         var rules = await _alerts.GetRulesAsync(ct);
         return Ok(await ToResponsesAsync(rules, ct));
+    }
+
+    /// <summary>
+    /// The ready-made alerts, in the order they are offered: what the alert wizard lists and what
+    /// the setup hub starts a tenant with.
+    /// </summary>
+    [HttpGet("presets")]
+    [RequireScope(Scope.AlertsRead)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<AlertPresetResponse>), StatusCodes.Status200OK)]
+    public ActionResult<List<AlertPresetResponse>> GetPresets() =>
+        Ok(AlertPresets.All
+            .Select(p => new AlertPresetResponse
+            {
+                Id = p.Id,
+                Group = p.Group,
+                Severity = p.Severity,
+                CanWait = p.CanWait,
+                ConditionType = p.ConditionType,
+                ConditionParams = p.ConditionParams is null ? null : DeserializeJson(p.ConditionParams),
+                AutoResolve = p.AutoResolve,
+                TrackerCategories = [.. p.TrackerCategories],
+                TrackerOnlyAgeHours = p.TrackerOnlyAgeHours,
+                StarterKind = p.StarterKind,
+            })
+            .ToList());
+
+    /// <summary>
+    /// The condition that closes an alert at once: the opposite of the given condition tree. The
+    /// answer has no condition when the tree has no opposite.
+    /// </summary>
+    [HttpPost("auto-resolve-suggestion")]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(AutoResolveSuggestionResponse), StatusCodes.Status200OK)]
+    public ActionResult<AutoResolveSuggestionResponse> SuggestAutoResolve([FromBody] AutoResolveSuggestionRequest request)
+    {
+        var suggestion = request.Condition is null
+            ? null
+            : AutoResolveSuggestion.For(JsonSerializer.Serialize(request.Condition));
+        return Ok(new AutoResolveSuggestionResponse
+        {
+            Condition = suggestion is null ? null : DeserializeJson(suggestion),
+        });
     }
 
     /// <summary>
@@ -663,6 +710,33 @@ public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds, s
 }
 
 #region DTOs
+
+public class AutoResolveSuggestionRequest
+{
+    /// <summary>A condition node as a rule stores it: its type, and its payload under that name.</summary>
+    public object? Condition { get; set; }
+}
+
+public class AutoResolveSuggestionResponse
+{
+    /// <summary>The opposite condition node, or null when the condition has none.</summary>
+    public object? Condition { get; set; }
+}
+
+/// <summary>An <see cref="AlertPreset"/>, with its condition as a JSON object.</summary>
+public class AlertPresetResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public AlertPresetGroup Group { get; set; }
+    public AlertRuleSeverity Severity { get; set; }
+    public bool CanWait { get; set; }
+    public AlertConditionType? ConditionType { get; set; }
+    public object? ConditionParams { get; set; }
+    public bool AutoResolve { get; set; }
+    public List<TrackerCategory> TrackerCategories { get; set; } = [];
+    public int? TrackerOnlyAgeHours { get; set; }
+    public StarterAlertKind? StarterKind { get; set; }
+}
 
 public class AlertRuleResponse
 {

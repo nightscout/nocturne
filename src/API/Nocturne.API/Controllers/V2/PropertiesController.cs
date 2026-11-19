@@ -10,10 +10,12 @@ using System.Text.Json;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// V2 Properties controller providing client properties and settings endpoints.
-/// Implements the legacy /api/v2/properties endpoints with 1:1 backwards compatibility.
+/// Nightscout properties: client properties and settings, such as IOB, COB, basal rates and sensor ages. A client
+/// can read all properties, or one property by path.
 /// </summary>
 /// <remarks>
+/// Implements the legacy /api/v2/properties endpoints with 1:1 backwards compatibility.
+///
 /// Both actions require only <c>glucose.read</c>, while the assembled response carries values
 /// derived from other categories: IOB and COB from boluses and carbs (treatments), basal rates and
 /// ratios from the active profile (therapy), and cannula/sensor/insulin ages from device data.

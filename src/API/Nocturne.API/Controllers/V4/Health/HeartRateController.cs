@@ -10,7 +10,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for heart rate data from diabetes apps and wearables.
+/// Heart rate readings from diabetes apps and wearables, stored as a time series. Callers can list,
+/// read, add, update and delete readings.
 /// </summary>
 /// <remarks>
 /// Heart rate readings are stored as time-series observations. All operations delegate to

@@ -136,7 +136,7 @@ disturb**.
 While Do not disturb is on:
 
 - **Critical** rules still reach you, always.
-- Rules with **Allow through Do not disturb** ticked still reach you.
+- Rules with **Also alert during Do Not Disturb** ticked still reach you.
 - Every other alert still **fires** and is recorded in history as silenced by
   Do not disturb. It is just not sent.
 
@@ -148,7 +148,7 @@ something that is neither, is only held back by Do not disturb for everything.
 
   Overnight is when people are least likely to notice a low on their own. If you
   use quiet hours, make sure the rules that matter most at night are Critical, or
-  have **Allow through Do not disturb** ticked.
+  have **Also alert during Do Not Disturb** ticked.
 
 </Callout>
 

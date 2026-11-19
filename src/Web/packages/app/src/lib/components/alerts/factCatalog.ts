@@ -86,6 +86,7 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "tracker_age", group: "device", icon: "timer" },
 	{ kind: "pump_battery", group: "device", icon: "battery" },
 	{ kind: "uploader_battery", group: "device", icon: "smartphone" },
+	{ kind: "transmitter_battery", group: "device", icon: "battery-low" },
 	{ kind: "loop_stale", group: "device", icon: "wifi-off" },
 	{ kind: "loop_enaction_stale", group: "device", icon: "rotate-ccw" },
 	{ kind: "signal_loss", group: "device", icon: "wifi-off" },
