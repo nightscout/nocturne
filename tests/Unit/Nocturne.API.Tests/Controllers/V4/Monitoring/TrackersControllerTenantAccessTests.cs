@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -38,6 +39,7 @@ public class TrackersControllerTenantAccessTests
     private readonly Mock<ITrackerRepository> _repository = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly Mock<IAlertRepository> _alerts = new();
+    private readonly Mock<IPatientDeviceRepository> _patientDevices = new();
 
     public TrackersControllerTenantAccessTests()
     {
@@ -72,10 +74,11 @@ public class TrackersControllerTenantAccessTests
         return controller;
     }
 
-    private TrackersController AsMember(string subjectId = MemberId, string scope = Scope.AlertsRead)
+    private TrackersController AsMember(
+        string subjectId = MemberId, string scope = Scope.AlertsRead, params string[] alsoHolding)
     {
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = new HashSet<string> { scope };
+        httpContext.Items["GrantedScopes"] = new HashSet<string>([scope, .. alsoHolding]);
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -179,6 +182,37 @@ public class TrackersControllerTenantAccessTests
     }
 
     [Fact]
+    public async Task GetTemplates_MemberReadsTheTemplatesOfTheTenantsDevices()
+    {
+        _patientDevices
+            .Setup(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PatientDevice { CatalogId = "omnipod-5", Rank = 0 }]);
+
+        var result = await AsMember(alsoHolding: Scope.DevicesRead).GetTemplates(_patientDevices.Object);
+
+        var templates = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Subject;
+        templates.Select(t => t.Id).Should().Contain(TrackerTemplates.Pod).And.NotContain(TrackerTemplates.Site);
+        templates.Single(t => t.Id == TrackerTemplates.Pod).Definition.Name.Should().Be("Omnipod 5 pod");
+    }
+
+    [Fact]
+    public async Task GetTemplates_WithoutDevicesRead_NamesNoDevice()
+    {
+        _patientDevices
+            .Setup(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PatientDevice { CatalogId = "omnipod-5", Rank = 0 }]);
+
+        var result = await AsMember().GetTemplates(_patientDevices.Object);
+
+        var templates = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Subject;
+        templates.Select(t => t.Id).Should().Contain(TrackerTemplates.Site);
+        templates.Should().OnlyContain(t => t.Definition.DeviceComponent == null);
+        _patientDevices.Verify(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task GetDefinitions_ByCategory_ReadsTheTenantsDefinitionsInIt()
     {
         var definition = Definition();
@@ -233,6 +267,8 @@ public class TrackersControllerTenantAccessTests
         (await controller.GetDefinitions()).Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerDefinitionDto[]>().Which.Should().BeEmpty();
         (await controller.GetDefinition(definition.Id)).Result.Should().BeOfType<NotFoundResult>();
+        (await controller.GetTemplates(_patientDevices.Object)).Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Which.Should().BeEmpty();
         (await controller.GetActiveInstances()).Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerInstanceDto[]>().Which.Should().BeEmpty();
         (await controller.GetInstanceHistory()).Result.Should().BeOfType<OkObjectResult>()

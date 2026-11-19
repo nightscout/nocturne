@@ -208,7 +208,6 @@ describe("trackers on a phone", () => {
 
   it("fits every dialog inside the screen", async () => {
     await page.getByRole("tab", { name: /Definitions/ }).click();
-    await expectDialogFits(() => page.getByRole("button", { name: "New definition" }).click());
     await expectDialogFits(() => page.getByRole("button", { name: "Edit Omnipod reservoir" }).click());
     await expectDialogFits(() => page.getByRole("button", { name: "Start" }).first().click());
 
@@ -252,7 +251,7 @@ describe.each([430, 500, 536, 600, 640, 768])("trackers at %ipx", (width) => {
     await page.getByRole("tab", { name: new RegExp(tab) }).click();
     const panel = document.querySelector<HTMLElement>("[role='tabpanel'][data-state='active']")!;
     const header = panel.querySelector<HTMLElement>("[data-slot='card-header']")!;
-    const button = header.querySelector<HTMLElement>("button")!;
+    const button = header.querySelector<HTMLElement>("button, a")!;
     const buttonBox = button.getBoundingClientRect();
     const headerBox = header.getBoundingClientRect();
     expect(buttonBox.right).toBeLessThanOrEqual(headerBox.right - parseFloat(getComputedStyle(header).paddingRight) + 0.5);

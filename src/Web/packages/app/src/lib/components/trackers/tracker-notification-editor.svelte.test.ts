@@ -32,54 +32,89 @@ describe("TrackerNotificationEditor", () => {
 			.toBeVisible();
 	});
 
-	it("renders notification entries", async () => {
+	it("shows a threshold in days before the end, in words", async () => {
 		render(TrackerNotificationEditor, {
 			notifications: [
-				{ urgency: NotificationUrgency.Info, hours: 24, description: "Check soon" },
+				{ urgency: NotificationUrgency.Warn, hours: -24, description: "Check soon" },
 			],
+			lifespanHours: 240,
 		});
 
-		// Should show Level and After labels
-		await expect.element(page.getByText("Level")).toBeVisible();
-		await expect.element(page.getByText("After (hours)")).toBeVisible();
-		await expect.element(page.getByText("Description (optional)")).toBeVisible();
+		await expect.element(page.getByLabelText("Level")).toHaveTextContent("Warning");
+		await expect.element(page.getByLabelText("Time")).toHaveValue(1);
+		await expect.element(page.getByLabelText("Unit")).toHaveTextContent(/^day$/);
+		await expect.element(page.getByLabelText("When")).toHaveTextContent("before it ends");
+		await expect.element(page.getByLabelText("Message (optional)")).toHaveValue("Check soon");
 	});
 
-	it("shows 'Hours' label in Event mode instead of 'After (hours)'", async () => {
+	it("shows hours that are not whole days as hours after the start", async () => {
 		render(TrackerNotificationEditor, {
-			notifications: [
-				{ urgency: NotificationUrgency.Info, hours: 24, description: "" },
-			],
+			notifications: [{ urgency: NotificationUrgency.Urgent, hours: 251, description: "" }],
+			lifespanHours: 240,
+		});
+
+		await expect.element(page.getByLabelText("Time")).toHaveValue(251);
+		await expect.element(page.getByLabelText("Unit")).toHaveTextContent("hours");
+		await expect.element(page.getByLabelText("When")).toHaveTextContent("after it starts");
+	});
+
+	it("counts from the date in Event mode", async () => {
+		render(TrackerNotificationEditor, {
+			notifications: [{ urgency: NotificationUrgency.Info, hours: -24, description: "" }],
 			mode: TrackerMode.Event,
 		});
 
-		await expect.element(page.getByText("Hours", { exact: true })).toBeVisible();
+		await expect.element(page.getByLabelText("When")).toHaveTextContent("before the date");
 	});
 
-	it("shows Duration mode help text", async () => {
+	it("keeps the unit a person chose while they enter the time", async () => {
 		render(TrackerNotificationEditor, {
-			notifications: [
-				{ urgency: NotificationUrgency.Info, hours: 24, description: "" },
-			],
-			mode: TrackerMode.Duration,
+			notifications: [{ urgency: NotificationUrgency.Info, hours: 24, description: "" }],
+			lifespanHours: 240,
+		});
+
+		await page.getByLabelText("Unit").click();
+		await page.getByRole("option", { name: "hours" }).click();
+		await page.getByLabelText("Time").fill("48");
+
+		await expect.element(page.getByLabelText("Unit")).toHaveTextContent("hours");
+		await expect.element(page.getByLabelText("Time")).toHaveValue(48);
+	});
+
+	it("does not offer a time before the end of a tracker with no lifespan", async () => {
+		render(TrackerNotificationEditor, {
+			notifications: [{ urgency: NotificationUrgency.Info, hours: 24, description: "" }],
+		});
+
+		await page.getByLabelText("When").click();
+
+		await expect.element(page.getByRole("option", { name: "after it starts" })).toBeVisible();
+		await expect.element(page.getByRole("option", { name: "before it ends" })).not.toBeInTheDocument();
+	});
+
+	it("says when a time before the end is longer than the tracker lasts", async () => {
+		render(TrackerNotificationEditor, {
+			notifications: [{ urgency: NotificationUrgency.Info, hours: -300, description: "" }],
+			lifespanHours: 240,
 		});
 
 		await expect
-			.element(page.getByText(/Positive = after start, negative = before expiration/))
-			.toBeVisible();
+			.element(page.getByRole("alert"))
+			.toHaveTextContent("This time is before the tracker starts.");
 	});
 
-	it("shows Event mode help text", async () => {
+	it("starts the rows again from what is stored when one is removed", async () => {
 		render(TrackerNotificationEditor, {
 			notifications: [
-				{ urgency: NotificationUrgency.Info, hours: 24, description: "" },
+				{ urgency: NotificationUrgency.Info, hours: 24, description: "First" },
+				{ urgency: NotificationUrgency.Warn, hours: 72, description: "Second" },
 			],
-			mode: TrackerMode.Event,
 		});
 
-		await expect
-			.element(page.getByText(/Negative = before event, positive = after event/))
-			.toBeVisible();
+		await page.getByRole("button", { name: /Remove notification/i }).first().click();
+
+		await expect.element(page.getByLabelText("Time")).toHaveValue(3);
+		await expect.element(page.getByLabelText("Message (optional)")).toHaveValue("Second");
 	});
 
 	it("disables add button when 4 notifications exist", async () => {
@@ -149,7 +184,7 @@ describe("TrackerNotificationEditor", () => {
 			],
 		});
 
-		await expect.element(page.getByText("Level")).toBeVisible();
+		await expect.element(page.getByLabelText("Level")).toBeVisible();
 		await expect
 			.element(page.getByRole("link", { name: /Channels/i }))
 			.not.toBeInTheDocument();

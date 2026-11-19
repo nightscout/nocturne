@@ -81,6 +81,15 @@ public static class ConsumableTrackerSpecs
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
+    /// <summary>
+    /// A pod of no registered model: three days, with no grace period, since how long a pod keeps
+    /// delivering past its lifespan differs by model.
+    /// </summary>
+    public static ConsumableTrackerSpec TypicalPod { get; } = new("Pod", TrackerCategory.Pod, "hexagon", 72,
+        [TreatmentTypes.PodChange, TreatmentTypes.PodActivated, TreatmentTypes.SiteChange],
+        [TreatmentTypes.PodDeactivated],
+        Covers: [PumpCapability.Site, PumpCapability.Reservoir, PumpCapability.Power]);
+
     /// <summary>The trackers <paramref name="entry"/> calls for, empty when it carries no wear data.</summary>
     public static IReadOnlyList<ConsumableTrackerSpec> SpecsFor(DeviceCatalogEntry entry)
     {

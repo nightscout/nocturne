@@ -11,6 +11,7 @@ using Nocturne.API.Services.Monitoring;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -262,6 +263,33 @@ public class TrackersController : ControllerBase, IWriteScopedController
             : await _repository.GetAllDefinitionsAsync(HttpContext.RequestAborted);
 
         return Ok(definitions.Select(TrackerDefinitionDto.FromEntity).ToArray());
+    }
+
+    /// <summary>
+    /// The ready-made trackers the tracker wizard offers, each an unsaved definition for the
+    /// tenant's registered devices (<see cref="TrackerTemplates"/>). Empty for a caller that
+    /// <see cref="ReadsNoTrackers"/>. A caller without <see cref="Scope.DevicesRead"/> gets the
+    /// templates of a tenant with no devices, since a template names the device it is for.
+    /// </summary>
+    [HttpGet("templates")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TrackerTemplateDto[]), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TrackerTemplateDto[]>> GetTemplates(
+        [FromServices] IPatientDeviceRepository patientDevices)
+    {
+        if (ReadsNoTrackers)
+            return Ok(Array.Empty<TrackerTemplateDto>());
+
+        IReadOnlyCollection<PatientDevice> devices = HttpContext.HasScope(Scope.DevicesRead)
+            ? [.. await patientDevices.GetCurrentAsync(HttpContext.RequestAborted)]
+            : [];
+        return Ok(TrackerTemplates.For(devices)
+            .Select(t => new TrackerTemplateDto
+            {
+                Id = t.Id,
+                Definition = TrackerDefinitionDto.FromEntity(t.Definition),
+            })
+            .ToArray());
     }
 
     /// <summary>
@@ -1064,6 +1092,15 @@ public class TrackerDefinitionDto
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
         };
+}
+
+/// <summary>A <see cref="TrackerTemplate"/> as the tracker wizard reads it.</summary>
+public class TrackerTemplateDto
+{
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>The definition a tracker of this template starts as. It is not saved and has no id.</summary>
+    public TrackerDefinitionDto Definition { get; set; } = new();
 }
 
 public class TrackerPresetDto

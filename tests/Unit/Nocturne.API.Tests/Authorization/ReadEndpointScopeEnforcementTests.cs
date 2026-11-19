@@ -154,6 +154,7 @@ public class ReadEndpointScopeEnforcementTests
             ["TenantAppearanceController.GetTenantAppearance"] = V4Reason.ActionChecksAccess,
 
             ["TrackersController.GetDefinitions"] = V4Reason.TenantTrackers,
+            ["TrackersController.GetTemplates"] = V4Reason.TenantTrackers,
             ["TrackersController.GetDefinition"] = V4Reason.TenantTrackers,
             ["TrackersController.GetActiveInstances"] = V4Reason.TenantTrackers,
             ["TrackersController.GetInstanceHistory"] = V4Reason.TenantTrackers,
