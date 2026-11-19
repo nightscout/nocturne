@@ -74,10 +74,11 @@ public class TrackersControllerTenantAccessTests
         return controller;
     }
 
-    private TrackersController AsMember(string subjectId = MemberId, string scope = Scope.AlertsRead)
+    private TrackersController AsMember(
+        string subjectId = MemberId, string scope = Scope.AlertsRead, params string[] alsoHolding)
     {
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = new HashSet<string> { scope };
+        httpContext.Items["GrantedScopes"] = new HashSet<string>([scope, .. alsoHolding]);
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -187,12 +188,28 @@ public class TrackersControllerTenantAccessTests
             .Setup(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([new PatientDevice { CatalogId = "omnipod-5", Rank = 0 }]);
 
-        var result = await AsMember().GetTemplates(_patientDevices.Object);
+        var result = await AsMember(alsoHolding: Scope.DevicesRead).GetTemplates(_patientDevices.Object);
 
         var templates = result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Subject;
         templates.Select(t => t.Id).Should().Contain(TrackerTemplates.Pod).And.NotContain(TrackerTemplates.Site);
         templates.Single(t => t.Id == TrackerTemplates.Pod).Definition.Name.Should().Be("Omnipod 5 pod");
+    }
+
+    [Fact]
+    public async Task GetTemplates_WithoutDevicesRead_NamesNoDevice()
+    {
+        _patientDevices
+            .Setup(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PatientDevice { CatalogId = "omnipod-5", Rank = 0 }]);
+
+        var result = await AsMember().GetTemplates(_patientDevices.Object);
+
+        var templates = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Subject;
+        templates.Select(t => t.Id).Should().Contain(TrackerTemplates.Site);
+        templates.Should().OnlyContain(t => t.Definition.DeviceComponent == null);
+        _patientDevices.Verify(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -268,7 +268,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <summary>
     /// The ready-made trackers the tracker wizard offers, each an unsaved definition for the
     /// tenant's registered devices (<see cref="TrackerTemplates"/>). Empty for a caller that
-    /// <see cref="ReadsNoTrackers"/>.
+    /// <see cref="ReadsNoTrackers"/>. A caller without <see cref="Scope.DevicesRead"/> gets the
+    /// templates of a tenant with no devices, since a template names the device it is for.
     /// </summary>
     [HttpGet("templates")]
     [RemoteQuery]
@@ -279,7 +280,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return Ok(Array.Empty<TrackerTemplateDto>());
 
-        var devices = (await patientDevices.GetCurrentAsync(HttpContext.RequestAborted)).ToList();
+        IReadOnlyCollection<PatientDevice> devices = HttpContext.HasScope(Scope.DevicesRead)
+            ? [.. await patientDevices.GetCurrentAsync(HttpContext.RequestAborted)]
+            : [];
         return Ok(TrackerTemplates.For(devices)
             .Select(t => new TrackerTemplateDto
             {

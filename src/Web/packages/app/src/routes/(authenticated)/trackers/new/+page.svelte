@@ -12,7 +12,9 @@
   } from "#lib/api/generated/trackers.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import WizardProgress from "#lib/components/wizard/WizardProgress.svelte";
+  import { TrackerMode } from "#lib/api/index.js";
   import { newDraftFrom, type TrackerDraft } from "#lib/components/trackers/draft.js";
+  import { thresholdIssue } from "#lib/components/trackers/threshold-time.js";
   import TrackerDefinitionInputs from "#lib/components/trackers/TrackerDefinitionInputs.svelte";
   import TrackerRemindersStep from "#lib/components/trackers/wizard/TrackerRemindersStep.svelte";
   import TrackerSettingsStep from "#lib/components/trackers/wizard/TrackerSettingsStep.svelte";
@@ -101,6 +103,13 @@
   const blocked = $derived.by<string | null>(() => {
     if (!draft) return "Choose a tracker type.";
     if (step >= SETTINGS && draft.name.trim() === "") return "Enter a name.";
+    if (step === REMINDERS) {
+      const { mode, notifications } = draft;
+      const lifespan = mode === TrackerMode.Duration ? draft.lifespanHours : undefined;
+      if (notifications.some((n) => thresholdIssue(n.hours, mode, lifespan) !== null)) {
+        return "Change the time of the reminder that is marked.";
+      }
+    }
     return null;
   });
 
@@ -111,8 +120,6 @@
     return () => root.classList.remove("[scrollbar-gutter:stable]");
   });
 
-  // ---- Create ------------------------------------------------------------
-
   const form = createDefinition.for("wizard");
   const submission = useSubmission({ fallback: "Could not create the tracker. Try again." });
   let submitted = $state(false);
@@ -120,7 +127,7 @@
 
   async function submitStep(submit: () => Promise<boolean>): Promise<void> {
     if (blocked) return;
-    // Enter in a field submits the form; before the last step that is a move to the next one.
+    // Next submits the form, as Enter in a field does; before the last step that is a move ahead.
     if (step < REMINDERS) {
       open(step + 1);
       return;
@@ -224,13 +231,11 @@
             />
           {/if}
         {:else if step === SETTINGS}
-          {#key template}
-            <TrackerSettingsStep
-              bind:draft
-              choosesMode={template === "custom"}
-              namePlaceholder={templateLabel(template)}
-            />
-          {/key}
+          <TrackerSettingsStep
+            bind:draft
+            choosesMode={template === "custom"}
+            namePlaceholder={templateLabel(template)}
+          />
         {:else}
           <TrackerRemindersStep bind:draft />
         {/if}
@@ -272,12 +277,7 @@
             Create tracker
           </Button>
         {:else}
-          <Button
-            type="button"
-            size="touch"
-            onclick={() => open(step + 1)}
-            disabled={step > TYPE && blocked !== null}
-          >
+          <Button type="submit" size="touch" disabled={step > TYPE && blocked !== null}>
             Next
             <ArrowRight aria-hidden="true" />
           </Button>

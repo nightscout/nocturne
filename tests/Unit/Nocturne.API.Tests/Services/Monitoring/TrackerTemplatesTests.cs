@@ -50,7 +50,7 @@ public class TrackerTemplatesTests
     }
 
     [Fact]
-    public void EveryTemplate_MapsToADefinitionTheWizardCanPost()
+    public void EveryTemplate_IsUnsaved_AndEachOfItsThresholdsCanFire()
     {
         foreach (var template in TrackerTemplates.For([]))
         {

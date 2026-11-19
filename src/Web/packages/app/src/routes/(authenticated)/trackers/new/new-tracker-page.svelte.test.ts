@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import {
@@ -185,6 +185,36 @@ describe("new tracker wizard", () => {
     await next().click();
 
     await expect.element(page.getByRole("heading", { name: "Name and settings" })).toBeVisible();
+  });
+
+  it("goes to the next step on Enter in a field", async () => {
+    show();
+
+    await page.getByTestId("tracker-type-sensor").click();
+    await page.getByLabelText("Name").click();
+    await userEvent.keyboard("{Enter}");
+
+    await expect
+      .element(page.getByRole("heading", { name: "When does it remind you?" }))
+      .toBeVisible();
+    expect(createDefinition).not.toHaveBeenCalled();
+  });
+
+  it("does not create a tracker with a reminder before the end of no lifespan, and says why", async () => {
+    show();
+
+    await page.getByTestId("tracker-type-sensor").click();
+    await userEvent.clear(page.getByLabelText("How long it lasts"));
+    await expect.element(page.getByLabelText("How long it lasts")).toHaveValue("");
+    await next().click();
+
+    await expect.element(create()).toBeDisabled();
+    await expect
+      .element(page.getByText("Change the time of the reminder that is marked."))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Set how long the tracker lasts before you use a time before its end."))
+      .toBeVisible();
   });
 
   it("offers the low reservoir alert for a tracker that holds insulin", async () => {
