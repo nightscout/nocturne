@@ -38,6 +38,7 @@ internal class TreatmentReadService : ITreatmentStore
         IBolusCalculationRepository bolusCalcRepo,
         IProfileActivationRepository activationRepo,
         IStateSpanService stateSpans,
+        IWriteBackSentRecords sentRecords,
         ILogger<TreatmentReadService> logger)
     {
         _projection = projection;
@@ -48,7 +49,8 @@ internal class TreatmentReadService : ITreatmentStore
                 activationRepo),
             projection,
             decomposer,
-            stateSpans);
+            stateSpans,
+            sentRecords);
         _logger = logger;
     }
 
@@ -367,8 +369,8 @@ internal class TreatmentReadService : ITreatmentStore
         await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.UpdateAsync(treatment, ct) : null;
 
     /// <inheritdoc />
-    public async Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default) =>
-        await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.DeleteAsync(ct) : null;
+    public async Task<TreatmentDeletion?> DeleteAsync(string id, bool findUpstreamCopies, CancellationToken ct = default) =>
+        await _store.ResolveAsync(id, ct) is { } resolved ? await resolved.DeleteAsync(findUpstreamCopies, ct) : null;
 
     /// <inheritdoc />
     public async Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default) =>

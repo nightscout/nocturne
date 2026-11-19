@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -35,6 +36,7 @@ public class TreatmentReadServiceFindFilterTests
             new Mock<IBolusCalculationRepository>().Object,
             Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
     }
 

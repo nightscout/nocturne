@@ -44,6 +44,7 @@ internal static class WritingTreatmentService
             tempBasals, boluses, carbs, bgChecks, notes, deviceEvents, calculations,
             new Mock<IProfileActivationRepository>().AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>().Object,
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
 
         return new TreatmentService(

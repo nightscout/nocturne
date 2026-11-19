@@ -325,7 +325,7 @@ public class TreatmentServiceTests
     public async Task DeleteTreatmentAsync_ShouldPublishEvent()
     {
         var existing = new Treatment { Id = "id" };
-        _mockStore.Setup(x => x.DeleteAsync("id", It.IsAny<CancellationToken>())).ReturnsAsync(new TreatmentDeletion(existing));
+        _mockStore.Setup(x => x.DeleteAsync("id", true, It.IsAny<CancellationToken>())).ReturnsAsync(new TreatmentDeletion(existing));
         var result = await _treatmentService.DeleteTreatmentAsync("id", CancellationToken.None);
         result.Should().BeTrue();
         _mockEvents.Verify(x => x.OnDeletedAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
@@ -335,7 +335,7 @@ public class TreatmentServiceTests
     [Fact]
     public async Task DeleteTreatmentAsync_WhenNotFound_ShouldNotPublish()
     {
-        _mockStore.Setup(x => x.DeleteAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((TreatmentDeletion?)null);
+        _mockStore.Setup(x => x.DeleteAsync("x", true, It.IsAny<CancellationToken>())).ReturnsAsync((TreatmentDeletion?)null);
         var result = await _treatmentService.DeleteTreatmentAsync("x", CancellationToken.None);
         result.Should().BeFalse();
         _mockEvents.Verify(x => x.OnDeletedAsync(It.IsAny<Treatment?>(), It.IsAny<CancellationToken>()), Times.Never);

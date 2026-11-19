@@ -46,6 +46,7 @@ public class TreatmentReadServiceTests
             _bolusCalcRepo.Object,
             new Mock<IProfileActivationRepository>().AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>().Object,
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
     }
 
@@ -625,7 +626,7 @@ public class TreatmentReadServiceTests
             .Setup(p => p.DeleteByLegacyIdAsync("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
 
-        var result = await _service.DeleteAsync("t1");
+        var result = await _service.DeleteAsync("t1", findUpstreamCopies: false);
 
         result.Should().NotBeNull();
         _decomposer.Verify(p => p.DeleteByLegacyIdAsync("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -634,7 +635,7 @@ public class TreatmentReadServiceTests
     [Fact]
     public async Task DeleteAsync_NothingStoredUnderTheId_DeletesNothing()
     {
-        var result = await _service.DeleteAsync("t1");
+        var result = await _service.DeleteAsync("t1", findUpstreamCopies: false);
 
         result.Should().BeNull();
         _decomposer.Verify(
@@ -815,7 +816,7 @@ public class TreatmentReadServiceTests
             .Setup(p => p.DeleteByLegacyIdAsync(syncIdentifier, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var result = await _service.DeleteAsync(echoed);
+        var result = await _service.DeleteAsync(echoed, findUpstreamCopies: false);
 
         result.Should().NotBeNull();
     }
@@ -851,7 +852,7 @@ public class TreatmentReadServiceTests
             .Setup(p => p.DeleteByLegacyIdAsync(wireId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        await _service.DeleteAsync(wireId);
+        await _service.DeleteAsync(wireId, findUpstreamCopies: false);
 
         _decomposer.Verify(
             p => p.DeleteByLegacyIdAsync("bolus-legacy", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
@@ -878,7 +879,7 @@ public class TreatmentReadServiceTests
             .Setup(p => p.DeleteByLegacyIdAsync("syn-meal-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(2); // both siblings
 
-        var result = await _service.DeleteAsync(wireId);
+        var result = await _service.DeleteAsync(wireId, findUpstreamCopies: false);
 
         result.Should().NotBeNull();
         _decomposer.Verify(
@@ -929,7 +930,7 @@ public class TreatmentReadServiceTests
     [Fact]
     public async Task DeleteAsync_UnknownObjectId_ScansEachTableOnce()
     {
-        (await _service.DeleteAsync("0123456789abcdef01234567")).Should().BeNull();
+        (await _service.DeleteAsync("0123456789abcdef01234567", findUpstreamCopies: false)).Should().BeNull();
 
         VerifyOneHashScanPerTable();
     }

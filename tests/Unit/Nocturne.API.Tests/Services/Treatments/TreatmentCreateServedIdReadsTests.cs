@@ -140,6 +140,7 @@ public class TreatmentCreateServedIdReadsTests
             Table<IBolusCalculationRepository, BolusCalculation>().Object,
             Table<IProfileActivationRepository, ProfileActivation>().Object,
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
 
         var stored = new List<StoredTreatment>();

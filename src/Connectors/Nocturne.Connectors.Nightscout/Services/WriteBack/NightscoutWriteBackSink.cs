@@ -171,16 +171,19 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         _logger.LogWarning(ex, "Nightscout write-back failed for {Method} {Endpoint}", method, Endpoint);
     }
 
-    public Task OnDeletedAsync(T? item, CancellationToken ct = default)
-    {
-        // Nightscout v1 DELETE requires an ID, not the full object.
-        // Since the interface only gives us the item (which may be null after deletion),
-        // we skip write-back for deletes. The bidirectional sync handles this
-        // through the connector's next poll cycle.
-        return Task.CompletedTask;
-    }
+    /// <summary>Logs a write that was never sent: the configuration did not load, or its URL is unusable.</summary>
+    protected void LogNotSent(Exception ex, HttpMethod method) =>
+        _logger.LogWarning(ex, "Nightscout write-back could not send {Method} {Endpoint}", method, Endpoint);
 
-    private async Task<NightscoutConnectorConfiguration?> ResolveIfReadyAsync(CancellationToken ct)
+    /// <summary>
+    /// Sends nothing: the event cannot tell a user's delete from a bulk one, nor a record write-back
+    /// sent from one it never did. A treatment's copy is removed through
+    /// <see cref="Nocturne.Core.Contracts.Events.ITreatmentUpstreamDeletion"/>.
+    /// </summary>
+    public Task OnDeletedAsync(T? item, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <returns>The tenant's configuration, or null when write-back is off or its circuit breaker is open.</returns>
+    protected async Task<NightscoutConnectorConfiguration?> ResolveIfReadyAsync(CancellationToken ct)
     {
         var config = _cachedConfig ??= await _configLoader.LoadForTenantAsync(ct);
 

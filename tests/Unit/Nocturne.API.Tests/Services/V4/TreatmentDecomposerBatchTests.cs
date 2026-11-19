@@ -1095,6 +1095,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
         public Task<IReadOnlySet<string>> GetSentUpstreamAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
             => keys.GetSentUpstreamAsync(legacyIds, ct);
 
+        public Task<IReadOnlySet<Guid>> GetSentRowsAsync(IReadOnlyCollection<Guid> rowIds, CancellationToken ct = default)
+            => keys.GetSentRowsAsync(rowIds, ct);
+
         public Task<HeldLegacyIds> GetHeldLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
             => keys.GetHeldLegacyIdsAsync(legacyIds, ct);
 

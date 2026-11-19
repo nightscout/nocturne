@@ -248,6 +248,24 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
             ct);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads under the caller's history clamp: the rows it is asked about are ones the caller has just
+    /// read.
+    /// </remarks>
+    public async Task<IReadOnlySet<Guid>> GetSentRowsAsync(IReadOnlyCollection<Guid> rowIds, CancellationToken ct = default)
+    {
+        var sent = new HashSet<Guid>();
+        if (rowIds.Count == 0)
+            return sent;
+
+        await using var db = await contexts.CreateAsync(ct);
+        Guid[] ids = [.. rowIds];
+        foreach (var table in DecomposedTreatmentTables.All)
+            sent.UnionWith(await table.SentLiveRowsAsync(db, ids, ct));
+        return sent;
+    }
+
     /// <summary>Stages a user tombstone like each of <paramref name="tombstones"/> under each of <paramref name="keys"/>.</summary>
     internal static void AddTombstoneCopies<T>(
         NocturneDbContext context, IEnumerable<T> tombstones, string[] keys, Action<T, string> setKey)

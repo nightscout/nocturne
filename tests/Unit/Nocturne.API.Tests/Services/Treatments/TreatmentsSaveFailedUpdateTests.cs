@@ -49,6 +49,7 @@ public class TreatmentsSaveFailedUpdateTests
             Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
 
         var service = new TreatmentService(

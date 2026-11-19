@@ -63,6 +63,7 @@ public class TreatmentCreateBroadcastTests
             new Mock<IBolusCalculationRepository>().AnswersServedIdsPerKey<IBolusCalculationRepository, BolusCalculation>().Object,
             _activations.Object,
             Mock.Of<IStateSpanService>(),
+            new NeverSentUpstream(),
             NullLogger<TreatmentReadService>.Instance);
 
         _service = new TreatmentService(

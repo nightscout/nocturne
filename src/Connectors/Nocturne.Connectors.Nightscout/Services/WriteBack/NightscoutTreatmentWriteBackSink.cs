@@ -1,11 +1,14 @@
+using System.Data.Common;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
@@ -70,6 +73,15 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// meal's bolus is accepted and its carbs are not, would otherwise apply Nocturne's own document as an
 /// upstream edit.
 /// </para>
+/// <para>
+/// A delete (<see cref="DeleteUpstreamAsync"/>) is sent for the legacy ids its caller names: those
+/// of the deleted record whose own live rows show upstream accepted a send of them. It removes only the copies held under an
+/// <c>identifier</c> no client but write-back sends (<see cref="WrittenForms"/>), with the carbs
+/// write-back split off a meal and the copy Nightscout split off an earlier one
+/// (<see cref="PreBolusSplitCopy"/>). It never falls back to <c>_id</c> as an edit does: what is
+/// held there is the original a migration imported, which Nocturne did not write. A delete that
+/// fails upstream is not retried, so the copy stays there.
+/// </para>
 /// </remarks>
 public class NightscoutTreatmentWriteBackSink(
     HttpClient httpClient,
@@ -77,7 +89,7 @@ public class NightscoutTreatmentWriteBackSink(
     NightscoutCircuitBreaker circuitBreaker,
     IWriteBackSentRecords sentRecords,
     ILogger<NightscoutTreatmentWriteBackSink> logger)
-    : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, circuitBreaker, logger)
+    : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, circuitBreaker, logger), ITreatmentUpstreamDeletion
 {
     protected override string Endpoint => "/api/v1/treatments";
 
@@ -85,6 +97,59 @@ public class NightscoutTreatmentWriteBackSink(
 
     protected override bool ShouldSkip(Treatment item)
         => item.DataSource == DataSources.NightscoutConnector;
+
+    /// <remarks>
+    /// The copies of a legacy id other than <paramref name="deleted"/>'s, such as the other half of a
+    /// meal whose halves hold different ones, are found by that id alone.
+    /// </remarks>
+    public async Task DeleteUpstreamAsync(Treatment deleted, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        try
+        {
+            if (ShouldSkip(deleted) || legacyIds.Count == 0 || await ResolveIfReadyAsync(ct) is not { } config)
+                return;
+
+            foreach (var legacyId in legacyIds.Distinct(StringComparer.Ordinal))
+            {
+                var written = legacyId == deleted.LegacyId ? deleted : new Treatment { LegacyId = legacyId };
+                // An identifier query with no forms would match every treatment upstream.
+                if (WrittenForms(written) is not { Count: > 0 } forms)
+                    continue;
+
+                await RemoveSplitCopiesAsync(config, written, ct);
+                await RemoveAsync(config, forms, ct);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogNotSent(ex, HttpMethod.Delete);
+        }
+        catch (DbException ex)
+        {
+            LogNotSent(ex, HttpMethod.Delete);
+        }
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, ct))
+        {
+            LogNotSent(ex, HttpMethod.Delete);
+        }
+    }
+
+    /// <summary>
+    /// The forms of <see cref="UpstreamIdentityJson.TreatmentWireForms"/> only write-back puts in an
+    /// <c>identifier</c>, with those of the carbs it splits off a meal
+    /// (<see cref="PreBolusSplit.WriteBackCarbsId"/>). The legacy id as it is, unless it is already
+    /// the wire key, is left out: it is the uploader's own id, which from 15.0.7 Nightscout keeps as
+    /// the <c>identifier</c> of the copy that uploader sent it.
+    /// </summary>
+    private static IReadOnlyList<string> WrittenForms(Treatment treatment)
+    {
+        var key = UpstreamIdentityJson.TreatmentWireKey(treatment);
+        var forms = UpstreamIdentityJson.TreatmentWireForms(treatment)
+            .Where(form => form == key || form != treatment.LegacyId);
+        if (treatment.LegacyId is { Length: > 0 } legacyId)
+            forms = forms.Concat(UpstreamIdentityJson.TreatmentWireForms(new Treatment { Id = PreBolusSplit.WriteBackCarbsId(legacyId) }));
+        return [.. forms.Distinct(StringComparer.Ordinal)];
+    }
 
     protected override async Task<IReadOnlyList<Treatment>> PrepareAsync(
         NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> batch, CancellationToken ct)
