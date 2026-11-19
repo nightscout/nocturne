@@ -1,7 +1,9 @@
 using FluentAssertions;
+using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -215,6 +217,19 @@ public class EngineAlarmRelayTests
         alarm.Notify.Group.Should().Be(newest.ExcursionId.ToString());
         alarm.Notify.Title.Should().Be("Urgent low");
         alarm.Notify.Message.Should().Be("BG Now: 50 mg/dL");
+    }
+
+    [Fact]
+    public async Task A_new_subscriber_costs_no_read_for_a_trend_the_alarm_does_not_show()
+    {
+        await _tenant.SeedAsync(AlertRuleSeverity.Critical);
+        _tenant.LatestReading(mgdl: 50);
+
+        await _tenant.Relay().HighestAlarmingAsync(CancellationToken.None);
+
+        _tenant.Canonical.Verify(
+            c => c.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

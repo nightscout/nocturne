@@ -35,7 +35,8 @@ public record SensorContext
     public required DateTime? LastReadingAt { get; init; }
 
     /// <summary>
-    /// Coarse trend bucket derived from <see cref="TrendRate"/>. Used by the trend condition.
+    /// Coarse trend bucket of <see cref="TrendRate"/>, or of the reading's arrow when no rate is
+    /// known. Used by the trend condition.
     /// </summary>
     public TrendBucket? TrendBucket { get; init; }
 
@@ -259,7 +260,7 @@ public sealed record ActiveTrackerReference(DateTime ReferenceAt, DateTime? Reco
 public record PredictedGlucosePoint(int OffsetMinutes, decimal Mgdl);
 
 /// <summary>
-/// Coarse trend bucket derived from rate of change.
+/// Coarse trend bucket of the rate of change, or of the reading's arrow when no rate is known.
 /// </summary>
 public enum TrendBucket
 {

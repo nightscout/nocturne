@@ -43,13 +43,15 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 
     /// <summary>
     /// The base context an evaluation pass starts from for <paramref name="latest"/>, the
-    /// tenant's newest canonical reading; the orchestrator's enricher fills in the rest.
+    /// tenant's newest canonical reading, and its <paramref name="trend"/>; the orchestrator's
+    /// enricher fills in the rest.
     /// </summary>
-    internal static SensorContext ContextFor(SensorGlucose latest) => new()
+    internal static SensorContext ContextFor(SensorGlucose latest, ReadingTrend trend) => new()
     {
         LatestValue = latest.Mgdl.ToDecimal(),
         LatestTimestamp = latest.Timestamp,
-        TrendRate = latest.TrendRate?.ToDecimal(),
+        TrendRate = trend.Rate,
+        TrendBucket = trend.Bucket,
         LastReadingAt = latest.Timestamp,
     };
 
@@ -70,7 +72,8 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
                 return;
             }
 
-            await _alertOrchestrator.EvaluateAsync(ContextFor(latest), ct);
+            var trend = await ReadingTrend.ForAsync(latest, _canonicalGlucose, ct);
+            await _alertOrchestrator.EvaluateAsync(ContextFor(latest, trend), ct);
 
             _watermark.Record(tenantId, latest);
         }
