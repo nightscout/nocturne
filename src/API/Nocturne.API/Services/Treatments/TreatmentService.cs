@@ -428,8 +428,16 @@ internal class TreatmentService : ITreatmentService
         // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
         // merge.
         var originalId = treatment.Id;
+        // The merge reads the record back from its wire form, which carries no mark of an uploaded
+        // duration and would round it; a patch that names no duration leaves the uploader's value.
+        var uploadedDuration = treatment.DurationIsUploaded && !patchData.TryGetProperty("duration", out _)
+            ? treatment.Duration
+            : null;
 
         JsonMergePatch.ApplyInPlace(treatment, patchData);
+
+        if (uploadedDuration is { } minutes)
+            treatment.Duration = minutes;
 
         // A PATCH updates the record identified by the URL; it never changes identity. Restore the
         // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
