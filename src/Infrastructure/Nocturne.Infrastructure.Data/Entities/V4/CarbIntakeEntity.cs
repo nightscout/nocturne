@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.CarbIntake
 /// </summary>
 [Table("carb_intakes")]
-public class CarbIntakeEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
+public class CarbIntakeEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackSent
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -21,6 +21,11 @@ public class CarbIntakeEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstrea
     [AuditIgnored]
     [Column("written_live")]
     public bool WrittenLive { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("write_back_sent_fingerprint")]
+    public string? WriteBackSentFingerprint { get; set; }
 
     /// <inheritdoc />
     [AuditIgnored]

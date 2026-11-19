@@ -262,6 +262,31 @@ public class TreatmentCreateBroadcastTests
         _creates.Should().ContainSingle().Which.Doc.Should().BeOfType<Treatment>().Which.DataSource.Should().Be("glooko-connector");
     }
 
+    /// <summary>
+    /// An upstream edit keeps its record's data source, and write-back skips only the pull's own
+    /// treatments, so the edit is announced as the pull's: sent back, it would ping-pong.
+    /// </summary>
+    [Fact]
+    public async Task AnUpstreamEditIsAnnouncedAsThePullsOwn()
+    {
+        _decomposer.AnswersBatchPerTreatment(upstreamEdit: _ => true);
+        var activation = new ProfileActivation
+        {
+            Id = Guid.CreateVersion7(), Timestamp = At, LegacyId = ClientId, DataSource = "glooko-connector",
+        };
+        Decomposes(activation);
+        _activations.Setup(r => r.GetByIdAsync(activation.Id, It.IsAny<CancellationToken>())).ReturnsAsync(activation);
+        Serves(new Treatment
+        {
+            Id = activation.Id.ToString(), EventType = "Profile Switch", Mills = activation.Mills, DataSource = "glooko-connector",
+        });
+
+        await _service.CreateTreatmentsAsync(
+            [new Treatment { Id = ClientId, EventType = "Profile Switch", Mills = activation.Mills, DataSource = Connector }]);
+
+        _creates.Should().ContainSingle().Which.Doc.Should().BeOfType<Treatment>().Which.DataSource.Should().Be(Connector);
+    }
+
     [Fact]
     public async Task ATreatmentRefusedByAUserTombstoneIsNotAnnounced()
     {

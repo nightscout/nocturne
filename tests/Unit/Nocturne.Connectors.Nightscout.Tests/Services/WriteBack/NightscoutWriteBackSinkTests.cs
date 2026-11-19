@@ -10,6 +10,7 @@ using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -593,6 +594,7 @@ public class NightscoutWriteBackSinkTests
         new HttpClient(handler),
         CreateLoader(_config).Object,
         Breaker,
+        Mock.Of<IWriteBackSentRecords>(),
         NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
     /// <summary>
@@ -953,6 +955,52 @@ public class NightscoutWriteBackSinkTests
         Breaker.IsOpen.Should().BeFalse();
         Breaker.RecordFailure();
         Breaker.IsOpen.Should().BeFalse("the refusal for a status already upstream reset the failure count");
+    }
+
+    /// <summary>
+    /// A batch sent again one item at a time, where one item is refused: what follows a write runs for
+    /// every item upstream accepted or already holds, and only for those.
+    /// </summary>
+    [Fact]
+    public async Task ABatchSentOneByOne_RunsWhatFollowsAWriteForEachItemUpstreamTook()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            RespondTo = (_, body) =>
+                body.StartsWith('[') && JsonSerializer.Deserialize<JsonElement>(body).GetArrayLength() > 1
+                || body.Contains("\"loop_status_1\"", StringComparison.Ordinal)
+                    ? DuplicateKey()
+                    : body.Contains("\"loop_status_2\"", StringComparison.Ordinal)
+                        ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                        : null,
+        };
+        var sut = new AfterWrittenRecordingSink(new HttpClient(handler), CreateLoader(_config).Object, Breaker);
+
+        await sut.OnCreatedAsync(new[]
+        {
+            new DeviceStatus { Id = "loop_status_1", Device = "loop" },
+            new DeviceStatus { Id = "loop_status_2", Device = "loop" },
+            new DeviceStatus { Id = "loop_status_3", Device = "loop" },
+        });
+
+        sut.Written.Select(s => s.Id).Should().Equal("loop_status_1", "loop_status_3");
+    }
+
+    private sealed class AfterWrittenRecordingSink(
+        HttpClient httpClient,
+        IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
+        NightscoutCircuitBreaker circuitBreaker)
+        : NightscoutDeviceStatusWriteBackSink(
+            httpClient, configLoader, circuitBreaker, NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance)
+    {
+        public List<DeviceStatus> Written { get; } = [];
+
+        protected override Task AfterWrittenAsync(
+            NightscoutConnectorConfiguration config, IReadOnlyList<DeviceStatus> items, CancellationToken ct)
+        {
+            Written.AddRange(items);
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]

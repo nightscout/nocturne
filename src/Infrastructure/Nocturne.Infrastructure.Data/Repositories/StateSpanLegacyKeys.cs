@@ -36,7 +36,7 @@ public sealed class StateSpanLegacyKeys(INocturneDbContextFactory contexts, IRea
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync" />
-    public async Task<IEnumerable<string>> GetLegacyIdsWriteBackMaySendAsync(
+    public async Task<IEnumerable<WriteBackSendable>> GetLegacyIdsWriteBackMaySendAsync(
         IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct)
     {
         if (legacyIds.Count == 0)
@@ -49,7 +49,9 @@ public sealed class StateSpanLegacyKeys(INocturneDbContextFactory contexts, IRea
             .WhereBlocksSpanRecreation()
             .Select(s => new LegacyWireIdLookups.WriteBackCandidate(s.LegacyId!, s.Id, s.Source, s.DeletedAt, s.WrittenLive))
             .ToListAsync(ct);
-        return LegacyWireIdLookups.WriteBackMaySend(rows, skippedSource);
+        return LegacyWireIdLookups.WriteBackMaySend(rows, skippedSource)
+            .Select(r => new WriteBackSendable(r.LegacyId, r.Source, null, r.DeletedAt == null))
+            .ToList();
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync" />

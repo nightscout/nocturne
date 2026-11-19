@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -44,6 +45,7 @@ public class TreatmentPreBolusWriteBackTests
             new HttpClient(upstream) { BaseAddress = new Uri(_config.Url) },
             loader.Object,
             new NightscoutCircuitBreaker(new FakeTimeProvider(DateTimeOffset.Parse(BolusTime, CultureInfo.InvariantCulture))),
+            Mock.Of<IWriteBackSentRecords>(),
             NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
     }
 

@@ -6651,6 +6651,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -7099,6 +7103,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -7292,6 +7300,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
 
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
@@ -7593,6 +7605,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
 
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
@@ -7934,6 +7950,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
 
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
@@ -8282,6 +8302,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
 
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
@@ -8780,6 +8804,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
 
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
@@ -9599,6 +9627,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
+
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
 
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")

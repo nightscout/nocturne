@@ -14,10 +14,11 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// Manages a Nightscout 15.0.3 container with its MongoDB dependency for parity testing.
 /// Follows the same lifecycle pattern as SharedContainerState in TestDatabaseFixture.
 /// </summary>
-public class NightscoutContainer : IAsyncDisposable
+/// <param name="image">The Nightscout image to run, the pinned release unless a test names another.</param>
+public class NightscoutContainer(string image = NightscoutContainer.PinnedImage) : IAsyncDisposable
 {
-    private const string NightscoutImage = "nightscout/cgm-remote-monitor:15.0.3";
-    private const string ApiSecret = "test-api-secret-12chars";
+    public const string PinnedImage = "nightscout/cgm-remote-monitor:15.0.3";
+    public const string ApiSecret = "test-api-secret-12chars";
     private const int NightscoutPort = 1337;
     private const string MongoNetworkAlias = "mongodb";
 
@@ -95,7 +96,7 @@ public class NightscoutContainer : IAsyncDisposable
         var internalMongoUri = $"mongodb://{MongoNetworkAlias}:27017/nightscout";
 
         // Start Nightscout connected to MongoDB via internal network
-        _nightscoutContainer = new ContainerBuilder(NightscoutImage)
+        _nightscoutContainer = new ContainerBuilder(image)
             .WithNetwork(_network)
             .WithPortBinding(NightscoutPort, true)
             .WithEnvironment("MONGODB_URI", internalMongoUri)

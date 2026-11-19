@@ -81,7 +81,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System),
             bolusRepo, tempBasalRepo,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),
@@ -94,7 +94,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             caller,
-            NullLogger<TreatmentDecomposer>.Instance);
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
 
         var projection = new V4ToLegacyProjectionService(
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,

@@ -53,7 +53,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
         var insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System),
             bolusRepo, tempBasalRepoMock.Object,
             carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             stateSpanServiceMock.Object,
@@ -66,7 +66,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             insulinRepoMock.Object,
             TempBasalTestDeps.Unscheduled(),
             Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
     }
 
     public void Dispose()

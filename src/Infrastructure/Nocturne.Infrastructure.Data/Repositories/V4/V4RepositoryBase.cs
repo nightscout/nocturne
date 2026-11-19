@@ -625,7 +625,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync" />
-    public async Task<IEnumerable<string>> GetLegacyIdsWriteBackMaySendAsync(
+    public async Task<IEnumerable<WriteBackSendable>> GetLegacyIdsWriteBackMaySendAsync(
         IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct = default)
     {
         if (legacyIds.Count == 0 || !IsWriteBackTracked)
@@ -640,10 +640,23 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 e.LegacyId!, e.Id, e.DataSource, e.DeletedAt, EF.Property<bool>(e, nameof(IWriteBackTracked.WrittenLive))))
             .ToListAsync(ct);
 
-        return LegacyWireIdLookups.WriteBackMaySend(rows, skippedSource);
+        var sendable = LegacyWireIdLookups.WriteBackMaySend(rows, skippedSource);
+        if (sendable.Count == 0 || !IsWriteBackSent)
+            return sendable.Select(r => new WriteBackSendable(r.LegacyId, r.Source, null, r.DeletedAt == null)).ToList();
+
+        var rowIds = sendable.Select(r => r.Id).ToList();
+        var fingerprints = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => rowIds.Contains(e.Id))
+            .Select(e => new { e.Id, Fingerprint = EF.Property<string?>(e, nameof(IWriteBackSent.WriteBackSentFingerprint)) })
+            .ToDictionaryAsync(e => e.Id, e => e.Fingerprint, ct);
+        return sendable
+            .Select(r => new WriteBackSendable(r.LegacyId, r.Source, fingerprints.GetValueOrDefault(r.Id), r.DeletedAt == null))
+            .ToList();
     }
 
     private static readonly bool IsWriteBackTracked = typeof(IWriteBackTracked).IsAssignableFrom(typeof(TEntity));
+
+    private static readonly bool IsWriteBackSent = typeof(IWriteBackSent).IsAssignableFrom(typeof(TEntity));
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.FindUnkeyedOwnIdsAsync" />
     public async Task<IEnumerable<UnkeyedOwnId>> FindUnkeyedOwnIdsAsync(
@@ -675,7 +688,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             .Where(c => c.Value.DeletedAt is not null || !heldLive.Contains(c.Key))
             .Select(c => new UnkeyedOwnId(
                 c.Key,
-                c.Value is IWriteBackTracked { WrittenLive: true } && c.Value.DataSource != skippedSource))
+                c.Value is IWriteBackTracked { WrittenLive: true } && c.Value.DataSource != skippedSource,
+                c.Value.DataSource,
+                (c.Value as IWriteBackSent)?.WriteBackSentFingerprint,
+                c.Value.DeletedAt is null))
             .ToList();
     }
 

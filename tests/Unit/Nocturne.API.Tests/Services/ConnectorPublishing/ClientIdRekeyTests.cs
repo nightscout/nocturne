@@ -233,10 +233,10 @@ public class ClientIdRekeyTests : IDisposable
         var calculations = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()), bolus, EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(), carbs, bgChecks, notes, deviceEvents, calculations,
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System), bolus, EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(), carbs, bgChecks, notes, deviceEvents, calculations,
             Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(), new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance,
+            Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System,
             legacyReads: _legacyReads);
         var service = WritingTreatmentService.Over(
             decomposer, Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations);

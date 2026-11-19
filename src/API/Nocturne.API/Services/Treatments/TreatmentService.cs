@@ -7,6 +7,7 @@ using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Uploads;
@@ -277,8 +278,12 @@ internal class TreatmentService : ITreatmentService
                 _logger.LogWarning("Created treatment {Id} did not read back", created.Id);
 
             var announced = readBack?[i] ?? created;
-            // A state span keeps no data source, and the write-back sink tells a connector's own treatments by it.
-            announced.DataSource ??= created.DataSource;
+            // The write-back sink tells a connector's own treatments by the data source. A state span
+            // keeps none, and an upstream edit keeps its record's, so it is announced as the pull's.
+            if (stored[i].UpstreamEdit)
+                announced.DataSource = DataSources.NightscoutConnector;
+            else
+                announced.DataSource ??= created.DataSource;
             served.Add(announced);
             if (stored[i].Updated)
                 updated.Add(announced);
