@@ -396,8 +396,11 @@ jobs:
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
           pnpm --filter @nocturne/charts --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
+      # svelte-check holds the whole app in one TypeScript program, which passes Node's default heap.
       - name: Typecheck app
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --filter @nocturne/app run check
       # The portal imports the app's appearance store, which imports the generated client.
       - name: Typecheck portal

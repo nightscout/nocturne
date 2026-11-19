@@ -25,7 +25,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// is per caller.
 /// </remarks>
 [ApiController]
-[Tags("CustomReports")]
+[Tags("Analytics")]
 [Route("api/v4/reports/custom")]
 [RequireScope(Scope.ReportsRead)]
 [DenyNoAccountViewer]

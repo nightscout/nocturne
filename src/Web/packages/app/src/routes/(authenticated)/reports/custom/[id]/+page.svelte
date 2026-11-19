@@ -28,7 +28,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
-  import { getPatientTimezone } from "#lib/api/generated/patientRecords.generated.remote.js";
+  import { getPatientTimezone } from "#lib/api/generated/patientTimezones.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { copyToClipboard } from "#lib/utils/index.js";
   import CopyPlus from "@lucide/svelte/icons/copy-plus";

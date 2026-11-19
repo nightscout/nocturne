@@ -668,7 +668,7 @@ internal sealed class MeterGlucoseDataset : IReportDataset
             : null;
         return new ReportDatasetOutput
         {
-            Rows = [.. readings.Select(m => SeriesRows.Row(("time", m.Mills), ("meterGlucose", Extensions.GlucoseUnits.Scale(m.Mgdl, useMmol))))],
+            Rows = [.. readings.Select(m => SeriesRows.Row(("time", m.Mills), ("meterGlucose", ReportGlucose.Scale(m.Mgdl, useMmol))))],
             Summary = cutNote is null ? sentence : $"{sentence}\n{cutNote}",
             Facts =
             [

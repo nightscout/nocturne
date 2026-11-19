@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Reports;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
@@ -92,7 +93,7 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
     {
         var therapy = new Mock<ITherapySettingsResolver>();
         therapy.Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(zone.Id);
-        return new TenantClockResolver(therapy.Object, new CategoryReadContext(), NullLogger<TenantClockResolver>.Instance);
+        return new TenantClockResolver(therapy.Object, new CategoryReadContext(), new ShareClockDouble(therapy.Object), NullLogger<TenantClockResolver>.Instance);
     }
 
     /// <summary>Each signal's state over the last week for <paramref name="tenant"/>, read as <paramref name="reader"/>.</summary>

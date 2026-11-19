@@ -301,13 +301,13 @@ describe("chart data engine — predictions", () => {
         return result;
       }) as never);
 
-      let engine!: ChartDataEngine;
+      let engine!: ChartDataView;
       let store!: RealtimeStore;
       render(Harness, {
         props: {
           entries: [],
           options: { focusHours: 3, initialChartData: withReading(6) },
-          onengine: (e: ChartDataEngine) => (engine = e),
+          onengine: (e: ChartDataView) => (engine = e),
           onstore: (s: RealtimeStore) => {
             store = s;
             s.isReady = false;
