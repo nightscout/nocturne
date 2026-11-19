@@ -14,6 +14,7 @@
     scale={glucoseScale(null, null, 90)}
     limits={GLUCOSE_LIMITS}
     onWindowChange={() => {}}
+    onRangeChange={() => {}}
     onBoundariesChange={() => {}}
     onEndsChange={() => {}}
     onDimChange={() => {}}
