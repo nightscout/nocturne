@@ -86,11 +86,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Current entry endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
 
         Entry[] current = currentEntry is null ? [] : [currentEntry];
@@ -389,10 +384,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Create entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (!TryParseEntries(entryData, out var entriesToCreate))
@@ -784,11 +775,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Bulk delete entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
         return await DeleteMatchingEntriesAsync(findQuery, findQuery, cancellationToken);

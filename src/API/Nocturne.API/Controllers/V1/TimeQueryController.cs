@@ -29,6 +29,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
+[ErrorEnvelope]
 public class TimeQueryController : ControllerBase
 {
     /// <summary>
@@ -174,25 +175,6 @@ public class TimeQueryController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error executing time-based query with prefix: {Prefix}, regex: {Regex}",
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
     }
 
     /// <summary>
@@ -307,25 +289,6 @@ public class TimeQueryController : ControllerBase
         catch (TimePatternRejectedException ex)
         {
             return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error generating time query echo with prefix: {Prefix}, regex: {Regex}",
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
         }
     }
 
@@ -563,28 +526,6 @@ public class TimeQueryController : ControllerBase
         catch (TimePatternRejectedException ex)
         {
             return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error executing slice query - storage: {Storage}, field: {Field}, type: {Type}, prefix: {Prefix}, regex: {Regex}",
-                storage,
-                field,
-                type,
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
         }
     }
 

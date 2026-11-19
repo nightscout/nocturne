@@ -48,11 +48,6 @@ public class VersionController : ControllerBase
     [ProducesResponseType(typeof(V3Envelope<V3VersionResult>), 200)]
     public async Task<ActionResult<V3Envelope<V3VersionResult>>> GetVersion()
     {
-        _logger.LogDebug(
-            "V3 version endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         try
         {
             var status = await _statusService.GetV3SystemStatusAsync();

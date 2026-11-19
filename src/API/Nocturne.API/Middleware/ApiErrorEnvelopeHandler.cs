@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware;
 
@@ -16,7 +17,10 @@ namespace Nocturne.API.Middleware;
 /// The envelope is a wire contract, not a presentation choice — Nightscout clients parse it — so
 /// each version keeps the shape it shipped with: V1 <c>{status, message, type, error}</c>, V3
 /// <c>{status, message}</c>, and V2/V4 an RFC 9457 <c>ProblemDetails</c>. The V1 <c>error</c>
-/// member carries <see cref="Exception.Message"/>, which uploaders surface to the user.
+/// member carries <see cref="Exception.Message"/>, which uploaders surface to the user, for an
+/// authenticated caller only; any other caller gets the fixed text of <c>message</c>, because an
+/// exception message can quote database and query text and a public share link's reader reaches
+/// V1 reads.
 ///
 /// V1-V3 bodies are written with <see cref="NightscoutJsonOptions"/> because
 /// <see cref="NightscoutJsonFilter"/> serialises every other result on those routes that way, and
@@ -84,7 +88,7 @@ internal sealed class ApiErrorEnvelopeHandler : IExceptionHandler
             refused is null ? Title : phrase,
             refused is null ? Detail : phrase,
             type: "internal",
-            error: exception.Message
+            error: httpContext.IsAuthenticated() ? exception.Message : Detail
         );
 
         httpContext.Response.StatusCode = status;

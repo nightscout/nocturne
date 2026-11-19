@@ -66,11 +66,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ErrorEnvelope]
     public async Task<ActionResult> GetTreatments(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 treatments endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();

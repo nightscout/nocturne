@@ -59,11 +59,6 @@ public class FoodController : BaseV3Controller<Food>
     [ErrorEnvelope]
     public async Task<ActionResult> GetFood(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -370,10 +365,6 @@ public class FoodController : BaseV3Controller<Food>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 food create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             // Check for empty request body first (Nightscout returns "Bad or missing request body")

@@ -25,6 +25,7 @@ namespace Nocturne.API.Controllers.V1;
 [Route("api/v1")]
 [Produces("application/json")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationV1Service _notificationService;
@@ -132,45 +133,21 @@ public class NotificationsController : ControllerBase
     )
     {
         var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug("Admin notifies endpoint requested from {RemoteAddress}", remoteAddress);
 
-        try
-        {
-            // Get subject ID for authorization check (implements legacy ctx.authorization.resolveWithRequest)
-            var subjectId = HttpContext?.GetSubjectIdString();
+        // Get subject ID for authorization check (implements legacy ctx.authorization.resolveWithRequest)
+        var subjectId = HttpContext?.GetSubjectIdString();
 
-            var response = await _notificationService.GetAdminNotifiesAsync(
-                subjectId,
-                cancellationToken
-            );
+        var response = await _notificationService.GetAdminNotifiesAsync(
+            subjectId,
+            cancellationToken
+        );
 
-            _logger.LogDebug(
-                "Admin notifies retrieved successfully from {RemoteAddress}, count: {Count}",
-                remoteAddress,
-                response.Message.NotifyCount
-            );
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error retrieving admin notifies from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new AdminNotifiesResponse
-                {
-                    Status = 500,
-                    Message = new AdminNotifiesMessage
-                    {
-                        Notifies = new List<AdminNotification>(),
-                        NotifyCount = 0,
-                    },
-                }
-            );
-        }
+        _logger.LogDebug(
+            "Admin notifies retrieved successfully from {RemoteAddress}, count: {Count}",
+            remoteAddress,
+            response.Message.NotifyCount
+        );
+        return Ok(response);
     }
 
     /// <summary>
@@ -199,67 +176,43 @@ public class NotificationsController : ControllerBase
     )
     {
         var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug(
-            "Add admin notification endpoint requested from {RemoteAddress}",
-            remoteAddress
-        );
 
-        try
+        if (notification == null)
         {
-            if (notification == null)
-            {
-                _logger.LogWarning(
-                    "Admin notification request body is null from {RemoteAddress}",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationAckResponse
-                    {
-                        Success = false,
-                        Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            var response = await _notificationService.AddAdminNotificationAsync(
-                notification,
-                cancellationToken
-            );
-
-            if (!response.Success)
-            {
-                _logger.LogWarning(
-                    "Admin notification add failed from {RemoteAddress}: {Message}",
-                    remoteAddress,
-                    response.Message
-                );
-                return BadRequest(response);
-            }
-
-            _logger.LogDebug(
-                "Admin notification added successfully from {RemoteAddress}",
+            _logger.LogWarning(
+                "Admin notification request body is null from {RemoteAddress}",
                 remoteAddress
             );
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error adding admin notification from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
+            return BadRequest(
                 new NotificationAckResponse
                 {
                     Success = false,
-                    Message = "Internal server error adding admin notification",
+                    Message = "Request body is required",
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 }
             );
         }
+
+        var response = await _notificationService.AddAdminNotificationAsync(
+            notification,
+            cancellationToken
+        );
+
+        if (!response.Success)
+        {
+            _logger.LogWarning(
+                "Admin notification add failed from {RemoteAddress}: {Message}",
+                remoteAddress,
+                response.Message
+            );
+            return BadRequest(response);
+        }
+
+        _logger.LogDebug(
+            "Admin notification added successfully from {RemoteAddress}",
+            remoteAddress
+        );
+        return Ok(response);
     }
 
     /// <summary>
@@ -284,44 +237,20 @@ public class NotificationsController : ControllerBase
     )
     {
         var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+
+        await _notificationService.ClearAllAdminNotificationsAsync(cancellationToken);
+
         _logger.LogDebug(
-            "Clear all admin notifications endpoint requested from {RemoteAddress}",
+            "All admin notifications cleared successfully from {RemoteAddress}",
             remoteAddress
         );
-
-        try
-        {
-            await _notificationService.ClearAllAdminNotificationsAsync(cancellationToken);
-
-            _logger.LogDebug(
-                "All admin notifications cleared successfully from {RemoteAddress}",
-                remoteAddress
-            );
-            return Ok(
-                new NotificationAckResponse
-                {
-                    Success = true,
-                    Message = "All admin notifications cleared successfully",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error clearing all admin notifications from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new NotificationAckResponse
-                {
-                    Success = false,
-                    Message = "Internal server error clearing admin notifications",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                }
-            );
-        }
+        return Ok(
+            new NotificationAckResponse
+            {
+                Success = true,
+                Message = "All admin notifications cleared successfully",
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            }
+        );
     }
 }

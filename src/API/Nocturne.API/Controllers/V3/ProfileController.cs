@@ -63,11 +63,6 @@ public class ProfileController : BaseV3Controller<Profile>
     [ErrorEnvelope]
     public async Task<ActionResult> GetProfiles(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 profile endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -208,10 +203,6 @@ public class ProfileController : BaseV3Controller<Profile>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 profile create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             var profiles = ParseCreateRequestFromJsonElement(profileData);

@@ -166,7 +166,7 @@ public class TotalIobAgreementTests
             MockStateSpans.Empty().Object, _aps.Object, _pump.Object, TestTenantCache.Create(), NullLogger<IobCobReader>.Instance);
 
     private IobController V1(IobCobReader reader) =>
-        new(_calculator, reader, reader, new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        new(_calculator, reader, reader, new FakeTimeProvider(Reading));
 
     private IBolusRepository Boluses(long reading)
     {
@@ -566,7 +566,7 @@ public class TotalIobAgreementTests
             .Setup(r => r.ReadSeriesAsync(It.IsAny<IobCobSeriesWindow>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobCobSeriesReading([], [], [], [], await _timelines.Object.BuildAsync(0, 1), new ScheduledBasal([], [])));
         var controller = new IobController(
-            _calculator, Reader(ReadingMills), series.Object, new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+            _calculator, Reader(ReadingMills), series.Object, new FakeTimeProvider(Reading));
         using var cts = new CancellationTokenSource();
 
         await controller.GetHourlyIob(intervalMinutes: 5, hours: 1, startTime: ReadingMills - 55 * Minute, cts.Token);

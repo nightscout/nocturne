@@ -276,16 +276,16 @@ public class CountControllerTests
     }
 
     [Fact]
-    public async Task CountEntries_StoreFailure_Answers500()
+    public async Task CountEntries_StoreFailure_TheExceptionEscapes()
     {
         _mockEntryService
             .Setup(s => s.CountEntriesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("synthetic"));
 
-        (await _controller.CountEntries()).Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
-        (await _controller.CountGeneric("entries")).Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        await FluentActions.Awaiting(() => _controller.CountEntries())
+            .Should().ThrowAsync<InvalidOperationException>();
+        await FluentActions.Awaiting(() => _controller.CountGeneric("entries"))
+            .Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
