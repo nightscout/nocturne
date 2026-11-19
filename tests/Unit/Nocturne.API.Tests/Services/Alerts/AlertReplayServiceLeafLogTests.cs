@@ -34,6 +34,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public class AlertReplayServiceLeafLogTests
 {
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<IIobCalculator> _iobCalculator = new();
@@ -60,8 +62,8 @@ public class AlertReplayServiceLeafLogTests
             .ReturnsAsync([]);
 
         // The repo never returns null; default the DND-window fetch to empty (no DND).
-        _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
@@ -78,6 +80,8 @@ public class AlertReplayServiceLeafLogTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             new Mock<Nocturne.Core.Contracts.V4.Repositories.ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
@@ -94,6 +98,7 @@ public class AlertReplayServiceLeafLogTests
 
         _sut = new AlertReplayService(
             _alertRepository.Object,
+            _dndWindows.Object,
             _glucoseRepository.Object,
             enricher,
             _tenantAccessor.Object,

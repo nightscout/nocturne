@@ -27,6 +27,7 @@ public sealed record DataNeedsSet(
     bool NeedsPumpStatus,
     bool NeedsTempBasal,
     bool NeedsUploaderStatus,
+    bool NeedsTransmitterStatus,
     bool NeedsOverride,
     bool NeedsSensitivityRatio,
     bool NeedsGlucoseBucket,
@@ -45,7 +46,7 @@ public sealed record DataNeedsSet(
     /// <summary>An empty needs set with all flags false.</summary>
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false, false,
             false, false, false, false,
             new HashSet<PumpModeState>(),
             new HashSet<(StateSpanCategory, string?)>(),
@@ -133,6 +134,7 @@ public static class RuleDataNeeds
             case AlertConditionType.PumpBattery: b.PumpStatus = true; break;
             case AlertConditionType.TempBasal: b.TempBasal = true; break;
             case AlertConditionType.UploaderBattery: b.UploaderStatus = true; break;
+            case AlertConditionType.TransmitterBattery: b.TransmitterStatus = true; break;
             case AlertConditionType.OverrideActive: b.Override = true; break;
             case AlertConditionType.SensitivityRatio: b.SensitivityRatio = true; break;
             case AlertConditionType.GlucoseBucket:
@@ -179,6 +181,7 @@ public static class RuleDataNeeds
         public bool PumpStatus; // PumpSuspended OR PumpBattery — both share a PumpSnapshot fetch.
         public bool TempBasal;
         public bool UploaderStatus;
+        public bool TransmitterStatus;
         public bool Override;
         public bool SensitivityRatio;
         public bool GlucoseBucket;
@@ -191,7 +194,8 @@ public static class RuleDataNeeds
 
         public DataNeedsSet Build() =>
             new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, ActiveAlerts,
-                LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, Override, SensitivityRatio,
+                LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, TransmitterStatus, Override,
+                SensitivityRatio,
                 GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpStates, StateSpans, TrackerDefinitions);
     }
 }

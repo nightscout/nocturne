@@ -14,17 +14,19 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for reviewing and actioning user access requests.
+/// Access requests from users who want to join the instance. List pending requests, then approve or
+/// deny them. Denying a request deletes the account that made it.
 /// </summary>
 /// <remarks>
 /// Access requests are created when an unauthenticated user completes the
 /// <c>POST /api/auth/passkey/access-request/complete</c> ceremony. Admins with the
 /// <c>platform_admin</c> role can list pending requests, approve them (activating the subject
-/// and adding them as a tenant member), or reject them (deactivating the subject record).
+/// and adding them as a tenant member), or reject them (deleting the subject record).
 /// </remarks>
 /// <seealso cref="ISubjectService"/>
 /// <seealso cref="IAccessRequestService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Access Requests")]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/access-requests")]
 [Authorize(Roles = "platform_admin")]
@@ -72,6 +74,7 @@ public class AccessRequestController(
             request.DirectPermissions,
             request.LimitTo24Hours,
             HttpContext.GetGrantedScopes(),
+            HttpContext.GetSubjectId(),
             ct);
 
         switch (result.Outcome)
@@ -105,7 +108,7 @@ public class AccessRequestController(
     {
         var subject = await subjects.GetAsync(subjectId, ct);
 
-        if (subject is not { ApprovalStatus: "Pending" })
+        if (subject is not { ApprovalStatus: nameof(ApprovalStatus.Pending) })
             return NotFound();
 
         if (await subjectService.DeleteSubjectAsync(subjectId) is SubjectChange.LastOwnerOf lastOwnerOf)

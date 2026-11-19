@@ -20,18 +20,14 @@ public class DeviceEventControllerTests
     private readonly Mock<IPatientDeviceRepository> _patientDevicesMock = new();
     private readonly Mock<IPatientDeviceStamper> _deviceStamperMock = new();
 
-    private DeviceEventController CreateController(IQueryCollection? query = null)
+    private DeviceEventController CreateController()
     {
         var controller = new DeviceEventController(
             _repoMock.Object,
             _patientDevicesMock.Object,
             _deviceStamperMock.Object);
 
-        var httpContext = new DefaultHttpContext();
-        if (query is not null)
-            httpContext.Request.Query = query;
-
-        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         return controller;
     }
 
@@ -297,15 +293,11 @@ public class DeviceEventControllerTests
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<DeviceEventType>?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var query = new QueryCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>
-        {
-            ["patientDeviceId"] = patientDeviceId.ToString(),
-        });
-
-        var result = await CreateController(query).GetAll(from: null, to: null);
+        var result = await CreateController().GetAll(from: null, to: null, patientDeviceId: patientDeviceId);
 
         result.Result.Should().BeOfType<OkObjectResult>();
         _repoMock.Verify(r => r.GetAsync(
@@ -313,6 +305,7 @@ public class DeviceEventControllerTests
             It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(),
             It.IsAny<bool>(), patientDeviceId,
+            It.IsAny<IReadOnlyCollection<DeviceEventType>?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -325,6 +318,7 @@ public class DeviceEventControllerTests
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<DeviceEventType>?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([new DeviceEvent()]);
 
@@ -332,6 +326,44 @@ public class DeviceEventControllerTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<DeviceEvent>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repoMock.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CountAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_CountsWithTheFiltersTheDataQueryUses()
+    {
+        var patientDeviceId = Guid.NewGuid();
+        DeviceEventType[] expected = [DeviceEventType.SiteChange, DeviceEventType.SensorChange, DeviceEventType.PodChange];
+        _repoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<DeviceEventType>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new DeviceEvent()]);
+        _repoMock
+            .Setup(r => r.CountAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(7);
+
+        var result = await CreateController().GetAll(
+            from: null, to: null, device: "pump-a", source: "tandem", includeTotal: true,
+            patientDeviceId: patientDeviceId, eventType: expected);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<DeviceEvent>>().Subject;
+        response.Pagination.Total.Should().Be(7);
+        _repoMock.Verify(r => r.GetAsync(
+            null, null, "pump-a", "tandem", 100, 0, true, patientDeviceId,
+            It.Is<IReadOnlyCollection<DeviceEventType>?>(t => t!.SequenceEqual(expected)),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _repoMock.Verify(r => r.CountAsync(
+            null, null, "pump-a", "tandem", patientDeviceId,
+            It.Is<IReadOnlyCollection<DeviceEventType>?>(t => t!.SequenceEqual(expected)),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

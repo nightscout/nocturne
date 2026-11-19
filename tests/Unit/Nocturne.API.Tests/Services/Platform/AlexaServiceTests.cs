@@ -466,6 +466,16 @@ public class AlexaServiceTests
     }
 
     [Fact]
+    public async Task MetricNow_UploaderBattery_WithNoRecentUploader_SpeaksLegacyPlaceholder()
+    {
+        Properties(("upbat", new Dictionary<string, object> { ["display"] = "?%" }));
+
+        var result = await MetricNow(ResolvedMetric("uploader battery", "uploader battery"));
+
+        Assert.Equal("Your uploader battery is at ?%", Speech(result));
+    }
+
+    [Fact]
     public async Task MetricNow_UploaderBattery_WithoutReading_SpeaksUnknownValue()
     {
         Properties();

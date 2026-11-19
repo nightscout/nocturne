@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -62,7 +63,7 @@ public class DeleteResponseTests
         var settings = new Mock<ISettingsRepository>();
         settings.Setup(s => s.DeleteSettingsAsync("abc", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var controller = WithContext(
-            new SettingsController(settings.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<SettingsController>.Instance));
+            new SettingsController(settings.Object, Mock.Of<IWriteSideEffects>(), Mock.Of<IDocumentProcessingService>(), NullLogger<SettingsController>.Instance));
 
         AssertStatusEnvelope(await controller.DeleteSettings("abc"));
     }

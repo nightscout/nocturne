@@ -11,10 +11,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for providing pre-computed chart data for the dashboard.
-/// Returns all data needed by the glucose chart in a single call:
-/// glucose readings, IOB/COB series, basal delivery, treatment markers,
-/// state spans, system events, and tracker markers.
+/// Chart data for the dashboard glucose chart, returned in one response: glucose readings,
+/// IOB and COB series, basal delivery, treatment markers, state spans, system events and tracker markers.
 /// </summary>
 /// <remarks>
 /// Responses are cached for 60 seconds in the caller's own client cache, so a browser that

@@ -17,9 +17,11 @@ using Nocturne.Core.Contracts.DeviceStatuses;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Count controller that provides 1:1 compatibility with Nightscout count endpoints.
-/// Implements the /api/v1/count/* endpoints from the legacy JavaScript implementation.
+/// Nightscout count: returns how many documents in a collection match a query, such as entries or treatments.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/count/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="IDeviceStatusService"/>

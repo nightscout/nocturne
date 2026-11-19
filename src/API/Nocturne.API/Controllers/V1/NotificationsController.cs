@@ -12,10 +12,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// V1 Notifications controller providing basic notification system endpoints.
+/// Nightscout notifications: acknowledgment of notifications, and admin notifications. A client can acknowledge
+/// notifications, and list, create and delete admin notifications.
+/// </summary>
+/// <remarks>
 /// Implements the legacy /api/v1/notifications and /api/v1/adminnotifies endpoints with 1:1 backwards compatibility.
 /// Based on the legacy notifications.js and adminnotifies.js implementations.
-/// </summary>
+/// </remarks>
 /// <seealso cref="INotificationV1Service"/>
 [ApiController]
 [Tags("V1")]

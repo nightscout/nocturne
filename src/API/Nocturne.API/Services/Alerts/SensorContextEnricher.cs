@@ -194,7 +194,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 }
             }
 
-            var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(ct);
+            var settings = await _deps.AlertSettings.GetAsync(ct);
             // No row yet means DND has never been configured for this tenant — treat as off.
             // Scheduled DND is tenant-wide, i.e. == scope=all (manual DND is a scope=all window,
             // resolved below); this projects the active scheduled window if any (ADR 0004 D5).
@@ -203,10 +203,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // Scoped DND windows + scheduled DND, folded into the active scope set and the
             // tenant-wide projection by the shared resolver — the same call replay makes (there
             // receipt-gated), so the live gate and replay cannot drift on how a window resolves.
-            // The read is bounded by expiry: a window that merely runs out is never cleared, so
-            // filtering on cleared_at alone would return every timed mute the tenant has ever set,
-            // on a path that runs once per reading.
-            var windows = await _deps.Alerts.GetUnexpiredDndWindowsAsync(now, ct);
+            // The read's bound is stated on IDndWindowRepository.GetUnexpiredSnapshotsAsync.
+            var windows = await _deps.DndWindowRepository.GetUnexpiredSnapshotsAsync(now, ct);
             var dnd = DndWindowResolver.Resolve(windows, now, receiptGated: false, scheduled);
 
             enriched = enriched with
@@ -487,6 +485,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 {
                     UploaderBatteryPercent = uploader.Battery.HasValue ? (decimal?)uploader.Battery.Value : null,
                     HasEverUploaderSnapshot = true,
+                };
+            }
+        }
+
+        if (needs.NeedsTransmitterStatus)
+        {
+            var latest = await _deps.UploaderSnapshots.GetLatestOfTypeAsync(TransmitterStatus.UploaderType, asOf, ct);
+            if (TransmitterStatus.From(latest) is { } transmitter)
+            {
+                enriched = enriched with
+                {
+                    TransmitterVoltageA = transmitter.VoltageA,
+                    TransmitterVoltageB = transmitter.VoltageB,
+                    TransmitterResistance = transmitter.Resistance,
+                    TransmitterDays = transmitter.Days,
                 };
             }
         }

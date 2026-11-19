@@ -20,7 +20,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: 120, trend: 3, cgTime: "2026-04-24T12:00:00Z");
 
-        var result = _mapper.Map(patient, Now);
+        var result = _mapper.Map(patient, "US", Now);
 
         result.Should().NotBeNull();
         result!.Mgdl.Should().Be(120);
@@ -33,7 +33,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: EversenseConstants.NoGlucose, trend: 0, cgTime: "2026-04-24T12:00:00Z");
 
-        _mapper.Map(patient, Now).Should().BeNull();
+        _mapper.Map(patient, "US", Now).Should().BeNull();
     }
 
     [Theory]
@@ -43,26 +43,35 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: glucose, trend: 3, cgTime: "2026-04-24T12:00:00Z");
 
-        _mapper.Map(patient, Now)!.Mgdl.Should().Be(glucose);
+        _mapper.Map(patient, "US", Now)!.Mgdl.Should().Be(glucose);
     }
 
     [Theory]
     [InlineData(0, GlucoseDirection.NotComputable)]
+    [InlineData(1, GlucoseDirection.SingleDown)]
+    [InlineData(2, GlucoseDirection.FortyFiveDown)]
     [InlineData(3, GlucoseDirection.Flat)]
     [InlineData(4, GlucoseDirection.FortyFiveUp)]
     [InlineData(5, GlucoseDirection.SingleUp)]
-    [InlineData(7, GlucoseDirection.DoubleUp)]
-    [InlineData(2, GlucoseDirection.FortyFiveDown)]
-    [InlineData(1, GlucoseDirection.SingleDown)]
-    [InlineData(6, GlucoseDirection.DoubleDown)]
-    public void Map_TrendValues_MapsToCorrectDirection(int eversenseTrend, GlucoseDirection expected)
+    public void Map_SingleArrowTrends_MapTheSameInBothRegions(int eversenseTrend, GlucoseDirection expected)
     {
         var patient = CreatePatient(glucose: 100, trend: eversenseTrend, cgTime: "2026-04-24T12:00:00Z");
 
-        var result = _mapper.Map(patient, Now);
+        _mapper.Map(patient, "US", Now)!.Direction.Should().Be(expected);
+        _mapper.Map(patient, "OUS", Now)!.Direction.Should().Be(expected);
+    }
 
-        result.Should().NotBeNull();
-        result!.Direction.Should().Be(expected);
+    [Theory]
+    [InlineData("US", 6, GlucoseDirection.DoubleUp)]
+    [InlineData("US", 7, GlucoseDirection.DoubleDown)]
+    [InlineData("OUS", 6, GlucoseDirection.DoubleDown)]
+    [InlineData("OUS", 7, GlucoseDirection.DoubleUp)]
+    [InlineData("ous", 6, GlucoseDirection.DoubleDown)]
+    public void Map_DoubleArrowTrends_FollowTheServerRegion(string server, int eversenseTrend, GlucoseDirection expected)
+    {
+        var patient = CreatePatient(glucose: 100, trend: eversenseTrend, cgTime: "2026-04-24T12:00:00Z");
+
+        _mapper.Map(patient, server, Now)!.Direction.Should().Be(expected);
     }
 
     [Fact]
@@ -70,7 +79,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: 100, trend: 99, cgTime: "2026-04-24T12:00:00Z");
 
-        var result = _mapper.Map(patient, Now);
+        var result = _mapper.Map(patient, "US", Now);
 
         result.Should().NotBeNull();
         result!.Direction.Should().Be(GlucoseDirection.None);
@@ -81,7 +90,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: 100, trend: 3, cgTime: "not-a-date");
 
-        var result = _mapper.Map(patient, Now);
+        var result = _mapper.Map(patient, "US", Now);
 
         result.Should().BeNull();
     }
@@ -91,7 +100,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: 100, trend: 3, cgTime: "2026-04-24T12:00:00Z");
 
-        var result = _mapper.Map(patient, Now);
+        var result = _mapper.Map(patient, "US", Now);
 
         result.Should().NotBeNull();
         var expectedMills = new DateTimeOffset(2026, 4, 24, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -103,7 +112,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var patient = CreatePatient(glucose: 0, trend: 0, cgTime: "0001-01-01T00:00:00");
 
-        var result = _mapper.Map(patient, Now);
+        var result = _mapper.Map(patient, "US", Now);
 
         result.Should().BeNull();
     }
@@ -160,7 +169,7 @@ public class EversenseSensorGlucoseMapperTests
     {
         var history = _mapper.MapHistory(
             [new EversenseUserEvent { EventTypeId = 1, Value = 110, EventDate = "2026-10-16T10:00:00" }], Now);
-        var latest = _mapper.Map(CreatePatient(glucose: 110, cgTime: "2026-10-16T10:00:00"), Now);
+        var latest = _mapper.Map(CreatePatient(glucose: 110, cgTime: "2026-10-16T10:00:00"), "US", Now);
 
         history.Single().LegacyId.Should().Be(latest!.LegacyId);
     }

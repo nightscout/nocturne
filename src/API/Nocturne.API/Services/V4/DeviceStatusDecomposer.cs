@@ -1040,6 +1040,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 ? openAps.Enacted.Smb
                 : openAps.Enacted?.Units,
             AidVersion = openAps.Version,
+            AdditionalProperties = UploadedExtras.OfOpenAps(openAps),
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
         snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
@@ -1101,9 +1102,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             Clock = ds.Pump.Clock,
             Iob = ds.Pump.Iob?.Iob,
             BolusIob = ds.Pump.Iob?.BolusIob,
-            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
-                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
-                : null,
+            AdditionalProperties = UploadedExtras.OfPump(ds.Pump),
         };
     }
 
@@ -1124,6 +1123,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             IsCharging = ds.IsCharging ?? ds.Uploader?.IsCharging,
             Temperature = ds.Uploader?.Temperature,
             Type = ds.Uploader?.Type,
+            AdditionalProperties = ds.Uploader?.ExtensionData is { Count: > 0 } reported
+                ? reported.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
         };
     }
 
@@ -1134,13 +1136,15 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// <summary>
     /// Distinguishes between vanilla OpenAPS, AAPS, and Trio based on payload heuristics.
     /// All three post under the "openaps" devicestatus key.
-    /// - AAPS: uploader name contains "AndroidAPS"
+    /// - AAPS: uploader name contains "AndroidAPS", or the top-level <c>app</c> is "AAPS" (what
+    ///   NSClientV3 sends, with an empty uploader block)
     /// - Trio: openaps block includes a version field
     /// - Vanilla OpenAPS: neither of the above
     /// </summary>
     internal static V4Models.AidAlgorithm DetectOpenApsVariant(DeviceStatus ds)
     {
-        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true)
+        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true
+            || IsAapsApp(ds))
             return V4Models.AidAlgorithm.AndroidAps;
 
         if (!string.IsNullOrEmpty(ds.OpenAps?.Version))
@@ -1148,6 +1152,13 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         return V4Models.AidAlgorithm.OpenAps;
     }
+
+    private static bool IsAapsApp(DeviceStatus ds) =>
+        ds.ExtensionData?.TryGetValue("app", out var app) == true
+        && app.ValueKind == JsonValueKind.String
+        && app.GetString() is { } name
+        && (name.Equals("AAPS", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("AndroidAPS", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Resolves the best available timestamp for a device status record.

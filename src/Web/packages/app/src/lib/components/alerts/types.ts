@@ -3,6 +3,7 @@ import {
 	ChannelType,
 	AlertConditionType,
 	TempBasalMetric,
+	TransmitterBatteryMetric,
 	GlucoseBucket,
 	PumpModeState,
 	StateSpanCategory,
@@ -33,6 +34,7 @@ import type {
 	PumpBatteryCondition,
 	TempBasalCondition,
 	UploaderBatteryCondition,
+	TransmitterBatteryCondition,
 	OverrideActiveCondition,
 	SensitivityRatioCondition,
 	DoNotDisturbCondition,
@@ -51,7 +53,7 @@ import type {
 // pinning the wire names to snake_case). Editor-only adornments live here only
 // where they don't exist on the wire — currently just `_uid`.
 
-export { TempBasalMetric, GlucoseBucket, PumpModeState, StateSpanCategory, AlertWeekday };
+export { TempBasalMetric, TransmitterBatteryMetric, GlucoseBucket, PumpModeState, StateSpanCategory, AlertWeekday };
 export type {
 	ThresholdCondition,
 	RateOfChangeCondition,
@@ -72,6 +74,7 @@ export type {
 	PumpBatteryCondition,
 	TempBasalCondition,
 	UploaderBatteryCondition,
+	TransmitterBatteryCondition,
 	OverrideActiveCondition,
 	SensitivityRatioCondition,
 	DoNotDisturbCondition,
@@ -197,6 +200,7 @@ export interface ConditionNode {
 	pump_battery?: PumpBatteryCondition;
 	temp_basal?: TempBasalCondition;
 	uploader_battery?: UploaderBatteryCondition;
+	transmitter_battery?: TransmitterBatteryCondition;
 	override_active?: OverrideActiveCondition;
 	sensitivity_ratio?: SensitivityRatioCondition;
 	do_not_disturb?: DoNotDisturbCondition;
@@ -368,6 +372,15 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 				type: "uploader_battery",
 				uploader_battery: { operator: "<=", value: 20 },
 			};
+		case "transmitter_battery":
+			return {
+				type: "transmitter_battery",
+				transmitter_battery: {
+					metric: TransmitterBatteryMetric.VoltageA,
+					operator: "<",
+					value: 290,
+				},
+			};
 		case "override_active":
 			return {
 				type: "override_active",
@@ -489,6 +502,7 @@ const SHOWN_DEFAULTS: Partial<Record<ConditionKind, Record<string, unknown>>> = 
 	loop_enaction_stale: { operator: ">", minutes: 0 },
 	signal_loss: { timeout_minutes: 0 },
 	temp_basal: { metric: TempBasalMetric.Rate, operator: ">=", value: 0 },
+	transmitter_battery: { metric: TransmitterBatteryMetric.VoltageA, operator: ">=", value: 0 },
 	alert_state: { state: "firing" },
 	time_since_last_carb: { operator: AlertComparisonOperator.Gte, minutes: 0 },
 	time_since_last_bolus: { operator: AlertComparisonOperator.Gte, minutes: 0 },

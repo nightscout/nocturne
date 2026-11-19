@@ -3,22 +3,22 @@ using Nocturne.Core.Models.Connectors;
 namespace Nocturne.Core.Contracts.Connectors;
 
 /// <summary>
-/// Deletes the rows a data source owns outside the glucose tables, and releases the re-import
-/// tombstones of every table including glucose, attributed to the scope's audit actor, as the
-/// scope's reader.
+/// Deletes the rows a <see cref="RecordSelector"/> names outside the glucose tables, and releases the
+/// re-import tombstones of every table including glucose, attributed to the scope's audit actor, as
+/// the scope's reader.
 /// </summary>
 public interface ISourceOwnedDataPurge
 {
     /// <summary>
-    /// Soft-deletes every non-glucose row <paramref name="source"/> owns, stamping each as a user
-    /// delete so no sync re-imports it, and records one bulk summary per table for
-    /// <paramref name="scope"/>.
+    /// Soft-deletes every non-glucose row <paramref name="selector"/> names, stamping each as a user
+    /// delete so no sync re-imports it, and records one bulk summary per table under the selector's
+    /// <see cref="RecordSelector.Scope"/>.
     /// </summary>
-    Task<SourcePurgeResult> SoftDeleteBySourceAsync(string source, string scope, CancellationToken ct);
+    Task<SourcePurgeResult> SoftDeleteAsync(RecordSelector selector, CancellationToken ct);
 
     /// <summary>
-    /// Releases every user tombstone <paramref name="source"/> produced, glucose included and those of
-    /// earlier deletes too, so the source can send its records again. The rows stay deleted.
+    /// Releases every user tombstone of the rows <paramref name="selector"/> names, glucose included and
+    /// those of earlier deletes too, so their sender can send them again. The rows stay deleted.
     /// </summary>
-    Task AllowReimportBySourceAsync(string source, string scope, CancellationToken ct);
+    Task AllowReimportAsync(RecordSelector selector, CancellationToken ct);
 }

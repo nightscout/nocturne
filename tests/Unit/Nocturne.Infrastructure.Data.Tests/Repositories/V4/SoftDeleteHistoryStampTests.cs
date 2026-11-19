@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -244,7 +245,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
 
         await using var context = _db.CreateContext();
         var deleted = await context.AuditedSoftDeleteAsync(
-            context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            context.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(2);
         await using var verify = _db.CreateContext();
@@ -297,7 +298,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         await using var context = _db.CreateContext();
         _statements.Clear();
         var deleted = await context.AuditedSoftDeleteAsync(
-            context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            context.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(count);
         _statements.Count("SELECT", s => s.Contains("FROM \"linked_records\"", StringComparison.Ordinal)).Should().Be(1 + 3, "one lookup of the groups, then one read per chunk");
@@ -314,7 +315,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         var (primaries, copies) = await SeedGroupsAsync(1);
 
         await using var context = _db.CreateContext();
-        var rows = context.SensorGlucose.FromSource("source-a");
+        var rows = context.SensorGlucose.Selected(RecordSelector.ForSource("source-a"));
         _statements.FailOn(s => s.StartsWith("UPDATE \"linked_records\"", StringComparison.Ordinal), ordinal: 2);
         Func<Task> act = withEntities
             ? () => context.AuditedSoftDeleteWithEntitiesAsync(rows, new UserAuditContext(), "data_source=source-a")

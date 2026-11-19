@@ -52,12 +52,13 @@ public class AlertSurfaceWriteScopeTests
     private static readonly IReadOnlyDictionary<string, string> Ungated =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            // Both actions read the saved rules over a historical window and return the events that
+            // These actions read a historical window and return the events that
             // would have fired. AlertReplayService has no SaveChangesAsync and adds to no DbSet, so
             // these are reads the request-body shape forced off GET; gating them would deny replay
             // to an alerts.read holder.
             ["AlertReplayController.Replay"] = "reads and returns; persists nothing",
             ["AlertReplayController.ReplayDryRun"] = "reads and returns; persists nothing",
+            ["AlertReplayController.FindFirings"] = "reads and returns; persists nothing",
 
             // The caller's own notification bookkeeping — read_at, and the archive flags — on a row
             // InAppNotificationService confines to the caller's subject. Neither acknowledges nor

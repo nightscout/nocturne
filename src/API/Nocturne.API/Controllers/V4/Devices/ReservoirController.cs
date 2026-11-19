@@ -9,7 +9,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Exposes the current reservoir level for display.
+/// Estimated current insulin reservoir level. Read the level for display.
 /// </summary>
 /// <remarks>
 /// Delegates to <see cref="IReservoirEstimationService"/>, which anchors on the newest

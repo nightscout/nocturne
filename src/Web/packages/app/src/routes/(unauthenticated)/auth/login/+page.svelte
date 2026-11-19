@@ -173,4 +173,4 @@
   </Card.Root>
 </div>
 
-<RequestMembershipDialog bind:open={showRequestDialog} {returnUrl} />
+<RequestMembershipDialog bind:open={showRequestDialog} />

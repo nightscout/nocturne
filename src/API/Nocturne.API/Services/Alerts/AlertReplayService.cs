@@ -20,6 +20,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
+    IDndWindowRepository dndWindowRepository,
     ISensorGlucoseRepository glucoseRepository,
     ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
@@ -44,6 +45,71 @@ internal sealed class AlertReplayService(
     {
         ArgumentNullException.ThrowIfNull(ruleOverride);
         return ReplayInternalAsync(localDate, timezone, fromUtc, toUtc, ruleOverride, ct);
+    }
+
+    /// <summary>
+    /// Replayed ahead of each searched day and not reported. Replay starts every rule from rest,
+    /// so a condition already true at the start of a window fires on its first tick; the lead-in
+    /// moves that edge out of the day, where the day before reports the real one. It is longer
+    /// than any "for at least" duration the editor offers.
+    /// </summary>
+    private static readonly TimeSpan FiringSearchLeadIn = TimeSpan.FromHours(3);
+
+    private const int MaxFiringsReturned = 50;
+
+    public async Task<AlertFiringSearchResult> FindFiringsAsync(
+        ReplayRuleOverride ruleOverride, bool lastDayOnly, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ruleOverride);
+
+        var options = evaluationOptions.Value;
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+        // On a tick boundary, so every searched day starts on a tick of its own replay.
+        var searchedTo = new DateTime(
+            utcNow.Ticks - utcNow.Ticks % TickInterval.Ticks, DateTimeKind.Utc);
+
+        var tenantId = tenantAccessor.TenantId;
+        if (tenantId == Guid.Empty)
+        {
+            return new AlertFiringSearchResult(searchedTo, searchedTo, false, 0, []);
+        }
+
+        var candidate = OverrideSnapshot(ruleOverride, tenantId);
+        IReadOnlyList<AlertRuleSnapshot> rules = RuleDataNeeds.Walk([candidate]).NeedsActiveAlerts
+            ? Layer(await alertRepository.GetEnabledRulesAsync(ct), candidate)
+            : [candidate];
+
+        var started = timeProvider.GetTimestamp();
+        var firings = new List<AlertFiring>();
+        var hasReadings = false;
+        var searchedFrom = searchedTo;
+
+        var days = lastDayOnly ? 1 : Math.Max(1, options.FiringSearchDays);
+        for (var day = 0; day < days; day++)
+        {
+            var dayEnd = searchedTo.AddDays(-day);
+            var dayStart = dayEnd.AddDays(-1);
+
+            var series = await BuildTicksAsync(
+                rules, dayStart - FiringSearchLeadIn, dayEnd, captureFacts: false, ct);
+            var run = await replayEngine.ReplayAsync(new AlertReplayInput(rules, series.Ticks), ct);
+
+            firings.AddRange(run.Events
+                .Where(e => e.RuleId == candidate.Id
+                            && e.At >= dayStart
+                            && e.Kind is AlertReplayTransition.Fired or AlertReplayTransition.SuppressedByDnd)
+                .OrderByDescending(e => e.At)
+                .Select(e => new AlertFiring(DateTime.SpecifyKind(e.At, DateTimeKind.Utc), EventKind(e.Kind))));
+            hasReadings |= series.HasReadings;
+            searchedFrom = dayStart;
+
+            if (timeProvider.GetElapsedTime(started) > options.FiringSearchBudget)
+                break;
+        }
+
+        return new AlertFiringSearchResult(
+            searchedFrom, searchedTo, hasReadings, firings.Count,
+            firings.Take(MaxFiringsReturned).ToList());
     }
 
     /// <summary>
@@ -83,6 +149,47 @@ internal sealed class AlertReplayService(
             return new AlertReplayResult(windowStart, windowEnd, []);
         }
 
+        var series = await BuildTicksAsync(rules, windowStart, windowEnd, captureFacts: true, ct);
+
+        var run = await replayEngine.ReplayAsync(new AlertReplayInput(rules, series.Ticks), ct);
+
+        var byId = rules.ToDictionary(r => r.Id);
+        var events = run.Events
+            .Where(e => e.Kind != AlertReplayTransition.Cleared)
+            .Select(e =>
+            {
+                var rule = byId[e.RuleId];
+                return new AlertReplayEvent(
+                    DateTime.SpecifyKind(e.At, DateTimeKind.Utc), rule.Id, rule.Name, rule.Severity, EventKind(e.Kind));
+            })
+            .ToList();
+
+        var factTimelines = series.FactPoints.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (IReadOnlyList<FactSnapshotPoint>)kvp.Value);
+
+        return new AlertReplayResult(windowStart, windowEnd, events)
+        {
+            LeafTransitionsByRule = run.LeafTransitions.ToDictionary(l => l.RuleId, l => l.Leaves),
+            FactTimelines = factTimelines,
+        };
+    }
+
+    /// <summary>The ticks of one replay window, each enriched as of its own instant.</summary>
+    /// <param name="FactPoints">Empty unless the fact timelines were asked for.</param>
+    /// <param name="HasReadings">Whether any tick had a glucose reading at or before it.</param>
+    private sealed record TickSeries(
+        IReadOnlyList<AlertReplayTick> Ticks,
+        Dictionary<string, List<FactSnapshotPoint>> FactPoints,
+        bool HasReadings);
+
+    private async Task<TickSeries> BuildTicksAsync(
+        IReadOnlyList<AlertRuleSnapshot> rules,
+        DateTime windowStart,
+        DateTime windowEnd,
+        bool captureFacts,
+        CancellationToken ct)
+    {
         // Replay walks the canonical stream — the same series the live engine alarms on. The
         // window is keyset-paged and consumed by the tick loop as a left-to-right fold, so the
         // readings are never all resident; the per-tick contexts built from them are.
@@ -97,7 +204,7 @@ internal sealed class AlertReplayService(
         // do_not_disturb leaf's ActiveDoNotDisturb snapshot re-source from these windows per
         // tick. Scheduled DND is not reconstructible historically (the schedule row keeps no
         // change history), so — as before D5 — replay considers windows only.
-        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(windowEnd, ct);
+        var dndWindows = await dndWindowRepository.GetReceivedByAsync(windowEnd, ct);
 
         // Per-tick fact snapshots (site age, IOB, temp basal rate, etc.). Keyed by snake_case
         // fact name; same compression as the leaf log — emit baseline + on rounded-value flip.
@@ -106,6 +213,7 @@ internal sealed class AlertReplayService(
         var factPrev = new Dictionary<string, decimal>();
         var factPoints = new Dictionary<string, List<FactSnapshotPoint>>();
         var ticks = new List<AlertReplayTick>();
+        var hasReadings = false;
 
         for (var tick = windowStart; tick < windowEnd; tick += TickInterval)
         {
@@ -118,6 +226,7 @@ internal sealed class AlertReplayService(
             var current = readings.Current;
             var hasReadingForTick = current is not null && current.Timestamp <= tick;
             var trend = hasReadingForTick ? ReadingTrend.Of(current!, readings.Earlier) : default;
+            hasReadings |= hasReadingForTick;
 
             var baseContext = new SensorContext
             {
@@ -146,7 +255,8 @@ internal sealed class AlertReplayService(
                 ActiveDoNotDisturb = tickDnd.ActiveDoNotDisturb,
             };
 
-            CaptureFactSnapshots(enrichedBase, tickUtc, factPrev, factPoints);
+            if (captureFacts)
+                CaptureFactSnapshots(enrichedBase, tickUtc, factPrev, factPoints);
 
             // The gate live delivery applies when an excursion opens: a non-Critical rule whose
             // class an active scope covers is recorded as suppressed.
@@ -157,28 +267,7 @@ internal sealed class AlertReplayService(
             ticks.Add(new AlertReplayTick(tickUtc, enrichedBase, suppressed));
         }
 
-        var run = await replayEngine.ReplayAsync(new AlertReplayInput(rules, ticks), ct);
-
-        var byId = rules.ToDictionary(r => r.Id);
-        var events = run.Events
-            .Where(e => e.Kind != AlertReplayTransition.Cleared)
-            .Select(e =>
-            {
-                var rule = byId[e.RuleId];
-                return new AlertReplayEvent(
-                    DateTime.SpecifyKind(e.At, DateTimeKind.Utc), rule.Id, rule.Name, rule.Severity, EventKind(e.Kind));
-            })
-            .ToList();
-
-        var factTimelines = factPoints.ToDictionary(
-            kvp => kvp.Key,
-            kvp => (IReadOnlyList<FactSnapshotPoint>)kvp.Value);
-
-        return new AlertReplayResult(windowStart, windowEnd, events)
-        {
-            LeafTransitionsByRule = run.LeafTransitions.ToDictionary(l => l.RuleId, l => l.Leaves),
-            FactTimelines = factTimelines,
-        };
+        return new TickSeries(ticks, factPoints, hasReadings);
     }
 
     private static AlertReplayEventKind EventKind(AlertReplayTransition transition) => transition switch
@@ -497,13 +586,12 @@ internal sealed class AlertReplayService(
     private static IReadOnlyList<AlertRuleSnapshot> ApplyOverride(
         IReadOnlyList<AlertRuleSnapshot> stored,
         ReplayRuleOverride? ruleOverride,
-        Guid tenantId)
-    {
-        if (ruleOverride is null) return stored;
+        Guid tenantId) =>
+        ruleOverride is null ? stored : Layer(stored, OverrideSnapshot(ruleOverride, tenantId));
 
-        var overrideId = ruleOverride.Id ?? Guid.CreateVersion7();
-        var overrideSnapshot = new AlertRuleSnapshot(
-            Id: overrideId,
+    private static AlertRuleSnapshot OverrideSnapshot(ReplayRuleOverride ruleOverride, Guid tenantId) =>
+        new(
+            Id: ruleOverride.Id ?? Guid.CreateVersion7(),
             TenantId: tenantId,
             Name: ruleOverride.Name,
             ConditionType: ruleOverride.ConditionType,
@@ -515,18 +603,19 @@ internal sealed class AlertReplayService(
             AutoResolveParams: ruleOverride.AutoResolveParams,
             AllowThroughDnd: ruleOverride.AllowThroughDnd);
 
-        var matchedExisting = ruleOverride.Id.HasValue
-            && stored.Any(r => r.Id == ruleOverride.Id.Value);
-        if (matchedExisting)
+    private static IReadOnlyList<AlertRuleSnapshot> Layer(
+        IReadOnlyList<AlertRuleSnapshot> stored, AlertRuleSnapshot candidate)
+    {
+        if (stored.Any(r => r.Id == candidate.Id))
         {
             return stored
-                .Select(r => r.Id == overrideId ? overrideSnapshot : r)
+                .Select(r => r.Id == candidate.Id ? candidate : r)
                 .ToList();
         }
 
         var combined = new List<AlertRuleSnapshot>(stored.Count + 1);
         combined.AddRange(stored);
-        combined.Add(overrideSnapshot);
+        combined.Add(candidate);
         return combined;
     }
 }

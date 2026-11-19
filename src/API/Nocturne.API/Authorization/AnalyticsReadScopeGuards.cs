@@ -264,7 +264,10 @@ internal static class WidgetSummaryReadScopeGuard
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
             data.Iob = 0;
+            data.IobKnown = false;
             data.Cob = 0;
+            data.CobKnown = false;
+            data.BasalInjection = null;
         }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.AlertsRead))
@@ -301,6 +304,7 @@ internal static class CurrentTherapyStateReadScopeGuard
             data.Reservoir = null;
             data.PumpBatteryPercent = null;
             data.PumpBatteryVoltage = null;
+            data.LinkBatteryVoltage = null;
         }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))

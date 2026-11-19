@@ -263,9 +263,22 @@ public class OuraExportArchiveTests
             .ToArray();
         using var export = Open(("sleepmodel.csv", Csv(SleepHeader + ";sleep_phase_30_sec", rows)));
 
-        var read = () => export.ReadSleepSessions().Count();
+        var read = () => export.ReadSleepSessions().GetEnumerator().MoveNext();
+        var validate = () => export.Validate();
 
-        read.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.TooMuchData);
+        read.Should().Throw<OuraExportException>("no session is yielded before the budget is checked")
+            .Which.Code.Should().Be(OuraExportException.TooMuchData);
+        validate.Should().Throw<OuraExportException>().Which.Code.Should().Be(OuraExportException.TooMuchData);
+    }
+
+    [Fact]
+    public void AnExportWithinEveryBudget_Validates()
+    {
+        using var export = Open(
+            ("sleepmodel.csv", Csv(SleepHeader, LongSleep())),
+            ("heartrate.csv", Csv("bpm;source;timestamp", "61;awake;2026-03-01T10:00:00+00:00")));
+
+        export.Invoking(e => e.Validate()).Should().NotThrow();
     }
 
     [Fact]

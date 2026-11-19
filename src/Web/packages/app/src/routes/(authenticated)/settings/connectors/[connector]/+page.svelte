@@ -16,10 +16,7 @@
   import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import OuraImportCard from "#lib/components/connectors/OuraImportCard.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
-  import type {
-    AvailableConnector,
-    OuraImportResult,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
 
   const connectorName = $derived(page.params.connector);
   const isHomeAssistant = $derived(
@@ -27,9 +24,6 @@
   );
   // Oura has no sync to enable, configure or repeat: its data arrives as an uploaded export.
   const isOura = $derived(connectorName?.toLowerCase() === "oura");
-  // Held here, not in the card: a completed import refreshes the page's queries, which remounts
-  // everything the connector setup renders.
-  let ouraImported = $state<OuraImportResult | null>(null);
   const permissionsQuery = getMyPermissions();
   const canManage = $derived(
     canManageConnectors(
@@ -67,8 +61,8 @@
     onCancel={() => goto(resolve('settings/connectors'))}
   >
     {#snippet extras({ connector }: { connector: AvailableConnector })}
-      {#if isOura && canManage}
-        <OuraImportCard bind:imported={ouraImported} />
+      {#if isOura && canManage && connectorName}
+        <OuraImportCard connectorId={connectorName} />
       {:else if connector.id && !isOura}
         <RepullHistoryCard connectorId={connector.id} />
       {/if}
