@@ -266,7 +266,7 @@ public class DDataService : IDDataService
         // filter temp target
         var tempTargetTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Temporary Target")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.TemporaryTarget)
             )
             .ToList();
         if (preserveOriginalTreatments)

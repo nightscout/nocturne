@@ -605,7 +605,7 @@ public class TreatmentsController : ControllerBase
                 (true, true) => TreatmentTypes.MealBolus,
                 (true, false) => TreatmentTypes.CorrectionBolus,
                 (false, true) => TreatmentTypes.CarbCorrection,
-                _ => "Note",
+                _ => TreatmentTypes.Note,
             };
         }
 

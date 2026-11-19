@@ -1062,10 +1062,7 @@ public class PropertiesService : IPropertiesService
         var tempBasalTreatment = treatments
             .Where(t =>
                 !string.IsNullOrEmpty(t.EventType)
-                && (
-                    t.EventType.Equals(TreatmentTypes.TempBasal, StringComparison.OrdinalIgnoreCase)
-                    || t.EventType.Equals("temp basal", StringComparison.OrdinalIgnoreCase)
-                )
+                && t.EventType.Equals(TreatmentTypes.TempBasal, StringComparison.OrdinalIgnoreCase)
                 && t.Mills <= time
                 && t.Mills + (t.Duration ?? 0) * 60000 > time
             ) // Duration in minutes, convert to ms
@@ -1088,10 +1085,7 @@ public class PropertiesService : IPropertiesService
         var comboBolusTreatment = treatments
             .Where(t =>
                 !string.IsNullOrEmpty(t.EventType)
-                && (
-                    t.EventType.Equals(TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase)
-                    || t.EventType.Equals("combo bolus", StringComparison.OrdinalIgnoreCase)
-                )
+                && t.EventType.Equals(TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase)
                 && t.Mills <= time
                 && t.Mills + (t.Duration ?? 0) * 60000 > time
             ) // Duration in minutes, convert to ms

@@ -260,13 +260,13 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             isProfileSwitch = true;
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, "Temporary Override", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.TemporaryOverride, StringComparison.OrdinalIgnoreCase))
         {
             isOverride = true;
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, TemporaryTargetEventType, StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.TemporaryTarget, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.TemporaryTargetCancel, StringComparison.OrdinalIgnoreCase))
         {
             isTemporaryTarget = true;
             delegateToStateSpan = true;
@@ -288,7 +288,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
               || string.Equals(eventType, TreatmentTypes.Smb, StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, TreatmentTypes.AutomaticBolus, StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, TreatmentTypes.Bolus, StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
+              || string.Equals(eventType, TreatmentTypes.ExternalInsulin, StringComparison.OrdinalIgnoreCase))
         {
             // As with a meal half, a dose type carrying only carbs is a carb intake, and a Carb
             // Correction carrying only insulin is a bolus, so neither drops what it was uploaded with.
@@ -304,13 +304,13 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             produceBGCheck = true;
         }
-        else if (string.Equals(eventType, "Announcement", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.Announcement, StringComparison.OrdinalIgnoreCase))
         {
             produceNote = true;
             isAnnouncement = true;
         }
-        else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Exercise", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, TreatmentTypes.Note, StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, TreatmentTypes.Exercise, StringComparison.OrdinalIgnoreCase))
         {
             produceNote = true;
         }
@@ -540,7 +540,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static StateSpan BuildTemporaryTargetSpan(Treatment treatment)
     {
         var isCancelled = treatment.Duration is null or 0
-            || string.Equals(treatment.EventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(treatment.EventType, TreatmentTypes.TemporaryTargetCancel, StringComparison.OrdinalIgnoreCase);
 
         return new StateSpan
         {
@@ -1219,8 +1219,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         }
     }
 
-    private const string TemporaryTargetEventType = "Temporary Target";
-
     private static Dictionary<string, object>? BuildOverrideMetadata(Treatment treatment)
     {
         var metadata = new Dictionary<string, object>
@@ -1266,7 +1264,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         // Nightscout stores a "Temporary Target Cancel" under that eventType, and finds it by it.
         if (treatment.EventType is { } eventType
-            && !string.Equals(eventType, TemporaryTargetEventType, StringComparison.Ordinal))
+            && !string.Equals(eventType, TreatmentTypes.TemporaryTarget, StringComparison.Ordinal))
             metadata[LegacyTreatmentTables.UploadedEventTypeKey] = eventType;
 
         if (treatment.Duration is { } duration)

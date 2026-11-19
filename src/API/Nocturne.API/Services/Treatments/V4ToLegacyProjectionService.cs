@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Nocturne.API.Services.Entries;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -602,7 +603,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     private static Treatment FoldedNoteTombstone(Treatment note) => new()
     {
         Id = note.Id,
-        EventType = "Note",
+        EventType = TreatmentTypes.Note,
         Mills = note.Mills,
         SrvCreated = note.SrvCreated,
         SrvModified = note.SrvModified,

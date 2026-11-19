@@ -153,7 +153,7 @@ public class SummaryService : ISummaryService
                 continue;
             }
 
-            if (treatment.EventType == "Temporary Target")
+            if (treatment.EventType == TreatmentTypes.TemporaryTarget)
             {
                 result.Targets.Add(
                     new SummaryTarget

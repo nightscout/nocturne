@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.V4;
@@ -19,11 +20,9 @@ namespace Nocturne.API.Services.V4;
 /// </remarks>
 internal static class EffectiveProfileSwitch
 {
-    internal const string NoteEventType = "Note";
-
     /// <summary>Whether <paramref name="treatment"/> is an AAPS effective profile switch.</summary>
     internal static bool Is(Treatment treatment) =>
-        string.Equals(treatment.EventType?.Trim(), NoteEventType, StringComparison.OrdinalIgnoreCase)
+        string.Equals(treatment.EventType?.Trim(), TreatmentTypes.Note, StringComparison.OrdinalIgnoreCase)
         && !string.IsNullOrEmpty(treatment.OriginalProfileName);
 
     /// <summary>

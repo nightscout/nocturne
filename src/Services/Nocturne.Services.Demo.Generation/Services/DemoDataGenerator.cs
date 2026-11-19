@@ -1059,7 +1059,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Carbs",
+            EventType = TreatmentTypes.Carbs,
             Carbs = carbs,
             FoodType = foodType,
             Mills = utc.ToMills(),
@@ -1312,7 +1312,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = announcement ? "Announcement" : "Note",
+            EventType = announcement ? TreatmentTypes.Announcement : TreatmentTypes.Note,
             Notes = text,
             Mills = utc.ToMills(),
             Created_at = utc.ToString("o"),
