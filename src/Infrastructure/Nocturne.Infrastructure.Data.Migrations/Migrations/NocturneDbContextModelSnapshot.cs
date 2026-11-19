@@ -699,6 +699,82 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("alert_tracker_state", (string)null);
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AppBuildLinkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AccountIsOrganization")
+                        .HasColumnType("boolean")
+                        .HasColumnName("account_is_organization");
+
+                    b.Property<string>("AccountLogin")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("account_login");
+
+                    b.PrimitiveCollection<string[]>("AdminRepositories")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("admin_repositories");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<long>("InstallationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("installation_id");
+
+                    b.Property<Guid>("LinkedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_by_subject_id");
+
+                    b.Property<long>("LinkerGitHubId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("linker_github_id");
+
+                    b.Property<string>("LinkerGitHubLogin")
+                        .IsRequired()
+                        .HasMaxLength(39)
+                        .HasColumnType("character varying(39)")
+                        .HasColumnName("linker_github_login");
+
+                    b.Property<string>("RepositoryFullName")
+                        .HasMaxLength(201)
+                        .HasColumnType("character varying(201)")
+                        .HasColumnName("repository_full_name");
+
+                    b.Property<string>("TargetId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("target_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "TargetId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_app_build_links_tenant_target");
+
+                    b.ToTable("app_build_links");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AuthAuditLogEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10221,6 +10297,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("ActiveExcursion");
 
                     b.Navigation("AlertRule");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AppBuildLinkEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AuthAuditLogEntity", b =>

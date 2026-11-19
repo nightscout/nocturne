@@ -60,6 +60,7 @@ export const DOCS_HERO: Record<string, DocsHero> = {
   'connecting-apps/aid-app-keys': { artwork: 'key', palette: 'dusk' },
   'alerts/email': { artwork: 'alarm-bell', palette: 'moonlight' },
   configuration: { artwork: 'spanner', palette: 'slate', wrap: false },
+  'configuration/github-build-app': { artwork: 'github-mark', palette: 'slate' },
   observability: { artwork: 'distant-mountains', palette: 'slate' },
   sdks: { artwork: 'magnifying-glass', palette: 'water' },
   'windows-widget': { artwork: 'phone', palette: 'slate' },

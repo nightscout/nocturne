@@ -435,6 +435,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TenantDemoConfigEntity> TenantDemoConfigs => Set<TenantDemoConfigEntity>();
 
+    public DbSet<AppBuildLinkEntity> AppBuildLinks => Set<AppBuildLinkEntity>();
+
     public DbSet<GoogleHealthGrantHolderEntity> GoogleHealthGrantHolders => Set<GoogleHealthGrantHolderEntity>();
 
     /// <summary>

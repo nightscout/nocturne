@@ -5,7 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Controllers.V4.AppBuilds;
 using Nocturne.API.Middleware;
+using Nocturne.API.Services.AppBuilds;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.GoogleHealth.Configurations;
@@ -19,6 +22,8 @@ public class ApexCallbackRelayMiddlewareTests
     private readonly BaseDomainOptions _config = new() { BaseDomain = "nocturne.run" };
     private readonly Mock<IOidcAuthService> _oidcAuthService = new();
     private readonly GoogleHealthOAuthState _googleHealthState = new(new EphemeralDataProtectionProvider());
+    private readonly AppBuildInstallState _appBuildState = new(
+        new EphemeralDataProtectionProvider(), new MemoryCache(new MemoryCacheOptions()), TimeProvider.System);
 
     private ApexCallbackRelayMiddleware CreateMiddleware(RequestDelegate? next = null)
     {
@@ -47,6 +52,7 @@ public class ApexCallbackRelayMiddlewareTests
         var services = new ServiceCollection();
         services.AddSingleton(_oidcAuthService.Object);
         services.AddSingleton(_googleHealthState);
+        services.AddSingleton(_appBuildState);
         return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
     }
 
@@ -68,6 +74,24 @@ public class ApexCallbackRelayMiddlewareTests
             .Should().StartWith("https://ryceg.nocturne.run/api/auth/oidc/link/callback?")
             .And.Contain("code=abc")
             .And.Contain($"state={state}");
+    }
+
+    [Fact]
+    public async Task Redirects_apex_app_build_callback_to_the_tenant_its_state_names()
+    {
+        var middleware = CreateMiddleware();
+        var state = _appBuildState.Protect(Guid.NewGuid(), "alice", Guid.NewGuid(), "aaps");
+        var context = NewContext();
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = AppBuildsController.CallbackPath;
+        context.Request.QueryString = new QueryString($"?code=abc&installation_id=42&state={Uri.EscapeDataString(state)}");
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(302);
+        context.Response.Headers.Location.ToString()
+            .Should().StartWith($"https://alice.nocturne.run{AppBuildsController.CallbackPath}?code=abc&installation_id=42&state=");
     }
 
     [Fact]
