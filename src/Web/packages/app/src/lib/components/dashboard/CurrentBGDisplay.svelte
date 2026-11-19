@@ -265,12 +265,14 @@
             size="xs"
             spacing={1}
             aria-labelledby="ns-focus-hours"
-            value={String(glucoseChartLookback.current)}
-            onValueChange={(value: string) => {
-              const hours = Number(value);
-              if (FOCUS_HOURS.some((h) => h === hours))
-                glucoseChartLookback.current = hours;
-            }}
+            bind:value={
+              () => String(glucoseChartLookback.current),
+              (value: string) => {
+                // Clicking the selected range again would clear it; the range stays.
+                const hours = Number(value);
+                if (FOCUS_HOURS.some((h) => h === hours)) glucoseChartLookback.current = hours;
+              }
+            }
           >
             {#each FOCUS_HOURS as hours (hours)}
               <ToggleGroup.Item value={String(hours)}>{hours}</ToggleGroup.Item>
