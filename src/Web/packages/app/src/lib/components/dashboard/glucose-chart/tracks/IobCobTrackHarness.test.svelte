@@ -3,19 +3,36 @@
   import { scaleTime } from "d3-scale";
   import IobCobTrack from "./IobCobTrack.svelte";
   import { partialEngine, setGlucoseChartContext } from "../chart-context.svelte";
-  import { computeTrackLayout } from "../engine/track-layout";
+  import { computeNightscoutTrackLayout, computeTrackLayout } from "../engine/track-layout";
   import type { GlucoseChartContext } from "../chart-context.svelte";
-  import type { CarbMarkerData, SeriesPoint } from "../engine/chart-data-view.svelte";
+  import type {
+    BolusMarkerData,
+    CarbMarkerData,
+    GlucosePoint,
+    SeriesPoint,
+  } from "../engine/chart-data-view.svelte";
 
   interface Props {
     carbMarkers?: CarbMarkerData[];
+    bolusMarkers?: BolusMarkerData[];
+    glucoseData?: GlucosePoint[];
+    variant?: "default" | "nightscout";
     iobData?: SeriesPoint[];
     minIob?: number;
     maxIob?: number;
     onMarkerClick?: (treatmentId: string) => void;
   }
 
-  let { carbMarkers = [], iobData = [], minIob = 0, maxIob = 1, onMarkerClick }: Props = $props();
+  let {
+    carbMarkers = [],
+    bolusMarkers = [],
+    glucoseData = [],
+    variant = "default",
+    iobData = [],
+    minIob = 0,
+    maxIob = 1,
+    onMarkerClick,
+  }: Props = $props();
 
   const baseTime = new Date("2026-01-01T12:00:00Z").getTime();
   const height = 300;
@@ -26,14 +43,21 @@
       return iobData;
     },
     cobData: [],
-    bolusMarkers: [],
+    get bolusMarkers() {
+      return bolusMarkers;
+    },
+    get glucoseData() {
+      return glucoseData;
+    },
     get carbMarkers() {
       return carbMarkers;
     },
   });
 
   const layout = $derived(
-    computeTrackLayout(
+    variant === "nightscout"
+      ? computeNightscoutTrackLayout(height, 400, 1)
+      : computeTrackLayout(
       height,
       400,
       1,
@@ -65,7 +89,7 @@
     padding={{ left: 0, right: 0, top: 0, bottom: 0 }}
   >
     <Svg>
-      <IobCobTrack {onMarkerClick} />
+      <IobCobTrack {onMarkerClick} {variant} />
     </Svg>
   </Chart>
 </div>
