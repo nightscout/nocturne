@@ -6,7 +6,7 @@
   import type { PointInspection } from "./engine/point-inspection.svelte";
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
-  import { computeTrackLayout } from "./engine/track-layout";
+  import { computeNightscoutTrackLayout, computeTrackLayout } from "./engine/track-layout";
   import { formatWeekdayDate, hourLabel } from "#lib/utils/formatting.js";
   import { hourTicks } from "./engine/axis-ticks";
   import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -28,6 +28,10 @@
     overlays?: Snippet<[GlucoseChartContext]>;
     /** Draws at this size instead of measuring its box, which lets the server render it. */
     size?: { width: number; height: number };
+    /** "nightscout" lays the tracks out as cgm-remote-monitor's focus chart (`computeNightscoutTrackLayout`). */
+    layoutMode?: "default" | "nightscout";
+    /** Classes for the time axis labels. */
+    timeAxisClass?: string;
   }
 
   const {
@@ -44,38 +48,42 @@
     tracks,
     overlays,
     size,
+    layoutMode = "default",
+    timeAxisClass = "text-xs fill-muted-foreground",
   }: Props = $props();
 
   let chartHeight = $state(0);
   const print = new PrintMode();
 
   const layout = $derived(
-    computeTrackLayout(
-      chartHeight,
-      engine.thresholds.glucoseYMax,
-      engine.maxBasalRate,
-      engine.maxIOB,
-      {
-        basal: legend?.basal ?? true,
-        iob: legend?.iob ?? true,
-        cob: legend?.cob ?? true,
-      },
-      {
-        pumpMode:
-          (legend?.pumpModes ?? true) &&
-          engine.displayPumpModeSpans.length > 0,
-        override:
-          (legend?.overrideSpans ?? false) &&
-          engine.displayOverrideSpans.length > 0,
-        profile:
-          (legend?.profileSpans ?? false) &&
-          engine.displayProfileSpans.length > 0,
-        activity:
-          (legend?.activitySpans ?? false) &&
-          engine.displayActivitySpans.length > 0,
-      },
-      engine.minIOB
-    )
+    layoutMode === "nightscout"
+      ? computeNightscoutTrackLayout(chartHeight, engine.thresholds.glucoseYMax, engine.maxBasalRate)
+      : computeTrackLayout(
+          chartHeight,
+          engine.thresholds.glucoseYMax,
+          engine.maxBasalRate,
+          engine.maxIOB,
+          {
+            basal: legend?.basal ?? true,
+            iob: legend?.iob ?? true,
+            cob: legend?.cob ?? true,
+          },
+          {
+            pumpMode:
+              (legend?.pumpModes ?? true) &&
+              engine.displayPumpModeSpans.length > 0,
+            override:
+              (legend?.overrideSpans ?? false) &&
+              engine.displayOverrideSpans.length > 0,
+            profile:
+              (legend?.profileSpans ?? false) &&
+              engine.displayProfileSpans.length > 0,
+            activity:
+              (legend?.activitySpans ?? false) &&
+              engine.displayActivitySpans.length > 0,
+          },
+          engine.minIOB
+        )
   );
 
   // Paper carries no forecast, so its axis ends where the period does.
@@ -150,7 +158,7 @@
             ticks={hourTicks}
             format={tickLabel}
             tickOcclusion
-            tickLabelProps={{ class: "text-xs fill-muted-foreground", fontSize: 12 }}
+            tickLabelProps={{ class: timeAxisClass, fontSize: layoutMode === "nightscout" ? 16 : 12 }}
           />
         {/if}
       </Svg>

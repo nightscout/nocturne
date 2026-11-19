@@ -1,5 +1,5 @@
-import { scaleLinear } from "d3-scale";
-import type { ScaleLinear } from "d3-scale";
+import { scaleLinear, scaleLog } from "d3-scale";
+import type { ScaleContinuousNumeric } from "d3-scale";
 
 export const SWIM_LANE_HEIGHT = 0.04;
 
@@ -23,7 +23,7 @@ export interface TrackGeometry {
   /** Maps domain value → layerchart y-domain via pixelToGlucoseDomain */
   scale: (value: number) => number;
   /** Independent scale for axis rendering (pixel-space) */
-  axisScale: ScaleLinear<number, number>;
+  axisScale: ScaleContinuousNumeric<number, number>;
   /** Zero line in layerchart y-domain coordinates */
   zero: number;
 }
@@ -179,4 +179,54 @@ function computeSwimLanePositions(
   }
 
   return positions;
+}
+
+/** Nightscout's focus-chart log domain, in mg/dL (lib/client/chart.js). */
+export const NIGHTSCOUT_GLUCOSE_DOMAIN: readonly [number, number] = [30, 510];
+
+/**
+ * cgm-remote-monitor's focus chart: glucose on a log scale over the whole plot, and basal drawn
+ * down from the top edge over its first quarter (domain `[0, max * 1.1]`), with no IOB/COB track
+ * or swim lanes. `glucose.axisScale` is a log scale here, so callers that read it as linear (the
+ * default glucose axis and gradient stops) must not be drawn in this layout.
+ */
+export function computeNightscoutTrackLayout(
+  chartHeight: number,
+  glucoseYMax: number,
+  maxBasalRate: number
+): TrackLayout {
+  const pixelToGlucoseDomain = (pixelY: number) =>
+    glucoseYMax * (1 - pixelY / chartHeight);
+
+  const [lo, hi] = NIGHTSCOUT_GLUCOSE_DOMAIN;
+  const logAxis = scaleLog().domain([lo, hi]).range([chartHeight, 0]).clamp(true);
+  const glucose: TrackGeometry = {
+    top: 0,
+    bottom: chartHeight,
+    height: chartHeight,
+    scale: (value: number) => pixelToGlucoseDomain(logAxis(Math.max(value, lo))),
+    axisScale: logAxis,
+    zero: pixelToGlucoseDomain(chartHeight),
+  };
+
+  const basalHeight = chartHeight / 4;
+  const basalMax = Math.max(maxBasalRate, 0.1) * 1.1;
+  const basal: TrackGeometry = {
+    top: 0,
+    bottom: basalHeight,
+    height: basalHeight,
+    scale: (rate: number) => pixelToGlucoseDomain((rate / basalMax) * basalHeight),
+    axisScale: scaleLinear().domain([0, basalMax]).range([0, basalHeight]),
+    zero: pixelToGlucoseDomain(0),
+  };
+
+  const hidden: SwimLanePosition = { top: 0, bottom: 0, visible: false };
+  return {
+    basal,
+    glucose,
+    iobCob: null,
+    swimLanes: { pumpMode: hidden, override: hidden, profile: hidden, activity: hidden },
+    ratios: { basal: 0.25, glucose: 1, iob: 0, swimLanes: 0 },
+    pixelToGlucoseDomain,
+  };
 }
