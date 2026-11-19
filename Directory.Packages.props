@@ -61,9 +61,12 @@
     <PackageVersion Include="MongoDB.Driver" Version="3.13.0" />
     <PackageVersion Include="MongoDB.Bson" Version="3.13.0" />
     <!-- The Linux native library is the build with no fontconfig or freetype dependency, which the
-         aspnet base image does not carry. Both packages move together. -->
-    <PackageVersion Include="SkiaSharp" Version="4.157.0" />
-    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.157.0" />
+         aspnet base image does not carry. Both packages move together. 4.156.0 to 4.157.0 crash the
+         process (access violation in sk_codec_new_from_data) on Windows for some malformed JPEGs,
+         which AvatarController takes from any signed-in caller; before moving past 4.155.2, fuzz
+         SKCodec.Create on Windows with random bytes after an FF D8 FF header. -->
+    <PackageVersion Include="SkiaSharp" Version="4.155.2" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.155.2" />
     <PackageVersion Include="SocketIOClient" Version="4.0.5" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
     <PackageVersion Include="Polly" Version="8.9.1" />

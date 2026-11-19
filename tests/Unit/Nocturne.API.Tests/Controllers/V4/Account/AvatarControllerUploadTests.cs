@@ -112,8 +112,9 @@ public class AvatarControllerUploadTests
     }
 
     /// <summary>
-    /// The source is red in its top left quarter and green in its top right one. Each case names
-    /// the quarters of the avatar those two land in once the orientation is applied.
+    /// The source is twice as wide as it is high, and white outside its centre square. That square
+    /// is red in its top left quarter, green in its top right one and blue below. Each case names
+    /// the quarters of the avatar the red and the green land in once the orientation is applied.
     /// </summary>
     [Theory]
     [InlineData(1, "TL", "TR")]
@@ -126,15 +127,17 @@ public class AvatarControllerUploadTests
     [InlineData(8, "BL", "TL")]
     public async Task TheSourcesExifOrientationIsApplied(int orientation, string red, string green)
     {
-        using var source = new SKBitmap(200, 200);
+        using var source = new SKBitmap(400, 200);
         using (var canvas = new SKCanvas(source))
         using (var paint = new SKPaint())
         {
-            canvas.Clear(SKColors.Blue);
+            canvas.Clear(SKColors.White);
+            paint.Color = SKColors.Blue;
+            canvas.DrawRect(100, 0, 200, 200, paint);
             paint.Color = SKColors.Red;
-            canvas.DrawRect(0, 0, 100, 100, paint);
-            paint.Color = new SKColor(0, 255, 0);
             canvas.DrawRect(100, 0, 100, 100, paint);
+            paint.Color = new SKColor(0, 255, 0);
+            canvas.DrawRect(200, 0, 100, 100, paint);
         }
         using var encoded = source.Encode(SKEncodedImageFormat.Jpeg, 100);
 
@@ -147,6 +150,7 @@ public class AvatarControllerUploadTests
             quarter => Dominant(stored.GetPixel(quarter[1] == 'L' ? 64 : 192, quarter[0] == 'T' ? 64 : 192)));
         quarters.Where(q => q.Value == "red").Select(q => q.Key).Should().Equal(red);
         quarters.Where(q => q.Value == "green").Select(q => q.Key).Should().Equal(green);
+        quarters.Values.Count(colour => colour == "blue").Should().Be(2);
     }
 
     private static string Dominant(SKColor color) =>

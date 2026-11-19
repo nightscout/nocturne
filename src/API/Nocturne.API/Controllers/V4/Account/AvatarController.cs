@@ -160,6 +160,8 @@ internal static class AvatarImage
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.Transparent);
         canvas.SetMatrix(OrientationMatrix(codec.EncodedOrigin, size));
+        // An immutable bitmap shares its pixels with the image; a mutable one is copied.
+        bitmap.SetImmutable();
         using var image = SKImage.FromBitmap(bitmap);
         canvas.DrawImage(image, crop, new SKRect(0, 0, size, size), sampling);
 
