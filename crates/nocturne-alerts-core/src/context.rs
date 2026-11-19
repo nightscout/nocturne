@@ -77,6 +77,12 @@ pub struct SensorContext {
     pub pump_battery_percent: Option<Decimal>,
     pub active_temp_basal: Option<TempBasalSnapshot>,
     pub uploader_battery_percent: Option<Decimal>,
+    /// The CGM transmitter's latest reported readings, unscaled; each `None`
+    /// until an uploader reports it.
+    pub transmitter_voltage_a: Option<Decimal>,
+    pub transmitter_voltage_b: Option<Decimal>,
+    pub transmitter_resistance: Option<Decimal>,
+    pub transmitter_days: Option<Decimal>,
     pub active_override: Option<StartedSpan>,
     pub active_pump_suspension: Option<StartedSpan>,
     pub sensitivity_ratio: Option<Decimal>,
@@ -168,6 +174,14 @@ struct WireContext {
     active_temp_basal: Option<WireTempBasal>,
     #[serde(default)]
     uploader_battery_percent: Option<Number>,
+    #[serde(default)]
+    transmitter_voltage_a: Option<Number>,
+    #[serde(default)]
+    transmitter_voltage_b: Option<Number>,
+    #[serde(default)]
+    transmitter_resistance: Option<Number>,
+    #[serde(default)]
+    transmitter_days: Option<Number>,
     #[serde(default)]
     active_override: Option<WireStartedSpan>,
     #[serde(default)]
@@ -398,6 +412,19 @@ impl SensorContext {
                 w.uploader_battery_percent.as_ref(),
                 "uploader_battery_percent",
             )?,
+            transmitter_voltage_a: opt_dec(
+                w.transmitter_voltage_a.as_ref(),
+                "transmitter_voltage_a",
+            )?,
+            transmitter_voltage_b: opt_dec(
+                w.transmitter_voltage_b.as_ref(),
+                "transmitter_voltage_b",
+            )?,
+            transmitter_resistance: opt_dec(
+                w.transmitter_resistance.as_ref(),
+                "transmitter_resistance",
+            )?,
+            transmitter_days: opt_dec(w.transmitter_days.as_ref(), "transmitter_days")?,
             active_override: started(w.active_override, "active_override.started_at")?,
             active_pump_suspension: started(
                 w.active_pump_suspension,

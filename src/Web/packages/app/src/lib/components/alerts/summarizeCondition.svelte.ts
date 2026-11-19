@@ -150,6 +150,22 @@ export function summarizeCondition(
 			if (!p) return "";
 			return `Uploader battery ${opSymbol(p.operator)} ${p.value}%`;
 		}
+		case "transmitter_battery": {
+			const p = node.transmitter_battery;
+			if (!p) return "";
+			switch (p.metric) {
+				case "voltage_a":
+					return `Transmitter voltage A ${opSymbol(p.operator)} ${p.value}`;
+				case "voltage_b":
+					return `Transmitter voltage B ${opSymbol(p.operator)} ${p.value}`;
+				case "resistance":
+					return `Transmitter resistance ${opSymbol(p.operator)} ${p.value}`;
+				case "days":
+					return `Transmitter age ${opSymbol(p.operator)} ${formatDays(p.value ?? 0)}`;
+				default:
+					return "";
+			}
+		}
 		case "override_active": {
 			const p = node.override_active;
 			if (!p) return "";

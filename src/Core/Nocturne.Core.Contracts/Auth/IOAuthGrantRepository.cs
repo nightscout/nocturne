@@ -65,6 +65,13 @@ public interface IOAuthGrantRepository
     Task<IReadOnlyList<OAuthGrantRecord>> ListForConnectionsAsync(
         Guid? subjectId, IReadOnlyCollection<Guid> writerIds, CancellationToken ct);
 
+    /// <summary>
+    /// The app grants, in any state and of any subject, of the clients <paramref name="clientEntityIds"/>
+    /// and of every client whose software id is one of <paramref name="softwareIds"/>.
+    /// </summary>
+    Task<IReadOnlyList<OAuthGrantRecord>> ListAppGrantsOfClientsAsync(
+        IReadOnlyCollection<Guid> clientEntityIds, IReadOnlyCollection<string> softwareIds, CancellationToken ct);
+
     /// <summary>The grant <paramref name="grantId"/> owned by <paramref name="ownerSubjectId"/>, in any state.</summary>
     Task<OAuthGrantRecord?> FindOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct);
 

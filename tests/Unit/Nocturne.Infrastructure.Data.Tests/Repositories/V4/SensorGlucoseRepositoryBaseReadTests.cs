@@ -53,4 +53,24 @@ public class SensorGlucoseRepositoryBaseReadTests : IDisposable
 
         served.Should().ContainSingle().Which.LegacyId.Should().Be("legacy-1");
     }
+
+    [Fact]
+    public async Task TheBaseCountCountsOnlyTheReadingsTheDeviceAndSourceFiltersMatch()
+    {
+        var at = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repo.CreateAsync(new SensorGlucose { Mgdl = 120, Timestamp = at, DataSource = "dexcom", Device = "g7", LegacyId = "a" }, WriteOrigin.Live);
+        await _repo.CreateAsync(new SensorGlucose { Mgdl = 121, Timestamp = at.AddMinutes(5), DataSource = "dexcom", Device = "g7", LegacyId = "b" }, WriteOrigin.Live);
+        await _repo.CreateAsync(new SensorGlucose { Mgdl = 122, Timestamp = at.AddMinutes(10), DataSource = "libre", Device = "l3", LegacyId = "c" }, WriteOrigin.Live);
+        IV4Repository<SensorGlucose> repo = _repo;
+
+        var forDevice = await repo.CountAsync(null, null, "g7", null, CancellationToken.None);
+        var forSource = await repo.CountAsync(null, null, null, "libre", CancellationToken.None);
+        var forBoth = await repo.CountAsync(null, null, "g7", "libre", CancellationToken.None);
+        var unfiltered = await repo.CountAsync(null, null, null, null, CancellationToken.None);
+
+        forDevice.Should().Be((await repo.GetAsync(null, null, "g7", null, 100, 0, true, CancellationToken.None)).Count()).And.Be(2);
+        forSource.Should().Be((await repo.GetAsync(null, null, null, "libre", 100, 0, true, CancellationToken.None)).Count()).And.Be(1);
+        forBoth.Should().Be(0);
+        unfiltered.Should().Be(3);
+    }
 }

@@ -10,11 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for glucose forecast predictions.
-/// Supports multiple prediction sources: <c>DeviceStatus</c> (AAPS/Trio/Loop loop data)
-/// or <c>OrefWasm</c> (server-side oref calculation).
+/// Glucose forecast predictions. Callers can read the current forecast, check the status of the
+/// prediction service, and read the therapy profile a device needs to run its own oref forecast.
 /// </summary>
 /// <remarks>
+/// Supports the <c>DeviceStatus</c> source (AAPS, Trio and Loop loop data) and the <c>OrefWasm</c>
+/// source (server-side oref calculation).
 /// The active prediction source is determined at startup from <c>Predictions:Source</c>
 /// in application configuration. If the source is <c>None</c> or no
 /// <see cref="IPredictionService"/> is registered, the endpoint returns <c>404 Not Found</c>
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="GlucosePredictionResponse"/>
 /// <seealso cref="PredictionStatusResponse"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Predictions")]
 [Tags("Analytics")]
 [Route("api/v4/predictions")]
 [Produces("application/json")]

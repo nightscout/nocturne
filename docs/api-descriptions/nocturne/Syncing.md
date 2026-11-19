@@ -15,7 +15,7 @@ A connection carries several independent streams — glucose, treatments (boluse
 - When a type has **no** data yet, it performs an initial backfill over a bounded window (currently 6 months) so a new connection fills in recent history.
 - Profiles and food are small and fetched in full on every sync rather than windowed.
 - Glooko XT (the former Diabnext service, reached by setting the Glooko connector's server to `XT`) exposes one read call over its whole logbook rather than per-type feeds, so a sync reads a single window — from the older of the glucose and treatment resume points to now, a week at a time — and fans every record out into the enabled types. Pump-mode spans (closed loop, attempting, boost, ease-off, and manual inferred between them), safety alerts, consumable changes and the pump-settings profile exist only in its CSV export, which the same sync reads a fortnight at a time when those types are enabled. Its sign-in is a code emailed to the patient, completed once in the connector settings; the resulting year-long token is what every sync presents.
-- Glooko has no per-type resume point, because Glooko itself receives pump data in batches days after the fact. Each scheduled sync re-reads a fixed lookback (`lookbackDays`, default 10), and once a day it walks the full 6-month window so anything that arrived late still lands; a walk that fails is retried after an hour, not on the next cycle. A manual sync (range or no range) and the SSV2 cursor mode are unaffected.
+- Glooko has no per-type resume point, because Glooko itself receives pump data in batches days after the fact. A scheduled sync reads the last day. Every three hours it re-reads a fixed lookback (`lookbackDays`, default 10), and once a day it walks the full 6-month window so anything that arrived late still lands; a walk that fails is retried after an hour, not on the next cycle. A manual sync (range or no range) and the SSV2 cursor mode are unaffected.
 
 ## Resilient ingestion
 
@@ -35,7 +35,7 @@ All are safe to re-run because of idempotency, below.
 
 How Nocturne guarantees that writing the same record twice never creates a duplicate — and why there are two separate keys for it.
 
-Diabetes data is written by two very different kinds of client, and **both retry**. A phone app may resend a `POST` after a flaky network; a background connector re-fetches overlapping time windows on every sync. To make writes safe to repeat, every V4 record carries an idempotency key and the database enforces uniqueness on it. Which key is used depends on **who is writing**.
+Diabetes data is written by two very different kinds of client, and **both retry**. A phone app may resend a `POST` after a flaky network; a background connector re-fetches overlapping time windows on every sync. To make writes safe to repeat, most V4 records carry an idempotency key (calibrations, meter glucose and bolus calculations do not, and always insert) and the database enforces uniqueness on it. Which key is used depends on **who is writing**.
 
 ### Two channels
 
@@ -48,7 +48,7 @@ A given record normally carries **one** of these keys, not both.
 
 #### `syncIdentifier` — client-owned
 
-Clients that integrate over the REST API supply their own stable identifier on each write, scoped by `dataSource`. On create, if a record with the same `(dataSource, syncIdentifier)` already exists, the endpoint returns the existing record unchanged — an idempotent upsert — instead of inserting a duplicate. Enforced by a unique index on `(tenant_id, data_source, sync_identifier)`.
+Clients that integrate over the REST API supply their own stable identifier on each write, scoped by `dataSource`. On create, if a record with the same `(dataSource, syncIdentifier)` already exists, the endpoint updates that record in place — an idempotent upsert — instead of inserting a duplicate. Enforced by a unique index on `(tenant_id, data_source, sync_identifier)`.
 
 Use this when **you** control the writer and can guarantee a stable ID that survives retries.
 

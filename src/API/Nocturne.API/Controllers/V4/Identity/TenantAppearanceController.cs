@@ -9,8 +9,8 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Serves the appearance a public share or a guest link renders the tenant's data with: units,
-/// time and date format, colour theme and chart style, taken from the owner's own settings.
+/// The display settings a public share or guest link uses to show the tenant's data: units, time
+/// and date format, color theme and chart style. These come from the owner's own settings.
 /// </summary>
 /// <remarks>
 /// Gated by the default-deny fallback policy rather than <c>[Authorize]</c>, for the same reason

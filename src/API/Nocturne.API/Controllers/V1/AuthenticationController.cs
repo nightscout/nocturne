@@ -8,8 +8,11 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Authentication controller that provides authentication verification for legacy Nightscout compatibility.
+/// Nightscout authentication check: a client calls <c>verifyauth</c> to confirm that its credentials are accepted.
 /// </summary>
+/// <remarks>
+/// Provides authentication verification for legacy Nightscout compatibility.
+/// </remarks>
 /// <seealso cref="VerifyAuthResponse"/>
 [ApiController]
 [Tags("V1")]

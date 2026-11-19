@@ -74,10 +74,10 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
     /// The seeded tables the model writes <c>written_live</c> to, a column a later migration adds. It
     /// is there only while the model seeds them.
     /// </summary>
-    private static readonly string[] LaterColumnTables = ["carb_intakes", "sensor_glucose"];
+    private static readonly string[] LaterColumnTables = ["carb_intakes", "sensor_glucose", "state_spans"];
 
     /// <summary>The seeded tables the model writes <c>writer_grant_id</c> to, on the same terms.</summary>
-    private static readonly string[] WriterStampedTables = [.. LaterColumnTables, "state_spans"];
+    private static readonly string[] WriterStampedTables = ["carb_intakes", "sensor_glucose", "state_spans"];
 
     /// <summary>
     /// For each of three record types: a group of a primary and one non-primary copy, and a record

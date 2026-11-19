@@ -16,12 +16,13 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Lets a member administrator restore access for a member who has no sign-in method left, by
-/// issuing a single-use code the member spends at <see cref="PasskeyController.RecoveryModeRedeem"/>.
+/// Restores access for members who have no sign-in method left. A member administrator can issue
+/// each such member a single-use code that the member uses to regain access.
 /// </summary>
 /// <remarks>
 /// Allowed during setup because these members are what put the tenant into recovery mode, where
 /// every other tenant endpoint answers 503.
+/// The member spends the code at <see cref="PasskeyController.RecoveryModeRedeem"/>.
 /// </remarks>
 [ApiController]
 [Tags("Identity")]

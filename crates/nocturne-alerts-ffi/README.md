@@ -337,7 +337,7 @@ each, in declaration order:
 ```
 
 The names are `glucose`, `predictions`, `insulin`, `carbs`, `pump`, `aps`,
-`uploader`, `state_spans`, `device_ages`, `trackers`, `sleep`,
+`uploader`, `transmitter`, `state_spans`, `device_ages`, `trackers`, `sleep`,
 `active_alerts`, `do_not_disturb` and `time_zone`. A rule with no kinds reads
 `[]`.
 

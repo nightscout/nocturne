@@ -5,96 +5,24 @@ using Microsoft.OpenApi;
 namespace Nocturne.API.Configuration;
 
 /// <summary>
-/// Adds Scalar-specific OpenAPI extensions to the document:
-/// <c>x-tagGroups</c> for sidebar grouping and <c>x-scalar-sdk-installation</c>
-/// for the "Install the SDK" panel rendered above the API reference.
+/// Adds <c>x-scalar-sdk-installation</c>, the "Install the SDK" panel Scalar renders above the
+/// Nocturne API reference.
 /// </summary>
 public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransformer
 {
-    private static readonly Dictionary<string, string[]> NocturneTagGroups = new()
-    {
-        ["Concepts"] = ["Syncing"],
-        ["Authentication & Identity"] = ["Authentication", "OIDC Discovery", "Identity"],
-        ["Health Data"] = ["Glucose", "Treatments", "Health", "Devices", "State Spans"],
-        ["Insights & Alerting"] = ["Analytics", "Current Therapy State", "Monitoring"],
-        ["Configuration"] = ["Profiles", "Coach Marks", "Connectors", "Metadata"],
-        ["Administration"] = ["Platform", "PlatformAdmin", "TenantAdmin"],
-    };
-
-    private static readonly Dictionary<string, string[]> NightscoutTagGroups = new()
-    {
-        ["Nightscout Legacy API"] = ["V1", "V2", "V3"],
-        ["Data Model"] =
-            ["ns-model-entries", "ns-model-treatments", "ns-model-devicestatus", "ns-model-profile"],
-    };
-
     public Task TransformAsync(
         OpenApiDocument document,
         OpenApiDocumentTransformerContext context,
         CancellationToken cancellationToken)
     {
-        document.Extensions ??= new Dictionary<string, IOpenApiExtension>();
-
-        var groups = context.DocumentName == "nightscout"
-            ? NightscoutTagGroups
-            : NocturneTagGroups;
-
-        var usedTags = CollectUsedTags(document);
-
-        var tagGroupsArray = new JsonArray();
-        foreach (var (groupName, tags) in groups)
-        {
-            var present = tags.Where(usedTags.Contains).ToArray();
-            if (present.Length == 0) continue;
-
-            var tagsArray = new JsonArray();
-            foreach (var tag in present)
-                tagsArray.Add(JsonValue.Create(tag));
-
-            tagGroupsArray.Add(new JsonObject
-            {
-                ["name"] = groupName,
-                ["tags"] = tagsArray,
-            });
-        }
-
-        if (tagGroupsArray.Count > 0)
-            document.Extensions["x-tagGroups"] = new JsonNodeExtension(tagGroupsArray);
-
         if (context.DocumentName == "nocturne")
         {
+            document.Extensions ??= new Dictionary<string, IOpenApiExtension>();
             document.Extensions["x-scalar-sdk-installation"] = new JsonNodeExtension(
                 BuildSdkInstallation());
         }
 
         return Task.CompletedTask;
-    }
-
-    private static HashSet<string> CollectUsedTags(OpenApiDocument document)
-    {
-        var used = new HashSet<string>(StringComparer.Ordinal);
-
-        // Document-level tags include standalone conceptual pages (e.g. Syncing)
-        // added by TagDescriptionDocumentTransformer, which runs before this one.
-        if (document.Tags is not null)
-            foreach (var tag in document.Tags)
-                if (tag.Name is not null)
-                    used.Add(tag.Name);
-
-        if (document.Paths is null) return used;
-
-        foreach (var pathItem in document.Paths.Values)
-        {
-            if (pathItem.Operations is null) continue;
-            foreach (var op in pathItem.Operations.Values)
-            {
-                if (op.Tags is null) continue;
-                foreach (var tag in op.Tags)
-                    if (tag is IOpenApiTag t && t.Name is not null)
-                        used.Add(t.Name);
-            }
-        }
-        return used;
     }
 
     private static JsonArray BuildSdkInstallation() => new()
@@ -139,7 +67,13 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
             ["lang"] = "Swift",
             ["description"] = "Swift client (Swift Package Manager):",
             ["source"] =
-                ".package(url: \"https://github.com/nightscout/nocturne\", from: \"0.1.0\")",
+                ".package(url: \"https://github.com/nightscout/nocturne-swift\", from: \"0.1.0\")",
+        },
+        new JsonObject
+        {
+            ["lang"] = "Rust",
+            ["description"] = "Rust client (crates.io):",
+            ["source"] = "cargo add nocturne-rs",
         },
     };
 }

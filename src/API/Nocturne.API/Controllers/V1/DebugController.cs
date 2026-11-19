@@ -6,11 +6,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// V1 debug controller for development and diagnostics.
-/// Provides basic database connectivity tests against the PostgreSQL data store.
+/// Nightscout debug: database connectivity checks for superusers. The responses can include raw glucose rows
+/// and error text from the data layer.
 /// </summary>
 /// <seealso cref="IEntryService"/>
 /// <remarks>
+/// Provides basic database connectivity tests against the PostgreSQL data store.
+///
 /// Admin-only: the responses carry real glucose rows and raw exception/inner-exception text from
 /// the data layer, so this is a diagnostics surface rather than a data API.
 /// </remarks>

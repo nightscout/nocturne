@@ -11,7 +11,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for managing in-app notifications.
+/// In-app notifications for the signed-in user. Create, list and run actions on notifications.
+/// Mark them as read or dismiss them.
 /// </summary>
 /// <remarks>
 /// <para>

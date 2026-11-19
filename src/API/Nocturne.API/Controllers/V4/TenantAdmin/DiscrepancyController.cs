@@ -14,8 +14,9 @@ using Nocturne.Infrastructure.Data.Abstractions;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Controller for discrepancy analysis and compatibility dashboard.
-/// Provides endpoints for monitoring Nightscout/Nocturne compatibility.
+/// Discrepancy analyses for Nightscout compatibility. A caller with full access can read the
+/// metrics, endpoints, analyses and status. The ingest operation receives discrepancy data
+/// forwarded from another instance. It checks a shared forwarding key in place of a sign-in.
 /// </summary>
 /// <seealso cref="IDiscrepancyAnalysisRepository"/>
 [ApiController]

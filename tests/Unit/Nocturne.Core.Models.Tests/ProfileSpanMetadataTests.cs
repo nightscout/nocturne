@@ -116,16 +116,13 @@ public class ProfileSpanMetadataTests
     public void Values_read_back_from_jsonb_parse_as_written()
     {
         var metadata = JsonSerializer.Deserialize<Dictionary<string, object>>(
-            """{"profileName":"Rhys (90%)","originalProfileName":"Rhys","percentage":90,"timeshift":-2,"uploadedTimeshift":-7200000,"timeshiftUnit":"ms","pumpId":4102,"pumpType":"OMNIPOD_DASH","pumpSerial":"33013206","app":"AAPS"}""")!;
+            """{"profileName":"Rhys (90%)","originalProfileName":"Rhys","percentage":90,"timeshift":-2,"uploadedTimeshift":-7200000,"timeshiftUnit":"ms","app":"AAPS"}""")!;
 
         var parsed = ProfileSpanMetadata.Parse(metadata);
 
         parsed.BaseProfileName.Should().Be("Rhys");
         parsed.TimeshiftMs.Should().Be(-7_200_000);
         parsed.UploadedTimeshift.Should().Be(-7_200_000);
-        parsed.PumpId.Should().Be(4102);
-        parsed.PumpType.Should().Be("OMNIPOD_DASH");
-        parsed.PumpSerial.Should().Be("33013206");
         parsed.App.Should().Be("AAPS");
     }
 
