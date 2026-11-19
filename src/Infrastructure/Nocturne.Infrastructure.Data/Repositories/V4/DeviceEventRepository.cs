@@ -112,6 +112,21 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetOfTypesAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, int limit, CancellationToken ct = default)
+    {
+        var types = eventTypes.Select(t => t.ToString()).ToList();
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceEvents.AsNoTracking()
+            .Where(e => types.Contains(e.EventType) && e.Timestamp >= from && e.Timestamp < to)
+            .ExcludeDuplicates()
+            .InObservationOrder(descending: false)
+            .Take(limit)
+            .ToListAsync(ct);
+        return [.. entities.Select(DeviceEventMapper.ToDomainModel)];
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

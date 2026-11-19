@@ -1,6 +1,6 @@
 <script lang="ts">
   import ColorFocusRange from "./ColorFocusRange.svelte";
-  import { getGlucoseHeatmapFill } from "#lib/utils/chart-colors.js";
+  import { getGlucoseHeatmapFill } from "@nocturne/charts/core";
   import { convertToDisplayUnits } from "@nocturne/ui/glucose";
   import { glucoseScale, GLUCOSE_LIMITS } from "#lib/utils/metric-color-focus.js";
 </script>

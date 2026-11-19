@@ -1,0 +1,76 @@
+<script lang="ts">
+  import { getGlucoseChartContext } from "../context.svelte.js";
+  import { trianglePoints } from "../icons/marker-shapes.js";
+
+  interface Props {
+    xPos: number;
+    lineTop: number;
+    lineBottom: number;
+    units: number;
+    insulinName?: string;
+  }
+
+  let { xPos, lineTop, lineBottom, units, insulinName }: Props = $props();
+
+  const ctx = getGlucoseChartContext();
+  const lineHeight = $derived(lineBottom - lineTop);
+  const amount = $derived(units.toFixed(1));
+</script>
+
+<g transform="translate({xPos}, {lineTop})">
+  <!-- Dashed vertical line spanning the chart height -->
+  <line
+    x1={0}
+    y1={0}
+    x2={0}
+    y2={lineHeight}
+    stroke-width={1.5}
+    stroke-dasharray="4 4"
+    class="stroke-entry-basal-injection/60"
+  />
+</g>
+
+<!-- Icon and label at the top -->
+<g transform="translate({xPos}, {lineTop - 2})">
+  <!-- Background pill -->
+  <rect
+    x={-26}
+    y={-9}
+    width={52}
+    height={18}
+    rx="9"
+    fill="var(--background)"
+    class="stroke-entry-basal-injection"
+    stroke-width="1"
+    opacity={0.9}
+  />
+  <!-- Triangle pointing along the time axis, sized to sit inside the pill -->
+  <polygon
+    points={trianglePoints("right", 5, 9, -10, 0)}
+    class="fill-entry-basal-injection"
+  />
+  <!-- Units label -->
+  <text
+    x={2}
+    y={0}
+    text-anchor="start"
+    class="text-3xs font-medium"
+    fill="var(--entry-basal-injection)"
+    dy="0.35em"
+  >
+    {ctx.labels.insulinAmount(amount)}
+  </text>
+</g>
+
+<!-- Tooltip-style hover area -->
+<g transform="translate({xPos}, {lineTop})">
+  <rect
+    x={-8}
+    y={0}
+    width={16}
+    height={lineHeight}
+    class="fill-transparent cursor-default"
+  >
+    <title>{ctx.labels.basalInjection(amount, insulinName)}</title>
+  </rect>
+</g>

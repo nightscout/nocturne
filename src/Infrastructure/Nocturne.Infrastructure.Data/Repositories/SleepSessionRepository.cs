@@ -66,6 +66,50 @@ public class SleepSessionRepository : ISleepSessionRepository
     }
 
     /// <inheritdoc />
+    public async Task<bool> AnySessionOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepSessions.AsNoTracking()
+            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnyStageOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepStages.AsNoTracking()
+            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnyBiometricSampleInAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepBiometricSamples.AsNoTracking()
+            .AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SleepBiometricSample>> GetBiometricSamplesAsync(
+        DateTime from, DateTime to, int limit, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepBiometricSamples.AsNoTracking()
+            .Where(s => s.Timestamp >= from && s.Timestamp < to)
+            .OrderBy(s => s.Timestamp).Take(limit)
+            .Select(s => new SleepBiometricSample
+            {
+                Timestamp = s.Timestamp,
+                HeartRate = s.HeartRate,
+                Hrv = s.Hrv,
+                Spo2 = s.Spo2,
+                RespirationRate = s.RespirationRate,
+                Movement = s.Movement,
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<SleepSession?> GetSessionByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         GetSessionAsync(s => s.Id == id, cancellationToken);
 

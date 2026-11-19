@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { predictionDisplayMode, predictionEnabled } from "#lib/stores/appearance-store.svelte.js";
   import { browser } from "$app/env";
   import { getClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
   import {
@@ -16,16 +17,9 @@
   import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
   import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import BasalTrack from "#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
-  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import PredictionTrack from "#lib/components/dashboard/glucose-chart/tracks/PredictionTrack.svelte";
-  import DeviceEventMarkers from "#lib/components/dashboard/glucose-chart/markers/DeviceEventMarkers.svelte";
-  import TrackerMarkers from "#lib/components/dashboard/glucose-chart/markers/TrackerMarkers.svelte";
-  import ChartTooltip from "#lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, PredictionTrack, DeviceEventMarkers, TrackerMarkers, ChartTooltip } from "@nocturne/charts";
   import { openDayInReview } from "#lib/components/dashboard/glucose-chart/day-in-review.js";
-  import TrackerCategoryIcon from "#lib/components/icons/TrackerCategoryIcon.svelte";
+  import { TrackerCategoryIcon } from "@nocturne/charts/icons";
   import type { ClockFaceConfig, TrackerDefinitionDto } from "#lib/api/index.js";
   import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import {
@@ -292,7 +286,7 @@
             <ThresholdRules />
             <GlucoseTrack showPoints={false} />
             {#if backgroundChart.chartConfig?.showPredictions ?? false}
-              <PredictionTrack />
+              <PredictionTrack displayMode={predictionDisplayMode.current} enabled={predictionEnabled.current} />
             {/if}
             {#if (backgroundChart.chartConfig?.showBolus ?? true) || (backgroundChart.chartConfig?.showCarbs ?? true) || (backgroundChart.chartConfig?.showIob ?? false) || (backgroundChart.chartConfig?.showCob ?? false)}
               <IobCobTrack />
@@ -359,7 +353,7 @@
                       <ThresholdRules />
                       <GlucoseTrack showPoints={false} />
                       {#if element.chartConfig?.showPredictions ?? false}
-                        <PredictionTrack />
+                        <PredictionTrack displayMode={predictionDisplayMode.current} enabled={predictionEnabled.current} />
                       {/if}
                       {#if (element.chartConfig?.showBolus ?? true) || (element.chartConfig?.showCarbs ?? true) || (element.chartConfig?.showIob ?? false) || (element.chartConfig?.showCob ?? false)}
                         <IobCobTrack />

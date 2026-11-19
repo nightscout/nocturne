@@ -15,15 +15,6 @@
         "-y",
         "@playwright/mcp@latest"
       ]
-    },
-    "nocturne": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "src/Tools/Nocturne.Tools.McpServer"
-      ]
     }
   }
 }

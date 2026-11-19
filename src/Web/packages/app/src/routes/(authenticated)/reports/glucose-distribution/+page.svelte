@@ -10,12 +10,12 @@
   import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
   import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
-  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import { TextureSwatch } from "@nocturne/charts/print";
   import {
     CHART_TEXTURES,
     patternClass,
     type GlucoseRange,
-  } from "#lib/components/charts/print/chart-print-patterns.js";
+  } from "@nocturne/charts/core";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { bg, bgLabel, formatShortDate } from "#lib/utils/formatting.js";

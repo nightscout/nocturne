@@ -7,7 +7,7 @@
     relativeAge,
   } from "#lib/utils/formatting.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";

@@ -1,0 +1,161 @@
+/* Nocturne clinical colours: what the API's ChartColor names (resolveChartColor maps a value
+   to the custom property of the same name) and the other fills the chart draws.
+   The host supplies the chrome tokens (--background, --foreground, --muted, --border, ...),
+   the record kinds' text grades (--entry-*), and may restyle these per theme with a more
+   specific selector. @nocturne/ui's theme.css supplies all of them. */
+
+:root {
+  /* Glucose Levels */
+  --glucose-in-range: oklch(0.6 0.118 184.704);
+  --glucose-tight-range: oklch(0.72 0.16 150);
+  --glucose-low: oklch(0.646 0.222 41.116);
+  --glucose-very-low: oklch(0.577 0.245 27.325);
+  --glucose-high: oklch(0.65 0.18 270);
+  --glucose-very-high: oklch(0.55 0.25 15);
+  /* Text on a glucose fill: whichever ink contrasts more with that fill. */
+  --glucose-very-low-foreground: oklch(0.985 0.002 247.839);
+  --glucose-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-in-range-foreground: oklch(0.21 0.034 264.665);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.985 0.002 247.839);
+
+  /* OpenAPS Prediction Lines */
+  --pred-iob: oklch(0.6 0.18 258);       /* blue, was #1e88e5 */
+  --pred-cob: oklch(0.7 0.18 50);        /* orange, was #FB8C00 */
+  --pred-acob: oklch(0.7 0.18 50);       /* orange, was #FB8C00 */
+  --pred-zt: oklch(0.75 0.15 195);       /* teal, was #00d2d2 */
+  --pred-uam: oklch(0.75 0.12 85);       /* yellow-green, was #c9bd60 */
+  /* The combined prediction the loop acts on, drawn over or instead of the per-input lines. */
+  --pred-main: oklch(0.714 0.203 305.504);
+
+  /* Insulin Types */
+  --insulin: rgb(30, 150, 252);
+  --insulin-bolus: rgba(30, 150, 252, 1);
+  --insulin-manual-temp-basal: rgba(30, 150, 252, 0.8);
+
+  /* Basal. One hue for every basal mark; --entry-basal is its text grade.
+     Scheduled is the pale, desaturated step and temp (algorithm or manual) the full
+     colour, so the two separate by lightness, not hue alone. The glucose chart draws
+     the translucent pair and outlines temp in --insulin-bolus; reports stack the
+     opaque pair under bolus, pale to deep. */
+  --basal: oklch(0.75 0.134 248.6);
+  --insulin-basal: oklch(0.75 0.134 248.6 / 0.3);
+  --insulin-temp-basal: oklch(0.75 0.134 248.6 / 0.85);
+  --insulin-scheduled-basal: oklch(0.87 0.055 248.6);
+  --insulin-additional-basal: var(--basal);
+
+  /* Carbohydrates. Fills; --entry-carbs is the text grade. */
+  --carbs: oklch(0.769 0.188 70.08);
+  --carbs-on-board: oklch(62.447% 0.13042 69.605);
+
+  /* IOB (Insulin on Board) - for charts - should be more prominent than basal */
+  --iob-basal: rgba(30, 150, 252, 0.7);
+  --iob-bolus: rgba(30, 150, 252, 1);
+  --iob-temporary: rgba(45, 190, 175, 0.85);
+
+  /* Pump Mode States */
+  --pump-mode-automatic: oklch(0.6 0.118 184.704); /* Green - full automation */
+  --pump-mode-limited: oklch(
+    0.7 0.12 220
+  ); /* Light blue - partial automation */
+  --pump-mode-manual: oklch(0.6 0.03 270); /* Gray - open loop */
+  --pump-mode-boost: oklch(0.7 0.2 50); /* Orange - aggressive delivery */
+  --pump-mode-ease-off: oklch(
+    0.65 0.15 100
+  ); /* Yellow-green - reduced delivery */
+  --pump-mode-sleep: oklch(0.5 0.1 280); /* Purple - sleep mode */
+  --pump-mode-exercise: oklch(0.65 0.18 140); /* Teal - activity mode */
+  --pump-mode-suspended: oklch(
+    0.6 0.22 30
+  ); /* Red-orange - insulin suspended */
+  --pump-mode-off: oklch(0.4 0.05 270); /* Dark gray - pump off */
+  --pump-mode-liberty: oklch(0.65 0.13 200); /* Cyan - liberty mode */
+
+  /* System Event Severity */
+  --system-event-alarm: oklch(0.577 0.245 27.325); /* Red - critical alarm */
+  --system-event-hazard: oklch(0.646 0.222 41.116); /* Orange - hazard */
+  --system-event-warning: oklch(0.769 0.188 70.08); /* Yellow - warning */
+  --system-event-info: oklch(0.6 0.118 184.704); /* Green - informational */
+
+  /* Health Overlays */
+  --heart-rate: oklch(0.6 0.2 25);
+  --steps: oklch(0.6 0.15 300);
+  /* Sleep, as hours slept and sleep sessions: the hue the sleep report's lanes give deep sleep
+     ([data-lane] in @nocturne/ui's theme.css), so sleep reads the same everywhere. */
+  --activity-sleep: var(--pump-mode-sleep);
+}
+
+@media not print {
+.dark {
+  /* Insulin Types - Dark Mode - need higher opacity for visibility. Scheduled basal
+     recedes toward the page here, so its pale step is darker, not lighter. */
+  --insulin-basal: oklch(0.75 0.134 248.6 / 0.35);
+  --insulin-temp-basal: oklch(0.75 0.134 248.6 / 0.9);
+  --insulin-manual-temp-basal: rgba(30, 150, 252, 0.9);
+  --insulin-scheduled-basal: oklch(0.52 0.07 248.6);
+
+  /* IOB - Dark Mode - more saturated for contrast */
+  --iob-basal: rgba(60, 160, 255, 0.8);
+  --iob-bolus: rgba(30, 150, 252, 1);
+  --iob-temporary: rgba(60, 215, 200, 0.9);
+}
+}
+
+/* Tailwind theme integration */
+@theme inline {
+  /* Glucose Levels */
+  --color-glucose-in-range: var(--glucose-in-range);
+  --color-glucose-tight-range: var(--glucose-tight-range);
+  --color-glucose-low: var(--glucose-low);
+  --color-glucose-very-low: var(--glucose-very-low);
+  --color-glucose-high: var(--glucose-high);
+  --color-glucose-very-high: var(--glucose-very-high);
+  --color-glucose-very-low-foreground: var(--glucose-very-low-foreground);
+  --color-glucose-low-foreground: var(--glucose-low-foreground);
+  --color-glucose-in-range-foreground: var(--glucose-in-range-foreground);
+  --color-glucose-high-foreground: var(--glucose-high-foreground);
+  --color-glucose-very-high-foreground: var(--glucose-very-high-foreground);
+
+  /* OpenAPS Prediction Lines */
+  --color-pred-iob: var(--pred-iob);
+  --color-pred-cob: var(--pred-cob);
+  --color-pred-acob: var(--pred-acob);
+  --color-pred-zt: var(--pred-zt);
+  --color-pred-uam: var(--pred-uam);
+  --color-pred-main: var(--pred-main);
+
+  /* Insulin Types */
+  --color-basal: var(--basal);
+  --color-insulin: var(--insulin);
+  --color-insulin-bolus: var(--insulin-bolus);
+  --color-insulin-basal: var(--insulin-basal);
+  --color-insulin-temp-basal: var(--insulin-temp-basal);
+  --color-insulin-manual-temp-basal: var(--insulin-manual-temp-basal);
+  --color-insulin-scheduled-basal: var(--insulin-scheduled-basal);
+  --color-insulin-additional-basal: var(--insulin-additional-basal);
+
+  /* Carbohydrates */
+  --color-carbs: var(--carbs);
+  --color-carbs-on-board: var(--carbs-on-board);
+
+  /* IOB */
+  --color-iob-basal: var(--iob-basal);
+  --color-iob-bolus: var(--iob-bolus);
+  --color-iob-temporary: var(--iob-temporary);
+
+  /* Health overlays */
+  --color-heart-rate: var(--heart-rate);
+  --color-activity-sleep: var(--activity-sleep);
+
+  /* Pump modes */
+  --color-pump-mode-automatic: var(--pump-mode-automatic);
+  --color-pump-mode-limited: var(--pump-mode-limited);
+  --color-pump-mode-manual: var(--pump-mode-manual);
+  --color-pump-mode-boost: var(--pump-mode-boost);
+  --color-pump-mode-ease-off: var(--pump-mode-ease-off);
+  --color-pump-mode-sleep: var(--pump-mode-sleep);
+  --color-pump-mode-exercise: var(--pump-mode-exercise);
+  --color-pump-mode-suspended: var(--pump-mode-suspended);
+  --color-pump-mode-off: var(--pump-mode-off);
+  --color-pump-mode-liberty: var(--pump-mode-liberty);
+}

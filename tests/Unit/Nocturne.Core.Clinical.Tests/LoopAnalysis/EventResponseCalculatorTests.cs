@@ -38,13 +38,18 @@ public class EventResponseCalculatorTests
         bool requireCorroboration = false,
         long? from = null,
         long? to = null,
-        long? now = null)
+        long? now = null,
+        IReadOnlyDictionary<long, IReadOnlyList<MealFood>>? mealFoods = null,
+        bool includeTraces = false,
+        IReadOnlyList<long>? siteChanges = null,
+        IReadOnlyList<MillsInterval>? sleep = null)
     {
         var definition = new EventResponseDefinition
         {
             Cohorts = [.. cohorts],
             IsolatedOnly = isolatedOnly,
             RequireCorroboration = requireCorroboration,
+            IncludeTraces = includeTraces,
         };
         var inputs = new EventResponseInputs
         {
@@ -58,7 +63,10 @@ public class EventResponseCalculatorTests
             },
             Sources = sources ?? new LoopAnalysisMaskSources(),
             SensorStarts = sensorStarts ?? [],
+            SiteChanges = siteChanges ?? [],
+            SleepSessions = sleep ?? [],
             Now = now ?? long.MaxValue,
+            MealFoods = mealFoods ?? new Dictionary<long, IReadOnlyList<MealFood>>(),
         };
         var start = from ?? From;
         var end = to ?? To;
@@ -92,6 +100,108 @@ public class EventResponseCalculatorTests
         range.Cohorts.Single().Events.Should().Be(1);
         range.Cohorts.Single().Anchors.Should().Be(1);
         range.Events.Should().ContainSingle().Which.Time.Should().Be("08:00");
+    }
+
+    [Fact]
+    public void AFoodFilter_CountsMealsWithAMatchingRecord_AndCountsCarbsOnlyMealsApart()
+    {
+        var pasta = Guid.NewGuid();
+        var rice = Guid.NewGuid();
+        var withPasta = Local(2024, 6, 11, 12);
+        var withRice = Local(2024, 6, 12, 12);
+        var carbsOnly = Local(2024, 6, 13, 12);
+        var uncategorised = Local(2024, 6, 14, 12);
+        var foods = new Dictionary<long, IReadOnlyList<MealFood>>
+        {
+            [withPasta] = [new MealFood(pasta, "Pasta"), new MealFood(null, null)],
+            [withRice] = [new MealFood(rice, "Grains")],
+            [uncategorised] = [new MealFood(null, null)],
+        };
+        CarbEvent[] carbs = [new(withPasta, 60), new(withRice, 50), new(carbsOnly, 40), new(uncategorised, 30)];
+
+        var byId = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [pasta] }],
+            glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+        var byCategory = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodCategory = " grains " }],
+            glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+        var both = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [pasta], FoodCategory = "Grains" }],
+            glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+        var unfiltered = Calculate([Cohort(1)], glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+
+        // A record of unspecified carbs names no food, so that meal is counted as carbs only.
+        byId.Events.Should().Be(1);
+        byId.Anchors.Should().Be(1);
+        byId.MealsWithFoodRecord.Should().Be(2);
+        byId.MealsWithoutFoodRecord.Should().Be(2);
+        byCategory.Events.Should().Be(1);
+        byCategory.MealsWithFoodRecord.Should().Be(2);
+        byCategory.MealsWithoutFoodRecord.Should().Be(2);
+        both.Events.Should().Be(0);
+        unfiltered.Events.Should().Be(4);
+        unfiltered.MealsWithFoodRecord.Should().Be(0);
+        unfiltered.MealsWithoutFoodRecord.Should().Be(0);
+    }
+
+    [Fact]
+    public void AWithheldFoodFilter_CountsNoEvents_NeverEveryMeal()
+    {
+        var lunch = Local(2024, 6, 11, 12);
+
+        var cohort = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodFilterWithheld = true }],
+            glucose: Flat(120), carbs: [new(lunch, 60)]).Cohorts.Single();
+
+        cohort.Events.Should().Be(0);
+        cohort.Anchors.Should().Be(0);
+        cohort.MealsWithFoodRecord.Should().Be(0);
+        cohort.MealsWithoutFoodRecord.Should().Be(0);
+    }
+
+    [Fact]
+    public void AFoodFilter_CountsOnlyMealsThatPassTheOtherFilters()
+    {
+        var pasta = Guid.NewGuid();
+        var lunch = Local(2024, 6, 11, 12);
+        var dinner = Local(2024, 6, 11, 19);
+        var foods = new Dictionary<long, IReadOnlyList<MealFood>> { [lunch] = [new MealFood(pasta, "Pasta")] };
+
+        var cohort = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FromMinute = 11 * 60, ToMinute = 14 * 60, FoodIds = [pasta] }],
+            glucose: Flat(120), carbs: [new(lunch, 60), new(dinner, 40)], mealFoods: foods).Cohorts.Single();
+
+        cohort.Events.Should().Be(1);
+        cohort.MealsWithFoodRecord.Should().Be(1);
+        cohort.MealsWithoutFoodRecord.Should().Be(0);
+    }
+
+    [Fact]
+    public void ADayOfWeekFilter_KeepsAnchorsOnThoseLocalDays()
+    {
+        // 2024-06-10 is a Monday in Sydney; 23:30 Monday local is still Monday 13:30 UTC.
+        var monday = Local(2024, 6, 10, 23, 30);
+        var tuesday = Local(2024, 6, 11, 8);
+        var saturday = Local(2024, 6, 15, 8);
+
+        var range = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, DaysOfWeek = [DayOfWeek.Monday, DayOfWeek.Saturday] }],
+            glucose: Flat(120), carbs: [new(monday, 30), new(tuesday, 30), new(saturday, 30)]);
+
+        range.Cohorts.Single().Events.Should().Be(2);
+        range.Events.Select(e => e.Date).Should().Equal("2024-06-10", "2024-06-15");
+    }
+
+    [Fact]
+    public void EachEventsGlucoseTrace_IsKeptOnlyWhenAsked()
+    {
+        var meal = Local(2024, 6, 12, 8);
+
+        var plain = Calculate([Cohort(1, from: 0, to: 1439)], glucose: Flat(120), carbs: [new(meal, 30)]);
+        var traced = Calculate([Cohort(1, from: 0, to: 1439)], glucose: Flat(120), carbs: [new(meal, 30)], includeTraces: true);
+
+        plain.Events.Single().GlucoseTrace.Should().BeEmpty();
+        traced.Events.Single().GlucoseTrace.Should().HaveCount(72).And.Contain(120);
     }
 
     [Fact]
@@ -350,7 +460,7 @@ public class EventResponseCalculatorTests
     [InlineData(true)]
     public void AnUnansweredRiseInAMealsWindow_TakesItsGramsPerUnitWhateverCorroborationIsAskedFor(bool requireCorroboration)
     {
-        // Lunch at 12:00 with its own climb, then a climb at 15:00 nobody logged and the loop did
+        // Lunch at 12:00 with its own climb, then a climb at 07:00 nobody logged and the loop did
         // not answer: a second intake inside lunch's window.
         var lunch = Local(2024, 6, 11, 12, 0);
         double Shape(long t) => ((t - lunch) / (double)Minute) switch
@@ -375,6 +485,54 @@ public class EventResponseCalculatorTests
         cohort.GramsPerUnitNotIsolated.Should().Be(1, "the climb at 15:00 is a second intake");
         range.Events.Single().Metrics.GramsPerUnit.Should().BeNull();
     }
+
+    [Theory]
+    [MemberData(nameof(EveryAnchor))]
+    public void CorroborationChangesOnlyTheAnchorsThatReadIt(EventAnchorKind anchor)
+    {
+        // Each day: a low at 03:00 treated with carbs, a climb at 07:00 nobody logged and the loop did not answer,
+        // lunch with its climb, and a correction at 19:00; with a sensor start, a site change and nights of sleep, so
+        // every anchor with a source has events.
+        double Shape(long t)
+        {
+            var minute = (t - From) % Day / (double)Minute;
+            return minute switch
+            {
+                >= 180 and < 240 => 60,
+                >= 720 and <= 750 => 110 + 2 * (minute - 720),
+                > 750 and <= 840 => 170 - (minute - 750) * 60 / 90,
+                >= 420 and < 450 => 110 + 3 * (minute - 420),
+                >= 450 and < 540 => 200 - (minute - 450),
+                _ => 110,
+            };
+        }
+        var days = Enumerable.Range(0, 7).Select(d => From + d * Day).ToList();
+        EventResponseRange Run(bool corroborate) => Calculate(
+            [Cohort(1, anchor)],
+            glucose: Readings(From - 12 * Hour, To + 12 * Hour, Shape),
+            carbs: [.. days.SelectMany(d => new CarbEvent[] { new(d + 12 * Hour, 60), new(d + 3 * Hour + 20 * Minute, 15) })],
+            doses: [.. days.SelectMany(d => new InsulinDose[] { new(d + 12 * Hour, 4, false), new(d + 19 * Hour, 1, false) })],
+            delivered: [new(From - Day, To + Day, 1.0, BasalDeliveryOrigin.Algorithm)],
+            scheduled: [new(From - Day, To + Day, 1.0)],
+            sensorStarts: [From + Day + 9 * Hour],
+            siteChanges: [From + 2 * Day + 9 * Hour],
+            sleep: [.. days.Select(d => new MillsInterval(d + 22 * Hour, d + 30 * Hour))],
+            requireCorroboration: corroborate);
+
+        var plain = Run(false);
+        var corroborated = Run(true);
+
+        if (EventAnchors.ReadsCorroboration(anchor))
+            corroborated.Cohorts.Single().Events.Should().BeLessThan(plain.Cohorts.Single().Events);
+        else
+        {
+            if (anchor is not (EventAnchorKind.ExerciseStart or EventAnchorKind.OverrideStart or EventAnchorKind.TemporaryTargetStart))
+                plain.Events.Should().NotBeEmpty("the fixture has events of every anchor it has a source for");
+            corroborated.Events.Select(e => e.Time).Should().Equal(plain.Events.Select(e => e.Time));
+        }
+    }
+
+    public static TheoryData<EventAnchorKind> EveryAnchor() => [.. Enum.GetValues<EventAnchorKind>()];
 
     [Fact]
     public void AFastUnloggedSnackBesideALoggedMeal_TakesTheMealsGramsPerUnit()
@@ -479,6 +637,13 @@ public class EventResponseCalculatorTests
         { EventAnchorKind.ExerciseStart, EventResponseKind.Fall },
         { EventAnchorKind.OverrideStart, EventResponseKind.Fall },
         { EventAnchorKind.TemporaryTargetStart, EventResponseKind.Fall },
+        { EventAnchorKind.LowStart, EventResponseKind.Fall },
+        { EventAnchorKind.HighStart, EventResponseKind.Rise },
+        { EventAnchorKind.SiteChange, EventResponseKind.Rise },
+        { EventAnchorKind.SleepStart, EventResponseKind.Rise },
+        { EventAnchorKind.Wake, EventResponseKind.Rise },
+        { EventAnchorKind.LowTreatment, EventResponseKind.Rise },
+        { EventAnchorKind.AnyBolus, EventResponseKind.Fall },
     };
 
     [Fact]
@@ -495,16 +660,24 @@ public class EventResponseCalculatorTests
 
         var range = Calculate(
             [Cohort(1, anchor)],
-            glucose: Readings(From, To, t => t <= at + 25 * Minute ? 120 : Math.Min(200, 120 + 3 * (t - at - 25 * Minute) / (double)Minute)),
-            carbs: anchor == EventAnchorKind.Meal ? [new(at, 40)] : [],
-            doses: anchor == EventAnchorKind.CorrectionBolus ? [new(at, 2, false)] : [],
+            glucose: Readings(From, To, anchor switch
+            {
+                EventAnchorKind.LowStart => t => t >= at && t < at + 30 * Minute ? 60 : 120,
+                EventAnchorKind.LowTreatment => t => t >= at - 20 * Minute && t < at + 20 * Minute ? 60 : 120,
+                EventAnchorKind.HighStart => t => t >= at && t < at + 2 * Hour ? 200 : 120,
+                _ => t => t <= at + 25 * Minute ? 120 : Math.Min(200, 120 + 3 * (t - at - 25 * Minute) / (double)Minute),
+            }),
+            carbs: anchor is EventAnchorKind.Meal or EventAnchorKind.LowTreatment ? [new(at, 15)] : [],
+            doses: anchor is EventAnchorKind.CorrectionBolus or EventAnchorKind.AnyBolus ? [new(at, 2, false)] : [],
             sources: new LoopAnalysisMaskSources
             {
                 Exercise = anchor == EventAnchorKind.ExerciseStart ? [new(at, at + Hour)] : [],
                 Overrides = anchor == EventAnchorKind.OverrideStart ? [new(at, at + Hour)] : [],
                 TemporaryTargets = anchor == EventAnchorKind.TemporaryTargetStart ? [new(at, at + Hour)] : [],
             },
-            sensorStarts: anchor == EventAnchorKind.SensorStart ? [at] : []);
+            sensorStarts: anchor == EventAnchorKind.SensorStart ? [at] : [],
+            siteChanges: anchor == EventAnchorKind.SiteChange ? [at] : [],
+            sleep: anchor == EventAnchorKind.SleepStart ? [new(at, at + 7 * Hour)] : anchor == EventAnchorKind.Wake ? [new(at - 7 * Hour, at)] : []);
 
         EventAnchors.ResponseOf(anchor).Should().Be(expected);
         var cohort = range.Cohorts.Single();

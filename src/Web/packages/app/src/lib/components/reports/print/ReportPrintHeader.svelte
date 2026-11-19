@@ -4,6 +4,7 @@
   page number in the `@page` footer, so a loose sheet can still be placed.
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import { getReportSubject } from "#lib/api/reports.remote.js";
   import { formatLocale, formatMediumDateRange, formatMediumDateTime } from "#lib/utils/formatting.js";
   import { dayCount, endOfDay, startOfDay } from "#lib/utils/date-range.js";
@@ -41,6 +42,14 @@
   });
 
   let printedAt = $state(new Date());
+  /**
+   * The footer names the subject, which the server renders before its query resolves, so the rules are
+   * written only in the browser, where they are printed: written on the server they differ on hydration.
+   */
+  let hydrated = $state(false);
+  onMount(() => {
+    hydrated = true;
+  });
   $effect(() => {
     const stamp = () => (printedAt = new Date());
     window.addEventListener("beforeprint", stamp);
@@ -60,7 +69,7 @@
 
 <svelte:head>
   <!-- eslint-disable-next-line svelte/no-at-html-tags -- every interpolated value passes through cssString -->
-  {@html pageRules}
+  {#if hydrated}{@html pageRules}{/if}
 </svelte:head>
 
 {#snippet writeIn()}
@@ -69,7 +78,7 @@
 
 <header class="mb-4 hidden px-3 print:block">
   <div class="flex items-baseline justify-between gap-4 border-b-2 border-foreground pb-1">
-    <h1 class="text-lg font-bold text-foreground">{title}</h1>
+    <p class="text-lg font-bold text-foreground">{title}</p>
     <span class="text-xs font-medium text-muted-foreground">Nocturne</span>
   </div>
   <dl class="mt-2 grid grid-cols-[auto_1fr_auto_1fr] items-baseline gap-x-3 gap-y-1 text-xs">

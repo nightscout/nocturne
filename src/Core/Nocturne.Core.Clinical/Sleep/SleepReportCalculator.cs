@@ -139,14 +139,10 @@ public static class SleepReportCalculator
         var asleepAt = session.SleepLatencyMs.HasValue
             ? session.StartTime.AddMilliseconds(session.SleepLatencyMs.Value)
             : session.StartTime;
-        var readings = allGlucose
-            .Where(g => g.Timestamp >= asleepAt && g.Timestamp <= session.EndTime)
-            .Where(g => GlucoseStatistics.IsPlausibleReading(g.Mgdl))
-            .OrderBy(g => g.Mills)
-            .ToList();
+        var readings = allGlucose.Where(g => g.Timestamp >= asleepAt && g.Timestamp <= session.EndTime);
 
         var stageList = stages.ToList();
-        return GlucoseEpisodeDetector.Detect(readings, thresholds)
+        return GlucoseEpisodes.Find(readings, thresholds)
             .Where(episode => episode.BelowRange)
             .Select(episode => BuildHypoEvent(episode, stageList))
             .ToList();

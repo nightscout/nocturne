@@ -71,6 +71,18 @@ public class SystemEventRepository : ISystemEventRepository
         return entities.Select(SystemEventMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SystemEvent>> GetInRangeAsync(long from, long to, int limit, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.SystemEvents.AsNoTracking()
+            .Where(e => e.Mills >= from && e.Mills < to)
+            .OrderBy(e => e.Mills).ThenBy(e => e.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return [.. entities.Select(SystemEventMapper.ToDomainModel)];
+    }
+
     /// <summary>
     /// Get a specific system event by ID
     /// </summary>

@@ -70,6 +70,9 @@ public static class ShareRlsPolicy
     /// with <paramref name="parent"/>.</param>
     /// <param name="openSpanBound">With <paramref name="spanEndColumn"/>, how long a still-open span
     /// stays visible, counted from its start column.</param>
+    /// <param name="spanEarlyEndColumn">With <paramref name="spanEndColumn"/>, a second column that can end the span
+    /// first: the span ends at the earlier of the two that is set, so it stays visible while each is null or inside
+    /// the last 24 hours.</param>
     public static string BuildPolicySql(
         string table,
         string? governingScope,
@@ -79,8 +82,16 @@ public static class ShareRlsPolicy
         ParentRecency? parent = null,
         string? parentRecencyColumn = null,
         string? parentSpanEndColumn = null,
-        OpenSpanBound? openSpanBound = null)
+        OpenSpanBound? openSpanBound = null,
+        string? spanEarlyEndColumn = null)
     {
+        if (spanEarlyEndColumn is not null)
+        {
+            if (spanEndColumn is null || openSpanBound is not null)
+                throw new ArgumentException("An early end column goes with a span end column and no open-span bound.", nameof(spanEarlyEndColumn));
+            SqlIdentifier.Require(spanEarlyEndColumn, nameof(spanEarlyEndColumn));
+        }
+
         if (openSpanBound is not null)
         {
             if (spanEndColumn is null)
@@ -131,10 +142,13 @@ public static class ShareRlsPolicy
             ? $"\"{recencyColumn}\" >= {windowStart}"
             : spanEndColumn is null
                 ? null
-                : openSpanBound is null
-                    ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - {ClampInterval})"
-                    : $"((\"{spanEndColumn}\" IS NULL AND \"{openSpanBound.StartColumn}\" >= now() - interval '{openSpanBound.MaxOpenDays} days')" +
-                      $" OR \"{spanEndColumn}\" >= now() - {ClampInterval})";
+                : spanEarlyEndColumn is not null
+                    ? $"((\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - {ClampInterval})" +
+                      $" AND (\"{spanEarlyEndColumn}\" IS NULL OR \"{spanEarlyEndColumn}\" >= now() - {ClampInterval}))"
+                    : openSpanBound is null
+                        ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - {ClampInterval})"
+                        : $"((\"{spanEndColumn}\" IS NULL AND \"{openSpanBound.StartColumn}\" >= now() - interval '{openSpanBound.MaxOpenDays} days')" +
+                          $" OR \"{spanEndColumn}\" >= now() - {ClampInterval})";
 
         // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
         // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.

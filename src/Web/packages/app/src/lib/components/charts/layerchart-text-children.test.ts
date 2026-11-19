@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const roots = [
 	fileURLToPath(new URL("../../../../src", import.meta.url)),
-	fileURLToPath(new URL("../../../../../glucose-chart/src", import.meta.url)),
+	fileURLToPath(new URL("../../../../../charts/src", import.meta.url)),
 ];
 
 function svelteFiles(dir: string): string[] {

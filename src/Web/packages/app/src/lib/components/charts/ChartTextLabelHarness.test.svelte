@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { appChartContext } from "#lib/components/dashboard/glucose-chart/app-chart-context.svelte.js";
+  import { glucoseChartLabels } from "#lib/components/dashboard/glucose-chart/chart-labels.svelte.js";
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
   import BasalRateTrack from "./BasalRateTrack.svelte";
-  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import PredictionVisualizations from "#lib/components/dashboard/PredictionVisualizations.svelte";
-  import { partialEngine, setGlucoseChartContext } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
-  import { computeTrackLayout } from "#lib/components/dashboard/glucose-chart/engine/track-layout.js";
-  import type { GlucoseChartContext } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
+  import { IobCobTrack } from "@nocturne/charts";
+  import { PredictionVisualizations } from "@nocturne/charts";
+  import { partialView, setGlucoseChartContext } from "@nocturne/charts";
+  import { computeTrackLayout } from "@nocturne/charts/core";
   import type { PredictionData } from "#lib/api/predictions.remote.js";
 
   interface Props {
@@ -40,7 +41,7 @@
     value: 1 + (i % 3) * 0.5,
   }));
 
-  const engineStub = partialEngine({
+  const engineStub = partialView({
     get iobData() {
       return series;
     },
@@ -66,14 +67,14 @@
     ),
   );
 
-  const ctx: GlucoseChartContext = {
-    get engine() {
+  const ctx = appChartContext({
+    get view() {
       return engineStub;
     },
     get layout() {
       return layout;
     },
-  };
+  });
   setGlucoseChartContext(ctx);
 
   const xDomain = $derived<[Date, Date]>([at(0), at(5)]);
@@ -118,6 +119,7 @@
           glucoseTrackTop={20}
           chartXDomain={{ from: at(0), to: at(5) }}
           glucoseData={series.map((d) => ({ time: d.time, sgv: 120 }))}
+          labels={glucoseChartLabels()}
         />
       {/if}
     </Svg>

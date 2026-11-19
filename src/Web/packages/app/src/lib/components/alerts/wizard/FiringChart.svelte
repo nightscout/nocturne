@@ -5,11 +5,7 @@
   } from "#lib/api/generated/nocturne-api-client.js";
   import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import BasalTrack from "#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
-  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import ChartTooltip from "#lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, ChartTooltip } from "@nocturne/charts";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import ReplayOverlay from "../ReplayOverlay.svelte";
   import { legendForRules } from "../replaySeries";

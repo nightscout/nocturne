@@ -11,6 +11,7 @@ public class NocturneScalarThemeTests
     [Theory]
     [InlineData(NocturneScalarTheme.ThemeResource)]
     [InlineData(NocturneScalarTheme.NocturneThemeResource)]
+    [InlineData(NocturneScalarTheme.ChartsThemeResource)]
     public void Theme_source_is_embedded(string resourceName)
     {
         typeof(NocturneScalarTheme).Assembly.GetManifestResourceNames()
@@ -18,12 +19,13 @@ public class NocturneScalarThemeTests
     }
 
     [Fact]
-    public void Build_carries_both_theme_files_adapted_for_scalar()
+    public void Build_carries_the_theme_files_adapted_for_scalar()
     {
         var css = NocturneScalarTheme.Build();
 
         css.Should().Contain("--radius:", "theme.css declares it");
         css.Should().Contain("--status-normal:", "nocturne-theme.css declares it");
+        css.Should().Contain("--system-event-warning:", "the charts theme declares it, and Scalar's yellow reads it");
         css.Should().Contain(".dark-mode", "Nocturne's .dark blocks are mirrored for Scalar's switch");
         css.Should().NotContain("@import", "Tailwind directives are stripped");
     }

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
-  import { BASAL_BANDS } from "./percentile-band-colors";
+  import { BASAL_BANDS } from "@nocturne/charts/core";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { EmptyState } from "#lib/components/shared/index.js";
 

@@ -48,13 +48,11 @@ import { flushSync } from "svelte";
 import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 import { getChartData } from "#lib/api/chart-data.remote.js";
 import { getPredictions, getPredictionStatus } from "#lib/api/predictions.remote.js";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 import type { Entry } from "#lib/websocket/types.js";
 import Harness from "./chart-data-engine-harness.test.svelte";
-import type {
-  ChartDataEngine,
-  ChartDataEngineOptions,
-} from "./chart-data-engine.svelte";
+import type { ChartDataView } from "@nocturne/charts";
+import type { ChartDataEngineOptions } from "./chart-data-engine.svelte";
 
 // The server half of the merge is deliberately empty, so every point the engine
 // produces came from the realtime store and the window under test is the only
@@ -85,12 +83,12 @@ const entries = [
 ];
 
 async function glucoseOf(options: ChartDataEngineOptions) {
-  let engine!: ChartDataEngine;
+  let engine!: ChartDataView;
   render(Harness, {
     props: {
       entries,
       options,
-      onengine: (e: ChartDataEngine) => (engine = e),
+      onengine: (e: ChartDataView) => (engine = e),
     },
   });
 
@@ -127,7 +125,7 @@ describe("chart data engine — realtime merge window", () => {
     const from = Date.now() - 5 * HOUR;
     const to = Date.now() - 1 * HOUR;
 
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     render(Harness, {
       props: {
         entries: [
@@ -140,7 +138,7 @@ describe("chart data engine — realtime merge window", () => {
           enablePredictions: false,
           dateRange: { from: new Date(from), to: new Date(to) },
         },
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
       },
     });
     await vi.waitFor(() => expect(engine.serverChartData).not.toBeNull());
@@ -163,13 +161,13 @@ describe("chart data engine — realtime glucose source", () => {
     options: ChartDataEngineOptions = sidebar,
     onstore?: (store: RealtimeStore) => void
   ) {
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     vi.mocked(getChartData).mockClear();
     render(Harness, {
       props: {
         entries,
         options,
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
         onstore,
       },
     });
@@ -303,13 +301,13 @@ describe("chart data engine — predictions", () => {
         return result;
       }) as never);
 
-      let engine!: ChartDataEngine;
+      let engine!: ChartDataView;
       let store!: RealtimeStore;
       render(Harness, {
         props: {
           entries: [],
           options: { focusHours: 3, initialChartData: withReading(6) },
-          onengine: (e: ChartDataEngine) => (engine = e),
+          onengine: (e: ChartDataView) => (engine = e),
           onstore: (s: RealtimeStore) => {
             store = s;
             s.isReady = false;
@@ -355,12 +353,12 @@ describe("chart data engine — refused fetch", () => {
     }
     vi.mocked(getChartData).mockRejectedValueOnce(refused);
 
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     render(Harness, {
       props: {
         entries: [],
         options: { focusHours: 3, enablePredictions: false },
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
       },
     });
 
@@ -378,12 +376,12 @@ describe("chart data engine — refused fetch", () => {
     }
     vi.mocked(getChartData).mockRejectedValueOnce(refused);
 
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     render(Harness, {
       props: {
         entries: [],
         options: { focusHours: 3, enablePredictions: false },
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
       },
     });
 
@@ -424,13 +422,13 @@ describe("chart data engine — SSR data refresh", () => {
     vi.useFakeTimers();
     vi.mocked(getChartData).mockReset();
     vi.mocked(getChartData).mockImplementation((() => resolving(boluslike(1))) as never);
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     let store!: Store;
     render(Harness, {
       props: {
         entries: [],
         options,
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
         // The store is a process-wide singleton, so reset what earlier tests left on it
         // before the engine is created.
         onstore: (s: Store) => {

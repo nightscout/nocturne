@@ -12,7 +12,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { SLEEP_COMPOSITION_SEGMENTS, laneTexture } from "#lib/utils/sleep-stages.js";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import { localDayStart } from "#lib/utils/timezone.js";
   import { indexBy } from "#lib/utils/collections.js";

@@ -120,6 +120,11 @@ report name and the period.
 - **[Sleep & Overnight](/docs/reports/sleep)**: how do I sleep, and what does my
   glucose do overnight?
 
+### Your own reports
+
+- **[Custom reports](/docs/reports/custom)**: a report that you make from a
+  question, with the data and the charts that you choose.
+
 ## Good to know
 
 - **Only the reports you can read.** On a public share link, or as a member

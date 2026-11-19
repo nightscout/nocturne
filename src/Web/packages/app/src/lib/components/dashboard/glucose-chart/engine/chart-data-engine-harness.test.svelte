@@ -5,15 +5,13 @@
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import type { Entry } from "#lib/websocket/types.js";
   import { createChartDataEngine } from "./chart-data-engine.svelte";
-  import type {
-    ChartDataEngine,
-    ChartDataEngineOptions,
-  } from "./chart-data-engine.svelte";
+  import type { ChartDataView } from "@nocturne/charts";
+  import type { ChartDataEngineOptions } from "./chart-data-engine.svelte";
 
   interface Props {
     entries: Entry[];
     options: ChartDataEngineOptions;
-    onengine: (engine: ChartDataEngine) => void;
+    onengine: (engine: ChartDataView) => void;
     onstore?: (store: ReturnType<typeof createRealtimeStore>) => void;
   }
 

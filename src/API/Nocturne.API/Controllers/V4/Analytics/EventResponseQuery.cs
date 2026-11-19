@@ -36,6 +36,24 @@ public sealed class EventResponseQuery
     [FromQuery(Name = "maxGrams2")] public double? MaxGrams2 { get; set; }
     [FromQuery(Name = "maxGrams3")] public double? MaxGrams3 { get; set; }
 
+    /// <summary>
+    /// Foods a meal of cohort 1 must carry a food record of, any one of them; for a meal cohort only.
+    /// A meal with only carbs, no food record, is counted apart and never matched.
+    /// </summary>
+    [FromQuery(Name = "foodIds1")] public Guid[]? FoodIds1 { get; set; }
+    [FromQuery(Name = "foodIds2")] public Guid[]? FoodIds2 { get; set; }
+    [FromQuery(Name = "foodIds3")] public Guid[]? FoodIds3 { get; set; }
+
+    /// <summary>The food category a meal of cohort 1 must carry a food record of; for a meal cohort only. Ignored without food.read.</summary>
+    [FromQuery(Name = "foodCategory1"), StringLength(EventResponseDefinition.MaxFoodCategoryLength)] public string? FoodCategory1 { get; set; }
+    [FromQuery(Name = "foodCategory2"), StringLength(EventResponseDefinition.MaxFoodCategoryLength)] public string? FoodCategory2 { get; set; }
+    [FromQuery(Name = "foodCategory3"), StringLength(EventResponseDefinition.MaxFoodCategoryLength)] public string? FoodCategory3 { get; set; }
+
+    /// <summary>Local weekdays cohort 1's anchors must fall on; every day when empty.</summary>
+    [FromQuery(Name = "dayOfWeek1")] public DayOfWeek[]? DayOfWeek1 { get; set; }
+    [FromQuery(Name = "dayOfWeek2")] public DayOfWeek[]? DayOfWeek2 { get; set; }
+    [FromQuery(Name = "dayOfWeek3")] public DayOfWeek[]? DayOfWeek3 { get; set; }
+
     /// <summary>Drop events with another meal, correction bolus or rise in their window; ignored without treatments.read.</summary>
     [FromQuery(Name = "isolatedOnly")] public bool IsolatedOnly { get; set; }
 
@@ -59,11 +77,20 @@ public sealed class EventResponseQuery
     private int AppliedMinutesAfter =>
         MinutesAfter is { } m && EventResponseDefinition.MinutesAfterChoices.Contains(m) ? m : EventResponseDefinition.DefaultMinutesAfter;
 
-    private IEnumerable<(int Cohort, EventAnchorKind? Anchor, int? From, int? To, double? MinGrams, double? MaxGrams)> Cohorts() =>
+    private sealed record CohortParameters(
+        int Cohort, EventAnchorKind? Anchor, int? From, int? To, double? MinGrams, double? MaxGrams,
+        Guid[]? FoodIds, string? FoodCategory, DayOfWeek[]? Days)
+    {
+        public bool HasFoods => FoodIds is { Length: > 0 } || !string.IsNullOrWhiteSpace(FoodCategory);
+
+        public bool HasFilter => (From ?? To ?? MinGrams ?? MaxGrams) is not null || HasFoods || Days is { Length: > 0 };
+    }
+
+    private IEnumerable<CohortParameters> Cohorts() =>
     [
-        (1, Anchor1, FromMinute1, ToMinute1, MinGrams1, MaxGrams1),
-        (2, Anchor2, FromMinute2, ToMinute2, MinGrams2, MaxGrams2),
-        (3, Anchor3, FromMinute3, ToMinute3, MinGrams3, MaxGrams3),
+        new(1, Anchor1, FromMinute1, ToMinute1, MinGrams1, MaxGrams1, FoodIds1, FoodCategory1, DayOfWeek1),
+        new(2, Anchor2, FromMinute2, ToMinute2, MinGrams2, MaxGrams2, FoodIds2, FoodCategory2, DayOfWeek2),
+        new(3, Anchor3, FromMinute3, ToMinute3, MinGrams3, MaxGrams3, FoodIds3, FoodCategory3, DayOfWeek3),
     ];
 
     /// <summary>The cohort's anchor: the one named, or every meal for cohort 1 when none is.</summary>
@@ -76,13 +103,18 @@ public sealed class EventResponseQuery
     /// </summary>
     public string? Problem()
     {
-        foreach (var (n, anchor, from, to, min, max) in Cohorts())
+        foreach (var c in Cohorts())
         {
-            var kind = KindOf(n, anchor);
-            if (kind is null && (from ?? to ?? min ?? max) is not null)
+            var n = c.Cohort;
+            var kind = KindOf(n, c.Anchor);
+            if (kind is null && c.HasFilter)
                 return $"Cohort {n}'s filters need anchor{n}.";
-            if ((min ?? max) is not null && kind != EventAnchorKind.Meal)
+            if ((c.MinGrams ?? c.MaxGrams) is not null && kind != EventAnchorKind.Meal)
                 return $"minGrams{n} and maxGrams{n} apply only to a meal cohort.";
+            if (c.HasFoods && kind != EventAnchorKind.Meal)
+                return $"foodIds{n} and foodCategory{n} apply only to a meal cohort.";
+            if (c.FoodIds is { Length: > EventResponseDefinition.MaxFoods })
+                return $"foodIds{n} names at most {EventResponseDefinition.MaxFoods} foods.";
         }
         return null;
     }
@@ -97,12 +129,12 @@ public sealed class EventResponseQuery
             yield return "minutesBefore";
         if (MinutesAfter is not null && AppliedMinutesAfter != MinutesAfter)
             yield return "minutesAfter";
-        foreach (var (n, _, _, _, min, max) in Cohorts())
+        foreach (var c in Cohorts())
         {
-            if (!IsGrams(min))
-                yield return $"minGrams{n}";
-            if (!IsGrams(max))
-                yield return $"maxGrams{n}";
+            if (!IsGrams(c.MinGrams))
+                yield return $"minGrams{c.Cohort}";
+            if (!IsGrams(c.MaxGrams))
+                yield return $"maxGrams{c.Cohort}";
         }
     }
 
@@ -135,6 +167,9 @@ public sealed class EventResponseQuery
                         ToMinute = allDay ? null : c.To,
                         MinGrams = swap ? c.MaxGrams : c.MinGrams,
                         MaxGrams = swap ? c.MinGrams : c.MaxGrams,
+                        FoodIds = c.FoodIds is { Length: > 0 } ids ? [.. ids.Distinct()] : null,
+                        FoodCategory = string.IsNullOrWhiteSpace(c.FoodCategory) ? null : c.FoodCategory.Trim(),
+                        DaysOfWeek = c.Days is { Length: > 0 } days ? [.. days.Distinct().Order()] : null,
                     };
                 }),
         ],

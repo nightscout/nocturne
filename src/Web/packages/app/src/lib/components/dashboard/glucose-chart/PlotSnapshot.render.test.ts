@@ -2,7 +2,7 @@ import type { ComponentProps } from "svelte";
 import { render } from "svelte/server";
 import { describe, expect, it } from "vitest";
 import PlotSnapshot from "./PlotSnapshot.svelte";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 
 type Props = ComponentProps<typeof PlotSnapshot>;
 

@@ -41,6 +41,10 @@ public class DailyProfileRange
 
     public List<DailyProfileSlot> Slots { get; set; } = [];
 
+    /// <summary>How the range's days fell under a day condition, where one kept only some of them. Not served.</summary>
+    [JsonIgnore]
+    public DaySelection? DaySelection { get; set; }
+
     /// <summary>Net loop correction delivered in each local hour of the day, in U, mean across days.</summary>
     public List<LoopAnalysisHourlyValue> HourlyNetLoopCorrection { get; set; } = [];
 

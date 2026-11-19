@@ -17,14 +17,14 @@
   import {
     distinctRangeStops,
     type GlucoseThresholds,
-  } from "#lib/utils/chart-colors.js";
+  } from "@nocturne/charts/core";
   import { glucoseRangePalette } from "#lib/stores/appearance-store.svelte.js";
   import {
     lineStopsFor,
     fillStopsFor,
     type AreaMode,
     type LineColorMode,
-  } from "./glucose-chart/utils/glucose-gradient-stops";
+  } from "@nocturne/charts/core";
 
   interface GlucosePoint {
     time: Date;

@@ -1,6 +1,6 @@
 import type { ScaleTime } from 'd3-scale';
 import type { ActogramDay as ServedActogramDay } from '#lib/api/index.js';
-import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
+import type { ChartThresholds } from '@nocturne/charts/core';
 import { formatShortDate } from '#lib/utils/formatting.js';
 import { localDayStart } from '#lib/utils/timezone.js';
 

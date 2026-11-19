@@ -8,6 +8,7 @@
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "#lib/api/generated/index.js";
   import { page } from "$app/state";
+  import { clearMemberStorage } from "#lib/stores/member-storage.js";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
   import { resolve } from "$app/paths";
@@ -42,11 +43,14 @@
   // Resolved once by the root layout; here it decides which sign-in methods can work at all.
   const tenantless = $derived(page.data.tenantless === true);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated. A session that ended while the browser was closed lands
+  // here, so once the server says nobody is signed in, what the browser kept for a member goes.
   $effect(() => {
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
       void goToReturnUrl(returnUrl, { replace: true });
+    } else if (currentAuth && !currentAuth.isAuthenticated && !currentAuth.unreadable) {
+      clearMemberStorage();
     }
   });
 </script>

@@ -34,8 +34,7 @@ public class LoopAnalysisController(
     TenantClockResolver tenantClock,
     TimeProvider timeProvider) : ControllerBase
 {
-    private static readonly DateOnly EarliestDate = new(1970, 1, 1);
-    private static readonly DateOnly LatestDate = new(2999, 12, 31);
+    private readonly LoopAnalysisRequestResolver _resolver = new(tenantClock, timeProvider);
 
     /// <summary>
     /// Every series in 288 local five-minute slots of the day: glucose, scheduled and delivered
@@ -177,10 +176,19 @@ public class LoopAnalysisController(
     [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(LoopAnalysisResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<LoopAnalysisResponse>> GetEnvelope(
+    public async Task<ActionResult<LoopAnalysisResponse>> GetEnvelope(
         [FromQuery] LoopAnalysisQuery query,
-        CancellationToken cancellationToken = default) =>
-        ServeAsync(query, (filter, _, ct) => EnvelopeOnlyAsync(new LoopAnalysisResponse(), filter, ct), cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var (invalid, request) = await TryResolveAsync(query, cancellationToken);
+        if (invalid is not null)
+            return invalid;
+
+        var response = new LoopAnalysisResponse();
+        if (request!.Zone is not null && (request.Filter ?? request.HistoryWindowFilter) is { } filter)
+            response = await EnvelopeOnlyAsync(response, filter, cancellationToken);
+        return Ok(LoopAnalysisReadScopeGuard.Redact(request.Fill(response), HttpContext.GetGrantedScopes()));
+    }
 
     /// <summary>
     /// Glucose, net loop correction, net insulin above schedule, IOB and COB aligned on up to three
@@ -239,8 +247,8 @@ public class LoopAnalysisController(
     }
 
     /// <summary>
-    /// Resolves <paramref name="query"/>, computes the page when the tenant has a zone, fills the
-    /// envelope and narrows the result to the caller.
+    /// Resolves <paramref name="query"/>, computes the page when there is a range to analyse, fills
+    /// the envelope and narrows the result to the caller.
     /// </summary>
     private async Task<ActionResult<T>> ServeAsync<T>(
         LoopAnalysisQuery query,
@@ -252,7 +260,7 @@ public class LoopAnalysisController(
         if (invalid is not null)
             return invalid;
 
-        var result = request!.Zone is { } zone ? await compute(request.Filter!, zone, ct) : new T();
+        var result = request!.Filter is { } filter && request.Zone is { } zone ? await compute(filter, zone, ct) : new T();
         return Ok(LoopAnalysisReadScopeGuard.Redact(request.Fill(result), HttpContext.GetGrantedScopes()));
     }
 
@@ -265,110 +273,23 @@ public class LoopAnalysisController(
         return response;
     }
 
-    /// <summary>A request resolved against the tenant clock and the caller.</summary>
-    /// <param name="Filter">Null when <see cref="Zone"/> is: without a zone the dates cannot be placed.</param>
-    /// <param name="Zone">The tenant's time zone; null when it has none to resolve.</param>
-    /// <param name="Reason">Why there is no zone; null when there is one.</param>
-    /// <param name="PrimaryRange">The range analysed; null without a zone.</param>
-    /// <param name="ComparisonRange">The range compared against; null without a zone, when none was asked for, and for a history-clamped caller.</param>
-    /// <param name="Masks">The masks left once those the caller may not use are dropped.</param>
-    /// <param name="IgnoredFilters">The query parameters the caller passed that were dropped or overridden.</param>
-    /// <param name="UnavailableFilters">The filters the caller's scopes do not allow.</param>
-    /// <param name="HistoryClamped">Whether the caller is history-clamped.</param>
-    private sealed record LoopAnalysisRequest(
-        LoopAnalysisFilter? Filter,
-        TimeZoneInfo? Zone,
-        TimeZoneUnavailableReason? Reason,
-        LoopAnalysisResolvedRange? PrimaryRange,
-        LoopAnalysisResolvedRange? ComparisonRange,
-        LoopAnalysisMasks Masks,
-        List<string> IgnoredFilters,
-        List<LoopAnalysisUnavailableFilter> UnavailableFilters,
-        bool HistoryClamped)
-    {
-        public T Fill<T>(T response) where T : LoopAnalysisResponse
-        {
-            response.HistoryClamped = HistoryClamped;
-            response.TimeZoneUnavailableReason = Reason;
-            response.PrimaryRange = PrimaryRange;
-            response.ComparisonRange = ComparisonRange;
-            response.AppliedFilters = Masks;
-            response.IgnoredFilters = IgnoredFilters;
-            response.UnavailableFilters = UnavailableFilters;
-            return response;
-        }
-    }
-
     /// <summary>
-    /// Validates the query, drops the masks the caller may not use
-    /// (<see cref="LoopAnalysisReadScopeGuard.NarrowFilter"/>) and resolves the local dates to
-    /// instants in the tenant zone (<see cref="LoopAnalysisRanges"/>). A history-clamped caller is
-    /// analysed over its last <see cref="HistoryClamp.Window"/> whatever dates it asked for, with
-    /// no comparison. Every resolved range ends after it starts and no later than now.
+    /// Validates the query and resolves it for the caller with <see cref="LoopAnalysisRequestResolver"/>.
     /// </summary>
     private async Task<(ObjectResult? Invalid, LoopAnalysisRequest? Request)> TryResolveAsync(
         LoopAnalysisQuery query, CancellationToken ct)
     {
-        if (OutOfRange(query.StartDate) || OutOfRange(query.EndDate))
-            return (BadRange("startDate and endDate must be dates between 1970 and 2999."), null);
-        if (query.EndDate < query.StartDate)
-            return (BadRange("endDate must not be before startDate."), null);
+        if (LoopAnalysisRequestResolver.Problem(query) is { } problem)
+            return (BadRange(problem), null);
 
-        var custom = query.Compare == LoopAnalysisComparison.Custom;
-        if (custom != (query.CompareStartDate.HasValue && query.CompareEndDate.HasValue)
-            || (!custom && (query.CompareStartDate.HasValue || query.CompareEndDate.HasValue)))
-            return (BadRange("compareStartDate and compareEndDate are given together, and only with compare=custom."), null);
-        if (query is { CompareStartDate: { } compareStart, CompareEndDate: { } compareEnd })
-        {
-            if (OutOfRange(compareStart) || OutOfRange(compareEnd))
-                return (BadRange("compareStartDate and compareEndDate must be dates between 1970 and 2999."), null);
-            if (compareEnd < compareStart)
-                return (BadRange("compareEndDate must not be before compareStartDate."), null);
-        }
-
-        var masks = query.ToMasks();
-        var passed = Request.Query.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var granted = HttpContext.GetGrantedScopes();
-        var ignored = LoopAnalysisReadScopeGuard.NarrowFilter(masks, granted);
-        var unavailable = LoopAnalysisReadScopeGuard.UnavailableFilters(granted);
-        var clamped = HttpContext.IsCallerHistoryClamped();
-        if (clamped)
-            ignored.AddRange(["startDate", "endDate", "compare", "compareStartDate", "compareEndDate"]);
-        ignored = [.. ignored.Where(passed.Contains)];
-
-        var (zone, reason) = await tenantClock.ResolveAsync(ct);
-        if (zone is null)
-            return (null, new LoopAnalysisRequest(null, null, reason, null, null, masks, ignored, unavailable, clamped));
-
-        var maxDays = V4ReadLimits.MaxAnalyticsSpanDays;
-        var now = timeProvider.GetUtcNow().UtcDateTime;
-        var primary = clamped
-            ? LoopAnalysisRanges.Clamped(now, HistoryClamp.Window, zone)
-            : LoopAnalysisRanges.Resolve(query.StartDate, query.EndDate, zone, maxDays, now);
-
-        var comparison = clamped ? null : query.Compare switch
-        {
-            LoopAnalysisComparison.Previous => LoopAnalysisRanges.Previous(primary, zone),
-            LoopAnalysisComparison.Custom => LoopAnalysisRanges.Resolve(
-                query.CompareStartDate!.Value, query.CompareEndDate!.Value, zone, maxDays, now),
-            _ => null,
-        };
-
-        var filter = new LoopAnalysisFilter
-        {
-            From = primary.From,
-            To = primary.To,
-            CompareFrom = comparison?.From,
-            CompareTo = comparison?.To,
-            Now = now,
-            Masks = masks,
-            ReadProfileNames = !LoopAnalysisReadScopeGuard.WithheldEnvelope(granted).Contains(LoopAnalysisSeries.ProfileNames),
-            HistoryVisibleFrom = clamped ? primary.From : null,
-        };
-        return (null, new LoopAnalysisRequest(filter, zone, null, primary, comparison, masks, ignored, unavailable, clamped));
+        var request = await _resolver.ResolveAsync(
+            query,
+            HttpContext.GetGrantedScopes(),
+            HttpContext.IsCallerHistoryClamped(),
+            Request.Query.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            ct);
+        return (null, request);
     }
-
-    private static bool OutOfRange(DateOnly date) => date < EarliestDate || date > LatestDate;
 
     private ObjectResult BadRange(string detail) => Problem(detail: detail, statusCode: 400, title: "Bad Request");
 }

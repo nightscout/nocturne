@@ -322,6 +322,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>Manually-entered lab HbA1c results, compared against the computed eHbA1c estimate.</summary>
     public DbSet<LabHbA1cResultEntity> LabHbA1cResults { get; set; }
 
+    /// <summary>Saved custom reports: a name and a report spec each.</summary>
+    public DbSet<ReportSpecEntity> ReportSpecs { get; set; }
+
     public DbSet<DeviceEventEntity> DeviceEvents { get; set; }
 
     public DbSet<BolusCalculationEntity> BolusCalculations { get; set; }

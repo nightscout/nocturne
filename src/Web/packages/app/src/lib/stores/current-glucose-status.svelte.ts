@@ -4,7 +4,7 @@ import type {
   GlucoseStatus,
   V4BasalInjectionStatus,
 } from "#lib/api/generated/nocturne-api-client.js";
-import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
 
 /** Longest a superseded reading stays on screen while the summary catches up. */
 export const PAIR_HOLD_MS = 5000;

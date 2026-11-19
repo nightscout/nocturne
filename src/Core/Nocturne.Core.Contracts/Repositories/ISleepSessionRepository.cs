@@ -50,6 +50,27 @@ public interface ISleepSessionRepository
         SleepSource? source = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Whether any session overlaps <c>[from, to)</c>: starts before <paramref name="to"/> and ends at or after
+    /// <paramref name="from"/>. Reads one row at most.
+    /// </summary>
+    Task<bool> AnySessionOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether any stage of a session overlaps <c>[from, to)</c>, as <see cref="AnySessionOverlappingAsync"/> reads
+    /// sessions. Reads one row at most.
+    /// </summary>
+    Task<bool> AnyStageOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether any biometric sample was taken in <c>[from, to)</c>. Reads one row at most.</summary>
+    Task<bool> AnyBiometricSampleInAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The first <paramref name="limit"/> biometric samples taken in <c>[from, to)</c>, of every session, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<SleepBiometricSample>> GetBiometricSamplesAsync(
+        DateTime from, DateTime to, int limit, CancellationToken cancellationToken = default);
+
     /// <returns>The <see cref="SleepSession"/> if found, or <c>null</c>.</returns>
     Task<SleepSession?> GetSessionByIdAsync(
         Guid id,

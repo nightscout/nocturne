@@ -17,13 +17,13 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { CHART_TEXTURES, dashClass, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { CHART_TEXTURES, dashClass, patternClass } from "@nocturne/charts/core";
   import {
     BASAL_BANDS,
     COB_BANDS as COB,
     GLUCOSE_BANDS,
     IOB_BANDS as IOB,
-  } from "#lib/components/reports/percentile-band-colors.js";
+  } from "@nocturne/charts/core";
   import { plural } from "#lib/utils/plural.js";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
@@ -31,7 +31,7 @@
   import { bg, bgLabel, convertToDisplayUnits, hourLabel } from "#lib/utils/formatting.js";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
-  import PercentileBands from "./PercentileBands.svelte";
+  import { PercentileBands } from "@nocturne/charts";
   import SlotLine from "./SlotLine.svelte";
   import SlotBars, { type SlotBar } from "./SlotBars.svelte";
   import AggregateReadout from "./AggregateReadout.svelte";

@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { EventAnchorKind, type EventResponseDefinition } from "#lib/api/index.js";
+import { DayOfWeek, EventAnchorKind, type EventResponseDefinition, type Food } from "#lib/api/index.js";
 import EventCohortBuilder from "./EventCohortBuilder.svelte";
 import type { EventResponseState } from "./event-response-filter";
 import { EVENT_LIMITS as limits } from "./event-response.test-fixtures";
@@ -106,5 +106,48 @@ describe("EventCohortBuilder", () => {
     await page.getByLabelText("After the event").click();
     await expect.element(page.getByRole("option", { name: "10 h" })).toBeVisible();
     expect(page.getByRole("option", { name: "8 h" }).elements()).toHaveLength(0);
+  });
+
+  const pasta = "0190a3c4-0000-7000-8000-000000000001";
+  const foods: Food[] = [
+    { _id: pasta, name: "Penne", category: "Pasta" },
+    { _id: "0190a3c4-0000-7000-8000-000000000002", name: "Rice", category: "Grains" },
+  ];
+
+  it("filters a meal cohort by food and category, and any cohort by weekday", async () => {
+    const onchange = vi.fn<(next: EventResponseState) => void>();
+    render(EventCohortBuilder, {
+      props: { value: { cohorts: [{ cohort: 1, anchor: EventAnchorKind.Meal }] }, onchange, limits, foods },
+    });
+
+    await page.getByLabelText("Cohort 1 foods").click();
+    await page.getByRole("option", { name: "Penne" }).click();
+    expect(onchange.mock.lastCall![0].cohorts![0].foodIds).toEqual([pasta]);
+
+    await userEvent.keyboard("{Escape}");
+    await page.getByLabelText("Cohort 1 food category").click();
+    await page.getByRole("option", { name: "Grains" }).click();
+    expect(onchange.mock.lastCall![0].cohorts![0].foodCategory).toBe("Grains");
+
+    await page.getByRole("radio", { name: /Cohort 1 Sat/ }).or(page.getByRole("button", { name: /Cohort 1 Sat/ })).click();
+    expect(onchange.mock.lastCall![0].cohorts![0].daysOfWeek).toEqual([DayOfWeek.Saturday]);
+  });
+
+  it("offers no food filter on a cohort that is not meals, and disables it without access to food", async () => {
+    const { rerender } = render(EventCohortBuilder, {
+      props: { value: { cohorts: [{ cohort: 1, anchor: EventAnchorKind.CorrectionBolus }] }, onchange: () => {}, limits, foods },
+    });
+    expect(page.getByLabelText("Cohort 1 foods").elements()).toHaveLength(0);
+    await expect.element(page.getByText("Days")).toBeVisible();
+
+    await rerender({
+      value: { cohorts: [{ cohort: 1, anchor: EventAnchorKind.Meal }] },
+      onchange: () => {},
+      limits,
+      foods: null,
+      unavailableFilters: [{ filter: "foodIds", requiredScope: "food.read" }, { filter: "foodCategory", requiredScope: "food.read" }],
+    });
+    await expect.element(page.getByLabelText("Cohort 1 foods")).toBeDisabled();
+    await expect.element(page.getByText("(Needs access to food)")).toBeVisible();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventAnchorKind } from "#lib/api/index.js";
+import { DayOfWeek, EventAnchorKind } from "#lib/api/index.js";
 import {
   clockToMinute,
   eventResponseQuery,
@@ -33,6 +33,59 @@ describe("event response filter", () => {
     expect(written.get("anchor2")).toBe("UnannouncedRise");
     expect(written.has("anchor3")).toBe(false);
     expect(readEventResponse(written)).toEqual(state);
+  });
+
+  it("round-trips a meal cohort's foods and every cohort's weekdays, and sends them only where they apply", () => {
+    const pasta = "0190a3c4-0000-7000-8000-000000000001";
+    const rice = "0190a3c4-0000-7000-8000-000000000002";
+    const search = new URLSearchParams(
+      `anchor1=Meal&foodIds1=${pasta}&foodIds1=${rice}&foodIds1=not-a-food&foodCategory1=%20Pasta%20&dayOfWeek1=6&dayOfWeek1=1&anchor2=CorrectionBolus&foodIds2=${pasta}&dayOfWeek2=9`
+    );
+
+    const state = readEventResponse(search);
+    expect(state.cohorts?.[0]).toMatchObject({
+      foodIds: [pasta, rice],
+      foodCategory: "Pasta",
+      daysOfWeek: [DayOfWeek.Monday, DayOfWeek.Saturday],
+    });
+    expect(state.cohorts?.[1].foodIds).toBeUndefined();
+    expect(state.cohorts?.[1].daysOfWeek).toBeUndefined();
+
+    const written = writeEventResponse(state, search);
+    expect(written.getAll("foodIds1")).toEqual([pasta, rice]);
+    expect(written.getAll("dayOfWeek1")).toEqual(["1", "6"]);
+    expect(written.has("foodIds2")).toBe(false);
+    expect(readEventResponse(written)).toEqual(state);
+
+    const query = eventResponseQuery({ startDate: "2026-10-01", endDate: "2026-10-14" }, state);
+    expect(query.foodIds1).toEqual([pasta, rice]);
+    expect(query.foodCategory1).toBe("Pasta");
+    expect(query.dayOfWeek1).toEqual([DayOfWeek.Monday, DayOfWeek.Saturday]);
+    expect(query.foodIds2).toBeUndefined();
+  });
+
+  it("drops a non-meal cohort's foods when it normalises one", () => {
+    const cohort = normalisedCohort(
+      { cohort: 1, anchor: EventAnchorKind.ExerciseStart, foodIds: ["x"], foodCategory: "Pasta", daysOfWeek: [DayOfWeek.Sunday] },
+      1000
+    );
+    expect(cohort.foodIds).toBeUndefined();
+    expect(cohort.foodCategory).toBeUndefined();
+    expect(cohort.daysOfWeek).toEqual([DayOfWeek.Sunday]);
+  });
+
+  it("drops the food filters the viewer cannot use and keeps their cohorts", () => {
+    const state = readEventResponse(
+      new URLSearchParams("anchor1=Meal&foodIds1=0190a3c4-0000-7000-8000-000000000001&dayOfWeek1=2&anchor2=Meal&foodCategory2=Pasta")
+    );
+
+    const next = withoutUnavailableEvents(state, [], ["foodIds", "foodCategory"]);
+
+    expect(next?.cohorts).toHaveLength(2);
+    expect(next?.cohorts?.[0].foodIds).toBeUndefined();
+    expect(next?.cohorts?.[0].daysOfWeek).toEqual([DayOfWeek.Tuesday]);
+    expect(next?.cohorts?.[1].foodCategory).toBeUndefined();
+    expect(withoutUnavailableEvents(next!, [], ["foodIds", "foodCategory"])).toBeNull();
   });
 
   it("reads no cohorts as the API's default, and drops what it cannot read", () => {

@@ -18,6 +18,13 @@ public interface ILoopAnalysisService
     Task<DailyProfileResponse> GetDailyProfileAsync(
         LoopAnalysisFilter filter, TimeZoneInfo zone, CancellationToken ct = default);
 
+    /// <summary>
+    /// <see cref="GetDailyProfileAsync"/> over only the local days <paramref name="days"/> keeps, decided
+    /// from the series the profile reads; <see cref="DailyProfileRange.DaySelection"/> says how they fell.
+    /// </summary>
+    Task<DailyProfileResponse> GetDailyProfileForDaysAsync(
+        LoopAnalysisFilter filter, TimeZoneInfo zone, DayCondition days, CancellationToken ct = default);
+
     /// <remarks>Takes and returns as <see cref="GetDailyProfileAsync"/> does.</remarks>
     Task<PredictionAccuracyResponse> GetPredictionAccuracyAsync(
         LoopAnalysisFilter filter, TimeZoneInfo zone, CancellationToken ct = default);

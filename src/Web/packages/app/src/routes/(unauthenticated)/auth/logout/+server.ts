@@ -2,6 +2,10 @@ import type { RequestHandler } from "./$types";
 import { redirect } from "@sveltejs/kit";
 import { clearAuthCookies } from "#lib/config/auth-cookies.js";
 import { logout } from "#lib/api/generated/oidcs.generated.remote.js";
+import { SIGNED_OUT_COOKIE } from "#lib/stores/member-storage.js";
+
+/** Longer than a draft is kept, so a sign-out that went to the provider still clears on return. */
+const SIGNED_OUT_MAX_AGE_S = 30 * 24 * 60 * 60;
 
 /**
  * Logout is POST-only: a GET that revokes the session is reachable from any
@@ -19,6 +23,8 @@ export const POST: RequestHandler = async ({ cookies }) => {
 
   // Clear cookies whether or not the backend revocation succeeded.
   clearAuthCookies(cookies);
+  // Host-only, so it clears the storage of this tenant's origin and no other.
+  cookies.set(SIGNED_OUT_COOKIE, "1", { path: "/", httpOnly: false, sameSite: "lax", maxAge: SIGNED_OUT_MAX_AGE_S });
 
   throw redirect(303, providerLogoutUrl ?? "/", { external: true });
 };

@@ -1,0 +1,288 @@
+<script lang="ts">
+  import { dashOf } from "../print/patterns.js";
+  import {
+    Area,
+    Spline,
+    Pattern,
+    Rect,
+    ChartClipPath,
+    Highlight,
+    AnnotationLine,
+    AnnotationPoint,
+    getChartContext,
+  } from "layerchart";
+  import { curveStepAfter } from "d3";
+  import { BasalDeliveryOrigin } from "../enums.js";
+  import { getGlucoseChartContext } from "../context.svelte.js";
+  import TrackAxis from "./TrackAxis.svelte";
+  import TrackLabel from "./TrackLabel.svelte";
+  import { markerKey } from "../keys.js";
+
+  interface Props {
+    onPointClick?: (time: Date) => void;
+  }
+
+  let { onPointClick }: Props = $props();
+
+  const ctx = getGlucoseChartContext();
+  const chartCtx = getChartContext();
+  // Width the "Last pump sync" label needs to its right before it would run off the chart.
+  const LAST_SYNC_LABEL_ROOM = 100;
+
+  const basalData = $derived(ctx.view.basalData);
+  const scheduledBasalData = $derived(ctx.view.scheduledBasalData);
+  const tempBasalSpans = $derived(ctx.view.displayTempBasalSpans);
+  const staleBasalData = $derived(ctx.view.staleBasalData);
+  const maxBasalRate = $derived(ctx.view.maxBasalRate);
+  const basalLayout = $derived(ctx.layout.basal);
+
+  const effectiveOnPointClick = $derived(
+    onPointClick ?? ((time: Date) => ctx.inspection?.inspectFromTrack(time))
+  );
+
+  // Group consecutive basal points by origin for proper layered rendering
+  // This ensures each origin type (Scheduled, Algorithm, Manual, Suspended) is rendered as a distinct segment
+  const basalSegmentsByOrigin = $derived.by(() => {
+    type BasalDataPoint = (typeof basalData)[number];
+    type Segment = { origin: BasalDeliveryOrigin; points: BasalDataPoint[] };
+    const segments: Segment[] = [];
+    let currentSegment: Segment | null = null;
+
+    for (const point of basalData) {
+      const origin = point?.origin ?? BasalDeliveryOrigin.Scheduled;
+
+      if (!currentSegment || currentSegment.origin !== origin) {
+        // Start a new segment
+        if (currentSegment && currentSegment.points.length > 0) {
+          segments.push(currentSegment);
+        }
+        currentSegment = { origin, points: [point] };
+      } else {
+        // Continue current segment
+        currentSegment.points.push(point);
+      }
+    }
+
+    // Don't forget the last segment
+    if (currentSegment && currentSegment.points.length > 0) {
+      segments.push(currentSegment);
+    }
+
+    // Add closing points so curveStepAfter renders the last step of each segment.
+    // Without this, a segment with a single point (e.g. a temp basal immediately
+    // followed by a suspended period) produces no visible area.
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const lastPoint = seg.points[seg.points.length - 1];
+      const nextSegFirstPoint = segments[i + 1]?.points[0];
+
+      if (nextSegFirstPoint && lastPoint.timestamp !== nextSegFirstPoint.timestamp) {
+        seg.points.push({
+          ...lastPoint,
+          timestamp: nextSegFirstPoint.timestamp,
+        });
+      }
+    }
+
+    return segments;
+  });
+
+  // Get opacity based on basal delivery origin
+  function getBasalOpacity(origin: BasalDeliveryOrigin): number {
+    switch (origin) {
+      case BasalDeliveryOrigin.Algorithm:
+        return 0.8;
+      case BasalDeliveryOrigin.Manual:
+        return 0.9;
+      case BasalDeliveryOrigin.Suspended:
+        return 0.5;
+      case BasalDeliveryOrigin.Inferred:
+        return 0.4;
+      case BasalDeliveryOrigin.Scheduled:
+      default:
+        return 0.6;
+    }
+  }
+
+  // Get pattern for basal delivery origin (only Inferred uses hatching)
+  function getBasalPattern(origin: BasalDeliveryOrigin): { size: number; lines: { rotate: number; opacity: number } } | undefined {
+    if (origin === BasalDeliveryOrigin.Inferred) {
+      return { size: 8, lines: { rotate: -45, opacity: 0.3 } };
+    }
+    return undefined;
+  }
+</script>
+
+{#if basalLayout}
+  {@const basalScale = basalLayout.scale}
+  {@const basalZero = basalLayout.zero}
+  {@const basalAxisScale = basalLayout.axisScale}
+
+  <!-- The spans repeat the delivered rate the area already draws, and their
+       rate labels are too small to read on paper. -->
+  {#if !ctx.printing}
+  <ChartClipPath>
+    <!-- Temp basal span indicators (shown in basal track when basal is visible) -->
+    {#each tempBasalSpans as span, i (markerKey(span.id, span.startTime, i))}
+      {@const spanLeft = chartCtx.xScale(span.displayStart)}
+      {@const spanUpper = chartCtx.yScale(basalScale(maxBasalRate * 0.9))}
+      {@const spanLower = chartCtx.yScale(basalScale(maxBasalRate * 0.7))}
+      {@const labelX = spanLeft + 4}
+      {@const labelY = chartCtx.yScale(basalScale(maxBasalRate * 0.8))}
+      <!-- Native rect: up to ~288 temp basals a day; layerchart Rect mounts ~5x slower (0.16 vs 0.03 ms each) and registers a component per span, which mark-registration.svelte.test.ts forbids. -->
+      <rect
+        x={spanLeft}
+        y={Math.min(spanUpper, spanLower)}
+        width={chartCtx.xScale(span.displayEnd) - spanLeft}
+        height={Math.abs(spanLower - spanUpper)}
+        fill={span.color}
+        class="opacity-40"
+      />
+      <!-- Show temp basal rate label -->
+      {#if span.rate !== null}
+        <text
+          x={labelX}
+          y={labelY}
+          dy="-0.355em"
+          class="text-4xs fill-entry-basal font-medium"
+        >
+          {ctx.labels.basalRate(span.rate.toFixed(2))}
+        </text>
+      {:else if span.percent !== null}
+        <text
+          x={labelX}
+          y={labelY}
+          dy="-0.355em"
+          class="text-4xs fill-entry-basal font-medium"
+        >
+          {span.percent}%
+        </text>
+      {/if}
+    {/each}
+  </ChartClipPath>
+  {/if}
+
+  <!-- Stale basal data indicator -->
+  {#if staleBasalData}
+    <ChartClipPath>
+      {@const staleLeft = chartCtx.xScale(staleBasalData.start)}
+      {@const staleWidth = chartCtx.xScale(staleBasalData.end) - staleLeft}
+      {@const staleTop = chartCtx.yScale(basalScale(maxBasalRate))}
+      {@const staleBottom = chartCtx.yScale(basalZero)}
+      <Pattern size={8} lines={{ rotate: -45, opacity: ctx.printing ? 0.3 : 0.1 }}>
+        {#snippet children({ pattern }: { pattern: string })}
+          <Rect
+            x={staleLeft}
+            y={Math.min(staleTop, staleBottom)}
+            width={staleWidth}
+            height={Math.abs(staleBottom - staleTop)}
+            fill={pattern}
+          />
+        {/snippet}
+      </Pattern>
+    </ChartClipPath>
+    <AnnotationLine
+      x={staleBasalData.start}
+      props={{ line: { class: "stroke-warning/50 stroke-1 print:stroke-foreground/60", dashArray: "2,2" } }}
+    />
+    <!-- On paper the callout would print over the mode lane; the chart key names the hatching instead. -->
+    {#if !ctx.printing}
+      <AnnotationPoint
+        x={staleBasalData.start.getTime()}
+        y={basalScale(maxBasalRate)}
+        label={ctx.labels.lastPumpSync}
+        labelPlacement={chartCtx.width - chartCtx.xScale(staleBasalData.start) < LAST_SYNC_LABEL_ROOM ? "bottom-left" : "bottom-right"}
+        fill="var(--warning)"
+        class="hover:bg-background hover:text-foreground"
+      />
+    {/if}
+  {/if}
+
+  <!-- Scheduled basal rate line -->
+  {#if scheduledBasalData.length > 0}
+    <ChartClipPath>
+      <Spline
+        data={scheduledBasalData}
+        x={(d) => new Date(d.timestamp ?? 0)}
+        y={(d) => basalScale(d.rate ?? 0)}
+        curve={curveStepAfter}
+        class="stroke-muted-foreground/50 stroke-1 fill-none print:stroke-foreground/70"
+        stroke-dasharray={dashOf("insulin-scheduled-basal")}
+      />
+    </ChartClipPath>
+  {/if}
+
+  <TrackAxis scale={basalAxisScale} unit={ctx.labels.unitsPerHour} />
+  <TrackLabel label={ctx.labels.basal} top={basalLayout.top} bottom={basalLayout.bottom} />
+
+  <!-- Basal area - render each segment by origin with actual delivered rate -->
+  {#if basalData.length > 0}
+    <ChartClipPath>
+      {#each basalSegmentsByOrigin as segment, i (i)}
+        {@const pattern = getBasalPattern(segment.origin)}
+        {@const opacity = getBasalOpacity(segment.origin)}
+        {@const fillColor = segment.points[0].fillColor}
+        {@const strokeColor = segment.points[0].strokeColor}
+        {#if pattern}
+          <!-- Hatched step rects for segments with patterns (Inferred) -->
+          <Pattern size={pattern.size} lines={pattern.lines}>
+            {#snippet children({ pattern: patternFill }: { pattern: string })}
+              {#each segment.points.slice(0, -1) as point, pointIdx (pointIdx)}
+                {@const nextPoint = segment.points[pointIdx + 1]}
+                {@const left = chartCtx.xScale(new Date(point.timestamp ?? 0))}
+                {@const top = chartCtx.yScale(basalScale(point.rate ?? 0))}
+                {@const bottom = chartCtx.yScale(basalZero)}
+                {@const step = {
+                  x: left,
+                  y: Math.min(top, bottom),
+                  width:
+                    chartCtx.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
+                  height: Math.abs(bottom - top),
+                }}
+                <!-- Native rect: same measured cost as the temp basal spans above. -->
+                <rect {...step} fill={fillColor} {opacity} />
+                <rect {...step} fill={patternFill} {opacity} />
+              {/each}
+            {/snippet}
+          </Pattern>
+        {:else}
+          <!-- Use Area for segments without patterns -->
+          <Area
+            data={segment.points}
+            x={(d) => new Date(d.timestamp ?? 0)}
+            y0={() => basalZero}
+            y1={(d) => basalScale(d.rate ?? 0)}
+            curve={curveStepAfter}
+            fill={fillColor}
+            stroke={strokeColor}
+            class="stroke-1 opacity-(--segment-opacity)"
+            style="--segment-opacity: {opacity}"
+          />
+        {/if}
+      {/each}
+    </ChartClipPath>
+  {/if}
+
+  <!-- Basal highlight for point click -->
+  <ChartClipPath>
+    <Highlight
+      x={(d) => d.time}
+      y={(d) => {
+        const timeMs = d.time.getTime();
+        let nearest: (typeof basalData)[number] | undefined;
+        for (let i = basalData.length - 1; i >= 0; i--) {
+          if ((basalData[i].timestamp ?? 0) <= timeMs) {
+            nearest = basalData[i];
+            break;
+          }
+        }
+        if (!nearest || nearest.rate == null) return null;
+        return basalScale(nearest.rate);
+      }}
+      points={{ class: "fill-iob-basal" }}
+      onPointClick={effectiveOnPointClick
+        ? (_e, { data }) => effectiveOnPointClick(data.time)
+        : undefined}
+    />
+  </ChartClipPath>
+{/if}

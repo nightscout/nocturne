@@ -107,6 +107,13 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
 
     /// <summary>
+    /// The first <paramref name="limit"/> events of <paramref name="eventTypes"/> in [<paramref name="from"/>,
+    /// <paramref name="to"/>), oldest first, the copies deduplication hides left out as <see cref="GetAsync"/> leaves them.
+    /// </summary>
+    Task<IReadOnlyList<DeviceEvent>> GetOfTypesAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// The events of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>)
     /// that the user deleted, oldest first.
     /// </summary>
