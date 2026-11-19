@@ -97,7 +97,7 @@
 </script>
 
 <Popover.Root bind:open={popoverOpen}>
-  <Popover.Trigger class={pillClasses} data-pill-trigger>
+  <Popover.Trigger class={pillClasses} data-pill-trigger data-pill>
     {#if showProgress}
       <span
         class="absolute bottom-0 left-3 h-px {PROGRESS_FILL[level]} w-[calc((100%-1.5rem)*var(--progress))] transition-all duration-500 ease-out"
@@ -105,14 +105,14 @@
         aria-hidden="true"
       ></span>
     {/if}
-    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+    <span class="flex items-center gap-1 text-xs text-muted-foreground" data-pill-label>
       <TrackerCategoryIcon
         category={definition?.category ?? TrackerCategory.Custom}
         class="size-3"
       />
       {label}
     </span>
-    <span class="flex items-center gap-1 text-sm font-medium tabular-nums {VALUE_TONE[level]}">
+    <span class="flex items-center gap-1 text-sm font-medium tabular-nums {VALUE_TONE[level]}" data-pill-value>
       {#if alertPrefix}
         <TriangleAlert class="size-3.5" aria-hidden="true" />
         <span class="sr-only">{alertPrefix}</span>
