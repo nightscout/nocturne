@@ -93,7 +93,7 @@ internal static class LoopAnalysisDatasetRun
         if (response.ComparisonRange is { } comparison)
             yield return $"Comparison range: local days {clock.Date(comparison.StartDate)} to {clock.Date(comparison.EndDate)}.";
         if (response.HistoryClamped)
-            yield return HistoryClampNote(response);
+            yield return HistoryClampNote(response, clock);
         if (response.IgnoredFilters.Count > 0)
             yield return $"Not applied, because the token does not hold the scope they need: {string.Join(", ", response.IgnoredFilters)}.";
         var withheld = response.WithheldSeries.Where(s => s != LoopAnalysisSeries.ProfileNames).ToList();
@@ -111,15 +111,17 @@ internal static class LoopAnalysisDatasetRun
     }
 
     /// <summary>What the history clamp did to the range: the window served, or that the range is older than the window.</summary>
-    internal static string HistoryClampNote(LoopAnalysisResponse response)
+    internal static string HistoryClampNote(LoopAnalysisResponse response, ReportClock? clock = null)
     {
         if (response.RangeOutsideHistory)
             return "No data: the range ends before the last 24 hours, and this token reads only the last 24 hours.";
         return !response.NarrowerThanHistoryWindow || response.PrimaryRange is not { } range
             ? "This token reads only the last 24 hours, so the analysis covers that window and has no comparison."
-            : string.Create(CultureInfo.InvariantCulture,
-                $"This token reads only the last 24 hours, so the analysis covers only the part of the range in that window, {range.From:yyyy-MM-dd HH:mm} to {range.To:yyyy-MM-dd HH:mm} UTC, and has no comparison.");
+            : "This token reads only the last 24 hours, so the analysis covers only the part of the range in that window, "
+                + $"{ReportFacts.Window(Utc(range.From), Utc(range.To), clock)}, and has no comparison.";
     }
+
+    private static DateTimeOffset Utc(DateTime at) => new(DateTime.SpecifyKind(at, DateTimeKind.Utc));
 
     /// <summary>The scope that withholds a series from a caller; the first one when several do.</summary>
     public static string ScopeOf(LoopAnalysisSeries series) => series switch

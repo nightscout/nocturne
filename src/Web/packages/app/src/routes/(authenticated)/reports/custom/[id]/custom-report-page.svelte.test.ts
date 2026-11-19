@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { createQueryResource, remoteCommand, remoteQuery, remoteQueryError, type RemoteQueryStub } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
 import { chartResult, normalisedSpec, statTilesResult } from "../custom-report-fixtures.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
@@ -17,9 +17,19 @@ const calls = vi.hoisted(() => ({
 }));
 let saved: CustomReport;
 let runResult: () => unknown = statTilesResult;
+/** The saved report another member saves before the next update arrives, which the API then refuses. */
+let savedElsewhere: CustomReport | null = null;
+/** The report the API reads: `saved`, or none (404) once another member deleted it. */
+let deleted = false;
+/** How the patient's zone answers. */
+let zone: () => RemoteQueryStub<{ timezone: string | null }> = () => remoteQuery(() => ({ timezone: null }));
+
+vi.mock("#lib/api/generated/patientTimezones.generated.remote.js", () => ({
+  getPatientTimezone: () => zone(),
+}));
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
-  getCustomReport: () => remoteQuery(() => saved),
+  getCustomReport: () => (deleted ? remoteQueryError({ status: 404, body: { message: "Not found" } }) : remoteQuery(() => saved)),
   getCustomReportCatalogue: () => remoteQuery(() => liveCatalogue),
   runCustomReport: remoteCommand((arg) => {
     calls.runs.push(arg);
@@ -27,6 +37,14 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   }),
   updateCustomReport: remoteCommand((arg) => {
     calls.updates.push(arg);
+    const { request } = arg as { request: { name?: string; expectedUpdatedAt?: string } };
+    if (savedElsewhere) {
+      saved = savedElsewhere;
+      savedElsewhere = null;
+    }
+    if (request.expectedUpdatedAt !== undefined && request.expectedUpdatedAt !== saved.updatedAt)
+      return Promise.reject({ status: 409, body: { message: "The report was changed.", code: "custom_report_changed" } });
+    saved = { ...saved, name: request.name ?? saved.name, updatedAt: "2026-11-16T03:00:00Z" };
     return saved;
   }),
   deleteCustomReport: remoteCommand((id) => {
@@ -63,6 +81,21 @@ vi.mock("#lib/utils/index.js", async (original) => ({
 
 import CustomReportPage from "./+page.svelte";
 
+/** The page data of a signed-in member of a tenant, whose drafts this browser keeps. */
+const MEMBER = { tenantSlug: "dev", user: { subjectId: "subject-1" } };
+const DRAFT_KEY = "nocturne.member.custom-report-draft.dev.subject-1.a1";
+
+/** Picks the first and third days the date picker offers. */
+async function pickDates() {
+  await page.getByRole("button", { name: /^Dates to show/ }).click();
+  await vi.waitFor(() => expect(document.querySelectorAll("[data-bits-day]").length).toBeGreaterThan(0));
+  const days = [...document.querySelectorAll<HTMLElement>("[data-bits-day]")].filter(
+    (d) => !d.hasAttribute("data-disabled") && !d.hasAttribute("data-outside-month")
+  );
+  days[0].click();
+  days[2].click();
+}
+
 describe("saved custom report page", () => {
   beforeEach(() => {
     for (const list of Object.values(calls)) list.length = 0;
@@ -71,6 +104,11 @@ describe("saved custom report page", () => {
     saved = { id: "a1", name: "Fortnight", spec: normalisedSpec, errors: [], canEdit: true };
     runResult = statTilesResult;
     image.refuse = null;
+    savedElsewhere = null;
+    deleted = false;
+    zone = () => remoteQuery(() => ({ timezone: null }));
+    pageState.data = { ...MEMBER };
+    localStorage.clear();
   });
 
   it("says in the page's words why an image was refused", async () => {
@@ -165,7 +203,8 @@ describe("saved custom report page", () => {
     await expect.element(page.getByLabelText("Name")).toHaveFocus();
     await page.getByLabelText("Name").fill("Two weeks of lunches");
     await page.getByRole("button", { name: "Save" }).click();
-    await vi.waitFor(() => expect(calls.updates).toEqual([{ id: "a1", request: { name: "Two weeks of lunches" } }]));
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect(calls.updates[0]).toMatchObject({ id: "a1", request: { name: "Two weeks of lunches" } });
 
     await page.getByTestId("report-actions").click();
     await page.getByRole("menuitem", { name: "Copy link" }).click();
@@ -203,5 +242,74 @@ describe("saved custom report page", () => {
     await expect.element(page.getByText("0 is not a supported version. Send the number 1.")).toBeVisible();
     await expect.element(page.getByText("Show the technical details")).toBeVisible();
     expect(calls.runs).toEqual([]);
+  });
+
+  async function renameTo(newName: string) {
+    await page.getByTestId("report-actions").click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    await page.getByLabelText("Name").fill(newName);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+  }
+
+  it("renames only the version it read, and keeps the member's own draft current", async () => {
+    saved = { ...saved, updatedAt: "2026-11-16T01:00:00Z" };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1, savedAt: "2026-11-16T01:00:00Z", writtenAt: Date.now(), state: { title: "x" } }));
+    render(CustomReportPage, {});
+
+    await renameTo("Lunches");
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect(calls.updates[0]).toEqual({ id: "a1", request: { name: "Lunches", expectedUpdatedAt: "2026-11-16T01:00:00Z" } });
+    await vi.waitFor(() => expect(JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "{}").savedAt).toBe("2026-11-16T03:00:00Z"));
+    expect(JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "{}").state).toEqual({ title: "x" });
+  });
+
+  it("says a rename was refused when the report changed elsewhere, and renames it after a confirm", async () => {
+    saved = { ...saved, updatedAt: "2026-11-16T01:00:00Z" };
+    savedElsewhere = { ...saved, name: "Their name", updatedAt: "2026-11-16T02:00:00Z" };
+    render(CustomReportPage, {});
+
+    await renameTo("Lunches");
+
+    await expect.element(page.getByTestId("rename-conflict")).toHaveTextContent('Its name is now "Their name"');
+    await expect.element(page.getByLabelText("Name")).toHaveValue("Lunches");
+    await page.getByRole("button", { name: "Rename it" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent('The name "Lunches" replaces the name "Their name"');
+    await dialog.getByRole("button", { name: "Replace", exact: true }).click();
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(2));
+    expect(calls.updates[1]).toEqual({ id: "a1", request: { name: "Lunches" } });
+    await expect.element(page.getByTestId("rename-conflict")).not.toBeInTheDocument();
+  });
+
+  it("clears the draft of a report that no longer exists", async () => {
+    deleted = true;
+    localStorage.setItem(DRAFT_KEY, "{}");
+    render(CustomReportPage, {});
+
+    await vi.waitFor(() => expect(localStorage.getItem(DRAFT_KEY)).toBeNull());
+  });
+
+  it("does not run two dates while the patient's zone loads", async () => {
+    zone = () => createQueryResource(() => new Promise(() => {}));
+    render(CustomReportPage, {});
+    await vi.waitFor(() => expect(calls.runs).toHaveLength(1));
+
+    await pickDates();
+
+    await expect.element(page.getByTestId("zone-loading")).toBeVisible();
+    expect(calls.runs).toHaveLength(1);
+  });
+
+  it("says it could not read the patient's zone, and runs the saved range rather than the dates in UTC", async () => {
+    zone = () => remoteQueryError({ status: 500, body: { message: "down" } });
+    render(CustomReportPage, {});
+    await vi.waitFor(() => expect(calls.runs).toHaveLength(1));
+
+    await pickDates();
+
+    await expect.element(page.getByTestId("zone-failed")).toHaveTextContent("could not read the patient's time zone");
+    expect(calls.runs.every((r) => !("from" in ((r as { spec: { range?: object } }).spec.range ?? {})))).toBe(true);
   });
 });

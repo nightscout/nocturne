@@ -58,12 +58,18 @@ public sealed class ReportSpecRepository(INocturneDbContextFactory contexts) : I
     }
 
     public async Task<SavedReportSpecWrite> UpdateAsync(
-        Guid id, string? name, string? specJson, int? version, CancellationToken ct = default)
+        Guid id, string? name, string? specJson, int? version, DateTime? expectedUpdatedAt = null, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
+        await using var transaction = expectedUpdatedAt is null ? null : await db.Database.BeginTransactionAsync(ct);
+        if (transaction is not null && db.Database.IsNpgsql())
+            await db.Database.ExecuteSqlAsync($"SELECT 1 FROM report_specs WHERE id = {id} FOR UPDATE", ct);
+
         var row = await db.ReportSpecs.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (row is null)
             return new SavedReportSpecWrite(SavedReportSpecWriteStatus.NotFound);
+        if (expectedUpdatedAt is { } expected && Stored(expected) != Stored(row.UpdatedAt))
+            return new SavedReportSpecWrite(SavedReportSpecWriteStatus.Changed);
 
         if (name is not null && name != row.Name)
         {
@@ -80,12 +86,24 @@ public sealed class ReportSpecRepository(INocturneDbContextFactory contexts) : I
         try
         {
             await db.SaveChangesAsync(ct);
+            if (transaction is not null)
+                await transaction.CommitAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
             return new SavedReportSpecWrite(SavedReportSpecWriteStatus.NameTaken);
         }
         return new SavedReportSpecWrite(SavedReportSpecWriteStatus.Saved, ToModel(row));
+    }
+
+    /// <summary>
+    /// <paramref name="at"/> as the database keeps it: UTC, to the microsecond. A row just saved holds the clock's finer
+    /// ticks in memory, and a client sends back what it was given, so both sides of a compare go through this.
+    /// </summary>
+    internal static DateTime Stored(DateTime at)
+    {
+        var utc = at.Kind == DateTimeKind.Local ? at.ToUniversalTime() : at;
+        return new DateTime(utc.Ticks - utc.Ticks % 10, DateTimeKind.Utc);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
@@ -101,5 +119,5 @@ public sealed class ReportSpecRepository(INocturneDbContextFactory contexts) : I
     }
 
     private static SavedReportSpec ToModel(ReportSpecEntity row) =>
-        new(row.Id, row.Name, row.Spec, row.Version, row.CreatedBySubjectId, row.CreatedAt, row.UpdatedAt);
+        new(row.Id, row.Name, row.Spec, row.Version, row.CreatedBySubjectId, Stored(row.CreatedAt), Stored(row.UpdatedAt));
 }

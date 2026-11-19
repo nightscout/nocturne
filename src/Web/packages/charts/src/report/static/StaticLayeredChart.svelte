@@ -13,7 +13,7 @@
   import CategoryBars from "../CategoryBars.svelte";
   import LayeredPlot from "../layered/LayeredPlot.svelte";
   import { formatAxisValue } from "../layered/axis-format.js";
-  import { axisGroups, drawnLayers, isTimeAxis, legend, slots, toDomain, xExtent } from "../layered/layered-layout.js";
+  import { axisGroups, drawnLayers, isTimeAxis, legend, slots, toDomain, xExtent, xFieldOf } from "../layered/layered-layout.js";
   import type { ReportPanel } from "../types.js";
   import { mergedBars } from "./static-panel.js";
   import StaticFrame, { staticKeyRows, staticPadding, type StaticKeyItem } from "./StaticFrame.svelte";
@@ -54,12 +54,15 @@
   );
   const padding = $derived(staticPadding({ key: staticKeyRows(key, still.width), left: 60, right: hasRight ? 56 : 20 }));
   const bars = $derived(mergedBars(panel.tracks.flatMap((t) => drawnLayers(t)).filter((l) => l.mark === "bars")));
-  /** The axis a scatter or a lag lies along, named where the panel has no range line: values and lags are not times. */
+  /**
+   * The axis a scatter, a lag or minutes from an event lies along, named where the panel has no range
+   * line, as LayeredChart names it: values, lags and offsets are not times.
+   */
   const caption = $derived.by(() => {
-    if (groups.length > 1 || (kind !== "value" && kind !== "lag")) return null;
+    if (groups.length > 1 || (kind !== "value" && kind !== "lag" && kind !== "offset")) return null;
     const first = panel.tracks.flatMap((t) => drawnLayers(t))[0];
-    const field = first?.fields.find((f) => f.name === first.bindings.x);
-    return field ? `${field.label}${field.unit ? ` (${field.unit})` : ""}` : null;
+    const field = first?.fields.find((f) => f.name === xFieldOf(first));
+    return field ? `${field.label}${field.unit && kind !== "offset" ? ` (${field.unit})` : ""}` : null;
   });
   const gradient = (stops: GradientStop[], height: number) => (still.gradient ? gradientStroke(still.gradient(0, height, stops)) : undefined);
 </script>

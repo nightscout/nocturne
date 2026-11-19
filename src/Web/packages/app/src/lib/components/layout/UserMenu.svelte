@@ -13,7 +13,6 @@
   import { resolve } from "$app/paths";
   import type { AuthUser } from "#lib/stores/auth-store.svelte.js";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
-  import { clearMemberStorage } from "#lib/stores/member-storage.js";
 
   interface Props {
     user: AuthUser | null;
@@ -137,7 +136,7 @@
       <DropdownMenu.Separator />
 
       <!-- display:contents keeps the form out of the menu's layout box -->
-      <form method="POST" action="/auth/logout" class="contents" onsubmit={clearMemberStorage}>
+      <form method="POST" action="/auth/logout" class="contents">
         <DropdownMenu.Item variant="destructive" class="w-full">
           {#snippet child({ props }: { props: Record<string, unknown> })}
             <!-- eslint-disable-next-line no-restricted-syntax -- DropdownMenu.Item styles its child as the menu item -->

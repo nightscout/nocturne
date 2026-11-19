@@ -129,12 +129,15 @@ public class CustomReportTests
             return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.Saved, row));
         }
 
-        public Task<SavedReportSpecWrite> UpdateAsync(Guid id, string? name, string? specJson, int? version, CancellationToken ct = default)
+        public Task<SavedReportSpecWrite> UpdateAsync(
+            Guid id, string? name, string? specJson, int? version, DateTime? expectedUpdatedAt = null, CancellationToken ct = default)
         {
             var index = Rows.FindIndex(r => r.Id == id);
             if (index < 0)
                 return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.NotFound));
-            Rows[index] = Rows[index] with { Name = name ?? Rows[index].Name };
+            if (expectedUpdatedAt is { } expected && expected != Rows[index].UpdatedAt)
+                return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.Changed));
+            Rows[index] = Rows[index] with { Name = name ?? Rows[index].Name, UpdatedAt = Rows[index].UpdatedAt.AddSeconds(1) };
             return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.Saved, Rows[index]));
         }
 
@@ -237,16 +240,34 @@ public class CustomReportTests
         var other = new CustomReportEditor(Guid.CreateVersion7(), EditsAll: false);
         (await store.ListAsync(other, default)).Single().CanEdit.Should().BeFalse();
         (await store.GetAsync(saved.Id, other, default))!.CanEdit.Should().BeFalse();
-        (await store.UpdateAsync(saved.Id, "Taken", null, other, default)).Status.Should().Be(CustomReportWriteStatus.Forbidden);
+        (await store.UpdateAsync(saved.Id, "Taken", null, null, other, default)).Status.Should().Be(CustomReportWriteStatus.Forbidden);
         (await store.DeleteAsync(saved.Id, other, default)).Should().Be(CustomReportWriteStatus.Forbidden);
         (await store.DeleteAsync(saved.Id, new CustomReportEditor(null, EditsAll: false), default))
             .Should().Be(CustomReportWriteStatus.Forbidden, "a caller with no subject owns nothing");
 
-        (await store.UpdateAsync(saved.Id, "Renamed", null, Member, default)).Status.Should().Be(CustomReportWriteStatus.Saved);
+        (await store.UpdateAsync(saved.Id, "Renamed", null, null, Member, default)).Status.Should().Be(CustomReportWriteStatus.Saved);
         var owner = new CustomReportEditor(Guid.CreateVersion7(), EditsAll: true);
         (await store.ListAsync(owner, default)).Single().CanEdit.Should().BeTrue();
         (await store.DeleteAsync(saved.Id, owner, default)).Should().Be(CustomReportWriteStatus.Saved);
         (await store.DeleteAsync(saved.Id, owner, default)).Should().Be(CustomReportWriteStatus.NotFound);
+    }
+
+    [Fact]
+    public async Task An_update_that_sends_a_stale_updated_at_is_refused_as_changed_and_one_without_it_is_not()
+    {
+        var repository = new FakeRepository();
+        var store = Store(repository);
+        var saved = (await store.CreateAsync("Mine", JsonDocument.Parse(TwoPanels).RootElement, Member, default)).Report!;
+
+        var first = await store.UpdateAsync(saved.Id, "First", null, saved.UpdatedAt, Member, default);
+        var stale = await store.UpdateAsync(saved.Id, "Stale", null, saved.UpdatedAt, Member, default);
+        var blind = await store.UpdateAsync(saved.Id, "Blind", null, null, Member, default);
+
+        first.Status.Should().Be(CustomReportWriteStatus.Saved);
+        stale.Status.Should().Be(CustomReportWriteStatus.Changed);
+        stale.Report.Should().BeNull();
+        blind.Status.Should().Be(CustomReportWriteStatus.Saved);
+        repository.Rows.Single().Name.Should().Be("Blind");
     }
 
     [Fact]

@@ -10,6 +10,7 @@
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import { describe } from "./describe.js";
   import type { ChartBlock, Report } from "./report.svelte.js";
+  import { toast } from "svelte-sonner";
   import { offerUndo } from "./undo.svelte.js";
 
   interface Props {
@@ -25,7 +26,10 @@
   function change() {
     confirming = false;
     const undo = report.changeSignalBySignal(block);
-    if (typeof undo === "string") return;
+    if (typeof undo === "string") {
+      toast.error(undo);
+      return;
+    }
     offerUndo("Nocturne changed the chart signal by signal.", undo);
   }
 </script>

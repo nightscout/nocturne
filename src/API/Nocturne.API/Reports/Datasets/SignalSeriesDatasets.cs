@@ -103,9 +103,13 @@ internal sealed class SleepNightsDataset : IReportDataset
     {
         var body = request.HasScope(Scope.HeartRateRead);
         IReadOnlyList<ReportOmittedField> omitted = body ? [] : [.. BodyFields.Select(f => new ReportOmittedField(f, Scope.HeartRateRead))];
-        var sessions = (await request.Services.GetRequiredService<ISleepSessionRepository>().GetSessionsAsync(
+        var repository = request.Services.GetRequiredService<ISleepSessionRepository>();
+        var sessions = (await repository.GetSessionsAsync(
             request.From.UtcDateTime, request.To.UtcDateTime, limit: MaxSessions + 1, descending: false, cancellationToken: cancellationToken)).ToList();
         var cut = sessions.Count > MaxSessions;
+        var stored = cut
+            ? await repository.CountSessionsAsync(request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken: cancellationToken)
+            : sessions.Count;
         if (cut)
             sessions = sessions[..MaxSessions];
         if (sessions.Count > 0)
@@ -147,7 +151,7 @@ internal sealed class SleepNightsDataset : IReportDataset
         {
             Rows = rows,
             CutNote = cutNote,
-            Resolution = new ReportResolution(0, 0, cut ? MaxSessions + 1 : sessions.Count, rows.Count, cut),
+            Resolution = new ReportResolution(0, 0, stored, rows.Count, cut),
             Summary = string.Join('\n', lines),
             Facts =
             [
@@ -240,13 +244,8 @@ internal sealed class SleepBiometricsDataset : IReportDataset
             return SeriesRows.Empty("Not shown, because the token does not hold the heart rate scope.", $"{context}.",
                 [.. Fields.Where(f => f.Scope is not null).Select(f => new ReportOmittedField(f.Name, Scope.HeartRateRead))]);
 
-        var (start, end) = (request.From.UtcDateTime, request.To.UtcDateTime);
-        await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
-        var read = await db.SleepBiometricSamples.AsNoTracking()
-            .Where(s => s.Timestamp >= start && s.Timestamp < end)
-            .OrderBy(s => s.Timestamp).Take(MaxSamples + 1)
-            .Select(s => new { s.Timestamp, s.HeartRate, s.Hrv, s.Spo2, s.RespirationRate })
-            .ToListAsync(cancellationToken);
+        var read = await request.Services.GetRequiredService<ISleepSessionRepository>().GetBiometricSamplesAsync(
+            request.From.UtcDateTime, request.To.UtcDateTime, MaxSamples + 1, cancellationToken);
         var cut = read.Count > MaxSamples;
         var samples = read.Take(MaxSamples).Select(s => new Sample(SeriesRows.Mills(s.Timestamp), s.HeartRate, s.Hrv, s.Spo2, s.RespirationRate)).ToList();
         if (samples.Count > 0)
@@ -357,9 +356,13 @@ internal sealed class LabHbA1cDataset : IReportDataset
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var results = await db.LabHbA1cResults.AsNoTracking()
             .Where(r => r.MeasuredAt >= start && r.MeasuredAt < end)
-            .OrderBy(r => r.MeasuredAt).Take(Budget)
+            .OrderBy(r => r.MeasuredAt).ThenBy(r => r.Id).Take(Budget + 1)
             .Select(r => new { r.MeasuredAt, r.ValuePercent })
             .ToListAsync(cancellationToken);
+        var cut = results.Count > Budget;
+        var stored = cut ? await db.LabHbA1cResults.CountAsync(r => r.MeasuredAt >= start && r.MeasuredAt < end, cancellationToken) : results.Count;
+        if (cut)
+            results = results[..Budget];
         if (results.Count > 0)
             request.ReadLog.Record("lab_hba1c_results", results.Count);
         var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(results.Count, "lab result")}.";
@@ -372,12 +375,17 @@ internal sealed class LabHbA1cDataset : IReportDataset
         var latest = results[^1];
         var sentence = $"Latest lab HbA1c: {ReportFacts.Number(latest.ValuePercent)}% on {request.Clock.Date(DateOnly.FromDateTime(latest.MeasuredAt))}, "
             + $"of {ReportFacts.Plural(results.Count, "result")} in this period.";
+        string? cutNote = cut
+            ? $"Only the first {Budget} results are shown, to {request.Clock.Date(DateOnly.FromDateTime(latest.MeasuredAt))}."
+            : null;
         return new ReportDatasetOutput
         {
             Rows = rows,
+            CutNote = cutNote,
+            Resolution = new ReportResolution(0, 0, stored, rows.Count, cut),
             Summary = sentence + (results.Count > 1
                 ? $"\nFrom {ReportFacts.Number(results.Min(r => r.ValuePercent))}% to {ReportFacts.Number(results.Max(r => r.ValuePercent))}%."
-                : ""),
+                : "") + (cutNote is null ? "" : $"\n{cutNote}"),
             Facts =
             [
                 new ReportFact("Latest", ReportFacts.Number(latest.ValuePercent), "%", request.Clock.Date(DateOnly.FromDateTime(latest.MeasuredAt)), ["hba1c"]),
@@ -401,11 +409,7 @@ internal sealed class LabHbA1cDataset : IReportDataset
         return (first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), last.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
-    internal static long Midnight(DateOnly day, TimeZoneInfo zone)
-    {
-        var local = day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUnixTimeMilliseconds();
-    }
+    internal static long Midnight(DateOnly day, TimeZoneInfo zone) => LocalSlotBinning.DayStartMills(day, zone);
 }
 
 /// <summary>
@@ -451,14 +455,10 @@ internal sealed class BodyWeightDataset : IReportDataset
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
-        var (from, to) = (request.From.ToUnixTimeMilliseconds(), request.To.ToUnixTimeMilliseconds());
-        await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
-        var latest = await db.BodyWeights.AsNoTracking()
-            .Where(w => w.Mills >= from && w.Mills < to)
-            .OrderByDescending(w => w.Mills).Take(Budget + 1)
-            .Select(w => new { w.Mills, w.WeightKg, w.BodyFatPercent, w.LeanMassKg })
-            .ToListAsync(cancellationToken);
+        var repository = request.Services.GetRequiredService<IBodyWeightRepository>();
+        var latest = await repository.GetObservedInNewestFirstAsync(request.From.UtcDateTime, request.To.UtcDateTime, Budget + 1, cancellationToken);
         var cut = latest.Count > Budget;
+        var stored = cut ? await repository.CountObservedInAsync(request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken) : latest.Count;
         var records = latest.Take(Budget).Reverse().ToList();
         if (records.Count > 0)
             request.ReadLog.Record("body_weights", records.Count);
@@ -492,7 +492,7 @@ internal sealed class BodyWeightDataset : IReportDataset
             ],
             CompleteFrom = cut ? records[0].Mills : null,
             CutNote = cutNote,
-            Resolution = new ReportResolution(0, 0, latest.Count, rows.Count, cut),
+            Resolution = new ReportResolution(0, 0, stored, rows.Count, cut),
             Sentence = sentence,
             SentenceAbout = ["weight"],
             OtherSentences = SeriesRows.Sentences(

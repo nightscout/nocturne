@@ -89,7 +89,9 @@ internal abstract class LaneDataset : IReportDataset
         var read = await ReadAsync(request, from, to, PointBudget + 1, cancellationToken);
         if (read.Spans.Count > 0 && ReadName is { } source)
             request.ReadLog.Record(source, read.Spans.Count);
-        return Output(Clip(read.Spans, from, to, Instants), request, PointBudget, read.Cut);
+        // Whether the read reached its limit is decided on what it read: clipping to the range can drop spans the
+        // limit counted, and the spans past the limit were never read.
+        return Output(Clip(read.Spans, from, to, Instants), request, PointBudget, read.Cut || read.Spans.Count > PointBudget);
     }
 
     /// <summary>Each span cut to the range, in start order; an instant is kept where it falls in it.</summary>
@@ -108,7 +110,7 @@ internal abstract class LaneDataset : IReportDataset
     internal ReportDatasetOutput Output(IReadOnlyList<Span> spans, ReportDatasetRequest request, int budget, bool readCut = false)
     {
         var kept = spans.Take(budget).ToList();
-        var cut = kept.Count < spans.Count || (readCut && kept.Count > 0);
+        var cut = kept.Count < spans.Count || readCut;
         var window = ReportFacts.Window(request.From, request.To, request.Clock);
         var lanes = kept.GroupBy(s => s.Lane).Select(g => (Lane: g.Key, Count: g.Count())).ToList();
         var lines = new List<string> { string.Create(CultureInfo.InvariantCulture, $"{Label} from {window}.") };
@@ -121,7 +123,9 @@ internal abstract class LaneDataset : IReportDataset
         string? cutNote = null;
         if (cut)
         {
-            cutNote = $"Only the first {kept.Count} {Noun}s are shown, to {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(kept[^1].Start), request.Clock)}.";
+            cutNote = kept.Count > 0
+                ? $"Only the first {kept.Count} {Noun}s are shown, to {ReportFacts.Instant(DateTimeOffset.FromUnixTimeMilliseconds(kept[^1].Start), request.Clock)}."
+                : $"No {Noun}s are shown: the read stopped at its limit before it found one in this period.";
             lines.Add(cutNote);
         }
 

@@ -24,6 +24,8 @@
   import type { GivenBlock, Report } from "./report.svelte.js";
   import SignalCatalogue from "./SignalCatalogue.svelte";
   import { SignalPicks } from "./signal-picks.svelte.js";
+  import { page } from "$app/state";
+  import { memberOwner } from "#lib/stores/member-storage.js";
   import { markLabel } from "./vocabulary-words.svelte.js";
 
   interface Props {
@@ -42,7 +44,7 @@
   let titleOpen = $state(false);
 
   const source = $derived(givenSource(report, block));
-  const picks = new SignalPicks();
+  const picks = new SignalPicks(memberOwner(page.data));
   let catalogueOpen = $state(false);
   const periods = $derived(kind === "comparison" ? report.givenComparison(block) : null);
 </script>
@@ -62,7 +64,7 @@
     data-testid="chart-side"
   >
     {#if kind === "chart"}
-      <nav aria-labelledby="{id}-heading" class="space-y-2" data-testid="signal-rail">
+      <div role="group" aria-labelledby="{id}-heading" class="space-y-2" data-testid="signal-rail">
         <h3 id="{id}-heading" class="px-2 text-xs font-medium text-muted-foreground">On this chart</h3>
         <ul class="space-y-0.5">
           {#each layers as layer (layer.id)}
@@ -73,7 +75,7 @@
                 variant="ghost"
                 size="icon-touch"
                 class="shrink-0"
-                aria-label={`Remove ${layer.name}`}
+                aria-label={`Remove ${layer.name} from the chart`}
                 disabled={removeReason !== null}
                 {...describe(removeReason)}
                 onclick={() => (refused = report.removeGivenLayer(block, layer))}
@@ -94,7 +96,7 @@
         {#if refused}
           <p class="px-2 text-xs text-muted-foreground" role="status">{refused}</p>
         {/if}
-      </nav>
+      </div>
     {:else if kind === "comparison" && periods}
       <div class="space-y-1.5">
         <p class="text-xs text-muted-foreground" id="{id}-compare">Compare</p>

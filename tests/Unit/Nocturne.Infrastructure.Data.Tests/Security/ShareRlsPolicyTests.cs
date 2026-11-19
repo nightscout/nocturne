@@ -276,6 +276,7 @@ public class ShareRlsPolicyTests
             Expect(ShareDataCategories.RecencyColumnFor(table), "recency",
                 ShareDataCategories.RecencyIsUnixMillis(table) ? [typeof(long)] : timestamp);
             Expect(ShareDataCategories.SpanEndColumnFor(table), "span end", timestamp);
+            Expect(ShareDataCategories.SpanEarlyEndColumnFor(table), "span early end", timestamp);
             Expect(ShareDataCategories.OpenSpanBoundFor(table)?.StartColumn, "open-span start", timestamp);
             if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
             {

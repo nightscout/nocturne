@@ -12,6 +12,8 @@
   import type { ChartBlock, Report } from "./report.svelte.js";
   import SignalCatalogue from "./SignalCatalogue.svelte";
   import { SignalPicks } from "./signal-picks.svelte.js";
+  import { page } from "$app/state";
+  import { memberOwner } from "#lib/stores/member-storage.js";
   import Swatch from "./Swatch.svelte";
   import { removeWithUndo } from "./undo.svelte.js";
   import { signalLabel } from "./vocabulary-words.svelte.js";
@@ -25,7 +27,7 @@
 
   const ws = $derived(block.ws);
   const source = $derived(chartSource(report, block));
-  const picks = new SignalPicks();
+  const picks = new SignalPicks(memberOwner(page.data));
   let open = $state(false);
   let nav = $state<HTMLElement | null>(null);
 

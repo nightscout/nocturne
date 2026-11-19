@@ -135,7 +135,9 @@ public class CustomReportsController(
 
     /// <summary>
     /// Renames a custom report, replaces its spec, or both: its creator, or a member who edits every
-    /// report. Refused to a history-clamped member, as saving is.
+    /// report. Refused to a history-clamped member, as saving is. A request that sends the
+    /// <c>expectedUpdatedAt</c> it read is refused with a 409 coded <see cref="CustomReportProblemCodes.Changed"/>
+    /// when the report has changed since.
     /// </summary>
     [HttpPut("{id:guid}")]
     [RequireInteractiveSession]
@@ -151,7 +153,7 @@ public class CustomReportsController(
     {
         if (HttpContext.IsCallerHistoryClamped())
             return Forbid();
-        return Result(await store.UpdateAsync(id, request.Name, request.Spec, Caller(), cancellationToken));
+        return Result(await store.UpdateAsync(id, request.Name, request.Spec, request.ExpectedUpdatedAt, Caller(), cancellationToken));
     }
 
     /// <summary>Deletes a custom report: its creator, or a member who edits every report.</summary>
@@ -181,6 +183,8 @@ public class CustomReportsController(
         CustomReportWriteStatus.Forbidden => Forbid(),
         CustomReportWriteStatus.Invalid => Refused(write.Errors, StatusCodes.Status400BadRequest),
         CustomReportWriteStatus.NameTaken => Refused(write.Errors, StatusCodes.Status409Conflict),
+        CustomReportWriteStatus.Changed => this.ProblemWithCode(CustomReportProblemCodes.Changed,
+            "The report was changed after you opened it. Open it again to see the changes.", StatusCodes.Status409Conflict),
         _ => throw new ArgumentOutOfRangeException(nameof(write), write.Status, null),
     };
 

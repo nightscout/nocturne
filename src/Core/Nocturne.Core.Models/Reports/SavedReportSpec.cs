@@ -26,6 +26,9 @@ public enum SavedReportSpecWriteStatus
 
     /// <summary>Another live custom report of the tenant has the name.</summary>
     NameTaken,
+
+    /// <summary>The report was changed after the caller read it, so nothing was written.</summary>
+    Changed,
 }
 
 /// <summary>A write's outcome, and the row as saved when it was.</summary>

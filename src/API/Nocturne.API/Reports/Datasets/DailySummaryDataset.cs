@@ -153,7 +153,7 @@ internal sealed class DailySummaryDataset : IReportDataset
         {
             Rows = rows,
             Summary = (dayFilter is null ? "" : dayFilter.Summary(selection) + "\n")
-                + Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)], request.HistoryClamped ? request.From : null),
+                + Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)], request.HistoryClamped ? request.From : null, request.Clock),
             Facts = FactsOf(rows, useMmol, omitted.Count == 0),
             Sentence = rows.Any(r => r["readings"] is int n && n > 0)
                 ? "One row per local day; no figure is averaged across days."
@@ -235,6 +235,12 @@ internal sealed class DailySummaryDataset : IReportDataset
         return facts;
     }
 
+    /// <summary>A row's <c>date</c> key, yyyy-MM-dd, as <paramref name="clock"/> writes a date.</summary>
+    private static string? DayWords(object? date, ReportClock clock) =>
+        date is string key && DateOnly.TryParseExact(key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            ? clock.Date(day)
+            : date?.ToString();
+
     /// <summary>The days the rows cover, and the extremes across them; no figure is averaged across days.</summary>
     internal static string Summarise(
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
@@ -242,17 +248,19 @@ internal sealed class DailySummaryDataset : IReportDataset
         DateOnly end,
         bool useMmol,
         IReadOnlyList<string> omitted,
-        DateTimeOffset? clampedFrom = null)
+        DateTimeOffset? clampedFrom = null,
+        ReportClock? clock = null)
     {
+        clock ??= ReportClock.Utc;
         string N(object? value, string format) => value is IFormattable f ? f.ToString(format, CultureInfo.InvariantCulture) : "no data";
         var lines = new List<string>
         {
-            string.Create(CultureInfo.InvariantCulture, $"Daily summary over local days {start:yyyy-MM-dd} to {end:yyyy-MM-dd}."),
+            $"Daily summary over local days {clock.Date(start)} to {clock.Date(end)}.",
         };
 
         if (clampedFrom is { } cut && rows.FirstOrDefault(r => r.GetValueOrDefault("partial") is true) is { } first)
-            lines.Add(string.Create(CultureInfo.InvariantCulture,
-                $"The day {first["date"]} is partial: this token reads only the last 24 hours, so its row starts at {cut:yyyy-MM-dd HH:mm} UTC."));
+            lines.Add($"The day {DayWords(first["date"], clock)} is partial: this token reads only the last 24 hours, so its row starts at "
+                + $"{ReportFacts.Instant(cut, clock)}.");
 
         var withData = rows.Where(r => r["readings"] is int n && n > 0).ToList();
         lines.Add($"Days with glucose readings: {withData.Count} of {rows.Count}.");

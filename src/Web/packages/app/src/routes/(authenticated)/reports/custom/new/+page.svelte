@@ -103,4 +103,4 @@
   {/if}
 </div>
 
-<UnsavedGuard dirty={draft.dirty} kept={draft.kept} />
+<UnsavedGuard dirty={draft.dirty} kept={draft.kept} keeps={draft.keeps} />

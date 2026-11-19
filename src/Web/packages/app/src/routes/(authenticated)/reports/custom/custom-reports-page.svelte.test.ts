@@ -58,4 +58,17 @@ describe("custom reports list", () => {
     await page.getByRole("button", { name: "Delete", exact: true }).click();
     await vi.waitFor(() => expect(removed).toEqual(["b2"]));
   });
+
+  it("drops drafts older than the time a draft is kept, and keeps the rest", async () => {
+    const old = "nocturne.member.custom-report-draft.dev.subject-1.a1";
+    const recent = "nocturne.member.custom-report-draft.dev.subject-1.b2";
+    const draft = (writtenAt: number) => JSON.stringify({ version: 1, savedAt: null, writtenAt, state: {} });
+    localStorage.setItem(old, draft(Date.now() - 15 * 24 * 60 * 60 * 1000));
+    localStorage.setItem(recent, draft(Date.now()));
+    render(CustomReportsPage, {});
+
+    await vi.waitFor(() => expect(localStorage.getItem(old)).toBeNull());
+    expect(localStorage.getItem(recent)).not.toBeNull();
+    localStorage.clear();
+  });
 });

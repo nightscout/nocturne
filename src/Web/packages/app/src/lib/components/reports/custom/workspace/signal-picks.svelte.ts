@@ -1,10 +1,13 @@
 /**
- * The signals a viewer starred and the ones they used last, kept in this browser only. A browser that refuses
- * storage keeps them for the page's life.
+ * The signals a member starred and the ones they used last, kept in this browser only, for each
+ * member of each tenant, and cleared with the rest of what the browser keeps for them (see
+ * `member-storage.ts`). A browser that refuses storage, or a page with no one member to keep them
+ * for, keeps them for the page's life.
  */
+import { memberKey, type MemberOwner } from "#lib/stores/member-storage.js";
 import type { SignalId } from "./catalogue-vocabulary.js";
 
-const KEY = "nocturne:report-signal-picks";
+const NAME = "report-signal-picks";
 
 /** The starred signals before the viewer changes them. */
 export const DEFAULT_STARRED: readonly SignalId[] = ["glucose", "target", "iob", "boluses", "carbs", "cob", "basal", "timeInRange"];
@@ -21,9 +24,9 @@ function strings(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((v) => typeof v === "string") ? value : null;
 }
 
-function read(storage: Storage | null): Stored {
+function read(storage: Storage | null, key: string | null): Stored {
   try {
-    const raw: unknown = JSON.parse(storage?.getItem(KEY) ?? "null");
+    const raw: unknown = JSON.parse((key && storage?.getItem(key)) ?? "null");
     if (raw && typeof raw === "object")
       return {
         starred: strings(Reflect.get(raw, "starred")) ?? [...DEFAULT_STARRED],
@@ -47,10 +50,12 @@ export class SignalPicks {
   starred = $state<SignalId[]>([]);
   recent = $state<SignalId[]>([]);
   readonly #storage: Storage | null;
+  readonly #key: string | null;
 
-  constructor(storage: Storage | null = browserStorage()) {
+  constructor(owner: MemberOwner, storage: Storage | null = browserStorage()) {
     this.#storage = storage;
-    const stored = read(storage);
+    this.#key = memberKey(owner, NAME);
+    const stored = read(storage, this.#key);
     this.starred = stored.starred;
     this.recent = stored.recent;
   }
@@ -72,7 +77,7 @@ export class SignalPicks {
 
   #save() {
     try {
-      this.#storage?.setItem(KEY, JSON.stringify({ starred: this.starred, recent: this.recent }));
+      if (this.#key) this.#storage?.setItem(this.#key, JSON.stringify({ starred: this.starred, recent: this.recent }));
     } catch {
       // A full or blocked storage keeps the picks for this page only.
     }

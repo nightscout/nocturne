@@ -3,6 +3,11 @@
   range it runs over (as saved, or a preset the viewer picks, which changes nothing saved) and the
   actions: Edit, and the rest in one menu. A spec that no longer validates shows the API's reasons.
 -->
+<script lang="ts" module>
+  /** The problem code of a write refused because the report changed since the page read it. */
+  const CHANGED = "custom_report_changed";
+</script>
+
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -18,7 +23,7 @@
   import CustomReportQuery from "#lib/components/reports/custom/CustomReportQuery.svelte";
   import SpecErrorList from "#lib/components/reports/custom/SpecErrorList.svelte";
   import DateSpanField from "#lib/components/reports/custom/workspace/DateSpanField.svelte";
-  import { clearDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import { clearDraft, draftOwner, moveDraftVersion } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import RangeChoices from "#lib/components/reports/custom/workspace/RangeChoices.svelte";
   import { CUSTOM_RANGE, viewerRange } from "#lib/components/reports/custom/workspace/viewer-range.svelte.js";
   import type { DateSpan } from "#lib/components/reports/custom/workspace/workspace.svelte.js";
@@ -28,13 +33,16 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
   import { getPatientTimezone } from "#lib/api/generated/patientTimezones.generated.remote.js";
-  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { describeSubmitError, errorCode, errorStatus } from "#lib/forms/submit-error.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import { copyToClipboard } from "#lib/utils/index.js";
   import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Link from "@lucide/svelte/icons/link";
   import Pencil from "@lucide/svelte/icons/pencil";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import SquarePen from "@lucide/svelte/icons/square-pen";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { tick } from "svelte";
@@ -64,11 +72,19 @@
   let span = $state<DateSpan | null>(null);
   let nameField = $state<HTMLInputElement | null>(null);
 
-  /** The patient's zone, which the two dates a viewer picks are read in; null while unknown or unset. */
+  /**
+   * The patient's zone, which the two dates a viewer picks are read in. A caller refused the zone reads
+   * it as unset (UTC), as the other reports do; while it loads, or when it fails, two dates do not run.
+   */
   const timeZone = getPatientTimezone();
+  const zoneRefused = $derived(errorStatus(timeZone.error) === 403);
+  const zoneReady = $derived(timeZone.current !== undefined || zoneRefused);
+  const zoneFailed = $derived(!zoneReady && timeZone.error != null);
+  const datesPicked = $derived(rangeChoice === CUSTOM_RANGE && span !== null);
+  const waitingForZone = $derived(datesPicked && !zoneReady);
   const range = $derived(
     report && catalogue.current
-      ? viewerRange(catalogue.current, report.spec, rangeChoice, span, timeZone.current?.timezone ?? null)
+      ? viewerRange(catalogue.current, report.spec, waitingForZone ? null : rangeChoice, span, timeZone.current?.timezone ?? null)
       : null
   );
 
@@ -81,20 +97,40 @@
     nameField?.select();
   }
 
-  async function rename(event: SubmitEvent) {
-    event.preventDefault();
-    if (name.trim() === "") return;
+  /** The report as saved now, when a rename was refused because it changed after the page read it. */
+  let renameConflict = $state<{ name: string; changedAt: string | null } | null>(null);
+  let confirmingReplace = $state(false);
+
+  /** Renames the report, only the version the page read unless `replace` (the member confirmed it). */
+  async function rename(event?: SubmitEvent, replace = false) {
+    event?.preventDefault();
+    if (name.trim() === "" || !report) return;
+    const read = report.updatedAt ?? null;
     busy = true;
     actionError = null;
     try {
-      await updateCustomReport({ id, request: { name: name.trim() } });
+      const result = await updateCustomReport({
+        id,
+        request: { name: name.trim(), ...(replace || !read ? {} : { expectedUpdatedAt: read }) },
+      });
+      // The rename changes only the name: the member's own unsaved changes to the spec still apply.
+      moveDraftVersion(draftOwner(page.data), id, read, result.updatedAt ?? null);
       renaming = false;
+      renameConflict = null;
       toast.success("Nocturne renamed the report.");
     } catch (err) {
-      actionError = describeSubmitError(err, "Could not rename the report. Try again.");
+      if (errorStatus(err) === 409 && errorCode(err) === CHANGED) {
+        const now = await fresh(getCustomReport(id)).catch(() => null);
+        renameConflict = { name: now?.name ?? report.name ?? "", changedAt: now?.updatedAt ?? null };
+      } else actionError = describeSubmitError(err, "Could not rename the report. Try again.");
     } finally {
       busy = false;
     }
+  }
+
+  function cancelRename() {
+    renaming = false;
+    renameConflict = null;
   }
 
   async function remove() {
@@ -113,6 +149,11 @@
     }
   }
 
+  // A report deleted somewhere else leaves no draft behind.
+  $effect(() => {
+    if (errorStatus(resource.error) === 404) clearDraft(draftOwner(page.data), id);
+  });
+
   async function copyLink() {
     if (await copyToClipboard(page.url.href)) toast.success("Nocturne copied the link.");
     else toast.error("Could not copy the link. Copy it from the address bar.");
@@ -129,9 +170,31 @@
         </div>
         <div class="flex gap-2">
           <Button type="submit" disabled={busy || name.trim() === ""}>Save</Button>
-          <Button type="button" variant="outline" onclick={() => (renaming = false)}>Cancel</Button>
+          <Button type="button" variant="outline" onclick={cancelRename}>Cancel</Button>
         </div>
       </form>
+      {#if renameConflict}
+        <div class="space-y-3 rounded-lg border border-warning/40 bg-warning/5 p-4" role="alert" data-testid="rename-conflict">
+          <p class="text-sm font-medium">Nocturne did not rename the report. It changed somewhere else after you opened it.</p>
+          <p class="text-sm">
+            {#if renameConflict.changedAt}
+              The report was saved again on {formatMediumDateTime(renameConflict.changedAt)}. Its name is now "{renameConflict.name}".
+            {:else}
+              Its name is now "{renameConflict.name}".
+            {/if}
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <Button variant="outline" size="touch-sm" disabled={busy} onclick={() => (confirmingReplace = true)}>
+              <Pencil aria-hidden="true" />
+              Rename it
+            </Button>
+            <Button variant="outline" size="touch-sm" disabled={busy} onclick={cancelRename}>
+              <RotateCcw aria-hidden="true" />
+              Keep the name "{renameConflict.name}"
+            </Button>
+          </div>
+        </div>
+      {/if}
     {:else}
       <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2" data-testid="report-toolbar">
         {#if range && specErrors.length === 0}
@@ -147,7 +210,7 @@
               value={rangeChoice === CUSTOM_RANGE ? span : null}
               label="Dates to show"
               placeholder="Choose dates"
-              pressed={range.value === CUSTOM_RANGE}
+              pressed={range.value === CUSTOM_RANGE || waitingForZone}
               onchange={(picked) => {
                 span = picked;
                 rangeChoice = CUSTOM_RANGE;
@@ -210,6 +273,15 @@
     {#if actionError}
       <p class="text-sm text-destructive" role="alert">{actionError}</p>
     {/if}
+    {#if datesPicked && zoneFailed}
+      <div class="flex flex-wrap items-center gap-3 text-sm" role="alert" data-testid="zone-failed">
+        <p>Nocturne could not read the patient's time zone, so it cannot show the dates you chose. The report shows its saved range.</p>
+        <Button variant="outline" size="touch-sm" onclick={() => void timeZone.refresh()}>
+          <RotateCcw aria-hidden="true" />
+          Try again
+        </Button>
+      </div>
+    {/if}
     {#if range?.spanReason}
       <p class="text-xs text-muted-foreground" role="status" data-testid="span-reason">{range.spanReason}</p>
     {/if}
@@ -219,6 +291,8 @@
 
     {#if specErrors.length > 0}
       <SpecErrorList errors={specErrors} spec={report.spec} />
+    {:else if waitingForZone && !zoneFailed}
+      <p class="text-sm text-muted-foreground" role="status" data-testid="zone-loading">Reading the patient's time zone for the dates you chose.</p>
     {:else}
       {#key `${id}|${range?.value ?? ""}|${range?.value === CUSTOM_RANGE && span ? `${span.from}/${span.to}` : ""}`}
         <CustomReportQuery request={{ spec: range?.spec ?? report.spec }}>
@@ -230,6 +304,23 @@
     {/if}
   {/if}
 </div>
+
+<ConfirmDialog
+  open={confirmingReplace}
+  onOpenChange={(open) => (confirmingReplace = open)}
+  title="Replace the name?"
+  confirmLabel="Replace"
+  cancelLabel="Do not replace"
+  {busy}
+  onConfirm={async () => {
+    confirmingReplace = false;
+    await rename(undefined, true);
+  }}
+>
+  {#snippet description()}
+    The name "{name.trim()}" replaces the name "{renameConflict?.name}" saved somewhere else. Nothing else in the report changes.
+  {/snippet}
+</ConfirmDialog>
 
 <ConfirmDialog
   open={confirmingDelete}

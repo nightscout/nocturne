@@ -4,7 +4,7 @@
   yet.
 -->
 <script lang="ts">
-  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { describeSubmitError, type ProblemCodeMessages } from "#lib/forms/submit-error.js";
   import { Button, type ButtonVariant } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
@@ -28,9 +28,11 @@
     showReason?: boolean;
     /** Saves under the name; a rejection is shown under the button. */
     onsave: (name: string) => Promise<void>;
+    /** What to say for a rejection that carries one of these problem codes. */
+    codes?: ProblemCodeMessages;
   }
 
-  let { report, name: given = "", kind = "save", variant = "default", disabled = false, reason = null, showReason = true, onsave }: Props = $props();
+  let { report, name: given = "", kind = "save", variant = "default", disabled = false, reason = null, showReason = true, onsave, codes }: Props = $props();
 
   let open = $state(false);
   let typed = $state<string | null>(null);
@@ -65,7 +67,8 @@
     } catch (err) {
       error = describeSubmitError(
         err,
-        kind === "copy" ? "Could not save the copy. Try again." : "Could not save the report. Try again."
+        kind === "copy" ? "Could not save the copy. Try again." : "Could not save the report. Try again.",
+        codes
       );
     } finally {
       saving = false;

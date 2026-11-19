@@ -35,7 +35,7 @@ public static class GlucoseEpisodes
     /// The episodes in <paramref name="readings"/>, in the order they began. Implausible readings are left out and the
     /// rest put in time order, as the statistics take them.
     /// </summary>
-    public static List<GlucoseEpisode> Find(IEnumerable<SensorGlucose> readings, GlycemicThresholds thresholds) =>
+    public static IReadOnlyList<GlucoseEpisode> Find(IEnumerable<SensorGlucose> readings, GlycemicThresholds thresholds) =>
         GlucoseEpisodeDetector.Detect(
             readings.Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl)).OrderBy(r => r.Timestamp).ToList(), thresholds);
 }

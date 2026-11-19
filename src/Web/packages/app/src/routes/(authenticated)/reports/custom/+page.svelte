@@ -9,7 +9,7 @@
     getCustomReports,
   } from "#lib/api/generated/customReports.generated.remote.js";
   import type { CustomReportSummary } from "#lib/api/generated/nocturne-api-client.js";
-  import { clearDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import { clearDraft, draftOwner, dropExpiredDrafts } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
@@ -17,12 +17,15 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
+  import { onMount } from "svelte";
 
   const resource = contextResource(() => getCustomReports(), {
     errorTitle: "Could not load the custom reports",
   });
 
   const reports = $derived<CustomReportSummary[]>(resource.current ?? []);
+
+  onMount(() => dropExpiredDrafts());
   const clamped = $derived(page.data.limitTo24Hours === true);
 
   let pendingDelete = $state<CustomReportSummary | null>(null);
@@ -52,7 +55,8 @@
       <LayoutDashboard class="h-5 w-5 text-primary" aria-hidden="true" />
     </div>
     <div class="space-y-1">
-      <h2 class="text-xl font-semibold">Saved custom reports</h2>      <p class="text-sm text-muted-foreground">
+      <h2 class="text-xl font-semibold">Saved custom reports</h2>
+      <p class="text-sm text-muted-foreground">
         A custom report shows the charts and figures of your data that you select. Each member of this
         account sees the same list.
       </p>

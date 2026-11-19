@@ -77,7 +77,7 @@ public class SystemEventRepository : ISystemEventRepository
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entities = await db.SystemEvents.AsNoTracking()
             .Where(e => e.Mills >= from && e.Mills < to)
-            .OrderBy(e => e.Mills)
+            .OrderBy(e => e.Mills).ThenBy(e => e.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
         return [.. entities.Select(SystemEventMapper.ToDomainModel)];

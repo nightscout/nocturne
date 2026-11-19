@@ -49,6 +49,29 @@ public class HealthDatasetTests
     }
 
     [Fact]
+    public async Task A_whole_read_of_heart_rate_keeps_at_most_the_whole_row_cap_and_says_where_it_stops()
+    {
+        var from = To.AddDays(-90);
+        var minutes = Enumerable.Range(0, ReportDatasetRequest.MaxWholeRows + 10)
+            .Select(i => new HeartRate { Timestamp = from.AddMinutes(i).UtcDateTime, Bpm = 60 }).ToList();
+        var heart = new Mock<IHeartRateService>();
+        heart.Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(minutes);
+        var services = new ServiceCollection().AddSingleton(heart.Object).BuildServiceProvider();
+
+        var whole = await new HeartRateDataset().RunAsync(
+            Request(new HeartRateParameters(), services, new ReportReadLog(), TimeSpan.FromDays(90)) with { Whole = true }, CancellationToken.None);
+        var sampled = await new HeartRateDataset().RunAsync(
+            Request(new HeartRateParameters(), services, new ReportReadLog(), TimeSpan.FromDays(90)), CancellationToken.None);
+
+        whole.Rows.Should().HaveCount(ReportDatasetRequest.MaxWholeRows);
+        whole.CutNote.Should().Be(
+            $"Only the first {ReportDatasetRequest.MaxWholeRows} minutes are drawn, to {ReportFacts.Instant(from.AddMinutes(ReportDatasetRequest.MaxWholeRows - 1), new ReportClock(TimeZoneInfo.Utc))}.");
+        whole.Resolution!.SourceRows.Should().Be(ReportDatasetRequest.MaxWholeRows + 10);
+        sampled.CutNote.Should().BeNull("a sampled read keeps within its budget by its slots");
+    }
+
+    [Fact]
     public async Task Steps_are_added_up_per_slot_without_records_that_may_be_running_totals()
     {
         var steps = new Mock<IStepCountService>();

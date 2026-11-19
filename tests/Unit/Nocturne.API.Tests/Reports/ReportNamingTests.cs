@@ -126,6 +126,13 @@ public class ReportNamingTests
             .Should().Be("No lows started from 12:00 AM to 6:00 AM in the last 90 days.");
         Nocturne.API.Reports.Datasets.EventResponseDataset.RangeWords(Request(now.AddDays(-100)))
             .Should().Be("from 2026-05-10 to 2026-08-08");
+
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var days = new ReportDatasetRequest(null!, ReportPanelKind.Chart, new DateTimeOffset(2026, 10, 25, 0, 0, 0, TimeSpan.FromHours(11)),
+            new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.FromHours(11)), false, new HashSet<string>(), null!, new ReportReadLog(), Now: now,
+            Zone: sydney, Region: "en-US");
+        Nocturne.API.Reports.Datasets.EventResponseDataset.RangeWords(days)
+            .Should().Be("from Oct 25, 2026 to Oct 31, 2026", "a range that ends at a local midnight does not take in the day that starts there");
     }
 
     [Fact]

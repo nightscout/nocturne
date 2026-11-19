@@ -72,7 +72,9 @@ internal sealed class HeartRateDataset : IReportDataset
             request.ReadLog.Record("heart_rates", minutes.Count);
 
         var interval = request.Whole ? 1 : GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
-        var rows = Slots(minutes.Select(h => (Mills: new DateTimeOffset(DateTime.SpecifyKind(h.Timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds(), Value: (double)h.Bpm)),
+        var cut = request.Whole && minutes.Count > ReportDatasetRequest.MaxWholeRows;
+        var drawn = cut ? minutes.Take(ReportDatasetRequest.MaxWholeRows) : minutes;
+        var rows = Slots(drawn.Select(h => (Mills: new DateTimeOffset(DateTime.SpecifyKind(h.Timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds(), Value: (double)h.Bpm)),
                 request.From.ToUnixTimeMilliseconds(), interval)
             .Select(s => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -90,10 +92,15 @@ internal sealed class HeartRateDataset : IReportDataset
         var mean = values.Average();
         string B(double v) => Number(v, "0");
         var sentence = $"Heart rate: mean {B(mean)} bpm, from {B(values.Min())} to {B(values.Max())} bpm, over {ReportFacts.Plural(minutes.Count, "minute")}.";
+        string? cutNote = cut
+            ? $"Only the first {ReportDatasetRequest.MaxWholeRows} minutes are drawn, to "
+                + $"{ReportFacts.Instant(new DateTimeOffset(DateTime.SpecifyKind(minutes[ReportDatasetRequest.MaxWholeRows - 1].Timestamp, DateTimeKind.Utc)), request.Clock)}."
+            : null;
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = sentence + (interval > 1 ? $"\nEach row is {interval} minutes." : ""),
+            CutNote = cutNote,
+            Summary = sentence + (interval > 1 ? $"\nEach row is {interval} minutes." : "") + (cutNote is null ? "" : $"\n{cutNote}"),
             Facts =
             [
                 new ReportFact("Mean", B(mean), "bpm", About: ["bpm"]),
@@ -104,7 +111,7 @@ internal sealed class HeartRateDataset : IReportDataset
             Sentence = sentence,
             SentenceAbout = ["bpm"],
             Context = context,
-            Resolution = new ReportResolution(1, interval, minutes.Count, rows.Count, interval > 1),
+            Resolution = new ReportResolution(1, interval, minutes.Count, rows.Count, interval > 1 || cut),
         };
     }
 
@@ -277,9 +284,13 @@ internal sealed class SleepDataset : IReportDataset
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
-        var sessions = (await request.Services.GetRequiredService<ISleepSessionRepository>().GetSessionsAsync(
+        var repository = request.Services.GetRequiredService<ISleepSessionRepository>();
+        var sessions = (await repository.GetSessionsAsync(
             request.From.UtcDateTime, request.To.UtcDateTime, limit: MaxSessions + 1, descending: false, cancellationToken: cancellationToken)).ToList();
         var cut = sessions.Count > MaxSessions;
+        var stored = cut
+            ? await repository.CountSessionsAsync(request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken: cancellationToken)
+            : sessions.Count;
         sessions = [.. sessions.Take(MaxSessions)];
         if (sessions.Count > 0)
             request.ReadLog.Record("sleep_sessions", sessions.Count);
@@ -334,7 +345,7 @@ internal sealed class SleepDataset : IReportDataset
         {
             Rows = rows,
             CutNote = cutNote,
-            Resolution = new ReportResolution(0, 0, cut ? MaxSessions + 1 : sessions.Count, rows.Count, cut),
+            Resolution = new ReportResolution(0, 0, stored, rows.Count, cut),
             Summary = string.Join('\n', lines),
             Facts = facts,
             Sentence = sentence ?? lines[0],

@@ -119,13 +119,20 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
                     Id = Guid.CreateVersion7(), AlertExcursionId = open.Id, TriggeredAt = now.AddHours(-30), ResolvedAt = now.AddHours(-1), Status = "resolved",
                 });
 
+            // A window on now, one that ran out three days ago, one turned off three days ago with no expiry (hidden from
+            // a clamped member by its clearing alone), and one with neither set that is still on.
             db.DndWindows.AddRange(
                 new DndWindowEntity { Id = Guid.CreateVersion7(), Scope = DndScope.Lows, StartedAt = now.AddHours(-2), EndsAt = now.AddHours(1), CreatedAt = now },
                 new DndWindowEntity
                 {
                     Id = Guid.CreateVersion7(), Scope = DndScope.All, StartedAt = now.AddDays(-3), EndsAt = now.AddDays(-3).AddHours(8),
                     ClearedAt = now.AddDays(-3).AddHours(2), CreatedAt = now.AddDays(-3),
-                });
+                },
+                new DndWindowEntity
+                {
+                    Id = Guid.CreateVersion7(), Scope = DndScope.Highs, StartedAt = now.AddDays(-4), ClearedAt = now.AddDays(-3), CreatedAt = now.AddDays(-4),
+                },
+                new DndWindowEntity { Id = Guid.CreateVersion7(), Scope = DndScope.All, StartedAt = now.AddDays(-5), CreatedAt = now.AddDays(-5) });
 
             db.CompressionLowSuggestions.AddRange(
                 new CompressionLowSuggestionEntity
@@ -173,7 +180,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         { TrackersParameters.Name, 3, 2, 0 },
         { AlertExcursionsParameters.Name, 3, 2, 3 },
         { AlertInstancesParameters.Name, 3, 2, 3 },
-        { DndWindowsParameters.Name, 2, 1, 0 },
+        { DndWindowsParameters.Name, 4, 2, 0 },
         { CompressionLowsParameters.Name, 2, 1, 0 },
         { LabHbA1cParameters.Name, 2, 1, 0 },
         { BodyWeightParameters.Name, 2, 1, 0 },
@@ -228,6 +235,10 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         var factory = seed.AsFactory();
         await using var services = new ServiceCollection().AddSingleton(factory)
             .AddSingleton<Nocturne.Core.Contracts.Repositories.ISystemEventRepository>(new SystemEventRepository(factory))
+            .AddSingleton<Nocturne.Core.Contracts.Alerts.IDndWindowRepository>(new DndWindowRepository(factory))
+            .AddSingleton<Nocturne.Core.Contracts.Repositories.ISleepSessionRepository>(new SleepSessionRepository(factory))
+            .AddSingleton<Nocturne.Core.Contracts.Repositories.IBodyWeightRepository>(
+                new Nocturne.Infrastructure.Data.Repositories.Health.BodyWeightRepository(factory, TimeProvider.System))
             .BuildServiceProvider();
         var output = await dataset.RunAsync(
             new ReportDatasetRequest(parameters, ReportPanelKind.Chart, from, to, false, new HashSet<string>([.. Scopes, Scope.DevicesRead]),
@@ -283,7 +294,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         output.Rows.Should().HaveCount(2_000);
         output.Rows[0]["start"].Should().Be(Mills(start), "the read keeps the start of the range");
         output.Rows[^1]["start"].Should().Be(Mills(start.AddMinutes(1_999)));
-        output.CutNote.Should().Be($"Only the first 2000 alarms are shown, to {ReportFacts.Instant(start.AddMinutes(1_999), TimeZoneInfo.Utc)}.");
+        output.CutNote.Should().Be($"Only the first 2000 alarms are shown, to {ReportFacts.Instant(start.AddMinutes(1_999), new ReportClock(TimeZoneInfo.Utc))}.");
     }
 
     [Fact]
@@ -330,6 +341,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         output.Facts.Single(f => f.Label == "Change").Value.Should().Be("+5", "from the first record kept, 70 kg, to the latest");
         output.CompleteFrom.Should().Be(Mills(start.AddMinutes(10)));
         output.CutNote.Should().StartWith("Only the latest 1000 records are shown, from ");
+        output.Resolution!.SourceRows.Should().Be(1_001, "the records stored in the range, not the limit read past");
     }
 
     [Fact]

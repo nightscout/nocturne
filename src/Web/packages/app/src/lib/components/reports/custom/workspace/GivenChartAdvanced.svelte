@@ -43,11 +43,15 @@
 
   const sources = $derived(givenSources(report.catalogue, block.panel));
   let op = $state<CalculatedOp>("rolling_mean");
+  /** The member's pick of each signal; "" for "From" while untouched, which takes the first signal. */
   let a = $state("");
   let b = $state("");
   let minutes = $state(120);
-  const sourceA = $derived(sources.find((s) => s.key === a)?.source ?? sources[0]?.source ?? null);
-  const sourceB = $derived(sources.find((s) => s.key === b)?.source ?? null);
+  /** The signal each pick names, or none when the member has not chosen one or it left the chart. */
+  const pickA = $derived(a === "" ? sources[0] : sources.find((s) => s.key === a));
+  const pickB = $derived(sources.find((s) => s.key === b));
+  const sourceA = $derived(pickA?.source ?? null);
+  const sourceB = $derived(pickB?.source ?? null);
   const paired = $derived(PAIRED_OPS.includes(op));
   const windowed = $derived(op === "rolling_mean" || op === "band_sd");
   const addReason = $derived(
@@ -185,8 +189,8 @@
       {#if sources.length > 0}
         <div class="space-y-1">
           <Label for="{id}-a" variant="option">{paired ? "First signal" : "From"}</Label>
-          <Select.Root type="single" value={a || sources[0].key} onValueChange={(v) => (a = v)}>
-            <Select.Trigger id="{id}-a" size="sm" class="w-full">{sources.find((s) => s.key === (a || sources[0].key))?.label}</Select.Trigger>
+          <Select.Root type="single" value={pickA?.key ?? ""} onValueChange={(v) => v && (a = v)}>
+            <Select.Trigger id="{id}-a" size="sm" class="w-full">{pickA?.label ?? "Choose a signal"}</Select.Trigger>
             <Select.Content>
               {#each sources as s (s.key)}
                 <Select.Item value={s.key} label={s.label}>{s.label}</Select.Item>
@@ -197,8 +201,8 @@
         {#if paired}
           <div class="space-y-1">
             <Label for="{id}-b" variant="option">Second signal</Label>
-            <Select.Root type="single" value={b} onValueChange={(v) => (b = v)}>
-              <Select.Trigger id="{id}-b" size="sm" class="w-full">{sources.find((s) => s.key === b)?.label ?? "Choose a signal"}</Select.Trigger>
+            <Select.Root type="single" value={pickB?.key ?? ""} onValueChange={(v) => v && (b = v)}>
+              <Select.Trigger id="{id}-b" size="sm" class="w-full">{pickB?.label ?? "Choose a signal"}</Select.Trigger>
               <Select.Content>
                 {#each sources as s (s.key)}
                   <Select.Item value={s.key} label={s.label}>{s.label}</Select.Item>

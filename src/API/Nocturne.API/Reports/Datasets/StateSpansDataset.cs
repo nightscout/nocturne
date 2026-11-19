@@ -59,8 +59,12 @@ internal sealed class StateSpansDataset : IReportDataset
     /// <summary>The kinds read when none are named: the ones the dashboard chart draws.</summary>
     internal static readonly IReadOnlyList<ReportSpanKind> ChartKinds = [.. Enum.GetValues<ReportSpanKind>().Where(k => CategoryOf(k) is null)];
 
-    public string? LayerTitle(ReportDatasetParameters parameters) =>
-        string.Join(", ", (((StateSpansParameters)parameters).Kinds is { Count: > 0 } asked ? asked : ChartKinds).Select(Words));
+    /// <summary>The kinds asked for that the caller reads: a kind it may not read is not drawn, so it does not name the layer.</summary>
+    public string? LayerTitle(ReportDatasetParameters parameters, IReadOnlySet<string> granted) =>
+        (((StateSpansParameters)parameters).Kinds is { Count: > 0 } asked ? asked : ChartKinds)
+            .Where(k => Scope.Satisfies(granted, ScopeOf(k))).Select(Words).ToList() is { Count: > 0 } read
+            ? string.Join(", ", read)
+            : null;
 
     /// <summary>The scope each kind needs, as the chart's endpoint redacts it; an activity of sleep needs sleep.read in place of treatments.read.</summary>
     internal static string ScopeOf(ReportSpanKind kind) => kind switch

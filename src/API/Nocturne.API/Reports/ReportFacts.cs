@@ -84,7 +84,8 @@ internal sealed record ReportClock(TimeZoneInfo? Zone = null, bool? Hour12 = nul
 {
     public static readonly ReportClock Utc = new();
 
-    public static implicit operator ReportClock(TimeZoneInfo? zone) => new(zone);
+    /// <summary>Each region's order, worked out once: a report writes hundreds of dates, and an unknown region throws.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, char?> Orders = new(StringComparer.Ordinal);
 
     /// <summary>The zone's IANA name, or UTC.</summary>
     public string ZoneName => Zone is null ? "UTC"
@@ -102,6 +103,10 @@ internal sealed record ReportClock(TimeZoneInfo? Zone = null, bool? Hour12 = nul
     /// <summary>"2 Nov 2026", "Nov 2, 2026" or "2026-11-02".</summary>
     public string Date(DateOnly day) => day.ToString(DatePattern, CultureInfo.InvariantCulture);
 
+    /// <summary>The local date of <paramref name="at"/> in the zone, written as <see cref="Date(DateOnly)"/> writes it.</summary>
+    public string Date(DateTimeOffset at) =>
+        Date(DateOnly.FromDateTime(Zone is null ? at.UtcDateTime : TimeZoneInfo.ConvertTime(at, Zone).DateTime));
+
     /// <summary>The date and time of <paramref name="at"/> in the zone: "2 Nov 2026 11:48", "Nov 2, 2026 11:48 AM".</summary>
     public string DateTime(DateTimeOffset at)
     {
@@ -110,10 +115,11 @@ internal sealed record ReportClock(TimeZoneInfo? Zone = null, bool? Hour12 = nul
     }
 
     /// <summary>Which of day, month or year the region writes first; null for no region, or one .NET does not know.</summary>
-    private static char? Order(string? region)
+    private static char? Order(string? region) =>
+        string.IsNullOrWhiteSpace(region) ? null : Orders.GetOrAdd(region, ReadOrder);
+
+    private static char? ReadOrder(string region)
     {
-        if (string.IsNullOrWhiteSpace(region))
-            return null;
         try
         {
             var pattern = CultureInfo.GetCultureInfo(region, predefinedOnly: true).DateTimeFormat.ShortDatePattern;

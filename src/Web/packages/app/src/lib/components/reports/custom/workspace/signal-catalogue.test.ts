@@ -70,24 +70,38 @@ describe("the catalogue's sections", () => {
 });
 
 describe("starred and recently used signals", () => {
+  const me = { tenant: "dev", subject: "subject-1" };
+
   it("starts with the default stars and keeps changes in storage", () => {
     const storage = new MemoryStorage();
-    const picks = new SignalPicks(storage as unknown as Storage);
+    const picks = new SignalPicks(me, storage as unknown as Storage);
     expect(picks.starred).toEqual([...DEFAULT_STARRED]);
 
     picks.toggleStar("heartRate");
     picks.toggleStar("glucose");
     for (const id of ["a", "b", "c", "d", "e", "f", "g", "b"]) picks.used(id);
 
-    const again = new SignalPicks(storage as unknown as Storage);
+    const again = new SignalPicks(me, storage as unknown as Storage);
     expect(again.isStarred("heartRate")).toBe(true);
     expect(again.isStarred("glucose")).toBe(false);
     expect(again.recent[0]).toBe("b");
     expect(again.recent).toHaveLength(MAX_RECENT);
   });
 
+  it("keeps each member's picks apart, and none for a page with no one member", () => {
+    const storage = new MemoryStorage();
+    new SignalPicks(me, storage as unknown as Storage).toggleStar("heartRate");
+    expect(new SignalPicks({ tenant: "dev", subject: "subject-2" }, storage as unknown as Storage).isStarred("heartRate")).toBe(false);
+    expect(new SignalPicks({ tenant: "other", subject: "subject-1" }, storage as unknown as Storage).isStarred("heartRate")).toBe(false);
+
+    const nobody = new SignalPicks({ tenant: "dev", subject: "" }, storage as unknown as Storage);
+    nobody.toggleStar("steps");
+    expect(nobody.isStarred("steps")).toBe(true);
+    expect(new SignalPicks({ tenant: "dev", subject: "" }, storage as unknown as Storage).isStarred("steps")).toBe(false);
+  });
+
   it("keeps working when storage refuses", () => {
-    const picks = new SignalPicks(new RefusingStorage() as unknown as Storage);
+    const picks = new SignalPicks(me, new RefusingStorage() as unknown as Storage);
     picks.toggleStar("steps");
     expect(picks.isStarred("steps")).toBe(true);
   });

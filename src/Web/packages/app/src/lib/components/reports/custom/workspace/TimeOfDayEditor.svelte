@@ -99,6 +99,6 @@
   </div>
 
   <p class="text-sm tabular-nums" aria-live="polite" data-testid="time-of-day-window">
-    {windowLabel(from, to)}{#if overnight}<span class="text-muted-foreground">, past midnight</span>{/if}
+    {#if overnight}{minuteLabel(from)} to {minuteLabel(end)}, past midnight{:else}{windowLabel(from, to)}{/if}
   </p>
 </div>

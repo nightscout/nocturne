@@ -92,7 +92,7 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
                 })]
                 : [new Dictionary<string, object?>(bands.Select(b => KeyValuePair.Create(b.Key, (object?)Math.Round(b.Percent, 1))))
                 {
-                    [PeriodField.Name] = string.Create(CultureInfo.InvariantCulture, $"{request.From:yyyy-MM-dd} to {request.To:yyyy-MM-dd}"),
+                    [PeriodField.Name] = $"{request.Clock.Date(request.From)} to {request.Clock.Date(request.To.AddTicks(-1))}",
                 }];
 
         return new ReportDatasetOutput

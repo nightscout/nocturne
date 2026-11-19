@@ -171,7 +171,13 @@ export class AuthStore {
     try {
       const session = await fresh(getSessionInfo());
 
-      if (session.isAuthenticated && session.subjectId) {
+      if (session.unavailable) {
+        // The API did not answer: the session may still be there, so nothing kept for it is removed.
+        this._error = "Failed to load session";
+        this._state = "unauthenticated";
+        this._user = null;
+        this._expiresAt = null;
+      } else if (session.isAuthenticated && session.subjectId) {
         this._user = {
           subjectId: session.subjectId,
           name: session.name ?? "User",
@@ -184,7 +190,7 @@ export class AuthStore {
         this._expiresAt = toDate(session.expiresAt);
         this._state = "authenticated";
       } else {
-        if (this._user) clearMemberStorage();
+        if (!session.isAuthenticated) clearMemberStorage();
         this._user = null;
         this._expiresAt = null;
         this._state = "unauthenticated";
@@ -206,10 +212,10 @@ export class AuthStore {
     if (!browser) return;
 
     this._state = "loading";
-    clearMemberStorage();
 
     try {
       const result = await logoutSessionRemote(providerId);
+      clearMemberStorage();
 
       // Clear local state
       this._user = null;
@@ -252,21 +258,32 @@ export class AuthStore {
         // "loading" state and briefly unmount everything gated on isAuthenticated.
         this._expiresAt = toDate(result.expiresAt);
         return true;
-      } else {
-        // Refresh failed, user needs to re-login
-        clearMemberStorage();
-        this._user = null;
-        this._expiresAt = null;
-        this._state = "unauthenticated";
-        return false;
       }
+      if (result.refused) return await this.confirmSession();
     } catch (e) {
       console.error("Session refresh failed:", e);
-      this._user = null;
-      this._expiresAt = null;
-      this._state = "unauthenticated";
-      return false;
     }
+    // The refresh failed without an answer: the session stays as it was, and the next check tries again.
+    return false;
+  }
+
+  /**
+   * After a refused refresh, asks the API whether the session is still there (another tab may have
+   * rotated the token): it takes the session's expiry when it is, and signs out, clearing what this
+   * browser keeps for the member, only when the API says it is gone.
+   */
+  private async confirmSession(): Promise<boolean> {
+    const session = await fresh(getSessionInfo());
+    if (session.unavailable) return false;
+    if (session.isAuthenticated) {
+      this._expiresAt = toDate(session.expiresAt);
+      return true;
+    }
+    clearMemberStorage();
+    this._user = null;
+    this._expiresAt = null;
+    this._state = "unauthenticated";
+    return false;
   }
 
   /**

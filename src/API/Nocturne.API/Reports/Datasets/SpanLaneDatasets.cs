@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -52,7 +53,7 @@ internal sealed class SleepStagesDataset : LaneDataset
         var sessions = (await request.Services.GetRequiredService<ISleepSessionRepository>().GetSessionsAsync(
             Utc(from), Utc(to), limit: MaxSessions + 1, descending: false, includeStages: true, cancellationToken: cancellationToken)).ToList();
         return new([.. sessions.Take(MaxSessions).SelectMany(s => s.Stages ?? [])
-            .Where(st => LaneOf(st.Stage) is not null)
+            .Where(st => LaneOf(st.Stage) is not null && Mills(st.StartTime) < to && Mills(st.EndTime) > from)
             .OrderBy(st => st.StartTime)
             .Take(limit)
             .Select(st => new Span(LaneOf(st.Stage)!, LaneOf(st.Stage)!, Mills(st.StartTime), Mills(st.EndTime), ColorOf(st.Stage)))],
@@ -230,13 +231,8 @@ internal sealed class DndWindowsDataset : LaneDataset
 
     protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
-        var (start, end) = (Utc(from), Utc(to));
-        await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
-        var rows = await db.DndWindows.AsNoTracking()
-            .Where(w => w.StartedAt < end && (w.EndsAt == null || w.EndsAt > start) && (w.ClearedAt == null || w.ClearedAt > start))
-            .OrderBy(w => w.StartedAt).Take(limit)
-            .Select(w => new { w.StartedAt, w.EndsAt, w.ClearedAt, w.Scope })
-            .ToListAsync(cancellationToken);
+        var rows = await request.Services.GetRequiredService<IDndWindowRepository>()
+            .GetOverlappingAsync(Utc(from), Utc(to), limit, cancellationToken);
         return new([.. rows.Select(w =>
         {
             var cleared = w.ClearedAt is { } c && (w.EndsAt is null || c < w.EndsAt);

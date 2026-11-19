@@ -276,7 +276,8 @@ public class ReportWorkspaceTests
     public async Task A_caller_who_may_read_no_signal_is_told_so_without_a_read_of_the_database()
     {
         var contexts = new Moq.Mock<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(Moq.MockBehavior.Strict);
-        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, contexts.Object, TimeProvider.System,
+        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, contexts.Object,
+            ReportSignalAvailabilityPostgresTests.Repositories(contexts.Object), TimeProvider.System,
             ReportSignalAvailabilityPostgresTests.Clock(TimeZoneInfo.Utc));
 
         var result = await availability.ForRangeAsync(100_000, new HashSet<string>(), historyClamped: false, CancellationToken.None);

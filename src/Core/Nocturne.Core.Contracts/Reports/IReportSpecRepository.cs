@@ -20,8 +20,14 @@ public interface IReportSpecRepository
         string name, string specJson, int version, Guid? createdBySubjectId, CancellationToken ct = default);
 
     /// <summary>Renames the report, replaces its spec, or both; a null argument leaves that part as it is.</summary>
+    /// <param name="expectedUpdatedAt">
+    /// The <see cref="SavedReportSpec.UpdatedAt"/> the caller read, or null to write whatever is stored. When the stored
+    /// value differs, to the microsecond the database keeps, nothing is written and the write is
+    /// <see cref="SavedReportSpecWriteStatus.Changed"/>. The row is locked from the compare to the commit, so two writes
+    /// that read the same value cannot both succeed.
+    /// </param>
     Task<SavedReportSpecWrite> UpdateAsync(
-        Guid id, string? name, string? specJson, int? version, CancellationToken ct = default);
+        Guid id, string? name, string? specJson, int? version, DateTime? expectedUpdatedAt = null, CancellationToken ct = default);
 
     /// <summary>Soft-deletes the report. False when no live report has the id.</summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);

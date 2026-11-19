@@ -39,6 +39,18 @@ public interface IDndWindowRepository
     Task<IReadOnlyList<DndWindowSnapshot>> GetReceivedByAsync(DateTime asOfReceiptUtc, CancellationToken ct);
 
     /// <summary>
+    /// The first <paramref name="limit"/> windows in effect at some instant of <c>(from, to)</c>, earliest started
+    /// first: started before <paramref name="to"/>, and neither expired nor cleared by <paramref name="from"/>.
+    /// </summary>
+    Task<IReadOnlyList<DndWindowRecord>> GetOverlappingAsync(DateTime from, DateTime to, int limit, CancellationToken ct);
+
+    /// <summary>
+    /// Whether any window touches <c>[from, to)</c>: started before <paramref name="to"/>, and neither expired nor
+    /// cleared before <paramref name="from"/>. Reads one row at most.
+    /// </summary>
+    Task<bool> AnyTouchingAsync(DateTime from, DateTime to, CancellationToken ct);
+
+    /// <summary>
     /// Stores <paramref name="window"/> unless the tenant already holds its id, and reconciles the
     /// same-scope windows whose span overlaps it so one scope is never active twice at an instant.
     /// An earlier window is truncated to end where this one begins, and one that starts at or after

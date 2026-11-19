@@ -11,6 +11,7 @@
 <script lang="ts">
   import { Axis, getChartContext, Group, Line, Text } from "layerchart";
   import { scaleLinear, scaleTime } from "d3-scale";
+  import { untrack } from "svelte";
   import type { ChartLabels } from "../../labels.js";
   import type { TextureKey } from "../../print/patterns.js";
   import type { GradientStop, LineColorMode } from "../../view/glucose-gradient-stops.js";
@@ -136,8 +137,10 @@
     return raw === null ? null : { group: g, raw, x: pixelOf(g, raw) };
   });
   $effect(() => {
-    onfocus?.(pointed);
+    const focus = pointed;
+    untrack(() => onfocus?.(focus));
   });
+  $effect(() => () => untrack(() => onfocus?.(null)));
 
   /**
    * Moves the focus one slot along its run (`along`, -1 or 1), or to the next run up or down (`across`), and shows

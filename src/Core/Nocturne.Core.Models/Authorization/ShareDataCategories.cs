@@ -356,6 +356,11 @@ public static class ShareDataCategories
                 throw new InvalidOperationException(
                     $"An early end column on '{table}' needs a span end column in {nameof(HiddenSpanEndColumns)} and no open-span bound.");
             }
+            if (HiddenParentRecency.Values.Any(p => p.Table == table))
+            {
+                throw new InvalidOperationException(
+                    $"'{table}' is a parent in {nameof(HiddenParentRecency)}, whose clamp does not apply an early end column.");
+            }
         }
 
         foreach (var (table, bound) in HiddenOpenSpanBounds)

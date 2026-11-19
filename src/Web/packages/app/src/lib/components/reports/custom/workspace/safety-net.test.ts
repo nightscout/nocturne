@@ -77,8 +77,22 @@ describe("the draft kept in this browser", () => {
     writeDraft(me, "r1", stateText(report), saved_at);
     expect(readDraft({ tenant: "dev", subject: "subject-2" }, "r1")).toBeNull();
     expect(readDraft({ tenant: "other", subject: "subject-1" }, "r1")).toBeNull();
-    expect(localStorage.key(0)).toBe("nocturne.custom-report-draft.dev.subject-1.r1");
+    expect(localStorage.key(0)).toBe("nocturne.member.custom-report-draft.dev.subject-1.r1");
     expect(localStorage.length).toBe(1);
+  });
+
+  it("keeps nothing, and says so, for a page with no one member to keep it for", () => {
+    for (const owner of [{ tenant: "dev", subject: "" }, { tenant: "", subject: "subject-1" }]) {
+      const draft = new ReportDraft("r1", owner);
+      const report = new Report(liveCatalogue, starter("dawn-rise")!);
+      expect(draft.keeps).toBe(false);
+      expect(draft.open(report, saved_at, fromDraft)).toBe(report);
+      report.title = "Changed";
+      draft.keep(report);
+      expect(draft.dirty).toBe(true);
+      expect(draft.kept).toBe(false);
+      expect(localStorage.length).toBe(0);
+    }
   });
 
   it("keeps nothing, throws nothing, and says so when browser storage refuses", () => {
@@ -97,7 +111,7 @@ describe("the draft kept in this browser", () => {
   });
 
   it("reads a draft that is not JSON, not a state, or has no time of writing as none", () => {
-    const key = "nocturne.custom-report-draft.dev.subject-1.r1";
+    const key = "nocturne.member.custom-report-draft.dev.subject-1.r1";
     localStorage.setItem(key, "{not json");
     expect(readDraft(me, "r1")).toBeNull();
     localStorage.setItem(key, JSON.stringify({ state: {} }));
@@ -203,16 +217,17 @@ describe("the draft kept in this browser", () => {
     expect(draft.dirty).toBe(true);
   });
 
-  it("drops drafts older than the longest age, and drafts written before drafts had an owner, on open", () => {
+  it("drops drafts older than the longest age, and drafts that no longer read, on open", () => {
     const report = new Report(liveCatalogue, starter("dawn-rise")!);
     const now = Date.now();
     writeDraft(me, "old", stateText(report), saved_at, now - DRAFT_MAX_AGE_MS - 1);
     writeDraft(me, "recent", stateText(report), saved_at, now - 1000);
-    localStorage.setItem("nocturne.custom-report-draft.r9", JSON.stringify({ version: BUILDER_VERSION, state: {} }));
+    const unread = "nocturne.member.custom-report-draft.dev.subject-2.r9";
+    localStorage.setItem(unread, JSON.stringify({ version: BUILDER_VERSION, state: {} }));
     new ReportDraft(NEW_REPORT, me).open(null, null, fromDraft);
     expect(readDraft(me, "old")).toBeNull();
     expect(readDraft(me, "recent")).not.toBeNull();
-    expect(localStorage.getItem("nocturne.custom-report-draft.r9")).toBeNull();
+    expect(localStorage.getItem(unread)).toBeNull();
   });
 
   it("keeps no draft of a deleted report, and none of any member once a session ends", () => {

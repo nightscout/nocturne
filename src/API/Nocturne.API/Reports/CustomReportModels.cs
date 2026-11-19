@@ -84,6 +84,20 @@ public sealed record CustomReportUpdateRequest
     public string? Name { get; init; }
 
     public JsonElement? Spec { get; init; }
+
+    /// <summary>
+    /// The <see cref="CustomReport.UpdatedAt"/> the client read. When it is sent and the report has changed since,
+    /// nothing is written and the answer is a 409 whose code is <see cref="CustomReportProblemCodes.Changed"/>. Left
+    /// out, the write replaces whatever is stored.
+    /// </summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
+
+/// <summary>The problem codes the custom report endpoints answer with, which the web app translates.</summary>
+public static class CustomReportProblemCodes
+{
+    /// <summary>The report was changed after the client read it, so the write was refused.</summary>
+    public const string Changed = "custom_report_changed";
 }
 
 public enum CustomReportWriteStatus
@@ -95,6 +109,9 @@ public enum CustomReportWriteStatus
 
     /// <summary>The caller may not change this report: it is another member's.</summary>
     Forbidden,
+
+    /// <summary>The report was changed after the caller read it, so nothing was written.</summary>
+    Changed,
 }
 
 public sealed record CustomReportWrite(

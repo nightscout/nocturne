@@ -5,6 +5,8 @@
  * compares what comes back. It is skipped unless NOCTURNE_REPORTS_API_URL (the API's base URL),
  * NOCTURNE_REPORTS_API_HOST (the tenant host) and NOCTURNE_REPORTS_API_TOKEN (a member's bearer token)
  * are set; against `aspire start`, take the token from the dev-only login (see the dev-tenant-api skill).
+ * In CI the API's ProducedSpecRoundTripTests runs the same specs (produced-specs.fixture.json) through the
+ * validator itself.
  */
 import { describe, expect, it } from "vitest";
 import { liveCatalogue } from "./catalogue.fixtures.js";

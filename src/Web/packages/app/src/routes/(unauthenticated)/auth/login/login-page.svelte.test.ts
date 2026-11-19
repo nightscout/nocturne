@@ -6,6 +6,7 @@ import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 const state = vi.hoisted(() => ({
   url: new URL("http://sam.localhost/auth/login"),
   isAuthenticated: false,
+  unreadable: false,
   goto: vi.fn(async (_url: string, _options?: unknown) => {}),
 }));
 
@@ -26,8 +27,8 @@ vi.mock("../auth.remote", () => ({
   getAuthState: () =>
     remoteQuery(() =>
       state.isAuthenticated
-        ? { isAuthenticated: true, user: { subjectId: "s" } }
-        : { isAuthenticated: false, user: null },
+        ? { isAuthenticated: true, unreadable: false, user: { subjectId: "s" } }
+        : { isAuthenticated: false, unreadable: state.unreadable, user: null },
     ),
 }));
 vi.mock("#lib/api/generated/index.js", () => ({
@@ -51,8 +52,12 @@ function loginWith(returnUrl: string) {
   return render(LoginPage, { data: {} } as never);
 }
 
+const DRAFT_KEY = "nocturne.member.custom-report-draft.dev.s.new";
+
 beforeEach(() => {
   state.isAuthenticated = false;
+  state.unreadable = false;
+  localStorage.clear();
   state.goto.mockClear();
 });
 
@@ -73,5 +78,33 @@ describe("Login page", () => {
     loginWith("https://evil.test/x");
 
     await vi.waitFor(() => expect(state.goto).toHaveBeenCalledWith("/", { replace: true }));
+  });
+
+  it("clears what the browser kept for a member once the server says nobody is signed in", async () => {
+    localStorage.setItem(DRAFT_KEY, "{}");
+
+    loginWith("/calendar");
+
+    await vi.waitFor(() => expect(localStorage.getItem(DRAFT_KEY)).toBeNull());
+  });
+
+  it("keeps the drafts of a member who is still signed in", async () => {
+    state.isAuthenticated = true;
+    localStorage.setItem(DRAFT_KEY, "{}");
+
+    loginWith("/calendar");
+
+    await vi.waitFor(() => expect(state.goto).toHaveBeenCalled());
+    expect(localStorage.getItem(DRAFT_KEY)).toBe("{}");
+  });
+
+  it("keeps the drafts when the server could not read the session", async () => {
+    state.unreadable = true;
+    localStorage.setItem(DRAFT_KEY, "{}");
+
+    loginWith("/calendar");
+
+    await expect.element(page.getByTestId("sign-in-card")).toBeInTheDocument();
+    expect(localStorage.getItem(DRAFT_KEY)).toBe("{}");
   });
 });

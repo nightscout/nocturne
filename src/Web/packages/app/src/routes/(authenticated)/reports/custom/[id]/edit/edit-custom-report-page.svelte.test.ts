@@ -22,6 +22,8 @@ const calls = vi.hoisted(() => ({
 }));
 /** How the validator answers: as the engine does, or by failing to answer, as a network error does. */
 let validatorDown = false;
+/** The saved report another member saves before the next update arrives, which the API then refuses. */
+let savedElsewhere: CustomReport | null = null;
 let saved: CustomReport;
 
 type Saved = { request: { name: string; spec: { builder?: { kind: string }; title?: string; panels: Record<string, unknown>[] } } };
@@ -44,6 +46,13 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   }),
   updateCustomReport: remoteCommand((arg) => {
     calls.updates.push(arg);
+    const expected = (arg as { request: { expectedUpdatedAt?: string } }).request.expectedUpdatedAt;
+    if (savedElsewhere) {
+      saved = savedElsewhere;
+      savedElsewhere = null;
+    }
+    if (expected !== undefined && expected !== saved.updatedAt)
+      return Promise.reject({ status: 409, body: { message: "The report was changed.", code: "custom_report_changed" } });
     return saved;
   }),
   createCustomReport: remoteCommand((arg) => {
@@ -61,6 +70,9 @@ vi.mock("$app/navigation", () => ({
 }));
 
 import EditCustomReportPage from "./+page.svelte";
+
+/** The page data of a signed-in member of a tenant, whose drafts this browser keeps. */
+const MEMBER = { tenantSlug: "dev", user: { subjectId: "subject-1" } };
 
 /** A saved report as the API returns one the workspace made: the spec it stored, and the state with it. */
 function madeInWorkspace(change: (spec: Record<string, unknown>) => Record<string, unknown> = (spec) => spec): CustomReport {
@@ -82,9 +94,10 @@ beforeEach(async () => {
   calls.gotos.length = 0;
   calls.guards.length = 0;
   validatorDown = false;
+  savedElsewhere = null;
   localStorage.clear();
   pageState.params = { id: "r1" };
-  pageState.data = {};
+  pageState.data = { ...MEMBER };
   await page.viewport(1280, 900);
 });
 
@@ -163,7 +176,7 @@ describe("editing a report saved without the workspace's state", () => {
   });
 
   it("keeps a member limited to the last 24 hours from changing or copying it", async () => {
-    pageState.data = { limitTo24Hours: true };
+    pageState.data = { ...MEMBER, limitTo24Hours: true };
     render(EditCustomReportPage, {});
 
     await expect.element(page.getByTestId("clamped-note")).toBeVisible();
@@ -323,6 +336,7 @@ describe("the unsaved changes to a saved report", () => {
     document.body.innerHTML = "";
     render(EditCustomReportPage, {});
     await expect.element(page.getByTestId("draft-conflict")).toHaveTextContent("changed somewhere else");
+    await expect.element(page.getByTestId("conflict-differences")).toHaveTextContent('The saved title is "Their title". Your title is "My unsaved title".');
     expect(page.getByTestId("report-workspace").elements()).toHaveLength(0);
     expect(page.getByText("Restored your unsaved changes.").elements()).toHaveLength(0);
 
@@ -372,5 +386,104 @@ describe("the unsaved changes to a saved report", () => {
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
     expect(page.getByRole("alertdialog").elements()).toHaveLength(0);
+  });
+
+  it("keeps the draft under the tenant and the member", async () => {
+    saved = madeInWorkspace();
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("Unsaved");
+
+    await vi.waitFor(() => expect(localStorage.length).toBe(1));
+    const key = localStorage.key(0) ?? "";
+    expect(key).toContain(".dev.");
+    expect(key).toContain(".subject-1.");
+    expect(key.endsWith(".r1")).toBe(true);
+  });
+
+  /** Asks the page's newest leave guard about a link in the app, which opens the leave dialog. */
+  function leaveByLink() {
+    calls.guards.at(-1)?.({ type: "link", to: { url: new URL("http://localhost/reports") }, cancel: () => {} });
+  }
+
+  for (const [who, data] of [
+    ["a page with no member", { tenantSlug: "dev" }],
+    ["a guest session", { tenantSlug: "dev", user: { subjectId: "guest" }, isGuestSession: true }],
+  ] as const) {
+    it(`keeps no draft for ${who}, and says so before it leaves`, async () => {
+      pageState.data = data;
+      saved = madeInWorkspace();
+      render(EditCustomReportPage, {});
+      await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+      await page.getByLabelText("Report title").fill("Unsaved");
+      await expect.element(page.getByLabelText("Report title")).toHaveValue("Unsaved");
+
+      expect(localStorage.length).toBe(0);
+      expect(guardHolds()).toBe(true);
+      leaveByLink();
+      await expect.element(page.getByRole("alertdialog")).toHaveTextContent("only for a signed-in member");
+    });
+  }
+});
+
+describe("a save refused because the report changed somewhere else", () => {
+  beforeEach(() => {
+    saved = { ...madeInWorkspace(), updatedAt: "2026-11-16T01:00:00Z" };
+    savedElsewhere = { ...madeInWorkspace((spec) => ({ ...spec, title: "Their title" })), name: "Their name", updatedAt: "2026-11-16T02:00:00Z" };
+  });
+
+  it("sends the version it opened, keeps the member's work on screen, and says what differs", async () => {
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("My title");
+    await saveAs("Dawn");
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect((calls.updates[0] as { request: { expectedUpdatedAt?: string } }).request.expectedUpdatedAt).toBe("2026-11-16T01:00:00Z");
+    const conflict = page.getByTestId("draft-conflict");
+    await expect.element(conflict).toHaveTextContent("did not save your changes");
+    const differences = page.getByTestId("conflict-differences");
+    await expect.element(differences).toHaveTextContent('The saved title is "Their title". Your title is "My title".');
+    await expect.element(differences).toHaveTextContent('The saved name is "Their name". Your name is "Dawn".');
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("My title");
+    expect(localStorage.length).toBe(1);
+    expect(calls.gotos).toEqual([]);
+  });
+
+  it("saves over the other version only after a confirm that names it", async () => {
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("My title");
+    await saveAs("Dawn");
+    await expect.element(page.getByTestId("draft-conflict")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+
+    await page.getByRole("button", { name: "Save my changes" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent('replace the version of "Their name"');
+    expect(calls.updates).toHaveLength(1);
+    await dialog.getByRole("button", { name: "Replace", exact: true }).click();
+
+    await vi.waitFor(() => expect(calls.updates).toHaveLength(2));
+    const { request } = calls.updates[1] as { request: { expectedUpdatedAt?: string; spec: { title?: string } } };
+    expect(request.expectedUpdatedAt).toBeUndefined();
+    expect(request.spec.title).toBe("My title");
+    await vi.waitFor(() => expect(calls.gotos).toEqual(["/reports/custom/r1"]));
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("opens the report as it is now on Discard my changes", async () => {
+    render(EditCustomReportPage, {});
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    await page.getByLabelText("Report title").fill("My title");
+    await saveAs("Dawn");
+    await expect.element(page.getByTestId("draft-conflict")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+
+    await page.getByRole("button", { name: "Discard my changes" }).click();
+
+    await expect.element(page.getByLabelText("Report title")).toHaveValue("Their title");
+    expect(page.getByTestId("draft-conflict").elements()).toHaveLength(0);
+    expect(localStorage.length).toBe(0);
   });
 });

@@ -180,11 +180,13 @@ function sourceName(catalogue: CustomReportCatalogue, source: unknown): string {
 function derivedName(catalogue: CustomReportCatalogue, derived: Json): string {
   const a = sourceName(catalogue, derived.a);
   const b = sourceName(catalogue, derived.b);
-  return opPhrase(String(derived.op), a, b, typeof derived.minutes === "number" ? derived.minutes : null);
+  const op = CALCULATED_OPS.find((o) => o === derived.op);
+  if (!op) return a ? `Calculated from ${a}` : "Calculated signal";
+  return opPhrase(op, a, b, typeof derived.minutes === "number" ? derived.minutes : null);
 }
 
 /** What a calculated signal shows, from the names of its sources: each one whole message to translate. */
-function opPhrase(op: string, a: string, b: string, minutes: number | null): string {
+function opPhrase(op: CalculatedOp, a: string, b: string, minutes: number | null): string {
   const window = minutes === null ? null : windowWords(minutes);
   switch (op) {
     case "difference":
@@ -201,8 +203,6 @@ function opPhrase(op: string, a: string, b: string, minutes: number | null): str
       return `Trend of ${a}`;
     case "band_sd":
       return window === null ? `Average and spread of ${a}` : `Average and spread of ${a} over ${window}`;
-    default:
-      return op;
   }
 }
 

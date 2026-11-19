@@ -301,7 +301,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var first = Lead(all);
         var leadOutput = first is null ? null : outputOf.GetValueOrDefault(first.Id);
         var sentence = first is { SettingsSentence: false } ? first.Sentence : null;
-        var cutNotes = drawn.Where(l => l.CutNote is not null && l != first).Select(l => $"{l.FullTitle}: {l.CutNote}").ToList();
+        var cutNotes = drawn.Where(l => l.CutNote is not null && (l != first || sentence is null))
+            .Select(l => $"{l.FullTitle}: {l.CutNote}").ToList();
         if (cutNotes.Count > 0)
             sentence = string.Join(' ', new[] { sentence }.OfType<string>().Concat(cutNotes));
         if (notDrawn.Count > 0)
@@ -316,7 +317,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Id = panel.Id!,
             Group = panel.Group,
             Title = panel.Title ?? (severalGroups ? null
-                : DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id), first ?? all[0])),
+                : DefaultPanelTitle(tracks.SelectMany(t => t.Layers).Single(l => l.Id == (first ?? all[0]).Id), first ?? all[0], run.Context.GrantedScopes)),
             Kind = ReportPanelKind.Chart,
             Status = drawn.Count > 0 ? ReportPanelStatus.Ok : all[0].Status,
             Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
@@ -363,15 +364,15 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     /// days with a low: 4 of 29 days") would head all of them as if they were one, so the host's caption names the
     /// comparison.
     /// </summary>
-    private string DefaultPanelTitle(ReportLayerSpec lead, ReportLayerResult leadResult) =>
+    private string DefaultPanelTitle(ReportLayerSpec lead, ReportLayerResult leadResult, IReadOnlySet<string> granted) =>
         lead.Title ?? (leadResult.Named ? leadResult.Heading!
-            : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : DatasetWords(lead.Dataset!));
+            : lead.Derived is { } derived ? ReportDerivedOps.Of(derived).Label : DatasetWords(lead.Dataset!, granted));
 
     /// <summary>A dataset read in words, where no field names it: what it draws (<see cref="IReportDataset.LayerTitle"/>), else its label.</summary>
-    private string DatasetWords(ReportDatasetParameters parameters)
+    private string DatasetWords(ReportDatasetParameters parameters, IReadOnlySet<string> granted)
     {
         var dataset = registry.Find(parameters.DatasetName)!;
-        return dataset.LayerTitle(parameters) ?? dataset.Label;
+        return dataset.LayerTitle(parameters, granted) ?? dataset.Label;
     }
 
     /// <summary>
@@ -513,7 +514,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     private async Task<(ReportLayerResult Result, ReportDatasetOutput? Output)> RunLayerAsync(ReportPanelSpec panel, ReportLayerSpec layer, Run run)
     {
         var range = layer.Range ?? panel.Range!;
-        var title = layer.Title ?? DefaultTitle(layer, run.Context.UseMmol);
+        var title = layer.Title ?? DefaultTitle(layer, run.Context.GrantedScopes);
         ReportLayerResult Empty(ReportPanelStatus status, string note, DateTimeOffset from, DateTimeOffset to) => new()
         {
             Id = layer.Id!,
@@ -615,7 +616,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             .Select(n => Labelled(catalogue.Single(f => f.Name == n).ResolveUnit(useMmol), output))
             .ToList();
         var names = fields.Select(f => f.Name).ToList();
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows = [.. output.Rows.Select(row =>
+        // A fold reads only the fields it is given from each row, so a read's rows go to it as they are: a whole read
+        // is every row of the range, and a copy of each would double what the run holds.
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows = folded ? output.Rows : [.. output.Rows.Select(row =>
             (IReadOnlyDictionary<string, object?>)names.ToDictionary(n => n, n => row.GetValueOrDefault(n)))];
 
         var step = folded ? ReportGrid.Step(layer.XKind, panel.Grid!.Value, from, to) : 0;
@@ -636,7 +639,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             ? Markers(folded ? rows : output.Rows, bindings, fields)
             : [];
         if (layer.Title is null && layer.Mark == ReportMark.Markers)
-            title = MarkersTitle(DatasetWords(layer.Dataset), fields, bindings, markers);
+            title = MarkersTitle(DatasetWords(layer.Dataset, run.Context.GrantedScopes), fields, bindings, markers);
         var named = layer.Title is null && output.Name is not null;
         var (facts, sentence, settingsSentence) = About(output, drawnNames);
         if (output.CutNote is { } cutNote)
@@ -851,7 +854,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
     /// layer's own (<see cref="DerivedTitle"/>). The group a dataset names its rows by is the layer's
     /// <see cref="ReportLayerResult.Group"/>, not part of its name.
     /// </summary>
-    private string DefaultTitle(ReportLayerSpec layer, bool useMmol)
+    private string DefaultTitle(ReportLayerSpec layer, IReadOnlySet<string> granted)
     {
         if (layer.Derived is { } derived)
             return DerivedTitle(derived, new Dictionary<string, IReadOnlyList<ReportCohort>>());
@@ -864,7 +867,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var signals = (layer.Bindings!.Y ?? []).Concat(layer.Mark == ReportMark.Band && layer.Bindings.Y is null ? layer.Bindings.Edges ?? [] : [])
             .Select(n => fields.FirstOrDefault(f => f.Name == n)?.Label).OfType<string>()
             .Select(ReportNames.Signal).Distinct(StringComparer.Ordinal).ToList();
-        return signals.Count == 0 || layer.Mark == ReportMark.Spans ? DatasetWords(layer.Dataset) : string.Join(", ", signals);
+        return signals.Count == 0 || layer.Mark == ReportMark.Spans ? DatasetWords(layer.Dataset, granted) : string.Join(", ", signals);
     }
 
     /// <summary>

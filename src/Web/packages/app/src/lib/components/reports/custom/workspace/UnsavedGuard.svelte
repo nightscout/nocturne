@@ -12,9 +12,11 @@
     dirty: boolean;
     /** Whether this browser keeps those changes (see `ReportDraft.kept`). */
     kept: boolean;
+    /** Whether the page has one member to keep changes for (see `ReportDraft.keeps`). */
+    keeps?: boolean;
   }
 
-  let { dirty, kept }: Props = $props();
+  let { dirty, kept, keeps = true }: Props = $props();
 
   /** Where the cancelled navigation went, while the dialog asks. */
   let pending = $state<URL | null>(null);
@@ -60,7 +62,9 @@
   onConfirm={leave}
 >
   {#snippet description()}
-    {#if kept}
+    {#if !keeps}
+      Your changes are not saved. Nocturne keeps unsaved changes in the browser only for a signed-in member, so you lose them when you leave.
+    {:else if kept}
       Your changes are not saved. This browser keeps them, and the report opens with them when you come back.
     {:else}
       Your changes are not saved. This browser could not keep them, so you lose them when you leave.

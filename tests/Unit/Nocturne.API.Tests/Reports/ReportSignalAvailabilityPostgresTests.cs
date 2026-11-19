@@ -10,7 +10,10 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -44,6 +47,12 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         /// <summary>No rows.</summary>
         public Guid Other { get; private set; }
 
+        /// <summary>
+        /// A heart rate, a step count, a body weight with no body fat, a sleep session with a stage and a sample, and a
+        /// do-not-disturb window, each an hour ago: the sources read through their own repositories.
+        /// </summary>
+        public Guid Modules { get; private set; }
+
         public async Task InitializeAsync()
         {
             var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_availability");
@@ -51,8 +60,38 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
             MigratorConnectionString = db.MigratorConnectionString;
             Tenant = await TenantAsync();
             Other = await TenantAsync();
+            Modules = await TenantAsync();
 
             var now = DateTime.UtcNow;
+            await using (var modules = new NocturneDbContext(Options) { TenantId = Modules })
+            {
+                var hourAgo = now.AddHours(-1);
+                modules.HeartRates.Add(new HeartRateEntity { Id = Guid.CreateVersion7(), Timestamp = hourAgo, Bpm = 60 });
+                modules.StepCounts.Add(new StepCountEntity { Id = Guid.CreateVersion7(), Timestamp = hourAgo, Metric = 100 });
+                modules.BodyWeights.Add(new BodyWeightEntity
+                {
+                    Id = Guid.CreateVersion7(), Mills = new DateTimeOffset(hourAgo).ToUnixTimeMilliseconds(), WeightKg = 70,
+                });
+                var session = new SleepSessionEntity
+                {
+                    Id = Guid.CreateVersion7(), StartTime = hourAgo.AddHours(-1), EndTime = hourAgo,
+                    Type = "Overnight", DetectionMethod = "Auto", Source = "Fitbit",
+                };
+                modules.SleepSessions.Add(session);
+                modules.SleepStages.Add(new SleepStageEntity
+                {
+                    Id = Guid.CreateVersion7(), SleepSessionId = session.Id, StartTime = session.StartTime, EndTime = session.EndTime, Stage = "Deep",
+                });
+                modules.SleepBiometricSamples.Add(new SleepBiometricSampleEntity
+                {
+                    Id = Guid.CreateVersion7(), SleepSessionId = session.Id, Timestamp = hourAgo.AddMinutes(-5), HeartRate = 55,
+                });
+                modules.DndWindows.Add(new DndWindowEntity
+                {
+                    Id = Guid.CreateVersion7(), Scope = Nocturne.Core.Models.Alerts.DndScope.All, StartedAt = hourAgo, CreatedAt = hourAgo,
+                });
+                await modules.SaveChangesAsync();
+            }
             await using var seed = new NocturneDbContext(Options) { TenantId = Tenant };
             seed.ApsSnapshots.Add(new ApsSnapshotEntity { Id = Guid.CreateVersion7(), Timestamp = now.AddHours(-2), AidAlgorithm = "OpenAps" });
             seed.ProfileActivations.Add(new ProfileActivationEntity
@@ -101,10 +140,25 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         Guid tenant, string[] scopes, ICategoryReadContext? reader = null, bool historyClamped = false)
     {
         await using var context = new NocturneDbContext(database.Options) { TenantId = tenant }.ReadingFrom(reader: reader);
-        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, context.AsFactory(), TimeProvider.System, Clock(TimeZoneInfo.Utc));
-        var result = await availability.ForRangeAsync(168, new HashSet<string>(scopes), historyClamped, CancellationToken.None);
+        var result = await AvailabilityAsync(context, scopes, historyClamped);
         return result.Signals.ToDictionary(s => s.Signal, s => s.State);
     }
+
+    private static Task<CustomReportSignalAvailability> AvailabilityAsync(NocturneDbContext context, string[] scopes, bool historyClamped)
+    {
+        var factory = context.AsFactory();
+        var availability = new ReportSignalAvailability(
+            ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc));
+        return availability.ForRangeAsync(168, new HashSet<string>(scopes), historyClamped, CancellationToken.None);
+    }
+
+    /// <summary>The source repositories over <paramref name="factory"/>, as the API registers them.</summary>
+    internal static ReportSourceRepositories Repositories(INocturneDbContextFactory factory) => new(
+        new HeartRateRepository(factory, TimeProvider.System),
+        new StepCountRepository(factory, TimeProvider.System),
+        new BodyWeightRepository(factory, TimeProvider.System),
+        new SleepSessionRepository(factory),
+        new DndWindowRepository(factory));
 
     private static CategoryReadContext Clamped()
     {
@@ -153,6 +207,29 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
 
         states["glucose"].Should().Be(ReportSignalAvailability.None);
         states["iob"].Should().Be(ReportSignalAvailability.Data);
+    }
+
+    [Fact]
+    public async Task The_sources_of_their_own_modules_are_read_through_their_repositories()
+    {
+        var states = await StatesAsync(database.Modules, Everything);
+
+        states["heartRate"].Should().Be(ReportSignalAvailability.Data);
+        states["steps"].Should().Be(ReportSignalAvailability.Data);
+        states["weight"].Should().Be(ReportSignalAvailability.Data);
+        states["sleep"].Should().Be(ReportSignalAvailability.Data);
+        states["sleepStages"].Should().Be(ReportSignalAvailability.Data);
+        states["doNotDisturb"].Should().Be(ReportSignalAvailability.Data);
+        states["glucose"].Should().Be(ReportSignalAvailability.None);
+    }
+
+    [Fact]
+    public async Task A_clamped_caller_is_told_the_hours_read_not_the_hours_asked()
+    {
+        await using var context = new NocturneDbContext(database.Options) { TenantId = database.Tenant }.ReadingFrom(reader: Clamped());
+
+        (await AvailabilityAsync(context, Everything, historyClamped: true)).Hours.Should().Be(24);
+        (await AvailabilityAsync(context, Everything, historyClamped: false)).Hours.Should().Be(168);
     }
 
     [Fact]

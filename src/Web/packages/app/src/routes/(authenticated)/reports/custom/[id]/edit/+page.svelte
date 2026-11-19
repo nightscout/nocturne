@@ -3,6 +3,11 @@
   edits every report saves the changes; anyone who can read reports can save a copy under another
   name. The API checks each write again.
 -->
+<script lang="ts" module>
+  /** The problem code of a save refused because the report changed since the page opened it. */
+  const CHANGED = "custom_report_changed";
+</script>
+
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -19,7 +24,8 @@
   import DraftConflict from "#lib/components/reports/custom/workspace/DraftConflict.svelte";
   import DraftNotice from "#lib/components/reports/custom/workspace/DraftNotice.svelte";
   import { Report } from "#lib/components/reports/custom/workspace/report.svelte.js";
-  import { ReportDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import { ReportDraft, clearDraft, draftOwner } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
+  import { summarise, type ReportSummary } from "#lib/components/reports/custom/workspace/report-summary.js";
   import UnsavedGuard from "#lib/components/reports/custom/workspace/UnsavedGuard.svelte";
   import ReportWorkspace from "#lib/components/reports/custom/workspace/ReportWorkspace.svelte";
   import { normaliseWith, openSaved, specToSave } from "#lib/components/reports/custom/workspace/saved-report.js";
@@ -29,6 +35,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
+  import { errorCode, errorStatus } from "#lib/forms/submit-error.js";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Undo2 from "@lucide/svelte/icons/undo-2";
   import { toast } from "svelte-sonner";
@@ -52,7 +60,7 @@
    * not be checked, `unreadable` when its spec has no panels to open.
    */
   let opening = $state<
-    | { id: string; state: "open"; report: Report; saved: Report }
+    | { id: string; state: "open"; report: Report; saved: Report; savedAt: string | null }
     | { id: string; state: "failed" }
     | { id: string; state: "unreadable" }
     | null
@@ -85,7 +93,7 @@
           return;
         }
         const shown = untrack(() => draft).open(made, saved.updatedAt ?? null, (d) => Report.fromState(known, d.version, d.state, minuteLabel, spanLabel));
-        opening = { id: forId, state: "open", report: shown ?? made, saved: made };
+        opening = { id: forId, state: "open", report: shown ?? made, saved: made, savedAt: saved.updatedAt ?? null };
       },
       () => {
         if (current) opening = { id: forId, state: "failed" };
@@ -98,6 +106,11 @@
 
   $effect(() => {
     if (opening?.state === "open" && opening.id === id) untrack(() => draft).keep(opening.report);
+  });
+
+  // A report deleted somewhere else leaves no draft behind.
+  $effect(() => {
+    if (errorStatus(report.error) === 404) clearDraft(owner, id);
   });
 
   /** Puts the report back as it was saved. */
@@ -131,15 +144,70 @@
     return opened();
   }
 
-  async function saveWorkspace(workspace: Report, newName: string) {
+  /**
+   * The version saved somewhere else that refused the member's save: what it holds and when it was
+   * saved, beside the name the member saved under. The member's changes stay on screen.
+   */
+  let conflict = $state<{ theirs: ReportSummary; report: Report | null; changedAt: string | null; name: string } | null>(null);
+
+  const problemCodes = {
+    [CHANGED]: "This report changed somewhere else. Read what changed above the report, then choose.",
+  };
+
+  /**
+   * Saves the member's changes, only over the version the page opened unless `replace` (the member
+   * confirmed that they replace the version saved since).
+   */
+  async function saveWorkspace(workspace: Report, newName: string, replace = false) {
+    if (opening?.state !== "open") return;
+    const savedAt = opening.savedAt;
     busy = true;
     try {
-      await updateCustomReport({ id, request: { name: newName, spec: specToSave(workspace) } });
+      await updateCustomReport({
+        id,
+        request: { name: newName, spec: specToSave(workspace), ...(replace || !savedAt ? {} : { expectedUpdatedAt: savedAt }) },
+      });
       draft.clear();
+      conflict = null;
       toast.success("Nocturne saved the report.");
       await opened();
+    } catch (err) {
+      if (errorStatus(err) === 409 && errorCode(err) === CHANGED) await showConflict(newName);
+      throw err;
     } finally {
       busy = false;
+    }
+  }
+
+  /** Reads the version saved since and says how it differs from the member's changes. */
+  async function showConflict(newName: string) {
+    const known = catalogue.current;
+    const now = await fresh(getCustomReport(id)).catch(() => null);
+    const unknown: ReportSummary = { name: now?.name ?? "", title: "", blocks: [], state: "" };
+    const theirs =
+      now && known
+        ? await openSaved(known, now.spec, (spec) => normaliseWith(validateCustomReport, spec), minuteLabel, spanLabel).catch(() => null)
+        : null;
+    conflict = {
+      theirs: theirs ? summarise(theirs, now?.name ?? "") : unknown,
+      report: theirs,
+      changedAt: now?.updatedAt ?? null,
+      name: newName,
+    };
+  }
+
+  /** Drops the member's changes after a refused save: the report opens as it is saved now. */
+  function discardAfterConflict() {
+    const theirs = conflict?.report ?? null;
+    const changedAt = conflict?.changedAt ?? null;
+    conflict = null;
+    draft.clear();
+    if (theirs) {
+      draft.open(theirs, changedAt, () => null);
+      opening = { id, state: "open", report: theirs, saved: theirs, savedAt: changedAt };
+    } else {
+      opening = null;
+      attempt++;
     }
   }
 
@@ -176,8 +244,27 @@
     {:else if opening.state === "open"}
       {@const workspace = opening.report}
       {#if draft.stale}
-        <DraftConflict onkeep={keepStale} ondiscard={() => draft.discardStale()} />
+        <DraftConflict
+          mine={summarise(draft.stale, name)}
+          theirs={summarise(opening.saved, name)}
+          changedAt={opening.savedAt}
+          onkeep={keepStale}
+          ondiscard={() => draft.discardStale()}
+        />
       {:else}
+      {#if conflict}
+        <DraftConflict
+          kind="save"
+          mine={summarise(workspace, conflict.name)}
+          theirs={conflict.theirs}
+          changedAt={conflict.changedAt}
+          {busy}
+          onkeep={() => {
+            if (conflict) saveWorkspace(workspace, conflict.name, true).catch(() => {});
+          }}
+          ondiscard={discardAfterConflict}
+        />
+      {/if}
       {#if draft.restored}
         <DraftNotice ondiscard={discard} />
       {/if}
@@ -185,7 +272,7 @@
         <ReportWorkspace report={workspace}>
           {#snippet actions(problem: string | null)}
             {#if canEdit}
-              <SaveControl report={workspace} {name} reason={problem} disabled={busy} onsave={(n) => saveWorkspace(workspace, n)} />
+              <SaveControl report={workspace} {name} reason={problem} disabled={busy} codes={problemCodes} onsave={(n) => saveWorkspace(workspace, n)} />
             {/if}
             {#if !clamped}
               <SaveControl
@@ -220,7 +307,7 @@
   {/if}
 </div>
 
-<UnsavedGuard dirty={draft.dirty} kept={draft.kept} />
+<UnsavedGuard dirty={draft.dirty} kept={draft.kept} keeps={draft.keeps} />
 
 <ConfirmDialog
   open={confirmingCancel}

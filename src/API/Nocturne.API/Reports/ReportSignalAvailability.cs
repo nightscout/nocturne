@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -10,7 +12,10 @@ using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Reports;
 
-/// <summary>Whether each signal of the workspace has data in the last <paramref name="Hours"/> hours.</summary>
+/// <summary>
+/// Whether each signal of the workspace has data in the last <paramref name="Hours"/> hours: the hours read, which for a
+/// history-clamped caller are at most the 24 it may read.
+/// </summary>
 public sealed record CustomReportSignalAvailability(
     [property: Required] int Hours,
     [property: Required] IReadOnlyList<CustomReportSignalPresence> Signals);
@@ -38,9 +43,9 @@ internal static class ReportDataSources
     public const string ApsSnapshots = "apsSnapshots";
     public const string PumpSnapshots = "pumpSnapshots";
     public const string UploaderSnapshots = "uploaderSnapshots";
-    public const string HeartRates = "heartRates";
-    public const string StepCounts = "stepCounts";
-    public const string SleepSessions = "sleepSessions";
+    public const string HeartRate = "heartRates";
+    public const string StepCount = "stepCounts";
+    public const string SleepSession = "sleepSessions";
     public const string PumpModeSpans = "pumpModeSpans";
     public const string OverrideSpans = "overrideSpans";
     public const string ActivitySpans = "activitySpans";
@@ -53,15 +58,15 @@ internal static class ReportDataSources
     public const string PumpEvents = "pumpEvents";
     public const string SystemEvents = "systemEvents";
     public const string Trackers = "trackers";
-    public const string SleepStages = "sleepStages";
+    public const string SleepStage = "sleepStages";
     public const string SleepBiometrics = "sleepBiometrics";
     public const string LabHbA1c = "labHbA1c";
-    public const string BodyWeights = "bodyWeights";
+    public const string BodyWeight = "bodyWeights";
     public const string BodyFat = "bodyFat";
     public const string LeanMass = "leanMass";
     public const string AlertExcursions = "alertExcursions";
     public const string AlertInstances = "alertInstances";
-    public const string DndWindows = "dndWindows";
+    public const string Dnd = "dndWindows";
     public const string SensorTrendRates = "sensorTrendRates";
     public const string SensorNoise = "sensorNoise";
     public const string MeterGlucose = "meterGlucose";
@@ -97,9 +102,9 @@ internal static class ReportDataSources
             [ApsSnapshots] = [Scope.DevicesRead],
             [PumpSnapshots] = [Scope.DevicesRead],
             [UploaderSnapshots] = [Scope.DevicesRead],
-            [HeartRates] = [Scope.HeartRateRead],
-            [StepCounts] = [Scope.StepCountRead],
-            [SleepSessions] = [Scope.SleepRead],
+            [HeartRate] = [Scope.HeartRateRead],
+            [StepCount] = [Scope.StepCountRead],
+            [SleepSession] = [Scope.SleepRead],
             [PumpModeSpans] = [Datasets.StateSpansDataset.ScopeOf(ReportSpanKind.PumpMode)],
             [OverrideSpans] = [Datasets.StateSpansDataset.ScopeOf(ReportSpanKind.Override)],
             [ActivitySpans] = [Datasets.StateSpansDataset.ScopeOf(ReportSpanKind.Activity)],
@@ -112,15 +117,15 @@ internal static class ReportDataSources
             [PumpEvents] = [Scope.DevicesRead],
             [SystemEvents] = [Scope.DevicesRead],
             [Trackers] = [Scope.AlertsRead],
-            [SleepStages] = [Scope.SleepRead],
+            [SleepStage] = [Scope.SleepRead],
             [SleepBiometrics] = [Scope.SleepRead, Scope.HeartRateRead],
             [LabHbA1c] = [Scope.GlucoseRead],
-            [BodyWeights] = [Scope.TherapyRead],
+            [BodyWeight] = [Scope.TherapyRead],
             [BodyFat] = [Scope.TherapyRead],
             [LeanMass] = [Scope.TherapyRead],
             [AlertExcursions] = [Scope.AlertsRead],
             [AlertInstances] = [Scope.AlertsRead],
-            [DndWindows] = [Scope.AlertsRead],
+            [Dnd] = [Scope.AlertsRead],
             [SensorTrendRates] = [Scope.GlucoseRead],
             [SensorNoise] = [Scope.GlucoseRead],
             [MeterGlucose] = [Scope.GlucoseRead],
@@ -131,75 +136,62 @@ internal static class ReportDataSources
     /// Whether the source has a record in [from, to): a span by overlap, a lab result by the local days of the zone, as
     /// <see cref="Datasets.LabHbA1cDataset"/> reads them, anything else by its time.
     /// </summary>
-    public static readonly IReadOnlyDictionary<string, Func<NocturneDbContext, DateTime, DateTime, TimeZoneInfo, CancellationToken, Task<bool>>> All =
-        new Dictionary<string, Func<NocturneDbContext, DateTime, DateTime, TimeZoneInfo, CancellationToken, Task<bool>>>
+    public static readonly IReadOnlyDictionary<string, Func<NocturneDbContext, ReportSourceRepositories, DateTime, DateTime, TimeZoneInfo, CancellationToken, Task<bool>>> All =
+        new Dictionary<string, Func<NocturneDbContext, ReportSourceRepositories, DateTime, DateTime, TimeZoneInfo, CancellationToken, Task<bool>>>
         {
-            [SensorGlucose] = (db, from, to, _, ct) => Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [BgChecks] = (db, from, to, _, ct) => db.BGChecks.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [Boluses] = (db, from, to, _, ct) => db.Boluses.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [Carbs] = (db, from, to, _, ct) => db.CarbIntakes.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [BasalInjections] = (db, from, to, _, ct) => db.BasalInjections.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [TempBasals] = (db, from, to, _, ct) =>
+            [SensorGlucose] = (db, r, from, to, _, ct) => Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [BgChecks] = (db, r, from, to, _, ct) => db.BGChecks.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [Boluses] = (db, r, from, to, _, ct) => db.Boluses.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [Carbs] = (db, r, from, to, _, ct) => db.CarbIntakes.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [BasalInjections] = (db, r, from, to, _, ct) => db.BasalInjections.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [TempBasals] = (db, r, from, to, _, ct) =>
                 db.TempBasals.AnyAsync(e => e.Timestamp < to && (e.EndTimestamp == null || e.EndTimestamp >= from), ct),
-            [ProfileActivations] = (db, from, to, _, ct) =>
+            [ProfileActivations] = (db, r, from, to, _, ct) =>
                 db.ProfileActivations.AnyAsync(e => e.Timestamp < to && (e.EndTimestamp == null || e.EndTimestamp >= from), ct),
-            [ApsSnapshots] = (db, from, to, _, ct) => db.ApsSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [PumpSnapshots] = (db, from, to, _, ct) => db.PumpSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [UploaderSnapshots] = (db, from, to, _, ct) => db.UploaderSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [HeartRates] = (db, from, to, _, ct) => db.HeartRates.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [StepCounts] = (db, from, to, _, ct) => db.StepCounts.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [SleepSessions] = (db, from, to, _, ct) => db.SleepSessions.AnyAsync(e => e.StartTime < to && e.EndTime >= from, ct),
-            [PumpModeSpans] = (db, from, to, _, ct) => SpansAsync(db, PumpModeCategories, from, to, ct),
-            [OverrideSpans] = (db, from, to, _, ct) => SpansAsync(db, OverrideCategories, from, to, ct),
-            [ActivitySpans] = (db, from, to, _, ct) => SpansAsync(db, ActivityCategories, from, to, ct),
-            [TemporaryTargetSpans] = (db, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.TemporaryTarget)], from, to, ct),
-            [PumpConnectivitySpans] = (db, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.PumpConnectivity)], from, to, ct),
-            [DataExclusionSpans] = (db, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.DataExclusion)], from, to, ct),
-            [MotionSpans] = (db, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.Motion)], from, to, ct),
-            [SensorEvents] = (db, from, to, _, ct) => DeviceEventsAsync(db, SensorEventTypes, from, to, ct),
-            [SiteEvents] = (db, from, to, _, ct) => DeviceEventsAsync(db, SiteEventTypes, from, to, ct),
-            [PumpEvents] = (db, from, to, _, ct) => DeviceEventsAsync(db, PumpEventTypes, from, to, ct),
-            [SystemEvents] = (db, from, to, _, ct) =>
+            [ApsSnapshots] = (db, r, from, to, _, ct) => db.ApsSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [PumpSnapshots] = (db, r, from, to, _, ct) => db.PumpSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [UploaderSnapshots] = (db, r, from, to, _, ct) => db.UploaderSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [HeartRate] = (db, r, from, to, _, ct) => r.Heart.AnyObservedInAsync(from, to, ct),
+            [StepCount] = (db, r, from, to, _, ct) => r.Steps.AnyObservedInAsync(from, to, ct),
+            [SleepSession] = (db, r, from, to, _, ct) => r.Sleep.AnySessionOverlappingAsync(from, to, ct),
+            [PumpModeSpans] = (db, r, from, to, _, ct) => SpansAsync(db, PumpModeCategories, from, to, ct),
+            [OverrideSpans] = (db, r, from, to, _, ct) => SpansAsync(db, OverrideCategories, from, to, ct),
+            [ActivitySpans] = (db, r, from, to, _, ct) => SpansAsync(db, ActivityCategories, from, to, ct),
+            [TemporaryTargetSpans] = (db, r, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.TemporaryTarget)], from, to, ct),
+            [PumpConnectivitySpans] = (db, r, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.PumpConnectivity)], from, to, ct),
+            [DataExclusionSpans] = (db, r, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.DataExclusion)], from, to, ct),
+            [MotionSpans] = (db, r, from, to, _, ct) => SpansAsync(db, [nameof(StateSpanCategory.Motion)], from, to, ct),
+            [SensorEvents] = (db, r, from, to, _, ct) => DeviceEventsAsync(db, SensorEventTypes, from, to, ct),
+            [SiteEvents] = (db, r, from, to, _, ct) => DeviceEventsAsync(db, SiteEventTypes, from, to, ct),
+            [PumpEvents] = (db, r, from, to, _, ct) => DeviceEventsAsync(db, PumpEventTypes, from, to, ct),
+            [SystemEvents] = (db, r, from, to, _, ct) =>
             {
                 var (start, end) = (Mills(from), Mills(to));
                 return db.SystemEvents.AnyAsync(e => e.Mills >= start && e.Mills < end, ct);
             },
-            [Trackers] = (db, from, to, _, ct) =>
+            [Trackers] = (db, r, from, to, _, ct) =>
                 db.TrackerInstances.AnyAsync(e => e.StartedAt < to && (e.CompletedAt == null || e.CompletedAt >= from), ct),
-            [SleepStages] = (db, from, to, _, ct) => db.SleepStages.AnyAsync(e => e.StartTime < to && e.EndTime >= from, ct),
-            [SleepBiometrics] = (db, from, to, _, ct) => db.SleepBiometricSamples.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [LabHbA1c] = (db, from, to, zone, ct) =>
+            [SleepStage] = (db, r, from, to, _, ct) => r.Sleep.AnyStageOverlappingAsync(from, to, ct),
+            [SleepBiometrics] = (db, r, from, to, _, ct) => r.Sleep.AnyBiometricSampleInAsync(from, to, ct),
+            [LabHbA1c] = (db, r, from, to, zone, ct) =>
             {
                 var (start, end) = Datasets.LabHbA1cDataset.StoredDays(Utc(from), Utc(to), zone);
                 return db.LabHbA1cResults.AnyAsync(e => e.MeasuredAt >= start && e.MeasuredAt < end, ct);
             },
-            [BodyWeights] = (db, from, to, _, ct) =>
-            {
-                var (start, end) = (Mills(from), Mills(to));
-                return db.BodyWeights.AnyAsync(e => e.Mills >= start && e.Mills < end, ct);
-            },
-            [BodyFat] = (db, from, to, _, ct) =>
-            {
-                var (start, end) = (Mills(from), Mills(to));
-                return db.BodyWeights.AnyAsync(e => e.Mills >= start && e.Mills < end && e.BodyFatPercent != null, ct);
-            },
-            [LeanMass] = (db, from, to, _, ct) =>
-            {
-                var (start, end) = (Mills(from), Mills(to));
-                return db.BodyWeights.AnyAsync(e => e.Mills >= start && e.Mills < end && e.LeanMassKg != null, ct);
-            },
-            [AlertExcursions] = (db, from, to, _, ct) =>
+            [BodyWeight] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.Weight, ct),
+            [BodyFat] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.BodyFat, ct),
+            [LeanMass] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.LeanMass, ct),
+            [AlertExcursions] = (db, r, from, to, _, ct) =>
                 db.AlertExcursions.AnyAsync(e => e.StartedAt < to && (e.EndedAt == null || e.EndedAt >= from), ct),
-            [AlertInstances] = (db, from, to, _, ct) =>
+            [AlertInstances] = (db, r, from, to, _, ct) =>
                 db.AlertInstances.AnyAsync(e => !e.IsTest && e.TriggeredAt >= from && e.TriggeredAt < to, ct),
-            [DndWindows] = (db, from, to, _, ct) =>
-                db.DndWindows.AnyAsync(e => e.StartedAt < to && (e.EndsAt == null || e.EndsAt >= from) && (e.ClearedAt == null || e.ClearedAt >= from), ct),
-            [SensorTrendRates] = (db, from, to, _, ct) =>
+            [Dnd] = (db, r, from, to, _, ct) => r.Dnd.AnyTouchingAsync(from, to, ct),
+            [SensorTrendRates] = (db, r, from, to, _, ct) =>
                 Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.TrendRate != null, ct),
-            [SensorNoise] = (db, from, to, _, ct) =>
+            [SensorNoise] = (db, r, from, to, _, ct) =>
                 Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.Noise != null, ct),
-            [MeterGlucose] = (db, from, to, _, ct) => db.MeterGlucose.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
-            [CompressionLows] = (db, from, to, _, ct) =>
+            [MeterGlucose] = (db, r, from, to, _, ct) => db.MeterGlucose.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
+            [CompressionLows] = (db, r, from, to, _, ct) =>
             {
                 var (start, end) = (Mills(from), Mills(to));
                 return db.CompressionLowSuggestions.AnyAsync(e => e.StartMills < end && e.EndMills >= start, ct);
@@ -234,12 +226,13 @@ public interface ICustomReportSignalAvailability
 
 /// <summary>
 /// Answers availability per source, not per signal: each source that a signal the caller may read draws, and whose
-/// scopes the caller holds, is asked once, in one context, whatever number of signals share it. A signal none of whose
-/// sources the caller may ask about is <see cref="NoAccess"/>.
+/// scopes the caller holds, is asked once, whatever number of signals share it. A signal none of whose sources the
+/// caller may ask about is <see cref="NoAccess"/>.
 /// </summary>
 internal sealed class ReportSignalAvailability(
     IReportDatasetRegistry registry,
     INocturneDbContextFactory contexts,
+    ReportSourceRepositories repositories,
     TimeProvider time,
     TenantClockResolver tenantClock) : ICustomReportSignalAvailability
 {
@@ -251,10 +244,11 @@ internal sealed class ReportSignalAvailability(
         int hours, IReadOnlySet<string> granted, bool historyClamped, CancellationToken cancellationToken)
     {
         hours = Math.Clamp(hours, 1, ReportSpec.MaxRangeHours);
+        if (historyClamped)
+            hours = Math.Min(hours, (int)ReportSpecRunner.ClampedHistory.TotalHours);
         var permitted = ReportWorkspace.Build(registry, granted).Signals.Where(s => s.Permitted).Select(s => s.Id).ToHashSet();
         var now = time.GetUtcNow();
-        var start = historyClamped && hours > ReportSpecRunner.ClampedHistory.TotalHours ? now - ReportSpecRunner.ClampedHistory : now.AddHours(-hours);
-        var (from, to) = (start.UtcDateTime, now.UtcDateTime);
+        var (from, to) = (now.AddHours(-hours).UtcDateTime, now.UtcDateTime);
 
         bool Holds(string source) => ReportDataSources.Scopes[source].All(scope => Scope.Satisfies(granted, scope));
         var asked = ReportWorkspace.SignalTable.ToDictionary(
@@ -268,10 +262,21 @@ internal sealed class ReportSignalAvailability(
                 : TimeZoneInfo.Utc;
             await using var db = await contexts.CreateAsync(cancellationToken);
             foreach (var source in needed)
-                found[source] = await ReportDataSources.All[source](db, from, to, zone, cancellationToken);
+                found[source] = await ReportDataSources.All[source](db, repositories, from, to, zone, cancellationToken);
         }
 
         return new CustomReportSignalAvailability(hours, [.. ReportWorkspace.SignalTable.Select(s => new CustomReportSignalPresence(s.Id,
             asked[s.Id].Count == 0 ? NoAccess : asked[s.Id].Any(found.GetValueOrDefault) ? Data : None))]);
     }
 }
+
+/// <summary>
+/// The repositories of the sources whose rows live in a persistence module of their own; each call opens its own
+/// context as the scope's reader, so row level security and the history clamp apply as they do to the shared context.
+/// </summary>
+internal sealed record ReportSourceRepositories(
+    IHeartRateRepository Heart,
+    IObservedHealthSeriesRepository<StepCount> Steps,
+    IBodyWeightRepository Weight,
+    ISleepSessionRepository Sleep,
+    IDndWindowRepository Dnd);

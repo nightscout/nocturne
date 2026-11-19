@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Contracts.Analytics;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Reports;
@@ -32,7 +33,7 @@ public class ReportReadCutTests
     public static TheoryData<string> Folded => new()
     {
         GlucoseSeriesParameters.Name, SensorDetailParameters.Name, DeviceStatusParameters.Name, HeartRateParameters.Name, StepsParameters.Name,
-        SleepBiometricsParameters.Name,
+        SleepBiometricsParameters.Name, BasalDeliveryParameters.Name,
     };
 
     [Theory]
@@ -50,6 +51,26 @@ public class ReportReadCutTests
         ReportSpecRunner.Folds(30, ReportXKind.Time, ReportMark.Line).Should().BeTrue();
         ReportSpecRunner.Folds(30, ReportXKind.Time, ReportMark.Spans).Should().BeFalse();
         ReportSpecRunner.Folds(null, ReportXKind.Time, ReportMark.Line).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Basal_delivery_keeps_every_change_for_a_whole_read_so_the_last_value_of_a_slot_is_its_last_change()
+    {
+        var from = To.AddDays(-14).ToUnixTimeMilliseconds();
+        var series = Enumerable.Range(0, 4032).Select(i => new BasalPoint
+        {
+            Timestamp = from + i * 300_000L, Rate = i % 2 == 0 ? 0.5 : 1.5, Origin = BasalDeliveryOrigin.Algorithm,
+        }).ToList();
+        var chart = new Mock<IChartDataService>();
+        chart.Setup(c => c.GetBasalSeriesAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>())).ReturnsAsync(series);
+        var services = new ServiceCollection().AddSingleton(chart.Object).BuildServiceProvider();
+
+        var sampled = await new BasalDeliveryDataset().RunAsync(Request(new BasalDeliveryParameters(), services, TimeSpan.FromDays(14)), CancellationToken.None);
+        var whole = await new BasalDeliveryDataset().RunAsync(Request(new BasalDeliveryParameters(), services, TimeSpan.FromDays(14), whole: true), CancellationToken.None);
+
+        sampled.Rows.Should().HaveCountLessThan(series.Count, "past the budget a sampled read keeps the first change of each slot");
+        whole.Rows.Should().HaveCount(series.Count);
+        whole.Resolution!.Downsampled.Should().BeFalse();
     }
 
     [Fact]
@@ -130,6 +151,8 @@ public class ReportReadCutTests
         var repository = new Mock<ISleepSessionRepository>();
         repository.Setup(s => s.GetSessionsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), 0, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime? _, DateTime? _, SleepSessionType? _, SleepSource? _, int limit, int _, bool _, bool _, CancellationToken _) => sessions.Take(limit).ToList());
+        repository.Setup(s => s.CountSessionsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(count);
         return repository;
     }
 
@@ -143,6 +166,18 @@ public class ReportReadCutTests
         output.Rows.Should().HaveCount(1000);
         output.CutNote.Should().StartWith("Only the first 1000 sessions are shown, to the night of ");
         output.Resolution!.Downsampled.Should().BeTrue();
+        output.Resolution.SourceRows.Should().Be(1001, "the sessions stored in the range, not the limit read past");
+    }
+
+    [Fact]
+    public async Task Sleep_sessions_cut_at_their_limit_report_the_sessions_stored()
+    {
+        var services = new ServiceCollection().AddSingleton(Sessions(1500).Object).BuildServiceProvider();
+
+        var output = await new SleepDataset().RunAsync(Request(new SleepParameters(), services, TimeSpan.FromDays(31)), CancellationToken.None);
+
+        output.Rows.Should().HaveCount(1000);
+        output.Resolution!.SourceRows.Should().Be(1500);
     }
 
     [Fact]
@@ -155,6 +190,26 @@ public class ReportReadCutTests
         output.Rows.Should().HaveCount(400);
         output.CutNote.Should().StartWith("Only the first 400 stages are shown, to ");
         output.Resolution!.Downsampled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Sleep_stages_before_the_range_do_not_take_the_limit_of_those_in_it()
+    {
+        var from = To.AddDays(-1).UtcDateTime;
+        var start = from.AddMinutes(-5000);
+        var stages = Enumerable.Range(0, 5010).Select(i => new SleepStageInterval
+        {
+            StartTime = start.AddMinutes(i), EndTime = start.AddMinutes(i + 1), Stage = SleepStageType.Light,
+        }).ToList();
+        var repository = new Mock<ISleepSessionRepository>();
+        repository.Setup(s => s.GetSessionsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), 0, false, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new SleepSession { StartTime = start, EndTime = start.AddMinutes(5010), Type = SleepSessionType.Overnight, Stages = stages }]);
+        var services = new ServiceCollection().AddSingleton(repository.Object).BuildServiceProvider();
+
+        var output = await new SleepStagesDataset().RunAsync(Request(new SleepStagesParameters(), services, TimeSpan.FromDays(1)), CancellationToken.None);
+
+        output.Rows.Should().HaveCount(10, "the ten stages in the range are read, not the first stages of the session");
+        output.CutNote.Should().BeNull();
     }
 
     [Fact]
@@ -223,9 +278,14 @@ public class ReportReadCutTests
     [Fact]
     public void An_untitled_span_or_marker_layer_is_named_by_the_signals_it_draws()
     {
-        new StateSpansDataset().LayerTitle(new StateSpansParameters { Kinds = [ReportSpanKind.PumpMode, ReportSpanKind.Override] })
+        var all = new HashSet<string>([Scope.DevicesRead, Scope.TherapyRead, Scope.TreatmentsRead, Scope.SleepRead]);
+        new StateSpansDataset().LayerTitle(new StateSpansParameters { Kinds = [ReportSpanKind.PumpMode, ReportSpanKind.Override] }, all)
             .Should().Be("Pump mode, Override");
-        new StateSpansDataset().LayerTitle(new StateSpansParameters()).Should().NotContain("State spans");
+        new StateSpansDataset().LayerTitle(new StateSpansParameters(), all).Should().NotContain("State spans");
+        new StateSpansDataset().LayerTitle(new StateSpansParameters { Kinds = [ReportSpanKind.PumpMode, ReportSpanKind.Profile] },
+                new HashSet<string>([Scope.DevicesRead]))
+            .Should().Be("Pump mode", "a kind the caller cannot read is not drawn, so it does not name the layer");
+        new StateSpansDataset().LayerTitle(new StateSpansParameters { Kinds = [ReportSpanKind.Profile] }, new HashSet<string>()).Should().BeNull();
         var bindings = new ReportLayerBindings { X = "time", Y = ["insulin", "carbs"] };
         var fields = new TreatmentsDataset().Fields.Select(f => f.ResolveUnit(false)).ToList();
         ReportSpecRunner.MarkersTitle("Treatments", fields, bindings,

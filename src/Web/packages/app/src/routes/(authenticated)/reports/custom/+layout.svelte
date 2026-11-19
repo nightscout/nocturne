@@ -2,7 +2,8 @@
   The custom report pages. On a phone, every small button and toggle on them is at least 44px tall, so
   a finger can hit it; the controls keep their desktop size from the `sm` breakpoint up. A control set
   in a line of text (`data-touch-hit`) keeps its size and gets a 44px tall area to hit around it, so
-  the text does not move.
+  the text does not move. Text that holds such controls gets 44px lines, so when it wraps, the area
+  of one line does not cover the controls of the line above.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -22,6 +23,9 @@
     }
     .touch-targets :global(:is(button, a):is(.size-7, .size-8)) {
       min-width: 2.75rem;
+    }
+    .touch-targets :global(:has(> [data-touch-hit])) {
+      line-height: 2.75rem;
     }
     .touch-targets :global([data-touch-hit]) {
       position: relative;

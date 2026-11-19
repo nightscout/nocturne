@@ -93,6 +93,9 @@ async function save(name: string) {
   await page.getByRole("button", { name: "Save the report" }).click();
 }
 
+/** The page data of a signed-in member of a tenant, whose drafts this browser keeps. */
+const MEMBER = { tenantSlug: "dev", user: { subjectId: "subject-1" } };
+
 describe("a new custom report", () => {
   beforeEach(async () => {
     calls.runs.length = 0;
@@ -104,7 +107,7 @@ describe("a new custom report", () => {
     decorate = () => {};
     availability = ({ hours }) => ({ hours, signals: [] });
     localStorage.clear();
-    pageState.data = {};
+    pageState.data = { ...MEMBER };
     await page.viewport(1280, 900);
   });
 
@@ -420,7 +423,7 @@ describe("a new custom report", () => {
 
 
   it("tells a member limited to the last 24 hours that it cannot create reports", async () => {
-    pageState.data = { limitTo24Hours: true };
+    pageState.data = { ...MEMBER, limitTo24Hours: true };
     render(NewCustomReportPage, {});
 
     await expect.element(page.getByTestId("clamped-note")).toHaveTextContent("Your access is limited to the last 24 hours. It cannot create reports.");
@@ -440,7 +443,7 @@ describe("the safety net of a new report", () => {
     decorate = () => {};
     availability = ({ hours }) => ({ hours, signals: [] });
     localStorage.clear();
-    pageState.data = {};
+    pageState.data = { ...MEMBER };
     await page.viewport(1280, 900);
   });
 

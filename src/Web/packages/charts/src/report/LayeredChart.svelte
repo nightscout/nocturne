@@ -8,6 +8,7 @@
   draws no plot: the panel's sentence says why. Every value, word and colour is the API's.
 -->
 <script lang="ts">
+  import { Key } from "@nocturne/ui/keys";
   import { Chart, Pattern, Svg, Tooltip } from "layerchart";
   import { scaleLinear, scaleTime } from "d3-scale";
   import type { ChartFormat } from "../format.js";
@@ -73,6 +74,9 @@
 
   const uid = $props.id();
 
+  /** How long the crosshair rests before its readout is said. */
+  const ANNOUNCE_SETTLE_MS = 300;
+
   const groups = $derived(axisGroups(panel));
   const kind = $derived(groups[0]?.kind ?? panel.xKind ?? "time");
   const weight = $derived(panel.tracks.reduce((sum, t) => sum + t.height, 0));
@@ -113,9 +117,14 @@
   let keyed = $state(false);
 
   function onkeydown(event: KeyboardEvent) {
-    const moves: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const moves: Record<string, [number, number]> = {
+      [Key.ArrowLeft]: [-1, 0],
+      [Key.ArrowRight]: [1, 0],
+      [Key.ArrowUp]: [0, -1],
+      [Key.ArrowDown]: [0, 1],
+    };
     const move = moves[event.key];
-    if (event.key === "Escape") {
+    if (event.key === Key.Escape) {
       if (!keyed) return;
       // Escape ends the reading only: in a dialog it does not also close the dialog.
       event.stopPropagation();
@@ -169,6 +178,17 @@
     const section = sectionAt(focus);
     return [section.heading, ...section.entries.map((e) => `${e.label}: ${e.value}${e.range ? ` (${e.range})` : ""}`)].join(". ");
   });
+  /** The readout once the crosshair stops: a held arrow key says only where it comes to rest. */
+  let announced = $state("");
+  $effect(() => {
+    const text = readout;
+    if (!text) {
+      announced = "";
+      return;
+    }
+    const settle = setTimeout(() => (announced = text), ANNOUNCE_SETTLE_MS);
+    return () => clearTimeout(settle);
+  });
 </script>
 
 {#snippet plotArea()}
@@ -191,7 +211,7 @@
         hover
       />
     </Svg>
-    <Tooltip.Root class="z-50 max-w-96 rounded-lg border border-border text-xs shadow-xl">
+    <Tooltip.Root class="z-50 max-w-96 rounded-lg border border-border text-xs shadow-md">
         {#if focus}
           {@const section = sectionAt(focus)}
           <p class="mb-1 border-b border-border pb-1 font-semibold" data-testid="report-tooltip-axis">{section.heading}</p>
@@ -276,7 +296,7 @@
   </div>
   {#if keysHint}
     <p class="sr-only" id="{uid}-keys">{keysHint}</p>
-    <p class="sr-only" aria-live="polite">{readout}</p>
+    <p class="sr-only" aria-live="polite">{announced}</p>
   {/if}
   {#if groups.length === 1 && (kind === "value" || kind === "lag" || kind === "offset") && xField}
     <p class="text-center text-xs text-muted-foreground" data-testid="report-x-caption">

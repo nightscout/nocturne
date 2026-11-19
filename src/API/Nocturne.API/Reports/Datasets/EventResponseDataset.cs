@@ -444,14 +444,15 @@ internal sealed class EventResponseDataset : IReportDataset
         _ => scope,
     };
 
-    /// <summary>The range as words: "in the last 90 days" for a range that ends now, else its local dates.</summary>
+    /// <summary>
+    /// The range as words: "in the last 90 days" for a range that ends now, else its first and last local days, the end
+    /// being exclusive.
+    /// </summary>
     internal static string RangeWords(ReportDatasetRequest request)
     {
         if (request.Now is { } now && (now - request.To).Duration() < TimeSpan.FromMinutes(2))
             return $"in the last {ReportSpecValidator.Describe(request.To - request.From)}";
-        var zone = request.Zone ?? TimeZoneInfo.Utc;
-        string Day(DateTimeOffset at) => request.Clock.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime));
-        return $"from {Day(request.From)} to {Day(request.To)}";
+        return $"from {request.Clock.Date(request.From)} to {request.Clock.Date(request.To.AddTicks(-1))}";
     }
 
     /// <summary>The event as the object of "from the": "low", "meal", "start of exercise".</summary>

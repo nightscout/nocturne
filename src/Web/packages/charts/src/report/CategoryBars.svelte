@@ -68,7 +68,7 @@
     {/each}
   </Svg>
 
-  <Tooltip.Root class="z-50 rounded-lg border border-border text-xs shadow-xl">
+  <Tooltip.Root class="z-50 rounded-lg border border-border text-xs shadow-md">
     {#snippet children({ data: hovered })}
       <Tooltip.Header value={hovered?.category} class="mb-1 border-b border-border pb-1 font-semibold" />
       <Tooltip.List>

@@ -224,9 +224,10 @@ internal interface IReportDataset
 
     /// <summary>
     /// What a layer of <paramref name="parameters"/> draws, in words, where that is narrower than <see cref="Label"/>: the
-    /// kinds of span asked for. A layer or panel the spec gives no title is named by it. Null for the label.
+    /// kinds of span asked for that a caller holding <paramref name="granted"/> reads. A layer or panel the spec gives no
+    /// title is named by it. Null for the label.
     /// </summary>
-    string? LayerTitle(ReportDatasetParameters parameters) => null;
+    string? LayerTitle(ReportDatasetParameters parameters, IReadOnlySet<string> granted) => null;
 
     /// <summary>The rows of group <paramref name="series"/>, from 1, that a derived source reads.</summary>
     IEnumerable<IReadOnlyDictionary<string, object?>> SeriesRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, int series) => rows;
@@ -271,6 +272,12 @@ internal sealed record ReportDatasetRequest(
     bool? Hour12 = null,
     string? Region = null)
 {
+    /// <summary>
+    /// The most rows a <see cref="Whole"/> read of a dense series keeps, so a run holds a bounded number however long
+    /// the range: a minute series over 90 days is about 130,000 rows. A read cut here says so in its cut note.
+    /// </summary>
+    public const int MaxWholeRows = 50_000;
+
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
     /// <summary>How the dates and times this read writes in words are written.</summary>

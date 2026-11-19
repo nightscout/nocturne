@@ -52,6 +52,14 @@ internal sealed class BasalDeliveryDataset : IReportDataset
 
     public int PointBudget => Budget;
 
+    public string? ReadVariant(ReportReadShape shape) => shape.Whole ? "whole" : null;
+
+    /// <summary>
+    /// A layer folded by the last value of each slot needs every change: thinned to the first change of each interval,
+    /// a slot's last value would be whichever change the thinning kept.
+    /// </summary>
+    public bool FoldsWhole => true;
+
     public IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters) => [];
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -70,8 +78,8 @@ internal sealed class BasalDeliveryDataset : IReportDataset
             request.ReadLog.Record("profiles", 0);
         var therapy = request.HasScope(Scope.TherapyRead);
 
-        var interval = GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
-        var kept = Thin(series, from, interval);
+        var interval = request.Whole ? 1 : GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
+        var kept = request.Whole ? series : Thin(series, from, interval);
         var rows = kept.Select(p => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
             ["time"] = p.Timestamp,

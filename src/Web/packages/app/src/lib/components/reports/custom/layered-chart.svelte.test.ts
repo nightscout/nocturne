@@ -38,7 +38,7 @@ describe("a layered chart on the page", () => {
 
     const tooltip = page.getByText("IOB", { exact: true }).last();
     await expect.element(tooltip).toBeVisible();
-    const box2 = tooltip.element().closest(".shadow-xl");
+    const box2 = tooltip.element().closest(".shadow-md");
     expect(box2, "the tooltip's box").not.toBeNull();
     for (const label of ["Glucose", "Target range", "COB", "Basal", "Pump mode", "Automatic", "mg/dL", " g"])
       expect(box2?.textContent, label).toContain(label);

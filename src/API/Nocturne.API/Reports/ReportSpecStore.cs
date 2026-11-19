@@ -27,7 +27,9 @@ public interface IReportSpecStore
     /// <summary>Saves a spec; refused once the tenant keeps <see cref="ReportSpecStore.MaxReports"/> live reports.</summary>
     Task<CustomReportWrite> CreateAsync(string name, JsonElement? spec, CustomReportEditor caller, CancellationToken cancellationToken);
 
-    Task<CustomReportWrite> UpdateAsync(Guid id, string? name, JsonElement? spec, CustomReportEditor caller, CancellationToken cancellationToken);
+    /// <param name="expectedUpdatedAt">The <see cref="CustomReport.UpdatedAt"/> the caller read, or null to write whatever is stored.</param>
+    Task<CustomReportWrite> UpdateAsync(
+        Guid id, string? name, JsonElement? spec, DateTime? expectedUpdatedAt, CustomReportEditor caller, CancellationToken cancellationToken);
 
     Task<CustomReportWriteStatus> DeleteAsync(Guid id, CustomReportEditor caller, CancellationToken cancellationToken);
 }
@@ -80,7 +82,7 @@ internal sealed class ReportSpecStore(
     }
 
     public async Task<CustomReportWrite> UpdateAsync(
-        Guid id, string? name, JsonElement? spec, CustomReportEditor caller, CancellationToken cancellationToken)
+        Guid id, string? name, JsonElement? spec, DateTime? expectedUpdatedAt, CustomReportEditor caller, CancellationToken cancellationToken)
     {
         if (await RefusalAsync(id, caller, cancellationToken) is { } refused)
             return new CustomReportWrite(refused, null, []);
@@ -92,7 +94,7 @@ internal sealed class ReportSpecStore(
             return Invalid(errors);
 
         var write = await repository.UpdateAsync(
-            id, trimmed, normalised, normalised is null ? null : ReportSpec.CurrentVersion, cancellationToken);
+            id, trimmed, normalised, normalised is null ? null : ReportSpec.CurrentVersion, expectedUpdatedAt, cancellationToken);
         return ToWrite(write, caller);
     }
 
@@ -163,6 +165,7 @@ internal sealed class ReportSpecStore(
     {
         SavedReportSpecWriteStatus.Saved => new(CustomReportWriteStatus.Saved, ToStoredReport(write.Report!, caller), []),
         SavedReportSpecWriteStatus.NotFound => new(CustomReportWriteStatus.NotFound, null, []),
+        SavedReportSpecWriteStatus.Changed => new(CustomReportWriteStatus.Changed, null, []),
         SavedReportSpecWriteStatus.NameTaken => new(CustomReportWriteStatus.NameTaken, null,
             [new("name", "Another custom report has this name. Enter a different name.")]),
         _ => throw new ArgumentOutOfRangeException(nameof(write), write.Status, null),

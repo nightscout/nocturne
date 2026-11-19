@@ -45,6 +45,7 @@ internal static class ReportServiceExtensions
         services.AddSingleton<ReportSpecValidator>();
         services.AddSingleton<ReportSpecRunner>();
         services.AddScoped<ICustomReportCatalogue, ReportCatalogue>();
+        services.AddScoped<ReportSourceRepositories>();
         services.AddScoped<ICustomReportSignalAvailability, ReportSignalAvailability>();
         services.AddScoped<ReportReadLog>();
         services.AddScoped<ReportRenderer>();
