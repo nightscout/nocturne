@@ -907,6 +907,50 @@ public class EntryDecomposerTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeAsync_SgvEntryWithQuality_StoresQualityAndSensorStatus()
+    {
+        var entry = new Entry
+        {
+            Id = "quality_test_1",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 76.0,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["quality"] = System.Text.Json.JsonDocument.Parse("\"invalid\"").RootElement,
+                ["sensorStatus"] = "G7:Errors/info2"
+            }
+        };
+
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        var sg = result.CreatedRecords[0] as SensorGlucose;
+        sg!.Quality.Should().Be(SensorGlucoseQuality.Invalid);
+        sg.SensorStatus.Should().Be("G7:Errors/info2");
+    }
+
+    [Theory]
+    [InlineData("Broken")]
+    [InlineData("7")]
+    public async Task DecomposeAsync_SgvEntryWithUnknownQuality_KeepsTheReadingWithoutIt(string quality)
+    {
+        var entry = new Entry
+        {
+            Id = "quality_test_2",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 120.0,
+            AdditionalProperties = new Dictionary<string, object> { ["quality"] = quality }
+        };
+
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        var sg = result.CreatedRecords[0] as SensorGlucose;
+        sg!.Mgdl.Should().Be(120.0);
+        sg.Quality.Should().BeNull();
+    }
+
+    [Fact]
     public async Task DecomposeAsync_SgvEntryWithSmoothedAndUnsmoothed_ResolvesAllFields()
     {
         // Arrange - both smoothed and unsmoothed provided

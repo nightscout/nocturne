@@ -118,7 +118,8 @@ public class V4ReadQueryShapeTests
 
         Where('s').Should().Be(
             $"WHERE {Tenant} AND {Window} AND t.patient_device_id = @patientDeviceId_Value"
-            + " AND NOT (t.is_secondary_stream) AND (t.data_source IS NULL OR t.data_source NOT IN ('demo-service', 'testing'))"
+            + " AND NOT (t.is_secondary_stream) AND (t.quality IS NULL OR t.quality <> 'Invalid')"
+            + " AND (t.data_source IS NULL OR t.data_source NOT IN ('demo-service', 'testing'))"
             + $" AND NOT (t.is_duplicate) AND {DescendingCursor}");
     }
 

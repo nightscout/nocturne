@@ -29,6 +29,15 @@ public static class EntryProjection
         entry.Unfiltered = sg.Unfiltered;
         entry.Delta = sg.Delta;
         entry.Rssi = sg.Rssi;
+        if (sg.Quality is not null || sg.SensorStatus is not null)
+        {
+            // Extra keys, as the v1/v3 write path reads them (EntryDecomposer).
+            entry.AdditionalProperties ??= [];
+            if (sg.Quality is { } quality)
+                entry.AdditionalProperties["quality"] = quality.ToString();
+            if (sg.SensorStatus is { } status)
+                entry.AdditionalProperties["sensorStatus"] = status;
+        }
         return entry;
     }
 
