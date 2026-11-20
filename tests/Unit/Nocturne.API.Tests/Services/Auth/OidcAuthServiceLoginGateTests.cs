@@ -37,6 +37,11 @@ public class OidcAuthServiceLoginGateTests
 
     public OidcAuthServiceLoginGateTests()
     {
+        // An unanswered mock reads as "a code is required"; these subjects have no authenticator.
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
+
         var options = Options.Create(new OidcOptions());
         _service = new OidcAuthService(
             _providerService.Object,
@@ -276,7 +281,7 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _totpService
-            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, false)).ReturnsAsync("step-up-token");
         SetupSessionIssuance();
@@ -307,7 +312,7 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _totpService
-            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, "device-token", It.IsAny<string?>()))
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, "device-token"))
             .ReturnsAsync(SecondFactorRequirement.SatisfiedByTrustedDevice);
         SetupSessionIssuance();
 
@@ -332,7 +337,7 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _totpService
-            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.SatisfiedByTrustedDevice);
 
         var result = await _service.CompleteLoginAsync(
@@ -355,7 +360,7 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _totpService
-            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.CodeRequired);
 
         var result = await _service.CompleteLoginAsync(
@@ -380,7 +385,7 @@ public class OidcAuthServiceLoginGateTests
             .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
             .ReturnsAsync(ValidInvite(tenantId));
         _totpService
-            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, true)).ReturnsAsync("step-up-token");
 
@@ -400,7 +405,7 @@ public class OidcAuthServiceLoginGateTests
     {
         var subject = SetupResolvedSubject();
         _totpService
-            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, null, false)).ReturnsAsync("step-up-token");
 

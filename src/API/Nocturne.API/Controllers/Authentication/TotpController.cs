@@ -237,7 +237,14 @@ public class TotpController : ControllerBase
 
         // No factor-count guard: TOTP is a second factor, so removing it can never
         // lock a user out of their primary sign-in method.
-        await _totpService.RemoveCredentialAsync(id, auth.SubjectId.Value);
+        var untrusted = await _totpService.RemoveCredentialAsync(id, auth.SubjectId.Value);
+        if (untrusted > 0)
+        {
+            await _auditService.LogAsync(AuthAuditEventType.TrustedDeviceRevoked, auth.SubjectId, success: true,
+                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                userAgent: Request.Headers.UserAgent.ToString(),
+                detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "authenticator_removed" }));
+        }
 
         return NoContent();
     }
@@ -314,7 +321,7 @@ public class TotpController : ControllerBase
             && await _trustedDevices.TrustAsync(
                 result.SubjectId,
                 Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName],
-                ua, ip, HttpContext.RequestAborted) is { } grant)
+                ua, HttpContext.RequestAborted) is { } grant)
         {
             Response.SetTrustedDeviceCookie(grant, _oidcOptions);
 
@@ -335,6 +342,10 @@ public class TotpController : ControllerBase
     /// Whether the authenticator step offers to trust the device, and for how long. Anonymous: the
     /// step runs before any session exists.
     /// </summary>
+    /// <remarks>
+    /// A lifetime that is not a whole number of days is rounded up, so the option is offered
+    /// exactly when <see cref="ITrustedDeviceService.Lifetime"/> is above zero.
+    /// </remarks>
     /// <response code="200">The policy; <c>days</c> is 0 when trusted devices are turned off.</response>
     [HttpGet("trusted-device-policy")]
     [AllowAnonymous]
@@ -343,7 +354,7 @@ public class TotpController : ControllerBase
     public ActionResult<TrustedDevicePolicyResponse> GetTrustedDevicePolicy() =>
         Ok(new TrustedDevicePolicyResponse
         {
-            Days = Math.Max(0, (int)Math.Floor(_trustedDevices.Lifetime.TotalDays)),
+            Days = Math.Max(0, (int)Math.Ceiling(_trustedDevices.Lifetime.TotalDays)),
         });
 
     /// <summary>

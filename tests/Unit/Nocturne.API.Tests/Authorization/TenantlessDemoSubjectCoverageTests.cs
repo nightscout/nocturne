@@ -125,7 +125,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["SupportController.GetSupportConfig"] = "returns the operator's own support and billing links from deployment configuration; reads no session and names no tenant",
             ["TlsAuthorizationController.Authorize"] = "answers the edge's on-demand-TLS ask for a hostname; it takes no credential and reads no session",
             ["TotpController.GetTrustedDevicePolicy"] = "reads one instance setting, the trusted-device lifetime, and resolves no subject",
-            ["TotpController.Login"] ="mints the session; the subject comes from the passkey step-up token, and it additionally requires membership of the resolved tenant, which a tenantless host has none of",
+            ["TotpController.Login"] = "mints the session; the subject comes from the passkey step-up token, and it additionally requires membership of the resolved tenant, which a tenantless host has none of",
         };
 
     /// <summary>

@@ -132,7 +132,7 @@ public class TotpControllerLoginGateTests
         var subjectId = Guid.NewGuid();
         var expiresAt = DateTime.UtcNow.AddDays(30);
         _trustedDevices
-            .Setup(t => t.TrustAsync(subjectId, "old-token", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(t => t.TrustAsync(subjectId, "old-token", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TrustedDeviceGrant(Guid.NewGuid(), "device-token", expiresAt));
 
         var setCookie = await SignInAsync(subjectId, trustDevice: true,
@@ -157,16 +157,20 @@ public class TotpControllerLoginGateTests
 
         setCookie.Should().NotContain(SessionCookieExtensions.TrustedDeviceCookieName);
         _trustedDevices.Verify(
-            t => t.TrustAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            t => t.TrustAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task Login_WhenTrustedDevicesAreTurnedOff_SignsInWithoutTheCookie()
+    public async Task Login_WhenTheServiceTrustsNothing_SignsInWithoutTheCookie()
     {
-        // The mock's TrustAsync returns null, as the service does when the lifetime is zero.
-        var setCookie = await SignInAsync(Guid.NewGuid(), trustDevice: true);
+        var subjectId = Guid.NewGuid();
+        _trustedDevices
+            .Setup(t => t.TrustAsync(subjectId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrustedDeviceGrant?)null);
+
+        var setCookie = await SignInAsync(subjectId, trustDevice: true);
 
         setCookie.Should().NotContain(SessionCookieExtensions.TrustedDeviceCookieName);
     }
@@ -183,18 +187,19 @@ public class TotpControllerLoginGateTests
             new TotpLoginRequest { StepUpToken = "step-up", Code = "000000", TrustDevice = true });
 
         _trustedDevices.Verify(
-            t => t.TrustAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            t => t.TrustAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
     [Theory]
     [Trait("Category", "Unit")]
-    [InlineData(30, 30)]
+    [InlineData(30 * 24, 30)]
+    [InlineData(12, 1)]
     [InlineData(0, 0)]
-    [InlineData(-1, 0)]
-    public void TrustedDevicePolicy_ReportsTheLifetimeInDays(int lifetimeDays, int expected)
+    [InlineData(-24, 0)]
+    public void TrustedDevicePolicy_OffersTheOptionExactlyWhenTheLifetimeIsAboveZero(int lifetimeHours, int expected)
     {
-        _trustedDevices.Setup(t => t.Lifetime).Returns(TimeSpan.FromDays(lifetimeDays));
+        _trustedDevices.Setup(t => t.Lifetime).Returns(TimeSpan.FromHours(lifetimeHours));
 
         var result = CreateController().GetTrustedDevicePolicy();
 

@@ -16,7 +16,7 @@ public interface ITrustedDeviceRepository
     Task<TrustedDeviceRecord?> FindByTokenHashAsync(string tokenHash, CancellationToken ct);
 
     /// <summary>Records that device <paramref name="deviceId"/> stood in for a code at <paramref name="now"/>.</summary>
-    Task MarkUsedAsync(Guid deviceId, DateTime now, string? ipAddress, CancellationToken ct);
+    Task MarkUsedAsync(Guid deviceId, DateTime now, CancellationToken ct);
 
     /// <summary>The subject's devices, most recently trusted first.</summary>
     Task<IReadOnlyList<TrustedDeviceRecord>> ListAsync(Guid subjectId, CancellationToken ct);
@@ -24,6 +24,9 @@ public interface ITrustedDeviceRepository
     /// <summary>Removes device <paramref name="deviceId"/> if <paramref name="subjectId"/> holds it.</summary>
     Task<bool> RemoveAsync(Guid deviceId, Guid subjectId, CancellationToken ct);
 
-    /// <summary>Removes every device the subject holds and returns how many there were.</summary>
-    Task<int> RemoveAllAsync(Guid subjectId, CancellationToken ct);
+    /// <summary>
+    /// Removes every device the subject holds, except the one whose token hashes to
+    /// <paramref name="keepTokenHash"/> when that is given, and returns how many were removed.
+    /// </summary>
+    Task<int> RemoveAllAsync(Guid subjectId, string? keepTokenHash, CancellationToken ct);
 }

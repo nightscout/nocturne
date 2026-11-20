@@ -28,7 +28,7 @@ public class TrustedDeviceService : ITrustedDeviceService
         ILogger<TrustedDeviceService> logger)
     {
         _devices = devices ?? throw new ArgumentNullException(nameof(devices));
-        _clock = clock;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _logger = logger;
         Lifetime = options.Value.Session.TrustedDeviceLifetime;
     }
@@ -40,7 +40,7 @@ public class TrustedDeviceService : ITrustedDeviceService
 
     /// <inheritdoc />
     public async Task<TrustedDeviceGrant?> TrustAsync(
-        Guid subjectId, string? replacedToken, string? userAgent, string? ipAddress, CancellationToken ct = default)
+        Guid subjectId, string? replacedToken, string? userAgent, CancellationToken ct = default)
     {
         if (!Enabled)
             return null;
@@ -61,7 +61,6 @@ public class TrustedDeviceService : ITrustedDeviceService
                 subjectId,
                 HashToken(token),
                 DeviceLabel.FromUserAgent(userAgent),
-                ipAddress,
                 now,
                 expiresAt),
             ct);
@@ -74,8 +73,7 @@ public class TrustedDeviceService : ITrustedDeviceService
     }
 
     /// <inheritdoc />
-    public async Task<bool> IsTrustedAsync(
-        Guid subjectId, string? token, string? ipAddress, CancellationToken ct = default)
+    public async Task<bool> IsTrustedAsync(Guid subjectId, string? token, CancellationToken ct = default)
     {
         if (!Enabled || string.IsNullOrEmpty(token))
             return false;
@@ -85,7 +83,7 @@ public class TrustedDeviceService : ITrustedDeviceService
         if (device is null || device.SubjectId != subjectId || device.ExpiresAt <= now)
             return false;
 
-        await _devices.MarkUsedAsync(device.Id, now, ipAddress, ct);
+        await _devices.MarkUsedAsync(device.Id, now, ct);
         return true;
     }
 
@@ -104,7 +102,6 @@ public class TrustedDeviceService : ITrustedDeviceService
             .Select(d => new TrustedDeviceInfo(
                 d.Id,
                 d.DeviceDescription,
-                d.IpAddress,
                 d.CreatedAt,
                 d.LastUsedAt,
                 d.ExpiresAt,
@@ -128,11 +125,25 @@ public class TrustedDeviceService : ITrustedDeviceService
     /// <inheritdoc />
     public async Task<int> RevokeAllAsync(Guid subjectId, CancellationToken ct = default)
     {
-        var removed = await _devices.RemoveAllAsync(subjectId, ct);
+        var removed = await _devices.RemoveAllAsync(subjectId, keepTokenHash: null, ct);
         if (removed > 0)
         {
             _logger.LogInformation(
                 "{Count} trusted devices revoked for subject {SubjectId}", removed, subjectId);
+        }
+
+        return removed;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RevokeOthersAsync(Guid subjectId, string? currentToken, CancellationToken ct = default)
+    {
+        var keep = string.IsNullOrEmpty(currentToken) ? null : HashToken(currentToken);
+        var removed = await _devices.RemoveAllAsync(subjectId, keep, ct);
+        if (removed > 0)
+        {
+            _logger.LogInformation(
+                "{Count} other trusted devices revoked for subject {SubjectId}", removed, subjectId);
         }
 
         return removed;

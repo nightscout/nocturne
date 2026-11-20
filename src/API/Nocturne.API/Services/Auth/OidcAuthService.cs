@@ -367,8 +367,7 @@ public class OidcAuthService : IOidcAuthService
                 "The login could not be completed against the tenant it was started from.");
         }
 
-        var secondFactor = await _totpService.GetSecondFactorRequirementAsync(
-            subject.Id, trustedDeviceToken, ipAddress);
+        var secondFactor = await _totpService.GetSecondFactorRequirementAsync(subject.Id, trustedDeviceToken);
 
         if (secondFactor == SecondFactorRequirement.CodeRequired)
         {

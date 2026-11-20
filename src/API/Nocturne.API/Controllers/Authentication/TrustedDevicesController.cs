@@ -68,7 +68,6 @@ public class TrustedDevicesController : ControllerBase
             {
                 Id = d.Id,
                 DeviceDescription = d.DeviceDescription,
-                IpAddress = d.IpAddress,
                 CreatedAt = d.CreatedAt,
                 LastUsedAt = d.LastUsedAt,
                 ExpiresAt = d.ExpiresAt,
@@ -161,9 +160,6 @@ public class TrustedDeviceDto
 
     /// <summary>Browser and platform read from the device's user agent when it was trusted.</summary>
     public string? DeviceDescription { get; set; }
-
-    /// <summary>The address the device was last seen at.</summary>
-    public string? IpAddress { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

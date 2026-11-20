@@ -4,8 +4,7 @@
   import * as Card from "#lib/components/ui/card/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import Monitor from "@lucide/svelte/icons/monitor";
-  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import MonitorSmartphone from "@lucide/svelte/icons/monitor-smartphone";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Clock from "@lucide/svelte/icons/clock";
@@ -32,14 +31,6 @@
       successMessage = null;
       errorMessage = null;
     }, 3000);
-  }
-
-  const MOBILE_DEVICES = ["iphone", "ipad", "android"];
-
-  function isMobileDevice(description: string | null | undefined): boolean {
-    if (!description) return false;
-    const lower = description.toLowerCase();
-    return MOBILE_DEVICES.some((d) => lower.includes(d));
   }
 
   async function handleRemove(id: string) {
@@ -145,11 +136,7 @@
               <div
                 class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted"
               >
-                {#if isMobileDevice(device.deviceDescription)}
-                  <Smartphone class="h-4.5 w-4.5 text-muted-foreground" />
-                {:else}
-                  <Monitor class="h-4.5 w-4.5 text-muted-foreground" />
-                {/if}
+                <MonitorSmartphone class="h-4.5 w-4.5 text-muted-foreground" />
               </div>
               <div class="space-y-1 min-w-0">
                 <Card.Title class="flex items-center gap-2 flex-wrap">
@@ -174,9 +161,6 @@
                         <Clock class="h-3 w-3" />
                         Expires {formatMediumDate(device.expiresAt)}
                       </span>
-                    {/if}
-                    {#if device.ipAddress}
-                      <span>IP {device.ipAddress}</span>
                     {/if}
                   </span>
                 </Card.Description>

@@ -70,6 +70,10 @@ public class PasskeyControllerTests : IDisposable
 
         _passkeyService = new Mock<IPasskeyService>();
         _totpService = new Mock<ITotpService>();
+        // An unanswered mock reads as "a code is required"; these members have no authenticator.
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
         _recoveryCodeService = new Mock<IRecoveryCodeService>();
         _jwtService = new Mock<IJwtService>();
         _sessionService = new Mock<ISessionService>();
@@ -1554,7 +1558,7 @@ public class PasskeyControllerTests : IDisposable
         var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
         StubSuccessfulAssertion(subjectId, "rhys");
         _totpService
-            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
 
@@ -1581,7 +1585,7 @@ public class PasskeyControllerTests : IDisposable
         var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
         StubSuccessfulAssertion(subjectId, "rhys");
         _totpService
-            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
             .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
         _sessionService
             .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
@@ -1607,7 +1611,7 @@ public class PasskeyControllerTests : IDisposable
         _controller.HttpContext.Request.Headers.Cookie =
             $"{SessionCookieExtensions.TrustedDeviceCookieName}=device-token";
         _totpService
-            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, "device-token", It.IsAny<string?>()))
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, "device-token"))
             .ReturnsAsync(SecondFactorRequirement.SatisfiedByTrustedDevice);
         _sessionService
             .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
@@ -1623,7 +1627,7 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task LoginComplete_AsksAboutTheSecondFactorOnlyForTheSubjectThePasskeyNamed()
+    public async Task LoginComplete_ChecksTheDeviceCookieAgainstTheSubjectThePasskeyNamed()
     {
         var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
         StubSuccessfulAssertion(subjectId, "rhys");
@@ -1636,12 +1640,37 @@ public class PasskeyControllerTests : IDisposable
         await LoginCompleteAsync();
 
         _totpService.Verify(
-            s => s.GetSecondFactorRequirementAsync(subjectId, "device-token", It.IsAny<string?>()),
+            s => s.GetSecondFactorRequirementAsync(subjectId, "device-token"),
             Times.Once,
             "the cookie is checked against the subject the assertion verified, never one the cookie names");
     }
 
     #endregion
+
+    [Fact]
+    public async Task RecoveryVerify_WithAValidCode_EndsTheTrustOfEveryDevice()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        _recoveryCodeService.Setup(s => s.VerifyAndConsumeAsync(subjectId, "ABCD-1234")).ReturnsAsync(true);
+        StubRecoveryTokenMinting();
+
+        var result = await _controller.RecoveryVerify(
+            new RecoveryVerifyRequest { Username = "rhys", Code = "ABCD-1234" });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        _trustedDevices.Verify(t => t.RevokeAllAsync(subjectId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecoveryVerify_WithARejectedCode_LeavesTrustedDevicesAlone()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        _recoveryCodeService.Setup(s => s.VerifyAndConsumeAsync(subjectId, "WRONG")).ReturnsAsync(false);
+
+        await _controller.RecoveryVerify(new RecoveryVerifyRequest { Username = "rhys", Code = "WRONG" });
+
+        _trustedDevices.Verify(t => t.RevokeAllAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     [Fact]
     public async Task RecoveryVerify_EmptyFields_ReturnsBadRequest()

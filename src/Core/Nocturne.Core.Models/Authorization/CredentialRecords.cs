@@ -54,7 +54,6 @@ public sealed record NewTrustedDevice(
     Guid SubjectId,
     string TokenHash,
     string? DeviceDescription,
-    string? IpAddress,
     DateTime CreatedAt,
     DateTime ExpiresAt);
 
@@ -64,7 +63,6 @@ public sealed record TrustedDeviceRecord(
     Guid SubjectId,
     string TokenHash,
     string? DeviceDescription,
-    string? IpAddress,
     DateTime CreatedAt,
     DateTime? LastUsedAt,
     DateTime ExpiresAt);

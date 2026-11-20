@@ -261,30 +261,29 @@ public class TotpService : ITotpService
         return credentials.Select(c => new TotpCredentialInfo(c.Id, c.Label, c.CreatedAt, c.LastUsedAt)).ToList();
     }
 
-    public async Task RemoveCredentialAsync(Guid credentialId, Guid subjectId)
+    public async Task<int> RemoveCredentialAsync(Guid credentialId, Guid subjectId)
     {
         if (!await _credentials.RemoveAsync(credentialId, subjectId, CancellationToken.None))
             throw new InvalidOperationException("Credential not found.");
 
         // A device was trusted on the strength of a code from the authenticators enrolled then.
         // Removing one, most often because the phone holding it is lost, ends that trust.
-        await _trustedDevices.RevokeAllAsync(subjectId);
+        var untrusted = await _trustedDevices.RevokeAllAsync(subjectId);
 
         _logger.LogInformation(
             "TOTP credential {CredentialId} removed for subject {SubjectId}",
             credentialId, subjectId);
+
+        return untrusted;
     }
 
-    public Task<int> GetCredentialCountAsync(Guid subjectId) =>
-        _credentials.CountAsync(subjectId, CancellationToken.None);
-
     public async Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(
-        Guid subjectId, string? trustedDeviceToken, string? ipAddress)
+        Guid subjectId, string? trustedDeviceToken)
     {
         if (await _credentials.CountAsync(subjectId, CancellationToken.None) == 0)
             return SecondFactorRequirement.NotEnrolled;
 
-        return await _trustedDevices.IsTrustedAsync(subjectId, trustedDeviceToken, ipAddress)
+        return await _trustedDevices.IsTrustedAsync(subjectId, trustedDeviceToken)
             ? SecondFactorRequirement.SatisfiedByTrustedDevice
             : SecondFactorRequirement.CodeRequired;
     }

@@ -30,7 +30,6 @@ public class TrustedDeviceRepository : ITrustedDeviceRepository
             SubjectId = device.SubjectId,
             TokenHash = device.TokenHash,
             DeviceDescription = device.DeviceDescription,
-            IpAddress = device.IpAddress,
             CreatedAt = device.CreatedAt,
             ExpiresAt = device.ExpiresAt,
         };
@@ -49,7 +48,7 @@ public class TrustedDeviceRepository : ITrustedDeviceRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task MarkUsedAsync(Guid deviceId, DateTime now, string? ipAddress, CancellationToken ct)
+    public virtual async Task MarkUsedAsync(Guid deviceId, DateTime now, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var entity = await db.TrustedDevices.FirstOrDefaultAsync(d => d.Id == deviceId, ct);
@@ -57,8 +56,6 @@ public class TrustedDeviceRepository : ITrustedDeviceRepository
             return;
 
         entity.LastUsedAt = now;
-        if (!string.IsNullOrEmpty(ipAddress))
-            entity.IpAddress = ipAddress;
         await db.SaveChangesAsync(ct);
     }
 
@@ -88,10 +85,12 @@ public class TrustedDeviceRepository : ITrustedDeviceRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<int> RemoveAllAsync(Guid subjectId, CancellationToken ct)
+    public virtual async Task<int> RemoveAllAsync(Guid subjectId, string? keepTokenHash, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var entities = await db.TrustedDevices.Where(d => d.SubjectId == subjectId).ToListAsync(ct);
+        var entities = await db.TrustedDevices
+            .Where(d => d.SubjectId == subjectId && (keepTokenHash == null || d.TokenHash != keepTokenHash))
+            .ToListAsync(ct);
         if (entities.Count == 0)
             return 0;
 
@@ -105,7 +104,6 @@ public class TrustedDeviceRepository : ITrustedDeviceRepository
         entity.SubjectId,
         entity.TokenHash,
         entity.DeviceDescription,
-        entity.IpAddress,
         entity.CreatedAt,
         entity.LastUsedAt,
         entity.ExpiresAt);

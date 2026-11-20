@@ -47,14 +47,6 @@ public class TrustedDeviceEntity
     public string? DeviceDescription { get; set; }
 
     /// <summary>
-    /// The address the device was last seen at: when it was trusted, then at each sign-in the
-    /// trust was used for.
-    /// </summary>
-    [MaxLength(64)]
-    [Column("ip_address")]
-    public string? IpAddress { get; set; }
-
-    /// <summary>
     /// When the subject trusted the device.
     /// </summary>
     [Column("created_at")]
@@ -72,8 +64,6 @@ public class TrustedDeviceEntity
     /// </summary>
     [Column("expires_at")]
     public DateTime ExpiresAt { get; set; }
-
-    // Navigation properties
 
     /// <summary>
     /// The subject the device is trusted for.

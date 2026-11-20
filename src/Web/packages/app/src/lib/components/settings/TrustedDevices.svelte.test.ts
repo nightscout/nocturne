@@ -83,16 +83,19 @@ describe("TrustedDevices", () => {
     expect(revoked).toEqual(["device-1"]);
   });
 
-  it("shows the server's reason when a removal is refused", async () => {
-    // A rejected generated remote function is SvelteKit's `HttpError`: `{ status, body }`.
-    revokeImpl = () =>
-      Promise.reject({ status: 409, body: { message: "That device was already removed." } });
+  it("says the removal failed when the device is already gone", async () => {
+    // A rejected generated remote function is SvelteKit's `HttpError`: `{ status, body }`. The
+    // API answers 404 for a device the account no longer holds.
+    revokeImpl = () => Promise.reject({ status: 404, body: { message: "Not Found" } });
 
     render(TrustedDevices);
     await page.getByRole("button", { name: "Remove", exact: true }).click();
     await page.getByRole("button", { name: "Remove", exact: true }).last().click();
 
-    await expect.element(page.getByText("That device was already removed.")).toBeVisible();
+    await expect
+      .element(page.getByText("Could not remove the device. Try again."))
+      .toBeVisible();
+    await expect.element(page.getByText("Device removed.")).not.toBeInTheDocument();
   });
 
   it("offers to remove all only when there is more than one device", async () => {

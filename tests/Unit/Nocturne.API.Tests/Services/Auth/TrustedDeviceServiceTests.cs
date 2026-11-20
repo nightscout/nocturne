@@ -59,19 +59,19 @@ public class TrustedDeviceServiceTests : IDisposable
     {
         var service = CreateService();
 
-        var grant = await service.TrustAsync(_subjectId, replacedToken: null, Chrome, "203.0.113.7");
+        var grant = await service.TrustAsync(_subjectId, replacedToken: null, Chrome);
 
         grant.Should().NotBeNull();
-        (await service.IsTrustedAsync(_subjectId, grant!.Token, "203.0.113.7")).Should().BeTrue();
+        (await service.IsTrustedAsync(_subjectId, grant!.Token)).Should().BeTrue();
     }
 
     [Fact]
     public async Task ATrustedDevice_IsNotTrustedForAnotherSubject()
     {
         var service = CreateService();
-        var grant = await service.TrustAsync(_subjectId, null, Chrome, null);
+        var grant = await service.TrustAsync(_subjectId, null, Chrome);
 
-        (await service.IsTrustedAsync(_otherSubjectId, grant!.Token, null))
+        (await service.IsTrustedAsync(_otherSubjectId, grant!.Token))
             .Should().BeFalse("the token replaces the code only for the account that presented the code");
     }
 
@@ -82,9 +82,9 @@ public class TrustedDeviceServiceTests : IDisposable
     public async Task AMissingOrUnknownToken_IsNotTrusted(string? token)
     {
         var service = CreateService();
-        await service.TrustAsync(_subjectId, null, Chrome, null);
+        await service.TrustAsync(_subjectId, null, Chrome);
 
-        (await service.IsTrustedAsync(_subjectId, token, null)).Should().BeFalse();
+        (await service.IsTrustedAsync(_subjectId, token)).Should().BeFalse();
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class TrustedDeviceServiceTests : IDisposable
     {
         var service = CreateService();
 
-        var grant = await service.TrustAsync(_subjectId, null, Chrome, null);
+        var grant = await service.TrustAsync(_subjectId, null, Chrome);
 
         var row = await _dbContext.TrustedDevices.AsNoTracking().SingleAsync();
         row.TokenHash.Should().NotBe(grant!.Token).And.HaveLength(64);
@@ -103,29 +103,28 @@ public class TrustedDeviceServiceTests : IDisposable
     public async Task TheTrustEndsAfterItsLifetime_HoweverOftenItWasUsed()
     {
         var service = CreateService(TimeSpan.FromDays(30));
-        var grant = await service.TrustAsync(_subjectId, null, Chrome, null);
+        var grant = await service.TrustAsync(_subjectId, null, Chrome);
 
         _clock.Advance(TimeSpan.FromDays(29));
-        (await service.IsTrustedAsync(_subjectId, grant!.Token, null)).Should().BeTrue();
+        (await service.IsTrustedAsync(_subjectId, grant!.Token)).Should().BeTrue();
 
         _clock.Advance(TimeSpan.FromDays(1));
-        (await service.IsTrustedAsync(_subjectId, grant.Token, null))
+        (await service.IsTrustedAsync(_subjectId, grant.Token))
             .Should().BeFalse("using the trust does not extend it");
         (await service.ListAsync(_subjectId, grant.Token)).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task UsingTheTrust_RecordsWhenAndFromWhere()
+    public async Task UsingTheTrust_RecordsWhen()
     {
         var service = CreateService();
-        var grant = await service.TrustAsync(_subjectId, null, Chrome, "203.0.113.7");
+        var grant = await service.TrustAsync(_subjectId, null, Chrome);
 
         _clock.Advance(TimeSpan.FromDays(3));
-        await service.IsTrustedAsync(_subjectId, grant!.Token, "198.51.100.4");
+        await service.IsTrustedAsync(_subjectId, grant!.Token);
 
         var device = (await service.ListAsync(_subjectId, grant.Token)).Should().ContainSingle().Subject;
         device.LastUsedAt.Should().Be(_clock.GetUtcNow().UtcDateTime);
-        device.IpAddress.Should().Be("198.51.100.4");
         device.IsCurrent.Should().BeTrue();
     }
 
@@ -133,72 +132,100 @@ public class TrustedDeviceServiceTests : IDisposable
     public async Task TrustingADeviceAgain_ReplacesItsRow()
     {
         var service = CreateService();
-        var first = await service.TrustAsync(_subjectId, null, Chrome, null);
+        var first = await service.TrustAsync(_subjectId, null, Chrome);
 
-        var second = await service.TrustAsync(_subjectId, first!.Token, Chrome, null);
+        var second = await service.TrustAsync(_subjectId, first!.Token, Chrome);
 
         (await service.ListAsync(_subjectId, second!.Token)).Should().ContainSingle()
             .Which.Id.Should().Be(second.DeviceId);
-        (await service.IsTrustedAsync(_subjectId, first.Token, null)).Should().BeFalse();
+        (await service.IsTrustedAsync(_subjectId, first.Token)).Should().BeFalse();
     }
 
     [Fact]
     public async Task TrustingADevice_DoesNotRemoveAnotherSubjectsRowForTheSameCookie()
     {
         var service = CreateService();
-        var others = await service.TrustAsync(_otherSubjectId, null, Chrome, null);
+        var others = await service.TrustAsync(_otherSubjectId, null, Chrome);
 
-        await service.TrustAsync(_subjectId, others!.Token, Chrome, null);
+        await service.TrustAsync(_subjectId, others!.Token, Chrome);
 
-        (await service.IsTrustedAsync(_otherSubjectId, others.Token, null)).Should().BeTrue();
+        (await service.IsTrustedAsync(_otherSubjectId, others.Token)).Should().BeTrue();
     }
 
     [Fact]
     public async Task ARevokedDevice_IsNotTrusted()
     {
         var service = CreateService();
-        var kept = await service.TrustAsync(_subjectId, null, Chrome, null);
-        var revoked = await service.TrustAsync(_subjectId, null, Chrome, null);
+        var kept = await service.TrustAsync(_subjectId, null, Chrome);
+        var revoked = await service.TrustAsync(_subjectId, null, Chrome);
 
         (await service.RevokeAsync(revoked!.DeviceId, _subjectId)).Should().BeTrue();
 
-        (await service.IsTrustedAsync(_subjectId, revoked.Token, null)).Should().BeFalse();
-        (await service.IsTrustedAsync(_subjectId, kept!.Token, null)).Should().BeTrue();
+        (await service.IsTrustedAsync(_subjectId, revoked.Token)).Should().BeFalse();
+        (await service.IsTrustedAsync(_subjectId, kept!.Token)).Should().BeTrue();
     }
 
     [Fact]
     public async Task ASubjectCannotRevokeAnotherSubjectsDevice()
     {
         var service = CreateService();
-        var grant = await service.TrustAsync(_subjectId, null, Chrome, null);
+        var grant = await service.TrustAsync(_subjectId, null, Chrome);
 
         (await service.RevokeAsync(grant!.DeviceId, _otherSubjectId)).Should().BeFalse();
 
-        (await service.IsTrustedAsync(_subjectId, grant.Token, null)).Should().BeTrue();
+        (await service.IsTrustedAsync(_subjectId, grant.Token)).Should().BeTrue();
     }
 
     [Fact]
     public async Task RevokingAll_EndsEveryDeviceOfThatSubjectOnly()
     {
         var service = CreateService();
-        var mine = await service.TrustAsync(_subjectId, null, Chrome, null);
-        await service.TrustAsync(_subjectId, null, Chrome, null);
-        var others = await service.TrustAsync(_otherSubjectId, null, Chrome, null);
+        var mine = await service.TrustAsync(_subjectId, null, Chrome);
+        await service.TrustAsync(_subjectId, null, Chrome);
+        var others = await service.TrustAsync(_otherSubjectId, null, Chrome);
 
         (await service.RevokeAllAsync(_subjectId)).Should().Be(2);
 
-        (await service.IsTrustedAsync(_subjectId, mine!.Token, null)).Should().BeFalse();
-        (await service.IsTrustedAsync(_otherSubjectId, others!.Token, null)).Should().BeTrue();
+        (await service.IsTrustedAsync(_subjectId, mine!.Token)).Should().BeFalse();
+        (await service.IsTrustedAsync(_otherSubjectId, others!.Token)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RevokingOthers_KeepsOnlyTheDeviceThatAsked()
+    {
+        var service = CreateService();
+        var mine = await service.TrustAsync(_subjectId, null, Chrome);
+        var lost = await service.TrustAsync(_subjectId, null, Chrome);
+        var others = await service.TrustAsync(_otherSubjectId, null, Chrome);
+
+        (await service.RevokeOthersAsync(_subjectId, mine!.Token)).Should().Be(1);
+
+        (await service.IsTrustedAsync(_subjectId, mine.Token)).Should().BeTrue();
+        (await service.IsTrustedAsync(_subjectId, lost!.Token)).Should().BeFalse();
+        (await service.IsTrustedAsync(_otherSubjectId, others!.Token)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("a-token-that-names-no-device")]
+    public async Task RevokingOthers_FromADeviceThatIsNotTrusted_RemovesEveryDevice(string? token)
+    {
+        var service = CreateService();
+        var lost = await service.TrustAsync(_subjectId, null, Chrome);
+
+        (await service.RevokeOthersAsync(_subjectId, token)).Should().Be(1);
+
+        (await service.IsTrustedAsync(_subjectId, lost!.Token)).Should().BeFalse();
     }
 
     [Fact]
     public async Task WhenTurnedOff_NothingIsTrustedAndNothingAlreadyTrustedIsHonoured()
     {
-        var grant = await CreateService().TrustAsync(_subjectId, null, Chrome, null);
+        var grant = await CreateService().TrustAsync(_subjectId, null, Chrome);
         var off = CreateService(TimeSpan.Zero);
 
-        (await off.TrustAsync(_subjectId, null, Chrome, null)).Should().BeNull();
-        (await off.IsTrustedAsync(_subjectId, grant!.Token, null)).Should().BeFalse();
+        (await off.TrustAsync(_subjectId, null, Chrome)).Should().BeNull();
+        (await off.IsTrustedAsync(_subjectId, grant!.Token)).Should().BeFalse();
         (await off.ListAsync(_subjectId, grant.Token)).Should().BeEmpty();
     }
 

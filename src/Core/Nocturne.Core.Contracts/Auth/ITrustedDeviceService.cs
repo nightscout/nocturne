@@ -31,16 +31,14 @@ public interface ITrustedDeviceService
     /// <param name="replacedToken">The token the device already presents, if any. A row it names
     /// for the same subject is removed, so a device is listed once.</param>
     /// <param name="userAgent">The device's user agent, for the label the subject sees.</param>
-    /// <param name="ipAddress">The address the device signed in from.</param>
     Task<TrustedDeviceGrant?> TrustAsync(
-        Guid subjectId, string? replacedToken, string? userAgent, string? ipAddress, CancellationToken ct = default);
+        Guid subjectId, string? replacedToken, string? userAgent, CancellationToken ct = default);
 
     /// <summary>
     /// Whether <paramref name="token"/> names a live trusted device of <paramref name="subjectId"/>.
     /// A match records the use. A token minted for another subject never matches.
     /// </summary>
-    Task<bool> IsTrustedAsync(
-        Guid subjectId, string? token, string? ipAddress, CancellationToken ct = default);
+    Task<bool> IsTrustedAsync(Guid subjectId, string? token, CancellationToken ct = default);
 
     /// <summary>
     /// The subject's live trusted devices, most recently trusted first.
@@ -54,6 +52,13 @@ public interface ITrustedDeviceService
 
     /// <summary>Stops trusting every device of the subject and returns how many there were.</summary>
     Task<int> RevokeAllAsync(Guid subjectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Stops trusting every device of the subject except the one presenting
+    /// <paramref name="currentToken"/>, and returns how many were removed. With no token, or one
+    /// that names no device of the subject, every device is removed.
+    /// </summary>
+    Task<int> RevokeOthersAsync(Guid subjectId, string? currentToken, CancellationToken ct = default);
 }
 
 /// <summary>A newly trusted device: the token for its cookie and when the trust ends.</summary>
@@ -64,7 +69,6 @@ public record TrustedDeviceGrant(Guid DeviceId, string Token, DateTime ExpiresAt
 public record TrustedDeviceInfo(
     Guid Id,
     string? DeviceDescription,
-    string? IpAddress,
     DateTime CreatedAt,
     DateTime? LastUsedAt,
     DateTime ExpiresAt,

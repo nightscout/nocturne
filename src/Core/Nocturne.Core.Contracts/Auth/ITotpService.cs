@@ -46,10 +46,11 @@ public interface ITotpService
 
     Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId);
 
-    Task RemoveCredentialAsync(Guid credentialId, Guid subjectId);
-
-    /// <summary>Returns the number of TOTP credentials registered to the specified subject.</summary>
-    Task<int> GetCredentialCountAsync(Guid subjectId);
+    /// <summary>
+    /// Removes one of the subject's authenticators and ends the trust of every device the subject
+    /// trusted. Returns how many devices that was.
+    /// </summary>
+    Task<int> RemoveCredentialAsync(Guid credentialId, Guid subjectId);
 
     /// <summary>
     /// What a sign-in still owes after its primary factor passed for <paramref name="subjectId"/>.
@@ -57,19 +58,20 @@ public interface ITotpService
     /// </summary>
     /// <param name="subjectId">The subject the primary factor just verified.</param>
     /// <param name="trustedDeviceToken">The trusted-device cookie the request carries, if any.</param>
-    /// <param name="ipAddress">The caller's address, recorded on the device when its trust is used.</param>
-    Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(
-        Guid subjectId, string? trustedDeviceToken, string? ipAddress);
+    Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(Guid subjectId, string? trustedDeviceToken);
 }
 
-/// <summary>What a sign-in owes once its primary factor has passed.</summary>
+/// <summary>
+/// What a sign-in owes once its primary factor has passed. The default value is the one that
+/// withholds the session, so an answer nobody gave never signs anyone in.
+/// </summary>
 public enum SecondFactorRequirement
 {
-    /// <summary>The subject has no authenticator, so the primary factor completes the sign-in.</summary>
-    NotEnrolled,
-
     /// <summary>The subject has an authenticator and must present a code.</summary>
     CodeRequired,
+
+    /// <summary>The subject has no authenticator, so the primary factor completes the sign-in.</summary>
+    NotEnrolled,
 
     /// <summary>
     /// The subject has an authenticator, and the request came from a device the subject trusted

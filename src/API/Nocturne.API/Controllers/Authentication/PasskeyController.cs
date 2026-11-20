@@ -539,8 +539,7 @@ public class PasskeyController : ControllerBase
             // not grant access, unless the device is one the subject trusted after an earlier code.
             var secondFactor = await _totpService.GetSecondFactorRequirementAsync(
                 assertionResult.SubjectId,
-                Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName],
-                HttpContext.Connection.RemoteIpAddress?.ToString());
+                Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]);
 
             if (secondFactor == SecondFactorRequirement.CodeRequired)
             {
@@ -639,7 +638,14 @@ public class PasskeyController : ControllerBase
 
         // A recovery code is what someone who lost their factors uses, so nothing an earlier
         // sign-in left behind may shorten the next one.
-        await _trustedDevices.RevokeAllAsync(subjectId, HttpContext.RequestAborted);
+        var untrusted = await _trustedDevices.RevokeAllAsync(subjectId, HttpContext.RequestAborted);
+        if (untrusted > 0)
+        {
+            await _auditService.LogAsync(AuthAuditEventType.TrustedDeviceRevoked, subjectId, success: true,
+                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                userAgent: Request.Headers.UserAgent.ToString(),
+                detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "recovery_code" }));
+        }
 
         await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: true,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),

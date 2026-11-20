@@ -92,9 +92,6 @@ export function buildProxyHeaders({
     AUTH_COOKIE_NAMES.guestSession,
     AUTH_COOKIE_NAMES.platformAccess,
     AUTH_COOKIE_NAMES.recoverySession,
-    // The identity-provider callback is a browser navigation through this proxy, and it is where
-    // the API decides whether that sign-in still needs the authenticator code.
-    AUTH_COOKIE_NAMES.trustedDevice,
   ]
     .map((name) => {
       const value = cookies.get(name);

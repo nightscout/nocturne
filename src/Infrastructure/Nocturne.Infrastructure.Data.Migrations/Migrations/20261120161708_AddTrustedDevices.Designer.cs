@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261120145214_AddTrustedDevices")]
+    [Migration("20261120161708_AddTrustedDevices")]
     partial class AddTrustedDevices
     {
         /// <inheritdoc />
@@ -6281,11 +6281,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("ip_address");
 
                     b.Property<DateTime?>("LastUsedAt")
                         .HasColumnType("timestamp with time zone")

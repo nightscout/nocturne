@@ -194,7 +194,7 @@ internal sealed class TrustedDeviceEntityConfiguration : IEntityTypeConfiguratio
     }
 }
 
-internal sealed class LoginCodeEntityConfiguration: IEntityTypeConfiguration<LoginCodeEntity>
+internal sealed class LoginCodeEntityConfiguration : IEntityTypeConfiguration<LoginCodeEntity>
 {
     public void Configure(EntityTypeBuilder<LoginCodeEntity> entity)
     {

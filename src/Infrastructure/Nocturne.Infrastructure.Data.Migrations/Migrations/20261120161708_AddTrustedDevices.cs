@@ -19,7 +19,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     subject_id = table.Column<Guid>(type: "uuid", nullable: false),
                     token_hash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     device_description = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
-                    ip_address = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     last_used_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)

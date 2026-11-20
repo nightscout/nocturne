@@ -600,9 +600,9 @@ public class TotpServiceTests : IDisposable
     public async Task SecondFactor_WithNoAuthenticator_IsNotEnrolled()
     {
         SeedSubject(TestUsername, _subjectId);
-        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null, null);
+        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null);
 
-        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token, null);
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token);
 
         requirement.Should().Be(SecondFactorRequirement.NotEnrolled);
     }
@@ -615,7 +615,7 @@ public class TotpServiceTests : IDisposable
     {
         SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Phone");
 
-        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, token, null);
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, token);
 
         requirement.Should().Be(SecondFactorRequirement.CodeRequired);
     }
@@ -625,9 +625,9 @@ public class TotpServiceTests : IDisposable
     public async Task SecondFactor_FromATrustedDevice_IsSatisfied()
     {
         SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Phone");
-        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null, null);
+        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null);
 
-        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token, null);
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token);
 
         requirement.Should().Be(SecondFactorRequirement.SatisfiedByTrustedDevice);
     }
@@ -638,9 +638,9 @@ public class TotpServiceTests : IDisposable
     {
         SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Phone");
         var other = SeedSubject("erik");
-        var grant = await CreateTrustedDevices().TrustAsync(other.Id, null, null, null);
+        var grant = await CreateTrustedDevices().TrustAsync(other.Id, null, null);
 
-        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token, null);
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token);
 
         requirement.Should().Be(SecondFactorRequirement.CodeRequired);
     }
@@ -655,12 +655,12 @@ public class TotpServiceTests : IDisposable
     {
         var removed = SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Lost phone");
         SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Tablet");
-        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null, null);
+        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null);
         var service = CreateService();
 
         await service.RemoveCredentialAsync(removed.Id, _subjectId);
 
-        (await service.GetSecondFactorRequirementAsync(_subjectId, grant!.Token, null))
+        (await service.GetSecondFactorRequirementAsync(_subjectId, grant!.Token))
             .Should().Be(SecondFactorRequirement.CodeRequired,
                 "the device was trusted on a code that the removed authenticator could have produced");
     }
@@ -701,35 +701,6 @@ public class TotpServiceTests : IDisposable
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*not found*");
-    }
-
-    #endregion
-
-    #region GetCredentialCountAsync
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetCredentialCountAsync_ReturnsCorrectCount()
-    {
-        var service = CreateService();
-
-        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "A");
-        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "B");
-
-        var count = await service.GetCredentialCountAsync(_subjectId);
-
-        count.Should().Be(2);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetCredentialCountAsync_NoCredentials_ReturnsZero()
-    {
-        var service = CreateService();
-
-        var count = await service.GetCredentialCountAsync(_subjectId);
-
-        count.Should().Be(0);
     }
 
     #endregion

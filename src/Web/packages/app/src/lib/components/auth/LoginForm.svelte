@@ -586,7 +586,11 @@
             />
             <div class="space-y-1">
               <Label for="totp-trust-device">
-                Trust this device for {trustDays} days
+                {#if trustDays === 1}
+                  Trust this device for 1 day
+                {:else}
+                  Trust this device for {trustDays} days
+                {/if}
               </Label>
               <p id="totp-trust-device-help" class="text-xs text-muted-foreground">
                 You will not need a code on this device during that time.

@@ -91,8 +91,10 @@ Select it only on a device that only you use. Signing out does not end the trust
 ends. Remove a device there to make its next sign-in need a code again. Nocturne removes all
 your trusted devices when you remove an authenticator app or sign in with a recovery code.
 
-The person who runs the instance can change the 30 days, or turn the option off, with the
-`Oidc__Session__TrustedDeviceLifetime` setting.
+If you lose a device, open **Sessions** on another one and select **Sign out everywhere
+else**. That signs the lost device out and stops trusting it.
+
+The person who runs the instance can set a different number of days, or turn the option off.
 
 <Callout type="warning" title="Keep a way back in">
 
