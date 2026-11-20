@@ -1022,6 +1022,8 @@ public static class ServiceRegistrationExtensions
         services.AddScheduledJob<TempBasalOriginCorroborationJob>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
+        services.AddScoped<IRawMmolProfileDetector, RawMmolProfileDetector>();
+        services.AddSingleton<RawMmolProfileNotifier>();
 
         return services;
     }

@@ -246,6 +246,21 @@ public class InAppNotificationRepository : IInAppNotificationRepository
             .ExecuteDeleteAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<bool> AnyBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.InAppNotifications.AnyAsync(
+            n => n.UserId == userId && n.Type == type && n.SourceId == sourceId,
+            cancellationToken
+        );
+    }
+
     /// <summary>
     /// Find an active notification by source
     /// </summary>
