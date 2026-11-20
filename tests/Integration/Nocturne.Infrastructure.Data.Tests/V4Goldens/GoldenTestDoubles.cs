@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -57,9 +58,9 @@ internal sealed class TestAuditContext : IAuditContext
 public sealed record BroadcastEntry(string Kind, Type ModelType, int Count, IReadOnlyList<Guid> Ids);
 
 /// <summary>
-/// Thread-safe singleton collector that the per-type <see cref="CapturingV4RecordBroadcaster{TModel}"/>
-/// instances record into. Lets a golden assert exactly which broadcasts the chokepoint fired (and that
-/// backfill / no-material-change writes fire none). Additive: goldens that don't read it are unaffected.
+/// Thread-safe singleton collector that <see cref="CapturingRecordChangeSubscriber"/> records into. Lets a
+/// golden assert exactly which broadcasts the chokepoint fired (and that backfill / no-material-change
+/// writes fire none). Additive: goldens that don't read it are unaffected.
 /// </summary>
 public sealed class BroadcastCapture
 {
@@ -76,30 +77,38 @@ public sealed class BroadcastCapture
 }
 
 /// <summary>
-/// Capturing <see cref="IV4RecordBroadcaster{TModel}"/> that records every fan-out into the shared
-/// <see cref="BroadcastCapture"/> instead of touching SignalR. Registered as an open generic so every V4
-/// repository resolves one, exercising the real <c>V4RepositoryBase</c> origin gate end-to-end.
+/// Announces each <see cref="WriteOrigin.Live"/> change into <see cref="BroadcastCapture"/> as the SignalR
+/// subscriber would send it, per record type, instead of touching SignalR, exercising the real publisher
+/// end-to-end.
 /// </summary>
-internal sealed class CapturingV4RecordBroadcaster<TModel>(BroadcastCapture capture)
-    : IV4RecordBroadcaster<TModel> where TModel : class
+internal sealed class CapturingRecordChangeSubscriber(BroadcastCapture capture) : IRecordChangeSubscriber
 {
-    public Task BroadcastCreatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-    {
-        if (items.Count > 0) capture.Add(new BroadcastEntry("created", typeof(TModel), items.Count, []));
-        return Task.CompletedTask;
-    }
+    public RecordChangeStage Stage => RecordChangeStage.Announce;
 
-    public Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
+    public Task OnChangedAsync(RecordsChanged batch, CancellationToken ct)
     {
-        if (items.Count > 0) capture.Add(new BroadcastEntry("updated", typeof(TModel), items.Count, []));
-        return Task.CompletedTask;
-    }
+        foreach (var change in batch.Changes.Where(change => change.Origin == WriteOrigin.Live))
+        {
+            if (change.Created.Count > 0)
+                capture.Add(new BroadcastEntry("created", change.RecordType, change.Created.Count, []));
+            if (change.Updated.Count > 0)
+                capture.Add(new BroadcastEntry("updated", change.RecordType, change.Updated.Count, []));
+            if (change.Deleted.Count > 0)
+                capture.Add(new BroadcastEntry(
+                    "deleted", change.RecordType, change.Deleted.Count, [.. change.Deleted.Select(record => record.Id)]));
+        }
 
-    public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
-    {
-        if (ids.Count > 0) capture.Add(new BroadcastEntry("deleted", typeof(TModel), ids.Count, ids));
         return Task.CompletedTask;
     }
+}
+
+/// <summary>Reports each change's record types to the registered <see cref="ILegacyReadCacheInvalidation"/>, as the API's cache subscriber does.</summary>
+internal sealed class CacheInvalidationSubscriber(ILegacyReadCacheInvalidation legacyReads) : IRecordChangeSubscriber
+{
+    public RecordChangeStage Stage => RecordChangeStage.Invalidate;
+
+    public Task OnChangedAsync(RecordsChanged batch, CancellationToken ct) =>
+        legacyReads.WrittenAsync([.. batch.Changes.Select(change => change.RecordType).Distinct()]);
 }
 
 /// <summary>
@@ -210,7 +219,7 @@ internal sealed class CapturingGlucoseReadingBroadcaster(GlucoseReadingCapture c
 /// Records the model types each committed write reports to the legacy read caches, in place of the
 /// API's cache clear.
 /// </summary>
-public sealed class CacheInvalidationCapture : Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation
+public sealed class CacheInvalidationCapture : ILegacyReadCacheInvalidation
 {
     private readonly ConcurrentQueue<Type> _written = new();
 

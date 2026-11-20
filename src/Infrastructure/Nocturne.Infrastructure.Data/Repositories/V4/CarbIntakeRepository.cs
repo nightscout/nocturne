@@ -32,9 +32,8 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger,
-        IV4RecordBroadcaster<CarbIntake>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
     }
 

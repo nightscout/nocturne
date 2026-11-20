@@ -29,16 +29,14 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     /// <param name="linker">Links committed inserts into their duplicate groups.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
-    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
+    /// <param name="changes">Optional; null tells no one of a write.</param>
     public TempBasalRepository(
         INocturneDbContextFactory contextFactory,
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<TempBasalRepository> logger,
-        IV4RecordBroadcaster<TempBasal>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
     }
 

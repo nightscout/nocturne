@@ -28,9 +28,8 @@ public abstract class ProfileScopedRepositoryBase<TModel, TEntity> : V4Repositor
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
-        IV4RecordBroadcaster<TModel>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

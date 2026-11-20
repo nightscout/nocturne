@@ -41,7 +41,7 @@ public class DeviceEventRepositoryReactorTests : IDisposable
             new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance,
-            broadcaster: null,
+            changes: null,
             reactor: _reactor);
     }
 
@@ -110,7 +110,7 @@ public class DeviceEventRepositoryReactorTests : IDisposable
             new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance,
-            broadcaster: null,
+            changes: null,
             reactor: new ThrowingReactor());
 
         var model = NewEvent();
@@ -186,7 +186,7 @@ public class DeviceEventRepositoryReactorTests : IDisposable
             new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance,
-            broadcaster: null,
+            changes: null,
             reactor: new ThrowingReactor());
         var model = NewEvent();
         await repo.CreateAsync(model, WriteOrigin.Backfill);
