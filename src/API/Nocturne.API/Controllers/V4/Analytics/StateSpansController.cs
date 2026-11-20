@@ -95,6 +95,8 @@ public class StateSpansController : ControllerBase
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var granted = HttpContext.GetGrantedScopes();
         if (category is { } requested && !StateSpanReadScopeGuard.CanRead(granted, requested))
@@ -251,6 +253,8 @@ public class StateSpansController : ControllerBase
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(category, from: from, to: to, cancellationToken: cancellationToken);
@@ -282,6 +286,8 @@ public class StateSpansController : ControllerBase
     {
         if (this.RejectInvalidSort(sort, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         offset = V4ReadLimits.ClampOffset(offset);
         limit = V4ReadLimits.ClampMergedPage(limit, offset);

@@ -69,6 +69,8 @@ public class TempBasalController(
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = (await repo.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
         var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, device, source, ct));

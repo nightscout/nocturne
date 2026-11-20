@@ -386,6 +386,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = (await _therapyRepo.GetAsync(
             from,

@@ -55,6 +55,8 @@ public class SleepController : ControllerBase
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = await _sleepService.GetSessionsAsync(from, to, type, source, limit, offset, descending, cancellationToken: cancellationToken);
         var total = await _sleepService.CountSessionsAsync(from, to, type, source, cancellationToken);
