@@ -167,7 +167,7 @@ public class SessionsController : ControllerBase
             subjectId.Value, Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName], ct);
         if (untrusted > 0)
         {
-            await _auditService.LogAsync(AuthAuditEventType.TrustedDeviceRevoked, subjectId, success: true,
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { others = true, count = untrusted, reason = "sessions_revoked" }));

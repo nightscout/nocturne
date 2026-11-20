@@ -144,7 +144,7 @@ public class TotpControllerLoginGateTests
         deviceCookie.Should().Contain("httponly", "script must never read the token that replaces a second factor");
         deviceCookie.Should().Contain($"expires={expiresAt:ddd, dd MMM yyyy}");
         _auditService.Verify(a => a.LogAsync(
-            AuthAuditEventType.TrustedDeviceAdded, subjectId, true,
+            AuthAuditEventType.DeviceTrustGranted, subjectId, true,
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()));
     }

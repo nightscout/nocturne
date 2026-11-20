@@ -62,7 +62,7 @@ public class TrustedDevicesControllerTests
 
     private void VerifyRevocationAudited(Times times) =>
         _auditService.Verify(a => a.LogAsync(
-            AuthAuditEventType.TrustedDeviceRevoked, _subjectId, true,
+            AuthAuditEventType.DeviceTrustRevoked, _subjectId, true,
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()), times);
 

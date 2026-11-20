@@ -140,10 +140,10 @@ public static class AuthAuditEventType
     /// Event type when a subject trusts a device at the authenticator step, so its later sign-ins
     /// skip the code.
     /// </summary>
-    public const string TrustedDeviceAdded = "trusted_device_added";
+    public const string DeviceTrustGranted = "trusted_device_added";
 
     /// <summary>
     /// Event type when a subject stops trusting one device, or all of them.
     /// </summary>
-    public const string TrustedDeviceRevoked = "trusted_device_revoked";
+    public const string DeviceTrustRevoked = "trusted_device_revoked";
 }

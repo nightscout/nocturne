@@ -240,7 +240,7 @@ public class TotpController : ControllerBase
         var untrusted = await _totpService.RemoveCredentialAsync(id, auth.SubjectId.Value);
         if (untrusted > 0)
         {
-            await _auditService.LogAsync(AuthAuditEventType.TrustedDeviceRevoked, auth.SubjectId, success: true,
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, auth.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "authenticator_removed" }));
@@ -325,7 +325,7 @@ public class TotpController : ControllerBase
         {
             Response.SetTrustedDeviceCookie(grant, _oidcOptions);
 
-            await _auditService.LogAsync(AuthAuditEventType.TrustedDeviceAdded, result.SubjectId, success: true,
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustGranted, result.SubjectId, success: true,
                 ipAddress: ip, userAgent: ua,
                 detailsJson: JsonSerializer.Serialize(new { deviceId = grant.DeviceId, expiresAt = grant.ExpiresAt }));
         }

@@ -145,7 +145,7 @@ public class TrustedDevicesController : ControllerBase
     private string? CurrentToken => Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName];
 
     private Task LogRevokedAsync(Guid subjectId, object details) =>
-        _auditService.LogAsync(AuthAuditEventType.TrustedDeviceRevoked, subjectId, success: true,
+        _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
             userAgent: Request.Headers.UserAgent.ToString(),
             detailsJson: JsonSerializer.Serialize(details));
