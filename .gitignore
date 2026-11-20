@@ -62,6 +62,7 @@ docs/seed/dev-snapshot.json
 docker-compose.yaml
 !deploy/portainer/docker-compose.yaml
 !deploy/docker-compose/docker-compose.yaml
+!deploy/vm/bundle/docker-compose.yaml
 !.env.example
 
 # Git worktrees

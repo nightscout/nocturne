@@ -3,7 +3,7 @@ name: Build and Publish with Aspire
 # Every merge to main publishes :develop and :main-<sha7>; a v* tag publishes the
 # version and, unless it is a pre-release, moves :latest to it (.github/scripts/image-tags.sh).
 # The dotnet images are pushed to an unpolled build tag and promoted once verified; a release
-# leaves :release-<sha7> behind on nocturne-api and nocturne-demo.
+# leaves :release-<sha7> behind on nocturne-api, nocturne-demo and nocturne-selfhost-setup.
 # Pull requests publish nothing: the images job in tests.yml builds the same images on its runner.
 # A manual dispatch from main or a v* tag re-publishes that ref. A weekly schedule rebuilds main
 # the same way as a merge, so the floating base images are picked up between merges; that
@@ -144,6 +144,17 @@ jobs:
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
             "-p:ContainerImageTags=${{ steps.tags.outputs.build_tag }}"
 
+      - name: Build and push Nocturne.Services.SelfHostSetup container
+        working-directory: src/Services/Nocturne.Services.SelfHostSetup
+        run: |
+          dotnet publish \
+            -c Release \
+            -p:PublishProfile=DefaultContainer \
+            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
+            -p:ContainerRegistry=${{ env.REGISTRY }} \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-selfhost-setup \
+            "-p:ContainerImageTags=${{ steps.tags.outputs.build_tag }}"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -173,7 +184,7 @@ jobs:
       # platform; see build_tag in .github/scripts/image-tags.sh.
       - name: Promote the dotnet containers
         run: |
-          for image in nocturne-api nocturne-demo; do
+          for image in nocturne-api nocturne-demo nocturne-selfhost-setup; do
             for tag in ${{ steps.tags.outputs.promote_tags }}; do
               docker buildx imagetools create \
                 --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${tag} \
@@ -349,6 +360,7 @@ jobs:
           images=(
             "nocturne-api"
             "nocturne-demo"
+            "nocturne-selfhost-setup"
             "nocturne-web"
           )
 
@@ -372,6 +384,7 @@ jobs:
             echo ""
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-demo:${{ steps.tags.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-selfhost-setup:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.tags.outputs.version }}\`"
             for tag in ${{ steps.tags.outputs.extra_tags }}; do
               echo "- also tagged \`${tag}\`"

@@ -13,7 +13,8 @@ public class ShippedBundleTests
 {
     public static TheoryData<string> Bundles => new(
         Path.Combine("deploy", "docker-compose", "docker-compose.yaml"),
-        Path.Combine("deploy", "portainer", "docker-compose.yaml"));
+        Path.Combine("deploy", "portainer", "docker-compose.yaml"),
+        Path.Combine("deploy", "vm", "bundle", "docker-compose.yaml"));
 
     [Theory]
     [MemberData(nameof(Bundles))]
@@ -46,10 +47,10 @@ public class ShippedBundleTests
         hsts.Should().ContainSingle().Which.Should().Be("Strict-Transport-Security \"max-age=31536000\"");
     }
 
-    private static YamlMappingNode ShippedService(string bundle, string name)
+    internal static YamlMappingNode ShippedService(string bundle, string name)
         => Service(File.ReadAllText(Path.Combine(RepositoryRoot(), bundle)), name);
 
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)

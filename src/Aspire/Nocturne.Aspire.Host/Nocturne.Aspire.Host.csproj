@@ -27,6 +27,7 @@
         <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\Nocturne.Aspire.Hosting\Nocturne.Aspire.Hosting.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\..\Services\Nocturne.Services.Demo\Nocturne.Services.Demo.csproj" />
+        <ProjectReference Include="..\..\Services\Nocturne.Services.SelfHostSetup\Nocturne.Services.SelfHostSetup.csproj" BuildReference="false" />
     </ItemGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Aspire.Host.Tests" />
