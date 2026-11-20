@@ -259,6 +259,7 @@ const authenticatorSchema = z.object({
     .string()
     .trim()
     .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app"),
+  trustDevice: z.boolean().optional(),
   returnUrl: z.string().optional(),
 });
 
@@ -321,6 +322,7 @@ export const signInWithAuthenticator = form(
       const result = await api.totp.login({
         stepUpToken: data.stepUpToken,
         code: data.code,
+        trustDevice: data.trustDevice === true,
       });
       verified = result?.success === true;
     } catch (err) {

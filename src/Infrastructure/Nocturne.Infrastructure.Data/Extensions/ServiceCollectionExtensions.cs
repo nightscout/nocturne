@@ -179,6 +179,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IRoleRepository, RoleRepository>();
         services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
         services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
+        services.AddTransient<ITrustedDeviceRepository, TrustedDeviceRepository>();
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();

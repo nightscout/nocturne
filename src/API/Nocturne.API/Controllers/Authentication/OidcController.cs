@@ -218,7 +218,8 @@ public class OidcController : ControllerBase
             expectedState,
             GetClientIpAddress(),
             Request.Headers.UserAgent,
-            currentTenantId
+            currentTenantId,
+            Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]
         );
 
         if (result.StepUpToken is { } stepUpToken)
@@ -275,7 +276,9 @@ public class OidcController : ControllerBase
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-            detailsJson: JsonSerializer.Serialize(new { method = "oidc" }));
+            detailsJson: result.UsedTrustedDevice
+                ? JsonSerializer.Serialize(new { method = "oidc", secondFactor = "trusted_device" })
+                : JsonSerializer.Serialize(new { method = "oidc" }));
 
         _logger.LogInformation(
             "OIDC login successful for user {Name} (subject: {SubjectId})",

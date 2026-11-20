@@ -381,6 +381,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const guestSessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
   const platformAccessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
   const recoverySessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.recoverySession);
+  const trustedDeviceToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.trustedDevice);
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),
@@ -409,6 +410,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     guestSessionToken,
     platformAccessToken,
     recoverySessionToken,
+    trustedDeviceToken,
     extraHeaders,
     responseCookies: event.cookies,
     rawSetCookies: event.locals.rawSetCookies,

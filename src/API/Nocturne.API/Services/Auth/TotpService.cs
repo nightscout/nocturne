@@ -42,6 +42,7 @@ public class TotpService : ITotpService
     private readonly INocturneDbContextFactory _contexts;
     private readonly ITotpCredentialRepository _credentials;
     private readonly ISubjectRepository _subjects;
+    private readonly ITrustedDeviceService _trustedDevices;
     private readonly IDataProtector _protector;
     private readonly IDataProtector _stepUpProtector;
     private readonly ILogger<TotpService> _logger;
@@ -49,18 +50,21 @@ public class TotpService : ITotpService
     /// <param name="contexts">Context factory for reading and redeeming the single-use step-up tokens.</param>
     /// <param name="credentials">Repository of the stored TOTP credentials and their consumed steps.</param>
     /// <param name="subjects">Repository for looking up the subject a step-up token names.</param>
+    /// <param name="trustedDevices">Tells whether a sign-in comes from a device trusted to skip the code, and forgets those devices when an authenticator is removed.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting setup challenge tokens.</param>
     /// <param name="logger">Logger for credential changes, rejected codes and undecryptable tokens.</param>
     public TotpService(
         INocturneDbContextFactory contexts,
         ITotpCredentialRepository credentials,
         ISubjectRepository subjects,
+        ITrustedDeviceService trustedDevices,
         IDataProtectionProvider dataProtectionProvider,
         ILogger<TotpService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
+        _trustedDevices = trustedDevices ?? throw new ArgumentNullException(nameof(trustedDevices));
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Totp.Setup");
         // A distinct purpose string keeps a setup challenge (which carries a secret the caller
         // already knows) from being redeemed as proof that a primary factor completed.
@@ -262,6 +266,10 @@ public class TotpService : ITotpService
         if (!await _credentials.RemoveAsync(credentialId, subjectId, CancellationToken.None))
             throw new InvalidOperationException("Credential not found.");
 
+        // A device was trusted on the strength of a code from the authenticators enrolled then.
+        // Removing one, most often because the phone holding it is lost, ends that trust.
+        await _trustedDevices.RevokeAllAsync(subjectId);
+
         _logger.LogInformation(
             "TOTP credential {CredentialId} removed for subject {SubjectId}",
             credentialId, subjectId);
@@ -269,6 +277,17 @@ public class TotpService : ITotpService
 
     public Task<int> GetCredentialCountAsync(Guid subjectId) =>
         _credentials.CountAsync(subjectId, CancellationToken.None);
+
+    public async Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(
+        Guid subjectId, string? trustedDeviceToken, string? ipAddress)
+    {
+        if (await _credentials.CountAsync(subjectId, CancellationToken.None) == 0)
+            return SecondFactorRequirement.NotEnrolled;
+
+        return await _trustedDevices.IsTrustedAsync(subjectId, trustedDeviceToken, ipAddress)
+            ? SecondFactorRequirement.SatisfiedByTrustedDevice
+            : SecondFactorRequirement.CodeRequired;
+    }
 
     private string CreateChallengeToken(byte[] secret, Guid subjectId)
     {

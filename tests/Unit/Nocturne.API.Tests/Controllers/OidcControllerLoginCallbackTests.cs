@@ -49,7 +49,8 @@ public class OidcControllerLoginCallbackTests
     private void SetupCallbackResult(OidcCallbackResult result) =>
         _authService
             .Setup(s => s.HandleCallbackAsync(
-                "code", "state", "state", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>()))
+                "code", "state", "state", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(),
+                It.IsAny<string?>()))
             .ReturnsAsync(result);
 
     private string SetCookieHeader() => _controller.HttpContext.Response.Headers.SetCookie.ToString();
@@ -99,5 +100,20 @@ public class OidcControllerLoginCallbackTests
         var setCookie = SetCookieHeader();
         setCookie.Should().Contain($"{_options.Cookie.AccessTokenName}=access");
         setCookie.Should().NotContain(SessionCookieExtensions.TotpStepUpCookieName);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Callback_HandsTheTrustedDeviceCookieToTheSignIn()
+    {
+        _controller.HttpContext.Request.Headers["Cookie"] =
+            $"{_options.Cookie.StateCookieName}=state; {SessionCookieExtensions.TrustedDeviceCookieName}=device-token";
+        SetupCallbackResult(OidcCallbackResult.Failed("callback_failed"));
+
+        await _controller.Callback("code", "state", null, null);
+
+        _authService.Verify(s => s.HandleCallbackAsync(
+            "code", "state", "state", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(),
+            "device-token"));
     }
 }

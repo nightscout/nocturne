@@ -12,6 +12,7 @@ const JAR: Record<string, string> = {
   [AUTH_COOKIE_NAMES.guestSession]: "guest-value",
   [AUTH_COOKIE_NAMES.platformAccess]: "platform-value",
   [AUTH_COOKIE_NAMES.recoverySession]: "recovery-value",
+  [AUTH_COOKIE_NAMES.trustedDevice]: "device-value",
 };
 
 const cookies = { get: (name: string) => JAR[name] };
@@ -58,6 +59,9 @@ describe("buildProxyHeaders", () => {
     // A recovery-code visitor's only credential: unforwarded, the passkey they came to register
     // cannot be enrolled and the recovery code is spent for nothing.
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.recoverySession}=recovery-value`);
+    // The identity-provider callback comes through here: unforwarded, a trusted device is asked
+    // for its authenticator code on every such sign-in.
+    expect(cookie).toContain(`${AUTH_COOKIE_NAMES.trustedDevice}=device-value`);
   });
 
   it("leaves the incoming Cookie header alone when the jar holds no auth cookies", () => {

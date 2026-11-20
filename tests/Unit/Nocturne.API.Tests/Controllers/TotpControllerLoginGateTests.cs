@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -22,6 +23,7 @@ namespace Nocturne.API.Tests.Controllers;
 public class TotpControllerLoginGateTests
 {
     private readonly Mock<ITotpService> _totpService = new();
+    private readonly Mock<ITrustedDeviceService> _trustedDevices = new();
     private readonly Mock<ISessionService> _sessionService = new();
     private readonly Mock<ISubjectService> _subjectService = new();
     private readonly Mock<IAuthAuditService> _auditService = new();
@@ -36,6 +38,7 @@ public class TotpControllerLoginGateTests
     private TotpController CreateController()
         => new(
             _totpService.Object,
+            _trustedDevices.Object,
             _sessionService.Object,
             _subjectService.Object,
             _auditService.Object,
@@ -101,6 +104,104 @@ public class TotpControllerLoginGateTests
 
     private Task<ActionResult<TotpLoginResponse>> LoginAsync() =>
         CreateController().Login(new TotpLoginRequest { StepUpToken = "step-up", Code = "123456" });
+
+    /// <summary>Signs a member in at the authenticator step and returns the Set-Cookie header.</summary>
+    private async Task<string> SignInAsync(Guid subjectId, bool trustDevice, string? presentedCookie = null)
+    {
+        var tenantId = Guid.NewGuid();
+        OnHost(tenantId);
+        TokenBoundTo(subjectId, tenantId);
+        SetupMembership(subjectId, tenantId, isMember: true);
+        SetupSessionIssuance();
+
+        var controller = CreateController();
+        if (presentedCookie is not null)
+            controller.HttpContext.Request.Headers.Cookie = presentedCookie;
+
+        var result = await controller.Login(
+            new TotpLoginRequest { StepUpToken = "step-up", Code = "123456", TrustDevice = trustDevice });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        return controller.HttpContext.Response.Headers.SetCookie.ToString();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_WhenAskedToTrustTheDevice_GivesItTheTrustedDeviceCookie()
+    {
+        var subjectId = Guid.NewGuid();
+        var expiresAt = DateTime.UtcNow.AddDays(30);
+        _trustedDevices
+            .Setup(t => t.TrustAsync(subjectId, "old-token", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TrustedDeviceGrant(Guid.NewGuid(), "device-token", expiresAt));
+
+        var setCookie = await SignInAsync(subjectId, trustDevice: true,
+            presentedCookie: $"{SessionCookieExtensions.TrustedDeviceCookieName}=old-token");
+
+        // Written last, so everything after its name is its own attributes.
+        var deviceCookie = setCookie[setCookie.IndexOf(SessionCookieExtensions.TrustedDeviceCookieName, StringComparison.Ordinal)..];
+        deviceCookie.Should().StartWith($"{SessionCookieExtensions.TrustedDeviceCookieName}=device-token;");
+        deviceCookie.Should().Contain("httponly", "script must never read the token that replaces a second factor");
+        deviceCookie.Should().Contain($"expires={expiresAt:ddd, dd MMM yyyy}");
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.TrustedDeviceAdded, subjectId, true,
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_WhenNotAskedToTrustTheDevice_TrustsNothing()
+    {
+        var setCookie = await SignInAsync(Guid.NewGuid(), trustDevice: false);
+
+        setCookie.Should().NotContain(SessionCookieExtensions.TrustedDeviceCookieName);
+        _trustedDevices.Verify(
+            t => t.TrustAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_WhenTrustedDevicesAreTurnedOff_SignsInWithoutTheCookie()
+    {
+        // The mock's TrustAsync returns null, as the service does when the lifetime is zero.
+        var setCookie = await SignInAsync(Guid.NewGuid(), trustDevice: true);
+
+        setCookie.Should().NotContain(SessionCookieExtensions.TrustedDeviceCookieName);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_WithARejectedCode_TrustsNothing()
+    {
+        _totpService
+            .Setup(s => s.VerifyStepUpAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((TotpLoginResult?)null);
+
+        await CreateController().Login(
+            new TotpLoginRequest { StepUpToken = "step-up", Code = "000000", TrustDevice = true });
+
+        _trustedDevices.Verify(
+            t => t.TrustAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(30, 30)]
+    [InlineData(0, 0)]
+    [InlineData(-1, 0)]
+    public void TrustedDevicePolicy_ReportsTheLifetimeInDays(int lifetimeDays, int expected)
+    {
+        _trustedDevices.Setup(t => t.Lifetime).Returns(TimeSpan.FromDays(lifetimeDays));
+
+        var result = CreateController().GetTrustedDevicePolicy();
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrustedDevicePolicyResponse>()
+            .Which.Days.Should().Be(expected);
+    }
 
     private void AssertDeniedAsNotAMember(ActionResult<TotpLoginResponse> result)
     {

@@ -279,7 +279,8 @@ public class OidcAuthService : IOidcAuthService
         string expectedState,
         string? ipAddress = null,
         string? userAgent = null,
-        Guid? currentTenantId = null
+        Guid? currentTenantId = null,
+        string? trustedDeviceToken = null
     )
     {
         var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState);
@@ -289,7 +290,8 @@ public class OidcAuthService : IOidcAuthService
         }
 
         return await CompleteLoginAsync(
-            parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent);
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent,
+            trustedDeviceToken);
     }
 
     /// <summary>
@@ -307,7 +309,8 @@ public class OidcAuthService : IOidcAuthService
         OidcIdTokenClaims idTokenClaims,
         Guid? currentTenantId,
         string? ipAddress,
-        string? userAgent)
+        string? userAgent,
+        string? trustedDeviceToken = null)
     {
         // Find or create subject
         var subject = await _subjectService.FindOrCreateFromOidcAsync(
@@ -364,7 +367,10 @@ public class OidcAuthService : IOidcAuthService
                 "The login could not be completed against the tenant it was started from.");
         }
 
-        if (await _totpService.GetCredentialCountAsync(subject.Id) > 0)
+        var secondFactor = await _totpService.GetSecondFactorRequirementAsync(
+            subject.Id, trustedDeviceToken, ipAddress);
+
+        if (secondFactor == SecondFactorRequirement.CodeRequired)
         {
             return OidcCallbackResult.SecondFactorRequired(
                 subject.Id,
@@ -419,7 +425,9 @@ public class OidcAuthService : IOidcAuthService
             provider.Name
         );
 
-        return OidcCallbackResult.Succeeded(tokens, userInfo, stateData.ReturnUrl, provider.Id);
+        return OidcCallbackResult.Succeeded(
+            tokens, userInfo, stateData.ReturnUrl, provider.Id,
+            usedTrustedDevice: secondFactor == SecondFactorRequirement.SatisfiedByTrustedDevice);
     }
 
     /// <summary>

@@ -40,6 +40,7 @@
   } from "#lib/api/generated/totps.generated.remote.js";
   import LinkedOidcIdentities from "#lib/components/settings/LinkedOidcIdentities.svelte";
   import ActiveSessions from "#lib/components/settings/ActiveSessions.svelte";
+  import TrustedDevices from "#lib/components/settings/TrustedDevices.svelte";
   import UserProfileCard from "#lib/components/account/UserProfileCard.svelte";
   import SecurityCredentialCard from "#lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "#lib/components/account/TotpSetupDialog.svelte";
@@ -438,6 +439,12 @@
         onRemove={(cred) => confirmRemoveTotp(cred)}
       />
 
+      <!-- A device is trusted in place of the authenticator code, so without an authenticator
+           there is nothing to list. -->
+      {#if totpCredentials.length > 0}
+        <TrustedDevices />
+      {/if}
+
       <!-- Section 3: Recovery Codes -->
       <Card.Root>
         <Card.Header>
@@ -703,7 +710,7 @@
       <Dialog.Description>
         Are you sure you want to remove "{totpRemoveTarget?.label ??
           "Unnamed authenticator"}"? You will no longer be able to sign in with
-        this authenticator app.
+        this authenticator app. This also removes your trusted devices.
       </Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>

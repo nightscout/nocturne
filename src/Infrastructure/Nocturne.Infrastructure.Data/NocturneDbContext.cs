@@ -188,6 +188,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TotpStepUpTokenEntity> TotpStepUpTokens { get; set; }
 
+    public DbSet<TrustedDeviceEntity> TrustedDevices { get; set; }
+
     /// <summary>
     /// ASP.NET Core Data Protection key ring — persisted so keys survive container restarts.
     /// Not tenant-scoped; no RLS.

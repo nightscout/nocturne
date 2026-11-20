@@ -598,6 +598,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
         services.AddScheduledJob<OAuthCodeCleanupJob>();
         services.AddScheduledJob<OAuthStepUpTokenCleanupJob>();
+        services.AddScheduledJob<TrustedDeviceCleanupJob>();
 
         services.AddHostedService<AuthorizationSeedService>();
 
@@ -619,6 +620,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
+        services.AddScoped<ITrustedDeviceService, TrustedDeviceService>();
         // Derive WebAuthn RP config from the base domain (single source of truth). Blank counts as
         // unset: it is what the shipped .env.example leaves behind, and an origin built from it is
         // one Fido2Configuration refuses to parse.

@@ -50,6 +50,32 @@ public interface ITotpService
 
     /// <summary>Returns the number of TOTP credentials registered to the specified subject.</summary>
     Task<int> GetCredentialCountAsync(Guid subjectId);
+
+    /// <summary>
+    /// What a sign-in still owes after its primary factor passed for <paramref name="subjectId"/>.
+    /// Both primary factors ask here, so this is the one place a trusted device stands in for a code.
+    /// </summary>
+    /// <param name="subjectId">The subject the primary factor just verified.</param>
+    /// <param name="trustedDeviceToken">The trusted-device cookie the request carries, if any.</param>
+    /// <param name="ipAddress">The caller's address, recorded on the device when its trust is used.</param>
+    Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(
+        Guid subjectId, string? trustedDeviceToken, string? ipAddress);
+}
+
+/// <summary>What a sign-in owes once its primary factor has passed.</summary>
+public enum SecondFactorRequirement
+{
+    /// <summary>The subject has no authenticator, so the primary factor completes the sign-in.</summary>
+    NotEnrolled,
+
+    /// <summary>The subject has an authenticator and must present a code.</summary>
+    CodeRequired,
+
+    /// <summary>
+    /// The subject has an authenticator, and the request came from a device the subject trusted
+    /// after an earlier code, so no code is asked for.
+    /// </summary>
+    SatisfiedByTrustedDevice,
 }
 
 /// <param name="ProvisioningUri">otpauth:// URI for scanning by an authenticator app.</param>
