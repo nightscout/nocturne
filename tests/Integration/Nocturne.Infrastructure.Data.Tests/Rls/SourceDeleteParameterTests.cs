@@ -52,6 +52,10 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
         (await ctx.LinkedRecords.CountAsync(l => l.IsPrimary && l.DataSource == "source-b")).Should().Be(Groups);
     }
 
+    /// <remarks>
+    /// The seed is analysed so that this test measures the SQL shape and not the planner's choice on
+    /// a table with no statistics.
+    /// </remarks>
     private async Task SeedAsync(Guid tenant)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
@@ -74,6 +78,7 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
             SELECT gen_random_uuid(), @tid, canonical, @type, a, 'source-a', true, (extract(epoch FROM ts) * 1000)::bigint, now() FROM g
             UNION ALL
             SELECT gen_random_uuid(), @tid, canonical, @type, b, 'source-b', false, (extract(epoch FROM ts) * 1000)::bigint, now() FROM g;
+            ANALYZE sensor_glucose, linked_records;
             """;
         cmd.Parameters.AddWithValue("tid", tenant);
         cmd.Parameters.AddWithValue("slug", $"srcdel-{tenant:N}");

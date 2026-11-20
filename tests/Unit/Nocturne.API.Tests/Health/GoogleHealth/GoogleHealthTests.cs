@@ -1756,6 +1756,9 @@ public class GoogleHealthTests : IDisposable
     [Fact]
     public async Task Disconnect_interrupts_preview_and_survives_browser_cancellation_before_google_revocation()
     {
+        // Every step waits on a signal; this only fails a hang, and a CI runner collecting coverage across
+        // the unit assemblies at once can stall the thread pool for seconds.
+        var patience = TimeSpan.FromSeconds(30);
         var scanning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var revoking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseRevoke = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1780,10 +1783,10 @@ public class GoogleHealthTests : IDisposable
         var store = new TestConnectorStore();
         var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var tenant = Guid.NewGuid();
-        var service = Service(store, handler, tenant, coordinator);
+        var service = Service(store, handler, tenant, coordinator, revokeTimeout: patience);
         await ConnectAsync(service);
         var preview = service.PreviewAsync(Guid.NewGuid(), default);
-        await scanning.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await scanning.Task.WaitAsync(patience);
         using var browser = new CancellationTokenSource();
         var disconnect = service.DisconnectAsync(Guid.NewGuid(), browser.Token);
         browser.Cancel();
@@ -1791,8 +1794,8 @@ public class GoogleHealthTests : IDisposable
         var requestId = (await coordinator.DisconnectRequestAsync(tenant, default))!.RequestId;
         try
         {
-            await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await revoking.Task.WaitAsync(patience);
+            await scanCancelled.Task.WaitAsync(patience);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preview);
             var status = await service.StatusAsync(default);
             Assert.False(status.Connected);
@@ -1801,8 +1804,8 @@ public class GoogleHealthTests : IDisposable
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PreviewAsync(Guid.NewGuid(), default));
         }
         finally { releaseRevoke.TrySetResult(); }
-        await disconnect.WaitAsync(TimeSpan.FromSeconds(5));
-        await recoveredDisconnect.WaitAsync(TimeSpan.FromSeconds(5));
+        await disconnect.WaitAsync(patience);
+        await recoveredDisconnect.WaitAsync(patience);
         Assert.False((await service.StatusAsync(default)).IsDisconnecting);
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
         Assert.True(store.Secrets.ContainsKey("accountKey"));
@@ -1836,7 +1839,8 @@ public class GoogleHealthTests : IDisposable
         IGoogleHealthReadingWriter? writer = null,
         Nocturne.Core.Models.V4.BiologicalSex? sex = null,
         IGoogleHealthGrantHolders? holders = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        TimeSpan? revokeTimeout = null)
     {
         var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
@@ -1861,7 +1865,7 @@ public class GoogleHealthTests : IDisposable
             oauth,
             new GoogleHealthSessionStore(store.Configurations, oauth,
                 holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions,
-                NullLogger<GoogleHealthSessionStore>.Instance),
+                NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout),
             store.Configurations,
             store.Loader,
             tenant.Object,
