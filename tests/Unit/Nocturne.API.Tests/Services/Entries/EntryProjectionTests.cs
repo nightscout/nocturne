@@ -26,6 +26,27 @@ public class EntryProjectionTests
     }
 
     [Fact]
+    public void FromSensorGlucose_WritesQualityAsExtraKeys()
+    {
+        var sg = CreateSensorGlucose();
+        sg.Quality = SensorGlucoseQuality.Valid;
+        sg.SensorStatus = "G7:info14";
+
+        var entry = EntryProjection.FromSensorGlucose(sg);
+
+        entry.AdditionalProperties.Should().Contain("quality", "Valid")
+            .And.Contain("sensorStatus", "G7:info14");
+    }
+
+    [Fact]
+    public void FromSensorGlucose_WithoutQuality_AddsNoExtraKeys()
+    {
+        var entry = EntryProjection.FromSensorGlucose(CreateSensorGlucose());
+
+        entry.AdditionalProperties.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
     public void FromSensorGlucose_UsesLegacyIdWhenPresent()
     {
         var sg = CreateSensorGlucose();
