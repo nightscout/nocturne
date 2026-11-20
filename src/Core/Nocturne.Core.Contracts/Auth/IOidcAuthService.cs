@@ -49,6 +49,21 @@ public interface IOidcAuthService
     string? TryReadTenantSlug(string state);
 
     /// <summary>
+    /// The server-relative URL of the GET that continues a callback a provider delivered as a form
+    /// POST (Sign in with Apple), carrying the same code, state and error, and the user's name when
+    /// the provider sent one.
+    /// </summary>
+    /// <param name="state">The state posted back.</param>
+    /// <param name="code">The authorization code posted back, absent on an error.</param>
+    /// <param name="error">The provider's error code, if any.</param>
+    /// <param name="user">Apple's <c>user</c> field: JSON naming the user, sent on first consent only.</param>
+    /// <returns>
+    /// The URL, or <see langword="null"/> when the state was not issued by this instance or names a
+    /// provider that does not answer by form POST.
+    /// </returns>
+    Task<string?> GetFormPostRelayUrlAsync(string state, string? code, string? error, string? user);
+
+    /// <summary>
     /// Handle the OIDC callback - exchange code for tokens and create session
     /// </summary>
     /// <param name="code">Authorization code from provider</param>
@@ -59,6 +74,7 @@ public interface IOidcAuthService
     /// The tenant the login is being performed against (the resolved subdomain tenant).
     /// When set, the resolved subject must be a member of this tenant or no session is issued.
     /// </param>
+    /// <param name="providerUser">The protected name a form-post relay carried (<see cref="GetFormPostRelayUrlAsync"/>).</param>
     /// <returns>Authentication result with session tokens</returns>
     Task<OidcCallbackResult> HandleCallbackAsync(
         string code,
@@ -66,7 +82,8 @@ public interface IOidcAuthService
         string expectedState,
         string? ipAddress = null,
         string? userAgent = null,
-        Guid? currentTenantId = null
+        Guid? currentTenantId = null,
+        string? providerUser = null
     );
 
     /// <param name="ipAddress">Client IP address</param>
@@ -113,11 +130,12 @@ public interface IOidcAuthService
     /// <param name="authenticatedSubjectId">The subject ID of the currently authenticated user.</param>
     /// <param name="ipAddress">Client IP address for audit logging.</param>
     /// <param name="userAgent">Client user-agent string for audit logging.</param>
+    /// <param name="providerUser">The protected name a form-post relay carried (<see cref="GetFormPostRelayUrlAsync"/>).</param>
     /// <returns>An <see cref="OidcLinkResult"/> indicating success or failure of the link attempt.</returns>
     Task<OidcLinkResult> HandleLinkCallbackAsync(
         string code, string state, string expectedState,
         Guid authenticatedSubjectId,
-        string? ipAddress = null, string? userAgent = null);
+        string? ipAddress = null, string? userAgent = null, string? providerUser = null);
 
     /// <summary>
     /// Generate an authorization URL for OIDC-based owner creation during setup.
@@ -132,7 +150,7 @@ public interface IOidcAuthService
     /// </summary>
     Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
         string code, string state, string expectedState,
-        string? ipAddress = null, string? userAgent = null);
+        string? ipAddress = null, string? userAgent = null, string? providerUser = null);
 }
 
 /// <summary>

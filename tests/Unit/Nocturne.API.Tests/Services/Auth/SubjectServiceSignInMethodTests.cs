@@ -31,6 +31,7 @@ public class SubjectServiceSignInMethodTests : IDisposable
             new SubjectRepository(_db.AsFactory()),
             Mock.Of<IAuthAuditService>(),
             _recoveryCodes.Object,
+            new NoProviderGrants(),
             NullLogger<SubjectService>.Instance
         );
     }

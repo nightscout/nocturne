@@ -12,8 +12,9 @@ title: Sign in with any OIDC provider
 Nocturne's social login is a generic OpenID Connect client. Any provider that publishes a
 standard discovery document works: Nocturne fetches
 `{issuer}/.well-known/openid-configuration` and wires up the authorization, token, and
-userinfo endpoints automatically. [Google](/docs/authentication/google) and
-[GitHub](/docs/authentication/github) have their own step-by-step guides; this page covers
+userinfo endpoints automatically. [Google](/docs/authentication/google),
+[GitHub](/docs/authentication/github) and [Apple](/docs/authentication/apple) have their own
+step-by-step guides; this page covers
 everything else: Okta, Auth0, Keycloak, Authentik, Microsoft Entra ID, Zitadel, and so on.
 
 ## The callback URL
@@ -142,4 +143,5 @@ names. Most providers need no mapping when they return the standard `email`, `na
 
 - [Sign in with Google](/docs/authentication/google)
 - [Sign in with GitHub](/docs/authentication/github)
+- [Sign in with Apple](/docs/authentication/apple)
 - [Authentication overview](/docs/authentication): all sign-in methods

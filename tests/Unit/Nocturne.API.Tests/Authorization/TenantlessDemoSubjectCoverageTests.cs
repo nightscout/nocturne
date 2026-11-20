@@ -109,6 +109,8 @@ public class TenantlessDemoSubjectCoverageTests
             ["OidcController.GetProviders"] = "lists the deployment's enabled identity providers so the sign-in page can render its buttons; reads no session",
             ["OidcController.Login"] = "starts the identity-provider sign-in and redirects to the provider; reads no session",
             ["OidcController.Callback"] = "mints the session; the subject comes from the provider's token response, not from any session on the request",
+            ["AppleSignInController.Callback"] = "turns Apple's form POST into a redirect to the flow's GET callback; reads only the state it carries, no session",
+            ["AppleSignInController.Notifications"] = "acts on an Apple-signed notification about the Apple user it names; reads no session",
             ["OidcController.Refresh"] = "mints the session; the subject comes from the refresh token presented, not from any session on the request",
             ["OidcController.GetSession"] = "reports the caller's own session back to the caller, which for a demo session is the demo account the demo UI is already signed in as",
 

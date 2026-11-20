@@ -574,6 +574,62 @@ public class SubjectRepository : ISubjectRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<bool> SetOidcIdentityEmailAsync(Guid identityId, string email, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var entity = await db.SubjectOidcIdentities.FirstOrDefaultAsync(x => x.Id == identityId, ct);
+        if (entity is null)
+            return false;
+
+        entity.Email = email;
+        await SaveAsync(db, ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> SetProviderRefreshTokenAsync(
+        string oidcSubjectId, string issuer, byte[]? tokenEncrypted, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var entity = await db.SubjectOidcIdentities.FirstOrDefaultAsync(
+            x => x.OidcSubjectId == oidcSubjectId && x.Issuer == issuer, ct);
+        if (entity is null)
+            return false;
+
+        entity.ProviderRefreshTokenEncrypted = tokenEncrypted;
+        await SaveAsync(db, ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<KeptProviderRefreshToken>> GetProviderRefreshTokensAsync(
+        Guid subjectId, Guid? identityId, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        return await lease.Context.SubjectOidcIdentities.AsNoTracking()
+            .Where(i => i.SubjectId == subjectId && i.ProviderRefreshTokenEncrypted != null)
+            .Where(i => identityId == null || i.Id == identityId)
+            .Select(i => new KeptProviderRefreshToken(i.ProviderId, i.ProviderRefreshTokenEncrypted!))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> RemoveDeadOidcIdentityAsync(Guid identityId, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var entity = await db.SubjectOidcIdentities.FirstOrDefaultAsync(x => x.Id == identityId, ct);
+        if (entity is null)
+            return false;
+
+        db.SubjectOidcIdentities.Remove(entity);
+        await SaveAsync(db, ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);

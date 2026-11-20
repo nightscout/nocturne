@@ -257,7 +257,11 @@
   {#if name && name.toLowerCase().includes("google")}
     <img src="/logos/google.webp" alt="" class="mr-2 h-4 w-4 shrink-0 object-contain" aria-hidden="true" />
   {:else if name && name.toLowerCase().includes("apple")}
-    <img src="/logos/apple.svg" alt="" class="mr-2 h-4 w-4 shrink-0 object-contain" aria-hidden="true" />
+    <!-- A mask, so the logo takes the button's text color: Apple's button is black. -->
+    <span
+      class="mr-2 h-4 w-4 shrink-0 bg-current [mask:url(/logos/apple.svg)_center/contain_no-repeat]"
+      aria-hidden="true"
+    ></span>
   {:else if name && name.toLowerCase().includes("github")}
     <img src="/logos/github.png" alt="" class="mr-2 h-4 w-4 shrink-0 object-contain" aria-hidden="true" />
   {:else}

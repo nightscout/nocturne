@@ -56,6 +56,7 @@ public class OidcAuthServiceRedirectUriTests
             new Mock<ITenantMemberService>().Object,
             new Mock<IMemberInviteService>().Object,
             new Mock<ITotpService>().Object,
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             Options.Create(baseDomainOptions),

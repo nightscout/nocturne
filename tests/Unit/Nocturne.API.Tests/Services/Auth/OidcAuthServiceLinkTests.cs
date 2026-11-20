@@ -41,6 +41,7 @@ public class OidcAuthServiceLinkTests
             _tenantMemberService.Object,
             new Mock<IMemberInviteService>().Object,
             new Mock<ITotpService>().Object,
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

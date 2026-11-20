@@ -63,6 +63,7 @@ public class OidcProviderAdminController : ControllerBase
             Name = request.Name,
             ProviderType = request.ProviderType,
             OAuth2 = request.OAuth2,
+            Apple = request.Apple,
             IssuerUrl = request.IssuerUrl,
             ClientId = request.ClientId,
             ClientSecret = request.ClientSecret,
@@ -117,6 +118,7 @@ public class OidcProviderAdminController : ControllerBase
         existing.Name = request.Name;
         existing.ProviderType = request.ProviderType;
         existing.OAuth2 = request.OAuth2;
+        existing.Apple = request.Apple;
         existing.IssuerUrl = request.IssuerUrl;
         existing.ClientId = request.ClientId;
         if (request.ClientSecret is not null)
@@ -301,7 +303,8 @@ public record CreateOidcProviderRequest(
     string? Icon = null,
     string? ButtonColor = null,
     OidcProviderType ProviderType = OidcProviderType.Oidc,
-    OAuth2ProviderSettings? OAuth2 = null);
+    OAuth2ProviderSettings? OAuth2 = null,
+    AppleProviderSettings? Apple = null);
 
 public record UpdateOidcProviderRequest(
     string Name,
@@ -316,7 +319,8 @@ public record UpdateOidcProviderRequest(
     string? Icon = null,
     string? ButtonColor = null,
     OidcProviderType ProviderType = OidcProviderType.Oidc,
-    OAuth2ProviderSettings? OAuth2 = null);
+    OAuth2ProviderSettings? OAuth2 = null,
+    AppleProviderSettings? Apple = null);
 
 public record OidcProviderResponse(
     Guid Id,
@@ -332,7 +336,8 @@ public record OidcProviderResponse(
     string? Icon,
     string? ButtonColor,
     OidcProviderType ProviderType,
-    OAuth2ProviderSettings? OAuth2)
+    OAuth2ProviderSettings? OAuth2,
+    AppleProviderSettings? Apple)
 {
     public static OidcProviderResponse FromDomain(OidcProvider p) => new(
         p.Id,
@@ -348,7 +353,8 @@ public record OidcProviderResponse(
         p.Icon,
         p.ButtonColor,
         p.ProviderType,
-        p.OAuth2);
+        p.OAuth2,
+        p.Apple);
 }
 
 public record ConfigManagedResponse(bool IsConfigManaged);

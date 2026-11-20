@@ -94,6 +94,7 @@ public class OidcAuthServiceRefreshTests
             Mock.Of<ITenantMemberService>(),
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITotpService>(),
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions { Session = new() { RotateRefreshTokens = rotate } }),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

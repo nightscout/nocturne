@@ -48,6 +48,7 @@ public class OidcAuthServiceLoginGateTests
             _tenantMemberService.Object,
             _memberInviteService.Object,
             _totpService.Object,
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

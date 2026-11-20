@@ -3554,6 +3554,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AppleSettingsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("apple_settings");
+
                     b.Property<string>("ButtonColor")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
@@ -5131,6 +5135,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uuid")
                         .HasColumnName("provider_id");
+
+                    b.Property<byte[]>("ProviderRefreshTokenEncrypted")
+                        .HasColumnType("bytea")
+                        .HasColumnName("provider_refresh_token");
 
                     b.Property<Guid>("SubjectId")
                         .HasColumnType("uuid")
