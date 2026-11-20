@@ -179,6 +179,21 @@ internal sealed class TotpStepUpTokenEntityConfiguration : IEntityTypeConfigurat
     }
 }
 
+internal sealed class TrustedDeviceEntityConfiguration : IEntityTypeConfiguration<TrustedDeviceEntity>
+{
+    public void Configure(EntityTypeBuilder<TrustedDeviceEntity> entity)
+    {
+        entity.HasIndex(e => e.TokenHash).IsUnique();
+        entity.HasIndex(e => e.SubjectId);
+        // The cleanup sweep deletes by expiry.
+        entity.HasIndex(e => e.ExpiresAt);
+        entity.HasOne(e => e.Subject)
+            .WithMany()
+            .HasForeignKey(e => e.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class LoginCodeEntityConfiguration : IEntityTypeConfiguration<LoginCodeEntity>
 {
     public void Configure(EntityTypeBuilder<LoginCodeEntity> entity)

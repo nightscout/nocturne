@@ -51,13 +51,13 @@ six-digit code that changes every thirty seconds. The technical name for this is
 short for time-based one-time password.
 
 It is optional, and it is a **second step rather than a way in on its own**. Once you have
-enrolled an authenticator app, signing in with your passkey is followed by a prompt for the
-current six-digit code. Both have to succeed.
+enrolled an authenticator app, signing in is followed by a prompt for the current six-digit
+code. Both have to succeed.
 
-<Callout type="info" title="It applies to passkey sign-ins">
+<Callout type="info" title="It applies to every sign-in">
 
-  The authenticator step follows a passkey. If you sign in through a social login provider
-  instead, that provider handles any extra steps of its own, and Nocturne does not ask again.
+  The authenticator step follows a passkey and a social login provider alike. Any extra step
+  the provider has of its own comes first, and Nocturne still needs its own code afterwards.
 
 </Callout>
 
@@ -73,10 +73,28 @@ Scan the code with the app before leaving the page; it isn't shown again afterwa
 
 ### Signing in afterwards
 
-From then on, sign in as usual with your passkey and a second screen asks for the current
-code from your app. Open the app, read the six digits, type them in.
+From then on, sign in as usual with your passkey or your social login provider and a second
+screen asks for the current code from your app. Open the app, read the six digits, type them in.
 
 <Screenshot id="totp-challenge" />
+
+### Trusting a device
+
+The code screen has a **Trust this device** option. Select it before you type the code, and
+Nocturne does not need a code on that browser for the next 30 days. You still sign in with
+your passkey each time. The 30 days count from the moment you select the option and do not
+restart when you sign in.
+
+Select it only on a device that only you use. Signing out does not end the trust.
+
+**My settings > Account > Trusted devices** lists each trusted device with the date its trust
+ends. Remove a device there to make its next sign-in need a code again. Nocturne removes all
+your trusted devices when you remove an authenticator app or sign in with a recovery code.
+
+If you lose a device, open **Sessions** on another one and select **Sign out everywhere
+else**. That signs the lost device out and stops trusting it.
+
+The person who runs the instance can set a different number of days, or turn the option off.
 
 <Callout type="warning" title="Keep a way back in">
 

@@ -27,7 +27,7 @@ If you're building an app or device that talks to the Nocturne API, see
 |--------|--------------|------------|
 | **Passkeys (WebAuthn)** | Always on | The primary credential. Face ID, Touch ID, Windows Hello, or a hardware security key. |
 | **Social login (OIDC)** | Optional, per instance | Google, GitHub, or any OIDC provider. |
-| **Authenticator app (TOTP)** | Optional second step | Six-digit codes from an app like Aegis, 1Password, or Google Authenticator. Asked for after the passkey, on accounts that have enrolled one. |
+| **Authenticator app (TOTP)** | Optional second step | Six-digit codes from an app like Aegis, 1Password, or Google Authenticator. Asked for after the passkey or the social login, on accounts that have enrolled one. |
 | **Recovery codes** | Fallback | One-time backup codes. The only credential that gets an account in without a passkey. |
 
 For the step-by-step of what signing in actually looks like, see
@@ -81,9 +81,9 @@ operator.
 
 - **Authenticator app (TOTP)**: TOTP stands for time-based one-time password: a
   six-digit code that changes every thirty seconds. When an account has enrolled an
-  authenticator app, signing in with a passkey is followed by a second step asking for the
-  current code. It does not apply to OIDC sign-ins, where the provider handles any extra
-  steps of its own.
+  authenticator app, signing in with a passkey or a social login provider is followed by a
+  second step asking for the current code. A device the user chose to trust at that step
+  skips it for 30 days.
 - **Recovery codes**: one-time backup codes issued when the account is set up, for when
   no passkey is available. The login screen carries a *Use a recovery code* link.
 
@@ -116,7 +116,7 @@ In order:
    [Request membership](/docs/authentication/request-membership).
 
 If the account has an authenticator app enrolled, a second step asking for the six-digit
-code follows the passkey.
+code follows the passkey or the social login.
 
 ## Enabling each method
 

@@ -18,7 +18,8 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <summary>
 /// Authenticator app codes (TOTP) as a second step of sign-in. A caller can set up an
 /// authenticator, verify it, and list and remove authenticators. A code completes a sign-in that a
-/// passkey or an external provider started. A code alone never signs in.
+/// passkey or an external provider started. A code alone never signs in. A caller who presents a
+/// code can trust the device, so later sign-ins from it skip the code.
 /// </summary>
 /// <remarks>
 /// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor
@@ -26,7 +27,8 @@ namespace Nocturne.API.Controllers.Authentication;
 /// token minted by a completed primary factor, so a code on its own can never produce a session.
 /// Both primary factors, <c>PasskeyController.LoginComplete</c> and
 /// <c>OidcAuthService.CompleteLoginAsync</c>, withhold the session from a subject with an
-/// authenticator enrolled and mint that token instead.
+/// authenticator enrolled and mint that token instead, except on a device the subject trusted
+/// here with an earlier code (<see cref="ITotpService.GetSecondFactorRequirementAsync"/>).
 /// </remarks>
 /// <seealso cref="ITotpService"/>
 /// <seealso cref="ISessionService"/>
@@ -52,6 +54,7 @@ public class TotpController : ControllerBase
     public const string NotAMember = "not_a_member";
 
     private readonly ITotpService _totpService;
+    private readonly ITrustedDeviceService _trustedDevices;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
@@ -66,6 +69,7 @@ public class TotpController : ControllerBase
     /// </summary>
     public TotpController(
         ITotpService totpService,
+        ITrustedDeviceService trustedDevices,
         ISessionService sessionService,
         ISubjectService subjectService,
         IAuthAuditService auditService,
@@ -76,6 +80,7 @@ public class TotpController : ControllerBase
         ILogger<TotpController> logger)
     {
         _totpService = totpService;
+        _trustedDevices = trustedDevices;
         _sessionService = sessionService;
         _subjectService = subjectService;
         _auditService = auditService;
@@ -207,7 +212,7 @@ public class TotpController : ControllerBase
     }
 
     /// <summary>
-    /// Remove a TOTP credential by ID. Allowed even when it is the last TOTP credential.
+    /// Remove a TOTP credential by ID. Allowed even when it is the last TOTP credential. Every trusted device of the account stops being trusted.
     /// </summary>
     /// <param name="id">The unique identifier of the TOTP credential to remove.</param>
     /// <returns>204 on success.</returns>
@@ -220,7 +225,7 @@ public class TotpController : ControllerBase
     [HttpDelete("{id:guid}")]
     [RequireInteractiveSession]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["ListCredentials"])]
+    [RemoteCommand(Invalidates = ["ListCredentials", "TrustedDevices_List"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -232,7 +237,14 @@ public class TotpController : ControllerBase
 
         // No factor-count guard: TOTP is a second factor, so removing it can never
         // lock a user out of their primary sign-in method.
-        await _totpService.RemoveCredentialAsync(id, auth.SubjectId.Value);
+        var untrusted = await _totpService.RemoveCredentialAsync(id, auth.SubjectId.Value);
+        if (untrusted > 0)
+        {
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, auth.SubjectId, success: true,
+                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                userAgent: Request.Headers.UserAgent.ToString(),
+                detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "authenticator_removed" }));
+        }
 
         return NoContent();
     }
@@ -305,6 +317,19 @@ public class TotpController : ControllerBase
             ipAddress: ip, userAgent: ua,
             detailsJson: JsonSerializer.Serialize(new { method = "totp" }));
 
+        if (request.TrustDevice
+            && await _trustedDevices.TrustAsync(
+                result.SubjectId,
+                Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName],
+                ua, HttpContext.RequestAborted) is { } grant)
+        {
+            Response.SetTrustedDeviceCookie(grant, _oidcOptions);
+
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustGranted, result.SubjectId, success: true,
+                ipAddress: ip, userAgent: ua,
+                detailsJson: JsonSerializer.Serialize(new { deviceId = grant.DeviceId, expiresAt = grant.ExpiresAt }));
+        }
+
         return Ok(new TotpLoginResponse
         {
             Success = true,
@@ -312,6 +337,25 @@ public class TotpController : ControllerBase
             ExpiresIn = session.ExpiresInSeconds,
         });
     }
+
+    /// <summary>
+    /// Whether the authenticator step offers to trust the device, and for how long. Anonymous: the
+    /// step runs before any session exists.
+    /// </summary>
+    /// <remarks>
+    /// A lifetime that is not a whole number of days is rounded up, so the option is offered
+    /// exactly when <see cref="ITrustedDeviceService.Lifetime"/> is above zero.
+    /// </remarks>
+    /// <response code="200">The policy; <c>days</c> is 0 when trusted devices are turned off.</response>
+    [HttpGet("trusted-device-policy")]
+    [AllowAnonymous]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TrustedDevicePolicyResponse), StatusCodes.Status200OK)]
+    public ActionResult<TrustedDevicePolicyResponse> GetTrustedDevicePolicy() =>
+        Ok(new TrustedDevicePolicyResponse
+        {
+            Days = Math.Max(0, (int)Math.Ceiling(_trustedDevices.Lifetime.TotalDays)),
+        });
 
     /// <summary>
     /// Whether this request is on the host a step-up token bound to <paramref name="boundTenantId"/>
@@ -391,6 +435,21 @@ public class TotpLoginRequest
 
     [Required, RegularExpression(@"^\d{6}$")]
     public string Code { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Trust this device, so its later sign-ins skip the code until the trust expires. Ignored when
+    /// trusted devices are turned off.
+    /// </summary>
+    public bool TrustDevice { get; set; }
+}
+
+/// <summary>
+/// What the authenticator step offers about trusting the device.
+/// </summary>
+public class TrustedDevicePolicyResponse
+{
+    /// <summary>How many days a trusted device skips the code. 0 when the option is not offered.</summary>
+    public int Days { get; set; }
 }
 
 /// <summary>

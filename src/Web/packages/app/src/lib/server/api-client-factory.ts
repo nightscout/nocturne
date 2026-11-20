@@ -25,6 +25,8 @@ export interface ServerHttpClientOptions {
   guestSessionToken?: string;
   platformAccessToken?: string;
   recoverySessionToken?: string;
+  /** Read by the API at sign-in only, to decide whether the authenticator code is needed. */
+  trustedDeviceToken?: string;
   hashedInstanceKey?: string | null;
   extraHeaders?: Record<string, string>;
   responseCookies?: CookieSetter;
@@ -89,6 +91,11 @@ export function createServerHttpClient(
       if (options?.recoverySessionToken) {
         cookies.push(
           `${AUTH_COOKIE_NAMES.recoverySession}=${options.recoverySessionToken}`
+        );
+      }
+      if (options?.trustedDeviceToken) {
+        cookies.push(
+          `${AUTH_COOKIE_NAMES.trustedDevice}=${options.trustedDeviceToken}`
         );
       }
       if (cookies.length > 0) {

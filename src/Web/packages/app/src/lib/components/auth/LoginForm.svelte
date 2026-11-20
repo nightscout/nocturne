@@ -2,6 +2,7 @@
   import { untrack, type ComponentProps } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -25,6 +26,7 @@
     loginOptions,
     loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
+  import { getTrustedDevicePolicy } from "#lib/api/generated/totps.generated.remote.js";
   import { invalidateAll } from "$app/navigation";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
@@ -77,6 +79,11 @@
     isLastUsed(lastSignIn, "oidc", orderedProviders[0]?.id)
   );
   const passkeyLastUsed = $derived(isLastUsed(lastSignIn, "passkey"));
+
+  /** How long the API trusts a device for. 0 when it does not offer to, so nothing is shown. */
+  const trustPolicyQuery = getTrustedDevicePolicy();
+  const trustDays = $derived(trustPolicyQuery.current?.days ?? 0);
+  let trustDevice = $state(false);
 
   // UI mode
   type LoginMode = "default" | "username" | "recovery" | "totp";
@@ -249,6 +256,7 @@
     if (newMode !== "totp") {
       stepUpToken = "";
       totpCode = "";
+      trustDevice = false;
     }
   }
 </script>
@@ -565,6 +573,32 @@
         <p class="text-sm text-muted-foreground">
           Enter the current code from your authenticator app to finish signing in.
         </p>
+
+        <!-- Above the code field: a complete code submits the form by itself. -->
+        {#if trustDays > 0}
+          <div class="flex items-start gap-2">
+            <Checkbox
+              id="totp-trust-device"
+              class="mt-0.5"
+              name={signInWithAuthenticator.fields.trustDevice.as("checkbox").name}
+              aria-describedby="totp-trust-device-help"
+              bind:checked={trustDevice}
+            />
+            <div class="space-y-1">
+              <Label for="totp-trust-device">
+                {#if trustDays === 1}
+                  Trust this device for 1 day
+                {:else}
+                  Trust this device for {trustDays} days
+                {/if}
+              </Label>
+              <p id="totp-trust-device-help" class="text-xs text-muted-foreground">
+                You will not need a code on this device during that time.
+                Select this only on a device that only you use.
+              </p>
+            </div>
+          </div>
+        {/if}
 
         <div class="space-y-2">
           <Label for="totp-code-input">Authenticator code</Label>

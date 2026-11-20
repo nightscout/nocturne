@@ -3,7 +3,10 @@ using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -590,7 +593,77 @@ public class TotpServiceTests : IDisposable
 
     #endregion
 
+    #region GetSecondFactorRequirementAsync
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task SecondFactor_WithNoAuthenticator_IsNotEnrolled()
+    {
+        SeedSubject(TestUsername, _subjectId);
+        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null);
+
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token);
+
+        requirement.Should().Be(SecondFactorRequirement.NotEnrolled);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(null)]
+    [InlineData("a-token-nobody-minted")]
+    public async Task SecondFactor_WithAnAuthenticatorAndNoTrustedDevice_NeedsACode(string? token)
+    {
+        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Phone");
+
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, token);
+
+        requirement.Should().Be(SecondFactorRequirement.CodeRequired);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task SecondFactor_FromATrustedDevice_IsSatisfied()
+    {
+        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Phone");
+        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null);
+
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token);
+
+        requirement.Should().Be(SecondFactorRequirement.SatisfiedByTrustedDevice);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task SecondFactor_FromADeviceAnotherSubjectTrusted_NeedsACode()
+    {
+        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Phone");
+        var other = SeedSubject("erik");
+        var grant = await CreateTrustedDevices().TrustAsync(other.Id, null, null);
+
+        var requirement = await CreateService().GetSecondFactorRequirementAsync(_subjectId, grant!.Token);
+
+        requirement.Should().Be(SecondFactorRequirement.CodeRequired);
+    }
+
+    #endregion
+
     #region RemoveCredentialAsync
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RemoveCredentialAsync_EndsTheTrustOfEveryDevice()
+    {
+        var removed = SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Lost phone");
+        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "Tablet");
+        var grant = await CreateTrustedDevices().TrustAsync(_subjectId, null, null);
+        var service = CreateService();
+
+        await service.RemoveCredentialAsync(removed.Id, _subjectId);
+
+        (await service.GetSecondFactorRequirementAsync(_subjectId, grant!.Token))
+            .Should().Be(SecondFactorRequirement.CodeRequired,
+                "the device was trusted on a code that the removed authenticator could have produced");
+    }
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -632,42 +705,19 @@ public class TotpServiceTests : IDisposable
 
     #endregion
 
-    #region GetCredentialCountAsync
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetCredentialCountAsync_ReturnsCorrectCount()
-    {
-        var service = CreateService();
-
-        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "A");
-        SeedCredential(_subjectId, TotpHelper.GenerateSecret(), "B");
-
-        var count = await service.GetCredentialCountAsync(_subjectId);
-
-        count.Should().Be(2);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetCredentialCountAsync_NoCredentials_ReturnsZero()
-    {
-        var service = CreateService();
-
-        var count = await service.GetCredentialCountAsync(_subjectId);
-
-        count.Should().Be(0);
-    }
-
-    #endregion
-
     #region Helpers
 
     private TotpService CreateService()
     {
         var contexts = _dbContext.AsFactory();
-        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), CreateTrustedDevices(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
     }
+
+    private TrustedDeviceService CreateTrustedDevices() => new(
+        new TrustedDeviceRepository(_dbContext.AsFactory()),
+        Options.Create(new OidcOptions()),
+        TimeProvider.System,
+        NullLogger<TrustedDeviceService>.Instance);
 
     private SubjectEntity SeedSubject(string username, Guid? subjectId = null)
     {

@@ -35,6 +35,10 @@ export const COOKIE_LAST_SIGN_IN_NAME = "LastSignIn";
 // Step-up token the API hands across the OIDC callback redirect when the account also has an
 // authenticator. The login page spends it once to open the authenticator step.
 export const COOKIE_TOTP_STEP_UP_NAME = ".Nocturne.TotpStepUp";
+// The token of a device its holder trusted at the authenticator step, issued by the API. Not a
+// session: the API reads it only after a passkey or identity provider has accepted the same
+// account, to decide whether to skip the code. It outlives sign-out on purpose.
+export const COOKIE_TRUSTED_DEVICE_NAME = ".Nocturne.TrustedDevice";
 
 // OpenTelemetry service identity (build-time, not deployment config)
 export const OTEL_SERVICE_NAME = "nocturne-web";

@@ -143,7 +143,7 @@
           Sign out {otherSessionCount}
           {otherSessionCount === 1 ? "other session" : "other sessions"}?
           This device stays signed in. The other devices will need to sign
-          in again.
+          in again, and Nocturne stops trusting them.
         {/snippet}
       </ConfirmDialog>
     {/if}

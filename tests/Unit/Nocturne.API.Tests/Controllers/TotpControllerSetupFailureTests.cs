@@ -41,6 +41,7 @@ public class TotpControllerSetupFailureTests
 
         return new TotpController(
             _totpService.Object,
+            new Mock<ITrustedDeviceService>().Object,
             _sessionService.Object,
             _subjectService.Object,
             _auditService.Object,

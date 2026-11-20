@@ -87,6 +87,7 @@ public class PasskeyController : ControllerBase
 
     private readonly IPasskeyService _passkeyService;
     private readonly ITotpService _totpService;
+    private readonly ITrustedDeviceService _trustedDevices;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly IJwtService _jwtService;
     private readonly ISessionService _sessionService;
@@ -104,6 +105,7 @@ public class PasskeyController : ControllerBase
 
     /// <param name="passkeyService">Generates each ceremony's options, verifies its response, and lists a subject's passkeys.</param>
     /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
+    /// <param name="trustedDevices">Forgets a subject's trusted devices when a recovery code is spent.</param>
     /// <param name="recoveryCodeService">Generates, counts, verifies and voids recovery codes.</param>
     /// <param name="jwtService">Issues and validates the recovery session's token.</param>
     /// <param name="sessionService">Issues the session a completed login or invite acceptance signs in with.</param>
@@ -121,6 +123,7 @@ public class PasskeyController : ControllerBase
     public PasskeyController(
         IPasskeyService passkeyService,
         ITotpService totpService,
+        ITrustedDeviceService trustedDevices,
         IRecoveryCodeService recoveryCodeService,
         IJwtService jwtService,
         ISessionService sessionService,
@@ -138,6 +141,7 @@ public class PasskeyController : ControllerBase
     {
         _passkeyService = passkeyService;
         _totpService = totpService;
+        _trustedDevices = trustedDevices;
         _recoveryCodeService = recoveryCodeService;
         _jwtService = jwtService;
         _sessionService = sessionService;
@@ -532,8 +536,12 @@ public class PasskeyController : ControllerBase
 
             // A subject with an authenticator enrolled finishes signing in at
             // POST /api/auth/totp/login. No session is issued here, so the passkey alone does
-            // not grant access.
-            if (await _totpService.GetCredentialCountAsync(assertionResult.SubjectId) > 0)
+            // not grant access, unless the device is one the subject trusted after an earlier code.
+            var secondFactor = await _totpService.GetSecondFactorRequirementAsync(
+                assertionResult.SubjectId,
+                Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]);
+
+            if (secondFactor == SecondFactorRequirement.CodeRequired)
             {
                 // Not a completed login, so not a successful one; the success row is written when
                 // the second factor lands.
@@ -567,7 +575,9 @@ public class PasskeyController : ControllerBase
             await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
-                detailsJson: JsonSerializer.Serialize(new { method = "passkey" }));
+                detailsJson: secondFactor == SecondFactorRequirement.SatisfiedByTrustedDevice
+                    ? JsonSerializer.Serialize(new { method = "passkey", secondFactor = "trusted_device" })
+                    : JsonSerializer.Serialize(new { method = "passkey" }));
 
             return Ok(new PasskeyLoginCompleteResponse
             {
@@ -625,6 +635,17 @@ public class PasskeyController : ControllerBase
         }
 
         var subjectId = subject!.Id;
+
+        // A recovery code is what someone who lost their factors uses, so nothing an earlier
+        // sign-in left behind may shorten the next one.
+        var untrusted = await _trustedDevices.RevokeAllAsync(subjectId, HttpContext.RequestAborted);
+        if (untrusted > 0)
+        {
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
+                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                userAgent: Request.Headers.UserAgent.ToString(),
+                detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "recovery_code" }));
+        }
 
         await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: true,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
