@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -26,5 +27,22 @@ internal static class AlertPayloads
         SubjectName = tenant?.SubjectName ?? tenant?.DisplayName ?? "Unknown",
         ActiveExcursionCount = activeExcursionCount,
         Severity = rule.Severity,
+    };
+
+    public static AlertPayload Test(
+        AlertConditionType type, string ruleName, AlertRuleSeverity severity, Guid tenantId, DateTime now) => new()
+    {
+        AlertType = type,
+        RuleName = $"[Test] {ruleName}",
+        Severity = severity,
+        TenantId = tenantId,
+        GlucoseValue = null,
+        Trend = null,
+        TrendRate = null,
+        ReadingTimestamp = now,
+        SubjectName = "Test fire",
+        ExcursionId = Guid.Empty,
+        InstanceId = Guid.Empty,
+        ActiveExcursionCount = 0,
     };
 }

@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Nocturne.Core.Models.LoopAnalysis;
 
-namespace Nocturne.API.Controllers.V4.Analytics;
+namespace Nocturne.API.Models.Requests.V4;
 
 /// <summary>
 /// The query parameters every Loop Analysis action takes, bound once as camelCase scalars.

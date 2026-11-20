@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Conditions;
@@ -136,7 +138,7 @@ public class AlertRulesController : ControllerBase
                 Severity = p.Severity,
                 CanWait = p.CanWait,
                 ConditionType = p.ConditionType,
-                ConditionParams = p.ConditionParams is null ? null : DeserializeJson(p.ConditionParams),
+                ConditionParams = p.ConditionParams is null ? null : AlertRuleResponses.Json(p.ConditionParams),
                 AutoResolve = p.AutoResolve,
                 TrackerCategories = [.. p.TrackerCategories],
                 TrackerOnlyAgeHours = p.TrackerOnlyAgeHours,
@@ -159,7 +161,7 @@ public class AlertRulesController : ControllerBase
             : AutoResolveSuggestion.For(JsonSerializer.Serialize(request.Condition));
         return Ok(new AutoResolveSuggestionResponse
         {
-            Condition = suggestion is null ? null : DeserializeJson(suggestion),
+            Condition = suggestion is null ? null : AlertRuleResponses.Json(suggestion),
         });
     }
 
@@ -395,7 +397,7 @@ public class AlertRulesController : ControllerBase
         var rule = await _alerts.GetRuleAsync(id, ct);
         if (rule is null) return NotFound();
 
-        await _deliveryService.TestFireAsync(id, rule.Channels, BuildTestPayload(rule.Rule, tenantId), ct);
+        await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, DateTime.UtcNow), ct);
         return Accepted();
     }
 
@@ -435,41 +437,11 @@ public class AlertRulesController : ControllerBase
                 c.DestinationLabel, i, AlertRuleChannelWriter.SerializeMetadata(c.Metadata), _channels.EncryptSecret(c.Secret)))
             .ToList();
 
-        var payload = new AlertPayload
-        {
-            AlertType = AlertConditionType.Composite,
-            RuleName = $"[Test] {request.Name}",
-            Severity = request.Severity,
-            TenantId = tenantId,
-            GlucoseValue = null,
-            Trend = null,
-            TrendRate = null,
-            ReadingTimestamp = DateTime.UtcNow,
-            SubjectName = "Test fire",
-            ExcursionId = Guid.Empty,
-            InstanceId = Guid.Empty,
-            ActiveExcursionCount = 0,
-        };
+        var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, DateTime.UtcNow);
 
         await _deliveryService.TestFireDryRunAsync(channels, payload, ct);
         return Accepted();
     }
-
-    internal static AlertPayload BuildTestPayload(AlertRuleSnapshot rule, Guid tenantId) => new()
-    {
-        AlertType = rule.ConditionType,
-        RuleName = $"[Test] {rule.Name}",
-        Severity = rule.Severity,
-        TenantId = tenantId,
-        GlucoseValue = null,
-        Trend = null,
-        TrendRate = null,
-        ReadingTimestamp = DateTime.UtcNow,
-        SubjectName = "Test fire",
-        ExcursionId = Guid.Empty,
-        InstanceId = Guid.Empty,
-        ActiveExcursionCount = 0,
-    };
 
     #region Helpers
 
@@ -572,7 +544,7 @@ public class AlertRulesController : ControllerBase
         Name = record.Rule.Name,
         Description = record.Description,
         ConditionType = record.Rule.ConditionType,
-        ConditionParams = DeserializeJson(record.Rule.ConditionParams),
+        ConditionParams = AlertRuleResponses.Json(record.Rule.ConditionParams),
         IsEnabled = record.IsEnabled,
         SortOrder = record.Rule.SortOrder,
         Severity = record.Rule.Severity,
@@ -584,33 +556,12 @@ public class AlertRulesController : ControllerBase
         AutoResolveEnabled = record.Rule.AutoResolveEnabled,
         AutoResolveParams = record.Rule.AutoResolveParams is null
             ? null
-            : DeserializeJson(record.Rule.AutoResolveParams),
-        ClientConfiguration = DeserializeJson(record.Rule.ClientConfiguration),
+            : AlertRuleResponses.Json(record.Rule.AutoResolveParams),
+        ClientConfiguration = AlertRuleResponses.Json(record.Rule.ClientConfiguration),
         Channels = record.Channels
-            .Select(c => new AlertRuleChannelResponse
-            {
-                Id = c.Id,
-                ChannelType = c.ChannelType,
-                Destination = c.Destination,
-                DestinationLabel = c.DestinationLabel,
-                SortOrder = c.SortOrder,
-                Metadata = c.Metadata is null ? null : DeserializeJson(c.Metadata),
-                HasSecret = c.Secret is not null,
-            })
+            .Select(AlertRuleResponses.Channel)
             .ToList(),
     };
-
-    private static object DeserializeJson(string json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<JsonElement>(json);
-        }
-        catch
-        {
-            return new { };
-        }
-    }
 
     /// <summary>
     /// Returns a <c>400 BadRequest</c> when the rule contains a <c>tracker_age</c> leaf whose
@@ -775,36 +726,6 @@ public class AlertRuleResponse
     public List<AlertRuleChannelResponse> Channels { get; set; } = [];
 }
 
-public class AlertRuleChannelResponse
-{
-    public Guid Id { get; set; }
-    public ChannelType ChannelType { get; set; }
-    public string Destination { get; set; } = string.Empty;
-    public string? DestinationLabel { get; set; }
-    public int SortOrder { get; set; }
-    /// <summary>Channel-specific config (e.g. device_action capabilities). Null when unset.</summary>
-    public object? Metadata { get; set; }
-    /// <summary>Whether a webhook signing secret is stored for this channel. The secret itself is
-    /// never returned.</summary>
-    public bool HasSecret { get; set; }
-    /// <summary>Who an <c>in_app</c> channel is sent to. Set only for in-app channels, and only
-    /// for a caller who may edit alert rules.</summary>
-    public InAppRecipientResponse? Recipient { get; set; }
-}
-
-/// <summary>The recipient of an <c>in_app</c> alert channel.</summary>
-public class InAppRecipientResponse
-{
-    /// <summary>The subject the channel names. Null when it names none.</summary>
-    public Guid? SubjectId { get; set; }
-    /// <summary>The name the site knows the member by. Null when they cannot receive.</summary>
-    public string? Name { get; set; }
-    /// <summary>Whether the channel reaches someone: the subject is a member of the site whose
-    /// roles grant any access. A channel that does not is sent to whoever next saves the
-    /// rule.</summary>
-    public bool CanReceive { get; set; }
-}
-
 public class CreateAlertRuleRequest
 {
     public string Name { get; set; } = string.Empty;
@@ -835,25 +756,6 @@ public class UpdateAlertRuleRequest
     public object? AutoResolveParams { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertRuleChannelRequest>? Channels { get; set; }
-}
-
-public class CreateAlertRuleChannelRequest
-{
-    public ChannelType ChannelType { get; set; }
-    /// <summary>Channel-specific address: webhook URL, chat handle, device kind for device_action, etc. Empty for in-app/web-push.</summary>
-    public string? Destination { get; set; }
-    public string? DestinationLabel { get; set; }
-    /// <summary>Channel-specific config, persisted as JSONB. For device_action: <c>{ "capabilities": ["notify", ...] }</c>.</summary>
-    public object? Metadata { get; set; }
-    /// <summary>
-    /// Write-only HMAC signing secret for a <c>webhook</c> channel; the receiver verifies it
-    /// against the <c>X-Nocturne-Signature</c> header. Omit to keep the secret stored against this
-    /// channel type and destination — changing either is a new channel and carries no secret over.
-    /// Send empty to clear it. At most 256 bytes once UTF-8 encoded. Never returned — the read side
-    /// reports <see cref="AlertRuleChannelResponse.HasSecret"/> instead.
-    /// </summary>
-    [MaxLength(256)]
-    public string? Secret { get; set; }
 }
 
 /// <summary>

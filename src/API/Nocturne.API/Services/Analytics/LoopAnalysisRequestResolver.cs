@@ -1,6 +1,6 @@
 using Nocturne.API.Authorization;
-using Nocturne.API.Controllers.V4.Analytics;
-using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -127,7 +127,7 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
             return new LoopAnalysisRequest(null, null, reason, null, null, masks, ignored, unavailable, clamped);
         }
 
-        var maxDays = V4ReadLimits.MaxAnalyticsSpanDays;
+        var maxDays = V4ApiLimits.MaxAnalyticsSpanDays;
         var now = asOf ?? timeProvider.GetUtcNow().UtcDateTime;
         var primary = LoopAnalysisRanges.Resolve(query.StartDate, query.EndDate, zone, maxDays, now);
         DateTime? visibleFrom = null;

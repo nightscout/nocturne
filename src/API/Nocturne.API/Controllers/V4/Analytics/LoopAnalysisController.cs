@@ -3,6 +3,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Contracts.Analytics;

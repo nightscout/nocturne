@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
