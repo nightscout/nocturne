@@ -621,6 +621,7 @@ public static class ServiceRegistrationExtensions
         // Singleton because its consumer runs at startup outside any request scope; it creates its
         // own scope per notification.
         services.AddSingleton<IShareLinkRotatedNotifier, ShareLinkRotatedNotifier>();
+        services.AddScoped<IConnectorAttentionNotifier, ConnectorAttentionNotifier>();
 
         // Passkey (WebAuthn/FIDO2) services
         services.AddScoped<IPasskeyService, PasskeyService>();

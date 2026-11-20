@@ -63,6 +63,32 @@ public class ConnectorPropertyAttribute : Attribute
     public bool Hidden { get; set; }
 
     /// <summary>
+    ///     The property whose value decides whether this one applies, named by its key. Set together
+    ///     with <see cref="VisibleWhenValues"/>: the property is shown, and if <see cref="Required"/>
+    ///     is demanded, only while the master property holds one of those values. A connector whose
+    ///     regions or modes need different credentials declares each credential against the mode it
+    ///     belongs to instead of asking for all of them at once.
+    /// </summary>
+    public ConnectorPropertyKey VisibleWhen { get; set; }
+
+    /// <summary>The master property values (compared without case) under which this property applies.</summary>
+    public string[]? VisibleWhenValues { get; set; }
+
+    /// <summary>Whether this property applies only under some values of another.</summary>
+    public bool HasVisibilityCondition => VisibleWhenValues is { Length: > 0 };
+
+    /// <summary>
+    ///     Whether the property applies given the master property's current value. A property
+    ///     without a condition always applies; with one, a null master value never satisfies it.
+    /// </summary>
+    public bool AppliesFor(object? masterValue)
+    {
+        if (!HasVisibilityCondition) return true;
+        var text = masterValue?.ToString();
+        return text is not null && VisibleWhenValues!.Any(v => string.Equals(v, text, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     ///     Default value if not specified in configuration.
     /// </summary>
     public string? DefaultValue { get; set; }

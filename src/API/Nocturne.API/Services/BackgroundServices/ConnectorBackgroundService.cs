@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.API.Services.Jobs;
 using Nocturne.Connectors.Core.Utilities;
@@ -502,6 +503,12 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
             ConnectorName,
             result.Success && signInFailure == null ? "success" : "failure",
             Stopwatch.GetElapsedTime(started));
+
+        // A connector whose credential only the tenant can renew says so here; the owner is told
+        // once and the notice is taken down when a later run no longer asks.
+        if (run.Services.GetService<IConnectorAttentionNotifier>() is { } attentionNotifier)
+            await attentionNotifier.ApplyAsync(
+                tenantId, Registration.ConnectorId, Registration.DisplayName, result.Attention, stoppingToken);
 
         if (result.Success && signInFailure == null)
         {

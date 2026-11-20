@@ -141,6 +141,18 @@
       }
     }
 
+    // A connector asking for a new sign-in is answered in its settings page, which the server
+    // cannot open; the notice comes down by itself once a sync no longer asks.
+    if (
+      notification.type?.startsWith("connector.") &&
+      actionId === "open" &&
+      notification.sourceId
+    ) {
+      markRead(notification.id);
+      goto(resolve(`settings/connectors/${notification.sourceId.toLowerCase()}`));
+      return;
+    }
+
     const removal = realtimeStore?.removeNotification(notification.id);
     try {
       await executeAction({ id: notification.id, actionId });

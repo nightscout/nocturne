@@ -8,6 +8,9 @@ const LABEL_MAP: Record<string, string> = {
   compression_low_detected_subtitle:
     "Possible overnight compression lows are ready to review",
   review: "Review",
+  connector_reconnect_required: "A connector needs you to sign in again",
+  connector_reconnect_soon: "A connector's sign-in expires soon",
+  connector_open_settings: "Open connector settings",
   release_notes: "Release notes",
   update_available: "A Nocturne update is available",
   instance_key_changed: "Enter some secrets again",

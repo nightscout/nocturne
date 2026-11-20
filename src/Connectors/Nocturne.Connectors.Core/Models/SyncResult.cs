@@ -30,4 +30,11 @@ public class SyncResult
     /// Null when the run was refused or never reached a connector.
     /// </summary>
     public long? DurationMs { get; set; }
+
+    /// <summary>
+    ///     What the tenant has to do for the connector, or null when nothing. Read by the host after
+    ///     every scheduled sync, which files or clears the tenant's notification accordingly; a
+    ///     connector that never sets it never notifies.
+    /// </summary>
+    public ConnectorAttention? Attention { get; set; }
 }

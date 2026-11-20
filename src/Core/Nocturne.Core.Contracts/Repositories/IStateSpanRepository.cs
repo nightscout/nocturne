@@ -109,6 +109,13 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    ///     Folds every stored run of touching same-state, same-source device spans into one span,
+    ///     the way <see cref="UpsertStateSpanAsync"/> does for a span as it arrives. Absorbed spans
+    ///     are soft-deleted.
+    /// </summary>
+    Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Writes each of <paramref name="stateSpans"/> onto the live row carrying its id, with one save.
     /// </summary>
     /// <remarks>A span's id is its original id when it has one, as <see cref="UpdateStateSpanAsync"/> matches it.</remarks>

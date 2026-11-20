@@ -167,6 +167,7 @@ public class V4WriteScopeGatingTests
 
             ["DeduplicationController"] = NotDataCategory.SuperuserAttribute,
             ["MigrationController"] = NotDataCategory.SuperuserAttribute,
+            ["StateSpanMaintenanceController"] = NotDataCategory.SuperuserAttribute,
 
             // CompatibilityController repeats [RequireSuperuser] per action rather than carrying it on
             // the class.
@@ -196,6 +197,7 @@ public class V4WriteScopeGatingTests
             ["ConnectorFoodEntriesController"] = NotDataCategory.ConnectorFoodImport,
 
             ["ConfigurationController"] = NotDataCategory.TenantSettingsScope,
+            ["GlookoXtConnectController"] = NotDataCategory.TenantSettingsScope,
             ["MyFitnessPalSettingsController"] = NotDataCategory.TenantSettingsScope,
             ["WebhookSettingsController"] = NotDataCategory.TenantSettingsScope,
 

@@ -22,9 +22,9 @@ public class GlookoConstantsRegionTests
     }
 
     [Fact]
-    public void Every_allowed_region_has_both_mappings()
+    public void Every_classic_region_has_both_mappings()
     {
-        foreach (var region in GlookoConstants.AllowedRegions)
+        foreach (var region in GlookoConstants.ClassicRegions)
         {
             GlookoConstants.ServerMapping.Should().ContainKey(region);
             GlookoConstants.WebOriginMapping.Should().ContainKey(region);

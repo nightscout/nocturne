@@ -122,6 +122,9 @@ public interface IStateSpanService
         int following,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.FoldStoredSpansAsync"/>
+    Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default);
+
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteStateSpanAsync(
         string id,

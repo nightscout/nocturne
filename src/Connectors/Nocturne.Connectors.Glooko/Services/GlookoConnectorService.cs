@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Connectors.Glooko.Xt;
 using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
@@ -35,6 +36,9 @@ public class GlookoConnectorService
     // in a window waits this long.
     private static readonly TimeSpan DefaultEndpointPause = TimeSpan.FromSeconds(5);
 
+    /// <summary>The Glooko XT read path; null when XT support is not installed.</summary>
+    private readonly GlookoXtSyncPath? _xtPath;
+
     public GlookoConnectorService(
         HttpClient httpClient,
         IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
@@ -47,10 +51,12 @@ public class GlookoConnectorService
         IDeviceClockService? deviceClockService = null,
         IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? timeProvider = null,
-        TimeSpan? endpointPause = null
+        TimeSpan? endpointPause = null,
+        IGlookoXtDataClient? xtDataClient = null
     )
         : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
+        _xtPath = xtDataClient is null ? null : new GlookoXtSyncPath(xtDataClient, logger, Clock);
         _mealMatchingService = mealMatchingService;
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
@@ -67,7 +73,11 @@ public class GlookoConnectorService
     {
         var token = await ValidTokenAsync(context.Config, context.CancellationToken);
         if (token is null)
+        {
+            if (context.Config.IsXt && TokenProvider.XtSignInFailure is { } xtFailure)
+                TrackFailedAuthentication(xtFailure);
             return false;
+        }
 
         // The token IS the session cookie for Glooko
         context.SessionCookie = token;
@@ -336,9 +346,19 @@ public class GlookoConnectorService
             await ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
 
             if (!await AuthenticateWithConfigAsync(context))
-                return AuthenticationFailedResult();
+            {
+                var failed = AuthenticationFailedResult();
+                if (config.IsXt) failed.Attention = ConnectorAttention.ReconnectRequired();
+                return failed;
+            }
 
             var activeTypes = ResolveActiveTypes(request, config);
+
+            if (config.IsXt)
+            {
+                await RunXtSyncAsync(context, request, activeTypes, result, cancellationToken);
+                return result;
+            }
 
             // Resolve the tenant's timezone timeline before mapping any records. The account's home
             // zone (from the V3 profile) seeds the timeline's origin on first sync; thereafter the
@@ -551,6 +571,91 @@ public class GlookoConnectorService
             _logger.LogWarning(ex,
                 "[{ConnectorSource}] Could not record the sync stamp ({Resource})", ConnectorSource, resource);
         }
+    }
+
+    /// <summary>
+    ///     The Glooko XT run. XT is a logbook read by a single call over the whole account, so one
+    ///     window serves every family — from the caller's bound (the lookback or full walk the
+    ///     scheduler resolved, or a manual range) to now — and every record fans out into the
+    ///     enabled types. Timestamps are UTC on the wire, so the Glooko time mapping does not apply.
+    /// </summary>
+    private async Task RunXtSyncAsync(
+        GlookoSyncContext context,
+        SyncRequest request,
+        HashSet<SyncDataType> activeTypes,
+        SyncResult result,
+        CancellationToken cancellationToken)
+    {
+        if (_xtPath is null)
+        {
+            result.Success = false;
+            result.Message = "Glooko XT support is not installed on this server.";
+            result.Errors.Add(result.Message);
+            return;
+        }
+
+        var token = context.SessionCookie!;
+        var now = Clock.GetUtcNow().UtcDateTime;
+        var from = DateTime.SpecifyKind(request.From ?? now.AddMonths(-GlookoConstants.FullWalkMonths), DateTimeKind.Utc);
+        var to = DateTime.SpecifyKind(request.To ?? now + GlookoXtConstants.FutureSlack, DateTimeKind.Utc);
+        if (from >= to) return;
+
+        // The token cannot be renewed without the tenant at their email, so a lapse in sight is
+        // worth telling them about while every sync still succeeds.
+        if (GlookoXtJwt.TryGetExpiry(token) is { } expiry && expiry - now <= GlookoXtConstants.ReconnectNotice)
+            result.Attention = ConnectorAttention.ReconnectSoon(expiry);
+
+        GlookoXtSyncPath.Fetched fetched;
+        try
+        {
+            fetched = await _xtPath.FetchAsync(token, from, to, activeTypes,
+                (f, t) => ReportSyncMessageAsync(SyncMessageType.FetchingData,
+                    new() { ["from"] = f.ToString("MMM dd"), ["to"] = t.ToString("MMM dd") }, cancellationToken),
+                cancellationToken);
+        }
+        catch (GlookoXtAuthenticationException ex)
+        {
+            _logger.LogWarning(ex, "[{ConnectorSource}] Glooko XT refused the stored sign-in", ConnectorSource);
+            TokenProvider.InvalidateToken();
+            TrackFailedRequest(ex.Message);
+            result.Success = false;
+            result.Message = "Glooko XT refused the stored sign-in. Open the connector settings and sign in again with a new emailed code.";
+            result.Errors.Add(result.Message);
+            result.Attention = ConnectorAttention.ReconnectRequired();
+            return;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
+        {
+            _logger.LogError(ex, "[{ConnectorSource}] Fetching Glooko XT records failed", ConnectorSource);
+            TrackFailedRequest(ex.Message);
+            result.Success = false;
+            result.Message = $"Could not read from Glooko XT: {ex.Message}";
+            result.Errors.Add(result.Message);
+            return;
+        }
+
+        TrackSuccessfulRequest();
+        _logger.LogInformation(
+            "[{ConnectorSource}] Fetched {Count} Glooko XT records for {From:O}..{To:O}",
+            ConnectorSource, fetched.Records.Count, from, to);
+
+        var batch = _xtPath.Map(fetched);
+        if (batch.Skipped > 0)
+            _logger.LogDebug("[{ConnectorSource}] {Skipped} Glooko XT records carried nothing to import", ConnectorSource, batch.Skipped);
+
+        var config = context.Config;
+        await PublishRecordTypeAsync(result, activeTypes, batch.SensorGlucose, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.BGChecks, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.Boluses, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.BolusCalculations, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.BasalInjections, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.CarbIntakes, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.TempBasals, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.DeviceEvents, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.SystemEvents, config, cancellationToken, "alarms");
+        await PublishRecordTypeAsync(result, activeTypes, batch.StateSpans, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.Profiles, config, cancellationToken);
+        await PublishRecordTypeAsync(result, activeTypes, batch.Notes, config, cancellationToken);
     }
 
     /// <summary>
