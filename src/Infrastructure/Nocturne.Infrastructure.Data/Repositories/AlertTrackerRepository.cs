@@ -290,6 +290,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         AutoResolveEnabled = entity.AutoResolveEnabled,
         AutoResolveParams = entity.AutoResolveParams,
         OnUnknown = entity.OnUnknown,
+        GlucoseFreshnessMinutes = entity.GlucoseFreshnessMinutes,
         CreatedAt = entity.CreatedAt,
         UpdatedAt = entity.UpdatedAt,
     };

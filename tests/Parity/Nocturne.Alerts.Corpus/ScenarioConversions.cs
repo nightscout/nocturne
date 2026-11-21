@@ -44,6 +44,7 @@ public static class ScenarioConversions
             AutoResolveEnabled = rule.AutoResolveEnabled,
             AutoResolveParams = rule.AutoResolveParams?.GetRawText(),
             OnUnknown = rule.OnUnknown ?? AlertRuleOnUnknown.Hold,
+            GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
         };
     }
 
@@ -53,6 +54,7 @@ public static class ScenarioConversions
         {
             LatestValue = ctx.LatestValue,
             LatestTimestamp = Utc(ctx.LatestTimestamp),
+            LatestReceivedAt = Utc(ctx.LatestReceivedAt),
             TrendRate = ctx.TrendRate,
             LastReadingAt = Utc(ctx.LastReadingAt),
             TrendBucket = ParseWireEnum<TrendBucket>(ctx.TrendBucket),

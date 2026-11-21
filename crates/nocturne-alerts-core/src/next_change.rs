@@ -17,6 +17,7 @@ use crate::engine::{EngineState, Rule};
 use crate::enums::WireEnum;
 use crate::eval::clock::{local, tenant_zone, time_of_day_zone};
 use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf};
+use crate::eval::glucose::freshness_expiry;
 use crate::excursion::{TrackerStateKind, hysteresis_expiry};
 use crate::leaf_identity::nodes_with_paths;
 use crate::model::{Node, Payload};
@@ -45,6 +46,7 @@ pub(crate) fn next_change_at(
     let mut scan = Scan {
         now,
         rule_id: rule.id,
+        glucose_freshness: rule.glucose_freshness,
         ctx,
         timers: &state.timers,
         earliest: None,
@@ -96,6 +98,7 @@ fn on_tick(at: DateTime<Utc>, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
 struct Scan<'a> {
     now: DateTime<Utc>,
     rule_id: Uuid,
+    glucose_freshness: TimeDelta,
     ctx: &'a SensorContext,
     timers: &'a TimerStore,
     earliest: Option<DateTime<Utc>>,
@@ -124,6 +127,9 @@ impl Scan<'_> {
                 Payload::DayOfWeek(_) => self.calendar(tenant_zone(self.ctx), &[NaiveTime::MIN]),
                 payload => {
                     if let Some(e) = clock_leaf(payload, self.ctx).and_then(ClockLeaf::elapsed) {
+                        self.elapsed(e);
+                    }
+                    if let Some(e) = freshness_expiry(payload, self.ctx, self.glucose_freshness) {
                         self.elapsed(e);
                     }
                 }

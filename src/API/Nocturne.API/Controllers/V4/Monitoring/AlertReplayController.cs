@@ -66,7 +66,7 @@ public class AlertReplayController : ControllerBase
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
-        if (UnknownWord(request.Rule) is { } invalid)
+        if (Invalid(request.Rule) is { } invalid)
             return invalid;
         try
         {
@@ -91,16 +91,23 @@ public class AlertReplayController : ControllerBase
     public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
         [FromBody] AlertFiringSearchRequest request, CancellationToken ct)
     {
-        if (UnknownWord(request.Rule) is { } invalid)
+        if (Invalid(request.Rule) is { } invalid)
             return invalid;
         return Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
     }
 
-    /// <summary>A 400 for an <c>on_unknown</c> naming none of <see cref="AlertRuleOnUnknown"/>, else null.</summary>
-    private ObjectResult? UnknownWord(ReplayRuleDefinition rule) =>
-        rule.OnUnknown is null || AlertRuleOnUnknown.IsKnown(rule.OnUnknown)
-            ? null
-            : Problem(detail: "OnUnknown must be hold, met or not_met", statusCode: 400, title: "Bad Request");
+    /// <summary>
+    /// A 400 for an <c>on_unknown</c> naming none of <see cref="AlertRuleOnUnknown"/>, or a
+    /// glucose freshness bound outside <see cref="AlertRuleGlucoseFreshness"/>'s range, else null.
+    /// </summary>
+    private ObjectResult? Invalid(ReplayRuleDefinition rule)
+    {
+        if (rule.OnUnknown is not null && !AlertRuleOnUnknown.IsKnown(rule.OnUnknown))
+            return Problem(detail: "OnUnknown must be hold, met or not_met", statusCode: 400, title: "Bad Request");
+        if (!AlertRuleGlucoseFreshness.IsValid(rule.GlucoseFreshnessMinutes))
+            return Problem(detail: AlertRuleGlucoseFreshness.InvalidMessage, statusCode: 400, title: "Bad Request");
+        return null;
+    }
 
     private static ReplayRuleOverride ToOverride(ReplayRuleDefinition rule) => new(
         Id: rule.Id,
@@ -111,7 +118,8 @@ public class AlertReplayController : ControllerBase
         AllowThroughDnd: rule.AllowThroughDnd,
         AutoResolveEnabled: rule.AutoResolveEnabled,
         AutoResolveParams: rule.AutoResolveParams,
-        OnUnknown: rule.OnUnknown);
+        OnUnknown: rule.OnUnknown,
+        GlucoseFreshnessMinutes: rule.GlucoseFreshnessMinutes);
 }
 
 /// <summary>Request body for the firing search.</summary>
@@ -147,7 +155,9 @@ public record AlertReplayDryRunRequest(
 /// shape — the controller doesn't deserialise the condition tree itself, just the
 /// <see cref="ConditionParams"/> JSON blob the rule body would have stored.
 /// <see cref="OnUnknown"/> is one of <see cref="AlertRuleOnUnknown"/>; null is the stored rule's
-/// word when <see cref="Id"/> names one, else <c>hold</c>.
+/// word when <see cref="Id"/> names one, else <c>hold</c>. <see cref="GlucoseFreshnessMinutes"/> is
+/// in <see cref="AlertRuleGlucoseFreshness"/>'s range; null is the stored rule's bound in the same
+/// way, else the engine's default.
 /// </summary>
 public record ReplayRuleDefinition(
     Guid? Id,
@@ -158,4 +168,5 @@ public record ReplayRuleDefinition(
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
     string? AutoResolveParams,
-    string? OnUnknown = null);
+    string? OnUnknown = null,
+    int? GlucoseFreshnessMinutes = null);

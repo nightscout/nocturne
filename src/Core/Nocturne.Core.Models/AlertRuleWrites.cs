@@ -28,7 +28,8 @@ public sealed record AlertRuleWrite(
     string? AutoResolveParams,
     string ClientConfiguration,
     string? ReviewReason = null,
-    string OnUnknown = AlertRuleOnUnknown.Hold)
+    string OnUnknown = AlertRuleOnUnknown.Hold,
+    int? GlucoseFreshnessMinutes = null)
 {
     /// <summary>The stored rule's values.</summary>
     public static AlertRuleWrite Of(AlertRuleRecord record) => new(
@@ -45,7 +46,8 @@ public sealed record AlertRuleWrite(
         record.Rule.AutoResolveParams,
         record.Rule.ClientConfiguration,
         record.ReviewReason,
-        record.Rule.OnUnknown);
+        record.Rule.OnUnknown,
+        record.Rule.GlucoseFreshnessMinutes);
 }
 
 /// <summary>

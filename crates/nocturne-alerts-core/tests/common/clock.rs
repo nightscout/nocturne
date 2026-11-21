@@ -89,8 +89,10 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
             option::of(zone),
         ),
         (
+            option::of(-5..=5i32),
             option::of(word_or_unrecognised::<TrendBucket>("sideways")),
             option::of(word_or_unrecognised::<GlucoseBucket>("off_the_chart")),
+            age(),
         ),
     )
         .prop_map(
@@ -98,13 +100,17 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                 (reading, site, sensor, aps, enacted, carb, bolus),
                 (suspension, override_, dnd, pump_state, span, alert),
                 (glucose, aps_cycled, pump_snapshot, mode, category, alert_state, zone),
-                (trend, glucose_bucket),
+                (rate, trend, bucket, received),
             )| {
                 let at = |s| anchor(now, s);
                 let started = |s| at(s).map(|at| json!({ "started_at": at }));
                 object(vec![
                     ("latest_value", glucose.map(Value::from)),
+                    ("trend_rate", rate.map(Value::from)),
+                    ("trend_bucket", trend.map(Value::from)),
+                    ("glucose_bucket", bucket.map(Value::from)),
                     ("latest_timestamp", at(reading)),
+                    ("latest_received_at", at(received)),
                     ("last_reading_at", at(reading)),
                     ("last_site_change_at", at(site)),
                     ("last_sensor_start_at", at(sensor)),
@@ -150,8 +156,6 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                         }),
                     ),
                     ("tenant_time_zone_id", zone.map(Value::from)),
-                    ("trend_bucket", trend.map(Value::from)),
-                    ("glucose_bucket", glucose_bucket.map(Value::from)),
                 ])
             },
         )

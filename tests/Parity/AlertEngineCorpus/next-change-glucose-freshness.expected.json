@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "scenario": "next-change-glucose-freshness",
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "next_change_at": "2026-03-02T12:11:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "next_change_at": "2026-03-02T12:20:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-03-02T12:11:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "next_change_at": "2026-03-02T12:11:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "next_change_at": "2026-03-02T12:20:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-03-02T12:11:01Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "next_change_at": "2026-03-02T12:20:00Z"
+        }
+      ]
+    }
+  ]
+}

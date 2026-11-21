@@ -70,6 +70,13 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
 
     /// <summary>
+    /// Minutes a reading stays fresh for the rule's reading-driven leaves; null is the engine's
+    /// default.
+    /// </summary>
+    [Column("glucose_freshness_minutes")]
+    public int? GlucoseFreshnessMinutes { get; set; }
+
+    /// <summary>
     /// Alert severity. Critical alerts bypass quiet hours.
     /// </summary>
     [Column("severity")]

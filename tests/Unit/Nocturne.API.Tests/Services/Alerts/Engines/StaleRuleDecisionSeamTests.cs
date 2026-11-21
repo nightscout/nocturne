@@ -90,6 +90,32 @@ public class StaleRuleDecisionSeamTests
         await ShouldStayActiveAsync(fixture);
     }
 
+    /// <summary>
+    /// What an unknown root means and how old a reading may be are part of what a decision is made
+    /// against, so a decision taken before either changed is dropped.
+    /// </summary>
+    [NativeTheory]
+    [InlineData("on_unknown")]
+    [InlineData("glucose freshness")]
+    public async Task A_pre_edit_evaluation_of_a_changed_reading_of_unknown_sets_no_hold(string field)
+    {
+        var rule = Rule();
+        var preEdit = Snapshot(rule);
+        var fixture = await BuildAsync(rule, r =>
+        {
+            if (field == "on_unknown")
+                r.OnUnknown = AlertRuleOnUnknown.NotMet;
+            else
+                r.GlucoseFreshnessMinutes = 30;
+        });
+
+        var evaluation = await fixture.Engine.EvaluateRuleAsync(
+            preEdit, Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
+
+        evaluation.AutoResolved.Should().BeFalse();
+        await ShouldStayActiveAsync(fixture);
+    }
+
     [NativeFact]
     public async Task A_pre_edit_sweep_auto_resolve_sets_no_hold()
     {

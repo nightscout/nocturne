@@ -116,7 +116,8 @@ public sealed class ReplayWindowTooLargeException : Exception
 /// shape. <see cref="Id"/> is optional: when present and matching an existing rule it
 /// replaces it for the replay; otherwise the override is appended to the rule list.
 /// <see cref="OnUnknown"/> null is the stored rule's word when <see cref="Id"/> names one, else
-/// <c>hold</c>.
+/// <c>hold</c>; <see cref="GlucoseFreshnessMinutes"/> null is the stored rule's bound in the same
+/// way, else the engine's default.
 /// </summary>
 public record ReplayRuleOverride(
     Guid? Id,
@@ -127,7 +128,8 @@ public record ReplayRuleOverride(
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
     string? AutoResolveParams,
-    string? OnUnknown = null);
+    string? OnUnknown = null,
+    int? GlucoseFreshnessMinutes = null);
 
 /// <summary>
 /// Discriminator for the per-rule timeline events surfaced by replay. Defaults to

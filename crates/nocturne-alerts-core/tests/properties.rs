@@ -42,14 +42,16 @@ use nocturne_alerts_core::excursion::{
 use nocturne_alerts_core::model::{
     ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
 };
+use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
 use nocturne_alerts_core::truth::Truth;
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
 use clock::{clock_context, naming_the_context, word_or_unrecognised};
 use generators::{
-    RULE_ID, Tick, arbitrary_json, base, composite, is_container, mutated, mutations, node,
-    node_value, on_unknown, payload, rule_spec, simple_leaf, ticks, tree, word,
+    RULE_ID, Tick, arbitrary_json, base, composite, glucose_freshness_minutes, is_container,
+    mutated, mutations, node, node_value, on_unknown, payload, rule_spec, simple_leaf, ticks, tree,
+    word,
 };
 
 #[derive(Debug, Clone)]
@@ -387,14 +389,36 @@ fn apply_ops(
     Ok(())
 }
 
-/// The leaves and Kleene connectives of the generated trees, and the
-/// `sustained` rule of §3 stated as a run start per path.
-#[derive(Default)]
+/// The leaves and Kleene connectives of the generated trees, the reading
+/// freshness of §3, and the `sustained` rule of §3 stated as a run start per
+/// path.
 struct Model {
     run_starts: BTreeMap<String, DateTime<Utc>>,
+    glucose_freshness_minutes: i64,
 }
 
 impl Model {
+    /// For a rule whose own bound is `minutes`, the engine's default when
+    /// absent.
+    fn new(minutes: Option<i64>) -> Self {
+        Model {
+            run_starts: BTreeMap::new(),
+            glucose_freshness_minutes: minutes.unwrap_or(11),
+        }
+    }
+
+    /// More than the bound has passed since the reading arrived, else since its
+    /// timestamp: exactly the bound is fresh.
+    fn stale(&self, ctx: &Value, now: DateTime<Utc>) -> bool {
+        let arrived = ctx["latest_received_at"].as_str();
+        arrived
+            .or(ctx["latest_timestamp"].as_str())
+            .is_some_and(|at| {
+                let at: DateTime<Utc> = at.parse().expect("an instant");
+                now - at > TimeDelta::minutes(self.glucose_freshness_minutes)
+            })
+    }
+
     fn eval(&mut self, node: &Value, path: &str, ctx: &Value, now: DateTime<Utc>) -> Truth {
         let kind = node["type"].as_str().expect("a typed node");
         let payload = &node[kind];
@@ -405,7 +429,10 @@ impl Model {
         match kind {
             "threshold" => {
                 let value = payload["value"].as_i64().unwrap();
-                match ctx["latest_value"].as_i64() {
+                match ctx["latest_value"]
+                    .as_i64()
+                    .filter(|_| !self.stale(ctx, now))
+                {
                     None => Truth::Unknown,
                     Some(latest) if payload["direction"] == "above" => (latest > value).into(),
                     Some(latest) => (latest < value).into(),
@@ -532,7 +559,7 @@ proptest! {
     ) {
         let rule = rule_from_wire(spec.wire());
         let mut state = EngineState::new();
-        let mut model = Model::default();
+        let mut model = Model::new(spec.glucose_freshness_minutes);
         let body = node("composite", spec.wire()["condition_params"].clone());
         let resolve = spec.wire()["auto_resolve_params"].clone();
         for tick in &ticks {
@@ -598,6 +625,81 @@ proptest! {
                         format!("{before:?}")
                     );
                 }
+            }
+        }
+    }
+}
+
+proptest! {
+    /// §5.1: under `hold` the instant a reading goes stale needs no
+    /// evaluation. A leaf going from known to unknown cannot turn a known root
+    /// into the other known value, so an evaluation there either reads the
+    /// root an evaluation a tick earlier reads, or holds; and when it holds,
+    /// the ticks after it come out as they do without it. Both runs close an
+    /// elapsed hysteresis window at that instant, as the sweep does whatever
+    /// it evaluates (§6.1). Only instants where nothing else is due count:
+    /// another clock change there is a reason to evaluate of its own.
+    #[test]
+    fn under_hold_a_missed_evaluation_at_the_staleness_instant_changes_nothing_later(
+        spec in rule_spec(),
+        ticks in ticks(),
+    ) {
+        let mut wire = spec.wire();
+        wire["on_unknown"] = "hold".into();
+        let rule = rule_from_wire(wire);
+        let bound = TimeDelta::minutes(spec.glucose_freshness_minutes.unwrap_or(11));
+        let config = TrackerRuleConfig {
+            confirmation_readings: rule.confirmation_readings,
+            hysteresis_minutes: rule.hysteresis_minutes,
+        };
+        for k in 0..ticks.len() {
+            let ctx = context_of(&ticks[k]);
+            let Some(read_at) = ctx.latest_received_at.or(ctx.latest_timestamp) else {
+                continue;
+            };
+            let stale_at = read_at + bound + RESOLUTION;
+            if stale_at <= ticks[k].now || ticks.get(k + 1).is_some_and(|t| t.now <= stale_at) {
+                continue;
+            }
+            let mut timeless = rule.clone();
+            timeless.glucose_freshness = TimeDelta::days(3650);
+            let mut state = EngineState::new();
+            for t in &ticks[..k] {
+                evaluate_rule(&rule, &context_of(t), t.now, &mut state, false);
+            }
+            let otherwise_due = evaluate_rule(&timeless, &ctx, ticks[k].now, &mut state, false)
+                .evaluation
+                .expect("the body is evaluable")
+                .next_change_at;
+            if otherwise_due.is_some_and(|due| due <= stale_at) {
+                continue;
+            }
+            let run = |evaluate_there: bool, at: DateTime<Utc>| {
+                let mut state = EngineState::new();
+                for t in &ticks[..=k] {
+                    evaluate_rule(&rule, &context_of(t), t.now, &mut state, false);
+                }
+                let _ = state.tracker.close_elapsed_hysteresis(RULE_ID, config, at);
+                let there = evaluate_there.then(|| {
+                    evaluate_rule(&rule, &ctx, at, &mut state, false)
+                        .evaluation
+                        .expect("the body is evaluable")
+                        .root
+                });
+                let later: Vec<Value> = ticks[k + 1..]
+                    .iter()
+                    .map(|t| evaluate_rule(&rule, &context_of(t), t.now, &mut state, false).to_json())
+                    .collect();
+                (there, later)
+            };
+            let (stale_root, evaluated) = run(true, stale_at);
+            let stale_root = stale_root.expect("evaluated");
+            if stale_root.is_unknown() {
+                let (_, missed) = run(false, stale_at);
+                prop_assert_eq!(evaluated, missed);
+            } else {
+                let (fresh_root, _) = run(true, stale_at - RESOLUTION);
+                prop_assert_eq!(Some(stale_root), fresh_root);
             }
         }
     }
@@ -684,7 +786,7 @@ proptest! {
         let on_unknown = wire["on_unknown"].as_str().expect("an on_unknown word").to_owned();
         let rule = rule_from_wire(wire);
         let mut state = EngineState::new();
-        let mut model = Model::default();
+        let mut model = Model::new(None);
         let mut held = false;
         for tick in &ticks {
             let awaiting = state.tracker.awaiting_rearm(RULE_ID);
@@ -1078,6 +1180,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
             seeded_tracker(now),
             vec(1..=3600i64, 0..=2),
             on_unknown(),
+            glucose_freshness_minutes(),
         )
             .prop_map(
                 move |(
@@ -1089,6 +1192,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                     tracker,
                     mut earlier,
                     on_unknown,
+                    glucose_freshness_minutes,
                 )| {
                     let body = naming_the_context(body);
                     let kind = body["type"].as_str().expect("a node type").to_owned();
@@ -1103,6 +1207,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                             "auto_resolve_enabled": resolve.is_some(),
                             "auto_resolve_params": resolve.map(naming_the_context),
                             "on_unknown": on_unknown,
+                            "glucose_freshness_minutes": glucose_freshness_minutes,
                         }),
                         context,
                         tracker,

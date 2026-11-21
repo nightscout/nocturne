@@ -25,6 +25,7 @@ internal readonly record struct NextChange(DateTime? At, string Glucose)
     public static string GlucoseOf(SensorContext context) => string.Join(
         '|',
         Instant(context.LatestTimestamp),
+        Instant(context.LatestReceivedAt),
         context.LatestValue?.ToString(CultureInfo.InvariantCulture),
         context.TrendRate?.ToString(CultureInfo.InvariantCulture),
         context.TrendBucket?.ToString(),

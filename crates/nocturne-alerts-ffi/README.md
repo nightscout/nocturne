@@ -84,7 +84,8 @@ preserves sub-second precision when present.
     "hysteresis_minutes": 0,                // default 0
     "auto_resolve_enabled": false,          // default false
     "auto_resolve_params": { "type": "…" }, // full ConditionNode or null
-    "on_unknown": "hold"                    // hold|met|not_met; default hold; any other word is an envelope error
+    "on_unknown": "hold",                   // hold|met|not_met; default hold; any other word is an envelope error
+    "glucose_freshness_minutes": 11         // a whole number from 1 to 1440; absent or null is 11 (semantics §3); any other value is an envelope error
   },
   "context": { /* ScenarioContext corpus shape */ },
   "now": "2026-01-05T12:00:00Z",            // the evaluation instant
@@ -146,7 +147,8 @@ returned `tracker` is the one sent (with no per-rule state for a rule never
 evaluated before).
 
 Envelope-level errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
-`schema_version`, unknown root `condition_type`, an `on_unknown` naming no choice, a tracker `state` without
+`schema_version`, unknown root `condition_type`, an `on_unknown` naming no choice, a
+`glucose_freshness_minutes` that is not a whole number from 1 to 1440, a tracker `state` without
 `updated_at`, an instant (`now`, a timer, a tracker or context timestamp)
 before 0001-01-01 or from 10000-01-01 UTC on, and a rule body that cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
 `docs/alerts/engine-semantics.md` §1.4. That last error reads
@@ -321,8 +323,11 @@ Whether a rule must be evaluated on a timer as well as per reading: one of its
 kinds measures elapsed time against an anchor a reading does not move
 (`docs/alerts/engine-semantics.md` §5.1). A host that evaluates only when a
 reading arrives never fires such a rule while readings stop, so it schedules
-these rules on its sweep. The request is the rule body, as for `classify`, plus
-the rule's auto-resolve configuration, both fields optional:
+these rules on its sweep. A rule whose `on_unknown` is `met` or `not_met` is
+wall-clock too when it has a `threshold`, `rate_of_change`, `trend` or
+`glucose_bucket` kind: that leaf turns unknown when its reading goes stale
+(semantics §3). The request is the rule body, as for `classify`, plus the rule's
+auto-resolve configuration and `on_unknown`, all optional:
 
 ```jsonc
 {
@@ -330,7 +335,8 @@ the rule's auto-resolve configuration, both fields optional:
   "condition_type": "composite",
   "condition_params": { "operator": "and", "conditions": [ /* … */ ] },
   "auto_resolve_enabled": true,                     // default false
-  "auto_resolve_params": { "type": "staleness", … } // a full node; default null
+  "auto_resolve_params": { "type": "staleness", … }, // a full node; default null
+  "on_unknown": "hold"                               // hold|met|not_met; default hold
 }
 ```
 
@@ -351,7 +357,8 @@ A rule's kinds are read as evaluation reads them:
 - The auto-resolve tree's kinds count only while `auto_resolve_enabled`, and
   only when the tree is present, not `null` and evaluable.
 
-Only a malformed envelope is the error envelope.
+Only a malformed envelope, or an `on_unknown` naming no choice, is the error
+envelope.
 
 ## Rule reads (`nocturne_alerts_rule_reads`)
 

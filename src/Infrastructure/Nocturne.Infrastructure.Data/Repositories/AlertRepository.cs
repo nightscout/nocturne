@@ -100,7 +100,8 @@ public class AlertRepository : IAlertRepository
         rules.Select(r => new AlertRuleSnapshot(
             r.Id, r.TenantId, r.Name, r.ConditionType,
             r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-            r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass, r.OnUnknown));
+            r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass, r.OnUnknown,
+            r.GlucoseFreshnessMinutes));
 
     private sealed class StoredRuleEnums
     {
@@ -380,7 +381,7 @@ public class AlertRepository : IAlertRepository
                     x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
                     x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
                     x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd, x.r.ScopeClass,
-                    x.r.OnUnknown)))
+                    x.r.OnUnknown, x.r.GlucoseFreshnessMinutes)))
             .ToListAsync(ct);
     }
 

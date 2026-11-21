@@ -61,6 +61,10 @@ pub struct PredictedPoint {
 pub struct SensorContext {
     pub latest_value: Option<Decimal>,
     pub latest_timestamp: Option<DateTime<Utc>>,
+    /// When the host received the newest reading, which its glucose facts'
+    /// age is measured from (engine-semantics.md §3); absent is
+    /// `latest_timestamp`.
+    pub latest_received_at: Option<DateTime<Utc>>,
     pub trend_rate: Option<Decimal>,
     pub last_reading_at: Option<DateTime<Utc>>,
     pub trend_bucket: Option<TrendBucket>,
@@ -144,6 +148,8 @@ struct WireContext {
     latest_value: Option<Number>,
     #[serde(default)]
     latest_timestamp: Option<DateTime<Utc>>,
+    #[serde(default)]
+    latest_received_at: Option<DateTime<Utc>>,
     #[serde(default)]
     trend_rate: Option<Number>,
     #[serde(default)]
@@ -376,6 +382,7 @@ impl SensorContext {
         Ok(SensorContext {
             latest_value: opt_dec(w.latest_value.as_ref(), "latest_value")?,
             latest_timestamp: opt_ts(w.latest_timestamp, "latest_timestamp")?,
+            latest_received_at: opt_ts(w.latest_received_at, "latest_received_at")?,
             trend_rate: opt_dec(w.trend_rate.as_ref(), "trend_rate")?,
             last_reading_at: opt_ts(w.last_reading_at, "last_reading_at")?,
             trend_bucket: w.trend_bucket.and_then(|s| TrendBucket::from_name(&s)),

@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{OnUnknown, Rule};
+use nocturne_alerts_core::eval::DEFAULT_GLUCOSE_FRESHNESS;
 use nocturne_alerts_core::model::ConditionKind;
 use nocturne_alerts_core::replay::{
     ReplayError, ReplayEventKind, ReplayOptions, ReplayRuleState, ReplayTick, replay,
@@ -42,6 +43,7 @@ fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
+        glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
     }
 }
 

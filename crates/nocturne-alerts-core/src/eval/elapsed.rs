@@ -66,6 +66,8 @@ pub(crate) enum Measure {
     Minutes { op: CmpOp, minutes: f64 },
     /// `now - anchor >= bound` as exact durations.
     AtLeast(TimeDelta),
+    /// `now - anchor > bound` as exact durations.
+    Over(TimeDelta),
 }
 
 impl Elapsed {
@@ -94,6 +96,7 @@ impl Elapsed {
                 elapsed(now, self.anchor, Unit::Minutes).is_some_and(|m| op.apply(m, minutes))
             }
             Measure::AtLeast(bound) => now.signed_duration_since(self.anchor) >= bound,
+            Measure::Over(bound) => now.signed_duration_since(self.anchor) > bound,
         }
     }
 
@@ -103,7 +106,7 @@ impl Elapsed {
     /// `==` at both.
     pub(crate) fn monotone_parts(self) -> impl Iterator<Item = Elapsed> {
         let ops: &[CmpOp] = match self.measure {
-            Measure::AtLeast(_) => &[CmpOp::Ge],
+            Measure::AtLeast(_) | Measure::Over(_) => &[CmpOp::Ge],
             Measure::Decimal { op, .. } | Measure::Minutes { op, .. } => match op {
                 CmpOp::Lt | CmpOp::Ge => &[CmpOp::Ge],
                 CmpOp::Le | CmpOp::Gt => &[CmpOp::Gt],
@@ -121,7 +124,7 @@ impl Elapsed {
                     threshold,
                 },
                 Measure::Minutes { minutes, .. } => Measure::Minutes { op, minutes },
-                Measure::AtLeast(bound) => Measure::AtLeast(bound),
+                measure @ (Measure::AtLeast(_) | Measure::Over(_)) => measure,
             },
         })
     }

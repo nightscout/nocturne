@@ -141,6 +141,76 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [Fact]
+    public async Task Glucose_freshness_round_trips_create_read_update_and_snapshot()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        var (controller, db) = CreateController(validator.Object);
+        var body = Json("""{"direction": "below", "value": 70}""");
+
+        var unset = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Default",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+        unset.GlucoseFreshnessMinutes.Should().BeNull();
+
+        var created = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            GlucoseFreshnessMinutes = 30,
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+        created.GlucoseFreshnessMinutes.Should().Be(30);
+
+        var changed = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            GlucoseFreshnessMinutes = 20,
+        }, CancellationToken.None);
+        changed.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.GlucoseFreshnessMinutes.Should().Be(20);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == created.Id))
+            .GlucoseFreshnessMinutes.Should().Be(20);
+        var snapshots = await new AlertRepository(new TestNocturneDbContextFactory(db))
+            .GetEnabledRulesAsync(CancellationToken.None);
+        snapshots.Single(r => r.Id == created.Id).GlucoseFreshnessMinutes.Should().Be(20);
+        snapshots.Single(r => r.Id == unset.Id).GlucoseFreshnessMinutes.Should().BeNull();
+
+        var kept = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+        }, CancellationToken.None);
+        kept.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.GlucoseFreshnessMinutes
+            .Should().Be(20, "an update without it keeps the stored bound");
+
+        var cleared = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            ClearGlucoseFreshness = true,
+        }, CancellationToken.None);
+        cleared.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.GlucoseFreshnessMinutes
+            .Should().BeNull("clearing returns the rule to the engine's default");
+        (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == created.Id))
+            .GlucoseFreshnessMinutes.Should().BeNull();
+    }
+
+    [Fact]
     public async Task CreateRule_without_on_unknown_holds()
     {
         var validator = new Mock<IAlertRuleConditionValidator>();

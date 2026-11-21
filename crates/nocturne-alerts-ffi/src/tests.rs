@@ -125,7 +125,14 @@ fn evaluate_reports_the_next_change_and_omits_none() {
         json!({ "direction": "below", "value": 70 }),
     ));
     assert_eq!(reading_driven["ok"], json!(true), "{reading_driven}");
-    assert!(reading_driven["result"].get("next_change_at").is_none());
+    assert_eq!(
+        reading_driven["result"]["next_change_at"],
+        json!("2026-01-05T12:06:00Z")
+    );
+
+    let constant = evaluate(&request("iob", json!({ "operator": ">", "value": 2 })));
+    assert_eq!(constant["ok"], json!(true), "{constant}");
+    assert!(constant["result"].get("next_change_at").is_none());
 }
 
 #[test]
@@ -667,6 +674,38 @@ fn evaluate_rejects_wrong_schema_version() {
 }
 
 #[test]
+fn evaluate_reads_a_rules_glucose_freshness_bound() {
+    let request = |minutes: Value| {
+        json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": "threshold",
+                "condition_params": { "direction": "above", "value": 180 },
+                "glucose_freshness_minutes": minutes,
+            },
+            "context": {
+                "latest_value": 200,
+                "latest_timestamp": "2026-01-05T11:40:00Z",
+                "last_reading_at": "2026-01-05T11:40:00Z"
+            },
+            "now": "2026-01-05T12:00:00Z",
+        })
+    };
+    let default = evaluate(&request(Value::Null));
+    assert_eq!(default["result"]["unknown"], json!(true), "{default}");
+    let thirty = evaluate(&request(json!(30)));
+    assert_eq!(thirty["result"]["root"], json!(true), "{thirty}");
+    assert!(thirty["result"].get("unknown").is_none());
+    for bad in [json!(0), json!(-1), json!(1441)] {
+        assert_error(
+            &evaluate(&request(bad)),
+            "glucose_freshness_minutes must be a whole number of minutes from 1 to 1440",
+        );
+    }
+}
+
+#[test]
 fn evaluate_rejects_an_on_unknown_word_naming_no_choice() {
     for word in ["Hold", "ignore", ""] {
         let request = json!({
@@ -1066,6 +1105,29 @@ fn references_wall_clock_rejects_a_bad_envelope() {
         ),
         "unsupported schema_version 2",
     );
+}
+
+#[test]
+fn references_wall_clock_reads_on_unknown_for_a_freshness_leaf() {
+    let request = |on_unknown: Option<&str>| {
+        let mut request = json!({
+            "schema_version": 1,
+            "condition_type": "threshold",
+            "condition_params": { "direction": "above", "value": 180 },
+        });
+        if let Some(word) = on_unknown {
+            request["on_unknown"] = word.into();
+        }
+        call_json(nocturne_alerts_references_wall_clock, &request.to_string())
+    };
+    assert_eq!(request(None)["references_wall_clock"], json!(false));
+    assert_eq!(request(Some("hold"))["references_wall_clock"], json!(false));
+    assert_eq!(request(Some("met"))["references_wall_clock"], json!(true));
+    assert_eq!(
+        request(Some("not_met"))["references_wall_clock"],
+        json!(true)
+    );
+    assert_error(&request(Some("Hold")), "unknown on_unknown 'Hold'");
 }
 
 #[test]

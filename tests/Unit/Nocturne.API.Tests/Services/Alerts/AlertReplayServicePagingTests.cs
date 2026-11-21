@@ -180,6 +180,7 @@ public class AlertReplayServicePagingTests
             Id = new Guid((uint)Interlocked.Increment(ref _idCounter), 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0),
             Timestamp = at,
+            CreatedAt = at,
             Mgdl = mgdl,
             PatientDeviceId = patientDeviceId,
             DataSource = dataSource,

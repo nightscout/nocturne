@@ -225,7 +225,8 @@ public class AlertRulesController : ControllerBase
                     request.AutoResolveEnabled,
                     trees.AutoResolveParams,
                     trees.ClientConfiguration ?? "{}",
-                    OnUnknown: request.OnUnknown ?? AlertRuleOnUnknown.Hold),
+                    OnUnknown: request.OnUnknown ?? AlertRuleOnUnknown.Hold,
+                    GlucoseFreshnessMinutes: request.GlucoseFreshnessMinutes),
                 _channels.ToWrites(request.Channels ?? [])),
             ct);
 
@@ -272,9 +273,15 @@ public class AlertRulesController : ControllerBase
 
         var sameBody = ConditionTreeEquality.Same(rule.Rule.ConditionParams, conditionParamsJson);
         var sameAutoResolve = ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, trees.AutoResolveParams);
+        var onUnknown = request.OnUnknown ?? rule.Rule.OnUnknown;
+        var glucoseFreshnessMinutes = request.ClearGlucoseFreshness
+            ? null
+            : request.GlucoseFreshnessMinutes ?? rule.Rule.GlucoseFreshnessMinutes;
         var conditionsChanged = rule.IsEnabled != request.IsEnabled
             || rule.Rule.ConditionType != request.ConditionType
             || !sameBody
+            || rule.Rule.GlucoseFreshnessMinutes != glucoseFreshnessMinutes
+            || !string.Equals(rule.Rule.OnUnknown, onUnknown, StringComparison.Ordinal)
             || rule.Rule.AutoResolveEnabled != request.AutoResolveEnabled
             || !sameAutoResolve;
         var snoozeChanged = !SmartSnoozeConfig.SameConditions(
@@ -296,7 +303,8 @@ public class AlertRulesController : ControllerBase
             request.AutoResolveEnabled,
             sameAutoResolve ? rule.Rule.AutoResolveParams : trees.AutoResolveParams,
             trees.ClientConfiguration ?? "{}",
-            OnUnknown: request.OnUnknown ?? rule.Rule.OnUnknown);
+            OnUnknown: onUnknown,
+            GlucoseFreshnessMinutes: glucoseFreshnessMinutes);
         if (!await rules.UpdateAsync(id, write, ct))
             return NotFound();
         if (request.Channels is not null)
@@ -570,6 +578,7 @@ public class AlertRulesController : ControllerBase
             ? null
             : AlertRuleResponses.Json(record.Rule.AutoResolveParams),
         OnUnknown = record.Rule.OnUnknown,
+        GlucoseFreshnessMinutes = record.Rule.GlucoseFreshnessMinutes,
         ClientConfiguration = AlertRuleResponses.Json(record.Rule.ClientConfiguration),
         Channels = record.Channels
             .Select(AlertRuleResponses.Channel)
@@ -743,6 +752,9 @@ public class AlertRuleResponse
     /// <summary>What an unknown condition means to the rule's alert: <c>hold</c> keeps it as it
     /// is, <c>met</c> reads it as true, <c>not_met</c> as false (<see cref="AlertRuleOnUnknown"/>).</summary>
     public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+    /// <summary>How many minutes old a reading may be before the rule's glucose conditions read it
+    /// unknown; null is the engine's default (docs/alerts/engine-semantics.md §3).</summary>
+    public int? GlucoseFreshnessMinutes { get; set; }
     public object ClientConfiguration { get; set; } = new { };
     /// <summary>Flat list of delivery channels. Dispatched in parallel when the rule fires.</summary>
     public List<AlertRuleChannelResponse> Channels { get; set; } = [];
@@ -762,6 +774,8 @@ public class CreateAlertRuleRequest
     public object? AutoResolveParams { get; set; }
     /// <summary>One of <see cref="AlertRuleOnUnknown"/>; null is <c>hold</c>.</summary>
     public string? OnUnknown { get; set; }
+    /// <summary>In <see cref="AlertRuleGlucoseFreshness"/>'s range; null is the engine's default.</summary>
+    public int? GlucoseFreshnessMinutes { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertRuleChannelRequest>? Channels { get; set; }
 }
@@ -780,6 +794,13 @@ public class UpdateAlertRuleRequest
     public object? AutoResolveParams { get; set; }
     /// <summary>One of <see cref="AlertRuleOnUnknown"/>; null keeps the stored value.</summary>
     public string? OnUnknown { get; set; }
+    /// <summary>
+    /// In <see cref="AlertRuleGlucoseFreshness"/>'s range; null keeps the stored value, so a client
+    /// that does not know the bound leaves it as it is. <see cref="ClearGlucoseFreshness"/> clears it.
+    /// </summary>
+    public int? GlucoseFreshnessMinutes { get; set; }
+    /// <summary>Returns the rule to the engine's default bound; not with <see cref="GlucoseFreshnessMinutes"/>.</summary>
+    public bool ClearGlucoseFreshness { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertRuleChannelRequest>? Channels { get; set; }
 }

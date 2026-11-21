@@ -129,6 +129,7 @@ public class AlertReplayServiceLeafLogTests
     {
         Id = Guid.NewGuid(),
         Timestamp = at,
+        CreatedAt = at,
         Mgdl = mgdl,
     };
 

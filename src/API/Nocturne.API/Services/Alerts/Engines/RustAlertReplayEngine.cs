@@ -50,6 +50,7 @@ internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertRe
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
         OnUnknown = rule.OnUnknown,
+        GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
     };
 
     private static AlertReplayRun ToRun(RustReplayResponse response) => new(

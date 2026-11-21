@@ -193,6 +193,83 @@ public class AlertSweepJobWallClockTests
     }
 
     /// <summary>
+    /// A threshold rule is swept once its <c>on_unknown</c> reads unknown as known, since its leaf
+    /// turns unknown when the reading goes stale (docs/alerts/engine-semantics.md §5.1); the kept
+    /// verdict follows an edit of that word alone.
+    /// </summary>
+    [NativeFact]
+    public async Task An_edit_of_on_unknown_alone_moves_the_rule_onto_the_sweep()
+    {
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        {
+            LastReadingAt = T0,
+            LatestMgdl = 50,
+        };
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+        fixture.InstancesCreated.Should().Be(0, "under hold a threshold rule is evaluated per reading only");
+
+        await fixture.SetOnUnknown(AlertRuleOnUnknown.NotMet);
+        await fixture.SweepAt(T0.AddMinutes(2));
+        fixture.InstancesCreated.Should().Be(1);
+    }
+
+    /// <summary>
+    /// A reading's age runs from when it was stored (docs/alerts/engine-semantics.md §3): one
+    /// that arrives 20 minutes after its timestamp is fresh on arrival, and stale one bound later.
+    /// </summary>
+    [NativeFact]
+    public async Task A_late_reading_is_fresh_on_arrival_and_stale_one_bound_later()
+    {
+        const string lowOrLoss = """
+            {"operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}}
+            ]}
+            """;
+        var fixture = new Fixture(AlertConditionType.Composite, lowOrLoss);
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, CreatedAt = T0.AddMinutes(20), Mgdl = 60 });
+        fixture.LastReadingAt = T0;
+        await fixture.SetOnUnknown(AlertRuleOnUnknown.NotMet);
+
+        await fixture.SweepAt(T0.AddMinutes(21));
+        fixture.InstancesCreated.Should().Be(1, "the reading arrived a minute ago");
+
+        await fixture.SweepAt(T0.AddMinutes(32));
+        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.State.Should().Be("hysteresis");
+    }
+
+    /// <summary>
+    /// Past the freshness bound the sweep's reading-driven leaves read unknown
+    /// (docs/alerts/engine-semantics.md §3): under hold the excursion they opened stays open,
+    /// under not_met it enters hysteresis.
+    /// </summary>
+    [NativeTheory]
+    [InlineData(AlertRuleOnUnknown.Hold, "active")]
+    [InlineData(AlertRuleOnUnknown.NotMet, "hysteresis")]
+    public async Task A_stale_reading_holds_or_releases_the_excursion_it_opened(string onUnknown, string state)
+    {
+        const string lowOrLoss = """
+            {"operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}}
+            ]}
+            """;
+        var fixture = new Fixture(AlertConditionType.Composite, lowOrLoss)
+        {
+            LastReadingAt = T0,
+            LatestMgdl = 60,
+        };
+        await fixture.SetOnUnknown(onUnknown);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+        fixture.InstancesCreated.Should().Be(1);
+
+        await fixture.SweepAt(T0.AddMinutes(20));
+        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.State.Should().Be(state);
+    }
+
+    /// <summary>
     /// The engine reads a body it cannot evaluate as its root kind alone, so a wall-clock leaf
     /// inside it does not put the rule on the sweep; the per-reading pass reports the fault.
     /// </summary>
@@ -427,7 +504,7 @@ public class AlertSweepJobWallClockTests
 
     /// <summary>
     /// A low reading whose evaluation stores nothing leaves the next change of the reading before
-    /// it, an hour off; the sweep must start the low's window, not wait for another reading.
+    /// it, when that reading goes stale; the sweep must start the low's window, not wait for it.
     /// </summary>
     [NativeTheory]
     [InlineData(LostEvaluation.Failed)]
@@ -439,13 +516,13 @@ public class AlertSweepJobWallClockTests
             """
             {"operator": "or", "conditions": [
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}},
-              {"type": "sustained", "sustained": {"minutes": 15, "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}}}
+              {"type": "sustained", "sustained": {"minutes": 5, "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}}}
             ]}
             """);
         fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
         await fixture.ReadingAt(T0);
         (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId)).Should().BeEquivalentTo(
-            new { NextChangeKnown = true, NextChangeAt = (DateTime?)T0.AddHours(1) });
+            new { NextChangeKnown = true, NextChangeAt = (DateTime?)T0.AddMinutes(11) });
 
         fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(5), Mgdl = 60 });
         fixture.LatestMgdl = 60;
@@ -454,7 +531,7 @@ public class AlertSweepJobWallClockTests
 
         await fixture.SweepAt(T0.AddMinutes(5.5));
         fixture.Evaluations.Should().Be(3);
-        await fixture.SweepAt(T0.AddMinutes(20.5));
+        await fixture.SweepAt(T0.AddMinutes(10.5));
         fixture.InstancesCreated.Should().Be(1);
     }
 
@@ -616,10 +693,25 @@ public class AlertSweepJobWallClockTests
             LastReadingAt = at;
             var context = new TenantContext(Tenant, "slug", "Slug", true, IsDemo: false);
             await using var scope = TenantJobScope.Open(_services, context, "reading");
-            var reading = new SensorGlucose { Timestamp = at, Mgdl = LatestMgdl ?? 120 };
+            var reading = new SensorGlucose { Timestamp = at, CreatedAt = at, Mgdl = LatestMgdl ?? 120 };
             var trend = await ReadingTrend.ForAsync(reading, Canonical.Object, CancellationToken.None);
             await scope.ServiceProvider.GetRequiredService<IAlertOrchestrator>()
                 .EvaluateAsync(CanonicalAlertEvaluator.ContextFor(reading, trend), CancellationToken.None);
+        }
+
+        /// <summary>A reading as the store returns it: stored at its own time unless a test says otherwise.</summary>
+        private static SensorGlucose Stored(SensorGlucose reading)
+        {
+            if (reading.CreatedAt == default)
+                reading.CreatedAt = reading.Timestamp;
+            return reading;
+        }
+
+        /// <summary>The rule under test's <c>on_unknown</c>, in its snapshot and its stored row.</summary>
+        public async Task SetOnUnknown(string onUnknown)
+        {
+            Rules[0] = Rules[0] with { OnUnknown = onUnknown };
+            (await TrackerRepo.GetRuleAsync(RuleId))!.OnUnknown = onUnknown;
         }
 
         /// <summary>The sweep as a new process runs it, with only what is stored.</summary>
@@ -691,14 +783,14 @@ public class AlertSweepJobWallClockTests
             canonical
                 .Setup(x => x.GetLatestAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => Readings.Count > 0
-                    ? Readings.MaxBy(r => r.Timestamp)
+                    ? Stored(Readings.MaxBy(r => r.Timestamp)!)
                     : LastReadingAt is { } at
-                        ? new SensorGlucose { Timestamp = at, Mgdl = LatestMgdl ?? 120 }
+                        ? new SensorGlucose { Timestamp = at, CreatedAt = at, Mgdl = LatestMgdl ?? 120 }
                         : null);
             canonical
                 .Setup(x => x.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((DateTime since, CancellationToken _) =>
-                    Readings.Where(r => r.Timestamp >= since).OrderByDescending(r => r.Timestamp).ToList());
+                    Readings.Where(r => r.Timestamp >= since).OrderByDescending(r => r.Timestamp).Select(Stored).ToList());
             canonical
                 .Setup(x => x.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((SensorGlucose reading, DateTime since, CancellationToken _) => Readings

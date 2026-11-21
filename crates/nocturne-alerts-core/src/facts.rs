@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use crate::engine::{WireRule, parse_auto_resolve};
+use crate::engine::{OnUnknown, WireRule, parse_auto_resolve};
 use crate::enums::{WireEnum, wire_enum};
 use crate::leaf_identity::collect_leaves;
 use crate::model::{ConditionKind, Node, parse_payload};
@@ -77,17 +77,21 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
 /// resolving as node dispatch resolves them (engine-semantics.md §1.2). The
 /// auto-resolve tree's kinds count whenever `auto_resolve_enabled` and the
 /// tree is present, not `null` and evaluable, even when the body is not and
-/// evaluation would skip the rule.
+/// evaluation would skip the rule. `on_unknown` reads no kind; it decides
+/// whether a rule is wall-clock ([`references_wall_clock`]).
+///
+/// [`references_wall_clock`]: crate::wall_clock::references_wall_clock
 #[derive(Debug, Clone, Copy)]
 pub struct RuleConditions<'a> {
     pub condition_type: &'a str,
     pub condition_params: &'a Value,
     pub auto_resolve_enabled: bool,
     pub auto_resolve_params: Option<&'a Value>,
+    pub on_unknown: OnUnknown,
 }
 
 impl<'a> RuleConditions<'a> {
-    /// A rule with auto-resolve disabled.
+    /// A rule with auto-resolve disabled that holds an unknown root.
     #[must_use]
     pub fn body(condition_type: &'a str, condition_params: &'a Value) -> Self {
         Self {
@@ -95,6 +99,7 @@ impl<'a> RuleConditions<'a> {
             condition_params,
             auto_resolve_enabled: false,
             auto_resolve_params: None,
+            on_unknown: OnUnknown::Hold,
         }
     }
 
@@ -117,6 +122,8 @@ impl<'a> RuleConditions<'a> {
     }
 }
 
+/// An `on_unknown` naming no word reads as `hold`: such a rule cannot be
+/// evaluated ([`Rule`](crate::engine::Rule)).
 impl<'a> From<&'a WireRule> for RuleConditions<'a> {
     fn from(rule: &'a WireRule) -> Self {
         Self {
@@ -124,6 +131,11 @@ impl<'a> From<&'a WireRule> for RuleConditions<'a> {
             condition_params: &rule.condition_params,
             auto_resolve_enabled: rule.auto_resolve_enabled,
             auto_resolve_params: rule.auto_resolve_params.as_ref(),
+            on_unknown: rule
+                .on_unknown
+                .as_deref()
+                .and_then(OnUnknown::from_name)
+                .unwrap_or(OnUnknown::Hold),
         }
     }
 }
@@ -192,6 +204,7 @@ mod tests {
             condition_params,
             auto_resolve_enabled,
             auto_resolve_params,
+            on_unknown: OnUnknown::Hold,
         }
     }
 
@@ -463,9 +476,11 @@ mod tests {
         );
         SensorContext {
             latest_value: glucose.then(|| Decimal::from(60)),
-            latest_timestamp: glucose.then(|| ago(20)),
+            // Fresh (§3), and older than the staleness samples' bounds.
+            latest_timestamp: glucose.then(|| ago(10)),
+            latest_received_at: glucose.then(|| ago(10)),
             trend_rate: glucose.then(|| Decimal::from(-3)),
-            last_reading_at: glucose.then(|| ago(20)),
+            last_reading_at: glucose.then(|| ago(10)),
             trend_bucket: glucose.then_some(TrendBucket::FallingFast),
             // A host derives the bucket from the reading in the tenant zone.
             glucose_bucket: (glucose && has(F::TimeZone)).then_some(GlucoseBucket::Low),
@@ -552,8 +567,8 @@ mod tests {
             ConditionKind::Sustained => json!({"minutes": 5, "child": low}),
             ConditionKind::Threshold => json!({"direction": "below", "value": 70}),
             ConditionKind::RateOfChange => json!({"direction": "falling", "rate": 2}),
-            ConditionKind::SignalLoss => json!({"timeout_minutes": 15}),
-            ConditionKind::Staleness => json!({"operator": ">", "value": 10}),
+            ConditionKind::SignalLoss => json!({"timeout_minutes": 5}),
+            ConditionKind::Staleness => json!({"operator": ">", "value": 5}),
             ConditionKind::Predicted => {
                 json!({"operator": "<", "value": 55, "within_minutes": 30})
             }

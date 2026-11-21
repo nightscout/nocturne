@@ -16,9 +16,13 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::{SensorContext, TrackerReference};
-use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, evaluate_rule};
+use nocturne_alerts_core::engine::{
+    EngineState, Evaluation, OnUnknown, Rule, WireRule, evaluate_rule,
+};
 use nocturne_alerts_core::enums::{GlucoseBucket, StateSpanCategory, TrendBucket, WireEnum};
-use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
+use nocturne_alerts_core::eval::{
+    DEFAULT_GLUCOSE_FRESHNESS, Env, eval_node, eval_payload as eval_parsed,
+};
 use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind,
     TransitionType,
@@ -273,7 +277,11 @@ fn sustained_timer_runs_behind_a_false_and_sibling() {
     let node = Node::parse(&tree).expect("node parses");
     let mut timers = TimerStore::new();
     let at = |now: DateTime<Utc>, glucose: &str, timers: &mut TimerStore| {
-        let ctx = glucose_ctx(Some(glucose), Some("0"));
+        let ctx = SensorContext {
+            latest_timestamp: Some(now),
+            last_reading_at: Some(now),
+            ..glucose_ctx(Some(glucose), Some("0"))
+        };
         let mut env = Env::new(now, Uuid::nil(), &ctx, timers);
         eval_node(&node, "composite", &mut env)
     };
@@ -293,6 +301,257 @@ fn sustained_timer_runs_behind_a_false_and_sibling() {
         at(base() + TimeDelta::minutes(15), "150", &mut timers)
     );
     assert_eq!(timers.snapshot_for_rule(Uuid::nil()).count(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Glucose freshness (§3)
+// ---------------------------------------------------------------------------
+
+/// Each leaf that judges freshness, true on a fresh `glucose_ctx` reading.
+fn freshness_leaves() -> Vec<(ConditionKind, Value, SensorContext)> {
+    let glucose = |trend_bucket, glucose_bucket| SensorContext {
+        trend_bucket,
+        glucose_bucket,
+        ..glucose_ctx(Some("60"), Some("-3"))
+    };
+    vec![
+        (
+            ConditionKind::Threshold,
+            json!({"direction": "below", "value": 70}),
+            glucose(None, None),
+        ),
+        (
+            ConditionKind::RateOfChange,
+            json!({"direction": "falling", "rate": 2}),
+            glucose(None, None),
+        ),
+        (
+            ConditionKind::Trend,
+            json!({"bucket": "falling_fast"}),
+            glucose(Some(TrendBucket::FallingFast), None),
+        ),
+        (
+            ConditionKind::GlucoseBucket,
+            json!({"buckets": ["low"]}),
+            glucose(None, Some(GlucoseBucket::Low)),
+        ),
+    ]
+}
+
+#[test]
+fn a_glucose_fact_is_fresh_up_to_exactly_eleven_minutes_and_unknown_after() {
+    for (kind, payload, ctx) in freshness_leaves() {
+        let at = |age: TimeDelta| eval_payload_at(kind, &payload, &ctx, base() + age);
+        assert_eq!(True, at(TimeDelta::zero()), "{kind:?} new");
+        assert_eq!(True, at(TimeDelta::minutes(11)), "{kind:?} at the bound");
+        assert_eq!(
+            Unknown,
+            at(TimeDelta::minutes(11) + TimeDelta::nanoseconds(1)),
+            "{kind:?} past the bound"
+        );
+    }
+}
+
+#[test]
+fn a_rules_freshness_bound_replaces_the_default() {
+    for (kind, payload, ctx) in freshness_leaves() {
+        let parsed = parse_payload(kind, &payload).expect("payload parses");
+        let at = |age: TimeDelta, bound: TimeDelta| {
+            let mut timers = TimerStore::new();
+            let mut env = Env::new(base() + age, Uuid::nil(), &ctx, &mut timers)
+                .with_glucose_freshness(bound);
+            eval_parsed(&parsed, kind.name(), &mut env)
+        };
+        let thirty = TimeDelta::minutes(30);
+        assert_eq!(True, at(TimeDelta::minutes(20), thirty), "{kind:?}");
+        assert_eq!(True, at(thirty, thirty), "{kind:?}");
+        assert_eq!(
+            Unknown,
+            at(thirty + TimeDelta::nanoseconds(1), thirty),
+            "{kind:?}"
+        );
+        assert_eq!(
+            Unknown,
+            at(TimeDelta::minutes(6), TimeDelta::minutes(5)),
+            "{kind:?}"
+        );
+    }
+}
+
+/// A reading that arrives late is as fresh as its arrival: its age runs from
+/// when the host received it, not from its own timestamp.
+#[test]
+fn a_late_reading_is_fresh_from_its_arrival() {
+    for (kind, payload, ctx) in freshness_leaves() {
+        let arrived = base() + TimeDelta::minutes(20);
+        let late = SensorContext {
+            latest_received_at: Some(arrived),
+            ..ctx
+        };
+        let at = |age: TimeDelta| eval_payload_at(kind, &payload, &late, arrived + age);
+        assert_eq!(True, at(TimeDelta::zero()), "{kind:?} on arrival");
+        assert_eq!(True, at(TimeDelta::minutes(11)), "{kind:?} at the bound");
+        assert_eq!(
+            Unknown,
+            at(TimeDelta::minutes(11) + TimeDelta::nanoseconds(1)),
+            "{kind:?} past the bound"
+        );
+    }
+}
+
+#[test]
+fn a_glucose_fact_without_a_reading_time_is_not_judged_stale() {
+    let ctx = SensorContext {
+        latest_timestamp: None,
+        ..glucose_ctx(Some("60"), None)
+    };
+    let payload = json!({"direction": "below", "value": 70});
+    let a_day_on = base() + TimeDelta::days(1);
+    assert_eq!(
+        True,
+        eval_payload_at(ConditionKind::Threshold, &payload, &ctx, a_day_on)
+    );
+}
+
+#[test]
+fn signal_loss_and_staleness_read_an_old_reading_as_ever() {
+    let ctx = glucose_ctx(Some("100"), None);
+    let an_hour_on = base() + TimeDelta::hours(1);
+    assert_eq!(
+        True,
+        eval_payload_at(
+            ConditionKind::SignalLoss,
+            &json!({"timeout_minutes": 20}),
+            &ctx,
+            an_hour_on
+        )
+    );
+    assert_eq!(
+        True,
+        eval_payload_at(
+            ConditionKind::Staleness,
+            &json!({"operator": ">", "value": 30}),
+            &ctx,
+            an_hour_on
+        )
+    );
+}
+
+fn held_rule(condition_type: ConditionKind, condition_params: Value) -> Rule {
+    Rule {
+        id: rule_id(),
+        condition_type,
+        condition_params,
+        confirmation_readings: 1,
+        hysteresis_minutes: 0,
+        auto_resolve_enabled: false,
+        auto_resolve_params: None,
+        on_unknown: OnUnknown::Hold,
+        glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
+    }
+}
+
+#[test]
+fn signal_loss_or_a_stale_threshold_opens_once_the_signal_is_lost() {
+    let rule = held_rule(
+        ConditionKind::Composite,
+        json!({"operator": "or", "conditions": [
+            {"type": "signal_loss", "signal_loss": {"timeout_minutes": 20}},
+            {"type": "threshold", "threshold": {"direction": "below", "value": 70}}
+        ]}),
+    );
+    let ctx = glucose_ctx(Some("100"), None);
+    let mut state = EngineState::new();
+    let mut at = |minutes| {
+        evaluate_rule(
+            &rule,
+            &ctx,
+            base() + TimeDelta::minutes(minutes),
+            &mut state,
+            false,
+        )
+        .evaluation
+        .expect("evaluable")
+    };
+    assert_eq!(False, at(0).root);
+    let outage = at(15);
+    assert_eq!(Unknown, outage.root);
+    assert_eq!(TransitionType::None, outage.transition.kind);
+    let lost = at(20);
+    assert_eq!(True, lost.root);
+    assert_eq!(TransitionType::ExcursionOpened, lost.transition.kind);
+}
+
+#[test]
+fn a_sustained_run_completes_only_on_a_fresh_reading() {
+    let rule = held_rule(
+        ConditionKind::Sustained,
+        json!({"minutes": 60, "child":
+            {"type": "threshold", "threshold": {"direction": "above", "value": 250}}}),
+    );
+    let old = glucose_ctx(Some("300"), None);
+    let mut state = EngineState::new();
+    evaluate_rule(&rule, &old, base(), &mut state, false);
+    let outage = evaluate_rule(
+        &rule,
+        &old,
+        base() + TimeDelta::minutes(61),
+        &mut state,
+        false,
+    )
+    .evaluation
+    .expect("evaluable");
+    assert_eq!(Unknown, outage.root);
+    assert_eq!(TransitionType::None, outage.transition.kind);
+    assert!(outage.timer_ops.is_empty());
+    let now = base() + TimeDelta::minutes(62);
+    let fresh = SensorContext {
+        latest_timestamp: Some(now),
+        last_reading_at: Some(now),
+        ..old
+    };
+    let resumed = evaluate_rule(&rule, &fresh, now, &mut state, false)
+        .evaluation
+        .expect("evaluable");
+    assert_eq!(TransitionType::ExcursionOpened, resumed.transition.kind);
+}
+
+#[test]
+fn glucose_freshness_minutes_is_a_whole_number_of_minutes_up_to_a_day() {
+    let wire = |minutes: Value| {
+        let wire: WireRule = serde_json::from_value(json!({
+            "id": rule_id(),
+            "condition_type": "threshold",
+            "condition_params": {"direction": "below", "value": 70},
+            "glucose_freshness_minutes": minutes,
+        }))
+        .map_err(|e| e.to_string())?;
+        Rule::try_from(wire)
+    };
+    assert_eq!(
+        wire(Value::Null).unwrap().glucose_freshness,
+        DEFAULT_GLUCOSE_FRESHNESS
+    );
+    for (minutes, bound) in [(1, 1), (30, 30), (1440, 1440)] {
+        assert_eq!(
+            wire(json!(minutes)).unwrap().glucose_freshness,
+            TimeDelta::minutes(bound)
+        );
+    }
+    for bad in [
+        json!(0),
+        json!(-5),
+        json!(1441),
+        json!(i64::from(i32::MAX) + 1),
+    ] {
+        assert_eq!(
+            wire(bad.clone()).unwrap_err(),
+            "glucose_freshness_minutes must be a whole number of minutes from 1 to 1440",
+            "{bad}"
+        );
+    }
+    assert!(wire(json!(1.5)).is_err());
+    assert!(wire(json!("11")).is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -881,6 +1140,7 @@ fn relapsing_low_rule() -> Rule {
                 "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
         })),
         on_unknown: OnUnknown::Hold,
+        glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
     }
 }
 

@@ -63,6 +63,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         string Params,
         bool AutoResolveEnabled,
         string? AutoResolveParams,
+        string OnUnknown,
         bool References,
         bool WaitsForNextChange);
 
@@ -508,8 +509,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// <remarks>
     /// The context is the one the per-reading path builds for <see cref="LastUsableReadingAsync"/>
     /// (<see cref="CanonicalAlertEvaluator.ContextFor"/>), so reading-driven leaves in the same
-    /// tree judge exactly what its last pass judged. A context without the glucose facts would
-    /// read them unknown, and a rule whose <c>on_unknown</c> is <c>not_met</c> would close an
+    /// tree judge what its last pass judged until the engine finds that reading stale
+    /// (docs/alerts/engine-semantics.md §3). A context without the glucose facts would read them
+    /// unknown before then, and a rule whose <c>on_unknown</c> is <c>not_met</c> would close an
     /// excursion they hold open.
     /// <para>
     /// A rule that <see cref="RuleTrees.WaitsForNextChange"/> is skipped while the next change its
@@ -643,7 +645,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             && cached.Type == rule.ConditionType
             && string.Equals(cached.Params, rule.ConditionParams, StringComparison.Ordinal)
             && cached.AutoResolveEnabled == rule.AutoResolveEnabled
-            && string.Equals(cached.AutoResolveParams, rule.AutoResolveParams, StringComparison.Ordinal))
+            && string.Equals(cached.AutoResolveParams, rule.AutoResolveParams, StringComparison.Ordinal)
+            && string.Equals(cached.OnUnknown, rule.OnUnknown, StringComparison.Ordinal))
         {
             verdicts[rule.Id] = cached;
             return cached.References;
@@ -675,7 +678,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         }
 
         verdicts[rule.Id] = new WallClockVerdict(
-            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled, rule.AutoResolveParams, references, waits);
+            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled, rule.AutoResolveParams, rule.OnUnknown,
+            references, waits);
         return references;
     }
 }

@@ -33,7 +33,7 @@ public class CanonicalAlertEvaluatorTests
     public CanonicalAlertEvaluatorTests() => _watermark = new AlertEvaluationWatermark(_clock);
 
     private static SensorGlucose Latest(DateTime timestamp, double mgdl = 120, double? trendRate = 0.5) =>
-        new() { Timestamp = timestamp, Mgdl = mgdl, TrendRate = trendRate };
+        new() { Timestamp = timestamp, CreatedAt = timestamp, Mgdl = mgdl, TrendRate = trendRate };
 
     private CanonicalAlertEvaluator Evaluator(Guid tenantId) =>
         new(_canonical.Object,
@@ -286,7 +286,7 @@ public class CanonicalAlertEvaluatorTests
     {
         var latest = new SensorGlucose
         {
-            Id = Guid.NewGuid(), Timestamp = Reading, Mgdl = 100, DataSource = "dexcom", Device = "g7",
+            Id = Guid.NewGuid(), Timestamp = Reading, CreatedAt = Reading, Mgdl = 100, DataSource = "dexcom", Device = "g7",
         };
         LatestIs(latest);
         _canonical
