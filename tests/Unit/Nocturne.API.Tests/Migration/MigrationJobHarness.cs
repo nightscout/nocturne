@@ -3,6 +3,7 @@ using Nocturne.API.Services.Health;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +11,7 @@ using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -18,6 +20,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -44,16 +47,62 @@ internal static class MigrationJobHarness
         public void SetTenant(TenantContext? tenant) => Context = tenant;
     }
 
+    /// <summary>Marks what it encrypts, so a test can tell stored ciphertext from plaintext, and reads only that back.</summary>
+    internal sealed class MarkingSecrets : ISecretEncryptionService
+    {
+        private const string Mark = "encrypted:";
+
+        public bool IsConfigured => true;
+
+        public string Encrypt(string plaintext) => Mark + plaintext;
+
+        public string Decrypt(string ciphertext) => CanDecrypt(ciphertext)
+            ? ciphertext[Mark.Length..]
+            : throw new ArgumentException("Invalid ciphertext format");
+
+        public bool CanDecrypt(string? ciphertext) => ciphertext?.StartsWith(Mark, StringComparison.Ordinal) == true;
+
+        public Dictionary<string, string> EncryptSecrets(Dictionary<string, string> secrets) =>
+            secrets.ToDictionary(s => s.Key, s => Encrypt(s.Value));
+
+        public Dictionary<string, string> DecryptSecrets(Dictionary<string, string> encryptedSecrets) =>
+            encryptedSecrets.ToDictionary(s => s.Key, s => Decrypt(s.Value));
+    }
+
+    /// <summary>
+    /// The service over <paramref name="provider"/>. A provider with no data services gets a factory
+    /// that opens nothing, for the tests that never reach the database.
+    /// </summary>
+    public static MigrationJobService CreateService(
+        IServiceProvider provider, IConfiguration? configuration = null, TimeProvider? time = null) => new(
+        NullLogger<MigrationJobService>.Instance,
+        provider,
+        configuration ?? new ConfigurationBuilder().Build(),
+        provider.GetService<INocturneDbContextFactory>() ?? Mock.Of<INocturneDbContextFactory>(),
+        new MarkingSecrets(),
+        time ?? TimeProvider.System);
+
+    /// <summary>Runs the tenant's live job slice by slice until it ends.</summary>
+    public static async Task RunToEndAsync(MigrationJobService service, TenantContext tenant)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (await service.RunSliceAsync(tenant, timeout.Token))
+        {
+        }
+    }
+
     /// <param name="entryOutcome">What the entry import reports for each page; empty when omitted.</param>
     /// <param name="treatmentOutcome">What the treatment import reports for each page; empty when omitted.</param>
     /// <param name="profileOutcome">What the profile decomposer reports for each profile; empty when omitted.</param>
+    /// <param name="deviceStatusOutcome">What the device status import reports for each page; empty when omitted.</param>
     /// <param name="interceptor">Attached to every <see cref="NocturneDbContext"/> the provider creates.</param>
     public static ServiceProvider BuildProvider(
         HttpMessageHandler handler,
         Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
         Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null,
         Func<Profile, DecompositionResult>? profileOutcome = null,
-        IInterceptor? interceptor = null)
+        IInterceptor? interceptor = null,
+        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null)
     {
         var database = $"migration-{Guid.NewGuid():N}";
 
@@ -72,7 +121,8 @@ internal static class MigrationJobHarness
         var deviceStatuses = new Mock<IDeviceStatusService>();
         deviceStatuses
             .Setup(s => s.ImportDeviceStatusesAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync((IReadOnlyList<DeviceStatus> page, string? _, CancellationToken _) =>
+                deviceStatusOutcome?.Invoke(page) ?? new DecompositionResult());
 
         var profiles = new Mock<IProfileDecomposer>();
         profiles
@@ -161,7 +211,7 @@ internal static class MigrationJobHarness
 
         onCreated?.Invoke(job);
 
-        await job.ExecuteAsync(CancellationToken.None);
+        await job.ExecuteAsync(TimeSpan.MaxValue, CancellationToken.None);
 
         return job.GetStatus();
     }

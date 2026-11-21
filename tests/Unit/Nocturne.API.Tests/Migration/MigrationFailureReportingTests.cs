@@ -93,7 +93,7 @@ public class MigrationFailureReportingTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
-        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(), TimeProvider.System);
+        MigrationJobHarness.CreateService(provider);
 
     private static TestMigrationConnectionRequest TestRequest() => new()
     {
@@ -482,7 +482,7 @@ public class MigrationFailureReportingTests
                 """,
         };
 
-        var status = MigrationJob.StatusFromRecord(run);
+        var status = MigrationJob.StatusFromRecord(run, DateTime.UtcNow);
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(9);
         status.CollectionProgress["treatments"].FailureReason.Should()
@@ -500,7 +500,7 @@ public class MigrationFailureReportingTests
             CollectionOutcomes = "{ not an outcome array",
         };
 
-        var status = MigrationJob.StatusFromRecord(run);
+        var status = MigrationJob.StatusFromRecord(run, DateTime.UtcNow);
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(4);
         status.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(2);

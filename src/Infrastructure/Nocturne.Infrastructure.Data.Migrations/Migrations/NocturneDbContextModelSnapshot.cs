@@ -2873,6 +2873,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Checkpoint")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("checkpoint");
+
                     b.Property<string>("CollectionOutcomes")
                         .HasColumnType("jsonb")
                         .HasColumnName("collection_outcomes");
@@ -2906,6 +2910,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("mode");
+
+                    b.Property<string>("RequestEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("request_encrypted");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
 
                     b.Property<string>("SourceAlarmSettings")
                         .HasColumnType("jsonb")

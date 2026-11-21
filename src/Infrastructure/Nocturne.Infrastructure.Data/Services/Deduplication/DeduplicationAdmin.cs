@@ -86,8 +86,7 @@ public sealed class DeduplicationAdmin(
             state.RunCancelRequestedAt = null;
             await db.SaveChangesAsync(token);
 
-            if (db.Database.IsNpgsql())
-                await JobLedgerRepository.RequestInTransactionAsync(db, IDeduplicationAdmin.RunJob, token);
+            await JobLedgerRepository.RequestInTransactionAsync(db, IDeduplicationAdmin.RunJob, token);
             return run.Status.JobId;
         }, ct: cancellationToken);
     }

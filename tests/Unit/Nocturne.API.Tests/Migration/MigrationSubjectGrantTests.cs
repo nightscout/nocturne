@@ -228,7 +228,7 @@ public class MigrationSubjectGrantTests
             provider,
             TimeProvider.System);
 
-        await job.ExecuteAsync(CancellationToken.None);
+        await job.ExecuteAsync(TimeSpan.MaxValue, CancellationToken.None);
         job.GetStatus().State.Should().Be(MigrationJobState.Completed);
 
         return tenant.TenantId;
@@ -498,7 +498,7 @@ public class MigrationSubjectGrantTests
             },
             tenant, NullLogger.Instance, provider, TimeProvider.System);
 
-        await job.ExecuteAsync(CancellationToken.None);
+        await job.ExecuteAsync(TimeSpan.MaxValue, CancellationToken.None);
 
         using var scope = provider.CreateScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();

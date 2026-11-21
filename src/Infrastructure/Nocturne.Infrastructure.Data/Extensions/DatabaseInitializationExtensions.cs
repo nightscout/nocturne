@@ -389,9 +389,10 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Marks any background job record still in a live state as Interrupted. Migration and
-    /// connector cursor reset jobs run on detached in-process tasks that die with the process,
-    /// so a row left in a live state at startup can only be an orphan from a previous run.
+    /// Marks any background job record still in a live state as Interrupted. A connector cursor
+    /// reset job runs on a detached in-process task that dies with the process, so a row left in a
+    /// live state at startup can only be an orphan from a previous run. A job the job ledger runs
+    /// is resumed instead and has no table here.
     /// Each job table is paired with the live state names its owning enum defines.
     /// Without this sweep, an operator polling such a job sees "Running" forever.
     /// Relies on the API running as one process: an instance booting while another has a job
