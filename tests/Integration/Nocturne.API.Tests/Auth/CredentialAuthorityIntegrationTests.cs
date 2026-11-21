@@ -152,6 +152,42 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
         (await exchanged.GetAsync("/api/v1/entries/current")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    /// A JWT exchanged from a Nightscout access token is that access token, not a sign-in: wherever
+    /// only the person's own sign-in is admitted it is refused exactly as the access token is.
+    /// </summary>
+    [Fact]
+    public async Task TokenExchangedFromANightscoutAccessToken_IsNotASignIn()
+    {
+        var token = await MintAsync(_ownerSession, "glucose.readwrite", "treatments.readwrite");
+
+        using var anonymous = Fixture.CreateHttpClient("nocturne-api", "http");
+        var exchange = await anonymous.GetAsync($"/api/v2/authorization/request/{token}");
+        var body = await exchange.Content.ReadAsStringAsync();
+        exchange.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        var jwt = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("token").GetString()!;
+
+        using var exchanged = AuthTestHelpers.CreateBearerClient(Fixture, jwt);
+        using var key = AuthTestHelpers.CreateBearerClient(Fixture, token);
+
+        (await exchanged.GetAsync("/api/v1/entries/current")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        foreach (var caller in new[] { exchanged, key })
+        {
+            (await caller.PostAsJsonAsync("/api/auth/direct-grants", new { label = "another", scopes = new[] { "glucose.read" } }))
+                .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await caller.GetAsync("/api/auth/direct-grants")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await caller.GetAsync("/api/oauth/grants")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await caller.PostAsync("/api/auth/passkey/recovery/regenerate", null))
+                .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await caller.PostAsJsonAsync("/api/auth/passkey/register/options", new { username = "second-device" }))
+                .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await caller.PostAsync("/api/auth/totp/setup", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await caller.PostAsJsonAsync("/api/v4/chat-identity/links/claim", new { token = "any" }))
+                .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+    }
+
     [Fact]
     public async Task Session_ManagesItsOwnCredentialsAndSignInFactors()
     {
