@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Repositories;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -29,11 +30,52 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
 
         _factory = _db.ContextFactory;
         _service = new ChatIdentityDirectoryService(
-            _factory.AsNocturneFactory(),
+            _factory.AsNocturneFactory(), new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
     }
 
     public void Dispose() => _db.Dispose();
+
+    /// <summary>
+    /// <see cref="ChatIdentityDirectoryService.GetCandidatesAsync"/> lists only the links whose
+    /// subject still holds a membership of the link's tenant, and every link this class makes
+    /// stands for one, so each link's subject is made a member of its tenant before the read.
+    /// </summary>
+    private async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> CandidatesAsync(
+        string platform, string platformUserId, CancellationToken ct)
+    {
+        await MakeLinkedSubjectsMembersAsync();
+        return await _service.GetCandidatesAsync(platform, platformUserId, ct);
+    }
+
+    /// <inheritdoc cref="CandidatesAsync"/>
+    private async Task<ChatIdentityDirectoryEntry?> DefaultAsync(
+        string platform, string platformUserId, CancellationToken ct)
+    {
+        await MakeLinkedSubjectsMembersAsync();
+        return await _service.GetDefaultAsync(platform, platformUserId, ct);
+    }
+
+    private async Task MakeLinkedSubjectsMembersAsync()
+    {
+        await using var db = _db.CreateContext();
+        var missing = await db.ChatIdentityDirectory
+            .Where(d => !db.TenantMembers.Any(m => m.TenantId == d.TenantId && m.SubjectId == d.NocturneUserId))
+            .Select(d => new { d.TenantId, d.NocturneUserId })
+            .Distinct()
+            .ToListAsync();
+        foreach (var pair in missing)
+        {
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = pair.TenantId,
+                SubjectId = pair.NocturneUserId,
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     /// <summary>
     /// Inserts a tenant and returns its id. chat_identity_directory.tenant_id is a real FK with
@@ -207,7 +249,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     [Fact]
     public async Task GetCandidatesAsync_returns_empty_when_no_links()
     {
-        var result = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var result = await CandidatesAsync(Platform, UserA, default);
         result.Should().BeEmpty();
     }
 
@@ -215,7 +257,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task GetCandidatesAsync_returns_single_link_when_one_exists()
     {
         await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
-        var result = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var result = await CandidatesAsync(Platform, UserA, default);
         result.Should().HaveCount(1);
     }
 
@@ -224,7 +266,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     {
         await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
         await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
-        var result = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var result = await CandidatesAsync(Platform, UserA, default);
         result.Should().HaveCount(2);
     }
 
@@ -246,9 +288,9 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             await db.Subjects.Where(s => s.Id == subjectId).ExecuteDeleteAsync();
         }
 
-        (await _service.GetCandidatesAsync(Platform, UserA, default))
+        (await CandidatesAsync(Platform, UserA, default))
             .Select(l => l.Label).Should().BeEquivalentTo(["oliver"]);
-        (await _service.GetCandidatesAsync(Platform, UserB, default)).Should().BeEmpty();
+        (await CandidatesAsync(Platform, UserB, default)).Should().BeEmpty();
     }
 
     // ---- CreateLinkAsync ----
@@ -289,7 +331,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         var act = () => _service.CreateLinkAsync(Platform, UserA, tenantId, NewSubject(), "lily", "Lily", default);
 
         await act.Should().ThrowAsync<ChatAccountLinkedToAnotherMemberException>();
-        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var all = await CandidatesAsync(Platform, UserA, default);
         all.Should().ContainSingle().Which.NocturneUserId.Should().Be(holder.NocturneUserId);
     }
 
@@ -324,7 +366,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             pending => InsertLink(UserA, stolen, pending.Label, isDefault: false),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "lily", "Ours", default);
@@ -333,7 +375,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         entry.TenantId.Should().Be(ours);
         factory.ContextsCreated.Should().Be(2, "the first attempt lost the label and had to re-read");
 
-        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var all = await CandidatesAsync(Platform, UserA, default);
         all.Select(l => l.Label).Should().BeEquivalentTo(["other", "lily", "lily-2"]);
     }
 
@@ -348,14 +390,14 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, tenantId, "winner", isDefault: true, subjectId),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, tenantId, subjectId, "loser", "Loser", default);
 
         entry.Label.Should().Be("winner");
 
-        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var all = await CandidatesAsync(Platform, UserA, default);
         all.Should().HaveCount(1);
     }
 
@@ -369,13 +411,13 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, tenantId, "winner", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = () => service.CreateLinkAsync(
             Platform, UserA, tenantId, NewSubject(), "loser", "Loser", default);
 
         await act.Should().ThrowAsync<ChatAccountLinkedToAnotherMemberException>();
-        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var all = await CandidatesAsync(Platform, UserA, default);
         all.Should().ContainSingle().Which.Label.Should().Be("winner");
     }
 
@@ -392,7 +434,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, theirs, "theirs", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "ours", "Ours", default);
@@ -401,7 +443,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         entry.IsDefault.Should().BeFalse("the concurrent first link already claimed the default");
         factory.ContextsCreated.Should().Be(2);
 
-        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var all = await CandidatesAsync(Platform, UserA, default);
         all.Where(l => l.IsDefault).Select(l => l.Label).Should().BeEquivalentTo(["theirs"]);
     }
 
@@ -425,7 +467,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             interlopeCount: 1,
             beforeRetry: () => DeleteLink(UserA, "lily"));
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "lily", "Ours", default);
@@ -433,7 +475,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         entry.Label.Should().Be("lily", "the freed label is available again");
         factory.ContextsCreated.Should().Be(2);
 
-        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var all = await CandidatesAsync(Platform, UserA, default);
         all.Select(l => l.Label).Should().BeEquivalentTo(["other", "lily"]);
     }
 
@@ -442,7 +484,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     {
         var factory = new BarrenFailureDbContextFactory(_db.Options);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = async () => await service.CreateLinkAsync(
             Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
@@ -462,7 +504,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             pending => InsertLink(UserA, NewTenant(), pending.Label, isDefault: false),
             interlopeCount: int.MaxValue);
         var service = new ChatIdentityDirectoryService(
-            factory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = async () => await service.CreateLinkAsync(
             Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
@@ -564,11 +606,11 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     {
         InsertLink(UserA, NewTenant(), "lily", isDefault: false);
         InsertLink(UserA, NewTenant(), "oliver", isDefault: false);
-        var before = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var before = await CandidatesAsync(Platform, UserA, default);
 
         await _service.RevokeAsync(before.Single(d => d.Label == "lily").Id, ChatLinkScope.Unscoped, ct: default);
 
-        var survivors = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var survivors = await CandidatesAsync(Platform, UserA, default);
         survivors.Should().ContainSingle().Which.IsDefault.Should().BeTrue();
     }
 
@@ -583,7 +625,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
 
         await _service.RevokeAsync(a.Id, ChatLinkScope.ForOwner(tenantA, subjectA), ct: default);
 
-        var survivors = await _service.GetCandidatesAsync(Platform, UserA, default);
+        var survivors = await CandidatesAsync(Platform, UserA, default);
         survivors.Should().HaveCount(2);
         survivors.Should().OnlyContain(d => !d.IsDefault, "choosing between two tenants belongs to the user");
     }
@@ -613,7 +655,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         await _service.SetDefaultAsync(b.Id, ChatLinkScope.Unscoped, ct: default);
         await _service.CreateLinkAsync(Platform, UserB, NewTenant(), NewSubject(), "rose", "Rose", default);
 
-        var result = await _service.GetDefaultAsync(Platform, UserA, default);
+        var result = await DefaultAsync(Platform, UserA, default);
 
         result.Should().NotBeNull();
         result!.Id.Should().Be(b.Id);
@@ -626,7 +668,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         InsertLink(UserA, NewTenant(), "lily", isDefault: false);
         await _service.CreateLinkAsync(Platform, UserB, NewTenant(), NewSubject(), "rose", "Rose", default);
 
-        var result = await _service.GetDefaultAsync(Platform, UserA, default);
+        var result = await DefaultAsync(Platform, UserA, default);
 
         result.Should().BeNull();
     }

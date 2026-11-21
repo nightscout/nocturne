@@ -159,13 +159,14 @@ public class SubjectRepository : ISubjectRepository
 
     /// <inheritdoc/>
     public virtual async Task<SubjectRecord?> FindMemberByUsernameAsync(
-        Guid tenantId, string username, bool activeOnly, CancellationToken ct)
+        Guid tenantId, string username, bool activeOnly, DateTime now, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var live = db.TenantMembers.LiveAt(now);
         var members = SubjectsWithRoles(db)
             .Where(s => s.Username == username
-                && db.TenantMembers.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id));
+                && live.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id));
         if (activeOnly)
             members = members.Where(s => s.IsActive);
 
@@ -174,17 +175,18 @@ public class SubjectRepository : ISubjectRepository
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<SubjectRecord>> FindMembersByConfirmedEmailAsync(
-        Guid tenantId, string email, CancellationToken ct)
+        Guid tenantId, string email, DateTime now, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var live = db.TenantMembers.LiveAt(now);
         // The query only narrows to the tenant's confirmed members; whether an address is the one
         // named is decided by EmailAddresses.AreSame below, so no SQL comparison restates it.
         var confirmed = await Subjects(db)
             .ExcludeDemo()
             .Where(OrphanedSubjectFilter.HoldsConfirmedEmail)
             .Where(s => s.IsActive && !s.IsSystemSubject
-                && db.TenantMembers.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id))
+                && live.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id))
             .ToListAsync(ct);
         return confirmed
             .Where(s => EmailAddresses.AreSame(s.Email, email))

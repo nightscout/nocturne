@@ -47,12 +47,12 @@ public class PasskeyCeremonyHostExtensionsTests
 
         var contexts = TestDbContextFactory.CreateInMemoryContext().AsFactory();
         return new PasskeyService(
-            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off)),
+            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             new Fido2(fido2Config),
             new EphemeralDataProtectionProvider(),
             Options.Create(fido2Config),
             NullLogger<PasskeyService>.Instance,
-            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"));
+            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"), TimeProvider.System);
     }
 
     [Fact]

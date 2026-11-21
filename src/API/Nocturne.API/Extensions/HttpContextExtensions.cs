@@ -208,6 +208,36 @@ public static class HttpContextExtensions
     public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
         requested || context.IsCallerHistoryClamped();
 
+    /// <summary>
+    /// The refusal a caller whose own access ends on a date reads when an action would give someone
+    /// access that lasts longer.
+    /// </summary>
+    public const string AccessEndCeilingDetail =
+        "Your access ends on a date, so you cannot give anyone access that lasts longer than yours.";
+
+    /// <summary>
+    /// When the caller's own membership of the request's tenant ends, read from the membership the
+    /// request authenticated with; null when it does not end or the credential is held to no
+    /// membership (the instance key, platform access). This is the caller's access ceiling, as
+    /// <see cref="IsCallerHistoryClamped"/> is the history ceiling: a membership the caller creates
+    /// inherits it, and the caller may not set an end later than it, or none.
+    /// </summary>
+    public static DateTime? CallerAccessEndsAt(this HttpContext context) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
+            ? RequestMembership.Of(context, subjectId, tenantId)?.Membership?.Access.AccessEndsAt
+            : null;
+
+    /// <summary>The end a membership this caller creates carries: the requested one, or the caller's own (<see cref="CallerAccessEndsAt"/>).</summary>
+    public static DateTime? InheritAccessEnd(this HttpContext context, DateTime? requested) =>
+        requested ?? context.CallerAccessEndsAt();
+
+    /// <summary>
+    /// Whether <paramref name="requested"/> would outlast the caller's own access: later than
+    /// <see cref="CallerAccessEndsAt"/>, or no end at all, for a caller whose access ends.
+    /// </summary>
+    public static bool OutlastsCallerAccess(this HttpContext context, DateTime? requested) =>
+        context.CallerAccessEndsAt() is { } ceiling && (requested is not { } end || end > ceiling);
+
     private const string ReaderItemKey = "TenantReader";
 
     /// <summary>

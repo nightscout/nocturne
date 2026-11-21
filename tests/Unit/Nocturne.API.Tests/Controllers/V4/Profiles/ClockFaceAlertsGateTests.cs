@@ -118,7 +118,7 @@ public class ClockFaceAlertsGateTests
     {
         var members = new Mock<ITenantMemberService>();
         members.Setup(m => m.GetMemberAccessAsync(_owner, _tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantMemberAccess(new HashSet<string>(ownerPermissions), false));
+            .ReturnsAsync(new TenantMemberAccess(new HashSet<string>(ownerPermissions), false, null));
         var tenant = new Mock<ITenantAccessor>();
         tenant.Setup(t => t.TenantId).Returns(_tenant);
 

@@ -75,7 +75,7 @@ public class SubjectOwnerGuardTests : IDisposable
 
         refused.Should().Equal(new LastOwnerTenant(_home, "home"));
         (await ExistsAsync(owner)).Should().BeTrue();
-        (await Members().IsMemberAsync(_home, owner, CancellationToken.None)).Should().BeTrue();
+        (await Members().IsMemberAsync(_home, owner, DateTime.UtcNow, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]

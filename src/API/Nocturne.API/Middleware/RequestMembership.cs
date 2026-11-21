@@ -13,7 +13,8 @@ namespace Nocturne.API.Middleware;
 /// request needs these facts before its controller runs. So they are read in one statement: joined to
 /// the grant by a handler that already reads one (<see cref="IOAuthGrantRepository"/>), otherwise
 /// joined to the subject's row with its platform-admin flag (<see cref="ReadAsync"/>). Nothing outlives
-/// the request, so a removed member or a revoked credential is refused on the next one.
+/// the request, so a removed member, an ended membership or a revoked credential is refused on the
+/// next one.
 /// </remarks>
 /// <param name="SubjectId">The authenticated subject.</param>
 /// <param name="TenantId">The resolved tenant.</param>
@@ -38,9 +39,9 @@ internal sealed record RequestMembership(Guid SubjectId, Guid TenantId, Membersh
     /// one statement (<see cref="ITenantMembershipRepository.ReadSubjectMembershipAsync"/>).
     /// </summary>
     internal static async Task<(RequestMembership Membership, bool IsPlatformAdmin)> ReadAsync(
-        ITenantMembershipRepository members, Guid subjectId, Guid tenantId, CancellationToken ct)
+        ITenantMembershipRepository members, Guid subjectId, Guid tenantId, DateTime now, CancellationToken ct)
     {
-        var read = await members.ReadSubjectMembershipAsync(subjectId, tenantId, ct);
+        var read = await members.ReadSubjectMembershipAsync(subjectId, tenantId, now, ct);
         return (new RequestMembership(subjectId, tenantId, MembershipFacts.From(read?.Membership)), read?.IsPlatformAdmin ?? false);
     }
 }

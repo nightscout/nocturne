@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
+using Nocturne.API.Middleware;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
@@ -68,7 +70,7 @@ public sealed class MemberRecoveryControllerTests : IDisposable
             new TenantMembershipRepository(contexts, linkRoute),
             MockTenantAccessor.Create(_tenantId).Object,
             _roles.Object,
-            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute)), linkRoute),
+            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute), TimeProvider.System), linkRoute),
             _recoveryCodes.Object,
             _loginCodes.Object)
         {
@@ -184,6 +186,46 @@ public sealed class MemberRecoveryControllerTests : IDisposable
 
         result.Should().BeOfType<ForbidResult>();
         NoCodeIssued();
+    }
+
+    private void CallerAccessEndsAt(DateTime accessEndsAt) =>
+        new RequestMembership(
+                _adminId,
+                _tenantId,
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, accessEndsAt), null))
+            .StoreOn(_controller.ControllerContext.HttpContext);
+
+    private void OrphanAccessEndsAt(DateTime? accessEndsAt)
+    {
+        _context.TenantMembers.Single(m => m.Id == _orphanMemberId).AccessEndsAt = accessEndsAt;
+        _context.SaveChanges();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(11)]
+    public async Task A_caller_whose_access_ends_cannot_recover_a_member_whose_access_outlasts_theirs(int? orphanEndsInDays)
+    {
+        var now = DateTime.UtcNow;
+        CallerAccessEndsAt(now.AddDays(10));
+        OrphanAccessEndsAt(orphanEndsInDays is { } days ? now.AddDays(days) : null);
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(HttpContextExtensions.AccessEndCeilingDetail);
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task A_caller_whose_access_ends_can_recover_a_member_whose_access_ends_no_later()
+    {
+        var now = DateTime.UtcNow;
+        CallerAccessEndsAt(now.AddDays(10));
+        OrphanAccessEndsAt(now.AddDays(10));
+
+        (await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None)).Should().BeOfType<OkObjectResult>();
     }
 
     [Theory]

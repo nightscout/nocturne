@@ -37,6 +37,7 @@ public class PublicSubjectFilterTests
             Label: null,
             Username: null,
             LimitTo24Hours: false,
+            AccessEndsAt: null,
             LastUsedAt: null,
             CreatedFromInviteId: null,
             SysCreatedAt: DateTime.UtcNow);

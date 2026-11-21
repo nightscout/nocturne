@@ -114,7 +114,7 @@ public class AlertRulesControllerTenantScopingTests
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
     }
 
     private static List<AlertRuleResponse> OkValue(ActionResult<List<AlertRuleResponse>> result)

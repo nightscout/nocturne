@@ -7,12 +7,17 @@ namespace Nocturne.Core.Contracts.Auth;
 /// </summary>
 public interface IGuestLinkService
 {
+    /// <param name="expiresNoLaterThan">
+    /// The latest the link may expire: the creator's own access end, so a link cannot outlast the
+    /// membership of the person who made it. Null leaves the link its normal lifetime.
+    /// </param>
     Task<GuestLinkCreationResult> CreateGuestLinkAsync(
         Guid dataOwnerSubjectId,
         Guid createdBySubjectId,
         string label,
         string baseUrl,
         IReadOnlySet<string> creatorScopes,
+        DateTime? expiresNoLaterThan,
         IEnumerable<string>? scopes = null,
         bool limitTo24Hours = false,
         CancellationToken ct = default);

@@ -56,6 +56,7 @@ public sealed class DevTenantMemberSelectionTests
         Label: null,
         Username: null,
         LimitTo24Hours: false,
+        AccessEndsAt: null,
         LastUsedAt: null,
         CreatedFromInviteId: null,
         SysCreatedAt: createdAt ?? DateTime.UtcNow);

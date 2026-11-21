@@ -5,9 +5,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
+using Nocturne.API.Middleware;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -113,12 +116,13 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 _tenantId, _callerSubjectId, It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(expected);
 
         var controller = BuildController(Scope.FullAccess);
 
-        var result = await controller.CreateInvite(ClinicianInvite(roleId));
+        var result = await controller.CreateInvite(ClinicianInvite(roleId), TimeProvider.System);
 
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status201Created);
@@ -136,12 +140,13 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(expected);
 
         var controller = BuildController(Scope.MembersInvite);
 
-        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()), TimeProvider.System);
 
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status201Created);
@@ -304,7 +309,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             TenantId = _tenantId,
         };
 
-        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()), TimeProvider.System);
 
         result.Should().BeOfType<UnauthorizedResult>();
         _inviteService.VerifyNoOtherCalls();
@@ -320,18 +325,19 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
         var controller = BuildController(Scope.MembersInvite, Scope.GlucoseRead);
 
-        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()), TimeProvider.System);
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(),
             It.Is<IEnumerable<string>>(scopes => scopes.OrderBy(x => x).SequenceEqual(
                 new[] { Scope.GlucoseRead, Scope.MembersInvite }.OrderBy(x => x))),
-            It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(), It.IsAny<string?>(),
+            It.IsAny<List<Guid>>(), It.IsAny<DateTime?>(), It.IsAny<List<string>?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.Once);
     }
@@ -347,6 +353,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(),
                 It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
@@ -355,10 +362,11 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         controller.HttpContext.Request.Scheme = "https";
         controller.HttpContext.Request.Host = new HostString("chris-natoli-aps.nocturne.run");
 
-        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()), TimeProvider.System);
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+            It.IsAny<DateTime?>(),
             It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(),
             It.IsAny<bool>(), "https://chris-natoli-aps.nocturne.run"),
             Times.Once);
@@ -379,6 +387,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
@@ -394,10 +403,11 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var invite = ClinicianInvite(Guid.CreateVersion7());
         invite.LimitTo24Hours = requested;
 
-        await controller.CreateInvite(invite);
+        await controller.CreateInvite(invite, TimeProvider.System);
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+            It.IsAny<DateTime?>(),
             It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), expected, It.IsAny<string?>()),
             Times.Once);
     }
@@ -430,15 +440,17 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
         var controller = BuildController(Scope.MembersInvite);
 
-        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()), TimeProvider.System);
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             _tenantId, _callerSubjectId, It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+            It.IsAny<DateTime?>(),
             It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.Once);
     }
@@ -454,12 +466,13 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ThrowsAsync(new ArgumentException("One or more role IDs do not belong to this tenant."));
 
         var controller = BuildController(Scope.MembersInvite);
 
-        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()), TimeProvider.System);
 
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -535,7 +548,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         DateTime.UtcNow,
         usedBy ?? [],
         [],
-        [Scope.GlucoseRead]);
+        [Scope.GlucoseRead], null);
 
     /// <summary>
     /// The invitee's browser resolves the tenant by host, and the invite belongs to exactly one
@@ -811,6 +824,91 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .ToList();
 
         routesWithoutToken.Should().BeEmpty();
+    }
+
+    private static readonly DateTimeOffset AccessEndNow = new(2026, 11, 22, 9, 0, 0, TimeSpan.Zero);
+
+    private async Task<(IActionResult Result, DateTime? Passed)> CreateInviteEndingAsync(
+        DateTime? callerAccessEndsAt, DateTimeOffset? requested)
+    {
+        DateTime? passed = null;
+        _inviteService
+            .Setup(s => s.CreateInviteAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(), It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(),
+                It.IsAny<string?>()))
+            .Callback(new InvocationAction(i => passed = (DateTime?)i.Arguments[4]))
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
+
+        var controller = BuildController(Scope.MembersInvite);
+        new RequestMembership(
+                _callerSubjectId,
+                _tenantId,
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersInvite }, false, callerAccessEndsAt), null))
+            .StoreOn(controller.HttpContext);
+        var invite = ClinicianInvite(Guid.CreateVersion7());
+        invite.AccessEndsAt = requested;
+
+        return (await controller.CreateInvite(invite, new FakeTimeProvider(AccessEndNow)), passed);
+    }
+
+    [Fact]
+    public async Task CreateInvite_byACallerWhoseAccessEnds_inheritsTheirEndWhenItNamesNone()
+    {
+        var (_, passed) = await CreateInviteEndingAsync(AccessEndNow.UtcDateTime.AddDays(10), requested: null);
+
+        passed.Should().Be(AccessEndNow.UtcDateTime.AddDays(10));
+    }
+
+    [Fact]
+    public async Task CreateInvite_byACallerWhoseAccessEnds_passesAnEarlierEnd()
+    {
+        var (_, passed) = await CreateInviteEndingAsync(AccessEndNow.UtcDateTime.AddDays(10), AccessEndNow.AddDays(2));
+
+        passed.Should().Be(AccessEndNow.UtcDateTime.AddDays(2));
+    }
+
+    [Fact]
+    public async Task CreateInvite_byACallerWhoseAccessEnds_refusesALaterEnd()
+    {
+        var (result, passed) = await CreateInviteEndingAsync(AccessEndNow.UtcDateTime.AddDays(10), AccessEndNow.AddDays(11));
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(HttpContextExtensions.AccessEndCeilingDetail);
+        passed.Should().BeNull("no invite was created");
+        _inviteService.Invocations.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(500)]
+    public async Task CreateInvite_byACallerWithNoEnd_passesWhatItAsksFor(int? daysAhead)
+    {
+        var requested = daysAhead is { } days ? AccessEndNow.AddDays(days) : (DateTimeOffset?)null;
+
+        var (result, passed) = await CreateInviteEndingAsync(callerAccessEndsAt: null, requested);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+        passed.Should().Be(requested?.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task CreateInvite_refusesAnEndAtOrBeforeNow()
+    {
+        var (result, _) = await CreateInviteEndingAsync(callerAccessEndsAt: null, AccessEndNow);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(AccessEndRequest.PastDetail);
+        _inviteService.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SetMemberAccessEnd_withoutMembersManage_isForbidden()
+    {
+        Gate(nameof(MemberInviteController.SetMemberAccessEnd), Scope.MembersInvite)
+            .ShouldBeScopeRefusal(Scope.MembersManage);
     }
 
     public void Dispose() => _dbContext.Dispose();

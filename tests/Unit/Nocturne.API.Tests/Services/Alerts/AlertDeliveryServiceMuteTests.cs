@@ -42,6 +42,7 @@ public class AlertDeliveryServiceMuteTests
         var services = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton(TimeProvider.System)
+            .AddSingleton<ITenantMembershipRepository>(new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
             .AddSingleton<ChatIdentityDirectoryService>()
             .AddSingleton(_notifications.Object)
             .AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>))

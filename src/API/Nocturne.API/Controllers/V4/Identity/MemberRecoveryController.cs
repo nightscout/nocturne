@@ -140,6 +140,9 @@ public class MemberRecoveryController : ControllerBase
         if (!member.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
+        if (HttpContext.OutlastsCallerAccess(member.AccessEndsAt))
+            return Problem(detail: HttpContextExtensions.AccessEndCeilingDetail, statusCode: 403);
+
         var issued = await _loginCodeService.IssueAsync(
             db, subjectId, LoginCodePurpose.Recovery,
             HttpContext.Connection.RemoteIpAddress?.ToString(),

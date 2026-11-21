@@ -90,6 +90,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddSingleton(AccountLinkRoutes.Off);
+        services.AddSingleton(TimeProvider.System);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var handler = new SessionCookieHandler(
@@ -107,6 +108,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddSingleton(AccountLinkRoutes.Off);
+        services.AddSingleton(TimeProvider.System);
         var ctx = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         ctx.Items["TenantContext"] =
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);
