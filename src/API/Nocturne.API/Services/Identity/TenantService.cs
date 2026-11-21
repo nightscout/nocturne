@@ -1,5 +1,4 @@
 using Nocturne.API.Multitenancy;
-using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -401,25 +400,14 @@ public partial class TenantService : ITenantService
 
         if (!string.IsNullOrEmpty(_config.SlugValidationWebhookUrl))
         {
-            try
-            {
-                var client = _httpClientFactory.CreateClient("slug-validation");
-                var response = await client.PostAsJsonAsync(
-                    _config.SlugValidationWebhookUrl,
-                    new { slug = normalized },
-                    ct);
+            var answer = await OperatorWebhook.PostAsync<SlugValidationResult>(
+                _httpClientFactory.CreateClient(OperatorWebhook.SlugValidationClient),
+                _config.SlugValidationWebhookUrl,
+                new { slug = normalized },
+                ct);
 
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
-                    if (result is { IsValid: false })
-                        return result;
-                }
-            }
-            catch
-            {
-                // Webhook failure should not block validation — fall through to success
-            }
+            if (answer.Value is { IsValid: false } rejection)
+                return rejection;
         }
 
         return new SlugValidationResult(true);
