@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -88,13 +89,13 @@ public static class DemoCoverageSeeds
             Device = ComparisonCgmSerial,
             Mills = mills,
             Date = timestamp,
-            DateString = timestamp.ToString("o"),
+            DateString = timestamp.ToString("o", CultureInfo.InvariantCulture),
             Mgdl = glucose,
             Sgv = glucose,
             Direction = source.Direction,
             Delta = source.Delta,
             DataSource = source.DataSource,
-            CreatedAt = timestamp.ToString("o"),
+            CreatedAt = timestamp.ToString("o", CultureInfo.InvariantCulture),
             ModifiedAt = timestamp,
         };
     }

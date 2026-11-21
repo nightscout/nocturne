@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -242,10 +243,10 @@ public class GlookoConnectorService
         var maxCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalMinutes / 5));
 
         return $"{endpoint}?patient={patientCode}"
-             + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-             + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&startDate={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+             + $"&endDate={endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&lastGuid={GlookoConstants.LegacyLastGuid}"
-             + $"&lastUpdatedAt={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&lastUpdatedAt={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&limit={maxCount}";
     }
 
@@ -262,8 +263,8 @@ public class GlookoConnectorService
         var seriesParams = string.Join("&", series.Select(s => $"series[]={s}"));
 
         return $"{GlookoConstants.V3GraphDataPath}?patient={patientCode}"
-             + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-             + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&startDate={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+             + $"&endDate={endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&{seriesParams}"
              + "&locale=en&insulinTooltips=false&filterBgReadings=false&splitByDay=false";
     }
@@ -281,8 +282,8 @@ public class GlookoConnectorService
         var seriesParams = string.Join("&", GlookoConstants.V3PumpModeSeries.Select(s => $"series[]={s}"));
 
         return $"{GlookoConstants.V3GraphDataPath}?patient={patientCode}"
-             + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-             + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&startDate={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+             + $"&endDate={endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&{seriesParams}"
              + "&locale=en&insulinTooltips=false&filterBgReadings=false&splitByDay=false";
     }
@@ -589,8 +590,8 @@ public class GlookoConnectorService
             await ReportSyncMessageAsync(SyncMessageType.FetchingData,
                 new()
                 {
-                    ["from"] = chunkFrom.ToString("MMM dd"),
-                    ["to"] = chunkTo.ToString("MMM dd"),
+                    ["from"] = chunkFrom.ToString("MMM dd", CultureInfo.InvariantCulture),
+                    ["to"] = chunkTo.ToString("MMM dd", CultureInfo.InvariantCulture),
                     ["chunk"] = $"{i + 1}/{chunks.Count}",
                 },
                 cancellationToken);
@@ -1699,7 +1700,7 @@ public class GlookoConnectorService
                 + "&sendSoftDeleted=false&allDevicesFlag=true";
 
         if (startDate.HasValue)
-            url += $"&startDate={startDate.Value:yyyy-MM-ddTHH:mm:ss.fffZ}";
+            url += $"&startDate={startDate.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}";
 
         return url;
     }
@@ -1872,7 +1873,7 @@ public class GlookoConnectorService
         return JsonSerializer.Deserialize<T>(result.Value.GetRawText());
     }
 
-    private static string FormatSsv2Cursor(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+    private static string FormatSsv2Cursor(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     /// <summary>Page budget for the one-time historical scan: 12 × 500 boluses ≈ years of pump use.</summary>
     private const int HistoricalScanMaxPages = 12;
@@ -2019,8 +2020,8 @@ public class GlookoConnectorService
             if (patientCode == null) return null;
 
             var url = $"{GlookoConstants.V3HistoriesPath}?patient={patientCode}"
-                    + $"&startDate={fromDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-                    + $"&endDate={toDate:yyyy-MM-ddTHH:mm:ss.fffZ}";
+                    + $"&startDate={fromDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+                    + $"&endDate={toDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}";
 
             _logger.LogInformation("[{ConnectorSource}] Fetching v3 histories from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
                 ConnectorSource, fromDate, toDate);

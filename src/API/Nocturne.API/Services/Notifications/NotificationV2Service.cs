@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles;
@@ -129,7 +130,7 @@ public class NotificationV2Service : INotificationV2Service
                     title = notification.Title,
                     group = notification.Group,
                     level = notification.Level,
-                    processed_at = _time.GetUtcNow().ToString("O"),
+                    processed_at = _time.GetUtcNow().ToString("O", CultureInfo.InvariantCulture),
                 },
                 Timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds(),
             };
@@ -175,7 +176,7 @@ public class NotificationV2Service : INotificationV2Service
                 email_notifications = false, // Would be true if email service is configured
                 websocket_notifications = true,
             },
-            last_update = _time.GetUtcNow().ToString("O"),
+            last_update = _time.GetUtcNow().ToString("O", CultureInfo.InvariantCulture),
         };
     }
 

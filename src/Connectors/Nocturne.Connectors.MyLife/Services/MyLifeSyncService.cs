@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.MyLife.Models;
@@ -112,7 +113,7 @@ public class MyLifeSyncService(MyLifeSoapClient soapClient, ILogger<MyLifeSyncSe
 
         while (current <= end)
         {
-            months.Add(current.ToString("yyyyMM"));
+            months.Add(current.ToString("yyyyMM", CultureInfo.InvariantCulture));
             current = current.AddMonths(1);
         }
 

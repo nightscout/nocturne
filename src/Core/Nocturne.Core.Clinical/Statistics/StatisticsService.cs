@@ -2740,7 +2740,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
 
             var displayDate = DateOnly
                 .ParseExact(dateKey, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
-                .ToString("MMM d");
+                .ToString("MMM d", CultureInfo.InvariantCulture);
 
             result.DailyData.Add(
                 new DailyBasalBolusRatioData

@@ -200,9 +200,9 @@ public sealed class GoogleHealthConnectorService(
     {
         var configuration = await LoadRuntimeStateAsync(ct);
         configuration[BackfillCursorKey] = state.CursorDate is { } cursor
-            ? JsonSerializer.SerializeToElement(cursor.UtcDateTime.ToString("o"))
+            ? JsonSerializer.SerializeToElement(cursor.UtcDateTime.ToString("o", CultureInfo.InvariantCulture))
             : JsonSerializer.SerializeToElement<string?>(null);
-        configuration[BackfillFloorKey] = JsonSerializer.SerializeToElement(state.FloorDate.UtcDateTime.ToString("o"));
+        configuration[BackfillFloorKey] = JsonSerializer.SerializeToElement(state.FloorDate.UtcDateTime.ToString("o", CultureInfo.InvariantCulture));
         configuration[BackfillCompleteKey] = JsonSerializer.SerializeToElement(state.Complete);
         if (state.ChunkDays is { } chunkDays)
             configuration[BackfillChunkDaysKey] = JsonSerializer.SerializeToElement(chunkDays);
@@ -245,7 +245,7 @@ public sealed class GoogleHealthConnectorService(
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var existingValue) &&
             existingValue >= to.UtcDateTime)
             return;
-        configuration[LastSyncedToKey] = JsonSerializer.SerializeToElement(to.UtcDateTime.ToString("o"));
+        configuration[LastSyncedToKey] = JsonSerializer.SerializeToElement(to.UtcDateTime.ToString("o", CultureInfo.InvariantCulture));
         await SaveRuntimeStateAsync(configuration, ct);
     }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Nocturne.Core.Models;
 
@@ -136,7 +137,7 @@ public static class ActivityStateSpanMapper
             Notes = MetadataString(session, "notes"),
             Name = MetadataString(session, "name"),
             EnteredBy = MetadataString(session, "enteredBy") ?? session.SourceApp ?? "nocturne",
-            CreatedAt = session.CreatedAt?.ToString("o"),
+            CreatedAt = session.CreatedAt?.ToString("o", CultureInfo.InvariantCulture),
         };
     }
 

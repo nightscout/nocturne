@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -458,7 +459,7 @@ public class SummaryService : ISummaryService
 
         // Find the appropriate basal rate for the start time
         var startTime = DateTimeOffset.FromUnixTimeMilliseconds(start);
-        var startHHMM = startTime.ToString("HH:mm");
+        var startHHMM = startTime.ToString("HH:mm", CultureInfo.InvariantCulture);
 
         while (
             currentIndex < basals.Count - 1

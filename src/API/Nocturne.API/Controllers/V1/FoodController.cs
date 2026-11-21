@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -75,7 +76,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(foodList.ToArray());
     }
@@ -104,7 +105,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(foodArray);
     }
@@ -141,7 +142,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(foodArray);
     }
@@ -187,7 +188,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(food);
     }

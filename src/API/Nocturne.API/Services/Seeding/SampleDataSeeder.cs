@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Multitenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -1071,7 +1072,7 @@ public class SampleDataSeeder
             if (day.DayOfWeek != DayOfWeek.Sunday)
                 continue;
 
-            var syncId = $"demo-weight-{day:yyyy-MM-dd}";
+            var syncId = $"demo-weight-{day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
             if (existing.Contains(syncId))
                 continue;
 

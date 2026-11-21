@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Analytics;
@@ -155,7 +156,7 @@ public class IobController : ControllerBase
                 TimeSlot = tick.Mills,
                 Hour = timeStamp.Hour,
                 Minute = timeStamp.Minute,
-                TimeLabel = timeStamp.ToString("HH:mm"),
+                TimeLabel = timeStamp.ToString("HH:mm", CultureInfo.InvariantCulture),
                 TotalIOB = tick.Iob,
                 BolusIOB = tick.BolusIob ?? 0,
                 BasalIOB = tick.BasalIob ?? 0,

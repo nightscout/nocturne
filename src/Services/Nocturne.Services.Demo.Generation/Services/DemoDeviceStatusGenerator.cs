@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
@@ -81,7 +82,7 @@ public static class DemoDeviceStatusGenerator
         var utc = clock.ToUtc(time);
         var localTime = clock.ToLocal(utc);
         var mills = utc.ToMills();
-        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         var rng = DayScenarios.RngFor(localTime.Date, $"devicestatus:{localTime.Hour}:{localTime.Minute}");
 
         var eventualBg = EstimateEventualBg(glucose, iob, cob, effectiveIsf, effectiveCarbRatio, targetGlucose);

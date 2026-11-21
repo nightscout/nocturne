@@ -228,9 +228,9 @@ public class GlookoProfileMapper
         {
             Id = LegacyIds.Of(mills),
             DefaultProfile = defaultProfile,
-            StartDate = syncTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = syncTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = mills,
-            CreatedAt = syncTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = syncTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Units = "mg/dL",
             EnteredBy = "Glooko",
             IsExternallyManaged = true,

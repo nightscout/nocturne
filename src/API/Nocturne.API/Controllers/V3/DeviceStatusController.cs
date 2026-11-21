@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
@@ -301,7 +302,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         var updated = await _deviceStatuses.ReplaceDeviceStatusAsync(id, deviceStatus, cancellationToken);
@@ -402,7 +403,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Ensure DeviceStatus has required properties for V3 compatibility
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
     }
 

@@ -2,4 +2,5 @@
   <PropertyGroup>
     <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
+  <Import Project="CultureFreeDateBan.props"/>
 </Project>

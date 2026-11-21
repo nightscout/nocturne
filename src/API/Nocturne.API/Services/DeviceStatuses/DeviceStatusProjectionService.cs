@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Frozen;
 using System.Text.Json;
 using Nocturne.API.Configuration;
@@ -407,7 +408,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             SrvCreated = createdAt.ToMills(),
             // Nightscout clients place a status on the timeline by created_at, so it is the event
             // time; the server clock is srvCreated.
-            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             UtcOffset = utcOffset,
             Device = device ?? string.Empty,
         };
@@ -512,7 +513,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
         {
             // The span contains the status time. IsActive would say whether it has ended since.
             Active = true,
-            Timestamp = overrideSpan.StartTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Timestamp = overrideSpan.StartTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
         };
 
         if (overrideSpan.Metadata != null)

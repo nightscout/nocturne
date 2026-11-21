@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -188,7 +189,7 @@ public class GitHubIssueService(
             using var buffer = new MemoryStream();
             await imageContent.CopyToAsync(buffer, ct);
 
-            var path = $"screenshots/{DateTime.UtcNow:yyyy-MM}/{Guid.NewGuid():N}-{SanitizeFileName(fileName)}";
+            var path = $"screenshots/{DateTime.UtcNow.ToString("yyyy-MM", CultureInfo.InvariantCulture)}/{Guid.NewGuid():N}-{SanitizeFileName(fileName)}";
             var payload = JsonSerializer.Serialize(new GitHubCreateContentRequest
             {
                 Message = $"Add support issue screenshot {fileName}",

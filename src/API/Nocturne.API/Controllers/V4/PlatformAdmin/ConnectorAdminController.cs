@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -92,7 +93,7 @@ public class ConnectorAdminController : ControllerBase
 
         _logger.LogInformation(
             "Platform admin cursor reset requested for tenant {TenantId} (from {From})",
-            tenantId, request.From?.ToString("o") ?? "beginning");
+            tenantId, request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
         var job = await _resetJobService.StartResetAsync(
             tenantId, request.From, request.DataTypes, ct);

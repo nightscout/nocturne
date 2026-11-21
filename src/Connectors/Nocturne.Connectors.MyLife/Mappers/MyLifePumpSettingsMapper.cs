@@ -54,9 +54,9 @@ internal static class MyLifePumpSettingsMapper
             {
                 Id = readout.Id,
                 DefaultProfile = defaultProfile,
-                StartDate = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                StartDate = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 Mills = uploadMills,
-                CreatedAt = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                CreatedAt = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 Units = "mg/dL",
                 Store = store,
                 EnteredBy = "MyLife",
