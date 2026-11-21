@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -781,25 +782,8 @@ public class SubjectRepository : ISubjectRepository
     }
 
     private static SubjectRecord? ToRecord(SubjectEntity? subject) =>
-        subject is null ? null : new SubjectRecord(
-            subject.Id,
-            subject.Name,
-            subject.Username,
-            subject.Email,
-            subject.EmailConfirmedAt,
-            subject.Notes,
-            subject.IsActive,
-            subject.IsSystemSubject,
-            subject.IsDemoSubject,
-            subject.IsPlatformAdmin,
-            subject.ApprovalStatus,
-            subject.AccessRequestMessage,
-            subject.PreferredLanguage,
-            subject.Preferences,
-            subject.AvatarUrl,
-            subject.CreatedAt,
-            subject.UpdatedAt,
-            subject.LastLoginAt,
+        subject is null ? null : SubjectMapper.ToRecord(
+            subject,
             subject.SubjectRoles.Where(sr => sr.Role is not null).Select(sr => ToRole(sr.Role!)).ToList());
 
     private static Role ToRole(RoleEntity role) => new()
