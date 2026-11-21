@@ -1,0 +1,25 @@
+import {
+  GlucoseStatus,
+  type TenantOverviewItem,
+} from "#lib/api/generated/nocturne-api-client.js";
+import { tenantUrl } from "#lib/utils/tenant-host.js";
+
+export function personName(person: TenantOverviewItem): string {
+  return person.displayName || person.slug || "";
+}
+
+export function personHref(
+  person: TenantOverviewItem,
+  baseDomain: string | null
+): string | null {
+  return person.slug && baseDomain ? tenantUrl(person.slug, baseDomain) : null;
+}
+
+function hasReading(person: TenantOverviewItem): boolean {
+  return person.latest?.mgdl != null;
+}
+
+/** A reading the server calls stale, or none at all. */
+export function readingIsNotCurrent(person: TenantOverviewItem): boolean {
+  return person.status === GlucoseStatus.Stale || !hasReading(person);
+}

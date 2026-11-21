@@ -69,7 +69,7 @@ describe("buildAppNavigation", () => {
   it("withholds every owner surface from a public share", () => {
     const visible = titles(REPORTING_SHARE);
 
-    for (const owned of [...OWNER_ONLY, "Tenants"]) {
+    for (const owned of [...OWNER_ONLY, "People"]) {
       expect(visible).not.toContain(owned);
     }
   });
@@ -169,9 +169,9 @@ describe("buildAppNavigation", () => {
   });
 
   it("offers the tenant switcher only to a member holding more than one", () => {
-    expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("Tenants");
+    expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("People");
     expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
-      "Tenants"
+      "People"
     );
   });
 });

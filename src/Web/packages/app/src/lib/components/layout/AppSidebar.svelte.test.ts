@@ -153,7 +153,7 @@ describe("AppSidebar", () => {
     renderViewingBravo();
 
     await expect.element(page.getByText("Viewing data for")).toBeVisible();
-    await expect.element(link("Tenants")).toBeVisible();
+    await expect.element(link("People")).toBeVisible();
   });
 
   it("offers a single-tenant member no switcher and no Tenants item", async () => {
@@ -168,7 +168,7 @@ describe("AppSidebar", () => {
 
     await expect.element(link("Dashboard")).toBeVisible();
     await expect.element(page.getByText("Viewing data for")).not.toBeInTheDocument();
-    await expect.element(link("Tenants")).not.toBeInTheDocument();
+    await expect.element(link("People")).not.toBeInTheDocument();
   });
 
   it("reads the Do not disturb state the first time the alerts group opens", async () => {
