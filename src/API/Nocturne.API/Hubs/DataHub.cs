@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Hubs;
 
@@ -146,7 +147,7 @@ public class DataHub : TenantAwareHub
                 success = true,
             };
         }
-        catch (Exception ex) when (HubStoreFailure.Is(ex))
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,
@@ -255,7 +256,7 @@ public class DataHub : TenantAwareHub
                 deviceStatuses.Count()
             );
         }
-        catch (Exception ex) when (HubStoreFailure.Is(ex))
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,
@@ -312,7 +313,7 @@ public class DataHub : TenantAwareHub
 
             return new { success = true, collections = subscribed };
         }
-        catch (Exception ex) when (HubStoreFailure.Is(ex))
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,

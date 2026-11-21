@@ -11,6 +11,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -123,7 +124,7 @@ public class AlarmHubTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task A_replay_that_fails_still_reports_the_subscribe_as_successful(Exception failure)
     {
         _relay.Setup(r => r.HighestAlarmingAsync(It.IsAny<CancellationToken>())).ThrowsAsync(failure);
@@ -171,7 +172,7 @@ public class AlarmHubTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task A_subscribe_whose_credential_check_fails_is_answered_as_failed(Exception failure)
     {
         _tokenAuthorizer
@@ -197,7 +198,7 @@ public class AlarmHubTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task An_ack_that_fails_is_answered_with_a_failed_confirmation(Exception failure)
     {
         _ackHandler

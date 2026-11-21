@@ -14,6 +14,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -483,7 +484,7 @@ public class OverviewHubAuthorizeTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task Authorize_answers_a_failed_membership_read_with_a_failed_response(Exception failure)
     {
         var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
@@ -503,7 +504,7 @@ public class OverviewHubAuthorizeTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task Authorize_answers_a_failed_token_check_with_a_failed_response(Exception failure)
     {
         var (hub, _, overview, jwt, revocation, _, _) = CreateHub();

@@ -1,13 +1,11 @@
-using System.Data.Common;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -322,15 +320,7 @@ public class MembershipRequestService : IMembershipRequestService
                     cancellationToken: CancellationToken.None);
             }
         }
-        catch (DbUpdateException ex)
-        {
-            LogDecidersNotTold(ex, tenantId, requestId);
-        }
-        catch (DbException ex)
-        {
-            LogDecidersNotTold(ex, tenantId, requestId);
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogDecidersNotTold(ex, tenantId, requestId);
         }

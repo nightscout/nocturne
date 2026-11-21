@@ -70,17 +70,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 .Select(t => t.LastReadingAt)
                 .FirstOrDefaultAsync(ct);
         }
-        catch (DbUpdateException ex)
-        {
-            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
-            return;
-        }
-        catch (InvalidOperationException ex)
-        {
-            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
-            return;
-        }
-        catch (TimeoutException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
             return;
@@ -169,17 +159,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             return models.Where(m => shown.Contains(m.Id)).ToList();
         }
         catch (OperationCanceledException) { throw; }
-        catch (DbUpdateException ex)
-        {
-            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
-            return models;
-        }
-        catch (InvalidOperationException ex)
-        {
-            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
-            return models;
-        }
-        catch (TimeoutException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;

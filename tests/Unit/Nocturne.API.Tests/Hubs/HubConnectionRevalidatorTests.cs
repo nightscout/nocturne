@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -157,7 +158,7 @@ public class HubConnectionRevalidatorTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task A_connection_whose_check_fails_in_the_database_is_kept_and_the_next_is_still_checked(
         Exception failure)
     {
@@ -173,7 +174,7 @@ public class HubConnectionRevalidatorTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.Defects), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
     public async Task A_connection_whose_check_fails_unexpectedly_is_closed_and_the_next_is_still_checked(
         Exception failure)
     {

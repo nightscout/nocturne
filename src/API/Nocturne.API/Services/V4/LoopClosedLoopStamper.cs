@@ -1,8 +1,8 @@
-using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.V4;
@@ -65,7 +65,7 @@ internal sealed class LoopClosedLoopStamper(
             await using var job = TenantJobScope.Open(scope, tenant, AuditEndpoint);
             await stamp(job.ServiceProvider.GetRequiredService<IApsSnapshotRepository>());
         }
-        catch (DbException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogWarning(ex, "Could not stamp whether the loop was closed on the Loop snapshots a write governs");
         }

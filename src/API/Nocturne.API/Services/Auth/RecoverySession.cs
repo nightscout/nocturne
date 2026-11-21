@@ -1,9 +1,8 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -138,7 +137,7 @@ public sealed class RecoverySession(
             await using var db = await contexts.CreateAsync(ct);
             await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId, ct);
         }
-        catch (Exception ex) when (ex is DbException or DbUpdateException or InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException)
         {
             logger.LogWarning(ex, "Could not void outstanding recovery codes for {SubjectId}", subjectId);
         }

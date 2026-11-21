@@ -1,16 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using Nocturne.API.Hubs;
+using Nocturne.Infrastructure.Data;
 using Npgsql;
 
-namespace Nocturne.API.Tests.Hubs;
+namespace Nocturne.API.Tests.Infrastructure;
 
 /// <summary>
-/// A hub answers a failure of its database with its failed response, and lets a defect reach the
-/// hub pipeline.
+/// A caller answers a failure of its database with its failed response, and lets a defect reach its
+/// pipeline.
 /// </summary>
 [Trait("Category", "Unit")]
-public class HubStoreFailureTests
+public class StoreFailureTests
 {
     /// <summary>The failures the database raises through Npgsql and EF.</summary>
     public static TheoryData<Exception> StoreFailures => new()
@@ -32,13 +32,13 @@ public class HubStoreFailureTests
     [MemberData(nameof(StoreFailures))]
     public void A_failure_of_the_database_is_a_store_failure(Exception failure)
     {
-        HubStoreFailure.Is(failure).Should().BeTrue();
+        StoreFailure.Is(failure).Should().BeTrue();
     }
 
     [Theory]
     [MemberData(nameof(Defects))]
     public void A_defect_is_not_a_store_failure(Exception failure)
     {
-        HubStoreFailure.Is(failure).Should().BeFalse();
+        StoreFailure.Is(failure).Should().BeFalse();
     }
 }

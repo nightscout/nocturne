@@ -6,6 +6,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Hubs;
 
@@ -156,7 +157,7 @@ public class OverviewHub : Hub
 
             return new OverviewAuthorizeResponse { Success = true, TenantIds = tenantIds };
         }
-        catch (Exception ex) when (HubStoreFailure.Is(ex))
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex, "Error during overview authorization for client {ConnectionId}",
