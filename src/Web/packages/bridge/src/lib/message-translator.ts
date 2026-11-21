@@ -1,5 +1,5 @@
 import logger from './logger.js';
-import SocketIOServer from './socketio-server.js';
+import SocketIOServer, { overviewReads } from './socketio-server.js';
 import { AlarmLevel } from '../constants.js';
 import type { AlarmEvent } from '../types.js';
 import { fieldsOf, type Payload } from './payload.js';
@@ -7,16 +7,19 @@ import { fieldsOf, type Payload } from './payload.js';
 class MessageTranslator {
   private socketIOServer: SocketIOServer;
   private tenantSlug?: string;
+  private tenantId?: string;
 
-  constructor(socketIOServer: SocketIOServer, tenantSlug?: string) {
+  constructor(socketIOServer: SocketIOServer, tenantSlug?: string, tenantId?: string) {
     this.socketIOServer = socketIOServer;
     this.tenantSlug = tenantSlug;
+    this.tenantId = tenantId;
   }
 
   handleDataUpdate(data: unknown): void {
     try {
       const translatedData = this.translateDataUpdate(data);
       this.socketIOServer.broadcastDataUpdate(translatedData, this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error translating data update:', error);
     }
@@ -35,6 +38,7 @@ class MessageTranslator {
     try {
       const translatedAlarm = this.translateAlarm(event, alarm);
       this.socketIOServer.broadcastAlarm(event, translatedAlarm, this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error translating alarm:', error);
     }
@@ -43,6 +47,7 @@ class MessageTranslator {
   handleClearAlarm(clear: unknown): void {
     try {
       this.socketIOServer.broadcastClearAlarm(clear, this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error handling clear alarm:', error);
     }
@@ -51,6 +56,7 @@ class MessageTranslator {
   handleEngineAlarm(event: AlarmEvent, alarm: unknown): void {
     try {
       this.socketIOServer.broadcastToAlarmNamespace(event, this.translateAlarm(event, alarm), this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error translating engine alarm:', error);
     }
@@ -59,6 +65,7 @@ class MessageTranslator {
   handleEngineClearAlarm(clear: unknown): void {
     try {
       this.socketIOServer.broadcastToAlarmNamespace('clear_alarm', clear, this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error handling engine clear alarm:', error);
     }
@@ -91,6 +98,7 @@ class MessageTranslator {
     try {
       const translatedData = this.translateStorageEvent(data);
       this.socketIOServer.broadcastStorageEvent('create', translatedData, this.tenantSlug);
+      if (overviewReads(translatedData)) this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error translating storage create:', error);
     }
@@ -100,6 +108,7 @@ class MessageTranslator {
     try {
       const translatedData = this.translateStorageEvent(data);
       this.socketIOServer.broadcastStorageEvent('update', translatedData, this.tenantSlug);
+      if (overviewReads(translatedData)) this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error translating storage update:', error);
     }
@@ -109,6 +118,7 @@ class MessageTranslator {
     try {
       const translatedData = this.translateStorageEvent(data);
       this.socketIOServer.broadcastStorageEvent('delete', translatedData, this.tenantSlug);
+      if (overviewReads(translatedData)) this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error translating storage delete:', error);
     }
@@ -141,6 +151,7 @@ class MessageTranslator {
   handleTrackerUpdate(data: unknown): void {
     try {
       this.socketIOServer.broadcastTrackerUpdate(data, this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error handling tracker update:', error);
     }
@@ -149,6 +160,7 @@ class MessageTranslator {
   handleTrackerDefinitionUpdate(data: unknown): void {
     try {
       this.socketIOServer.broadcastTrackerDefinitionUpdate(data, this.tenantSlug);
+      this.socketIOServer.broadcastOverviewUpdate(this.tenantId);
     } catch (error) {
       logger.error('Error handling tracker definition update:', error);
     }

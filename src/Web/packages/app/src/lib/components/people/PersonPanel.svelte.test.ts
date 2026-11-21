@@ -33,6 +33,8 @@ vi.mock("$app/navigation", () => ({
   afterNavigate: () => {},
 }));
 
+vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
+
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
   getOverview: () => ({
     get current() {

@@ -2,6 +2,7 @@ import type { InAppNotificationDto } from "#lib/api/index.js";
 import { createSystemNotification } from "#lib/audio/alarm-sounds.js";
 import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
 import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
+import { BROWSER_SOCKET_TIMING } from "#lib/websocket/socket-options.js";
 
 /**
  * The in-app notification types an alert rule delivers to this person's own account: an alert,
@@ -45,11 +46,7 @@ export function closeAlertNotification(notification: InAppNotificationDto): void
 export function listenForAlertNotifications(): () => void {
   const client = new WebSocketClient({
     url: window.location.origin,
-    reconnectAttempts: Infinity,
-    reconnectDelay: 5000,
-    maxReconnectDelay: 30000,
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    ...BROWSER_SOCKET_TIMING,
   });
   client.on("notificationCreated", raiseAlertNotification);
   client.on("notificationArchived", closeAlertNotification);

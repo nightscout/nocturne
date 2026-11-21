@@ -16,6 +16,7 @@
   import { pollWhileVisible } from "#lib/utils/poll-while-visible.svelte.js";
   import Users from "@lucide/svelte/icons/users";
   import PeopleRoster from "./PeopleRoster.svelte";
+  import { followOverview } from "./live-overview.svelte.js";
   import PersonPanel from "./PersonPanel.svelte";
   import {
     PERSON_PANEL_HEADING_ID,
@@ -125,6 +126,7 @@
 
   // A bare await would answer with the value this page already holds.
   pollWhileVisible(() => overviewQuery.refresh(), PERSON_POLL_MS);
+  const overviewFeed = followOverview(() => overviewQuery.refresh());
 </script>
 
 <svelte:head>
@@ -155,6 +157,8 @@
               new Date(reviewData.to)
             )}.
           {/if}
+        {:else if overviewFeed.live}
+          Readings update as they arrive.
         {:else}
           Readings refresh every minute.
         {/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { BROWSER_SOCKET_TIMING } from "#lib/websocket/socket-options.js";
   import {
     calculatedBasalInjection,
     calculatedCob,
@@ -70,11 +71,7 @@
   const config = {
     url: typeof window !== "undefined" ? window.location.origin : "",
     disabled: data.isShareHost === true,
-    reconnectAttempts: Infinity,
-    reconnectDelay: 5000,
-    maxReconnectDelay: 30000,
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    ...BROWSER_SOCKET_TIMING,
   };
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
