@@ -44,9 +44,10 @@ public class TandemConnectorService
     public override string ServiceName => "Tandem Source";
 
 
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         TandemConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -55,15 +56,8 @@ public class TandemConnectorService
 
         try
         {
-            var token = await ValidTokenAsync(config, cancellationToken);
-            if (token is null)
-            {
-                _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
-                return AuthenticationFailedResult();
-            }
-
-            var session = await TokenProvider.GetCachedSessionAsync();
-            var pumperId = session?.Metadata?.GetValueOrDefault(TandemAuthTokenProvider.PumperIdKey);
+            var cached = await TokenProvider.GetCachedSessionAsync();
+            var pumperId = cached?.Metadata?.GetValueOrDefault(TandemAuthTokenProvider.PumperIdKey);
             if (string.IsNullOrEmpty(pumperId))
             {
                 _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
@@ -72,7 +66,7 @@ public class TandemConnectorService
                 return result;
             }
 
-            var pumper = await _apiClient.GetPumperAsync(region, token, pumperId, cancellationToken);
+            var pumper = await _apiClient.GetPumperAsync(region, session.Token, pumperId, cancellationToken);
             var pumps = pumper?.Pumps ?? [];
             var device = ChooseDevice(pumps, config.PumpSerialNumber);
             if (device == null)
@@ -102,7 +96,7 @@ public class TandemConnectorService
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
             var unclosed = await SyncEventsAsync(
-                request, region, pumperId, device, activeTypes, time, result, config, cancellationToken);
+                request, region, pumperId, device, activeTypes, time, result, config, session, cancellationToken);
 
             // Assigned here, after everything that can fail: on a run that did, Message is the
             // failure summary the tenant's card reads and must not be a coverage notice instead.
@@ -193,7 +187,7 @@ public class TandemConnectorService
     private async Task<string?> SyncEventsAsync(
         SyncRequest request, TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
         HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
-        TandemConnectorConfiguration config, CancellationToken cancellationToken)
+        TandemConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
         // The pump's newest event is a hard ceiling: there is nothing above it to ask for.
         var now = Clock.GetUtcNow().UtcDateTime;
@@ -248,7 +242,7 @@ public class TandemConnectorService
 
             var response = await FetchWindowAsync(
                 region, pumperId, device.AssignmentId, windowStart, windowEnd, eventIdsFilter,
-                config, cancellationToken);
+                config, session, cancellationToken);
             foreach (var logEvent in response?.Events ?? [])
                 if (seen.Add((logEvent.SequenceGroup, logEvent.SequenceNumber)))
                     allEvents.Add(TandemEventDecoder.Decode(logEvent, _logger));
@@ -367,16 +361,12 @@ public class TandemConnectorService
     private async Task<TandemPumpLogsResponse?> FetchWindowAsync(
         TandemConstants.RegionUrls region, string pumperId, string deviceAssignmentId,
         DateTime windowStart, DateTime windowEnd, int[]? eventIdsFilter,
-        TandemConnectorConfiguration config, CancellationToken cancellationToken)
+        TandemConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
-        var token = await TokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token))
-            return null;
-
         return await ExecuteWithRetryAsync(
             () => _apiClient.GetPumpLogsAsync(
-                region, token!, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
-            ReauthenticateWith(config, t => token = t, cancellationToken),
+                region, session.Token, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
+            session.ReauthenticateAsync,
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchPumpEvents",
             cancellationToken: cancellationToken);

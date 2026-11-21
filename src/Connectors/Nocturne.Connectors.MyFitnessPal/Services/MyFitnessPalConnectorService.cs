@@ -29,7 +29,7 @@ public class MyFitnessPalConnectorService
     private readonly IConnectorConfigurationService _configService;
     private readonly MyFitnessPalFoodEntryMapper _mapper;
 
-    private string? _accessToken;
+    private TokenSession? _session;
     private string? _userId;
 
     public MyFitnessPalConnectorService(
@@ -72,9 +72,13 @@ public class MyFitnessPalConnectorService
             progressReporter);
 
     /// <inheritdoc />
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override bool NeedsSignIn(SyncRequest request, MyFitnessPalConnectorConfiguration config) =>
+        ResolveActiveTypes(request, config).Contains(SyncDataType.Food);
+
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         MyFitnessPalConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -89,7 +93,7 @@ public class MyFitnessPalConnectorService
             return result;
         }
 
-        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
+        if (!await ApplySessionAsync(config, session, cancellationToken))
             return AuthenticationFailedResult();
 
         // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
@@ -160,18 +164,15 @@ public class MyFitnessPalConnectorService
     /// <summary>
     /// Obtains an access token and the MyFitnessPal user id required by the GraphQL API.
     /// </summary>
-    private async Task<bool> AuthenticateWithConfigAsync(
+    private async Task<bool> ApplySessionAsync(
         MyFitnessPalConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
-        var token = await ValidTokenAsync(config, cancellationToken);
-        if (token is null)
-            return false;
+        var cached = await TokenProvider.GetCachedSessionAsync();
+        var metadata = cached?.Metadata;
 
-        var session = await TokenProvider.GetCachedSessionAsync();
-        var metadata = session?.Metadata;
-
-        _accessToken = token;
+        _session = session;
         _userId = metadata?.GetValueOrDefault(MyFitnessPalAuthTokenProvider.UserIdMetadataKey)
                   ?? config.UserId;
 
@@ -556,7 +557,7 @@ public class MyFitnessPalConnectorService
     /// </summary>
     private void AddAuthHeaders(HttpRequestMessage request)
     {
-        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_accessToken}");
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_session!.Token}");
         request.Headers.TryAddWithoutValidation(MyFitnessPalConstants.Headers.UserId, _userId);
         request.Headers.TryAddWithoutValidation(
             MyFitnessPalConstants.Headers.ClientId, MyFitnessPalConstants.ClientId);
