@@ -5,6 +5,7 @@ use chrono_tz::Tz;
 
 use super::Env;
 use super::elapsed::{ClockLeaf, Elapsed, Measure};
+use crate::clock_anomaly::ClockAnchor;
 use crate::context::SensorContext;
 use crate::enums::DayOfWeek;
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
@@ -75,13 +76,18 @@ pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> Truth {
 
 /// Elapsed minutes since `anchor` as a double; a missing anchor is +infinity,
 /// so `>` and `>=` hold on cold start, unlike loop_stale.
-pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>) -> ClockLeaf {
+pub(super) fn time_since(
+    p: &TimeSincePayload,
+    anchor: Option<DateTime<Utc>>,
+    source: ClockAnchor,
+) -> ClockLeaf {
     let minutes = f64::from(p.minutes.get());
     anchor.map_or(
         ClockLeaf::Fixed(p.operator.apply(f64::INFINITY, minutes).into()),
         |anchor| {
             ClockLeaf::Measured(Elapsed {
                 anchor,
+                source: Some(source),
                 measure: Measure::Minutes {
                     op: p.operator,
                     minutes,

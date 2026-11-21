@@ -208,6 +208,39 @@ public class AlertOrchestratorConditionIssueTests
         harness.Logger.Warnings.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task An_evaluation_that_read_an_anchor_ahead_of_the_clock_reports_it()
+    {
+        var harness = new Harness();
+        IReadOnlyList<ClockAnomaly> anomalies = [new("last_reading_at", TimeSpan.FromHours(1))];
+        harness.Engine
+            .Setup(e => e.EvaluateRuleAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertEngineEvaluation { ConditionUnknown = true, ClockAnomalies = anomalies });
+
+        await harness.EvaluateAsync(Rule("""{"timeout_minutes":20}""", AlertConditionType.SignalLoss));
+
+        harness.ClockNotice.Verify(n => n.ReportAsync(
+            It.IsAny<SensorContext>(),
+            It.Is<IReadOnlyCollection<ClockAnomaly>>(a => a.SequenceEqual(anomalies)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_failing_clock_notice_does_not_fail_the_pass()
+    {
+        var harness = new Harness();
+        harness.ClockNotice
+            .Setup(n => n.ReportAsync(It.IsAny<SensorContext>(), It.IsAny<IReadOnlyCollection<ClockAnomaly>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("store down"));
+
+        var pass = () => harness.EvaluateAsync(Rule("""{"timeout_minutes":20}""", AlertConditionType.SignalLoss));
+
+        await pass.Should().NotThrowAsync();
+        harness.Engine.Verify(e => e.EvaluateRuleAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<SensorContext>(),
+            It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static AlertRuleSnapshot Rule(string conditionParams, AlertConditionType type = AlertConditionType.Threshold) =>
         new(RuleId, Tenant, "Urgent Low", type, conditionParams,
             AlertRuleSeverity.Critical, "{}", 0, false, null);
@@ -219,6 +252,7 @@ public class AlertOrchestratorConditionIssueTests
         public ListLogger<UnevaluableRuleNotice> Logger { get; } = new();
         public Mock<IAlertRepository> NoticeRows { get; } = new();
         public Mock<IAlertDeliveryService> Delivery { get; } = new();
+        public Mock<IClockAnomalyNotice> ClockNotice { get; } = new();
 
         private readonly AlertOrchestrator _orchestrator;
 
@@ -259,6 +293,7 @@ public class AlertOrchestratorConditionIssueTests
                 Mock.Of<IAlertAcknowledgementService>(),
                 Mock.Of<IExcursionResolutionHandler>(),
                 notice,
+                ClockNotice.Object,
                 TimeProvider.System,
                 new ListLogger<AlertOrchestrator>());
         }

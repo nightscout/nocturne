@@ -579,6 +579,17 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<bool> ReplaceMetadataBySourceAsync(
+            string userId, string type, string sourceId, Dictionary<string, object> metadata,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> CreateNotificationUnlessActiveAsync(
+            string userId, string type, string title, string sourceId, NotificationCategory? category = null,
+            string? source = null, string? subtitle = null, Dictionary<string, object>? metadata = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<List<InAppNotificationDto>> GetActiveNotificationsAsync(string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

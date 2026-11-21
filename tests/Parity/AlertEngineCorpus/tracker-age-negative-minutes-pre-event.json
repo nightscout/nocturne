@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "tracker-age-negative-minutes-pre-event",
-  "description": "elapsed is negative before a scheduled event; \u003E= -1440 is already true 12h out, \u003E= -360 is not yet",
+  "description": "the instance carries no scheduled flag, so it is a duration instance whose start is dated 12h, then about 6h, ahead of the clock: both rules are unknown and hold, and clock_anomaly reports active_trackers; tracker-age-event-versus-duration pins the negative elapsed time of a scheduled event",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

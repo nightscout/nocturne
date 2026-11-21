@@ -5,6 +5,7 @@ using Nocturne.Alerts.Corpus;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.Services.Alerts.Engines;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -28,6 +29,7 @@ public class CanonicalAlertEvaluatorTests
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
     private readonly Mock<IAlertOrchestrator> _orchestrator = new();
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(Reading, TimeSpan.Zero));
+    private readonly Mock<IClockAnomalyNotice> _notice = new();
     private readonly AlertEvaluationWatermark _watermark;
 
     public CanonicalAlertEvaluatorTests() => _watermark = new AlertEvaluationWatermark(_clock);
@@ -40,6 +42,8 @@ public class CanonicalAlertEvaluatorTests
             _orchestrator.Object,
             Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId),
             _watermark,
+            _notice.Object,
+            _clock,
             NullLogger<CanonicalAlertEvaluator>.Instance);
 
     private void LatestIs(params SensorGlucose?[] readings)
@@ -319,6 +323,94 @@ public class CanonicalAlertEvaluatorTests
             var evaluation = await engine.EvaluateRuleAsync(rule, seen, new AlertEngineOptions(), CancellationToken.None);
             evaluation.ConditionMet.Should().BeTrue(type.ToString());
         }
+    }
+
+    /// <summary>
+    /// A reading dated an hour ahead is stored as the newest, then a real reading of 60 arrives:
+    /// the context is built from the real one, so a low rule opens on it and signal loss counts
+    /// from it, and the skipped reading goes to the clock notice
+    /// (docs/alerts/engine-semantics.md §4).
+    /// </summary>
+    [NativeFact]
+    public async Task EvaluateAsync_AReadingDatedBeyondTheToleranceIsSkippedForTheRealOne()
+    {
+        var future = Latest(Reading.AddHours(1), mgdl: 300);
+        var real = Latest(Reading, mgdl: 60, trendRate: -1);
+        LatestIs(future);
+        _canonical
+            .Setup(c => c.GetLatestAsync(Reading + RustAlertEngine.ClockTolerance(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(real);
+        SensorContext? seen = null;
+        _orchestrator
+            .Setup(o => o.EvaluateAsync(It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorContext, CancellationToken>((c, _) => seen = c)
+            .Returns(Task.CompletedTask);
+
+        await Evaluator(Tenant).EvaluateAsync();
+
+        seen!.LatestValue.Should().Be(60m);
+        seen.LastReadingAt.Should().Be(Reading);
+        _notice.Verify(n => n.ReportReadingAsync(
+            It.Is<AlertReadingSelection>(s => s.Selected == real && s.Newest == future), Reading,
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        var time = new ManualTimeProvider();
+        time.SetUtcNow(Reading);
+        var engine = EngineTestHarness.BuildRustEngine(time, new InMemoryTrackerRepository([]));
+        var low = new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "low", AlertConditionType.Threshold,
+            """{"direction":"below","value":70}""", AlertRuleSeverity.Critical, "{}", 0, false, null);
+        (await engine.EvaluateRuleAsync(low, seen, new AlertEngineOptions(), CancellationToken.None))
+            .ConditionMet.Should().BeTrue("the low rule reads the real reading of 60");
+
+        time.SetUtcNow(Reading.AddMinutes(20));
+        var signalLoss = new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "signal", AlertConditionType.SignalLoss,
+            """{"timeout_minutes":20}""", AlertRuleSeverity.Critical, "{}", 0, false, null);
+        var lost = await engine.EvaluateRuleAsync(signalLoss, seen, new AlertEngineOptions(), CancellationToken.None);
+        lost.ConditionMet.Should().BeTrue("signal loss counts from the last real reading");
+        lost.ClockAnomalies.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_AReadingWithinTheToleranceIsSelectedOnceItsTimeComesNear()
+    {
+        var future = Latest(Reading.AddHours(1));
+        LatestIs(future);
+        _clock.SetUtcNow(new DateTimeOffset(future.Timestamp - RustAlertEngine.ClockTolerance(), TimeSpan.Zero));
+        SensorContext? seen = null;
+        _orchestrator
+            .Setup(o => o.EvaluateAsync(It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorContext, CancellationToken>((c, _) => seen = c)
+            .Returns(Task.CompletedTask);
+
+        await Evaluator(Tenant).EvaluateAsync();
+
+        seen!.LastReadingAt.Should().Be(future.Timestamp);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_AFailingClockNoticeDoesNotSkipTheReading()
+    {
+        LatestIs(Latest(Reading));
+        _notice
+            .Setup(n => n.ReportReadingAsync(It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("lock timeout"));
+
+        await Evaluator(Tenant).EvaluateAsync();
+
+        VerifyPasses(1);
+        _watermark.AlreadyEvaluated(Tenant, Latest(Reading)).Should().BeTrue("the pass completed");
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_ReadsOnceWhenNoReadingIsAhead()
+    {
+        LatestIs(Latest(Reading));
+
+        await Evaluator(Tenant).EvaluateAsync();
+
+        _canonical.Verify(c => c.GetLatestAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _canonical.Verify(c => c.GetLatestAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        VerifyPasses(1);
     }
 
     [Fact]

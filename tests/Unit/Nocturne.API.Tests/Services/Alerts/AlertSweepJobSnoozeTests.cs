@@ -61,6 +61,10 @@ public class AlertSweepJobSnoozeTests
             .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _readings.MaxBy(r => r.Timestamp));
         _canonical
+            .Setup(c => c.GetLatestAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime notAfter, CancellationToken _) =>
+                _readings.Where(r => r.Timestamp <= notAfter).MaxBy(r => r.Timestamp));
+        _canonical
             .Setup(c => c.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SensorGlucose reading, DateTime since, CancellationToken _) => _readings
                 .Where(r => r.Timestamp < reading.Timestamp && r.Timestamp >= since)
@@ -114,6 +118,7 @@ public class AlertSweepJobSnoozeTests
         services.AddSingleton(enricher.Object);
         services.AddSingleton(_orchestrator.Object);
         services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
+        services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
         services.AddSingleton<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(
             new InMemoryTrackerRepository(instances.Select(i => new AlertRule
             {
@@ -192,6 +197,18 @@ public class AlertSweepJobSnoozeTests
         await SweepAsync(instance);
 
         ShouldBeExtended(instance, minutes: 7);
+    }
+
+    [NativeFact]
+    public async Task LowSnooze_AReadingDatedAhead_DoesNotReachTheTrendGate()
+    {
+        FiveMinuteReadings(58, 60, 65);
+        _readings.Add(Reading(-60, 40));
+        var instance = Instance(SmartOn);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
     }
 
     [NativeFact]
@@ -452,6 +469,18 @@ public class AlertSweepJobSnoozeTests
     public async Task ThresholdCondition_ReadsTheLastUsableValue_NotAnErrorReading()
     {
         _readings = [Reading(1, 0), Reading(4, 72)];
+        var instance = Instance(ExtendWhileAbove65);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
+        _enricherInputs.Should().ContainSingle().Which.LatestValue.Should().Be(72m);
+    }
+
+    [NativeFact]
+    public async Task ThresholdCondition_ReadsTheLastUsableValue_NotOneDatedAhead()
+    {
+        _readings = [Reading(1, 0), Reading(4, 72), Reading(-60, 300)];
         var instance = Instance(ExtendWhileAbove65);
 
         await SweepAsync(instance);

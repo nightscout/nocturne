@@ -135,6 +135,38 @@ public class AlertSweepJobWallClockTests
         fixture.InstancesCreated.Should().Be(1, "error readings are not signal: the last usable one is 20 minutes old");
     }
 
+    /// <summary>
+    /// A usable reading dated far ahead, behind a selected reading with no value: the lookback
+    /// reads only up to the selected reading, so signal loss counts from the last real usable
+    /// reading and is not held by the future one.
+    /// </summary>
+    [NativeFact]
+    public async Task The_lookback_behind_an_unusable_reading_skips_a_usable_one_dated_ahead()
+    {
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15);
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 110 });
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(5), Mgdl = 0 });
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddHours(2), Mgdl = 110 });
+
+        await fixture.SweepAt(T0.AddMinutes(20.5));
+
+        fixture.InstancesCreated.Should().Be(1, "the last real usable reading is 20 minutes old");
+    }
+
+    [NativeFact]
+    public async Task A_failing_clock_notice_does_not_stop_the_wall_clock_pass()
+    {
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15);
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 110 });
+        fixture.ClockNotice
+            .Setup(n => n.ReportReadingAsync(It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("lock timeout"));
+
+        await fixture.SweepAt(T0.AddMinutes(20));
+
+        fixture.InstancesCreated.Should().Be(1);
+    }
+
     [NativeFact]
     public async Task The_lookback_for_a_usable_reading_runs_once_per_newest_reading()
     {
@@ -680,6 +712,8 @@ public class AlertSweepJobWallClockTests
 
         public Mock<ICanonicalGlucoseService> Canonical { get; } = new();
 
+        public Mock<IClockAnomalyNotice> ClockNotice { get; } = new();
+
         public Task SweepAt(DateTime at)
         {
             Time.SetUtcNow(at);
@@ -788,6 +822,12 @@ public class AlertSweepJobWallClockTests
                         ? new SensorGlucose { Timestamp = at, CreatedAt = at, Mgdl = LatestMgdl ?? 120 }
                         : null);
             canonical
+                .Setup(x => x.GetLatestAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((DateTime notAfter, CancellationToken _) =>
+                    Readings.Where(r => r.Timestamp <= notAfter).MaxBy(r => r.Timestamp) is { } bounded
+                        ? Stored(bounded)
+                        : null);
+            canonical
                 .Setup(x => x.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((DateTime since, CancellationToken _) =>
                     Readings.Where(r => r.Timestamp >= since).OrderByDescending(r => r.Timestamp).Select(Stored).ToList());
@@ -834,6 +874,7 @@ public class AlertSweepJobWallClockTests
             services.AddSingleton<ILogger<AlertOrchestrator>>(OrchestratorLogger);
             services.AddSingleton<ILogger<UnevaluableRuleNotice>>(new ListLogger<UnevaluableRuleNotice>());
             services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
+            services.AddSingleton(ClockNotice.Object);
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 
             _services = services.BuildServiceProvider();

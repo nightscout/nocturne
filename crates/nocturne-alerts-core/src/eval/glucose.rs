@@ -6,6 +6,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use super::Env;
 use super::elapsed::{ClockLeaf, Elapsed, Measure, decimal};
 use super::signal::{DataStopped, data_stopped};
+use crate::clock_anomaly::ClockAnchor;
 use crate::compare::Unit;
 use crate::context::SensorContext;
 use crate::enums::{CmpOp, RateDirection, ThresholdDirection, holds};
@@ -38,20 +39,25 @@ pub(crate) fn judges_freshness(kind: ConditionKind) -> bool {
 
 /// The reading goes stale once more than `bound` has passed since the host
 /// received it, else since its timestamp, so a reading exactly `bound` old is
-/// fresh; without either it never does.
+/// fresh; without either it never does. The arrival is the host's own
+/// instant, and one after `now` is fresh (§3); a timestamp is the device's.
 fn expiry(ctx: &SensorContext, bound: TimeDelta) -> Option<Elapsed> {
-    ctx.latest_received_at
-        .or(ctx.latest_timestamp)
-        .map(|anchor| Elapsed {
-            anchor,
-            measure: Measure::Over(bound),
-        })
+    let (anchor, source) = match (ctx.latest_received_at, ctx.latest_timestamp) {
+        (Some(arrival), _) => (arrival, None),
+        (None, Some(timestamp)) => (timestamp, Some(ClockAnchor::LatestTimestamp)),
+        (None, None) => return None,
+    };
+    Some(Elapsed {
+        anchor,
+        source,
+        measure: Measure::Over(bound),
+    })
 }
 
-/// `fact` while the reading is fresh at `env.now`, else absent.
-fn fresh<T>(fact: Option<T>, env: &Env) -> Option<T> {
-    let stale = expiry(env.ctx, env.glucose_freshness).is_some_and(|e| e.holds(env.now));
-    fact.filter(|_| !stale)
+/// `fact` while the reading is known to be fresh at `env.now`, else absent.
+fn fresh<T>(fact: Option<T>, env: &mut Env) -> Option<T> {
+    let stale = expiry(env.ctx, env.glucose_freshness).map_or(Truth::False, |e| env.measure(e));
+    fact.filter(|_| stale.is_false())
 }
 
 /// When a leaf that [`judges_freshness`] can turn unknown with only `now`
@@ -74,7 +80,7 @@ pub(crate) fn freshness_expiry(
 
 /// Strict comparison: below `v < value`, above `v > value`; no fresh reading
 /// is unknown.
-pub(super) fn threshold(p: &ThresholdPayload, env: &Env) -> Truth {
+pub(super) fn threshold(p: &ThresholdPayload, env: &mut Env) -> Truth {
     Truth::of(
         fresh(env.ctx.latest_value, env).map(|latest| match p.direction {
             ThresholdDirection::Below => latest < p.value,
@@ -84,7 +90,7 @@ pub(super) fn threshold(p: &ThresholdPayload, env: &Env) -> Truth {
 }
 
 /// Inclusive comparison: falling `rate' <= -rate`, rising `rate' >= rate`.
-pub(super) fn rate_of_change(p: &RateOfChangePayload, env: &Env) -> Truth {
+pub(super) fn rate_of_change(p: &RateOfChangePayload, env: &mut Env) -> Truth {
     Truth::of(
         fresh(env.ctx.trend_rate, env).map(|rate| match p.direction {
             RateDirection::Falling => rate <= -p.rate,
@@ -93,7 +99,7 @@ pub(super) fn rate_of_change(p: &RateOfChangePayload, env: &Env) -> Truth {
     )
 }
 
-pub(super) fn trend(p: &TrendPayload, env: &Env) -> Truth {
+pub(super) fn trend(p: &TrendPayload, env: &mut Env) -> Truth {
     Truth::of(fresh(env.ctx.trend_bucket, env).map(|bucket| p.bucket == bucket))
 }
 
@@ -114,7 +120,7 @@ pub(super) fn predicted(p: &PredictedPayload, env: &Env) -> Truth {
 }
 
 /// Set membership over the precomputed context bucket.
-pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &Env) -> Truth {
+pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &mut Env) -> Truth {
     Truth::of(fresh(env.ctx.glucose_bucket, env).map(|bucket| p.buckets.contains(&bucket)))
 }
 
@@ -126,7 +132,13 @@ pub(super) fn staleness(
     enabled_at: Option<DateTime<Utc>>,
 ) -> ClockLeaf {
     match data_stopped(ctx, enabled_at) {
-        DataStopped::At(anchor) => decimal(anchor, Unit::Minutes, p.operator, p.value.get()),
+        DataStopped::At(anchor, source) => decimal(
+            anchor,
+            Some(source),
+            Unit::Minutes,
+            p.operator,
+            p.value.get(),
+        ),
         DataStopped::Forever => {
             ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge).into())
         }

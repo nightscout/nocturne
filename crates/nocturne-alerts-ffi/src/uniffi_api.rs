@@ -111,3 +111,10 @@ pub(crate) fn version() -> String {
 pub(crate) fn tzdb_version() -> String {
     nocturne_alerts_core::TZDB_VERSION.to_owned()
 }
+
+/// `nocturne_alerts_clock_tolerance_ms`.
+#[uniffi::export]
+#[must_use]
+pub(crate) fn clock_tolerance_ms() -> i64 {
+    nocturne_alerts_core::clock_anomaly::CLOCK_TOLERANCE.num_milliseconds()
+}

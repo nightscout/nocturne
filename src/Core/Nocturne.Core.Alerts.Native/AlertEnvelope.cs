@@ -269,7 +269,22 @@ public sealed record RustRuleResult
     /// </summary>
     [JsonPropertyName("next_change_at")]
     public DateTime? NextChangeAt { get; init; }
+
+    /// <summary>
+    /// The anchors the evaluation read more than 5 minutes ahead of <c>now</c>
+    /// (docs/alerts/engine-semantics.md §5.4); omitted when none was.
+    /// </summary>
+    [JsonPropertyName("clock_anomaly")]
+    public List<RustClockAnomaly>? ClockAnomaly { get; init; }
 }
+
+/// <summary>
+/// One anchor read beyond the clock tolerance: the context field or state that held it, and how
+/// far ahead of <c>now</c> it was in whole milliseconds.
+/// </summary>
+public sealed record RustClockAnomaly(
+    [property: JsonPropertyName("fact"), JsonRequired] string Fact,
+    [property: JsonPropertyName("ahead_ms"), JsonRequired] long AheadMs);
 
 /// <summary>Tracker transition wire values in <see cref="RustRuleResult.Transition"/>.</summary>
 [JsonConverter(typeof(StrictStringEnumConverter<RustTransition>))]
@@ -373,6 +388,10 @@ public sealed record RustEvaluateNodeResponse : IRustResponseEnvelope
     /// <summary>Sustained-timer mutations performed during the call, in execution order.</summary>
     [JsonPropertyName("timer_ops")]
     public List<RustTimerOp>? TimerOps { get; init; }
+
+    /// <summary>As <see cref="RustRuleResult.ClockAnomaly"/>; omitted when none.</summary>
+    [JsonPropertyName("clock_anomaly")]
+    public List<RustClockAnomaly>? ClockAnomaly { get; init; }
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_leaf_paths</c>.</summary>

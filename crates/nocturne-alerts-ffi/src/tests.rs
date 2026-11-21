@@ -542,6 +542,67 @@ fn evaluate_node_evaluates_a_tree_with_a_root_override() {
 }
 
 #[test]
+fn evaluate_node_reports_a_reading_dated_beyond_the_clock_tolerance() {
+    let request = |reading: &str| {
+        json!({
+            "schema_version": 1,
+            "rule_id": "00000000-0000-0000-0000-000000000001",
+            "node": { "type": "signal_loss", "signal_loss": { "timeout_minutes": 20 } },
+            "context": { "last_reading_at": reading },
+            "now": "2026-01-05T12:00:00Z",
+        })
+    };
+    let ahead = evaluate_node(&request("2026-01-05T13:00:00Z"));
+    assert_eq!(ahead["value"], json!(false));
+    assert_eq!(ahead["unknown"], json!(true));
+    assert_eq!(
+        ahead["clock_anomaly"],
+        json!([{ "fact": "last_reading_at", "ahead_ms": 3_600_000 }])
+    );
+
+    let within = evaluate_node(&request("2026-01-05T12:05:00Z"));
+    assert_eq!(within["value"], json!(false));
+    assert!(within.get("unknown").is_none());
+    assert!(within.get("clock_anomaly").is_none());
+}
+
+#[test]
+fn evaluate_reports_a_reading_dated_ahead_and_holds_the_open_excursion() {
+    let rule = json!({
+        "id": "00000000-0000-0000-0000-000000000001",
+        "condition_type": "signal_loss",
+        "condition_params": { "timeout_minutes": 20 },
+    });
+    let response = call_json(
+        nocturne_alerts_evaluate,
+        &json!({
+            "schema_version": 1,
+            "rule": rule,
+            "context": { "last_reading_at": "2026-01-05T13:00:00Z" },
+            "now": "2026-01-05T12:00:00Z",
+            "tracker": {
+                "state": "active",
+                "confirmation_count": 0,
+                "active_excursion_ordinal": 1,
+                "updated_at": "2026-01-05T11:00:00Z",
+                "next_excursion_ordinal": 2
+            },
+        })
+        .to_string(),
+    );
+    assert_eq!(response["ok"], json!(true));
+    let result = &response["result"];
+    assert_eq!(result["unknown"], json!(true));
+    assert_eq!(result["transition"], json!("none"));
+    assert_eq!(response["tracker"]["state"], json!("active"));
+    assert_eq!(
+        result["clock_anomaly"],
+        json!([{ "fact": "last_reading_at", "ahead_ms": 3_600_000 }])
+    );
+    assert_eq!(result["next_change_at"], json!("2026-01-05T12:55:00Z"));
+}
+
+#[test]
 fn evaluate_node_threads_sustained_timers_under_the_root_override() {
     let rule_id = "00000000-0000-0000-0000-000000000002";
     let node = json!({

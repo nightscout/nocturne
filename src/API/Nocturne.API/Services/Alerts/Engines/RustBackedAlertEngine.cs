@@ -101,6 +101,9 @@ internal sealed class RustBackedAlertEngine(
                 ? result.Leaves!.ToDictionary(l => l.LeafId, l => l.Unknown ? null : (bool?)l.Value)
                 : null,
             NextChangeAt = result.NextChangeAt,
+            ClockAnomalies = result.ClockAnomaly?
+                .Select(a => new ClockAnomaly(a.Fact, TimeSpan.FromMilliseconds(a.AheadMs)))
+                .ToList() ?? [],
         };
     }
 

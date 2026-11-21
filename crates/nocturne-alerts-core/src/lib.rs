@@ -15,6 +15,7 @@
 pub const TZDB_VERSION: &str = chrono_tz::IANA_TZDB_VERSION;
 
 pub mod classify;
+pub mod clock_anomaly;
 mod compare;
 pub mod context;
 pub mod engine;

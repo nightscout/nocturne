@@ -130,6 +130,11 @@ internal static class EngineTestHarness
             AutoResolved = evaluation.AutoResolved ? true : null,
             TimerOps = trackerRepo.Timers.DrainOps() is { Count: > 0 } ops ? ops : null,
             NextChangeAt = evaluation.NextChangeAt,
+            ClockAnomaly = evaluation.ClockAnomalies.Count > 0
+                ? evaluation.ClockAnomalies
+                    .Select(a => new ExpectedClockAnomaly(a.Fact, (long)a.Ahead.TotalMilliseconds))
+                    .ToList()
+                : null,
         };
     }
 }

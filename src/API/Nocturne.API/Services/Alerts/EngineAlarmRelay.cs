@@ -139,7 +139,7 @@ internal sealed class EngineAlarmRelay(
         }
         if (top is null) return null;
 
-        var latest = await canonicalGlucose.GetLatestAsync(ct);
+        var latest = (await AlertReadings.SelectAsync(canonicalGlucose, now.UtcDateTime, ct)).Selected;
         var fresh = latest is not null && now.UtcDateTime - latest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
             ? latest
             : null;

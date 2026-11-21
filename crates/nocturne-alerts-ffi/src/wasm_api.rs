@@ -29,3 +29,11 @@ pub fn validate(request_json: &str) -> String {
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
+
+/// `nocturne_alerts_clock_tolerance_ms`, as a JavaScript number.
+#[wasm_bindgen]
+#[must_use]
+pub fn clock_tolerance_ms() -> f64 {
+    i32::try_from(nocturne_alerts_core::clock_anomaly::CLOCK_TOLERANCE.num_milliseconds())
+        .map_or(f64::MAX, f64::from)
+}

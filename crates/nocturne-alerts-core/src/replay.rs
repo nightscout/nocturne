@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
+use crate::clock_anomaly::ClockAnomalies;
 use crate::context::{ActiveAlertSnapshot, SensorContext};
 use crate::engine::{Rule, auto_resolve_truth, evaluate_body, format_instant};
 use crate::leaf_identity::collect_leaves;
@@ -179,8 +180,14 @@ pub fn replay(
             let resolved = rule.on_unknown.resolve(met);
             let rearm_read_resolve = firing.awaiting_rearm;
             if rearm_read_resolve {
-                let resolve_met =
-                    auto_resolve_truth(rule, prepared.auto_resolve.as_ref(), &ctx, at, &mut timers);
+                let resolve_met = auto_resolve_truth(
+                    rule,
+                    prepared.auto_resolve.as_ref(),
+                    &ctx,
+                    at,
+                    &mut timers,
+                    &mut ClockAnomalies::default(),
+                );
                 if let Some(met) = resolved {
                     firing.awaiting_rearm = met && !resolve_met.is_false();
                 }
@@ -211,8 +218,15 @@ pub fn replay(
 
             if now_firing
                 && !rearm_read_resolve
-                && auto_resolve_truth(rule, prepared.auto_resolve.as_ref(), &ctx, at, &mut timers)
-                    .is_true()
+                && auto_resolve_truth(
+                    rule,
+                    prepared.auto_resolve.as_ref(),
+                    &ctx,
+                    at,
+                    &mut timers,
+                    &mut ClockAnomalies::default(),
+                )
+                .is_true()
             {
                 ctx.active_alerts.remove(&rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::AutoResolved));

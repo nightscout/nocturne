@@ -42,6 +42,13 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
     }
 
     /// <inheritdoc />
+    public async Task<SensorGlucose?> GetLatestAsync(DateTime notAfter, CancellationToken ct = default)
+    {
+        var latest = await ReadAsync(from: null, to: notAfter, limit: 1, after: null, ct);
+        return latest.Count > 0 ? latest[0] : null;
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default)
         => ReadAsync(since, to: null, RecentFetchLimit, after: null, ct);
 

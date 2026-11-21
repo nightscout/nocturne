@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::clock_anomaly::ClockAnchor;
 use crate::eval::elapsed::Elapsed;
 use crate::eval::{Env, eval_node};
 use crate::model::SustainedPayload;
@@ -116,6 +117,8 @@ impl TimerStore {
 /// path; the first true sets it and is false; later trues hold once `minutes`
 /// fractional minutes have passed since it was set. Unknown is unknown and
 /// leaves the timer as it is: not knowing neither breaks a run nor starts one.
+/// A timer set beyond the tolerance ahead of `now` is unknown and kept: the
+/// clock went back, and the run is neither complete nor broken (§5.4).
 pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> Truth {
     let now = env.now;
     match eval_node(&p.child, &node_child_path(path, 0, &p.child), env) {
@@ -129,7 +132,11 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
                 env.timers.set_first_true(env.rule_id, path, now);
                 Truth::False
             }
-            Some(first) => Elapsed::held_for(first, p.minutes.get()).holds(now).into(),
+            Some(first) => env.measure(Elapsed::held_for(
+                first,
+                p.minutes.get(),
+                ClockAnchor::Sustained,
+            )),
         },
     }
 }

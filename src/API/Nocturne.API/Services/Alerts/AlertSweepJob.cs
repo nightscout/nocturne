@@ -22,6 +22,7 @@ namespace Nocturne.API.Services.Alerts;
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Check each enabled rule's condition for a version that cannot be evaluated (<see cref="IUnevaluableRuleNotice"/>).</item>
+///   <item>Archive a clock-anomaly notification once no stored reading is ahead of the clock (<see cref="IClockAnomalyNotice.RefreshAsync"/>).</item>
 ///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="RuleTrees.ReferencesWallClock"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
@@ -103,6 +104,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                      (CloseHysteresisWindowsAsync, "closing hysteresis windows"),
                      (CheckSnoozedInstancesAsync, "checking snoozed instances"),
                      (CheckRuleConditionsAsync, "checking rule conditions"),
+                     (CheckClockAnomaliesAsync, "checking clock-anomaly notifications"),
                      (EvaluateWallClockRulesAsync, "evaluating wall-clock rules"),
                      (EvaluateAutoResolveAsync, "evaluating auto-resolve"),
                  })
@@ -327,7 +329,10 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         try
         {
             var canonical = services.GetRequiredService<ICanonicalGlucoseService>();
-            return await canonical.GetRecentAsync(now - SmartSnoozeTrendGate.RequiredHistory, ct);
+            var bound = AlertReadings.Bound(now);
+            return (await canonical.GetRecentAsync(now - SmartSnoozeTrendGate.RequiredHistory, ct))
+                .Where(r => r.Timestamp <= bound)
+                .ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -498,6 +503,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         await sweep.Services.GetRequiredService<IUnevaluableRuleNotice>()
             .CheckAsync(await sweep.EnabledRulesAsync(ct), ct);
 
+    private static Task CheckClockAnomaliesAsync(Sweep sweep, CancellationToken ct) =>
+        sweep.Services.GetRequiredService<IClockAnomalyNotice>().RefreshAsync(sweep.Now, ct);
+
     /// <summary>
     /// Evaluates every enabled rule that <see cref="RuleTrees.ReferencesWallClock"/> selects
     /// through the orchestrator's full pipeline. Those conditions change truth with the clock
@@ -586,8 +594,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
 
     /// <summary>
     /// The reading every swept context measures <see cref="SensorContext.LastReadingAt"/> from:
-    /// the newest canonical reading with a glucose value, the only kind the per-reading path
-    /// evaluates, so <c>signal_loss</c> counts sensor-error and warm-up readings as no signal.
+    /// the newest canonical reading with a glucose value that <see cref="AlertReadings"/> selects,
+    /// the only kind the per-reading path evaluates, so <c>signal_loss</c> counts sensor-error and
+    /// warm-up readings as no signal.
     /// </summary>
     /// <remarks>
     /// It is looked for at most <see cref="UsableReadingLookback"/> before the newest canonical
@@ -604,7 +613,10 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     private async Task<UsableReading> LastUsableReadingAsync(Sweep sweep, CancellationToken ct)
     {
         var canonical = sweep.Services.GetRequiredService<ICanonicalGlucoseService>();
-        var latest = await canonical.GetLatestAsync(ct);
+        var selection = await AlertReadings.SelectAsync(canonical, sweep.Now, ct);
+        await sweep.Services.GetRequiredService<IClockAnomalyNotice>()
+            .ReportReadingIsolatedAsync(selection, sweep.Now, logger, ct);
+        var latest = selection.Selected;
         if (latest is null || latest.Mgdl > 0)
         {
             _usableLookbacks.TryRemove(sweep.TenantId, out _);
@@ -619,7 +631,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             return kept.Found;
         }
 
-        var recent = await canonical.GetRecentAsync(latest.Timestamp - UsableReadingLookback, ct);
+        var recent = (await canonical.GetRecentAsync(latest.Timestamp - UsableReadingLookback, ct))
+            .Where(r => r.Timestamp <= latest.Timestamp)
+            .ToList();
         var found = recent.Where(r => r.Mgdl > 0).MaxBy(r => r.Timestamp) is { } usable
             ? new UsableReading(usable, usable.Timestamp)
             : new UsableReading(null, recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp);

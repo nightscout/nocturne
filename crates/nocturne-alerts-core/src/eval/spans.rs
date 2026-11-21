@@ -3,6 +3,7 @@
 
 use super::Env;
 use super::elapsed::{ClockLeaf, Elapsed, active_for};
+use crate::clock_anomaly::ClockAnchor;
 use crate::context::SensorContext;
 use crate::enums::AlertStateKind;
 use crate::model::{
@@ -30,7 +31,9 @@ pub(super) fn alert_state(p: &AlertStatePayload, ctx: &SensorContext) -> ClockLe
     match (anchor, p.for_minutes) {
         (None, _) => ClockLeaf::Fixed(Truth::False),
         (Some(_), None) => ClockLeaf::Fixed(Truth::True),
-        (Some(at), Some(m)) => ClockLeaf::Measured(Elapsed::held_for(at, m)),
+        (Some(at), Some(m)) => {
+            ClockLeaf::Measured(Elapsed::held_for(at, m, ClockAnchor::ActiveAlerts))
+        }
     }
 }
 
@@ -40,6 +43,7 @@ pub(super) fn override_active(p: &ActiveForPayload, ctx: &SensorContext) -> Cloc
         p.is_active,
         p.for_minutes,
         ctx.active_override.map(|s| s.started_at),
+        ClockAnchor::ActiveOverride,
     )
 }
 
@@ -49,6 +53,7 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, ctx: &SensorContext) -> Clock
         p.is_active,
         p.for_minutes,
         ctx.active_do_not_disturb.map(|s| s.started_at),
+        ClockAnchor::ActiveDoNotDisturb,
     )
 }
 
@@ -59,17 +64,25 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, ctx: &SensorContext) -> Clock
 /// both completions are false until the span has lasted that long.
 pub(super) fn pump_state(p: &PumpStatePayload, ctx: &SensorContext) -> ClockLeaf {
     let Some(active) = ctx.active_pump_state else {
-        return active_for(p.is_active, p.for_minutes, None);
+        return active_for(
+            p.is_active,
+            p.for_minutes,
+            None,
+            ClockAnchor::ActivePumpState,
+        );
     };
     match (active.mode, p.for_minutes) {
         (Some(mode), _) => active_for(
             p.is_active,
             p.for_minutes,
             (mode == p.mode).then_some(active.started_at),
+            ClockAnchor::ActivePumpState,
         ),
-        (None, Some(m)) if p.is_active => {
-            ClockLeaf::UnknownOnceHeld(Elapsed::held_for(active.started_at, m))
-        }
+        (None, Some(m)) if p.is_active => ClockLeaf::UnknownOnceHeld(Elapsed::held_for(
+            active.started_at,
+            m,
+            ClockAnchor::ActivePumpState,
+        )),
         (None, _) => ClockLeaf::Fixed(Truth::Unknown),
     }
 }
@@ -80,7 +93,12 @@ pub(super) fn pump_state(p: &PumpStatePayload, ctx: &SensorContext) -> ClockLeaf
 /// category the leaf names.
 pub(super) fn state_span_active(p: &StateSpanPayload, ctx: &SensorContext) -> ClockLeaf {
     let span = ctx.active_state_spans.get(&(p.category, p.state.clone()));
-    active_for(p.is_active, p.for_minutes, span.map(|s| s.started_at))
+    active_for(
+        p.is_active,
+        p.for_minutes,
+        span.map(|s| s.started_at),
+        ClockAnchor::ActiveStateSpans,
+    )
 }
 
 /// `is_active` true fires while a sleep session is active, false while none is.

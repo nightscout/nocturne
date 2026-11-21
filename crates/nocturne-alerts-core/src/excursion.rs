@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use chrono::{DateTime, TimeDelta, Utc};
 use uuid::Uuid;
 
+use crate::clock_anomaly::ClockAnchor;
+use crate::eval::elapsed::{Elapsed, Measure};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TrackerStateKind {
@@ -421,19 +424,19 @@ fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
 
 /// `now - hysteresis_started_at >= hysteresis_minutes` (§6.1). Every
 /// hysteresis state has a start: entering hysteresis sets one and
-/// [`ExcursionTracker::restore_state`] adopts one.
+/// [`ExcursionTracker::restore_state`] adopts one. A start beyond the
+/// tolerance ahead of `now` does not close the window (§5.4).
 fn hysteresis_elapsed(state: &TrackerState, hysteresis_minutes: i32, now: DateTime<Utc>) -> bool {
-    hysteresis_expiry(state, hysteresis_minutes).is_some_and(|expiry| now >= expiry)
+    hysteresis_window(state, hysteresis_minutes).is_some_and(|w| w.truth(now).is_true())
 }
 
-/// When the window that `state` started closes, as exact whole minutes, so a
-/// non-positive window has always elapsed; `None` without a start or past the
-/// representable calendar, which never arrives.
-pub(crate) fn hysteresis_expiry(
-    state: &TrackerState,
-    hysteresis_minutes: i32,
-) -> Option<DateTime<Utc>> {
-    state.hysteresis_started_at.and_then(|started| {
-        started.checked_add_signed(TimeDelta::minutes(i64::from(hysteresis_minutes)))
+/// The window that `state` started, as exact whole minutes since the start,
+/// so a non-positive window has always elapsed; `None` without a start. One
+/// whose end is past the representable calendar never elapses.
+pub(crate) fn hysteresis_window(state: &TrackerState, hysteresis_minutes: i32) -> Option<Elapsed> {
+    state.hysteresis_started_at.map(|started| Elapsed {
+        anchor: started,
+        source: Some(ClockAnchor::HysteresisStartedAt),
+        measure: Measure::AtLeast(TimeDelta::minutes(i64::from(hysteresis_minutes))),
     })
 }
