@@ -1460,9 +1460,6 @@ public class DataSufficiencyAssessment
     /// <summary>Longest data gap in hours</summary>
     public double LongestGapHours { get; set; }
 
-    /// <summary>Data sufficiency status (use this for localization on frontend)</summary>
-    public DataSufficiencyStatus Status { get; set; } = DataSufficiencyStatus.Sufficient;
-
     /// <summary>Warning message if data is insufficient</summary>
     public string WarningMessage { get; set; } = string.Empty;
 
