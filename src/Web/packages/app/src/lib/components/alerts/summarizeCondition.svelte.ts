@@ -1,6 +1,6 @@
 import type { ConditionNode } from "./types";
 import { AlertWeekday, PumpModeState, StateSpanCategory } from "#lib/api/generated/nocturne-api-client.js";
-import { bg, bgLabel, formatLocale, weekdayLabel } from "#lib/utils/formatting.js";
+import { bg, bgLabel, formatList, weekdayLabel } from "#lib/utils/formatting.js";
 import { plural } from "#lib/utils/plural.js";
 import { glucoseBucketLabel } from "./alert-labels.svelte";
 
@@ -189,7 +189,7 @@ export function summarizeCondition(
 		case "glucose_bucket": {
 			const p = node.glucose_bucket;
 			if (!p || !p.buckets || p.buckets.length === 0) return "";
-			return `Glucose range: ${listFormat().format(p.buckets.map(glucoseBucketLabel))}`;
+			return `Glucose range: ${formatList(p.buckets.map(glucoseBucketLabel), "disjunction")}`;
 		}
 		case "time_since_last_carb": {
 			const p = node.time_since_last_carb;
@@ -204,7 +204,7 @@ export function summarizeCondition(
 		case "day_of_week": {
 			const p = node.day_of_week;
 			if (!p || !p.days || p.days.length === 0) return "";
-			return `On ${listFormat().format(p.days.map(alertWeekdayLabel))}`;
+			return `On ${formatList(p.days.map(alertWeekdayLabel), "disjunction")}`;
 		}
 		case "pump_state": {
 			const p = node.pump_state;
@@ -232,10 +232,6 @@ export function summarizeCondition(
 
 function withDuration(chip: string, minutes: number | undefined): string {
 	return minutes ? `${chip} for ${formatMinutes(minutes)}` : chip;
-}
-
-function listFormat(): Intl.ListFormat {
-	return new Intl.ListFormat(formatLocale(), { style: "long", type: "disjunction" });
 }
 
 export function alertWeekdayLabel(day: AlertWeekday): string {

@@ -1,5 +1,5 @@
 import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
-import { preferredLanguage } from "#lib/stores/appearance-store.svelte.js";
+import { formatList } from "#lib/utils/formatting.js";
 import type { StarterGroup } from "./starters.js";
 import {
   convertFromDisplayUnits,
@@ -1064,18 +1064,6 @@ function weekdayLabel(day: Weekday, weekdays: readonly Weekday[]): string {
   return weekdayName(day, weekdays);
 }
 
-function listFormat(type: "conjunction" | "disjunction"): Intl.ListFormat {
-  return new Intl.ListFormat(preferredLanguage.current, { type });
-}
-
-function joinAnd(items: string[]): string {
-  return listFormat("conjunction").format(items);
-}
-
-function joinOr(items: string[]): string {
-  return listFormat("disjunction").format(items);
-}
-
 function againstText(a: string, b: string): string {
   // @wc-include
   return `${a} against ${b}`;
@@ -1103,7 +1091,7 @@ export function weekdaysText(days: Weekday[], weekdays: readonly Weekday[]): str
       last.push(day);
     else runs.push([day]);
   }
-  return joinAnd(
+  return formatList(
     runs.flatMap((run) =>
       run.length >= 3
         ? [toText(weekdayLabel(run[0], weekdays), weekdayLabel(run[run.length - 1], weekdays))]
@@ -1193,7 +1181,7 @@ export function momentText(
           ? // @wc-include
             "with a food"
           : // @wc-include
-            `with ${joinOr(moment.foods.map((f) => f.name))}`
+            `with ${formatList(moment.foods.map((f) => f.name), "disjunction")}`
       );
     if (moment.foodCategory?.trim())
       // @wc-include
@@ -1291,7 +1279,7 @@ export function sinceMealText(b: Bounds | undefined): string | null {
 }
 
 function sentenceCase(labels: string[]): string {
-  return joinAnd(labels.map((l, i) => (i === 0 ? l : lowerFirst(l))));
+  return formatList(labels.map((l, i) => (i === 0 ? l : lowerFirst(l))));
 }
 
 export function rangeText(hours: number, presets: readonly { id: string; hours: number }[]): string {
@@ -1588,7 +1576,7 @@ export class Workspace {
       parts.push(
         left.length > 0
           ? // @wc-include
-            `without ${joinAnd(left)}`
+            `without ${formatList(left)}`
           : // @wc-include
             "all time"
       );
@@ -2512,7 +2500,7 @@ export class Workspace {
   #eventListCaption(): CaptionPart[] {
     const s = this.state;
     const anchors = distinct(s.moments.map((m) => m.what));
-    const phrase = joinAnd(anchors.map((a) => anchorPhrase(a)));
+    const phrase = formatList(anchors.map((a) => anchorPhrase(a)));
     let head: string;
     if (s.event.show === "each")
       head = againstText(outcomeLabel(this.up), lowerFirst(alongLabel(this.along)));
@@ -2557,7 +2545,7 @@ export class Workspace {
           s.moments.filter((m) => !m.everythingElse).map((m) => m.what)
         );
         // @wc-include
-        const around = `around ${joinAnd(anchors.map((a) => anchorPhrase(a)))}`;
+        const around = `around ${formatList(anchors.map((a) => anchorPhrase(a)))}`;
         const windows = this.#vocab.windows;
         const isDefault = s.event.before === windows.defaultBefore && s.event.after === windows.defaultAfter;
         return isDefault
@@ -2612,7 +2600,7 @@ export class Workspace {
       );
       if (left.length > 0)
         // @wc-include
-        parts.push(`without ${joinAnd(left)}`);
+        parts.push(`without ${formatList(left)}`);
       if (s.profileName)
         // @wc-include
         parts.push(`only while ${s.profileName} was active`);

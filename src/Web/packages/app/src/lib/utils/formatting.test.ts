@@ -38,6 +38,7 @@ const {
 	getUnitLabel,
 	formatGlucoseRange,
 	formatLocale,
+	formatList,
 	prefersHour12,
 	formatLongDate,
 	formatMediumDate,
@@ -98,6 +99,38 @@ function withRegionValue<T>(tag: RegionFormat, run: () => T): T {
 function withRegion(tag: RegionFormat, run: () => void): void {
 	withRegionValue(tag, run);
 }
+
+describe("formatList", () => {
+	function withLanguage<T>(tag: string, run: () => T): T {
+		const previous = store.preferredLanguage.current;
+		store.preferredLanguage.current = tag;
+		try {
+			return run();
+		} finally {
+			store.preferredLanguage.current = previous;
+		}
+	}
+
+	it("joins with the interface language when a German regional format is set", () => {
+		withRegion("de-DE", () => {
+			expect(formatList(["a", "b", "c"])).toBe("a, b, and c");
+			expect(formatList(["a", "b"])).toBe("a and b");
+			expect(formatList(["a", "b", "c"], "disjunction")).toBe("a, b, or c");
+		});
+	});
+
+	it("joins with the interface language when it is German", () => {
+		withLanguage("de", () => {
+			expect(formatList(["a", "b", "c"])).toBe("a, b und c");
+			expect(formatList(["a", "b"], "disjunction")).toBe("a oder b");
+		});
+	});
+
+	it("returns one item as it is and no items as empty", () => {
+		expect(formatList(["a"])).toBe("a");
+		expect(formatList([])).toBe("");
+	});
+});
 
 describe("Glucose conversion", () => {
 	describe("convertToDisplayUnits", () => {

@@ -3,6 +3,7 @@
   the events are, a chip for each narrowing, and the count of events from the last preview.
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import { before, removeThenFocus } from "./refocus.js";
   import { anchorGroupLabel, anchorLabel, anchorPhrase } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
@@ -227,7 +228,7 @@
       }
       case "foods":
         return moment.foods && moment.foods.length > 0
-          ? moment.foods.map((f) => f.name).join(" or ")
+          ? formatList(moment.foods.map((f) => f.name), "disjunction")
           : "Pick a food";
       case "foodCategory":
         return moment.foodCategory?.trim()

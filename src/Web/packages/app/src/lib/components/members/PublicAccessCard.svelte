@@ -1,6 +1,6 @@
 <script lang="ts">
   import { toggled } from "#lib/utils/collections.js";
-  import { formatDayTime } from "#lib/utils/formatting.js";
+  import { formatDayTime, formatList } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -26,7 +26,7 @@
     setShareLinkFullHistory,
     setShareLinkScopes,
   } from "#lib/api/generated/shareLinks.generated.remote.js";
-  import { categoriesIn, formatList } from "./data-categories";
+  import { categoriesIn } from "./data-categories";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { FormError } from "#lib/forms/index.js";
