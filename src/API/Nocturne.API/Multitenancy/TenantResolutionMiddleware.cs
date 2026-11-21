@@ -121,6 +121,9 @@ public class TenantResolutionMiddleware
         // Another instance's server relaying a support issue to the apex it was configured with
         // (GitHubIssueOptions.RelayUrl). The issue goes to GitHub, not to any tenant here.
         new TenantlessPath("/api/v4/support/relay", HttpMethods.Post),
+        // The web server's bot reports which chat platforms are online from the apex it was
+        // configured with. The instance key authenticates it; the channel read stays per tenant.
+        new TenantlessPath("/api/v4/system/heartbeat", HttpMethods.Post),
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
