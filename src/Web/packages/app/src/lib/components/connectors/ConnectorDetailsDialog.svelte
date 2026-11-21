@@ -19,7 +19,7 @@
   import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
   import { triggerConnectorSync } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { page } from "$app/state";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -56,7 +56,7 @@
   }: Props = $props();
 
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )

@@ -2,17 +2,19 @@ import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
-import { parseErrorBody } from "#lib/api/error-body.js";
+import { parseCode, parseErrorBody } from "#lib/api/error-body.js";
 import {
   describeRemoteError,
   describeSubmitError,
   errorIssues,
   errorMessage,
   PERMISSION_GATED_MUTATION,
+  permissionGatedMutationError,
 } from "./submit-error";
 import {
   genericSubmitError,
   missingItemError,
+  missingScopeError,
   rateLimitedError,
 } from "./submit-messages.svelte";
 import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -28,7 +30,8 @@ import { remoteErrorMessage } from "#lib/api/remote-error.js";
 type ForbidArm = (
   err: unknown,
   error: typeof import("@sveltejs/kit").error,
-  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody
+  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody,
+  parseCode: typeof import("#lib/api/error-body.js").parseCode
 ) => never;
 
 function compileArm(source: string): ForbidArm {
@@ -37,7 +40,7 @@ function compileArm(source: string): ForbidArm {
 
 async function crossThe403Arm(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, error, parseErrorBody) => { ${config.errorHandling.on403}; }`,
+    `(err, error, parseErrorBody, parseCode) => { ${config.errorHandling.on403}; }`,
     "on403.ts",
     { loader: "ts" }
   );
@@ -45,7 +48,7 @@ async function crossThe403Arm(thrown: unknown): Promise<unknown> {
   const forbid = compileArm(compiled.code.trim().replace(/;$/, ""));
 
   try {
-    forbid(thrown, error, parseErrorBody);
+    forbid(thrown, error, parseErrorBody, parseCode);
   } catch (crossed) {
     return crossed;
   }
@@ -236,6 +239,75 @@ describe("describeSubmitError", () => {
   it("tolerates null and non-objects", () => {
     expect(describeSubmitError(null)).toBe(genericSubmitError());
     expect(describeSubmitError("string throw")).toBe(genericSubmitError());
+  });
+});
+
+describe("a missing_scope refusal", () => {
+  const scopeRefusal = {
+    ...problemDetails(403, "This operation requires the 'tenant.settings' scope."),
+    code: "missing_scope",
+    scopes: ["tenant.settings"],
+  };
+
+  it("answers an ordinary caller with the permission sentence, which names no scope, ahead of its fallback", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+    const shown = describeSubmitError(crossed, "Could not save the profile.");
+
+    expect(shown).toBe(missingScopeError());
+    expect(shown).not.toContain("tenant.settings");
+  });
+
+  it("reads the same when the refusal reached NSwag unparsed", async () => {
+    const crossed = await crossThe403Arm(
+      nswagApiException(403, UNDECLARED_STATUS_MESSAGE, JSON.stringify(scopeRefusal))
+    );
+
+    expect(describeSubmitError(crossed, "Could not save the profile.")).toBe(
+      missingScopeError()
+    );
+  });
+
+  it("leaves a permission-gated caller its own refusal sentence", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+
+    expect(
+      permissionGatedMutationError(
+        crossed,
+        "Changing alerts requires the alerts.readwrite permission."
+      )
+    ).toBe("Changing alerts requires the alerts.readwrite permission.");
+  });
+
+  it("leaves a 403 with another code to the server's sentence", async () => {
+    const crossed = await crossThe403Arm({
+      ...problemDetails(403, "Demo accounts cannot do this."),
+      code: "demo_subject",
+    });
+
+    expect(describeSubmitError(crossed, "You can't change this setting.")).toBe(
+      "Demo accounts cannot do this."
+    );
+  });
+
+  it("lets a call site's own sentence for the code win", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+
+    expect(
+      describeSubmitError(crossed, "Fallback.", { missing_scope: "Ask an owner." })
+    ).toBe("Ask an owner.");
+  });
+
+  it("lets a call site's own sentence for the code win over a permission-gated caller's sentence", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+
+    expect(
+      describeRemoteError(
+        crossed,
+        "Changing alerts requires the alerts.readwrite permission.",
+        PERMISSION_GATED_MUTATION,
+        { missing_scope: "Ask an owner." }
+      )
+    ).toBe("Ask an owner.");
   });
 });
 

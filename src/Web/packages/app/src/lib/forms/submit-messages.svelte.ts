@@ -17,3 +17,8 @@ export function rateLimitedError(): string {
 export function missingItemError(): string {
   return "That item no longer exists. Refresh the page to see what's there now.";
 }
+
+/** Shown when the server refused an action because the caller's role lacks the scope it needs. */
+export function missingScopeError(): string {
+  return "You do not have permission to do this.";
+}

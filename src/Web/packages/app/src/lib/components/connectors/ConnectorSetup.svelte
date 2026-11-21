@@ -19,7 +19,7 @@
     getConnectorDataSummary,
   } from "#lib/api/generated/services.generated.remote.js";
   import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import {
@@ -36,9 +36,9 @@
   import ConnectorConfigForm from "#lib/components/settings/ConnectorConfigForm.svelte";
   import CareLinkConnectPanel from "#lib/components/connectors/CareLinkConnectPanel.svelte";
   import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
+  import ReadOnlyNotice from "#lib/components/settings/ReadOnlyNotice.svelte";
 
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
-  import Lock from "@lucide/svelte/icons/lock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
   import { EmptyState } from "#lib/components/shared/index.js";
@@ -98,7 +98,7 @@
   // navigation, so the layout's grant is the anonymous one until the next page load.
   const permissionsQuery = getMyPermissions();
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       permissionsQuery.current?.scopes,
       permissionsQuery.current?.refusedAsDemoSubject
     )
@@ -420,15 +420,10 @@
 
       <!-- Configuration Form -->
       {#if !canManage}
-        <Card data-testid="connector-read-only">
-          <CardContent class="flex items-center gap-3 py-4">
-            <Lock class="h-5 w-5 shrink-0 text-muted-foreground" />
-            <p class="text-sm text-muted-foreground">
-              Only members who can manage this site's settings can configure or
-              enable this connector.
-            </p>
-          </CardContent>
-        </Card>
+        <ReadOnlyNotice data-testid="connector-read-only">
+          Only members who can manage this site's settings can configure or
+          enable this connector.
+        </ReadOnlyNotice>
       {:else if showConfiguration && hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
