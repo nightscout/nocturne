@@ -6,6 +6,7 @@
     formatGlucoseDelta,
   } from "#lib/utils/formatting.js";
   import { getDirectionInfo } from "#lib/utils/index.js";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
   import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
   import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
@@ -47,7 +48,7 @@
     <span class="flex items-center gap-1 text-muted-foreground">
       {#if directionInfo.icon}
         {@const Icon = directionInfo.icon}
-        <Icon class="h-3.5 w-3.5 {directionInfo.css}" />
+        <Icon class="h-3.5 w-3.5 {deltaColorClass(glucose.direction)}" />
       {/if}
       {displayDelta}
     </span>

@@ -10,6 +10,7 @@
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { getDirectionInfo } from "#lib/utils/index.js";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     formatClock,
     formatGlucoseValue,
@@ -121,7 +122,7 @@
               </span>
               <span class="text-sm text-muted-foreground">{unitLabel}</span>
             </div>
-            <div class="flex items-center gap-1 text-sm {trend.css}">
+            <div class="flex items-center gap-1 text-sm {deltaColorClass(data.glucose.direction)}">
               <TrendIcon class="h-4 w-4" aria-label={trend.label} />
               {#if data.glucose.delta !== null && data.glucose.delta !== undefined}
                 <span class="tabular-nums">

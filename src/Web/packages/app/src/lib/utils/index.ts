@@ -13,7 +13,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
-type DirectionInfo = { label: string; icon: SvelteComponent; css: string };
+type DirectionInfo = { label: string; icon: SvelteComponent };
 
 /**
  * Shown for every direction no arrow can express — none reported, not computable, or a
@@ -22,7 +22,6 @@ type DirectionInfo = { label: string; icon: SvelteComponent; css: string };
 const unknownDirectionInfo: DirectionInfo = {
   label: "unknown",
   icon: HelpCircle,
-  css: "text-gray-500",
 };
 
 /** Keyed by the canonical direction name {@link canonicalDirection} yields. */
@@ -30,53 +29,43 @@ const directionInfo: Partial<Record<string, DirectionInfo>> = {
   [Direction.TripleUp]: {
     label: "rising extremely fast",
     icon: ArrowUp,
-    css: "text-red-500",
   },
   [Direction.DoubleUp]: {
     label: "rising very fast",
     icon: ArrowUp,
-    css: "text-red-500",
   },
   [Direction.SingleUp]: {
     label: "rising",
     icon: ArrowUpRight,
-    css: "text-orange-500",
   },
   [Direction.FortyFiveUp]: {
     label: "rising slowly",
     icon: ArrowUpRight,
-    css: "text-yellow-500",
   },
-  [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
+  [Direction.Flat]: { label: "stable", icon: ArrowRight },
   [Direction.FortyFiveDown]: {
     label: "falling slowly",
     icon: ArrowDownRight,
-    css: "text-yellow-500",
   },
   [Direction.SingleDown]: {
     label: "falling",
     icon: ArrowDownRight,
-    css: "text-orange-500",
   },
   [Direction.DoubleDown]: {
     label: "falling very fast",
     icon: ArrowDown,
-    css: "text-red-500",
   },
   [Direction.TripleDown]: {
     label: "falling extremely fast",
     icon: ArrowDown,
-    css: "text-red-500",
   },
   [Direction.RateOutOfRange]: {
     label: "out of range",
     icon: AlertTriangle,
-    css: "text-gray-500",
   },
   [Direction.CgmError]: {
     label: "sensor error",
     icon: AlertTriangle,
-    css: "text-gray-500",
   },
   [Direction.NONE]: unknownDirectionInfo,
   [Direction.NotComputable]: unknownDirectionInfo,
