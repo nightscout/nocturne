@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -412,39 +411,24 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(_operatorConfig.UsernameValidationWebhookUrl))
             return null;
 
-        Exception? failure = null;
-        int? statusCode = null;
+        var answer = await OperatorWebhook.PostAsync<SlugValidationResult>(
+            _httpClientFactory.CreateClient(OperatorWebhook.UsernameValidationClient),
+            _operatorConfig.UsernameValidationWebhookUrl,
+            new { username },
+            ct);
 
-        try
+        if (answer.Outcome == OperatorWebhookOutcome.Answered)
         {
-            var client = _httpClientFactory.CreateClient("username-validation");
-            var response = await client.PostAsJsonAsync(
-                _operatorConfig.UsernameValidationWebhookUrl,
-                new { username },
-                ct);
-
-            if (response.IsSuccessStatusCode)
-            {
-                Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
-                return await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
-            }
-
-            statusCode = (int)response.StatusCode;
-        }
-        catch (Exception ex)
-        {
-            if (ct.IsCancellationRequested)
-                return null;
-
-            failure = ex;
+            Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
+            return answer.Value;
         }
 
         if (Interlocked.Exchange(ref _usernameWebhookOutageReported, 1) == 0)
         {
             _logger.LogWarning(
-                failure,
-                "Username validation webhook did not answer ({Outcome}); usernames are being accepted without it",
-                statusCode?.ToString() ?? "unreachable");
+                "Username validation webhook did not answer ({Outcome}, {Detail}); usernames are being accepted without it",
+                answer.StatusCode?.ToString() ?? answer.Outcome.ToString(),
+                answer.Detail);
         }
 
         return null;

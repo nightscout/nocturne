@@ -579,10 +579,9 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<RecoveryLinkRequests>();
         services.AddSingleton<IAccountLinkDelivery, OperatorWebhookLinkDelivery>();
         services.AddSingleton<IAccountLinkRoute>(sp => sp.GetRequiredService<IAccountLinkDelivery>());
-        // The message carries a bearer link, so a redirect the operator did not configure must not
-        // receive it.
-        services.AddHttpClient(OperatorWebhookLinkDelivery.HttpClientName, client => client.Timeout = OperatorWebhookLinkDelivery.Timeout)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        services.AddOperatorWebhookClient(OperatorWebhook.AccountLinkClient);
+        services.AddOperatorWebhookClient(OperatorWebhook.SlugValidationClient);
+        services.AddOperatorWebhookClient(OperatorWebhook.UsernameValidationClient);
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();

@@ -38,7 +38,7 @@ public class OperatorWebhookLinkDeliveryTests
     private OperatorWebhookLinkDelivery Delivery(Handler handler, string? url = WebhookUrl, string baseDomain = "nocturne.example")
     {
         var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(OperatorWebhookLinkDelivery.HttpClientName))
+        factory.Setup(f => f.CreateClient(OperatorWebhook.AccountLinkClient))
             .Returns(() => new HttpClient(handler, disposeHandler: false));
         return new OperatorWebhookLinkDelivery(
             factory.Object,

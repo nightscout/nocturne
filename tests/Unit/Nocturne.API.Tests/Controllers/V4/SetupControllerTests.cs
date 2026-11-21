@@ -670,6 +670,57 @@ public class SetupControllerTests : IDisposable
         VerifyOutageReported(logger, Times.Once());
     }
 
+    [Fact]
+    public async Task ValidateUsername_WhenTheWebhookDoesNotAnswerInTime_AdmitsTheName()
+    {
+        var controller = BuildSilentWebhookController(TimeSpan.FromMilliseconds(50));
+        await SeedConfiguredTenantAsync("test", "Test");
+
+        var result = await controller.ValidateUsername("owner-one", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<SlugValidationResult>()
+            .Which.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ValidateUsername_WhenTheCallerCancels_DoesNotTreatItAsAWebhookOutage()
+    {
+        var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var controller = BuildSilentWebhookController(TimeSpan.FromSeconds(30), arrived);
+        await SeedConfiguredTenantAsync("test", "Test");
+        using var cts = new CancellationTokenSource();
+
+        var call = controller.ValidateUsername("owner-one", cts.Token);
+        await arrived.Task;
+        await cts.CancelAsync();
+
+        await FluentActions.Awaiting(() => call).Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private SetupController BuildSilentWebhookController(TimeSpan timeout, TaskCompletionSource? arrived = null)
+    {
+        var handler = new SilentHandler(arrived);
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(f => f.CreateClient(OperatorWebhook.UsernameValidationClient))
+            .Returns(() => new HttpClient(handler, disposeHandler: false) { Timeout = timeout });
+
+        return BuildController(
+            new OperatorConfiguration { UsernameValidationWebhookUrl = "https://webhook.invalid/validate" },
+            httpClientFactory.Object,
+            new Mock<ILogger<SetupController>>().Object);
+    }
+
+    private sealed class SilentHandler(TaskCompletionSource? arrived) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            arrived?.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
     private SetupController BuildWebhookController(
         Mock<ILogger<SetupController>> logger, params HttpStatusCode[] responses)
     {
