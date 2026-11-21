@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -38,13 +39,30 @@ public interface ILoginCodeService
     /// <summary>
     /// Redeems <paramref name="code"/> and returns the member and purpose it was minted for, or
     /// <see langword="null"/> when it is unknown, expired, already consumed, minted for a purpose
-    /// outside <paramref name="purposes"/>, or belongs to another tenant. Redemption is a single
-    /// atomic claim, so two concurrent callers cannot both succeed.
+    /// outside <paramref name="purposes"/>, belongs to another tenant, or is refused by
+    /// <paramref name="admits"/>. A code is spent only by a redemption that returns it: the claim
+    /// is conditional on the code being unspent, so two concurrent callers cannot both succeed.
     /// </summary>
+    /// <param name="dbContext">The context the redemption runs on, in one transaction.</param>
+    /// <param name="code">The code as presented.</param>
+    /// <param name="purposes">The purposes the caller redeems.</param>
+    /// <param name="admits">
+    /// Whether the code's member may redeem it now. It runs before the claim, so a refusal leaves
+    /// the code unspent.
+    /// </param>
+    /// <param name="withSpend">
+    /// Work that runs after the claim, inside its transaction: when it throws, the claim rolls back and
+    /// the code is not spent. A write it makes through another context commits on its own.
+    /// </param>
+    /// <param name="ipAddress">The caller's address, for the audit row.</param>
+    /// <param name="userAgent">The caller's user agent, for the audit row.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task<RedeemedLoginCode?> RedeemAsync(
         NocturneDbContext dbContext,
         string code,
         IReadOnlyCollection<LoginCodePurpose> purposes,
+        Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits,
+        Func<RedeemedLoginCode, CancellationToken, Task>? withSpend,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default);
@@ -139,6 +157,8 @@ public class LoginCodeService : ILoginCodeService
         NocturneDbContext dbContext,
         string code,
         IReadOnlyCollection<LoginCodePurpose> purposes,
+        Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits,
+        Func<RedeemedLoginCode, CancellationToken, Task>? withSpend,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default)
@@ -146,19 +166,33 @@ public class LoginCodeService : ILoginCodeService
         var codeHash = HashUtils.Sha256Hex(code);
         var now = DateTime.UtcNow;
 
-        // Claiming and checking in one statement is what makes the code single-use: consumption
-        // state is not a concurrency token, so a read-then-write would let two simultaneous
-        // exchanges both see consumed_at IS NULL and both mint a session.
-        var claimed = await dbContext.LoginCodes
-            .Where(c => c.CodeHash == codeHash && purposes.Contains(c.Purpose) && c.ConsumedAt == null && c.ExpiresAt > now)
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), ct);
+        var redeemed = await dbContext.ExecuteInTransactionAsync<RedeemedLoginCode?>(async token =>
+        {
+            var live = await dbContext.LoginCodes.AsNoTracking()
+                .Where(c => c.CodeHash == codeHash && purposes.Contains(c.Purpose) && c.ConsumedAt == null && c.ExpiresAt > now)
+                .Select(c => new { c.Id, c.SubjectId, c.Purpose })
+                .FirstOrDefaultAsync(token);
+            if (live is null)
+                return null;
 
-        var redeemed = claimed == 0
-            ? null
-            : await dbContext.LoginCodes.AsNoTracking()
-                .Where(c => c.CodeHash == codeHash)
-                .Select(c => new RedeemedLoginCode(c.SubjectId, c.Purpose))
-                .FirstOrDefaultAsync(ct);
+            var found = new RedeemedLoginCode(live.SubjectId, live.Purpose);
+            if (admits is not null && !await admits(found, token))
+                return null;
+
+            // Consumption state is not a concurrency token, so the read above decides nothing: the
+            // claim re-checks the code is unspent, and of two concurrent claims the row lock lets
+            // one through.
+            var claimed = await dbContext.LoginCodes
+                .Where(c => c.Id == live.Id && c.ConsumedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), token);
+            if (claimed == 0)
+                return null;
+
+            if (withSpend is not null)
+                await withSpend(found, token);
+
+            return found;
+        }, ct: ct);
         var subjectId = redeemed?.SubjectId;
 
         await _auditService.LogAsync(
