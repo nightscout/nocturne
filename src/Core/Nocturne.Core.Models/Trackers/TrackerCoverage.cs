@@ -1,13 +1,11 @@
 using System.Text.Json;
-using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
 
-namespace Nocturne.API.Services.Monitoring;
+namespace Nocturne.Core.Models;
 
 /// <summary>
-/// What a tracker definition's <see cref="TrackerDefinitionEntity.Covers"/> says its hardware
-/// provides, and what follows from it.
+/// What a tracker definition's <see cref="TrackerDefinition.Covers"/> says its hardware provides,
+/// and what follows from it.
 /// </summary>
 public static class TrackerCoverage
 {
@@ -48,11 +46,11 @@ public static class TrackerCoverage
         new HashSet<PumpCapability> { PumpCapability.Site, PumpCapability.Reservoir, PumpCapability.Power };
 
     /// <summary>
-    /// What <paramref name="definition"/> covers: its <see cref="TrackerDefinitionEntity.Covers"/>,
+    /// What <paramref name="definition"/> covers: its <see cref="TrackerDefinition.Covers"/>,
     /// else <see cref="PodCapabilities"/> for a pod tracker, else nothing known.
     /// </summary>
-    public static IReadOnlySet<PumpCapability> Of(TrackerDefinitionEntity definition) =>
-        Of(definition.Category, Parse(definition.Covers));
+    public static IReadOnlySet<PumpCapability> Of(TrackerDefinition definition) =>
+        Of(definition.Category, definition.Covers);
 
     /// <summary>What a definition of <paramref name="category"/> stating <paramref name="covers"/> covers.</summary>
     public static IReadOnlySet<PumpCapability> Of(TrackerCategory category, IReadOnlySet<PumpCapability> covers) =>
@@ -97,6 +95,6 @@ public static class TrackerCoverage
         category == TrackerCategory.Reservoir || Of(category, covers).Contains(PumpCapability.Reservoir);
 
     /// <inheritdoc cref="HoldsInsulin(TrackerCategory, IReadOnlySet{PumpCapability})"/>
-    public static bool HoldsInsulin(TrackerDefinitionEntity definition) =>
-        HoldsInsulin(definition.Category, Parse(definition.Covers));
+    public static bool HoldsInsulin(TrackerDefinition definition) =>
+        HoldsInsulin(definition.Category, definition.Covers);
 }

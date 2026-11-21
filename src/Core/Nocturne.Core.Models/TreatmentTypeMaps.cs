@@ -1,7 +1,6 @@
 using Nocturne.Core.Constants;
-using Nocturne.Core.Models;
 
-namespace Nocturne.Connectors.Core.Constants;
+namespace Nocturne.Core.Models;
 
 /// <summary>
 /// Maps from Nightscout event type strings to the typed enums, for treatment categorisation.

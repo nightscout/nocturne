@@ -20,9 +20,11 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [ApiController]
 [Tags("Monitoring")]
 [Route("api/v4/trackers")]
-public class TrackerLegacyFallbacksController(ILegacyFallbackService fallbacks)
+public class TrackerLegacyFallbacksController(ILegacyFallbackService fallbacks, TimeProvider? timeProvider = null)
     : ControllerBase, IWriteScopedController
 {
+    private DateTime UtcNow => (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+
     /// <inheritdoc cref="TrackersController.WriteScope"/>
     public string WriteScope => Scope.AlertsReadWrite;
 
@@ -52,7 +54,7 @@ public class TrackerLegacyFallbacksController(ILegacyFallbackService fallbacks)
         var found = await fallbacks.GetAsync(ReadsFallbacks, HttpContext.RequestAborted);
         return Ok(new LegacyFallbacksDto
         {
-            Fallbacks = [.. found.Fallbacks.Select(LegacyFallbackDto.From)],
+            Fallbacks = [.. found.Fallbacks.Select(f => LegacyFallbackDto.From(f, UtcNow))],
             Covered = [.. found.Covered.Select(c => new LegacyCoverageDto
             {
                 Kind = c.Kind,
@@ -98,8 +100,8 @@ public class TrackerLegacyFallbacksController(ILegacyFallbackService fallbacks)
 
         return Ok(new LegacyConversionDto
         {
-            Definitions = [.. conversion.Definitions.Select(TrackerDefinitionDto.FromEntity)],
-            Instances = [.. conversion.Instances.Select(TrackerInstanceDto.FromEntity)],
+            Definitions = [.. conversion.Definitions.Select(TrackerDefinitionDto.From)],
+            Instances = [.. conversion.Instances.Select(i => TrackerInstanceDto.From(i, UtcNow))],
             FailedKinds = [.. conversion.FailedKinds],
         });
     }
@@ -140,9 +142,10 @@ public class LegacyFallbackDto
     /// <summary>The tracker converting this fallback creates.</summary>
     public LegacyFallbackSpecDto Spec { get; set; } = new();
 
-    public static LegacyFallbackDto From(LegacyFallback fallback)
+    /// <summary>The fallback as a client reads it, its age measured at <paramref name="now"/>.</summary>
+    public static LegacyFallbackDto From(LegacyFallback fallback, DateTime now)
     {
-        var run = TrackerInstanceDto.FromEntity(fallback.Projected);
+        var run = TrackerInstanceDto.From(fallback.Projected, now);
         return new()
         {
             Kind = fallback.Kind,

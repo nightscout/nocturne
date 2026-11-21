@@ -9,6 +9,7 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Treatments;
@@ -595,7 +596,7 @@ public class TenantOverviewServiceTests
         services.AddScoped(_ => pumps.Object);
         var trackers = new Mock<ITrackerRepository>();
         trackers.Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
+            .ReturnsAsync(Array.Empty<TrackerInstance>());
         services.AddScoped(_ => trackers.Object);
         var provider = services.BuildServiceProvider();
 
@@ -998,30 +999,18 @@ public class TenantOverviewServiceTests
             InsulinInWindow = insulin,
         };
 
-    private static TrackerInstanceEntity EventTracker(string name, double hoursUntil, NotificationUrgency urgency)
-    {
-        var definition = new TrackerDefinitionEntity
+    private static TrackerInstance EventTracker(string name, double hoursUntil, NotificationUrgency urgency) =>
+        new()
         {
             Id = Guid.NewGuid(),
-            Name = name,
-            Mode = TrackerMode.Event,
-            DashboardVisibility = DashboardVisibility.Always,
-        };
-        definition.NotificationThresholds.Add(new TrackerNotificationThresholdEntity
-        {
-            Id = Guid.NewGuid(),
-            TrackerDefinitionId = definition.Id,
-            Urgency = urgency,
-            Hours = -24,
-        });
-        return new TrackerInstanceEntity
-        {
-            Id = Guid.NewGuid(),
-            DefinitionId = definition.Id,
-            Definition = definition,
+            Definition = TrackerDefinition.Restore(
+                Guid.NewGuid(),
+                name,
+                mode: TrackerMode.Event,
+                dashboardVisibility: DashboardVisibility.Always,
+                notificationThresholds: [new TrackerNotificationThreshold(Guid.NewGuid(), urgency, -24, null, 0)]),
             ScheduledAt = DateTime.UtcNow.AddHours(hoursUntil),
         };
-    }
 
     /// <summary>What one tenant's scope reads. A null member falls back to the call's default.</summary>
     private sealed class TenantData
@@ -1030,7 +1019,7 @@ public class TenantOverviewServiceTests
         public IReadOnlyList<SensorGlucose>? Recent { get; init; }
         public IobCobReading? OnBoard { get; init; }
         public PumpSnapshot? Pump { get; init; }
-        public TrackerInstanceEntity[]? Trackers { get; init; }
+        public TrackerInstance[]? Trackers { get; init; }
     }
 
     private sealed class Fakes
@@ -1058,7 +1047,7 @@ public class TenantOverviewServiceTests
             Pumps.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
                 .Returns(() => Task.FromResult(For(tenantId()!.Value).Pump));
             Trackers.Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-                .Returns(() => Task.FromResult<TrackerInstanceEntity[]>(For(tenantId()!.Value).Trackers ?? []));
+                .Returns(() => Task.FromResult<IReadOnlyList<TrackerInstance>>(For(tenantId()!.Value).Trackers ?? []));
 
             services.AddScoped(_ => Canonical.Object);
             services.AddScoped(_ => IobCob.Object);

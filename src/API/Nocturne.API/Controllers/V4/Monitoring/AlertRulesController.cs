@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
@@ -15,6 +14,7 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
@@ -205,7 +205,7 @@ public class AlertRulesController : ControllerBase
             return badChannel;
 
         var leaves = RuleTrees.Leaves(request.ConditionType, trees.ConditionParams);
-        if (await RejectInvalidTrackerAgeAsync(db, leaves, ct) is { } badTracker)
+        if (await RejectInvalidTrackerAgeAsync(new TrackerRepository(_contextFactory), leaves, ct) is { } badTracker)
             return badTracker;
 
         var conditionParamsJson = trees.ConditionParams;
@@ -260,7 +260,7 @@ public class AlertRulesController : ControllerBase
             return badChannel;
 
         var leaves = RuleTrees.Leaves(request.ConditionType, trees.ConditionParams);
-        if (await RejectInvalidTrackerAgeAsync(db, leaves, ct) is { } badTracker)
+        if (await RejectInvalidTrackerAgeAsync(new TrackerRepository(unit), leaves, ct) is { } badTracker)
             return badTracker;
 
         if (await _referenceService.DetectCycleAsync(id, RuleTrees.AlertStateTargets(leaves).ToList(), ct))
@@ -583,7 +583,7 @@ public class AlertRulesController : ControllerBase
     /// pass, a rule that silently never fires. Returns null when the request is acceptable.
     /// </summary>
     private static async Task<BadRequestObjectResult?> RejectInvalidTrackerAgeAsync(
-        NocturneDbContext db, IReadOnlyList<ConditionLeaf> leaves, CancellationToken ct)
+        ITrackerRepository trackers, IReadOnlyList<ConditionLeaf> leaves, CancellationToken ct)
     {
         var definitionIds = new List<Guid>();
         foreach (var leaf in leaves.Where(leaf => leaf.Kind == AlertConditionType.TrackerAge))
@@ -595,7 +595,7 @@ public class AlertRulesController : ControllerBase
 
         foreach (var definitionId in definitionIds)
         {
-            if (!await db.TrackerDefinitions.AnyAsync(d => d.Id == definitionId, ct))
+            if (await trackers.GetDefinitionByIdAsync(definitionId, ct) is null)
                 return new BadRequestObjectResult($"Unknown tracker definition '{definitionId}'.");
         }
 

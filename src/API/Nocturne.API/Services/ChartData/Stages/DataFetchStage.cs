@@ -7,7 +7,6 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
-using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.ChartData.Stages;
 
@@ -254,8 +253,8 @@ internal sealed class DataFetchStage(
                 Overrides = overrides,
                 ProfileSegments = profileSegments,
                 SystemEvents = systemEventsResult?.ToList() ?? [],
-                TrackerDefinitions = trackerDefs?.ToList() ?? [],
-                TrackerInstances = trackerInstances?.ToList() ?? [],
+                Trackers = trackerDefs?.ToList() ?? [],
+                RunningTrackers = trackerInstances?.ToList() ?? [],
                 HeartRateList = heartRateList,
                 StepCountList = stepCountList,
             };

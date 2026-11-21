@@ -13,9 +13,43 @@ public class TrackerTemplatesTests
     private static PatientDevice Device(string catalogId) => new() { CatalogId = catalogId, Rank = 0 };
 
     [Fact]
+    public void EverySpecTheCatalogAndTheGenericKindsCallFor_MakesAValidDefinition()
+    {
+        var now = DateTime.UtcNow;
+        var specs = DeviceCatalog.GetAll().SelectMany(ConsumableTrackerSpecs.SpecsFor)
+            .Concat(Enum.GetValues<LegacyConsumableKind>().Select(ConsumableTrackerSpecs.Generic))
+            .Append(ConsumableTrackerSpecs.TypicalPod)
+            .ToList();
+
+        specs.Should().NotBeEmpty();
+        foreach (var spec in specs)
+        {
+            FluentActions.Invoking(() => ConsumableTrackerSpecs.ToDefinition(spec, string.Empty, now))
+                .Should().NotThrow(spec.Name);
+            FluentActions.Invoking(() => ConsumableTrackerSpecs.ToDefinition(spec, string.Empty, now, withThresholds: false))
+                .Should().NotThrow(spec.Name);
+        }
+    }
+
+    [Fact]
+    public void EveryTemplate_ForNoDevicesAndForEachCatalogDevice_MakesAValidDefinition()
+    {
+        var now = DateTime.UtcNow;
+        var deviceSets = DeviceCatalog.GetAll().Select(entry => (IReadOnlyCollection<PatientDevice>)[Device(entry.Id)])
+            .Prepend([])
+            .ToList();
+
+        foreach (var devices in deviceSets)
+        {
+            FluentActions.Invoking(() => TrackerTemplates.For(devices, now))
+                .Should().NotThrow(string.Join(",", devices.Select(d => d.CatalogId)));
+        }
+    }
+
+    [Fact]
     public void WithNoDevices_EveryTemplateIsOffered_WithTypicalLifespans()
     {
-        var templates = TrackerTemplates.For([]);
+        var templates = TrackerTemplates.For([], DateTime.UtcNow);
 
         templates.Select(t => t.Id).Should().Equal(
             TrackerTemplates.Sensor, TrackerTemplates.Site, TrackerTemplates.Pod, TrackerTemplates.Reservoir,
@@ -28,7 +62,7 @@ public class TrackerTemplatesTests
     [Fact]
     public void APodPump_IsTheSite_AndLeavesNoReservoirOrBatteryBesideIt()
     {
-        var templates = TrackerTemplates.For([Device("omnipod-5")]);
+        var templates = TrackerTemplates.For([Device("omnipod-5")], DateTime.UtcNow);
 
         templates.Select(t => t.Id).Should().Equal(
             TrackerTemplates.Sensor, TrackerTemplates.Pod, TrackerTemplates.Appointment,
@@ -41,7 +75,7 @@ public class TrackerTemplatesTests
     [Fact]
     public void AnAppointment_IsAnEvent_WithNoLifespan_AndAReminderBeforeIt()
     {
-        var appointment = TrackerTemplates.For([]).Single(t => t.Id == TrackerTemplates.Appointment).Definition;
+        var appointment = TrackerTemplates.For([], DateTime.UtcNow).Single(t => t.Id == TrackerTemplates.Appointment).Definition;
 
         appointment.Mode.Should().Be(TrackerMode.Event);
         appointment.LifespanHours.Should().BeNull();
@@ -52,9 +86,9 @@ public class TrackerTemplatesTests
     [Fact]
     public void EveryTemplate_IsUnsaved_AndEachOfItsThresholdsCanFire()
     {
-        foreach (var template in TrackerTemplates.For([]))
+        foreach (var template in TrackerTemplates.For([], DateTime.UtcNow))
         {
-            var dto = TrackerDefinitionDto.FromEntity(template.Definition);
+            var dto = TrackerDefinitionDto.From(template.Definition);
 
             dto.Id.Should().BeEmpty();
             dto.NotificationThresholds.Should().OnlyContain(t => t.OffsetMinutes != null, template.Id);

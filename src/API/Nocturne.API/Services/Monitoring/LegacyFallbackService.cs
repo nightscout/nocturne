@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -23,7 +23,7 @@ public sealed record LegacyFallback(
     LegacyConsumableKind Kind,
     DeviceEvent LatestEvent,
     ConsumableTrackerSpec Spec,
-    TrackerInstanceEntity Projected);
+    TrackerInstance Projected);
 
 /// <summary>A consumable the tenant has a tracker for, and the definitions that cover it.</summary>
 /// <param name="Kind">The covered consumable.</param>
@@ -42,8 +42,8 @@ public sealed record LegacyFallbackRead(
 /// <param name="Instances">Their running instances.</param>
 /// <param name="FailedKinds">The kinds whose transaction failed, which committed nothing.</param>
 public sealed record LegacyConversion(
-    IReadOnlyList<TrackerDefinitionEntity> Definitions,
-    IReadOnlyList<TrackerInstanceEntity> Instances,
+    IReadOnlyList<TrackerDefinition> Definitions,
+    IReadOnlyList<TrackerInstance> Instances,
     IReadOnlyList<LegacyConsumableKind> FailedKinds);
 
 /// <summary>
@@ -80,6 +80,7 @@ public interface ILegacyFallbackService
 /// <inheritdoc />
 internal sealed class LegacyFallbackService(
     ITrackerRepository trackers,
+    ITrackerConsumableLock consumableLock,
     IDeviceEventRepository deviceEvents,
     IPatientDeviceRepository patientDevices,
     ConsumableTrackerWriter writer,
@@ -110,15 +111,15 @@ internal sealed class LegacyFallbackService(
     public async Task<LegacyConversion> CreateTrackersAsync(
         IReadOnlyCollection<LegacyConsumableKind> kinds, string userId, CancellationToken ct = default)
     {
-        var definitions = new List<TrackerDefinitionEntity>();
-        var instances = new List<TrackerInstanceEntity>();
+        var definitions = new List<TrackerDefinition>();
+        var instances = new List<TrackerInstance>();
         var failed = new List<LegacyConsumableKind>();
         foreach (var kind in kinds.Distinct().Order())
         {
             CreatedConsumableTracker? created;
             try
             {
-                created = await trackers.ExecuteUnderConsumableLockAsync(
+                created = await consumableLock.ExecuteAsync(
                     async (tx, unit, token) =>
                         (await ResolveAsync([kind], await tx.GetAllDefinitionsAsync(token), token)).SingleOrDefault()
                             is { } fallback
@@ -179,7 +180,7 @@ internal sealed class LegacyFallbackService(
 
     private async Task<IReadOnlyList<LegacyFallback>> ResolveAsync(
         IReadOnlyCollection<LegacyConsumableKind> kinds,
-        IReadOnlyCollection<TrackerDefinitionEntity> definitions,
+        IReadOnlyCollection<TrackerDefinition> definitions,
         CancellationToken ct)
     {
         var uncovered = kinds
@@ -207,10 +208,10 @@ internal sealed class LegacyFallbackService(
             if (!LegacyFallbackRules.IsConfident(kind, spec, latest.Timestamp, recentCount, now))
                 continue;
 
-            var projected = new TrackerInstanceEntity
+            var projected = new TrackerInstance
             {
                 StartedAt = latest.Timestamp,
-                Definition = ConsumableTrackerSpecs.ToDefinition(spec, string.Empty),
+                Definition = ConsumableTrackerSpecs.ToDefinition(spec, string.Empty, now),
             };
             fallbacks.Add(new LegacyFallback(kind, latest, spec, projected));
         }

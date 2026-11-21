@@ -33,10 +33,10 @@ public class TrackerLegacyFallbacksControllerTests
                     LegacyConsumableKind.Site,
                     new DeviceEvent { Id = Guid.NewGuid(), EventType = DeviceEventType.SiteChange, Timestamp = at },
                     spec,
-                    new TrackerInstanceEntity
+                    new TrackerInstance
                     {
                         StartedAt = at,
-                        Definition = ConsumableTrackerSpecs.ToDefinition(spec, string.Empty),
+                        Definition = ConsumableTrackerSpecs.ToDefinition(spec, string.Empty, at),
                     }),
             ], [new LegacyCoverage(LegacyConsumableKind.Sensor, [SensorTrackerId])]));
         _service.Setup(s => s.GetAsync(false, It.IsAny<CancellationToken>()))

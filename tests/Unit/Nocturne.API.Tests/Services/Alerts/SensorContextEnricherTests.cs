@@ -50,7 +50,7 @@ public class SensorContextEnricherTests
     private readonly Mock<IProfileActivationResolver> _profileActivations = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolver = new();
     private readonly Mock<ISleepService> _sleepService = new();
-    private readonly Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository> _trackerRepository = new();
+    private readonly Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository> _trackerRepository = new();
     private readonly Mock<IPredictionService> _predictionService = new();
     private readonly Mock<IReservoirEstimationService> _reservoirEstimator = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));

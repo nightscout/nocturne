@@ -257,6 +257,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
             .AddSingleton<Nocturne.Core.Contracts.Repositories.ISystemEventRepository>(new SystemEventRepository(factory))
             .AddSingleton<Nocturne.Core.Contracts.Alerts.IDndWindowRepository>(new DndWindowRepository(factory))
             .AddSingleton<Nocturne.Core.Contracts.Repositories.ISleepSessionRepository>(new SleepSessionRepository(factory))
+            .AddSingleton<Nocturne.Core.Contracts.Repositories.ITrackerRepository>(new TrackerRepository(factory))
             .AddSingleton<Nocturne.Core.Contracts.Repositories.IBodyWeightRepository>(
                 new Nocturne.Infrastructure.Data.Repositories.Health.BodyWeightRepository(factory, TimeProvider.System))
             .BuildServiceProvider();

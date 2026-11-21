@@ -54,6 +54,7 @@ public class DeviceSetupServiceTests
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             _reattribution.Object,
             new TrackerRepository(factory),
+            new TrackerRepository(factory),
             _ruleSync.Object,
             _therapySettings.Object,
             new ConsumableTrackerWriter(

@@ -1,5 +1,4 @@
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -32,9 +31,8 @@ public static class TrackerSchedule
     /// <summary>
     /// The instant <paramref name="threshold"/> fires for <paramref name="instance"/>, or null when it
     /// never can: a misconfigured negative threshold, or an Event instance with no scheduled time.
-    /// Requires <see cref="TrackerInstanceEntity.Definition"/> to be loaded.
     /// </summary>
-    public static DateTime? FiresAt(TrackerInstanceEntity instance, TrackerNotificationThresholdEntity threshold)
+    public static DateTime? FiresAt(TrackerInstance instance, TrackerNotificationThreshold threshold)
     {
         var definition = instance.Definition;
         var reference = definition.Mode == TrackerMode.Event ? instance.ScheduledAt : instance.StartedAt;

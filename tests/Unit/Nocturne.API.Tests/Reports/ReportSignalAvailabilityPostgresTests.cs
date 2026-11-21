@@ -158,7 +158,8 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         new StepCountRepository(factory, TimeProvider.System),
         new BodyWeightRepository(factory, TimeProvider.System),
         new SleepSessionRepository(factory),
-        new DndWindowRepository(factory));
+        new DndWindowRepository(factory),
+        new TrackerRepository(factory));
 
     private static CategoryReadContext Clamped()
     {

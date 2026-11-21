@@ -877,6 +877,7 @@ public static class ServiceRegistrationExtensions
         // connector-ingested site change advance a tracker the same way a hand-entered one does.
         services.AddScoped<IDeviceEventReactor, TrackerTriggerService>();
         services.AddScoped<TrackerDeviceEventWriter>();
+        services.AddScoped<ITrackerService, TrackerService>();
         // Tracker notifications ride the alert engine: thresholds are synthesised into
         // managed tracker_age alert rules, backfilled daily (TrackerAlertRuleBackfillJob).
         services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();

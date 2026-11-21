@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -8,16 +7,11 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Monitoring;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -25,8 +19,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// Trackers for consumables, appointments and reminders. Manage tracker definitions and presets,
 /// and start, complete, acknowledge and delete tracker instances.
 /// </summary>
-/// <seealso cref="ITrackerRepository"/>
-/// <seealso cref="ISignalRBroadcastService"/>
+/// <seealso cref="ITrackerService"/>
 [ApiController]
 [Tags("Monitoring")]
 [Route("api/v4/trackers")]
@@ -45,14 +38,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// </summary>
     public string WriteScope => Scope.AlertsReadWrite;
 
-    private readonly ITrackerRepository _repository;
-    private readonly ISignalRBroadcastService _broadcast;
-    private readonly ITrackerAlertRuleSyncService _ruleSync;
-    private readonly IAlertRepository _alerts;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IAlertAcknowledgementService _acknowledgementService;
-    private readonly TrackerDeviceEventWriter _deviceEvents;
-    private readonly ILogger<TrackersController> _logger;
+    private readonly ITrackerService _trackers;
     private readonly TimeProvider _time;
 
     private DateTime UtcNow => _time.GetUtcNow().UtcDateTime;
@@ -60,36 +46,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Initializes a new instance of <see cref="TrackersController"/>.
     /// </summary>
-    /// <param name="repository">Repository for tracker definition and log persistence.</param>
-    /// <param name="broadcast">Service for broadcasting real-time tracker updates via SignalR.</param>
-    /// <param name="ruleSync">Synthesises managed alert rules from notification thresholds.</param>
-    /// <param name="alerts">Finds the open excursions of a definition's managed rules.</param>
-    /// <param name="tenantAccessor">The request's tenant.</param>
-    /// <param name="acknowledgementService">Acknowledges alert excursions when a tracker is acked.</param>
-    /// <param name="deviceEvents">Records a definition's start and completion device events.</param>
-    /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">The clock a start or a range defaults from; the system clock when null.</param>
-    public TrackersController(
-        ITrackerRepository repository,
-        ISignalRBroadcastService broadcast,
-        ITrackerAlertRuleSyncService ruleSync,
-        IAlertRepository alerts,
-        ITenantAccessor tenantAccessor,
-        IAlertAcknowledgementService acknowledgementService,
-        TrackerDeviceEventWriter deviceEvents,
-        ILogger<TrackersController> logger,
-        TimeProvider? timeProvider = null
-    )
+    /// <param name="trackers">The tracker module every read and write goes through.</param>
+    /// <param name="timeProvider">The clock a range and the templates default from; the system clock when null.</param>
+    public TrackersController(ITrackerService trackers, TimeProvider? timeProvider = null)
     {
+        _trackers = trackers;
         _time = timeProvider ?? TimeProvider.System;
-        _repository = repository;
-        _broadcast = broadcast;
-        _ruleSync = ruleSync;
-        _alerts = alerts;
-        _tenantAccessor = tenantAccessor;
-        _acknowledgementService = acknowledgementService;
-        _deviceEvents = deviceEvents;
-        _logger = logger;
     }
 
     #region Helpers
@@ -97,55 +59,19 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <summary>The caller reads no trackers; see <see cref="TrackerReadAccess"/>.</summary>
     private bool ReadsNoTrackers => !TrackerReadAccess.Allows(HttpContext);
 
+    private ObjectResult BadRequestProblem(string detail) =>
+        Problem(detail: detail, statusCode: 400, title: "Bad Request");
+
     /// <summary>
-    /// A manual start replaces the running instance, as a device-event start does; see
-    /// <see cref="TrackerSuccession"/>. A started run records the definition's start event
-    /// (<see cref="TrackerDeviceEventWriter"/>).
+    /// A threshold that breaks a rule answers a plain 400 with the message as its body; every other
+    /// rule answers a problem.
     /// </summary>
-    private async Task<TrackerSuccessionResult> StartSuccessorAsync(
-        TrackerDefinitionEntity definition,
-        string userId,
-        string? startNotes,
-        string? startTreatmentId,
-        DateTime startedAt,
-        DateTime? scheduledAt)
-    {
-        var succession = await TrackerSuccession.StartAsync(
-            _repository,
-            _broadcast,
-            _logger,
-            definition,
-            startedAt,
-            completionNotes: null,
-            completeTreatmentId: null,
-            (tx, ct) => tx.StartInstanceAsync(
-                definition.Id,
-                userId,
-                startNotes,
-                startTreatmentId,
-                startedAt,
-                scheduledAt,
-                ct
-            ),
-            HttpContext.RequestAborted
-        );
+    private ActionResult DefinitionError(TrackerDefinitionError error) =>
+        error.Rule == TrackerDefinitionRule.Thresholds
+            ? BadRequest(error.Message)
+            : BadRequestProblem(error.Message);
 
-        // The run is committed, so its event is owed even when the client has gone.
-        if (succession.Started is { } started)
-            await _deviceEvents.WriteAsync(
-                definition.StartEventType,
-                started.StartedAt,
-                startNotes,
-                $"{started.Id}:start",
-                CancellationToken.None);
-
-        return succession;
-    }
-
-    private static string? NullIfBlank(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private ObjectResult SuccessionConflict(TrackerDefinitionEntity definition, TrackerSuccessionOutcome outcome) =>
+    private ObjectResult SuccessionConflict(TrackerDefinition definition, TrackerSuccessionOutcome outcome) =>
         Problem(
             detail: outcome == TrackerSuccessionOutcome.CompletedElsewhere
                 ? $"The running {definition.Name} was completed while this one was starting. Try again."
@@ -154,91 +80,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
             title: "Conflict"
         );
 
-    private ObjectResult? EventTypeError(
-        string? requestedStart,
-        string? requestedCompletion,
-        out string? startEventType,
-        out string? completionEventType)
-    {
-        completionEventType = null;
-        if (!TrackerDeviceEventWriter.TryNormalise(requestedStart, "StartEventType", out startEventType, out var error)
-            || !TrackerDeviceEventWriter.TryNormalise(requestedCompletion, "CompletionEventType", out completionEventType, out error))
-            return Problem(detail: error, statusCode: 400, title: "Bad Request");
-        return null;
-    }
-
-    private static string? ResolveEventType(string? requested, string? normalised, string? stored) =>
-        string.IsNullOrWhiteSpace(requested) ? null : normalised ?? stored;
-
-    private static string? Changed(string? requested, string? stored) =>
-        string.Equals(requested?.Trim(), stored?.Trim(), StringComparison.OrdinalIgnoreCase) ? null : requested;
-
-    private ObjectResult AlreadyCompleted() =>
-        Problem(detail: "Instance already completed", statusCode: 400, title: "Bad Request");
-
-    /// <summary>
-    /// Validate notification thresholds for a definition
-    /// </summary>
-    private static string? ValidateThresholds(
-        List<CreateNotificationThresholdRequest>? thresholds,
-        int? lifespanHours,
-        TrackerMode mode)
-    {
-        if (thresholds == null) return null;
-
-        foreach (var threshold in thresholds)
-        {
-            // For Duration mode, negative thresholds must not exceed lifespan
-            if (mode == TrackerMode.Duration && threshold.Hours < 0)
-            {
-                if (!lifespanHours.HasValue)
-                {
-                    return "Negative thresholds require a lifespan to be set";
-                }
-                if (Math.Abs(threshold.Hours) >= lifespanHours.Value)
-                {
-                    return $"Negative threshold {threshold.Hours} exceeds tracker lifespan of {lifespanHours} hours";
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Validate the low-reservoir level threshold for a definition
-    /// </summary>
-    private static string? ValidateLowReservoirUnits(
-        double? units, TrackerCategory category, IReadOnlySet<PumpCapability> covers)
-    {
-        if (units is not { } value) return null;
-        if (!TrackerCoverage.HoldsInsulin(category, covers))
-            return "Low reservoir units apply only to trackers of a reservoir or of hardware that holds insulin";
-        if (value <= 0)
-            return "Low reservoir units must be greater than zero";
-        if (value > 1000)
-            return "Low reservoir units must be at most 1000";
-        return null;
-    }
-
-    /// <summary>
-    /// Acknowledges every open, unacknowledged excursion belonging to the managed alert
-    /// rules synthesised from <paramref name="definitionId"/>'s thresholds.
-    /// </summary>
-    private async Task AcknowledgeManagedRuleExcursionsAsync(
-        Guid definitionId, string userId, CancellationToken ct)
-    {
-        var tenantId = _tenantAccessor.TenantId;
-        var excursions = await _alerts.GetUnacknowledgedExcursionIdsAsync(
-            TrackerAlertRuleSyncService.ManagedByTag(definitionId), ct);
-
-        foreach (var excursionId in excursions)
-        {
-            await _acknowledgementService.AcknowledgeExcursionAsync(
-                tenantId, excursionId, userId, HttpContext.GetAlertAcknowledgementAuthority(),
-                broadcast: true, ct);
-        }
-    }
+    private static TrackerNotificationThreshold Threshold(CreateNotificationThresholdRequest request) =>
+        new(Guid.Empty, request.Urgency, request.Hours, request.Description, request.DisplayOrder);
 
     #endregion
 
@@ -258,11 +101,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return Ok(Array.Empty<TrackerDefinitionDto>());
 
-        var definitions = category.HasValue
-            ? await _repository.GetDefinitionsByCategoryAsync(category.Value, HttpContext.RequestAborted)
-            : await _repository.GetAllDefinitionsAsync(HttpContext.RequestAborted);
+        var definitions = await _trackers.GetDefinitionsAsync(category, HttpContext.RequestAborted);
 
-        return Ok(definitions.Select(TrackerDefinitionDto.FromEntity).ToArray());
+        return Ok(definitions.Select(TrackerDefinitionDto.From).ToArray());
     }
 
     /// <summary>
@@ -283,11 +124,11 @@ public class TrackersController : ControllerBase, IWriteScopedController
         IReadOnlyCollection<PatientDevice> devices = HttpContext.HasScope(Scope.DevicesRead)
             ? [.. await patientDevices.GetCurrentAsync(HttpContext.RequestAborted)]
             : [];
-        return Ok(TrackerTemplates.For(devices)
+        return Ok(TrackerTemplates.For(devices, UtcNow)
             .Select(t => new TrackerTemplateDto
             {
                 Id = t.Id,
-                Definition = TrackerDefinitionDto.FromEntity(t.Definition),
+                Definition = TrackerDefinitionDto.From(t.Definition),
             })
             .ToArray());
     }
@@ -299,7 +140,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [RemoteQuery]
     [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
     public ActionResult<string[]> GetTriggerEventTypes() =>
-        Ok(TrackerTriggerService.TriggerableEventTypes.ToArray());
+        Ok(TrackerEventTypes.TriggerableEventTypes.ToArray());
 
     /// <summary>
     /// The device event types a tracker can be set to end on, completing its run without starting
@@ -309,7 +150,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [RemoteQuery]
     [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
     public ActionResult<string[]> GetEndEventTypes() =>
-        Ok(TrackerTriggerService.EndingEventTypes.ToArray());
+        Ok(TrackerEventTypes.EndingEventTypes.ToArray());
 
     /// <summary>
     /// The device event types a definition can create when a run starts or completes: the Nightscout
@@ -319,7 +160,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [RemoteQuery]
     [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
     public ActionResult<string[]> GetDeviceEventTypes() =>
-        Ok(TreatmentTypeMaps.DeviceEventTypeMap.Keys.ToArray());
+        Ok(TrackerEventTypes.DeviceEventTypes.ToArray());
 
     /// <summary>
     /// Get a specific tracker definition
@@ -332,12 +173,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return NotFound();
 
-        var definition = await _repository.GetDefinitionByIdAsync(id, HttpContext.RequestAborted);
+        var definition = await _trackers.GetDefinitionAsync(id, HttpContext.RequestAborted);
 
         if (definition == null)
             return NotFound();
 
-        return Ok(TrackerDefinitionDto.FromEntity(definition));
+        return Ok(TrackerDefinitionDto.From(definition));
     }
 
     /// <summary>
@@ -352,93 +193,36 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromBody] CreateTrackerDefinitionRequest request
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
-
-        // Validate thresholds
-        var validationError = ValidateThresholds(
-            request.NotificationThresholds,
-            request.LifespanHours,
-            request.Mode);
-        if (validationError != null)
-            return BadRequest(validationError);
-
-        // Validate mode-specific requirements
-        if (request.Mode == TrackerMode.Event && request.LifespanHours.HasValue)
-            return Problem(detail: "Event mode trackers should not have a lifespan", statusCode: 400, title: "Bad Request");
-
-        if (!TrackerCoverage.TryNormalise(request.Covers, out var covers, out var coversError))
-            return Problem(detail: coversError, statusCode: 400, title: "Bad Request");
-
-        var lowReservoirError = ValidateLowReservoirUnits(
-            request.LowReservoirUnits, request.Category, (covers ?? []).ToHashSet());
-        if (lowReservoirError != null)
-            return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
-
-        if (!TrackerTriggerService.TryNormaliseTriggers(request.TriggerEventTypes, out var triggers, out var triggerError))
-            return Problem(detail: triggerError, statusCode: 400, title: "Bad Request");
-
-        if (!TrackerTriggerService.TryNormaliseEnds(request.EndEventTypes, out var ends, out var endError))
-            return Problem(detail: endError, statusCode: 400, title: "Bad Request");
-
-        if (EventTypeError(request.StartEventType, request.CompletionEventType, out var startEventType, out var completionEventType) is { } eventTypeError)
-            return eventTypeError;
-
-        var entity = new TrackerDefinitionEntity
-        {
-            CreatedBy = userId,
-            Name = request.Name,
-            Description = request.Description,
-            Category = request.Category,
-            Icon = request.Icon ?? "activity",
-            TriggerEventTypes = JsonSerializer.Serialize(triggers ?? []),
-            EndEventTypes = JsonSerializer.Serialize(ends ?? []),
-            Covers = TrackerCoverage.Serialize(covers ?? []),
-            TriggerNotesContains = NullIfBlank(request.TriggerNotesContains),
-            LifespanHours = request.LifespanHours,
-            LowReservoirUnits = request.LowReservoirUnits,
-            LowReservoirUrgency = request.LowReservoirUrgency,
-            IsFavorite = request.IsFavorite,
-            DashboardVisibility = request.DashboardVisibility,
-            StartEventType = startEventType,
-            CompletionEventType = completionEventType,
-            Mode = request.Mode,
-        };
-
-        // Add notification thresholds if provided
-        if (request.NotificationThresholds != null)
-        {
-            foreach (var threshold in request.NotificationThresholds)
+        var result = await _trackers.CreateDefinitionAsync(
+            new TrackerDefinitionDraft
             {
-                entity.NotificationThresholds.Add(
-                    new TrackerNotificationThresholdEntity
-                    {
-                        Urgency = threshold.Urgency,
-                        Hours = threshold.Hours,
-                        Description = threshold.Description,
-                        DisplayOrder = threshold.DisplayOrder,
-                    }
-                );
-            }
-        }
-
-        var created = await _repository.CreateDefinitionAsync(entity, HttpContext.RequestAborted);
-
-        // CancellationToken.None: the definition is already committed, so a client
-        // disconnect must not leave it without its managed rules until the daily
-        // TrackerAlertRuleBackfillJob.
-        await _ruleSync.SyncDefinitionAsync(created.Id, CancellationToken.None);
-        await _broadcast.BroadcastTrackerDefinitionUpdateAsync(created.Id);
-
-        _logger.LogInformation(
-            "Tracker definition {Id} created by {CreatedBy}",
-            created.Id,
-            userId
-        );
+                Name = request.Name,
+                Description = request.Description,
+                Category = request.Category,
+                Icon = request.Icon,
+                TriggerEventTypes = request.TriggerEventTypes,
+                EndEventTypes = request.EndEventTypes,
+                Covers = request.Covers,
+                TriggerNotesContains = request.TriggerNotesContains,
+                LifespanHours = request.LifespanHours,
+                LowReservoirUnits = request.LowReservoirUnits,
+                LowReservoirUrgency = request.LowReservoirUrgency,
+                NotificationThresholds = request.NotificationThresholds?.Select(Threshold).ToList(),
+                IsFavorite = request.IsFavorite,
+                DashboardVisibility = request.DashboardVisibility,
+                StartEventType = request.StartEventType,
+                CompletionEventType = request.CompletionEventType,
+                Mode = request.Mode,
+            },
+            HttpContext.GetSubjectIdString()!,
+            HttpContext.RequestAborted);
+        if (result.Definition is not { } created)
+            return DefinitionError(result.Error!);
 
         return CreatedAtAction(
             nameof(GetDefinition),
             new { id = created.Id },
-            TrackerDefinitionDto.FromEntity(created)
+            TrackerDefinitionDto.From(created)
         );
     }
 
@@ -455,113 +239,35 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromBody] UpdateTrackerDefinitionRequest request
     )
     {
-        var existing = await _repository.GetDefinitionByIdAsync(id, HttpContext.RequestAborted);
-        if (existing == null)
-            return NotFound();
-
-        // Validate thresholds if being updated
-        var mode = request.Mode ?? existing.Mode;
-        var lifespan = request.LifespanHours ?? existing.LifespanHours;
-        if (request.NotificationThresholds != null)
-        {
-            var validationError = ValidateThresholds(request.NotificationThresholds, lifespan, mode);
-            if (validationError != null)
-                return BadRequest(validationError);
-        }
-
-        // Validate mode-specific requirements
-        if (mode == TrackerMode.Event && lifespan.HasValue)
-            return Problem(detail: "Event mode trackers should not have a lifespan", statusCode: 400, title: "Bad Request");
-
-        var category = request.Category ?? existing.Category;
-        if (!TrackerCoverage.TryNormalise(request.Covers, out var covers, out var coversError))
-            return Problem(detail: coversError, statusCode: 400, title: "Bad Request");
-        var coverage = covers?.ToHashSet() ?? TrackerCoverage.Parse(existing.Covers);
-        var lowReservoirError = ValidateLowReservoirUnits(request.LowReservoirUnits, category, coverage);
-        if (lowReservoirError != null)
-            return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
-
-        if (!TrackerTriggerService.TryNormaliseTriggers(request.TriggerEventTypes, out var triggers, out var triggerError))
-            return Problem(detail: triggerError, statusCode: 400, title: "Bad Request");
-
-        if (!TrackerTriggerService.TryNormaliseEnds(request.EndEventTypes, out var ends, out var endError))
-            return Problem(detail: endError, statusCode: 400, title: "Bad Request");
-
-        // A stored name saved before device events were enforced passes when the editor re-posts it.
-        if (EventTypeError(
-                Changed(request.StartEventType, existing.StartEventType),
-                Changed(request.CompletionEventType, existing.CompletionEventType),
-                out var startEventType,
-                out var completionEventType) is { } eventTypeError)
-            return eventTypeError;
-
-        existing.Name = request.Name ?? existing.Name;
-        existing.Description = request.Description ?? existing.Description;
-        existing.Category = request.Category ?? existing.Category;
-        existing.Icon = request.Icon ?? existing.Icon;
-        // The notes filter travels with the trigger list: the editor always posts the list, but a
-        // cleared filter arrives as no field at all, so null-means-keep could never clear it.
-        if (triggers != null)
-        {
-            existing.TriggerEventTypes = JsonSerializer.Serialize(triggers);
-            existing.TriggerNotesContains = NullIfBlank(request.TriggerNotesContains);
-        }
-        else if (request.TriggerNotesContains != null)
-        {
-            existing.TriggerNotesContains = NullIfBlank(request.TriggerNotesContains);
-        }
-        if (ends != null)
-            existing.EndEventTypes = JsonSerializer.Serialize(ends);
-        if (covers != null)
-            existing.Covers = TrackerCoverage.Serialize(covers);
-        existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
-        // Applied as-is (not null-means-keep): the tracker editor posts the whole
-        // definition, and null must clear the level rule. Forced null for a tracker
-        // that holds no insulin.
-        existing.LowReservoirUnits =
-            TrackerCoverage.HoldsInsulin(category, coverage) ? request.LowReservoirUnits : null;
-        existing.LowReservoirUrgency = request.LowReservoirUrgency ?? existing.LowReservoirUrgency;
-        existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
-        existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
-        // Applied as posted, like LowReservoirUnits: the editor posts the whole definition, so null or
-        // blank clears the event.
-        existing.StartEventType = ResolveEventType(request.StartEventType, startEventType, existing.StartEventType);
-        existing.CompletionEventType = ResolveEventType(request.CompletionEventType, completionEventType, existing.CompletionEventType);
-        existing.Mode = request.Mode ?? existing.Mode;
-
-        // Handle notification thresholds update (replaces all existing if provided)
-        if (request.NotificationThresholds != null)
-        {
-            await _repository.UpdateNotificationThresholdsAsync(
-                id,
-                request
-                    .NotificationThresholds.Select(t => new TrackerNotificationThresholdEntity
-                    {
-                        TrackerDefinitionId = id,
-                        Urgency = t.Urgency,
-                        Hours = t.Hours,
-                        Description = t.Description,
-                        DisplayOrder = t.DisplayOrder,
-                    })
-                    .ToList(),
-                HttpContext.RequestAborted
-            );
-        }
-
-        var updated = await _repository.UpdateDefinitionAsync(
+        var result = await _trackers.UpdateDefinitionAsync(
             id,
-            existing,
-            HttpContext.RequestAborted
-        );
+            new TrackerDefinitionEdit
+            {
+                Name = request.Name,
+                Description = request.Description,
+                Category = request.Category,
+                Icon = request.Icon,
+                TriggerEventTypes = request.TriggerEventTypes,
+                EndEventTypes = request.EndEventTypes,
+                Covers = request.Covers,
+                TriggerNotesContains = request.TriggerNotesContains,
+                LifespanHours = request.LifespanHours,
+                LowReservoirUnits = request.LowReservoirUnits,
+                LowReservoirUrgency = request.LowReservoirUrgency,
+                NotificationThresholds = request.NotificationThresholds?.Select(Threshold).ToList(),
+                IsFavorite = request.IsFavorite,
+                DashboardVisibility = request.DashboardVisibility,
+                StartEventType = request.StartEventType,
+                CompletionEventType = request.CompletionEventType,
+                Mode = request.Mode,
+            },
+            HttpContext.RequestAborted);
+        if (result is null)
+            return NotFound();
+        if (result.Definition is not { } updated)
+            return DefinitionError(result.Error!);
 
-        // Lifespan/mode/name changes shift the synthesised conditions even when the
-        // threshold list itself didn't change, so re-sync unconditionally.
-        // CancellationToken.None: the threshold writes are already committed; aborting
-        // here would leave stale rules firing at the old minutes.
-        await _ruleSync.SyncDefinitionAsync(id, CancellationToken.None);
-        await _broadcast.BroadcastTrackerDefinitionUpdateAsync(id);
-
-        return Ok(TrackerDefinitionDto.FromEntity(updated!));
+        return Ok(TrackerDefinitionDto.From(updated));
     }
 
     /// <summary>
@@ -572,24 +278,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [Authorize]
     [RemoteCommand(Invalidates = ["GetDefinitions", "GetActiveInstances", "GetInstanceHistory", "GetPresets"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult> DeleteDefinition(Guid id)
-    {
-        var existing = await _repository.GetDefinitionByIdAsync(id, HttpContext.RequestAborted);
-        if (existing == null)
-            return NotFound();
-
-        // Definition first, rules second: if the definition delete fails the tracker
-        // keeps its rules; if the rule cleanup is interrupted the leftover rules fail
-        // closed (no active instance for a deleted definition) rather than a live
-        // tracker losing its alerts. CancellationToken.None for the same reason.
-        await _repository.DeleteDefinitionAsync(id, HttpContext.RequestAborted);
-        await _ruleSync.DeleteRulesForDefinitionAsync(id, CancellationToken.None);
-        await _broadcast.BroadcastTrackerDefinitionUpdateAsync(id);
-
-        _logger.LogInformation("Deleted tracker definition {Id}", id);
-
-        return NoContent();
-    }
+    public async Task<ActionResult> DeleteDefinition(Guid id) =>
+        await _trackers.DeleteDefinitionAsync(id, HttpContext.RequestAborted) ? NoContent() : NotFound();
 
     #endregion
 
@@ -607,9 +297,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return Ok(Array.Empty<TrackerInstanceDto>());
 
-        var instances = await _repository.GetActiveInstancesAsync(HttpContext.RequestAborted);
+        var instances = await _trackers.GetActiveInstancesAsync(HttpContext.RequestAborted);
 
-        return Ok(instances.Select(TrackerInstanceDto.FromEntity).ToArray());
+        return Ok(instances.Select(i => TrackerInstanceDto.From(i, UtcNow)).ToArray());
     }
 
     /// <summary>
@@ -630,9 +320,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return Ok(Array.Empty<TrackerInstanceDto>());
 
-        var instances = await _repository.GetCompletedInstancesAsync(limit, HttpContext.RequestAborted);
+        var instances = await _trackers.GetInstanceHistoryAsync(limit, HttpContext.RequestAborted);
 
-        return Ok(instances.Select(TrackerInstanceDto.FromEntity).ToArray());
+        return Ok(instances.Select(i => TrackerInstanceDto.From(i, UtcNow)).ToArray());
     }
 
     /// <summary>
@@ -650,16 +340,13 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return Ok(Array.Empty<TrackerInstanceDto>());
 
-        var fromDate = from ?? UtcNow;
-        var toDate = to ?? UtcNow.AddDays(30);
-
-        var instances = await _repository.GetUpcomingInstancesAsync(
-            fromDate,
-            toDate,
+        var instances = await _trackers.GetUpcomingInstancesAsync(
+            from ?? UtcNow,
+            to ?? UtcNow.AddDays(30),
             HttpContext.RequestAborted
         );
 
-        return Ok(instances.Select(TrackerInstanceDto.FromEntity).ToArray());
+        return Ok(instances.Select(i => TrackerInstanceDto.From(i, UtcNow)).ToArray());
     }
 
     /// <summary>
@@ -675,39 +362,23 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromBody] StartTrackerInstanceRequest request
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
-
-        var definition = await _repository.GetDefinitionByIdAsync(
+        var result = await _trackers.StartInstanceAsync(
             request.DefinitionId,
-            HttpContext.RequestAborted
-        );
-        if (definition == null)
-            return NotFound("Definition not found");
-
-        // Validate mode-specific requirements
-        if (definition.Mode == TrackerMode.Event && !request.ScheduledAt.HasValue)
-            return Problem(detail: "Event mode trackers require a ScheduledAt datetime", statusCode: 400, title: "Bad Request");
-        if (definition.Mode == TrackerMode.Duration && request.ScheduledAt.HasValue)
-            return Problem(detail: "Duration mode trackers should not have a ScheduledAt datetime", statusCode: 400, title: "Bad Request");
-
-        var succession = await StartSuccessorAsync(
-            definition,
-            userId,
+            HttpContext.GetSubjectIdString()!,
             request.StartNotes,
             request.StartTreatmentId,
-            request.StartedAt ?? UtcNow,
-            request.ScheduledAt
+            request.StartedAt,
+            request.ScheduledAt,
+            HttpContext.RequestAborted
         );
-        if (succession.Started is not { } instance)
-            return SuccessionConflict(definition, succession.Outcome);
+        if (result.Definition is not { } definition)
+            return NotFound("Definition not found");
+        if (result.Invalid is { } invalid)
+            return BadRequestProblem(invalid);
+        if (result.Started is not { } instance)
+            return SuccessionConflict(definition, result.Succession!.Outcome);
 
-        _logger.LogInformation(
-            "Started tracker instance {Id} for definition {DefinitionId}",
-            instance.Id,
-            request.DefinitionId
-        );
-
-        return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.FromEntity(instance));
+        return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.From(instance, UtcNow));
     }
 
     /// <summary>
@@ -723,14 +394,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromBody] CompleteTrackerInstanceRequest request
     )
     {
-        var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
-        if (existing == null)
-            return NotFound();
-
-        if (existing.CompletedAt != null)
-            return AlreadyCompleted();
-
-        var completed = await _repository.CompleteInstanceAsync(
+        var completion = await _trackers.CompleteInstanceAsync(
             id,
             request.Reason,
             request.CompletionNotes,
@@ -738,30 +402,14 @@ public class TrackersController : ControllerBase, IWriteScopedController
             request.CompletedAt,
             HttpContext.RequestAborted
         );
-        if (completed is null)
-            return AlreadyCompleted();
 
-        if (completed.CompletedAt is { } completedAt)
-            await _deviceEvents.WriteAsync(
-                existing.Definition.CompletionEventType,
-                completedAt,
-                completed.CompletionNotes,
-                $"{completed.Id}:completion",
-                CancellationToken.None);
-
-        _logger.LogInformation(
-            "Completed tracker instance {Id} with reason {Reason}",
-            id,
-            request.Reason
-        );
-
-        // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync(
-            TrackerRealtimeAction.Complete,
-            TrackerInstanceDto.FromEntity(completed)
-        );
-
-        return Ok(TrackerInstanceDto.FromEntity(completed));
+        return completion.Outcome switch
+        {
+            TrackerCompletionOutcome.NotFound => NotFound(),
+            TrackerCompletionOutcome.AlreadyCompleted =>
+                BadRequestProblem("Instance already completed"),
+            _ => Ok(TrackerInstanceDto.From(completion.Completed!, UtcNow)),
+        };
     }
 
     /// <summary>
@@ -775,31 +423,15 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult> AckInstance(Guid id, [FromBody] AckTrackerRequest request)
-    {
-        var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
-        if (existing == null)
-            return NotFound();
-
-        var userId = HttpContext.GetSubjectIdString()!;
-        await _repository.AckInstanceAsync(id, request.SnoozeMins, HttpContext.RequestAborted);
-
-        // Acknowledge the active excursions of this definition's managed alert rules so
-        // the alert surface (history, escalation via alert_state, device intents) agrees
-        // with the tracker ack instead of showing a still-unacknowledged alert.
-        await AcknowledgeManagedRuleExcursionsAsync(existing.DefinitionId, userId, HttpContext.RequestAborted);
-
-        var updated = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
-        if (updated != null)
-        {
-            await _broadcast.BroadcastTrackerUpdateAsync(
-                TrackerRealtimeAction.Ack,
-                TrackerInstanceDto.FromEntity(updated)
-            );
-        }
-
-        return NoContent();
-    }
+    public async Task<ActionResult> AckInstance(Guid id, [FromBody] AckTrackerRequest request) =>
+        await _trackers.AcknowledgeInstanceAsync(
+            id,
+            request.SnoozeMins,
+            HttpContext.GetSubjectIdString()!,
+            HttpContext.GetAlertAcknowledgementAuthority(),
+            HttpContext.RequestAborted)
+            ? NoContent()
+            : NotFound();
 
     /// <summary>
     /// Delete a tracker instance
@@ -809,21 +441,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult> DeleteInstance(Guid id)
-    {
-        var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
-        if (existing == null)
-            return NotFound();
-
-        // Broadcast before deleting to get the definition name
-        var dto = TrackerInstanceDto.FromEntity(existing);
-        await _repository.DeleteInstanceAsync(id, HttpContext.RequestAborted);
-
-        // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Delete, dto);
-
-        return NoContent();
-    }
+    public async Task<ActionResult> DeleteInstance(Guid id) =>
+        await _trackers.DeleteInstanceAsync(id, HttpContext.RequestAborted) ? NoContent() : NotFound();
 
     #endregion
 
@@ -841,9 +460,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (ReadsNoTrackers)
             return Ok(Array.Empty<TrackerPresetDto>());
 
-        var presets = await _repository.GetPresetsAsync(HttpContext.RequestAborted);
+        var presets = await _trackers.GetPresetsAsync(HttpContext.RequestAborted);
 
-        return Ok(presets.Select(TrackerPresetDto.FromEntity).ToArray());
+        return Ok(presets.Select(TrackerPresetDto.From).ToArray());
     }
 
     /// <summary>
@@ -858,30 +477,19 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromBody] CreateTrackerPresetRequest request
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
-
-        var definition = await _repository.GetDefinitionByIdAsync(
+        var created = await _trackers.CreatePresetAsync(
+            request.Name,
             request.DefinitionId,
+            request.DefaultStartNotes,
+            HttpContext.GetSubjectIdString()!,
             HttpContext.RequestAborted
         );
-        if (definition == null)
+        if (created == null)
             return NotFound("Definition not found");
-
-        var entity = new TrackerPresetEntity
-        {
-            CreatedBy = userId,
-            Name = request.Name,
-            DefinitionId = request.DefinitionId,
-            DefaultStartNotes = request.DefaultStartNotes,
-        };
-
-        var created = await _repository.CreatePresetAsync(entity, HttpContext.RequestAborted);
-
-        _logger.LogInformation("Tracker preset {Id} created by {CreatedBy}", created.Id, userId);
 
         return Created(
             $"/api/v4/trackers/presets/{created.Id}",
-            TrackerPresetDto.FromEntity(created)
+            TrackerPresetDto.From(created)
         );
     }
 
@@ -899,30 +507,18 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromBody] ApplyPresetRequest? request = null
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
-
-        var preset = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);
-        if (preset == null)
-            return NotFound();
-
-        var succession = await StartSuccessorAsync(
-            preset.Definition,
-            userId,
-            request?.OverrideNotes ?? preset.DefaultStartNotes,
-            startTreatmentId: null,
-            UtcNow,
-            scheduledAt: null
-        );
-        if (succession.Started is not { } instance)
-            return SuccessionConflict(preset.Definition, succession.Outcome);
-
-        _logger.LogInformation(
-            "Applied preset {PresetId}, created instance {InstanceId}",
+        var result = await _trackers.ApplyPresetAsync(
             id,
-            instance.Id
+            HttpContext.GetSubjectIdString()!,
+            request?.OverrideNotes,
+            HttpContext.RequestAborted
         );
+        if (result?.Definition is not { } definition)
+            return NotFound();
+        if (result.Started is not { } instance)
+            return SuccessionConflict(definition, result.Succession!.Outcome);
 
-        return Ok(TrackerInstanceDto.FromEntity(instance));
+        return Ok(TrackerInstanceDto.From(instance, UtcNow));
     }
 
     /// <summary>
@@ -933,16 +529,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [Authorize]
     [RemoteCommand(Invalidates = ["GetPresets"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult> DeletePreset(Guid id)
-    {
-        var existing = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);
-        if (existing == null)
-            return NotFound();
-
-        await _repository.DeletePresetAsync(id, HttpContext.RequestAborted);
-
-        return NoContent();
-    }
+    public async Task<ActionResult> DeletePreset(Guid id) =>
+        await _trackers.DeletePresetAsync(id, HttpContext.RequestAborted) ? NoContent() : NotFound();
 
     #endregion
 }
@@ -970,17 +558,17 @@ public class NotificationThresholdDto
     /// </summary>
     public int? OffsetMinutes { get; set; }
 
-    public static NotificationThresholdDto FromEntity(
-        TrackerNotificationThresholdEntity entity, TrackerDefinitionEntity definition) =>
+    public static NotificationThresholdDto From(
+        TrackerNotificationThreshold threshold, TrackerDefinition definition) =>
         new()
         {
-            Id = entity.Id,
-            Urgency = entity.Urgency,
-            Hours = entity.Hours,
-            Description = entity.Description,
-            DisplayOrder = entity.DisplayOrder,
-            AlertRuleId = entity.AlertRuleId,
-            OffsetMinutes = TrackerSchedule.OffsetMinutes(definition.Mode, definition.LifespanHours, entity.Hours),
+            Id = threshold.Id,
+            Urgency = threshold.Urgency,
+            Hours = threshold.Hours,
+            Description = threshold.Description,
+            DisplayOrder = threshold.DisplayOrder,
+            AlertRuleId = threshold.AlertRuleId,
+            OffsetMinutes = TrackerSchedule.OffsetMinutes(definition.Mode, definition.LifespanHours, threshold.Hours),
         };
 }
 
@@ -999,7 +587,7 @@ public class TrackerDefinitionDto
     public List<string> EndEventTypes { get; set; } = [];
 
     /// <summary>
-    /// What the tracked hardware provides (<see cref="TrackerCoverage.Of(TrackerDefinitionEntity)"/>).
+    /// What the tracked hardware provides (<see cref="TrackerCoverage.Of(TrackerDefinition)"/>).
     /// Empty when not known, and then what the tracker stands for is read from its triggers and
     /// category.
     /// </summary>
@@ -1052,45 +640,37 @@ public class TrackerDefinitionDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public static TrackerDefinitionDto FromEntity(TrackerDefinitionEntity entity) =>
+    public static TrackerDefinitionDto From(TrackerDefinition definition) =>
         new()
         {
-            Id = entity.Id,
-            Name = entity.Name,
-            Description = entity.Description,
-            Category = entity.Category,
-            Icon = entity.Icon,
+            Id = definition.Id,
+            Name = definition.Name,
+            Description = definition.Description,
+            Category = definition.Category,
+            Icon = definition.Icon,
             TriggerEventTypes =
-            [
-                .. (JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [])
-                    .Select(TrackerTriggerService.CanonicalTrigger)
-                    .OfType<string>(),
-            ],
+                [.. definition.TriggerEventTypes.Select(TrackerEventTypes.CanonicalTrigger).OfType<string>()],
             EndEventTypes =
-            [
-                .. (JsonSerializer.Deserialize<List<string>>(entity.EndEventTypes) ?? [])
-                    .Select(TrackerTriggerService.CanonicalEnd)
-                    .OfType<string>(),
-            ],
-            Covers = [.. TrackerCoverage.Of(entity).Order()],
-            DeviceComponent = entity.DeviceComponent,
-            TriggerNotesContains = entity.TriggerNotesContains,
-            LifespanHours = entity.LifespanHours,
-            LowReservoirUnits = entity.LowReservoirUnits,
-            LowReservoirUrgency = entity.LowReservoirUrgency,
-            // Notification thresholds
+                [.. definition.EndEventTypes.Select(TrackerEventTypes.CanonicalEnd).OfType<string>()],
+            Covers = [.. TrackerCoverage.Of(definition).Order()],
+            DeviceComponent = definition.DeviceComponent,
+            TriggerNotesContains = definition.TriggerNotesContains,
+            LifespanHours = definition.LifespanHours,
+            LowReservoirUnits = definition.LowReservoirUnits,
+            LowReservoirUrgency = definition.LowReservoirUrgency,
             NotificationThresholds =
-                entity
-                    .NotificationThresholds?.OrderBy(t => t.DisplayOrder)
-                    .Select(t => NotificationThresholdDto.FromEntity(t, entity))
-                    .ToList() ?? [],
-            IsFavorite = entity.IsFavorite,
-            DashboardVisibility = entity.DashboardVisibility,
-            StartEventType = entity.StartEventType,
-            CompletionEventType = entity.CompletionEventType,
-            Mode = entity.Mode,
-            CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt,
+            [
+                .. definition.NotificationThresholds
+                    .OrderBy(t => t.DisplayOrder)
+                    .Select(t => NotificationThresholdDto.From(t, definition)),
+            ],
+            IsFavorite = definition.IsFavorite,
+            DashboardVisibility = definition.DashboardVisibility,
+            StartEventType = definition.StartEventType,
+            CompletionEventType = definition.CompletionEventType,
+            Mode = definition.Mode,
+            CreatedAt = definition.CreatedAt,
+            UpdatedAt = definition.UpdatedAt,
         };
 }
 
@@ -1112,15 +692,15 @@ public class TrackerPresetDto
     public string? DefaultStartNotes { get; set; }
     public DateTime CreatedAt { get; set; }
 
-    public static TrackerPresetDto FromEntity(TrackerPresetEntity entity) =>
+    public static TrackerPresetDto From(TrackerPreset preset) =>
         new()
         {
-            Id = entity.Id,
-            Name = entity.Name,
-            DefinitionId = entity.DefinitionId,
-            DefinitionName = entity.Definition?.Name ?? string.Empty,
-            DefaultStartNotes = entity.DefaultStartNotes,
-            CreatedAt = entity.CreatedAt,
+            Id = preset.Id,
+            Name = preset.Name,
+            DefinitionId = preset.DefinitionId,
+            DefinitionName = preset.Definition?.Name ?? string.Empty,
+            DefaultStartNotes = preset.DefaultStartNotes,
+            CreatedAt = preset.CreatedAt,
         };
 }
 

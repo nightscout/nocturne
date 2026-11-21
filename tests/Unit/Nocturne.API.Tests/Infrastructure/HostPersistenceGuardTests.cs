@@ -153,6 +153,10 @@ public class HostPersistenceGuardTests
             ["GoogleHealthGrantHolderEntity"],
             ["GoogleHealthGrantHolders"],
             []),
+        new("trackers (#3570)",
+            ["TrackerDefinitionEntity", "TrackerInstanceEntity", "TrackerPresetEntity", "TrackerNotificationThresholdEntity"],
+            ["TrackerDefinitions", "TrackerInstances", "TrackerPresets", "TrackerNotificationThresholds"],
+            []),
     ];
 
     private const string Host = "src/API/Nocturne.API";

@@ -105,7 +105,7 @@ public static class RuleDataNeeds
                 b.StateSpans.Add((category, leaf.StringParam("state")));
                 break;
             case AlertConditionType.TrackerAge when leaf.GuidParam("tracker_definition_id") is { } definitionId:
-                b.TrackerDefinitions.Add(definitionId);
+                b.TrackerDefinitionIds.Add(definitionId);
                 break;
         }
     }
@@ -190,12 +190,12 @@ public static class RuleDataNeeds
         public bool SleepSession;
         public readonly HashSet<PumpModeState> PumpStates = new();
         public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
-        public readonly HashSet<Guid> TrackerDefinitions = new();
+        public readonly HashSet<Guid> TrackerDefinitionIds = new();
 
         public DataNeedsSet Build() =>
             new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, ActiveAlerts,
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, TransmitterStatus, Override,
                 SensitivityRatio,
-                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpStates, StateSpans, TrackerDefinitions);
+                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpStates, StateSpans, TrackerDefinitionIds);
     }
 }
