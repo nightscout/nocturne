@@ -281,11 +281,39 @@ public class TrackerDefinitionTests
             "Low reservoir units apply only to trackers of a reservoir or of hardware that holds insulin");
 
     [Fact]
-    public void ARevisionToEventModeKeepingTheStoredLifespan_IsRefused() =>
+    public void ARevisionToEventModePostingNoLifespan_DropsTheStoredLifespan()
+    {
+        var stored = Stored(lifespanHours: 72);
+
+        var revised = stored.Revise(new() { Mode = TrackerMode.Event }).Definition!;
+
+        revised.Mode.Should().Be(TrackerMode.Event);
+        revised.LifespanHours.Should().BeNull();
+    }
+
+    [Fact]
+    public void ARevisionToEventModePostingALifespan_IsRefused() =>
         ShouldBreak(
-            Stored().Revise(new() { Mode = TrackerMode.Event }),
+            Stored().Revise(new() { Mode = TrackerMode.Event, LifespanHours = 24 }),
             TrackerDefinitionRule.Lifespan,
             "Event mode trackers should not have a lifespan");
+
+    [Fact]
+    public void ARevisionOfAnEventTrackerPostingALifespan_IsRefused() =>
+        ShouldBreak(
+            TrackerDefinition.Restore(Guid.NewGuid(), "Visit", mode: TrackerMode.Event).Revise(new() { LifespanHours = 24 }),
+            TrackerDefinitionRule.Lifespan,
+            "Event mode trackers should not have a lifespan");
+
+    [Fact]
+    public void ARevisionOfADurationTrackerPostingNoLifespan_KeepsIt() =>
+        Stored(lifespanHours: 72).Revise(new() { Name = "Renamed" }).Definition!.LifespanHours.Should().Be(72);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void ARevisionNamingTheTrackerNothing_IsRefused(string name) =>
+        ShouldBreak(Stored().Revise(new() { Name = name }), TrackerDefinitionRule.Name, "Name is required");
 
     // Starting a run
 

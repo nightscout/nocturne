@@ -767,6 +767,7 @@ public class CreateTrackerDefinitionRequest
 
 public class UpdateTrackerDefinitionRequest
 {
+    [NotBlankWhenPresent]
     public string? Name { get; set; }
     public string? Description { get; set; }
     public TrackerCategory? Category { get; set; }
@@ -785,6 +786,10 @@ public class UpdateTrackerDefinitionRequest
     /// </summary>
     public List<string>? Covers { get; set; }
     public string? TriggerNotesContains { get; set; }
+
+    /// <summary>
+    /// Null keeps the current lifespan, except that a tracker revised to Event mode drops it.
+    /// </summary>
     public int? LifespanHours { get; set; }
 
     /// <summary>
