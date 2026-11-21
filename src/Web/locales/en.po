@@ -11919,6 +11919,7 @@ msgstr "Default chart range"
 msgid "{0} hours"
 msgstr "{0} hours"
 
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "6 hours"
 msgstr "6 hours"
@@ -11927,6 +11928,7 @@ msgstr "6 hours"
 msgid "12 hours"
 msgstr "12 hours"
 
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "24 hours"
 msgstr "24 hours"
@@ -16819,6 +16821,7 @@ msgstr "Lowest ({0})"
 msgid "This report is for informational purposes. Always consult your healthcare provider for medical decisions."
 msgstr "This report is for informational purposes. Always consult your healthcare provider for medical decisions."
 
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "steps"
 msgstr "steps"
@@ -45734,3 +45737,179 @@ msgstr "sensor error"
 #: src/lib/utils/direction-info.svelte.ts
 msgid "unknown"
 msgstr "unknown"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "meals"
+msgstr "meals"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "correction boluses"
+msgstr "correction boluses"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "boluses"
+msgstr "boluses"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "rises with no carbs"
+msgstr "rises with no carbs"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "lows"
+msgstr "lows"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "highs"
+msgstr "highs"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "carbs taken in a low"
+msgstr "carbs taken in a low"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "exercise"
+msgstr "exercise"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sleep starts"
+msgstr "sleep starts"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "wake-ups"
+msgstr "wake-ups"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sensor starts"
+msgstr "sensor starts"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "site changes"
+msgstr "site changes"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "overrides"
+msgstr "overrides"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "temporary targets"
+msgstr "temporary targets"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "6h"
+msgstr "6h"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "24h"
+msgstr "24h"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "7d"
+msgstr "7d"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "7 days"
+msgstr "7 days"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "14d"
+msgstr "14d"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "14 days"
+msgstr "14 days"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "28d"
+msgstr "28d"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "28 days"
+msgstr "28 days"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "90d"
+msgstr "90d"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "90 days"
+msgstr "90 days"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "1 day"
+msgstr "1 day"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "glucose.read"
+msgstr "glucose.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "glucose"
+msgstr "glucose"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "treatments.read"
+msgstr "treatments.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "treatments"
+msgstr "treatments"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "food.read"
+msgstr "food.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "food"
+msgstr "food"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "therapy.read"
+msgstr "therapy.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "therapy settings"
+msgstr "therapy settings"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "devices.read"
+msgstr "devices.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "devices"
+msgstr "devices"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "heartrate.read"
+msgstr "heartrate.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "heart rate"
+msgstr "heart rate"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sleep.read"
+msgstr "sleep.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sleep"
+msgstr "sleep"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "stepcount.read"
+msgstr "stepcount.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "alerts.read"
+msgstr "alerts.read"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "alerts"
+msgstr "alerts"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "by hour of day"
+msgstr "by hour of day"
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "by weekday"
+msgstr "by weekday"

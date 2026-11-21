@@ -11919,6 +11919,7 @@ msgstr ""
 msgid "{0} hours"
 msgstr ""
 
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "6 hours"
 msgstr ""
@@ -11927,6 +11928,7 @@ msgstr ""
 msgid "12 hours"
 msgstr ""
 
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "24 hours"
 msgstr ""
@@ -16819,6 +16821,7 @@ msgstr ""
 msgid "This report is for informational purposes. Always consult your healthcare provider for medical decisions."
 msgstr ""
 
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "steps"
 msgstr ""
@@ -45733,4 +45736,180 @@ msgstr ""
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "unknown"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "meals"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "correction boluses"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "boluses"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "rises with no carbs"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "lows"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "highs"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "carbs taken in a low"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "exercise"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sleep starts"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "wake-ups"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sensor starts"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "site changes"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "overrides"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "temporary targets"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "6h"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "24h"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "7d"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "7 days"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "14d"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "14 days"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "28d"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "28 days"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "90d"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "90 days"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "1 day"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "glucose.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "glucose"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "treatments.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "treatments"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "food.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "food"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "therapy.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "therapy settings"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "devices.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "devices"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "heartrate.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "heart rate"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sleep.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "sleep"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "stepcount.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "alerts.read"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "alerts"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "by hour of day"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+msgid "by weekday"
 msgstr ""
