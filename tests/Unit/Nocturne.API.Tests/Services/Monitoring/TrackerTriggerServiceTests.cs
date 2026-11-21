@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -399,7 +400,7 @@ public class TrackerTriggerServiceTests
     {
         // Nothing else resolves the trigger, so this registration is the whole mechanism by which it
         // runs; unregistered, trackers stop advancing with no other symptom.
-        var services = new ServiceCollection().AddDomainServices();
+        var services = new ServiceCollection().AddAlertingAndMonitoring(new ConfigurationBuilder().Build());
 
         var descriptor = services.Should()
             .ContainSingle(d => d.ServiceType == typeof(IDeviceEventReactor)).Subject;

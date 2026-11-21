@@ -220,6 +220,7 @@ public static class ServiceCollectionExtensions
     /// <returns>Service collection for chaining</returns>
     public static IServiceCollection AddAlertRepositories(this IServiceCollection services)
     {
+        services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IAlertTrackerRepository, AlertTrackerRepository>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddScoped<IDndWindowRepository, DndWindowRepository>();
