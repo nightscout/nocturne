@@ -120,8 +120,13 @@ public record AutoResolveExcursionSnapshot(
 /// <summary>
 /// Tenant-level context for alert evaluation, providing subject identity and data freshness.
 /// </summary>
-public record TenantAlertContext(Guid TenantId, string SubjectName, string? Slug, string? DisplayName,
-    bool IsActive, DateTime? LastReadingAt);
+/// <param name="SubjectName">The patient's preferred name; null when there is none or it is blank.</param>
+public record TenantAlertContext(Guid TenantId, string? SubjectName, string? Slug, string? DisplayName,
+    bool IsActive, DateTime? LastReadingAt)
+{
+    /// <summary>The name an alert shows: the preferred name, else the tenant's display name.</summary>
+    public string? AlertSubjectName => SubjectName ?? DisplayName;
+}
 
 /// <summary>
 /// Snapshot of a snoozed alert instance, combining instance and rule data for post-snooze re-evaluation.

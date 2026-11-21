@@ -405,7 +405,7 @@ public class AlertRepository : IAlertRepository
             .FirstOrDefaultAsync(ct);
 
         return new TenantAlertContext(
-            tenant.Id, preferredName ?? string.Empty, tenant.Slug, tenant.DisplayName,
+            tenant.Id, string.IsNullOrWhiteSpace(preferredName) ? null : preferredName, tenant.Slug, tenant.DisplayName,
             tenant.IsActive, tenant.LastReadingAt);
     }
 

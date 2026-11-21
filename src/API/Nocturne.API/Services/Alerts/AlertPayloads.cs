@@ -24,7 +24,7 @@ internal static class AlertPayloads
         ExcursionId = excursionId,
         InstanceId = instanceId,
         TenantId = tenantId,
-        SubjectName = tenant?.SubjectName ?? tenant?.DisplayName ?? "Unknown",
+        SubjectName = SubjectNameOf(tenant),
         ActiveExcursionCount = activeExcursionCount,
         Severity = rule.Severity,
     };
@@ -49,10 +49,12 @@ internal static class AlertPayloads
         ExcursionId = excursionId,
         InstanceId = instanceId,
         TenantId = tenantId,
-        SubjectName = tenant?.SubjectName ?? tenant?.DisplayName ?? "Unknown",
+        SubjectName = SubjectNameOf(tenant),
         ActiveExcursionCount = activeExcursionCount,
         Severity = rule.Severity,
     };
+
+    private static string SubjectNameOf(TenantAlertContext? tenant) => tenant?.AlertSubjectName ?? "Unknown";
 
     public static AlertPayload Test(
         AlertConditionType type, string ruleName, AlertRuleSeverity severity, Guid tenantId, DateTime now) => new()
