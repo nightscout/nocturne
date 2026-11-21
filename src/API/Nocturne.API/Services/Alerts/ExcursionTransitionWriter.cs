@@ -128,7 +128,6 @@ internal static class ExcursionTransitionWriter
         post is not null
         && (prior is null
             || post.State != prior.State
-            || post.ConfirmationCount != prior.ConfirmationCount
             || post.HasExcursion != prior.ActiveExcursionId.HasValue
             || post.HysteresisStartedAt != prior.HysteresisStartedAt
             || post.AwaitingRearm != prior.AwaitingRearm);
@@ -183,7 +182,6 @@ internal static class ExcursionTransitionWriter
         var stored = await repository.GetTrackerStateAsync(wrote.AlertRuleId, ct);
         return stored is not null
                && stored.State == wrote.State
-               && stored.ConfirmationCount == wrote.ConfirmationCount
                && stored.ActiveExcursionId == wrote.ActiveExcursionId
                && stored.AwaitingRearm == wrote.AwaitingRearm
                && SameInstant(stored.UpdatedAt, wrote.UpdatedAt)
@@ -197,7 +195,6 @@ internal static class ExcursionTransitionWriter
         stored is null || prior is null
             ? stored is null && prior is null
             : stored.State == prior.State
-              && stored.ConfirmationCount == prior.ConfirmationCount
               && stored.ActiveExcursionId == prior.ActiveExcursionId
               && stored.AwaitingRearm == prior.AwaitingRearm
               && SameInstant(stored.UpdatedAt, prior.UpdatedAt)
@@ -302,7 +299,6 @@ internal static class ExcursionTransitionWriter
             {
                 AlertRuleId = ruleId,
                 State = post.State,
-                ConfirmationCount = post.ConfirmationCount,
                 ActiveExcursionId = post.HasExcursion ? activeId : null,
                 UpdatedAt = post.UpdatedAt,
                 HysteresisStartedAt = post.HysteresisStartedAt,
@@ -318,7 +314,6 @@ internal static class ExcursionTransitionWriter
             {
                 AlertRuleId = ruleId,
                 State = prior.State,
-                ConfirmationCount = prior.ConfirmationCount,
                 ActiveExcursionId = prior.ActiveExcursionId,
                 UpdatedAt = prior.UpdatedAt,
                 HysteresisStartedAt = prior.HysteresisStartedAt,

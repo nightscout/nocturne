@@ -19,7 +19,7 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
 - State lives in caller-owned stores the host persists between evaluations:
   sustained-condition timers ([`sustained::TimerStore`], keyed by rule and
   condition path, recording each set and clear) and the excursion state
-  machine ([`excursion::ExcursionTracker`], idle → confirming → active →
+  machine ([`excursion::ExcursionTracker`], idle → active →
   hysteresis, expiring against the persisted `hysteresis_started_at`,
   semantics §6.1, and holding an auto-resolved rule off until its condition or
   its auto-resolve tree is false, §6.3).

@@ -24,7 +24,6 @@ public class AutoResolveSeamTests
         Name = "low",
         ConditionType = AlertConditionType.Threshold,
         ConditionParams = """{"direction":"below","value":70}""",
-        ConfirmationReadings = 1,
         AutoResolveEnabled = autoResolveEnabled,
         AutoResolveParams = """{"type":"threshold","threshold":{"direction":"above","value":80}}""",
     };

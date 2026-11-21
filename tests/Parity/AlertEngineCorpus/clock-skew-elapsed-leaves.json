@@ -10,7 +10,6 @@
       "condition_params": {
         "timeout_minutes": 20
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -22,7 +21,6 @@
         "operator": "==",
         "value": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -34,7 +32,6 @@
         "operator": "<",
         "minutes": 10
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -46,7 +43,6 @@
         "operator": "<",
         "minutes": 10
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -58,7 +54,6 @@
         "operator": "<",
         "value": 1
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -70,7 +65,6 @@
         "operator": "<",
         "value": 1
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -82,7 +76,6 @@
         "operator": "<",
         "minutes": 30
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -94,7 +87,6 @@
         "operator": "<",
         "minutes": 30
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -107,7 +99,6 @@
         "state": "firing",
         "for_minutes": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -119,7 +110,6 @@
         "is_active": true,
         "for_minutes": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -131,7 +121,6 @@
         "is_active": true,
         "for_minutes": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -143,7 +132,6 @@
         "is_active": true,
         "for_minutes": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -156,7 +144,6 @@
         "is_active": true,
         "for_minutes": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -169,7 +156,6 @@
         "is_active": true,
         "for_minutes": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

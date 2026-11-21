@@ -59,7 +59,6 @@ enum Action {
     Process {
         condition_met: bool,
         auto_resolve_met: bool,
-        confirmation_readings: i32,
         hysteresis_minutes: i32,
     },
     ForceClose(CloseReason),
@@ -83,12 +82,11 @@ fn action() -> impl Strategy<Value = Action> {
         CloseReason::RuleDisabled,
     ]);
     prop_oneof![
-        6 => (any::<bool>(), any::<bool>(), 0..4i32, -1..30i32).prop_map(
-            |(condition_met, auto_resolve_met, confirmation_readings, hysteresis_minutes)| {
+        6 => (any::<bool>(), any::<bool>(), -1..30i32).prop_map(
+            |(condition_met, auto_resolve_met, hysteresis_minutes)| {
                 Action::Process {
                     condition_met,
                     auto_resolve_met,
-                    confirmation_readings,
                     hysteresis_minutes,
                 }
             }
@@ -126,27 +124,18 @@ fn run(
         Action::Process {
             condition_met,
             auto_resolve_met,
-            confirmation_readings,
             hysteresis_minutes,
         } => tracker.process_evaluation(
             rule,
-            TrackerRuleConfig {
-                confirmation_readings,
-                hysteresis_minutes,
-            },
+            TrackerRuleConfig { hysteresis_minutes },
             condition_met,
             auto_resolve_met,
             now,
         ),
         Action::ForceClose(reason) => tracker.force_close(rule, reason, now),
-        Action::CloseElapsed { hysteresis_minutes } => tracker.close_elapsed_hysteresis(
-            rule,
-            TrackerRuleConfig {
-                confirmation_readings: 1,
-                hysteresis_minutes,
-            },
-            now,
-        ),
+        Action::CloseElapsed { hysteresis_minutes } => {
+            tracker.close_elapsed_hysteresis(rule, TrackerRuleConfig { hysteresis_minutes }, now)
+        }
     }
 }
 
@@ -675,7 +664,6 @@ proptest! {
         let rule = rule_from_wire(wire);
         let bound = TimeDelta::minutes(spec.glucose_freshness_minutes.unwrap_or(11));
         let config = TrackerRuleConfig {
-            confirmation_readings: rule.confirmation_readings,
             hysteresis_minutes: rule.hysteresis_minutes,
         };
         for k in 0..ticks.len() {
@@ -838,13 +826,12 @@ fn plain_tree() -> BoxedStrategy<Value> {
 }
 
 fn auto_resolving_rule() -> impl Strategy<Value = (Value, Value, Value)> {
-    (plain_tree(), plain_tree(), 0..4i32, 0..10i32, on_unknown()).prop_map(
-        |(body, resolve, confirmation_readings, hysteresis_minutes, on_unknown)| {
+    (plain_tree(), plain_tree(), 0..10i32, on_unknown()).prop_map(
+        |(body, resolve, hysteresis_minutes, on_unknown)| {
             let wire = json!({
                 "id": RULE_ID.to_string(),
                 "condition_type": "composite",
                 "condition_params": composite("or", vec![body.clone()])["composite"],
-                "confirmation_readings": confirmation_readings,
                 "hysteresis_minutes": hysteresis_minutes,
                 "auto_resolve_enabled": true,
                 "auto_resolve_params": resolve,
@@ -1399,28 +1386,22 @@ proptest! {
     }
 }
 
-/// A tracker state a rule can be left in: each of the four, and idle
+/// A tracker state a rule can be left in: each of the three, and idle
 /// awaiting re-arm, last changed up to an hour before `now` or, by a clock
 /// that has since stepped back, up to 15 minutes after it.
 fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
     let kinds = select(vec![
         (TrackerStateKind::Idle, false),
         (TrackerStateKind::Idle, true),
-        (TrackerStateKind::Confirming, false),
         (TrackerStateKind::Active, false),
         (TrackerStateKind::Hysteresis, false),
     ]);
     let ago = prop_oneof![3 => 0..=3600i64, 1 => -900..=-1i64];
     option::of(
-        (kinds, 0..3i32, ago).prop_map(move |((state, awaiting_rearm), count, ago)| {
+        (kinds, ago).prop_map(move |((state, awaiting_rearm), ago)| {
             let since = now - TimeDelta::seconds(ago);
             TrackerState {
                 state,
-                confirmation_count: if state == TrackerStateKind::Confirming {
-                    count + 1
-                } else {
-                    0
-                },
                 active_excursion: matches!(
                     state,
                     TrackerStateKind::Active | TrackerStateKind::Hysteresis
@@ -1452,7 +1433,6 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
         (
             tree(),
             option::of(tree()),
-            0..4i32,
             0..10i32,
             clock_context(now),
             seeded_tracker(now),
@@ -1465,7 +1445,6 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                 move |(
                     body,
                     resolve,
-                    confirmation_readings,
                     hysteresis_minutes,
                     context,
                     tracker,
@@ -1482,7 +1461,6 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                             "id": RULE_ID.to_string(),
                             "condition_type": kind,
                             "condition_params": body[&kind],
-                            "confirmation_readings": confirmation_readings,
                             "hysteresis_minutes": hysteresis_minutes,
                             "auto_resolve_enabled": resolve.is_some(),
                             "auto_resolve_params": resolve.map(naming_the_context),

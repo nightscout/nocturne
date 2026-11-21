@@ -10,25 +10,23 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 internal sealed record TrackerPostState(
     string State,
-    int ConfirmationCount,
     bool HasExcursion,
     DateTime UpdatedAt,
     DateTime? HysteresisStartedAt,
     bool AwaitingRearm = false)
 {
     public const string Idle = "idle";
-    public const string Confirming = "confirming";
     public const string Active = "active";
     public const string Hysteresis = "hysteresis";
 
     /// <summary>Whether <paramref name="state"/> names a state the state machine has.</summary>
-    public static bool IsKnown(string? state) => state is Idle or Confirming or Active or Hysteresis;
+    public static bool IsKnown(string? state) => state is Idle or Active or Hysteresis;
 
     /// <summary>
     /// The stored state as the state machine reads it (docs/alerts/engine-semantics.md §6). A
     /// state string naming no state reads as <c>active</c> while the row holds an excursion, so
     /// that excursion goes on to close. Otherwise it reads as <c>idle</c>, so the rule can fire.
-    /// Confirmation, hysteresis and re-arm start over.
+    /// Hysteresis and re-arm start over.
     /// </summary>
     public static TrackerPostState? Of(AlertTrackerState? state)
     {
@@ -37,9 +35,9 @@ internal sealed record TrackerPostState(
         var hasExcursion = state.ActiveExcursionId is not null;
         return IsKnown(state.State)
             ? new TrackerPostState(
-                state.State, state.ConfirmationCount, hasExcursion, state.UpdatedAt,
+                state.State, hasExcursion, state.UpdatedAt,
                 state.HysteresisStartedAt, state.AwaitingRearm)
-            : new TrackerPostState(hasExcursion ? Active : Idle, 0, hasExcursion, state.UpdatedAt, null);
+            : new TrackerPostState(hasExcursion ? Active : Idle, hasExcursion, state.UpdatedAt, null);
     }
 }
 
@@ -53,9 +51,9 @@ internal sealed record TrackerDecision(
     TrackerPostState? Post);
 
 /// <summary>The rule configuration the excursion state machine reads.</summary>
-internal readonly record struct TrackerConfig(int ConfirmationReadings, int HysteresisMinutes)
+internal readonly record struct TrackerConfig(int HysteresisMinutes)
 {
-    public static TrackerConfig Of(AlertRule rule) => new(rule.ConfirmationReadings, rule.HysteresisMinutes);
+    public static TrackerConfig Of(AlertRule rule) => new(rule.HysteresisMinutes);
 }
 
 /// <summary>

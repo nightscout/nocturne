@@ -60,7 +60,6 @@ internal static class RustEnvelopeMapper
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
         ConditionParams = ParseJson(rule.ConditionParams),
-        ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
@@ -80,7 +79,6 @@ internal static class RustEnvelopeMapper
             : new RustTrackerState
             {
                 State = state.State,
-                ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionOrdinal = state.ActiveExcursionId is null ? null : ActiveExcursionSentinel,
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
                 HysteresisStartedAt = Utc(state.HysteresisStartedAt),
@@ -274,7 +272,6 @@ internal static class RustEnvelopeMapper
             ? null
             : new TrackerPostState(
                 tracker.State,
-                tracker.ConfirmationCount,
                 tracker.ActiveExcursionOrdinal is not null,
                 tracker.UpdatedAt!.Value,
                 tracker.HysteresisStartedAt,

@@ -101,7 +101,7 @@ public interface IExcursionTracker
 
     /// <summary>
     /// Returns the open excursion id for the rule, or <see langword="null"/>
-    /// when the rule is idle/confirming. Both <c>active</c> and <c>hysteresis</c>
+    /// when the rule is idle. Both <c>active</c> and <c>hysteresis</c>
     /// states count as having an open excursion (the underlying record has
     /// <c>EndedAt IS NULL</c>).
     /// </summary>

@@ -112,8 +112,6 @@ pub(crate) struct WireTracker {
     #[serde(default)]
     state: Option<String>,
     #[serde(default)]
-    confirmation_count: i32,
-    #[serde(default)]
     active_excursion_ordinal: Option<u32>,
     /// Required whenever `state` is present.
     #[serde(default)]
@@ -147,7 +145,6 @@ impl WireTracker {
         let restored = match TrackerStateKind::from_wire(s) {
             Some(state) => TrackerState {
                 state,
-                confirmation_count: self.confirmation_count,
                 active_excursion: self.active_excursion_ordinal,
                 updated_at,
                 hysteresis_started_at: self.hysteresis_started_at,
@@ -201,7 +198,6 @@ pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
     let mut t = Map::new();
     if let Some(s) = tracker.state(rule_id) {
         t.insert("state".into(), s.state.wire().into());
-        t.insert("confirmation_count".into(), s.confirmation_count.into());
         if let Some(excursion) = s.active_excursion {
             t.insert("active_excursion_ordinal".into(), excursion.into());
         }

@@ -39,7 +39,7 @@ internal sealed class RustBackedAlertEngine(
     {
         using var lease = await gate.AcquireAsync(rule.Id, ct);
 
-        // The snapshot does not carry ConfirmationReadings/HysteresisMinutes.
+        // The snapshot does not carry HysteresisMinutes.
         var ruleRow = await trackerRepository.GetRuleAsync(rule.Id, ct);
         if (ruleRow is null)
         {

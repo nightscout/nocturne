@@ -361,7 +361,6 @@ public class AlertSweepJobWallClockTests
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
             ConditionParams = """{"direction": "below", "value": 70}""",
-            ConfirmationReadings = 1,
         };
         var fixture = new Fixture(
             AlertConditionType.AlertState,
@@ -568,24 +567,6 @@ public class AlertSweepJobWallClockTests
     }
 
     /// <summary>
-    /// Confirmation counts evaluations, so a confirming rule is evaluated by every sweep whatever
-    /// its recorded next change.
-    /// </summary>
-    [NativeFact]
-    public async Task A_confirming_rule_is_evaluated_every_sweep()
-    {
-        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15) { LastReadingAt = T0 };
-        await fixture.SweepAt(T0.AddMinutes(1));
-        var state = (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!;
-        state.State = "confirming";
-        state.ConfirmationCount = 1;
-
-        await fixture.SweepAt(T0.AddMinutes(2));
-
-        fixture.Evaluations.Should().Be(2);
-    }
-
-    /// <summary>
     /// Each tree with whether the fixture's context leaves its other leaf unknown, so the rule is
     /// held and keeps no tracker row (docs/alerts/engine-semantics.md §6.4).
     /// </summary>
@@ -770,7 +751,6 @@ public class AlertSweepJobWallClockTests
                 Name = "Wall clock",
                 ConditionType = conditionType,
                 ConditionParams = conditionParams,
-                ConfirmationReadings = 1,
                 HysteresisMinutes = 0,
             };
             var snapshot = new AlertRuleSnapshot(

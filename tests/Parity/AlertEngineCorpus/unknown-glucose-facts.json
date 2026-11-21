@@ -11,7 +11,6 @@
         "direction": "below",
         "value": 120
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -23,7 +22,6 @@
         "direction": "rising",
         "rate": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -34,7 +32,6 @@
       "condition_params": {
         "bucket": "flat"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -47,7 +44,6 @@
           "in_range"
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -59,7 +55,6 @@
         "operator": "\u003C",
         "value": 10
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -70,7 +65,6 @@
       "condition_params": {
         "timeout_minutes": 1
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

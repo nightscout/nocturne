@@ -23,17 +23,16 @@ fn read(path: &Path) -> Value {
         .expect("parse scenario")
 }
 
-/// The live snapshot as replay events. Replay has no confirmation or
-/// hysteresis, so only a rule with neither is comparable: its clear is the
-/// evaluation that enters hysteresis.
+/// The live snapshot as replay events. Replay has no hysteresis, so only a
+/// rule without it is comparable: its clear is the evaluation that enters
+/// hysteresis.
 fn live_events(name: &str) -> Vec<(String, String, &'static str)> {
     let scenario = read(&corpus().join(format!("{name}.json")));
     for rule in scenario["rules"].as_array().unwrap() {
-        let confirmation = rule["confirmation_readings"].as_i64().unwrap_or(1);
         let hysteresis = rule["hysteresis_minutes"].as_i64().unwrap_or(0);
         assert!(
-            confirmation <= 1 && hysteresis == 0,
-            "{name}: a paired live scenario needs confirmation 1 and hysteresis 0"
+            hysteresis == 0,
+            "{name}: a paired live scenario needs hysteresis 0"
         );
     }
     let expected = read(&corpus().join(format!("{name}.expected.json")));

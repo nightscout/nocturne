@@ -1,4 +1,4 @@
-//! The excursion state machine, idle → confirming → active → hysteresis
+//! The excursion state machine, idle → active → hysteresis
 //! (engine-semantics.md §6). Hysteresis expires against the instant the
 //! excursion entered it, persisted as `hysteresis_started_at`.
 
@@ -14,7 +14,6 @@ use crate::eval::elapsed::{Elapsed, Measure};
 #[non_exhaustive]
 pub enum TrackerStateKind {
     Idle,
-    Confirming,
     Active,
     Hysteresis,
 }
@@ -24,7 +23,6 @@ impl TrackerStateKind {
     pub fn wire(self) -> &'static str {
         match self {
             TrackerStateKind::Idle => "idle",
-            TrackerStateKind::Confirming => "confirming",
             TrackerStateKind::Active => "active",
             TrackerStateKind::Hysteresis => "hysteresis",
         }
@@ -34,7 +32,6 @@ impl TrackerStateKind {
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "idle" => Some(TrackerStateKind::Idle),
-            "confirming" => Some(TrackerStateKind::Confirming),
             "active" => Some(TrackerStateKind::Active),
             "hysteresis" => Some(TrackerStateKind::Hysteresis),
             _ => None,
@@ -122,7 +119,6 @@ impl Transition {
 #[derive(Debug, Clone, Copy)]
 pub struct TrackerState {
     pub state: TrackerStateKind,
-    pub confirmation_count: i32,
     /// The active excursion's 1-based creation ordinal.
     pub active_excursion: Option<u32>,
     pub updated_at: DateTime<Utc>,
@@ -139,7 +135,7 @@ impl TrackerState {
     /// What a stored tracker whose state string names no state is read as
     /// (engine-semantics.md §6): active while it holds an excursion, so that
     /// excursion goes on to close, otherwise idle, so the rule can fire.
-    /// Confirmation, hysteresis and re-arm start over.
+    /// Hysteresis and re-arm start over.
     #[must_use]
     pub fn recovered(active_excursion: Option<u32>, updated_at: DateTime<Utc>) -> Self {
         TrackerState {
@@ -148,7 +144,6 @@ impl TrackerState {
             } else {
                 TrackerStateKind::Idle
             },
-            confirmation_count: 0,
             active_excursion,
             updated_at,
             hysteresis_started_at: None,
@@ -160,7 +155,6 @@ impl TrackerState {
 /// Rule inputs consumed by the tracker.
 #[derive(Debug, Clone, Copy)]
 pub struct TrackerRuleConfig {
-    pub confirmation_readings: i32,
     pub hysteresis_minutes: i32,
 }
 
@@ -237,7 +231,6 @@ impl ExcursionTracker {
     ) -> Transition {
         let mut state = *self.states.entry(rule_id).or_insert(TrackerState {
             state: TrackerStateKind::Idle,
-            confirmation_count: 0,
             active_excursion: None,
             updated_at: now,
             hysteresis_started_at: None,
@@ -245,12 +238,7 @@ impl ExcursionTracker {
         });
 
         let transition = match state.state {
-            TrackerStateKind::Idle => {
-                self.handle_idle(&mut state, config, condition_met, auto_resolve_met)
-            }
-            TrackerStateKind::Confirming => {
-                self.handle_confirming(&mut state, config, condition_met)
-            }
+            TrackerStateKind::Idle => self.handle_idle(&mut state, condition_met, auto_resolve_met),
             TrackerStateKind::Active => handle_active(&mut state, condition_met, now),
             TrackerStateKind::Hysteresis => {
                 handle_hysteresis(&mut state, config, condition_met, now)
@@ -265,7 +253,6 @@ impl ExcursionTracker {
     fn handle_idle(
         &mut self,
         state: &mut TrackerState,
-        config: TrackerRuleConfig,
         condition_met: bool,
         auto_resolve_met: bool,
     ) -> Transition {
@@ -278,37 +265,13 @@ impl ExcursionTracker {
         if !condition_met {
             return Transition::none();
         }
-        if config.confirmation_readings <= 1 {
-            return self.open_excursion(state);
-        }
-        state.state = TrackerStateKind::Confirming;
-        state.confirmation_count = 1;
-        Transition::none()
-    }
-
-    fn handle_confirming(
-        &mut self,
-        state: &mut TrackerState,
-        config: TrackerRuleConfig,
-        condition_met: bool,
-    ) -> Transition {
-        if !condition_met {
-            state.state = TrackerStateKind::Idle;
-            state.confirmation_count = 0;
-            return Transition::none();
-        }
-        state.confirmation_count = state.confirmation_count.saturating_add(1);
-        if state.confirmation_count >= config.confirmation_readings {
-            return self.open_excursion(state);
-        }
-        Transition::none()
+        self.open_excursion(state)
     }
 
     fn open_excursion(&mut self, state: &mut TrackerState) -> Transition {
         self.next_ordinal = self.next_ordinal.saturating_add(1);
         let ordinal = self.next_ordinal;
         state.state = TrackerStateKind::Active;
-        state.confirmation_count = 0;
         state.active_excursion = Some(ordinal);
         Transition {
             kind: TransitionType::ExcursionOpened,
@@ -357,7 +320,6 @@ impl ExcursionTracker {
         state.awaiting_rearm =
             reason == CloseReason::AutoResolve && state.state == TrackerStateKind::Active;
         state.state = TrackerStateKind::Idle;
-        state.confirmation_count = 0;
         state.active_excursion = None;
         state.hysteresis_started_at = None;
         state.updated_at = now;
@@ -411,7 +373,6 @@ fn handle_hysteresis(
 fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
     let excursion = state.active_excursion;
     state.state = TrackerStateKind::Idle;
-    state.confirmation_count = 0;
     state.active_excursion = None;
     state.hysteresis_started_at = None;
     state.awaiting_rearm = false;

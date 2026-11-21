@@ -12,7 +12,6 @@
         "operator": "<",
         "value": 290
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -25,7 +24,6 @@
         "operator": "<",
         "value": 270
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -38,7 +36,6 @@
         "operator": ">=",
         "value": 1400
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -51,7 +48,6 @@
         "operator": ">",
         "value": 90
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

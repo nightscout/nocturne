@@ -531,9 +531,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// glucose facts this context carries (<see cref="NextChange.GlucoseOf"/>): such a rule reads
     /// nothing else, so between them only the clock moves it. That holds only while the context
     /// measures a usable canonical reading, the one the per-reading path measures; with none, its
-    /// reading time moves with writes that evaluate nothing, so every rule is evaluated. A rule
-    /// whose tracker is confirming is never skipped: its next evaluation counts, whatever its
-    /// time (docs/alerts/engine-semantics.md §5.3).
+    /// reading time moves with writes that evaluate nothing, so every rule is evaluated.
     /// </para>
     /// </remarks>
     private async Task EvaluateWallClockRulesAsync(Sweep sweep, CancellationToken ct)
@@ -585,7 +583,6 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             if (verdicts[rule.Id].WaitsForNextChange
                 && await tracker.GetTrackerStateAsync(rule.Id, ct) is { NextChangeKnown: true } state
                 && state.NextChangeGlucose == glucose
-                && state.State != TrackerPostState.Confirming
                 && (state.NextChangeAt is not { } next || next > sweep.Now))
                 continue;
             due.Add(rule);

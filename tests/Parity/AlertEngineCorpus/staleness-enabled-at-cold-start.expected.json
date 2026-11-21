@@ -16,8 +16,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "next_change_at": "2026-03-02T12:20:00Z"
         },
@@ -32,8 +31,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "next_change_at": "2026-03-02T12:20:00.000000100Z"
         },
@@ -49,7 +47,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           },
           "next_change_at": "2026-03-02T12:20:00Z"
@@ -66,7 +63,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           },
           "next_change_at": "2026-03-02T12:20:00.000000100Z"
@@ -82,8 +78,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "next_change_at": "2026-03-02T12:20:00Z"
         },
@@ -117,7 +112,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 3
           }
         },
@@ -132,8 +126,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "next_change_at": "2026-03-02T12:20:00.000000100Z"
         },
@@ -149,7 +142,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-03-02T12:20:00Z"
           },
@@ -167,7 +159,6 @@
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           },
           "next_change_at": "2026-03-02T12:20:00.000000100Z"
@@ -184,7 +175,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 4
           },
           "next_change_at": "2026-03-02T12:20:00.000000100Z"
@@ -219,7 +209,6 @@
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 3
           }
         },
@@ -235,7 +224,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 5
           }
         },
@@ -251,8 +239,7 @@
           "transition": "closed",
           "close_reason": "hysteresis",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -267,7 +254,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 2,
             "hysteresis_started_at": "2026-03-02T12:20:30Z"
           },
@@ -285,7 +271,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 4,
             "hysteresis_started_at": "2026-03-02T12:20:30Z"
           },
@@ -321,7 +306,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 3,
             "hysteresis_started_at": "2026-03-02T12:21:00Z"
           },
@@ -339,7 +323,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 5,
             "hysteresis_started_at": "2026-03-02T12:21:00Z"
           },
@@ -357,7 +340,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 6
           },
           "next_change_at": "2026-03-02T12:40:45Z"
@@ -374,7 +356,6 @@
           "transition": "hysteresis_resumed",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           },
           "next_change_at": "2026-03-02T12:40:45.000000100Z"
@@ -391,8 +372,7 @@
           "transition": "closed",
           "close_reason": "hysteresis",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "next_change_at": "2026-03-02T12:40:45Z"
         },
@@ -407,8 +387,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "next_change_at": "2026-03-02T12:40:45Z"
         }

@@ -17,7 +17,6 @@
           "transition": "opened",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0,
             "awaiting_rearm": true
           },
           "auto_resolved": true
@@ -41,7 +40,6 @@
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0,
             "awaiting_rearm": true
           }
         }
@@ -62,7 +60,6 @@
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0,
             "awaiting_rearm": true
           }
         }
@@ -83,7 +80,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           }
         }

@@ -101,9 +101,6 @@ public sealed record ScenarioRule
     [JsonPropertyName("condition_params")]
     public required JsonElement ConditionParams { get; init; }
 
-    [JsonPropertyName("confirmation_readings")]
-    public int ConfirmationReadings { get; init; } = 1;
-
     [JsonPropertyName("hysteresis_minutes")]
     public int HysteresisMinutes { get; init; }
 
@@ -319,9 +316,6 @@ public sealed record ExpectedLeaf(
 public sealed record ExpectedTrackerState
 {
     public required string State { get; init; }
-
-    [JsonPropertyName("confirmation_count")]
-    public required int ConfirmationCount { get; init; }
 
     /// <summary>
     /// Stable ordinal of the active excursion within the scenario (1-based, in creation

@@ -52,7 +52,6 @@ pub struct Rule {
     pub condition_type: ConditionKind,
     /// The payload object as stored in `condition_params`.
     pub condition_params: Value,
-    pub confirmation_readings: i32,
     pub hysteresis_minutes: i32,
     pub auto_resolve_enabled: bool,
     /// A full condition node, or `None`.
@@ -98,8 +97,6 @@ pub struct WireRule {
     pub condition_type: String,
     #[serde(default)]
     pub condition_params: Value,
-    #[serde(default = "one")]
-    pub confirmation_readings: i32,
     #[serde(default)]
     pub hysteresis_minutes: i32,
     #[serde(default)]
@@ -115,10 +112,6 @@ pub struct WireRule {
     pub glucose_freshness_minutes: Option<i64>,
     #[serde(default)]
     pub enabled_at: Option<DateTime<Utc>>,
-}
-
-fn one() -> i32 {
-    1
 }
 
 /// Only the `condition_type`, `on_unknown`, `glucose_freshness_minutes` and
@@ -155,7 +148,6 @@ impl TryFrom<WireRule> for Rule {
             id: w.id,
             condition_type,
             condition_params: w.condition_params,
-            confirmation_readings: w.confirmation_readings,
             hysteresis_minutes: w.hysteresis_minutes,
             auto_resolve_enabled: w.auto_resolve_enabled,
             auto_resolve_params: w.auto_resolve_params,
@@ -260,10 +252,6 @@ impl RuleOutcome {
         if let Some(tracker) = &e.tracker {
             let mut t = Map::new();
             t.insert("state".into(), tracker.state.wire().into());
-            t.insert(
-                "confirmation_count".into(),
-                tracker.confirmation_count.into(),
-            );
             if let Some(excursion) = tracker.active_excursion {
                 t.insert("excursion".into(), excursion.into());
             }
@@ -334,7 +322,6 @@ pub fn evaluate_parsed_rule(
     let outcome = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
     let mut clock_anomaly = outcome.clock_anomaly;
     let config = TrackerRuleConfig {
-        confirmation_readings: rule.confirmation_readings,
         hysteresis_minutes: rule.hysteresis_minutes,
     };
 
@@ -373,7 +360,7 @@ pub fn evaluate_parsed_rule(
     let auto_resolved = !awaiting
         && rule.auto_resolve_enabled
         && try_auto_resolve(rule, ctx, now, state, &mut clock_anomaly);
-    let next_change_at = next_change_at(rule, body, ctx, now, state, met.is_none());
+    let next_change_at = next_change_at(rule, body, ctx, now, state);
 
     RuleOutcome {
         rule_id: rule.id,

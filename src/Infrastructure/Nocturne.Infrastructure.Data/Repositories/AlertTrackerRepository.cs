@@ -74,7 +74,6 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             {
                 AlertRuleId = state.AlertRuleId,
                 State = state.State,
-                ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionId = state.ActiveExcursionId,
                 UpdatedAt = state.UpdatedAt,
                 HysteresisStartedAt = state.HysteresisStartedAt,
@@ -87,7 +86,6 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         else
         {
             existing.State = state.State;
-            existing.ConfirmationCount = state.ConfirmationCount;
             existing.ActiveExcursionId = state.ActiveExcursionId;
             existing.UpdatedAt = state.UpdatedAt;
             existing.HysteresisStartedAt = state.HysteresisStartedAt;
@@ -266,7 +264,6 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     {
         AlertRuleId = entity.AlertRuleId,
         State = entity.State,
-        ConfirmationCount = entity.ConfirmationCount,
         ActiveExcursionId = entity.ActiveExcursionId,
         UpdatedAt = entity.UpdatedAt,
         HysteresisStartedAt = entity.HysteresisStartedAt,

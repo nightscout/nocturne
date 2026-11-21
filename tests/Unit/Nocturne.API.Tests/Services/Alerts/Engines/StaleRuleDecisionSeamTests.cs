@@ -29,7 +29,6 @@ public class StaleRuleDecisionSeamTests
         Name = "low",
         ConditionType = AlertConditionType.Threshold,
         ConditionParams = """{"direction":"below","value":70}""",
-        ConfirmationReadings = 1,
         AutoResolveEnabled = true,
         AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":90}}""",
     };
@@ -217,7 +216,6 @@ public class StaleRuleDecisionSeamTests
         Name = "loss",
         ConditionType = AlertConditionType.SignalLoss,
         ConditionParams = """{"timeout_minutes":15}""",
-        ConfirmationReadings = 1,
     };
 
     /// <summary>A reading five minutes before the evaluation, so signal loss is ten minutes off.</summary>

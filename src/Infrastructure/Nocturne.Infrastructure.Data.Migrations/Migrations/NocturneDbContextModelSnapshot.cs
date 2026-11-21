@@ -686,7 +686,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("awaiting_rearm");
 
                     b.Property<int>("ConfirmationCount")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("confirmation_count");
 
                     b.Property<DateTime?>("HysteresisStartedAt")

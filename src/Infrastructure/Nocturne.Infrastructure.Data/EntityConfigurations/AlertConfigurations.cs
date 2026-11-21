@@ -59,6 +59,8 @@ internal sealed class AlertTrackerStateEntityConfiguration : IEntityTypeConfigur
         entity.HasKey(e => e.AlertRuleId);
         entity.Property(e => e.AlertRuleId).ValueGeneratedNever();
         entity.Property(e => e.State).HasDefaultValue("idle");
+        // Kept one release so a rollback to the image that still writes it works; a later release drops it (#3798).
+        entity.Property<int>("ConfirmationCount").HasColumnName("confirmation_count").HasDefaultValue(0);
 
         entity.HasOne(e => e.AlertRule)
             .WithOne(r => r.TrackerState)

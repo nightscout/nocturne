@@ -12,7 +12,6 @@
         "to": "15:00",
         "timezone": "ETC/GMT-2"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -25,7 +24,6 @@
         "to": "15:00",
         "timezone": null
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

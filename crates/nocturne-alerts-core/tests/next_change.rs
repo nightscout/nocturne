@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, WireRule};
-use nocturne_alerts_core::excursion::{TrackerState, TrackerStateKind, TransitionType};
+use nocturne_alerts_core::excursion::{TrackerState, TrackerStateKind};
 use nocturne_alerts_core::next_change::RESOLUTION;
 
 #[path = "common/quiet.rs"]
@@ -50,21 +50,10 @@ fn rule(kind: &str, params: Value) -> Rule {
 }
 
 fn rule_with(kind: &str, params: Value, auto_resolve: Option<Value>, hysteresis: i32) -> Rule {
-    confirmed_rule(kind, params, auto_resolve, hysteresis, 1)
-}
-
-fn confirmed_rule(
-    kind: &str,
-    params: Value,
-    auto_resolve: Option<Value>,
-    hysteresis: i32,
-    confirmation_readings: i32,
-) -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE,
         "condition_type": kind,
         "condition_params": params,
-        "confirmation_readings": confirmation_readings,
         "hysteresis_minutes": hysteresis,
         "auto_resolve_enabled": auto_resolve.is_some(),
         "auto_resolve_params": auto_resolve,
@@ -100,7 +89,6 @@ impl Seed {
 fn tracker(kind: TrackerStateKind, hysteresis_started_at: Option<DateTime<Utc>>) -> TrackerState {
     TrackerState {
         state: kind,
-        confirmation_count: 0,
         active_excursion: (kind != TrackerStateKind::Idle).then_some(1),
         updated_at: now() - min(1),
         hysteresis_started_at,
@@ -461,25 +449,6 @@ fn sustained_over_a_false_child_has_only_its_childs() {
         ctx(json!({ "latest_value": 120 })),
     );
     assert_eq!(case.next_change(), None);
-}
-
-/// The hostile review's counterexample: the next evaluation, whatever its
-/// time, counts towards confirmation and opens the excursion.
-#[test]
-fn a_confirming_rule_changes_at_the_next_tick() {
-    let case = Case::new(
-        confirmed_rule("signal_loss", json!({ "timeout_minutes": 20 }), None, 0, 2),
-        ctx(json!({ "last_reading_at": ago(min(25)), "latest_timestamp": ago(min(25)) })),
-    );
-    let mut state = case.seed.state();
-    let first = case.evaluate(&mut state, now());
-    assert_eq!(
-        state.tracker.state(RULE).map(|t| t.state),
-        Some(TrackerStateKind::Confirming)
-    );
-    assert_eq!(first.next_change_at, Some(now() + RESOLUTION));
-    let then = case.evaluate(&mut state, now() + TimeDelta::seconds(30));
-    assert_eq!(then.transition.kind, TransitionType::ExcursionOpened);
 }
 
 /// The hostile review's counterexample: a flip in year 10240 is past what a

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "tracker-immediate-open",
-  "description": "ConfirmationReadings \u003C= 1 opens an excursion on the first true evaluation; continues while true",
+  "description": "A true evaluation opens an excursion at once; continues while true",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,7 +11,6 @@
         "direction": "below",
         "value": 70
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
