@@ -245,30 +245,33 @@ public static class ConsumableTrackerSpecs
     public const int WarnHoursBeforeEnd = 24;
 
     /// <summary>
-    /// An unsaved Duration definition of <paramref name="spec"/>, created by <paramref name="userId"/>,
-    /// with its <see cref="Thresholds"/> unless <paramref name="withThresholds"/> is false.
+    /// The draft of a Duration definition of <paramref name="spec"/>, with its <see cref="Thresholds"/>
+    /// unless <paramref name="withThresholds"/> is false.
+    /// </summary>
+    public static TrackerDefinitionDraft ToDraft(ConsumableTrackerSpec spec, bool withThresholds = true) => new()
+    {
+        Name = spec.Name,
+        Category = spec.Category,
+        Icon = spec.Icon,
+        LifespanHours = spec.LifespanHours,
+        TriggerEventTypes = spec.Triggers,
+        EndEventTypes = spec.Ends ?? [],
+        Covers = [.. (spec.Covers ?? []).Select(c => c.ToString())],
+        DeviceComponent = spec.Component,
+        StartEventType = spec.Triggers.FirstOrDefault(),
+        Mode = TrackerMode.Duration,
+        NotificationThresholds = withThresholds ? Thresholds(spec) : [],
+    };
+
+    /// <summary>
+    /// An unsaved definition of <paramref name="spec"/>'s <see cref="ToDraft"/>, created by
+    /// <paramref name="userId"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The spec breaks a rule every definition keeps.</exception>
     public static TrackerDefinition ToDefinition(
         ConsumableTrackerSpec spec, string userId, DateTime createdAt, bool withThresholds = true)
     {
-        var result = TrackerDefinition.Create(
-            new TrackerDefinitionDraft
-            {
-                Name = spec.Name,
-                Category = spec.Category,
-                Icon = spec.Icon,
-                LifespanHours = spec.LifespanHours,
-                TriggerEventTypes = spec.Triggers,
-                EndEventTypes = spec.Ends ?? [],
-                Covers = [.. (spec.Covers ?? []).Select(c => c.ToString())],
-                DeviceComponent = spec.Component,
-                StartEventType = spec.Triggers.FirstOrDefault(),
-                Mode = TrackerMode.Duration,
-                NotificationThresholds = withThresholds ? Thresholds(spec) : [],
-            },
-            userId,
-            createdAt);
+        var result = TrackerDefinition.Create(ToDraft(spec, withThresholds), userId, createdAt);
         return result.Definition
             ?? throw new InvalidOperationException($"The {spec.Name} tracker spec is not a valid definition: {result.Error!.Message}");
     }

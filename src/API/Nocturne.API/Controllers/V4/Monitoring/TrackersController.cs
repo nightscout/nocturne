@@ -124,11 +124,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
         IReadOnlyCollection<PatientDevice> devices = HttpContext.HasScope(Scope.DevicesRead)
             ? [.. await patientDevices.GetCurrentAsync(HttpContext.RequestAborted)]
             : [];
-        return Ok(TrackerTemplates.For(devices, UtcNow)
+        var now = UtcNow;
+        return Ok(TrackerTemplates.For(devices)
             .Select(t => new TrackerTemplateDto
             {
                 Id = t.Id,
-                Definition = TrackerDefinitionDto.From(t.Definition),
+                Definition = TrackerDefinitionDto.From(t.Draft, now),
             })
             .ToArray());
     }
@@ -560,6 +561,10 @@ public class NotificationThresholdDto
 
     public static NotificationThresholdDto From(
         TrackerNotificationThreshold threshold, TrackerDefinition definition) =>
+        From(threshold, definition.Mode, definition.LifespanHours);
+
+    public static NotificationThresholdDto From(
+        TrackerNotificationThreshold threshold, TrackerMode mode, int? lifespanHours) =>
         new()
         {
             Id = threshold.Id,
@@ -568,7 +573,7 @@ public class NotificationThresholdDto
             Description = threshold.Description,
             DisplayOrder = threshold.DisplayOrder,
             AlertRuleId = threshold.AlertRuleId,
-            OffsetMinutes = TrackerSchedule.OffsetMinutes(definition.Mode, definition.LifespanHours, threshold.Hours),
+            OffsetMinutes = TrackerSchedule.OffsetMinutes(mode, lifespanHours, threshold.Hours),
         };
 }
 
@@ -672,6 +677,45 @@ public class TrackerDefinitionDto
             CreatedAt = definition.CreatedAt,
             UpdatedAt = definition.UpdatedAt,
         };
+
+    /// <summary>
+    /// An unsaved <paramref name="draft"/> served as a definition made at <paramref name="createdAt"/>,
+    /// with no id. Event names are served as drafted, so the draft must name them canonically.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The draft covers a name that is no capability.</exception>
+    public static TrackerDefinitionDto From(TrackerDefinitionDraft draft, DateTime createdAt)
+    {
+        if (!TrackerCoverage.TryNormalise(draft.Covers, out var covers, out var coversError))
+            throw new InvalidOperationException(coversError);
+
+        return new()
+        {
+            Name = draft.Name,
+            Description = draft.Description,
+            Category = draft.Category,
+            Icon = draft.Icon ?? TrackerDefinition.DefaultIcon,
+            TriggerEventTypes = [.. draft.TriggerEventTypes ?? []],
+            EndEventTypes = [.. draft.EndEventTypes ?? []],
+            Covers = [.. TrackerCoverage.Of(draft.Category, (covers ?? []).ToHashSet()).Order()],
+            DeviceComponent = draft.DeviceComponent,
+            TriggerNotesContains = draft.TriggerNotesContains,
+            LifespanHours = draft.LifespanHours,
+            LowReservoirUnits = draft.LowReservoirUnits,
+            LowReservoirUrgency = draft.LowReservoirUrgency,
+            NotificationThresholds =
+            [
+                .. (draft.NotificationThresholds ?? [])
+                    .OrderBy(t => t.DisplayOrder)
+                    .Select(t => NotificationThresholdDto.From(t, draft.Mode, draft.LifespanHours)),
+            ],
+            IsFavorite = draft.IsFavorite,
+            DashboardVisibility = draft.DashboardVisibility,
+            StartEventType = draft.StartEventType,
+            CompletionEventType = draft.CompletionEventType,
+            Mode = draft.Mode,
+            CreatedAt = createdAt,
+        };
+    }
 }
 
 /// <summary>A <see cref="TrackerTemplate"/> as the tracker wizard reads it.</summary>

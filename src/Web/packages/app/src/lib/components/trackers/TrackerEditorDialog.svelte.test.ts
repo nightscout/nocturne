@@ -129,6 +129,18 @@ describe("TrackerEditorDialog save", () => {
     await expect.element(page.getByTestId("tracker-editor")).not.toBeInTheDocument();
   });
 
+  it.each(["", "   "])("does not save a name of only %j, and says why before the click", async (name) => {
+    open(TrackerCategory.Sensor);
+    await expect.element(page.getByRole("button", { name: "Save" })).toBeEnabled();
+    await expect.element(page.getByText("Enter a name.")).not.toBeInTheDocument();
+
+    await page.getByLabelText("Name").fill(name);
+
+    await expect.element(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect.element(page.getByRole("status")).toHaveTextContent("Enter a name.");
+    expect(updateDefinition).not.toHaveBeenCalled();
+  });
+
   it("refuses a lifespan that is not a whole number of hours, which the schema cannot take", async () => {
     open(TrackerCategory.Sensor);
 
