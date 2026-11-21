@@ -8,6 +8,7 @@ use crate::enums::AlertStateKind;
 use crate::model::{
     ActiveForPayload, AlertStatePayload, PumpStatePayload, SleepSessionPayload, StateSpanPayload,
 };
+use crate::truth::Truth;
 
 /// Cross-alert state. `firing`: the snapshot's state is "firing" (ASCII case
 /// ignored); `unacknowledged`: firing and not acknowledged; `acknowledged`:
@@ -15,7 +16,7 @@ use crate::model::{
 /// acknowledgement for `acknowledged`, from the trigger otherwise.
 pub(super) fn alert_state(p: &AlertStatePayload, ctx: &SensorContext) -> ClockLeaf {
     let Some(snapshot) = ctx.active_alerts.get(&p.alert_id) else {
-        return ClockLeaf::Fixed(false);
+        return ClockLeaf::Fixed(Truth::False);
     };
     let firing = snapshot.state.eq_ignore_ascii_case("firing");
     let anchor = match p.state {
@@ -27,8 +28,8 @@ pub(super) fn alert_state(p: &AlertStatePayload, ctx: &SensorContext) -> ClockLe
         AlertStateKind::Firing | AlertStateKind::Unacknowledged => None,
     };
     match (anchor, p.for_minutes) {
-        (None, _) => ClockLeaf::Fixed(false),
-        (Some(_), None) => ClockLeaf::Fixed(true),
+        (None, _) => ClockLeaf::Fixed(Truth::False),
+        (Some(_), None) => ClockLeaf::Fixed(Truth::True),
         (Some(at), Some(m)) => ClockLeaf::Measured(Elapsed::held_for(at, m)),
     }
 }
@@ -66,6 +67,6 @@ pub(super) fn state_span_active(p: &StateSpanPayload, ctx: &SensorContext) -> Cl
 }
 
 /// `is_active` true fires while a sleep session is active, false while none is.
-pub(super) fn sleep_session_active(p: &SleepSessionPayload, env: &Env) -> bool {
-    env.ctx.sleep_session_active == p.is_active
+pub(super) fn sleep_session_active(p: &SleepSessionPayload, env: &Env) -> Truth {
+    (env.ctx.sleep_session_active == p.is_active).into()
 }

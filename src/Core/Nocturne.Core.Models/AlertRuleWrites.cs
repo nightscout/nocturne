@@ -27,7 +27,8 @@ public sealed record AlertRuleWrite(
     bool AutoResolveEnabled,
     string? AutoResolveParams,
     string ClientConfiguration,
-    string? ReviewReason = null)
+    string? ReviewReason = null,
+    string OnUnknown = AlertRuleOnUnknown.Hold)
 {
     /// <summary>The stored rule's values.</summary>
     public static AlertRuleWrite Of(AlertRuleRecord record) => new(
@@ -43,7 +44,8 @@ public sealed record AlertRuleWrite(
         record.Rule.AutoResolveEnabled,
         record.Rule.AutoResolveParams,
         record.Rule.ClientConfiguration,
-        record.ReviewReason);
+        record.ReviewReason,
+        record.Rule.OnUnknown);
 }
 
 /// <summary>

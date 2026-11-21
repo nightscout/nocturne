@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::engine::{EngineState, Rule, evaluate_rule};
+use nocturne_alerts_core::engine::{EngineState, OnUnknown, Rule, evaluate_rule};
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseError, Reason, parse_payload};
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
@@ -279,6 +279,7 @@ fn rule(condition_params: Value) -> Rule {
         hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,
+        on_unknown: OnUnknown::Hold,
     }
 }
 

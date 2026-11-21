@@ -83,7 +83,8 @@ internal static class EngineTestHarness
             "{}",
             0,
             rule.AutoResolveEnabled,
-            rule.AutoResolveParams?.GetRawText());
+            rule.AutoResolveParams?.GetRawText(),
+            OnUnknown: rule.OnUnknown ?? AlertRuleOnUnknown.Hold);
     }
 
     /// <summary>
@@ -107,9 +108,10 @@ internal static class EngineTestHarness
         {
             RuleId = rule.Id,
             Root = evaluation.ConditionMet,
-            Leaves = (evaluation.LeafValues ?? new Dictionary<int, bool>())
+            Unknown = evaluation.ConditionUnknown ? true : null,
+            Leaves = (evaluation.LeafValues ?? new Dictionary<int, bool?>())
                 .OrderBy(kv => kv.Key)
-                .Select(kv => new ExpectedLeaf(kv.Key, kv.Value))
+                .Select(kv => new ExpectedLeaf(kv.Key, kv.Value ?? false, kv.Value is null ? true : null))
                 .ToList(),
             Transition = CorpusWire.TransitionWire(evaluation.Transition.Type),
             CloseReason = evaluation.Transition.CloseReason is { } reason ? CorpusWire.CloseReasonWire(reason) : null,

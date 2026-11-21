@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "loop-stale-guard-and-boundaries",
-  "description": "loop_stale is false without HasEverApsCycled, false with a null cycle timestamp, then compares minutes since the cycle",
+  "description": "loop_stale is unknown without HasEverApsCycled, unknown with a null cycle timestamp, then compares minutes since the cycle",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

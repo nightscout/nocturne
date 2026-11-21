@@ -15,7 +15,8 @@
             },
             {
               "leaf_id": 1,
-              "value": false
+              "value": false,
+              "unknown": true
             },
             {
               "leaf_id": 2,
@@ -44,7 +45,8 @@
             },
             {
               "leaf_id": 1,
-              "value": false
+              "value": false,
+              "unknown": true
             },
             {
               "leaf_id": 2,
@@ -96,6 +98,7 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
@@ -103,19 +106,19 @@
             },
             {
               "leaf_id": 1,
-              "value": false
+              "value": false,
+              "unknown": true
             },
             {
               "leaf_id": 2,
               "value": false
             }
           ],
-          "transition": "hysteresis_started",
+          "transition": "none",
           "tracker": {
-            "state": "hysteresis",
+            "state": "active",
             "confirmation_count": 0,
-            "excursion": 1,
-            "hysteresis_started_at": "2026-01-05T12:15:00Z"
+            "excursion": 1
           }
         }
       ]

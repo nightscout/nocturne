@@ -254,11 +254,14 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
     let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
     let value = eval_node(&node, &root, &mut env);
     let ops = timers.drain_ops();
-    Ok(ok(json!({
-        "value": value,
-        "timers": timers_json(&timers, req.rule_id),
-        "timer_ops": ops.iter().map(TimerOp::to_json).collect::<Vec<_>>(),
-    })))
+    let mut response = Map::new();
+    value.write(&mut response, "value");
+    response.insert("timers".into(), timers_json(&timers, req.rule_id));
+    response.insert(
+        "timer_ops".into(),
+        ops.iter().map(TimerOp::to_json).collect(),
+    );
+    Ok(ok(Value::Object(response)))
 }
 
 /// A rule body as stored: its root `condition_type` and payload-only

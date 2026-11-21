@@ -7,22 +7,24 @@ use rust_decimal::Decimal;
 
 use crate::compare::{Unit, decimal_from_f64_cs, elapsed};
 use crate::context::SensorContext;
-use crate::enums::{CmpOp, holds};
+use crate::enums::CmpOp;
 use crate::model::Payload;
+use crate::truth::Truth;
 
 /// A wall-clock leaf's truth for one context: fixed whatever `now` is, or an
-/// elapsed time compared with a bound.
+/// elapsed time compared with a bound. A leaf without its anchor is fixed, so
+/// an unknown one contributes no next change (engine-semantics.md §5.3).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ClockLeaf {
-    Fixed(bool),
+    Fixed(Truth),
     Measured(Elapsed),
 }
 
 impl ClockLeaf {
-    pub(crate) fn holds(self, now: DateTime<Utc>) -> bool {
+    pub(crate) fn holds(self, now: DateTime<Utc>) -> Truth {
         match self {
             ClockLeaf::Fixed(value) => value,
-            ClockLeaf::Measured(e) => e.holds(now),
+            ClockLeaf::Measured(e) => e.holds(now).into(),
         }
     }
 }
@@ -68,11 +70,9 @@ impl Elapsed {
                 unit,
                 op,
                 threshold,
-            } => holds(
-                op,
-                elapsed(now, self.anchor, unit).and_then(decimal_from_f64_cs),
-                threshold,
-            ),
+            } => elapsed(now, self.anchor, unit)
+                .and_then(decimal_from_f64_cs)
+                .is_some_and(|actual| op.apply(actual, threshold)),
             Measure::Minutes { op, minutes } => {
                 elapsed(now, self.anchor, Unit::Minutes).is_some_and(|m| op.apply(m, minutes))
             }
@@ -161,11 +161,11 @@ pub(super) fn active_for(
     started_at: Option<DateTime<Utc>>,
 ) -> ClockLeaf {
     match started_at {
-        Some(at) if is_active => for_minutes.map_or(ClockLeaf::Fixed(true), |m| {
+        Some(at) if is_active => for_minutes.map_or(ClockLeaf::Fixed(Truth::True), |m| {
             ClockLeaf::Measured(Elapsed::held_for(at, m))
         }),
-        Some(_) => ClockLeaf::Fixed(false),
-        None => ClockLeaf::Fixed(!is_active),
+        Some(_) => ClockLeaf::Fixed(Truth::False),
+        None => ClockLeaf::Fixed((!is_active).into()),
     }
 }
 

@@ -113,6 +113,10 @@ public sealed record ScenarioRule
     /// <summary>A full ConditionNode object (<c>{"type": …, …}</c>), or null.</summary>
     [JsonPropertyName("auto_resolve_params")]
     public JsonElement? AutoResolveParams { get; init; }
+
+    /// <summary><c>hold</c>, <c>met</c> or <c>not_met</c>; absent is <c>hold</c>.</summary>
+    [JsonPropertyName("on_unknown")]
+    public string? OnUnknown { get; init; }
 }
 
 public sealed record ScenarioTick
@@ -246,8 +250,11 @@ public sealed record ExpectedRuleResult
     /// </summary>
     public bool? Skipped { get; init; }
 
-    /// <summary>Root condition truth for this tick.</summary>
+    /// <summary>Root condition truth for this tick; false when <see cref="Unknown"/>.</summary>
     public bool? Root { get; init; }
+
+    /// <summary>The root is unknown; carried only when true.</summary>
+    public bool? Unknown { get; init; }
 
     /// <summary>Per-leaf force-eval truths, ordered by leaf id (replay/leaf-log semantics).</summary>
     public List<ExpectedLeaf>? Leaves { get; init; }
@@ -283,9 +290,11 @@ public sealed record ExpectedRuleResult
     public DateTime? NextChangeAt { get; init; }
 }
 
+/// <summary><see cref="Value"/> is false when <see cref="Unknown"/>, which is carried only when true.</summary>
 public sealed record ExpectedLeaf(
     [property: JsonPropertyName("leaf_id")] int LeafId,
-    [property: JsonPropertyName("value")] bool Value);
+    [property: JsonPropertyName("value")] bool Value,
+    [property: JsonPropertyName("unknown")] bool? Unknown = null);
 
 public sealed record ExpectedTrackerState
 {

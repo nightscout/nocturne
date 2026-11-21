@@ -3,11 +3,11 @@
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::context::SensorContext;
-use crate::enums::WireEnum;
+use crate::enums::{WireEnum, wire_enum};
 use crate::eval::{Env, eval_node, eval_payload};
 use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, Transition, TransitionType,
@@ -17,6 +17,28 @@ use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
 use crate::next_change::next_change_at;
 use crate::paths::AUTO_RESOLVE_ROOT;
 use crate::sustained::{TimerOp, TimerStore};
+use crate::truth::Truth;
+
+wire_enum! {
+    /// What an unknown root means to the tracker (engine-semantics.md §6.4).
+    pub enum OnUnknown {
+        Hold = "hold",
+        Met = "met",
+        NotMet = "not_met",
+    }
+}
+
+impl OnUnknown {
+    /// The root as the tracker reads it; `None` holds.
+    #[must_use]
+    pub fn resolve(self, root: Truth) -> Option<bool> {
+        root.known().or(match self {
+            OnUnknown::Hold => None,
+            OnUnknown::Met => Some(true),
+            OnUnknown::NotMet => Some(false),
+        })
+    }
+}
 
 /// An alert rule as stored: `(condition_type, condition_params)` plus tracker
 /// and auto-resolve configuration.
@@ -31,6 +53,7 @@ pub struct Rule {
     pub auto_resolve_enabled: bool,
     /// A full condition node, or `None`.
     pub auto_resolve_params: Option<Value>,
+    pub on_unknown: OnUnknown,
 }
 
 impl Rule {
@@ -74,13 +97,16 @@ pub struct WireRule {
     pub auto_resolve_enabled: bool,
     #[serde(default)]
     pub auto_resolve_params: Option<Value>,
+    /// Exactly a word of [`OnUnknown`]; absent is `hold`.
+    #[serde(default)]
+    pub on_unknown: Option<String>,
 }
 
 fn one() -> i32 {
     1
 }
 
-/// Only the `condition_type` is checked, not the body.
+/// Only the `condition_type` and `on_unknown` are checked, not the body.
 impl TryFrom<WireRule> for Rule {
     type Error = String;
 
@@ -91,6 +117,11 @@ impl TryFrom<WireRule> for Rule {
                 w.condition_type.escape_default()
             )
         })?;
+        let on_unknown = match w.on_unknown.as_deref() {
+            None => OnUnknown::Hold,
+            Some(word) => OnUnknown::from_name(word)
+                .ok_or_else(|| format!("unknown on_unknown '{}'", word.escape_default()))?,
+        };
         Ok(Rule {
             id: w.id,
             condition_type,
@@ -99,6 +130,7 @@ impl TryFrom<WireRule> for Rule {
             hysteresis_minutes: w.hysteresis_minutes,
             auto_resolve_enabled: w.auto_resolve_enabled,
             auto_resolve_params: w.auto_resolve_params,
+            on_unknown,
         })
     }
 }
@@ -129,9 +161,9 @@ pub struct RuleOutcome {
 
 #[derive(Debug, Clone)]
 pub struct Evaluation {
-    pub root: bool,
+    pub root: Truth,
     /// Each leaf evaluated alone, indexed by leaf id, when requested.
-    pub leaves: Option<Vec<bool>>,
+    pub leaves: Option<Vec<Truth>>,
     pub transition: Transition,
     pub tracker: Option<TrackerState>,
     pub auto_resolved: bool,
@@ -172,13 +204,18 @@ impl RuleOutcome {
             o.insert("skipped".into(), true.into());
             return Value::Object(o);
         };
-        o.insert("root".into(), e.root.into());
+        e.root.write(&mut o, "root");
         if let Some(leaves) = &e.leaves {
             let leaves = leaves.iter().enumerate();
             o.insert(
                 "leaves".into(),
                 leaves
-                    .map(|(leaf_id, value)| json!({ "leaf_id": leaf_id, "value": value }))
+                    .map(|(leaf_id, value)| {
+                        let mut leaf = Map::new();
+                        leaf.insert("leaf_id".into(), leaf_id.into());
+                        value.write(&mut leaf, "value");
+                        Value::Object(leaf)
+                    })
                     .collect(),
             );
         }
@@ -260,30 +297,35 @@ pub fn evaluate_parsed_rule(
     log_leaves: bool,
 ) -> RuleOutcome {
     let outcome = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
+    let config = TrackerRuleConfig {
+        confirmation_readings: rule.confirmation_readings,
+        hysteresis_minutes: rule.hysteresis_minutes,
+    };
 
     // Awaiting re-arm, the resolve tree is read before the tracker, and is
-    // then the evaluation's only read of it (engine-semantics.md §6.3).
+    // then the evaluation's only read of it (engine-semantics.md §6.3). Only
+    // a known false re-arms, and the tracker keeps the hold on a true one.
     let awaiting = state.tracker.awaiting_rearm(rule.id);
     let auto_resolve_met = awaiting
         && rule.auto_resolve_enabled
-        && auto_resolve_holds(
+        && !auto_resolve_truth(
             rule.id,
             rule.parse_auto_resolve().as_ref(),
             ctx,
             now,
             &mut state.timers,
-        );
-    let config = TrackerRuleConfig {
-        confirmation_readings: rule.confirmation_readings,
-        hysteresis_minutes: rule.hysteresis_minutes,
-    };
-    let transition =
-        state
+        )
+        .is_false();
+    let met = rule.on_unknown.resolve(outcome.root);
+    let transition = match met {
+        Some(met) => state
             .tracker
-            .process_evaluation(rule.id, config, outcome.root, auto_resolve_met, now);
+            .process_evaluation(rule.id, config, met, auto_resolve_met, now),
+        None => state.tracker.close_elapsed_hysteresis(rule.id, config, now),
+    };
     let auto_resolved =
         !awaiting && rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
-    let next_change_at = next_change_at(rule, body, ctx, now, state);
+    let next_change_at = next_change_at(rule, body, ctx, now, state, met.is_none());
 
     RuleOutcome {
         rule_id: rule.id,
@@ -301,8 +343,8 @@ pub fn evaluate_parsed_rule(
 
 /// A rule body's truth for one tick.
 pub(crate) struct BodyOutcome {
-    pub(crate) root: bool,
-    pub(crate) leaves: Option<Vec<bool>>,
+    pub(crate) root: Truth,
+    pub(crate) leaves: Option<Vec<Truth>>,
 }
 
 /// The root truth of a body read by [`Rule::parse_body`] and, when
@@ -331,7 +373,8 @@ pub(crate) fn evaluate_body(
 }
 
 /// Only while an excursion is active or in hysteresis; one that the
-/// auto-resolve tree holds for force-closes the excursion.
+/// auto-resolve tree holds for force-closes the excursion. An unknown tree
+/// does not resolve.
 fn try_auto_resolve(
     rule: &Rule,
     ctx: &SensorContext,
@@ -339,13 +382,14 @@ fn try_auto_resolve(
     state: &mut EngineState,
 ) -> bool {
     if state.tracker.active_excursion_id(rule.id).is_none()
-        || !auto_resolve_holds(
+        || !auto_resolve_truth(
             rule.id,
             rule.parse_auto_resolve().as_ref(),
             ctx,
             now,
             &mut state.timers,
         )
+        .is_true()
     {
         return false;
     }
@@ -355,17 +399,17 @@ fn try_auto_resolve(
     transition.kind == TransitionType::ExcursionClosed
 }
 
-/// Whether an auto-resolve tree read by [`Rule::parse_auto_resolve`]
-/// evaluates true at the `auto_resolve` root; no tree never holds.
-pub(crate) fn auto_resolve_holds(
+/// An auto-resolve tree read by [`Rule::parse_auto_resolve`] evaluated at
+/// the `auto_resolve` root; no tree is false.
+pub(crate) fn auto_resolve_truth(
     rule_id: Uuid,
     tree: Option<&Node>,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     timers: &mut TimerStore,
-) -> bool {
+) -> Truth {
     let Some(tree) = tree else {
-        return false;
+        return Truth::False;
     };
     let mut env = Env::new(now, rule_id, ctx, timers);
     eval_node(tree, AUTO_RESOLVE_ROOT, &mut env)

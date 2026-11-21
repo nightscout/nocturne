@@ -6,11 +6,12 @@ use chrono::{DateTime, TimeDelta, Utc};
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, evaluate_rule};
 use nocturne_alerts_core::excursion::TransitionType;
+use nocturne_alerts_core::truth::Truth;
 
 #[derive(Debug, PartialEq)]
 struct Outcome {
-    root: bool,
-    leaves: Option<Vec<bool>>,
+    root: Truth,
+    leaves: Option<Vec<Truth>>,
     transition: TransitionType,
     auto_resolved: bool,
 }

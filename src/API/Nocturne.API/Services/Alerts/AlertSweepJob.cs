@@ -340,7 +340,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// glucose facts are taken only when that reading is within
     /// <see cref="SmartSnoozeTrendGate.MaxLatestAge"/>: a stale value would let a
     /// <c>threshold</c> or <c>trend</c> condition hold a snooze on data that no longer describes
-    /// the patient, so it is left null and those conditions read false.
+    /// the patient, so it is left null and those conditions read unknown, which clears the snooze.
     /// </summary>
     private async Task<SensorContext?> BuildSnoozeContextAsync(
         Sweep sweep,
@@ -509,7 +509,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// The context is the one the per-reading path builds for <see cref="LastUsableReadingAsync"/>
     /// (<see cref="CanonicalAlertEvaluator.ContextFor"/>), so reading-driven leaves in the same
     /// tree judge exactly what its last pass judged. A context without the glucose facts would
-    /// read them false and close an excursion they hold open.
+    /// read them unknown, and a rule whose <c>on_unknown</c> is <c>not_met</c> would close an
+    /// excursion they hold open.
     /// <para>
     /// A rule that <see cref="RuleTrees.WaitsForNextChange"/> is skipped while the next change its
     /// last evaluation recorded is still ahead, or it recorded none, and that evaluation read the

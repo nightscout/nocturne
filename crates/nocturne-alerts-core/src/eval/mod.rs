@@ -19,6 +19,7 @@ use crate::enums::CompositeOp;
 use crate::model::{Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
+use crate::truth::Truth;
 
 /// Per-evaluation environment: the clock instant, the rule whose timers are
 /// keyed, the sensor context, and the mutable timer store.
@@ -46,12 +47,12 @@ impl<'a> Env<'a> {
 }
 
 /// Evaluates a condition node at `path`.
-pub fn eval_node(node: &Node, path: &str, env: &mut Env) -> bool {
+pub fn eval_node(node: &Node, path: &str, env: &mut Env) -> Truth {
     eval_payload(node.payload(), path, env)
 }
 
 /// Evaluates a payload as the node at `path`.
-pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
+pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> Truth {
     match payload {
         Payload::Threshold(p) => glucose::threshold(p, env),
         Payload::RateOfChange(p) => glucose::rate_of_change(p, env),
@@ -87,28 +88,28 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
         | Payload::PumpState(_)
         | Payload::StateSpanActive(_)
         | Payload::TrackerAge(_) => {
-            elapsed::clock_leaf(payload, env.ctx).is_some_and(|leaf| leaf.holds(env.now))
+            elapsed::clock_leaf(payload, env.ctx).map_or(Truth::False, |leaf| leaf.holds(env.now))
         }
     }
 }
 
 /// `and` / `or` evaluate every child in document order, whatever an earlier
 /// one returned, so each sustained timer tracks its own condition wherever it
-/// sits.
-fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> bool {
-    let results: Vec<bool> = p
+/// sits. They combine in Kleene's logic.
+fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> Truth {
+    let results: Vec<Truth> = p
         .conditions
         .iter()
         .enumerate()
         .map(|(i, child)| eval_node(child, &node_child_path(path, i, child), env))
         .collect();
     match p.operator {
-        CompositeOp::And => results.iter().all(|&r| r),
-        CompositeOp::Or => results.iter().any(|&r| r),
+        CompositeOp::And => Truth::all(results),
+        CompositeOp::Or => Truth::any(results),
     }
 }
 
-/// The child inverted.
-fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> bool {
+/// The child inverted; unknown stays unknown.
+fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> Truth {
     !eval_node(&p.child, &node_child_path(path, 0, &p.child), env)
 }

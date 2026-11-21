@@ -17,11 +17,12 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::engine::Rule;
+use nocturne_alerts_core::engine::{OnUnknown, Rule};
 use nocturne_alerts_core::model::ConditionKind;
 use nocturne_alerts_core::replay::{
     ReplayError, ReplayEventKind, ReplayOptions, ReplayRuleState, ReplayTick, replay,
 };
+use nocturne_alerts_core::truth::Truth;
 
 fn t(minutes: i64) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 5, 12, 0, 0).unwrap() + TimeDelta::minutes(minutes)
@@ -40,6 +41,7 @@ fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
         hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,
+        on_unknown: OnUnknown::Hold,
     }
 }
 
@@ -173,7 +175,7 @@ fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it_once_until_rea
     assert_eq!(
         ticks[0].rules[0].state,
         Some(ReplayRuleState {
-            met: true,
+            met: Truth::True,
             firing: false
         })
     );

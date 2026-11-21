@@ -73,9 +73,11 @@ public sealed record ReplayExpectedLeaf(
     [property: JsonPropertyName("leaf_id")] int LeafId,
     [property: JsonPropertyName("points")] List<ReplayExpectedPoint> Points);
 
+/// <summary><see cref="Value"/> is false when <see cref="Unknown"/>, which is carried only when true.</summary>
 public sealed record ReplayExpectedPoint(
     [property: JsonPropertyName("at_ms")] long AtMs,
-    [property: JsonPropertyName("value")] bool Value);
+    [property: JsonPropertyName("value")] bool Value,
+    [property: JsonPropertyName("unknown")] bool? Unknown = null);
 
 public sealed record ReplayExpectedTick(
     [property: JsonPropertyName("at")] DateTime At,
@@ -90,6 +92,9 @@ public sealed record ReplayExpectedRuleTick
     public bool? Skipped { get; init; }
 
     public bool? Met { get; init; }
+
+    /// <summary>The root is unknown; carried only when true.</summary>
+    public bool? Unknown { get; init; }
 
     public bool? Firing { get; init; }
 }

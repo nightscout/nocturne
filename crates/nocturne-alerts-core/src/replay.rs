@@ -10,10 +10,11 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use crate::context::{ActiveAlertSnapshot, SensorContext};
-use crate::engine::{Rule, auto_resolve_holds, evaluate_body, format_instant};
+use crate::engine::{Rule, auto_resolve_truth, evaluate_body, format_instant};
 use crate::leaf_identity::collect_leaves;
 use crate::model::{Node, Payload};
 use crate::sustained::TimerStore;
+use crate::truth::Truth;
 
 /// One replay tick: the instant and the context enriched as of it.
 #[derive(Debug, Clone, Deserialize)]
@@ -59,7 +60,7 @@ pub struct ReplayEvent {
 /// A rule's state after one tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReplayRuleState {
-    pub met: bool,
+    pub met: Truth,
     pub firing: bool,
 }
 
@@ -80,7 +81,7 @@ pub struct ReplayTickOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LeafPoint {
     pub at: DateTime<Utc>,
-    pub value: bool,
+    pub value: Truth,
 }
 
 /// A rule's leaf log: per leaf id, the first observation then every flip.
@@ -149,7 +150,7 @@ pub fn replay(
     let mut timers = TimerStore::new();
     let mut active = HashMap::new();
     let mut firing = vec![Firing::default(); ordered.len()];
-    let mut leaf_logs: Vec<Vec<(bool, Vec<LeafPoint>)>> = vec![Vec::new(); ordered.len()];
+    let mut leaf_logs: Vec<Vec<(Truth, Vec<LeafPoint>)>> = vec![Vec::new(); ordered.len()];
     let mut events = Vec::new();
     let mut tick_outcomes = options.include_ticks.then(Vec::new);
 
@@ -175,18 +176,24 @@ pub fn replay(
             record_leaves(leaf_log, body.leaves.unwrap_or_default(), at);
 
             let met = body.root;
+            let resolved = rule.on_unknown.resolve(met);
             let rearm_read_resolve = firing.awaiting_rearm;
             if rearm_read_resolve {
-                let resolve_met = auto_resolve_holds(
+                let resolve_met = auto_resolve_truth(
                     rule.id,
                     prepared.auto_resolve.as_ref(),
                     &ctx,
                     at,
                     &mut timers,
                 );
-                firing.awaiting_rearm = met && resolve_met;
+                if let Some(met) = resolved {
+                    firing.awaiting_rearm = met && !resolve_met.is_false();
+                }
             }
-            let mut now_firing = met && !firing.awaiting_rearm;
+            let mut now_firing = match resolved {
+                Some(resolved) => resolved && !firing.awaiting_rearm,
+                None => firing.firing,
+            };
             if now_firing && !firing.firing {
                 let kind = if tick.suppressed_rule_ids.contains(&rule.id) {
                     ReplayEventKind::SuppressedByDnd
@@ -202,20 +209,21 @@ pub fn replay(
                         acknowledged_at: None,
                     },
                 );
-            } else if !met && firing.firing {
+            } else if resolved == Some(false) && firing.firing {
                 close(&mut ctx, &mut timers, rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::Cleared));
             }
 
             if now_firing
                 && !rearm_read_resolve
-                && auto_resolve_holds(
+                && auto_resolve_truth(
                     rule.id,
                     prepared.auto_resolve.as_ref(),
                     &ctx,
                     at,
                     &mut timers,
                 )
+                .is_true()
             {
                 ctx.active_alerts.remove(&rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::AutoResolved));
@@ -288,8 +296,9 @@ fn close(ctx: &mut SensorContext, timers: &mut TimerStore, rule_id: Uuid) {
     timers.clear_all_for_rule(rule_id);
 }
 
-/// Each entry holds the leaf's last value and its points.
-fn record_leaves(log: &mut Vec<(bool, Vec<LeafPoint>)>, values: Vec<bool>, at: DateTime<Utc>) {
+/// Each entry holds the leaf's last value and its points; a leaf turning
+/// unknown, or known again, is a flip.
+fn record_leaves(log: &mut Vec<(Truth, Vec<LeafPoint>)>, values: Vec<Truth>, at: DateTime<Utc>) {
     for (leaf_id, value) in values.into_iter().enumerate() {
         match log.get_mut(leaf_id) {
             Some((last, points)) => {
@@ -419,7 +428,12 @@ fn leaf_log_json(log: &RuleLeafLog) -> Value {
             "leaf_id": leaf_id,
             "points": points
                 .iter()
-                .map(|p| json!({ "at_ms": p.at.timestamp_millis(), "value": p.value }))
+                .map(|p| {
+                    let mut point = Map::new();
+                    point.insert("at_ms".into(), p.at.timestamp_millis().into());
+                    p.value.write(&mut point, "value");
+                    Value::Object(point)
+                })
                 .collect::<Vec<_>>(),
         })
     });
@@ -429,7 +443,13 @@ fn leaf_log_json(log: &RuleLeafLog) -> Value {
 fn tick_json(tick: &ReplayTickOutcome) -> Value {
     let rules = tick.rules.iter().map(|r| match r.state {
         None => json!({ "rule_id": r.rule_id.to_string(), "skipped": true }),
-        Some(s) => json!({ "rule_id": r.rule_id.to_string(), "met": s.met, "firing": s.firing }),
+        Some(s) => {
+            let mut o = Map::new();
+            o.insert("rule_id".into(), r.rule_id.to_string().into());
+            s.met.write(&mut o, "met");
+            o.insert("firing".into(), s.firing.into());
+            Value::Object(o)
+        }
     });
     json!({ "at": format_instant(tick.at), "rules": rules.collect::<Vec<_>>() })
 }

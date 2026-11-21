@@ -8,6 +8,7 @@ use super::elapsed::{ClockLeaf, Elapsed, Measure};
 use crate::context::SensorContext;
 use crate::enums::DayOfWeek;
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
+use crate::truth::Truth;
 
 /// The tenant's zone id: an IANA zone id, matched exactly and then ignoring
 /// ASCII case, since stored tenant ids are often mis-cased (`ETC/GMT-2`).
@@ -48,18 +49,18 @@ pub(crate) fn local(now: DateTime<Utc>, tz: Option<Tz>) -> NaiveDateTime {
 }
 
 /// Half-open `[from, to)` window; `from > to` wraps midnight.
-pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
+pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> Truth {
     let (from, to) = (p.from, p.to);
     let current = local(env.now, time_of_day_zone(p, env.ctx)).time();
     if from <= to {
-        current >= from && current < to
+        (current >= from && current < to).into()
     } else {
-        current >= from || current < to
+        (current >= from || current < to).into()
     }
 }
 
 /// Today, in the tenant's zone, is one of `days`.
-pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
+pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> Truth {
     let today = match local(env.now, tenant_zone(env.ctx)).weekday() {
         Weekday::Sun => DayOfWeek::Sunday,
         Weekday::Mon => DayOfWeek::Monday,
@@ -69,7 +70,7 @@ pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
         Weekday::Fri => DayOfWeek::Friday,
         Weekday::Sat => DayOfWeek::Saturday,
     };
-    p.days.contains(&today)
+    p.days.contains(&today).into()
 }
 
 /// Elapsed minutes since `anchor` as a double; a missing anchor is +infinity,
@@ -77,7 +78,7 @@ pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
 pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>) -> ClockLeaf {
     let minutes = f64::from(p.minutes.get());
     anchor.map_or(
-        ClockLeaf::Fixed(p.operator.apply(f64::INFINITY, minutes)),
+        ClockLeaf::Fixed(p.operator.apply(f64::INFINITY, minutes).into()),
         |anchor| {
             ClockLeaf::Measured(Elapsed {
                 anchor,

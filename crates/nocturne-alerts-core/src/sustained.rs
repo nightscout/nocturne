@@ -10,6 +10,7 @@ use crate::eval::elapsed::Elapsed;
 use crate::eval::{Env, eval_node};
 use crate::model::SustainedPayload;
 use crate::paths::node_child_path;
+use crate::truth::Truth;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -113,21 +114,22 @@ impl TimerStore {
 
 /// The child evaluates first: false clears the timer keyed by this node's
 /// path; the first true sets it and is false; later trues hold once `minutes`
-/// fractional minutes have passed since it was set.
-pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> bool {
+/// fractional minutes have passed since it was set. Unknown is unknown and
+/// leaves the timer as it is: not knowing neither breaks a run nor starts one.
+pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> Truth {
     let now = env.now;
-    let child_result = eval_node(&p.child, &node_child_path(path, 0, &p.child), env);
-
-    if !child_result {
-        env.timers.clear(env.rule_id, path);
-        return false;
-    }
-
-    match env.timers.get_first_true(env.rule_id, path) {
-        None => {
-            env.timers.set_first_true(env.rule_id, path, now);
-            false
+    match eval_node(&p.child, &node_child_path(path, 0, &p.child), env) {
+        Truth::Unknown => Truth::Unknown,
+        Truth::False => {
+            env.timers.clear(env.rule_id, path);
+            Truth::False
         }
-        Some(first) => Elapsed::held_for(first, p.minutes.get()).holds(now),
+        Truth::True => match env.timers.get_first_true(env.rule_id, path) {
+            None => {
+                env.timers.set_first_true(env.rule_id, path, now);
+                Truth::False
+            }
+            Some(first) => Elapsed::held_for(first, p.minutes.get()).holds(now).into(),
+        },
     }
 }

@@ -289,6 +289,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         SortOrder = entity.SortOrder,
         AutoResolveEnabled = entity.AutoResolveEnabled,
         AutoResolveParams = entity.AutoResolveParams,
+        OnUnknown = entity.OnUnknown,
         CreatedAt = entity.CreatedAt,
         UpdatedAt = entity.UpdatedAt,
     };

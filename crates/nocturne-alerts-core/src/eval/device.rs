@@ -13,19 +13,20 @@ use crate::model::{
     ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
     TransmitterBatteryPayload,
 };
+use crate::truth::Truth;
 
-/// Site age in hours; no site change is false.
+/// Site age in hours; no site change is unknown.
 pub(super) fn site_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_site_change_at
-        .map_or(ClockLeaf::Fixed(false), |at| {
+        .map_or(ClockLeaf::Fixed(Truth::Unknown), |at| {
             decimal(at, Unit::Hours, p.operator, p.value)
         })
 }
 
-/// Sensor age in days; no sensor start is false.
+/// Sensor age in days; no sensor start is unknown.
 pub(super) fn sensor_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_sensor_start_at
-        .map_or(ClockLeaf::Fixed(false), |at| {
+        .map_or(ClockLeaf::Fixed(Truth::Unknown), |at| {
             decimal(at, Unit::Days, p.operator, p.value)
         })
 }
@@ -41,7 +42,7 @@ pub(super) fn tracker_age(p: &TrackerAgePayload, ctx: &SensorContext) -> ClockLe
         Some(t) if !held_when_recorded(p, t) => {
             decimal(t.reference_at, Unit::Minutes, p.operator, p.minutes)
         }
-        _ => ClockLeaf::Fixed(false),
+        _ => ClockLeaf::Fixed(Truth::False),
     }
 }
 
@@ -70,8 +71,8 @@ fn held_when_recorded(p: &TrackerAgePayload, t: &TrackerReference) -> bool {
 }
 
 /// loop_stale against the last cycle, loop_enaction_stale against the last
-/// enactment; both guarded by `has_ever_aps_cycled`. A null anchor is false
-/// (no infinity convention, unlike staleness).
+/// enactment; both guarded by `has_ever_aps_cycled`. The guard false or a null
+/// anchor is unknown (no infinity convention, unlike staleness).
 pub(super) fn loop_stale(
     p: &MinutesComparePayload,
     anchor: Option<DateTime<Utc>>,
@@ -81,14 +82,14 @@ pub(super) fn loop_stale(
         Some(at) if ctx.has_ever_aps_cycled => {
             decimal(at, Unit::Minutes, p.operator, p.minutes.get())
         }
-        _ => ClockLeaf::Fixed(false),
+        _ => ClockLeaf::Fixed(Truth::Unknown),
     }
 }
 
-/// Guarded by `has_ever_pump_snapshot`.
+/// Guarded by `has_ever_pump_snapshot`: unknown until a pump has reported.
 pub(super) fn pump_suspended(p: &ActiveForPayload, ctx: &SensorContext) -> ClockLeaf {
     if !ctx.has_ever_pump_snapshot {
-        return ClockLeaf::Fixed(false);
+        return ClockLeaf::Fixed(Truth::Unknown);
     }
     active_for(
         p.is_active,
@@ -97,18 +98,36 @@ pub(super) fn pump_suspended(p: &ActiveForPayload, ctx: &SensorContext) -> Clock
     )
 }
 
-pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx.has_ever_pump_snapshot && holds(p.operator, env.ctx.pump_battery_percent, p.value)
+/// The `has_ever_*` guard false is unknown, as is an absent reading.
+fn guarded<T: PartialOrd>(guard: bool, op: CmpOp, actual: Option<T>, threshold: T) -> Truth {
+    if guard {
+        holds(op, actual, threshold)
+    } else {
+        Truth::Unknown
+    }
 }
 
-pub(super) fn uploader_battery(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx.has_ever_uploader_snapshot
-        && holds(p.operator, env.ctx.uploader_battery_percent, p.value)
+pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> Truth {
+    guarded(
+        env.ctx.has_ever_pump_snapshot,
+        p.operator,
+        env.ctx.pump_battery_percent,
+        p.value,
+    )
 }
 
-/// No `has_ever_*` guard: a reading no uploader has reported is absent, which
-/// no operator holds for.
-pub(super) fn transmitter_battery(p: &TransmitterBatteryPayload, env: &Env) -> bool {
+pub(super) fn uploader_battery(p: &ComparePayload, env: &Env) -> Truth {
+    guarded(
+        env.ctx.has_ever_uploader_snapshot,
+        p.operator,
+        env.ctx.uploader_battery_percent,
+        p.value,
+    )
+}
+
+/// No `has_ever_*` guard: a reading no uploader has reported is absent, and
+/// unknown.
+pub(super) fn transmitter_battery(p: &TransmitterBatteryPayload, env: &Env) -> Truth {
     let actual = match p.metric {
         TransmitterBatteryMetric::VoltageA => env.ctx.transmitter_voltage_a,
         TransmitterBatteryMetric::VoltageB => env.ctx.transmitter_voltage_b,
@@ -118,6 +137,11 @@ pub(super) fn transmitter_battery(p: &TransmitterBatteryPayload, env: &Env) -> b
     holds(p.operator, actual, p.value)
 }
 
-pub(super) fn sensitivity_ratio(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx.has_ever_aps_sensitivity && holds(p.operator, env.ctx.sensitivity_ratio, p.value)
+pub(super) fn sensitivity_ratio(p: &ComparePayload, env: &Env) -> Truth {
+    guarded(
+        env.ctx.has_ever_aps_sensitivity,
+        p.operator,
+        env.ctx.sensitivity_ratio,
+        p.value,
+    )
 }

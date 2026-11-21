@@ -10,59 +10,64 @@ use crate::model::{
     GlucoseBucketPayload, PredictedPayload, RateOfChangePayload, StalenessPayload,
     ThresholdPayload, TrendPayload,
 };
+use crate::truth::Truth;
 
 /// Strict comparison: below `v < value`, above `v > value`; no reading is
-/// false.
-pub(super) fn threshold(p: &ThresholdPayload, env: &Env) -> bool {
-    env.ctx
-        .latest_value
-        .is_some_and(|latest| match p.direction {
-            ThresholdDirection::Below => latest < p.value,
-            ThresholdDirection::Above => latest > p.value,
-        })
+/// unknown.
+pub(super) fn threshold(p: &ThresholdPayload, env: &Env) -> Truth {
+    Truth::of(env.ctx.latest_value.map(|latest| match p.direction {
+        ThresholdDirection::Below => latest < p.value,
+        ThresholdDirection::Above => latest > p.value,
+    }))
 }
 
 /// Inclusive comparison: falling `rate' <= -rate`, rising `rate' >= rate`.
-pub(super) fn rate_of_change(p: &RateOfChangePayload, env: &Env) -> bool {
-    env.ctx.trend_rate.is_some_and(|rate| match p.direction {
+pub(super) fn rate_of_change(p: &RateOfChangePayload, env: &Env) -> Truth {
+    Truth::of(env.ctx.trend_rate.map(|rate| match p.direction {
         RateDirection::Falling => rate <= -p.rate,
         RateDirection::Rising => rate >= p.rate,
-    })
+    }))
 }
 
-pub(super) fn trend(p: &TrendPayload, env: &Env) -> bool {
-    env.ctx
-        .trend_bucket
-        .is_some_and(|bucket| p.bucket == bucket)
+pub(super) fn trend(p: &TrendPayload, env: &Env) -> Truth {
+    Truth::of(env.ctx.trend_bucket.map(|bucket| p.bucket == bucket))
 }
 
 /// True if any prediction with `offset_minutes <= within_minutes` satisfies the
-/// comparison; points beyond the horizon are skipped.
-pub(super) fn predicted(p: &PredictedPayload, env: &Env) -> bool {
-    env.ctx
-        .predictions
-        .iter()
-        .filter(|point| point.offset_minutes <= p.within_minutes.get())
-        .any(|point| holds(p.operator, Some(point.mgdl), p.value))
+/// comparison; points beyond the horizon are skipped. No predictions is
+/// unknown.
+pub(super) fn predicted(p: &PredictedPayload, env: &Env) -> Truth {
+    if env.ctx.predictions.is_empty() {
+        return Truth::Unknown;
+    }
+    Truth::any(
+        env.ctx
+            .predictions
+            .iter()
+            .filter(|point| point.offset_minutes <= p.within_minutes.get())
+            .map(|point| holds(p.operator, Some(point.mgdl), p.value)),
+    )
 }
 
 /// Set membership over the precomputed context bucket.
-pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &Env) -> bool {
-    env.ctx
-        .glucose_bucket
-        .is_some_and(|bucket| p.buckets.contains(&bucket))
+pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &Env) -> Truth {
+    Truth::of(
+        env.ctx
+            .glucose_bucket
+            .map(|bucket| p.buckets.contains(&bucket)),
+    )
 }
 
-/// Minutes since the last reading vs a threshold. Cold start (both
-/// `last_reading_at` and `latest_timestamp` null) is false, taking precedence
-/// over the infinity convention; `last_reading_at` alone null means elapsed is
-/// +infinity (`>`/`>=` true, others false).
+/// Minutes since the last reading vs a threshold. No reading history (both
+/// `last_reading_at` and `latest_timestamp` null) is unknown, taking
+/// precedence over the infinity convention; `last_reading_at` alone null
+/// means elapsed is +infinity (`>`/`>=` true, others false).
 pub(super) fn staleness(p: &StalenessPayload, ctx: &SensorContext) -> ClockLeaf {
     if ctx.last_reading_at.is_none() && ctx.latest_timestamp.is_none() {
-        return ClockLeaf::Fixed(false);
+        return ClockLeaf::Fixed(Truth::Unknown);
     }
     let Some(last_reading_at) = ctx.last_reading_at else {
-        return ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge));
+        return ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge).into());
     };
     decimal(last_reading_at, Unit::Minutes, p.operator, p.value.get())
 }

@@ -155,10 +155,12 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
@@ -170,10 +172,12 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "closed",

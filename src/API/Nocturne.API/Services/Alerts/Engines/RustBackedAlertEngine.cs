@@ -94,10 +94,11 @@ internal sealed class RustBackedAlertEngine(
         return new AlertEngineEvaluation
         {
             ConditionMet = result.Root!.Value,
+            ConditionUnknown = result.Unknown,
             Transition = transition,
             AutoResolveTransition = autoResolveTransition,
             LeafValues = options.IncludeLeafValues
-                ? result.Leaves!.ToDictionary(l => l.LeafId, l => l.Value)
+                ? result.Leaves!.ToDictionary(l => l.LeafId, l => l.Unknown ? null : (bool?)l.Value)
                 : null,
             NextChangeAt = result.NextChangeAt,
         };

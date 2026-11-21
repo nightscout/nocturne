@@ -167,15 +167,37 @@ byte-for-byte:
 
 ### 2.4 Evaluation order
 
+Every node evaluates to **true**, **false** or **unknown**. A node is unknown when a fact it
+compares is one the host has not got (§3), as opposed to a state whose absence is itself the
+answer. The connectives are Kleene's strong three-valued logic:
+
+| `a` | `b` | `a and b` | `a or b` | `not a` |
+|---|---|---|---|---|
+| true | true | true | true | false |
+| true | false | false | true | false |
+| true | unknown | unknown | true | false |
+| false | false | false | false | true |
+| false | unknown | false | unknown | true |
+| unknown | unknown | unknown | unknown | unknown |
+
+So `and` is false when any child is false, else unknown when any is unknown, else true; `or`
+is true when any child is true, else unknown when any is unknown, else false; `not` keeps
+unknown. `not(threshold above 180)` with no reading is unknown, not true.
+
 `composite` evaluates **every child, in document order, with no short-circuit**, then
-combines the results: `and` is true when every child is, `or` when any is. A child is
-evaluated whatever an earlier sibling returned, so every `sustained` descendant sets or
-clears its timer on each evaluation of its parent: where a row sits among its siblings
-never changes when a rule becomes true. **[normative]**
+combines the results. A child is evaluated whatever an earlier sibling returned, so every
+`sustained` descendant sets, keeps or clears its timer on each evaluation of its parent: where
+a row sits among its siblings never changes when a rule becomes true. **[normative]**
+
+On the wire (`evaluate`, `evaluate_node`, the replay output) a root, a leaf and a replay
+`met` stay booleans, `false` when unknown, with `"unknown": true` beside them only then. A
+reader that ignores the flag reads unknown as false; in a leaf log it can then see a point
+whose `value` repeats the one before (unknown, then false), which changes nothing.
 
 The replay path additionally force-evaluates **every leaf in isolation** to build the per-leaf
 transition log; leaves are evaluated with the **rule-root context path**, not their tree path (irrelevant for stateless leaves;
-containers are never force-evaluated). A leaf evaluation that throws is recorded `false`.
+containers are never force-evaluated). A leaf evaluation that throws is recorded `false`. A
+leaf that turns unknown, or known again, is a transition in the log.
 
 ---
 
@@ -183,48 +205,66 @@ containers are never force-evaluated). A leaf evaluation that throws is recorded
 
 Shared comparison helper (`ComparisonOps.Compare(actual, op, threshold)`): operators are
 `<` `<=` `>` `>=` `==` (§1.4). All comparisons below are non-strict/strict exactly as
-written. Every operand below is present and valid (§1.4).
+written. Every operand below is present and valid (§1.4). The last column says when a leaf
+is unknown (§2.4); a leaf is known in every other case, including the absent states it lists
+as false or true.
 
-| Kind | Payload | Inputs | Semantics | Null / cold-start behaviour |
+| Kind | Payload | Inputs | Semantics | Unknown, and absence that is an answer |
 |---|---|---|---|---|
-| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false |
-| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
-| `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null ⇒ **false** (cold start); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
-| `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false |
-| `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
-| `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ false |
-| `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ false |
-| `reservoir` | `operator`, `value` (units) | `ReservoirUnits` | `Compare` | null ⇒ false |
-| `site_age` | `operator`, `value` (**hours**) | `LastSiteChangeAt`, now | `Compare((decimal)(now-anchor).TotalHours, op, value)` | null ⇒ false |
-| `sensor_age` | `operator`, `value` (**days**) | `LastSensorStartAt`, now | `Compare((decimal)(now-anchor).TotalDays, op, value)` | null ⇒ false |
-| `alert_state` | `alert_id` (Guid), `state`, `for_minutes?` | `ActiveAlerts[alert_id]`, now | `firing`: snapshot.State == "firing" (ci). `unacknowledged`: State == "firing" **and** AcknowledgedAt null. `acknowledged`: AcknowledgedAt non-null (State irrelevant). Then if `for_minutes` set: elapsed since anchor `>= for_minutes` (double); anchor = AcknowledgedAt for `acknowledged`, TriggeredAt otherwise | no snapshot for id ⇒ false |
-| `loop_stale` | `operator`, `minutes` | `LastApsCycleAt`, `HasEverApsCycled`, now | `Compare((decimal)(now-cycle).TotalMinutes, op, minutes)` | `HasEverApsCycled` false ⇒ false; `LastApsCycleAt` null ⇒ false (no infinity convention here) |
+| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ **unknown** |
+| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ **unknown** |
+| `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null (no reading history) ⇒ **unknown**; only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
+| `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ **unknown**; with points present but none within the horizon or satisfying ⇒ false |
+| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ **unknown** |
+| `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC; never unknown |
+| `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ **unknown** |
+| `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ **unknown** |
+| `reservoir` | `operator`, `value` (units) | `ReservoirUnits`, `ReservoirIsLowerBound` | `Compare`; a lower-bound reading `b` ("50+") means the reservoir holds at least `b`, so it decides a comparison only where every amount from `b` up gives the same answer (table below) | null ⇒ **unknown**; a lower-bound reading that does not decide the comparison ⇒ **unknown** |
+| `site_age` | `operator`, `value` (**hours**) | `LastSiteChangeAt`, now | `Compare((decimal)(now-anchor).TotalHours, op, value)` | null ⇒ **unknown** |
+| `sensor_age` | `operator`, `value` (**days**) | `LastSensorStartAt`, now | `Compare((decimal)(now-anchor).TotalDays, op, value)` | null ⇒ **unknown** |
+| `alert_state` | `alert_id` (Guid), `state`, `for_minutes?` | `ActiveAlerts[alert_id]`, now | `firing`: snapshot.State == "firing" (ci). `unacknowledged`: State == "firing" **and** AcknowledgedAt null. `acknowledged`: AcknowledgedAt non-null (State irrelevant). Then if `for_minutes` set: elapsed since anchor `>= for_minutes` (double); anchor = AcknowledgedAt for `acknowledged`, TriggeredAt otherwise | no snapshot for id ⇒ false (the other alert is not firing) |
+| `loop_stale` | `operator`, `minutes` | `LastApsCycleAt`, `HasEverApsCycled`, now | `Compare((decimal)(now-cycle).TotalMinutes, op, minutes)` | `HasEverApsCycled` false ⇒ **unknown**; `LastApsCycleAt` null ⇒ **unknown** (no infinity convention here) |
 | `loop_enaction_stale` | `operator`, `minutes` | `LastApsEnactedAt`, `HasEverApsCycled` | same as `loop_stale` against the enacted timestamp | same guards (note: guard is `HasEverApsCycled`, not a separate enaction flag) |
-| `pump_suspended` | `is_active`, `for_minutes?` | `ActivePumpSuspension`, `HasEverPumpSnapshot`, now | `(suspension != null) == is_active`; then if `for_minutes` set **and** `is_active` true: `(now - StartedAt).TotalMinutes >= for_minutes` (double); `for_minutes` with `is_active:false` is a no-op (true) | `HasEverPumpSnapshot` false ⇒ false |
-| `pump_battery` | `operator`, `value` (%) | `PumpBatteryPercent`, `HasEverPumpSnapshot` | `Compare` | guard false ⇒ false; percent null ⇒ false |
-| `temp_basal` | `metric` (`rate`\|`percent_of_scheduled`), `operator`, `value` | `ActiveTempBasal` | `rate`: compare `Rate` (U/hr). `percent_of_scheduled`: compare `Rate / ScheduledRate * 100` (decimal division) | no active temp ⇒ false (**no** HasEver guard, by design); `ScheduledRate` null or 0 ⇒ false |
-| `uploader_battery` | `operator`, `value` (%) | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `Compare` | guard false ⇒ false; percent null ⇒ false |
-| `transmitter_battery` | `metric` (`voltage_a`\|`voltage_b`\|`resistance`\|`days`), `operator`, `value` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `Compare` against the metric's reading, unscaled as the transmitter reports it | reading null ⇒ false (**no** HasEver guard) |
-| `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate) |
-| `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ false; ratio null ⇒ false |
-| `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off |
-| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null ⇒ false |
-| `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start — intentional, opposite of loop_stale) | `==` against +∞ ⇒ false |
+| `pump_suspended` | `is_active`, `for_minutes?` | `ActivePumpSuspension`, `HasEverPumpSnapshot`, now | `(suspension != null) == is_active`; then if `for_minutes` set **and** `is_active` true: `(now - StartedAt).TotalMinutes >= for_minutes` (double); `for_minutes` with `is_active:false` is a no-op (true) | `HasEverPumpSnapshot` false ⇒ **unknown**; with it true, as the semantics say |
+| `pump_battery` | `operator`, `value` (%) | `PumpBatteryPercent`, `HasEverPumpSnapshot` | `Compare` | guard false ⇒ **unknown**; percent null ⇒ **unknown** |
+| `temp_basal` | `metric` (`rate`\|`percent_of_scheduled`), `operator`, `value` | `ActiveTempBasal` | `rate`: compare `Rate` (U/hr). `percent_of_scheduled`: compare `Rate / ScheduledRate * 100` (decimal division) | no active temp ⇒ false (**no** HasEver guard, by design: no temp is the state, for `rate` too); `percent_of_scheduled` with `ScheduledRate` null or 0, or a percentage that overflows ⇒ **unknown** |
+| `uploader_battery` | `operator`, `value` (%) | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `Compare` | guard false ⇒ **unknown**; percent null ⇒ **unknown** |
+| `transmitter_battery` | `metric` (`voltage_a`\|`voltage_b`\|`resistance`\|`days`), `operator`, `value` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `Compare` against the metric's reading, unscaled as the transmitter reports it | reading null ⇒ **unknown** (**no** HasEver guard) |
+| `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate): never unknown |
+| `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ **unknown**; ratio null ⇒ **unknown** |
+| `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off: never unknown |
+| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null ⇒ **unknown** |
+| `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
-| `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC |
-| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard |
-| `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category" — the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard |
-| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)` — reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false** — a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
+| `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
+| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard: never unknown |
+| `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown |
+| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
+
+`sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
+`is_active`) is never unknown: no session is the state.
+
+A **lower-bound** `reservoir` reading `b` (`ReservoirIsLowerBound`, "50+") is read exactly:
+the reservoir holds at least `b`.
+
+| Operator | true when | false when | unknown otherwise |
+|---|---|---|---|
+| `>` | `b > value` | never | `b <= value` |
+| `>=` | `b >= value` | never | `b < value` |
+| `<` | never | `b >= value` | `b < value` |
+| `<=` | never | `b > value` | `b <= value` |
+| `==` | never | `b > value` | `b <= value` |
 
 `composite` / `not` / `sustained` (containers):
 
 - **`composite`** — `{operator, conditions[]}`, `and` or `or` over at least one child.
-  Evaluates every child (§2.4).
-- **`not`** — `{child}`. Inverts the child.
+  Evaluates every child (§2.4) and combines them in Kleene's logic.
+- **`not`** — `{child}`. Inverts the child; unknown stays unknown.
 - **`sustained`** — `{minutes, child}`, `minutes > 0`. Each evaluation: evaluate child
   first (path-extended), then:
   - child false ⇒ **clear** the `(rule_id, path)` timer, return false;
+  - child unknown ⇒ return **unknown** and leave the timer as it is, set or not: a run is
+    not broken by not knowing, and not started by it;
   - child true, no timer ⇒ **set** timer to `now`, return **false** (a 0-elapsed check
     does not happen on the set tick);
   - child true, timer exists ⇒ return `(now - first).TotalMinutes >= minutes` (double).
@@ -261,7 +301,8 @@ in §3 plus:
   descend.
 - Cold-start flags `HasEverApsCycled`, `HasEverPumpSnapshot`, `HasEverUploaderSnapshot`,
   `HasEverApsSensitivity`: distinguish "never had this data" from "data is old/absent".
-  Guarded leaves are listed in §3. Facts whose absence is naturally meaningful
+  Guarded leaves are listed in §3; a guard that is false makes its leaf unknown. Facts whose
+  absence is naturally meaningful
   (`ActiveTempBasal`, `ActiveOverride`, `ActiveDoNotDisturb`, `ActivePumpState`,
   state spans) have **no** flag.
 - `ActiveAlerts`: `Dictionary<Guid, {State, TriggeredAt, AcknowledgedAt}>` — live state
@@ -290,7 +331,7 @@ in §3 plus:
 
 | Payload | Inputs | Semantics | Null / guard behaviour |
 |---|---|---|---|
-| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | both `LastReadingAt` and `LatestTimestamp` null ⇒ false (cold start); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
+| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | both `LastReadingAt` and `LatestTimestamp` null (no reading history) ⇒ **unknown**; only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
 
 It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare.
 
@@ -334,8 +375,8 @@ A periodic evaluation uses the context the per-reading path builds for the newes
 reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` are that
 reading's (null when there has never been one), and its glucose facts are that reading's
 however old. Reading-driven leaves therefore repeat the verdict of the last per-reading
-evaluation. A context without the glucose facts would read them false and move an excursion
-they hold open into hysteresis.
+evaluation. A context without the glucose facts would read them unknown, and a rule whose
+`on_unknown` is `not_met` (§6.4) would move an excursion they hold open into hysteresis.
 
 The excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
@@ -427,15 +468,17 @@ even when the root does not. Containers contribute only through their children, 
 |---|---|
 | `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
 | `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`. |
-| `sustained` with a timer (including one set by this evaluation) | The first instant `minutes` have passed since the timer was set; without one, only what its child contributes. |
+| `sustained` with a timer (including one set by this evaluation) | The first instant `minutes` have passed since the timer was set, whatever its child returned; without one, only what its child contributes. |
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
-| Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. |
-| Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. |
+| Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. This holds for an evaluation the rule held (§6.4) as well. |
+| Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. Nothing after an evaluation the rule held: the next one, with the same facts, holds too until another node's contribution changes the root. |
 | Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the reading, not to `now`. |
 
 A leaf without an anchor, or whose guard holds it constant (a `has_ever_*` flag false, a
-`tracker_age` threshold held back at recording), contributes nothing, as does a
+`tracker_age` threshold held back at recording), contributes nothing, so an unknown leaf
+contributes nothing (a fact arriving is not a clock event; an unknown leaf whose anchor is
+known would contribute as a known one, and there is none today), as does a
 comparison that has already flipped for good (an elapsed time grows only). Each flip is
 found by searching the comparison evaluation makes, so the decimal rounding of §1.3 moves
 it with the truth it changes: a fractional bound can hold before the exact instant it
@@ -461,16 +504,24 @@ backend reads it from the profile, and a profile write moves it and evaluates no
 entry at the tenant's local time, and a schedule boundary or a profile edit changes it with no
 reading. Every other wall-clock rule keeps the 30 s cadence.
 
+A held evaluation (§6.4) records its next change like any other: the value is read from the
+state the evaluation left, which is the state it found, and it is keyed by the context's glucose
+facts, so a reading arriving moves the key and the sweep evaluates. A held rule still
+`confirming` is never waited for, as above. A rule
+never evaluated before keeps no state after a held evaluation, so nothing is recorded and the
+sweep evaluates it on its cadence.
+
 ---
 
 ## 6. Excursion state machine (`ExcursionTracker`)
 
 Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt,
 HysteresisStartedAt, AwaitingRearm}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
-(default 1), `HysteresisMinutes`. One evaluation = one `ProcessEvaluationAsync(ruleId,
-conditionMet, autoResolveMet)` call, where `autoResolveMet` is read only while the rule
-awaits re-arm (§6.3). **Every call**, regardless of transition, decides `state.UpdatedAt =
-now`. The host persists a decision only when it changes another field: the only reader of
+(default 1), `HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
+read as known by `OnUnknown`, = one `ProcessEvaluationAsync(ruleId, conditionMet,
+autoResolveMet)` call, where `autoResolveMet` is read only while the rule awaits re-arm
+(§6.3). An evaluation the rule holds makes no such call (§6.4). **Every call**, regardless of
+transition, decides `state.UpdatedAt = now`. The host persists a decision only when it changes another field: the only reader of
 `UpdatedAt` is the hysteresis-start adoption below, and the decision that adopts it persists
 the start. A stored state string naming none of the four states is read as
 `active` when the row holds an `ActiveExcursionId`, so that excursion goes on to close,
@@ -536,7 +587,10 @@ and the auto-resolve tree true opens nothing. The first that finds either false 
 `AwaitingRearm` and carries on as an idle evaluation: a true condition then opens (or starts
 confirming) in that same evaluation, so a relapse — the condition still holding while what
 resolved it no longer does — alerts at once. An auto-resolve that is disabled, absent,
-malformed or cannot be evaluated reads as false and re-arms.
+malformed or cannot be evaluated reads as false and re-arms. Only a known false re-arms: an
+auto-resolve tree that is unknown keeps the hold as a true one does (the tracker's
+`autoResolveMet` is then true), and an evaluation the rule holds (§6.4) keeps it whatever the
+tree.
 
 Nothing flips while both trees hold, so evaluations against one stale reading (§5.1) stay
 quiet. An auto-resolve tree that flaps while the body holds re-arms on every false
@@ -556,6 +610,35 @@ loaded the rule before an edit cannot set a hold the edit cleared.
 
 State persisted before `AwaitingRearm` existed has none and reads as armed.
 
+### 6.4 Unknown root
+
+A rule's `OnUnknown` says what an unknown root (§2.4) means to the tracker. It is one of
+three words, stored as a string; any other word is an error in the `evaluate` envelope:
+
+| `OnUnknown` | An unknown root is |
+|---|---|
+| `hold` (default) | held: the tracker is not advanced |
+| `met` | read as true, then exactly as a known true root |
+| `not_met` | read as false, then exactly as a known false root |
+
+A **held** evaluation makes no `ProcessEvaluationAsync` call. State, `ConfirmationCount`, the
+open excursion, `HysteresisStartedAt`, `AwaitingRearm` and `UpdatedAt` stay as they were, and
+the transition is `none`. The one thing that still moves is time: an excursion in hysteresis
+whose window has elapsed closes, as `CloseElapsedHysteresisAsync` closes it (§6.1), with
+`ExcursionClosed(reason: hysteresis)` and `UpdatedAt = now`; that window was started by a
+known false and does not depend on this evaluation. A rule never evaluated before has no state
+after a held evaluation. `UpdatedAt` is left alone because its only reader, the
+hysteresis-start adoption of §6, reads it only in hysteresis without a start, which a held
+evaluation never makes; so a state restored from what a held evaluation left evaluates as the
+continuous one does.
+
+So an open excursion whose fact disappears stays open under `hold`, neither continuing nor
+entering hysteresis, and a rule whose fact has never arrived opens nothing; under `not_met`
+the first closes through hysteresis as it would on a false reading. Leaf timers follow the
+`sustained` rule of §3 whatever `OnUnknown` says. Auto-resolve (§7 step 5) still runs on a
+held evaluation: a known true auto-resolve tree closes the excursion, and an unknown one does
+not.
+
 ---
 
 ## 7. Per-evaluation driver sequence (orchestrator contract)
@@ -564,16 +647,20 @@ For each enabled rule on each reading (after `RuleReferenceResolver.FilterEvalua
 drops `alert_state` chains whose parents are disabled/deleted — host-side):
 
 1. Root context: `CurrentRuleId = rule.Id`, `CurrentPath = wire(rule.ConditionType)`.
-2. `conditionMet` = evaluate the rule tree.
+2. `conditionMet` = evaluate the rule tree, then read an unknown root through `OnUnknown`
+   (§6.4).
 3. `transition` = tracker.ProcessEvaluation(rule, conditionMet, autoResolveMet). Only when
    the stored state is idle awaiting re-arm, `autoResolveMet` is the auto-resolve tree
-   evaluated first, exactly as in step 5; otherwise it is not evaluated here.
+   evaluated first, exactly as in step 5, and is true unless the tree is known false;
+   otherwise it is not evaluated here. A held root makes no call: the transition is `none`,
+   or the hysteresis close of §6.4.
 4. Open/close side effects (instances, delivery, DND suppression, info auto-ack) —
    host-side, out of crate scope.
 5. **Unconditionally** (even on the same tick as an open), if `AutoResolveEnabled` and
    `AutoResolveParams` non-blank and an active excursion exists, and step 3 did not
    evaluate the tree: deserialise the auto-resolve tree; evaluate it with
-   `CurrentPath = "auto_resolve"`; if true, force-close with reason `auto`. A malformed
+   `CurrentPath = "auto_resolve"`; if true, force-close with reason `auto` (unknown does not
+   resolve). A malformed
    auto-resolve JSON is skipped silently. An evaluation therefore reads the tree at most
    once; one that re-armed and opened in step 3 found it false. Consequence: a rule whose
    resolve predicate is already true when its body opens produces an open + close pair on
@@ -609,6 +696,8 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 - Do Not Disturb: for each tick, the rules a fire opening on it is recorded for as
   suppressed (the gate live delivery applies on open, receipt-gated to the tick).
 - Fact timelines, and mapping the driver's output to the API's events and leaf log.
+- A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown`; without one it takes
+  the stored rule's when it names one, else `hold`, so it replays as the live engine evaluates.
 
 **Driver**, given the rules in any order and the ticks in time order:
 
@@ -631,22 +720,25 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
      payload, is **skipped**: no leaf log, no firing change. Its `alert_state` children
      never see it fire.
   2. Root truth `met` by the normal evaluators at the rule's root path (every child
-     evaluated, §2.4; shared timer store). The leaf log force-evaluates every leaf alone
-     at the same root path and records each leaf's first observation and every flip
-     (`LeafTransitionPoint(atMs, value)`, unix ms).
+     evaluated, §2.4; shared timer store), read through the rule's `OnUnknown` (§6.4). The
+     leaf log force-evaluates every leaf alone at the same root path and records each leaf's
+     first observation and every flip, unknown included (`LeafTransitionPoint(atMs,
+     value)`, unix ms, with `unknown` beside `value`).
   3. A rule awaiting re-arm (step 5) evaluates its enabled, evaluable auto-resolve tree at
-     `auto_resolve`; when `met` is false or the tree is, it re-arms on this tick (§6.3).
+     `auto_resolve`; when `met` is known false or the tree is, it re-arms on this tick
+     (§6.3). A held `met` keeps the hold.
   4. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
      the tick, unless the rule still awaits re-arm; the rule becomes firing either way.
      `!met && firing` ⇒ `cleared`: the rule stops firing and **all its timers are
-     cleared**, the auto-resolve tree's included.
+     cleared**, the auto-resolve tree's included. An unknown `met` that the rule holds
+     leaves the rule firing or not as it was and clears no timers.
   5. While firing — including on the tick it fired — and unless step 3 evaluated it, an
      enabled auto-resolve tree that parses and is evaluable is evaluated at `auto_resolve`
-     (§7 step 5); true ⇒ `auto_resolved`: the rule stops firing and awaits re-arm, and its
+     (§7 step 5); true ⇒ `auto_resolved` (unknown does not resolve): the rule stops firing and awaits re-arm, and its
      timers are kept, as the tracker keeps them.
 - **Output**: the evaluation order; events by tick then evaluation order; the leaf log per
-  rule in evaluation order; and, on request, each rule's `met`/`firing` (or `skipped`)
-  after every tick. The backend's API drops `cleared`, which has no event kind there.
+  rule in evaluation order; and, on request, each rule's `met` (with `unknown` beside it
+  when unknown)/`firing` (or `skipped`) after every tick. The backend's API drops `cleared`, which has no event kind there.
 
 ---
 
@@ -662,8 +754,9 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
   goes through the crate
   - The snooze context's glucose facts (`LatestValue`, `LatestTimestamp`, `TrendRate`) come
     from the newest canonical reading only when it is at most 11 minutes old; otherwise they
-    are null, so `threshold`, `trend` and `glucose_bucket` leaves read false and the snooze
-    clears.
+    are null, so `threshold`, `trend` and `glucose_bucket` leaves read unknown and the snooze
+    clears. `evaluate_node` flags an unknown value; the host's snooze treats it as false, so
+    an unknown snooze condition clears the snooze.
   - The trend fallback (smart snooze on, no conditions) applies to `threshold` rules only
     and compares the newest reading (at most 11 minutes old) with the readings closest to
     5 and 10 minutes before it (each within ±2.5 minutes; both must exist), all of them
@@ -686,6 +779,7 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 | 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |
 | 5 | *(retired: hysteresis expires against a persisted `HysteresisStartedAt`, in the tracker and the sweep)* | §6.1 | resolved |
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
-| 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |
-| 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start) — deliberately opposite to `loop_stale`'s guard | §3 | normative |
+| 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag: a loop that has cycled but never enacted is unknown only by its null enacted timestamp | §3 | normative |
+| 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start, never unknown), deliberately opposite to `loop_stale`, which is unknown without its anchor | §3 | normative |
 | 9 | *(retired: a `type` that is not exactly a wire string, such as a member name or ordinal, names no kind and cannot be evaluated)* | §1.2 | resolved |
+| 10 | *(retired: a missing input made its leaf false, so `not` over it was true and an open excursion closed when its fact went away; a missing input is now unknown, §2.4, and an unknown root holds, §6.4)* | §3 | resolved |

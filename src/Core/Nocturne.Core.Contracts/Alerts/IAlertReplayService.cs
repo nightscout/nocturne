@@ -115,6 +115,8 @@ public sealed class ReplayWindowTooLargeException : Exception
 /// In-memory rule definition layered into a dry-run replay. Mirrors the editor's pre-save
 /// shape. <see cref="Id"/> is optional: when present and matching an existing rule it
 /// replaces it for the replay; otherwise the override is appended to the rule list.
+/// <see cref="OnUnknown"/> null is the stored rule's word when <see cref="Id"/> names one, else
+/// <c>hold</c>.
 /// </summary>
 public record ReplayRuleOverride(
     Guid? Id,
@@ -124,7 +126,8 @@ public record ReplayRuleOverride(
     Nocturne.Core.Models.Alerts.AlertRuleSeverity Severity,
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
-    string? AutoResolveParams);
+    string? AutoResolveParams,
+    string? OnUnknown = null);
 
 /// <summary>
 /// Discriminator for the per-rule timeline events surfaced by replay. Defaults to

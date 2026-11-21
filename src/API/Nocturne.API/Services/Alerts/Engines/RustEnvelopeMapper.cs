@@ -64,6 +64,7 @@ internal static class RustEnvelopeMapper
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
+        OnUnknown = rule.OnUnknown,
     };
 
     /// <summary>

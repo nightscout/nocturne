@@ -66,6 +66,8 @@ public class AlertReplayController : ControllerBase
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
+        if (UnknownWord(request.Rule) is { } invalid)
+            return invalid;
         try
         {
             var result = await _replayService.ReplayDryRunAsync(
@@ -85,9 +87,20 @@ public class AlertReplayController : ControllerBase
     [HttpPost("dry-run/firings")]
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertFiringSearchResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
-        [FromBody] AlertFiringSearchRequest request, CancellationToken ct) =>
-        Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+        [FromBody] AlertFiringSearchRequest request, CancellationToken ct)
+    {
+        if (UnknownWord(request.Rule) is { } invalid)
+            return invalid;
+        return Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+    }
+
+    /// <summary>A 400 for an <c>on_unknown</c> naming none of <see cref="AlertRuleOnUnknown"/>, else null.</summary>
+    private ObjectResult? UnknownWord(ReplayRuleDefinition rule) =>
+        rule.OnUnknown is null || AlertRuleOnUnknown.IsKnown(rule.OnUnknown)
+            ? null
+            : Problem(detail: "OnUnknown must be hold, met or not_met", statusCode: 400, title: "Bad Request");
 
     private static ReplayRuleOverride ToOverride(ReplayRuleDefinition rule) => new(
         Id: rule.Id,
@@ -97,7 +110,8 @@ public class AlertReplayController : ControllerBase
         Severity: rule.Severity,
         AllowThroughDnd: rule.AllowThroughDnd,
         AutoResolveEnabled: rule.AutoResolveEnabled,
-        AutoResolveParams: rule.AutoResolveParams);
+        AutoResolveParams: rule.AutoResolveParams,
+        OnUnknown: rule.OnUnknown);
 }
 
 /// <summary>Request body for the firing search.</summary>
@@ -132,6 +146,8 @@ public record AlertReplayDryRunRequest(
 /// In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save
 /// shape — the controller doesn't deserialise the condition tree itself, just the
 /// <see cref="ConditionParams"/> JSON blob the rule body would have stored.
+/// <see cref="OnUnknown"/> is one of <see cref="AlertRuleOnUnknown"/>; null is the stored rule's
+/// word when <see cref="Id"/> names one, else <c>hold</c>.
 /// </summary>
 public record ReplayRuleDefinition(
     Guid? Id,
@@ -141,4 +157,5 @@ public record ReplayRuleDefinition(
     AlertRuleSeverity Severity,
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
-    string? AutoResolveParams);
+    string? AutoResolveParams,
+    string? OnUnknown = null);

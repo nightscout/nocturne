@@ -40,12 +40,13 @@ use nocturne_alerts_core::model::{
     ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
 };
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind};
+use nocturne_alerts_core::truth::Truth;
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
 use clock::{clock_context, naming_the_context};
 use generators::{
     RULE_ID, Tick, arbitrary_json, base, composite, is_container, mutated, mutations, node,
-    node_value, payload, rule_spec, simple_leaf, ticks, tree, word,
+    node_value, on_unknown, payload, rule_spec, simple_leaf, ticks, tree, word,
 };
 
 #[derive(Debug, Clone)]
@@ -383,7 +384,7 @@ fn apply_ops(
     Ok(())
 }
 
-/// The leaves and boolean connectives of the generated trees, and the
+/// The leaves and Kleene connectives of the generated trees, and the
 /// `sustained` rule of §3 stated as a run start per path.
 #[derive(Default)]
 struct Model {
@@ -391,7 +392,7 @@ struct Model {
 }
 
 impl Model {
-    fn eval(&mut self, node: &Value, path: &str, ctx: &Value, now: DateTime<Utc>) -> bool {
+    fn eval(&mut self, node: &Value, path: &str, ctx: &Value, now: DateTime<Utc>) -> Truth {
         let kind = node["type"].as_str().expect("a typed node");
         let payload = &node[kind];
         let child = |this: &mut Self, value: &Value, index: usize| {
@@ -401,59 +402,73 @@ impl Model {
         match kind {
             "threshold" => {
                 let value = payload["value"].as_i64().unwrap();
-                ctx["latest_value"].as_i64().is_some_and(|latest| {
-                    if payload["direction"] == "above" {
-                        latest > value
-                    } else {
-                        latest < value
-                    }
-                })
+                match ctx["latest_value"].as_i64() {
+                    None => Truth::Unknown,
+                    Some(latest) if payload["direction"] == "above" => (latest > value).into(),
+                    Some(latest) => (latest < value).into(),
+                }
             }
             "iob" => {
                 let value = payload["value"].as_i64().unwrap();
-                ctx["iob_units"].as_i64().is_some_and(|iob| {
-                    match payload["operator"].as_str().unwrap() {
-                        ">" => iob > value,
-                        ">=" => iob >= value,
-                        "<" => iob < value,
-                        "<=" => iob <= value,
-                        "==" => iob == value,
-                        other => panic!("the generators produce no operator {other}"),
-                    }
-                })
+                let Some(iob) = ctx["iob_units"].as_i64() else {
+                    return Truth::Unknown;
+                };
+                match payload["operator"].as_str().unwrap() {
+                    ">" => iob > value,
+                    ">=" => iob >= value,
+                    "<" => iob < value,
+                    "<=" => iob <= value,
+                    "==" => iob == value,
+                    other => panic!("the generators produce no operator {other}"),
+                }
+                .into()
             }
             "sleep_session_active" => {
-                ctx["sleep_session_active"].as_bool() == payload["is_active"].as_bool()
+                (ctx["sleep_session_active"].as_bool() == payload["is_active"].as_bool()).into()
             }
-            "not" => !child(self, &payload["child"], 0),
+            "not" => match child(self, &payload["child"], 0) {
+                Truth::True => Truth::False,
+                Truth::False => Truth::True,
+                Truth::Unknown => Truth::Unknown,
+            },
             "composite" => {
-                let results: Vec<bool> = payload["conditions"]
+                let results: Vec<Truth> = payload["conditions"]
                     .as_array()
                     .unwrap()
                     .iter()
                     .enumerate()
                     .map(|(i, c)| child(self, c, i))
                     .collect();
-                if payload["operator"] == "and" {
-                    results.iter().all(|r| *r)
+                let (decisive, otherwise) = if payload["operator"] == "and" {
+                    (Truth::False, Truth::True)
                 } else {
-                    results.iter().any(|r| *r)
+                    (Truth::True, Truth::False)
+                };
+                if results.contains(&decisive) {
+                    decisive
+                } else if results.contains(&Truth::Unknown) {
+                    Truth::Unknown
+                } else {
+                    otherwise
                 }
             }
-            "sustained" => {
-                if !child(self, &payload["child"], 0) {
+            "sustained" => match child(self, &payload["child"], 0) {
+                Truth::Unknown => Truth::Unknown,
+                Truth::False => {
                     self.run_starts.remove(path);
-                    return false;
+                    Truth::False
                 }
-                let minutes = payload["minutes"].as_i64().unwrap();
-                match self.run_starts.get(path) {
-                    None => {
-                        self.run_starts.insert(path.to_owned(), now);
-                        false
+                Truth::True => {
+                    let minutes = payload["minutes"].as_i64().unwrap();
+                    match self.run_starts.get(path) {
+                        None => {
+                            self.run_starts.insert(path.to_owned(), now);
+                            Truth::False
+                        }
+                        Some(first) => ((now - *first).num_seconds() >= minutes * 60).into(),
                     }
-                    Some(first) => (now - *first).num_seconds() >= minutes * 60,
                 }
-            }
+            },
             other => panic!("the generators produce no {other}"),
         }
     }
@@ -503,8 +518,9 @@ proptest! {
     }
 
     /// §3 `sustained`: after a tick a node's timer exists exactly while its
-    /// child is true and holds the first tick of the child's unbroken true
-    /// run, and the node is true once that run, begun on an earlier tick, has
+    /// child's run is unbroken and holds the first tick the child was true in
+    /// it; an unknown child neither starts nor breaks a run and leaves the
+    /// node unknown. The node is true once a run begun on an earlier tick has
     /// lasted its minutes.
     #[test]
     fn sustained_timers_follow_the_child_run_and_hold_for_their_minutes(
@@ -532,6 +548,96 @@ proptest! {
     }
 }
 
+/// §6.4: the root as the tracker reads it under `on_unknown`; `None` holds.
+fn model_met(on_unknown: &str, root: Truth) -> Option<bool> {
+    match (root, on_unknown) {
+        (Truth::True, _) | (Truth::Unknown, "met") => Some(true),
+        (Truth::False, _) | (Truth::Unknown, "not_met") => Some(false),
+        (Truth::Unknown, "hold") => None,
+        (Truth::Unknown, other) => panic!("the generators produce no on_unknown {other}"),
+    }
+}
+
+proptest! {
+    /// §6.4: an evaluation whose unknown root the rule holds leaves the
+    /// tracker as it was, `updated_at` included, except that a hysteresis
+    /// window that has elapsed closes the excursion.
+    #[test]
+    fn a_held_evaluation_changes_nothing_but_an_elapsed_hysteresis_window(
+        spec in rule_spec(),
+        ticks in ticks(),
+    ) {
+        let wire = spec.wire();
+        let holds = wire["on_unknown"] == "hold";
+        let rule = rule_from_wire(wire);
+        let mut state = EngineState::new();
+        for tick in &ticks {
+            let before = state.tracker.state(RULE_ID).copied();
+            let outcome = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false);
+            let evaluation = outcome.evaluation.expect("the body is evaluable");
+            if !(evaluation.root.is_unknown() && holds) {
+                continue;
+            }
+            let window_elapsed = before.is_some_and(|s| {
+                s.state == TrackerStateKind::Hysteresis
+                    && s.hysteresis_started_at.is_some_and(|started| {
+                        tick.now - started >= TimeDelta::minutes(i64::from(rule.hysteresis_minutes))
+                    })
+            });
+            if window_elapsed {
+                prop_assert_eq!(evaluation.transition.kind, TransitionType::ExcursionClosed);
+                prop_assert_eq!(evaluation.transition.close_reason, Some(CloseReason::Hysteresis));
+            } else {
+                prop_assert_eq!(evaluation.transition.kind, TransitionType::None);
+                if !evaluation.auto_resolved {
+                    prop_assert_eq!(
+                        format!("{:?}", state.tracker.state(RULE_ID)),
+                        format!("{before:?}")
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Generated contexts omit glucose and IOB often enough that roots are
+/// unknown, and held, in a stated share of evaluations: 1015 and 684 of 3165
+/// measured over 256 sampled rules and tick runs; the floors are about half.
+#[test]
+fn generated_evaluations_reach_unknown_and_hold_it() {
+    let cases = sample(&(rule_spec(), ticks()), 256);
+    let (mut evaluations, mut unknown, mut held) = (0usize, 0usize, 0usize);
+    for (spec, ticks) in cases {
+        let wire = spec.wire();
+        let holds = wire["on_unknown"] == "hold";
+        let rule = rule_from_wire(wire);
+        let mut state = EngineState::new();
+        for tick in &ticks {
+            let evaluation = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false)
+                .evaluation
+                .expect("the body is evaluable");
+            evaluations += 1;
+            if evaluation.root.is_unknown() {
+                unknown += 1;
+                if holds {
+                    held += 1;
+                }
+            }
+        }
+    }
+    assert!(
+        unknown * 100 >= evaluations * UNKNOWN_FLOOR_PERCENT,
+        "{unknown} of {evaluations} unknown"
+    );
+    assert!(
+        held * 100 >= evaluations * HELD_FLOOR_PERCENT,
+        "{held} of {evaluations} held"
+    );
+}
+
+const UNKNOWN_FLOOR_PERCENT: usize = 15;
+const HELD_FLOOR_PERCENT: usize = 10;
+
 fn plain_tree() -> BoxedStrategy<Value> {
     simple_leaf()
         .prop_recursive(3, 10, 3, |inner| {
@@ -545,8 +651,8 @@ fn plain_tree() -> BoxedStrategy<Value> {
 }
 
 fn auto_resolving_rule() -> impl Strategy<Value = (Value, Value, Value)> {
-    (plain_tree(), plain_tree(), 0..4i32, 0..10i32).prop_map(
-        |(body, resolve, confirmation_readings, hysteresis_minutes)| {
+    (plain_tree(), plain_tree(), 0..4i32, 0..10i32, on_unknown()).prop_map(
+        |(body, resolve, confirmation_readings, hysteresis_minutes, on_unknown)| {
             let wire = json!({
                 "id": RULE_ID.to_string(),
                 "condition_type": "composite",
@@ -555,6 +661,7 @@ fn auto_resolving_rule() -> impl Strategy<Value = (Value, Value, Value)> {
                 "hysteresis_minutes": hysteresis_minutes,
                 "auto_resolve_enabled": true,
                 "auto_resolve_params": resolve,
+                "on_unknown": on_unknown,
             });
             (wire, composite("or", vec![body]), resolve)
         },
@@ -563,25 +670,34 @@ fn auto_resolving_rule() -> impl Strategy<Value = (Value, Value, Value)> {
 
 proptest! {
     /// §6.3: after an auto-resolve closes an excursion whose condition held,
-    /// no excursion opens until a tick whose body or auto-resolve tree is false.
+    /// no excursion opens until a tick whose body or auto-resolve tree is
+    /// known false, the body as `on_unknown` reads it (§6.4); a held tick
+    /// keeps the hold.
     #[test]
-    fn an_auto_resolved_rule_opens_nothing_while_both_trees_hold(
+    fn an_auto_resolved_rule_opens_nothing_until_a_tree_is_known_false(
         (wire, body, resolve) in auto_resolving_rule(),
         ticks in ticks(),
     ) {
+        let on_unknown = wire["on_unknown"].as_str().expect("an on_unknown word").to_owned();
         let rule = rule_from_wire(wire);
         let mut state = EngineState::new();
         let mut model = Model::default();
         let mut held = false;
         for tick in &ticks {
             let awaiting = state.tracker.awaiting_rearm(RULE_ID);
+            prop_assert_eq!(awaiting, held);
             let before = state.tracker.state(RULE_ID).copied();
             let outcome = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false);
             let evaluation = outcome.evaluation.expect("the body is evaluable");
-            let body_true = model.eval(&body, "composite", &tick.context, tick.now);
-            let resolve_true = model.eval(&resolve, "auto_resolve", &tick.context, tick.now);
-            prop_assert_eq!(evaluation.root, body_true);
-            let both = body_true && resolve_true;
+            let body_truth = model.eval(&body, "composite", &tick.context, tick.now);
+            let resolve_truth = model.eval(&resolve, "auto_resolve", &tick.context, tick.now);
+            prop_assert_eq!(evaluation.root, body_truth);
+            let met = model_met(&on_unknown, body_truth);
+            let keeps = match met {
+                None => true,
+                Some(met) => met && !resolve_truth.is_false(),
+            };
+            let was_active = before.is_some_and(|s| s.state == TrackerStateKind::Active);
             let was_open = before.is_some_and(|s| {
                 matches!(s.state, TrackerStateKind::Active | TrackerStateKind::Hysteresis)
             });
@@ -593,15 +709,19 @@ proptest! {
                 TransitionType::ExcursionClosed => false,
                 _ => was_open,
             };
-            let must_resolve = !awaiting && resolve_true && open_after_tracker;
+            let active_after_tracker = match met {
+                Some(met) => met && open_after_tracker,
+                None => was_active,
+            };
+            let must_resolve = !awaiting && resolve_truth.is_true() && open_after_tracker;
             prop_assert_eq!(evaluation.auto_resolved, must_resolve);
             if must_resolve {
                 prop_assert_eq!(state.tracker.active_excursion_id(RULE_ID), None);
             }
-            if held && both {
+            if awaiting && keeps {
                 prop_assert_ne!(evaluation.transition.kind, TransitionType::ExcursionOpened);
             }
-            held = (evaluation.auto_resolved && body_true) || (held && both);
+            held = (evaluation.auto_resolved && active_after_tracker) || (awaiting && keeps);
         }
     }
 }
@@ -954,6 +1074,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
             clock_context(now),
             seeded_tracker(now),
             vec(1..=3600i64, 0..=2),
+            on_unknown(),
         )
             .prop_map(
                 move |(
@@ -964,6 +1085,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                     context,
                     tracker,
                     mut earlier,
+                    on_unknown,
                 )| {
                     let body = naming_the_context(body);
                     let kind = body["type"].as_str().expect("a node type").to_owned();
@@ -977,6 +1099,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                             "hysteresis_minutes": hysteresis_minutes,
                             "auto_resolve_enabled": resolve.is_some(),
                             "auto_resolve_params": resolve.map(naming_the_context),
+                            "on_unknown": on_unknown,
                         }),
                         context,
                         tracker,

@@ -600,6 +600,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
+                    b.Property<string>("OnUnknown")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("hold")
+                        .HasColumnName("on_unknown");
+
                     b.Property<string>("PreRepair")
                         .HasColumnType("jsonb")
                         .HasColumnName("pre_repair");

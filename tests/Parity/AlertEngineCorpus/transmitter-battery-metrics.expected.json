@@ -8,62 +8,54 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "transition": "none"
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "transition": "none"
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "transition": "none"
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "transition": "none"
         }
       ]
     },
@@ -372,18 +364,19 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "hysteresis_started",
+          "transition": "none",
           "tracker": {
-            "state": "hysteresis",
+            "state": "active",
             "confirmation_count": 0,
-            "excursion": 3,
-            "hysteresis_started_at": "2026-01-05T12:25:00Z"
+            "excursion": 3
           }
         },
         {
@@ -446,11 +439,12 @@
               "value": false
             }
           ],
-          "transition": "closed",
-          "close_reason": "hysteresis",
+          "transition": "hysteresis_started",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "excursion": 3,
+            "hysteresis_started_at": "2026-01-05T12:30:00Z"
           }
         },
         {
@@ -478,10 +472,12 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
@@ -493,10 +489,12 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
@@ -508,13 +506,16 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "none",
+          "transition": "closed",
+          "close_reason": "hysteresis",
           "tracker": {
             "state": "idle",
             "confirmation_count": 0
@@ -523,10 +524,12 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
           "root": false,
+          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "closed",

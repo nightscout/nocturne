@@ -48,7 +48,8 @@ public sealed record AlertReplayRunEvent(DateTime At, Guid RuleId, AlertReplayTr
 
 /// <summary>A rule's state after one tick.</summary>
 /// <param name="Skipped">The body cannot be evaluated; <see cref="Met"/> and <see cref="Firing"/> are false.</param>
-public sealed record AlertReplayRuleTick(Guid RuleId, bool Skipped, bool Met, bool Firing);
+/// <param name="Unknown">The root was unknown; <see cref="Met"/> is then false.</param>
+public sealed record AlertReplayRuleTick(Guid RuleId, bool Skipped, bool Met, bool Firing, bool Unknown = false);
 
 /// <param name="Rules">In evaluation order.</param>
 public sealed record AlertReplayTickOutcome(DateTime At, IReadOnlyList<AlertReplayRuleTick> Rules);

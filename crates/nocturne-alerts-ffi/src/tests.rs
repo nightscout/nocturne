@@ -667,6 +667,71 @@ fn evaluate_rejects_wrong_schema_version() {
 }
 
 #[test]
+fn evaluate_rejects_an_on_unknown_word_naming_no_choice() {
+    for word in ["Hold", "ignore", ""] {
+        let request = json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": "threshold",
+                "condition_params": { "direction": "above", "value": 180 },
+                "on_unknown": word,
+            },
+            "context": {},
+            "now": "2026-01-05T12:00:00Z",
+        });
+        assert_error(&evaluate(&request), &format!("unknown on_unknown '{word}'"));
+    }
+}
+
+#[test]
+fn evaluate_flags_an_unknown_root_and_leaf_beside_their_false_values() {
+    let request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "not",
+            "condition_params": {
+                "child": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
+            },
+        },
+        "context": {},
+        "now": "2026-01-05T12:00:00Z",
+    });
+    let result = &evaluate(&request)["result"];
+    assert_eq!(result["root"], json!(false));
+    assert_eq!(result["unknown"], json!(true));
+    assert_eq!(
+        result["leaves"],
+        json!([{ "leaf_id": 0, "value": false, "unknown": true }])
+    );
+    assert_eq!(result["transition"], json!("none"));
+}
+
+#[test]
+fn evaluate_node_flags_an_unknown_value() {
+    let request = |context: Value| {
+        call_json(
+            crate::nocturne_alerts_evaluate_node,
+            &json!({
+                "schema_version": 1,
+                "rule_id": "00000000-0000-0000-0000-000000000001",
+                "node": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } },
+                "context": context,
+                "now": "2026-01-05T12:00:00Z",
+            })
+            .to_string(),
+        )
+    };
+    let unknown = request(json!({}));
+    assert_eq!(unknown["value"], json!(false));
+    assert_eq!(unknown["unknown"], json!(true));
+    let known = request(json!({ "latest_value": 100 }));
+    assert_eq!(known["value"], json!(false));
+    assert_eq!(known.get("unknown"), None);
+}
+
+#[test]
 fn evaluate_rejects_unknown_condition_type() {
     let request = json!({
         "schema_version": 1,

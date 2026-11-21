@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "name": "unknown-predictions",
+  "description": "predicted is unknown with no predictions; with points present it is decided, points beyond the horizon skipped, and none satisfying is false (rule 2)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "\u003C",
+        "value": 70,
+        "within_minutes": 30
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "\u003C",
+        "value": 70,
+        "within_minutes": 10
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 20,
+            "mgdl": 60
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": []
+      }
+    }
+  ]
+}
