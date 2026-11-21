@@ -103,6 +103,7 @@ public class MigrationJobService : IMigrationJobService
     /// <summary>The job-ledger job that runs a tenant's live migration.</summary>
     internal const string RunJobName = "migration-run";
 
+    /// <summary>The advisory lock class of a tenant's run lock.</summary>
     internal const int RunLockClass = 0x4E4D_4952;
 
     private static readonly string[] s_liveStates = [.. MigrationJobStates.LiveNames];
@@ -181,7 +182,7 @@ public class MigrationJobService : IMigrationJobService
             await db.SaveChangesAsync(token);
             await JobLedgerRepository.RequestInTransactionAsync(db, RunJobName, token);
             return jobId;
-        }, ct: ct);
+        }, verifySucceeded: (id, token) => db.MigrationRuns.AnyAsync(r => r.Id == id, token), ct: ct);
 
         _logger.LogInformation(
             "Started migration job {JobId} in {Mode} mode from {Source}",
@@ -212,17 +213,21 @@ public class MigrationJobService : IMigrationJobService
             return false;
         }
 
-        var job = MigrationJob.Resume(
-            run, request, tenant, _logger, _serviceProvider, _timeProvider, MigrationJob.RecentSpan);
+        var job = MigrationJob.Resume(run, request, tenant, _logger, _serviceProvider, _timeProvider);
         _running[run.Id] = job;
         try
         {
-            return await job.ExecuteAsync(SliceLength, ct);
+            await job.ExecuteAsync(SliceLength, ct);
         }
         finally
         {
-            _running.TryRemove(run.Id, out _);
+            _running.TryRemove(KeyValuePair.Create(run.Id, job));
         }
+
+        // The record says whether the job has ended, not the slice: an end the slice could not
+        // store leaves the record live, and the next slice reaches that end again and stores it.
+        await using var after = await _contexts.CreateAsync(ct);
+        return await LiveRuns(after, tenant.TenantId).AnyAsync(r => r.Id == run.Id, ct);
     }
 
     private StartMigrationRequest? ReadRequest(MigrationRunEntity run)
@@ -275,7 +280,7 @@ public class MigrationJobService : IMigrationJobService
 
     /// <remarks>
     /// A job running in this process stops at once. One running in another stops before its next
-    /// page, when it finds its row ended.
+    /// page, or its next batch of a MongoDB collection, when it finds its row ended.
     /// </remarks>
     public async Task CancelAsync(Guid tenantId, Guid jobId)
     {
@@ -831,15 +836,25 @@ internal class MigrationJob
     /// <exception cref="OperationCanceledException">The call was cancelled, or the run record has ended or changed hands.</exception>
     private async Task<bool> PauseAsync(CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
-        await PersistSnapshotAsync(CancellationToken.None);
-        ct.ThrowIfCancellationRequested();
+        await StoreProgressAsync(ct);
 
         if (!_advanced || _timeProvider.GetElapsedTime(_sliceStarted) < _slice)
             return false;
 
         _paused = true;
         return true;
+    }
+
+    /// <summary>
+    /// Stores the run's state, so its status is current and a cancel made in another process is
+    /// seen, without offering the slice a place to stop.
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The call was cancelled, or the run record has ended or changed hands.</exception>
+    private async Task StoreProgressAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        await PersistSnapshotAsync(CancellationToken.None);
+        ct.ThrowIfCancellationRequested();
     }
 
     /// <summary>
@@ -970,16 +985,26 @@ internal class MigrationJob
     /// is holding. The per-collection outcomes are in <see cref="MigrationRunEntity.CollectionOutcomes"/>.
     /// </summary>
     /// <remarks>
-    /// <c>Pass</c> and <c>Step</c> are the part of the range and the collection the run reads next,
+    /// <para>
+    /// <c>Pass</c> and <c>Next</c> are the part of the range and the collection the run reads next,
     /// and a paged collection's <see cref="PagedPull.Bound"/> is where in it. A step that pages on
     /// no time, and every MongoDB collection, is read again from its start.
+    /// </para>
+    /// <para>
+    /// A live run outlives the version that started it, so a position is stored as what it names
+    /// (<c>Split</c>, <c>Next</c>), never as an index into a list the code defines. A change to what
+    /// any member means raises <see cref="CheckpointVersion"/>, and a run stored under another
+    /// version starts over.
+    /// </para>
     /// </remarks>
     internal sealed record Checkpoint
     {
+        public int Version { get; init; }
         public bool Counted { get; init; }
         public DateTime WindowTo { get; init; }
+        public DateTime? Split { get; init; }
         public int Pass { get; init; }
-        public int Step { get; init; }
+        public string? Next { get; init; }
         public bool DocumentWeighted { get; init; }
         public DateTime? PullStartedAt { get; init; }
         public bool RecentDataReady { get; init; }
@@ -993,12 +1018,16 @@ internal class MigrationJob
         public string? Collection { get; init; }
     }
 
+    internal const int CheckpointVersion = 1;
+
     private Checkpoint ToCheckpoint() => new()
     {
+        Version = CheckpointVersion,
         Counted = _counted,
         WindowTo = _window.To,
+        Split = _split,
         Pass = _pass,
-        Step = _step,
+        Next = _next,
         DocumentWeighted = _documentWeighted,
         PullStartedAt = _pullStartedAt,
         RecentDataReady = _recentDataReady,
@@ -1013,8 +1042,9 @@ internal class MigrationJob
     };
 
     /// <summary>
-    /// The checkpoint a run record holds, or null when it holds none or one this version cannot
-    /// read; the run then starts over, which stores nothing twice.
+    /// The checkpoint a run record holds, or null when it holds none, one this version cannot read
+    /// or one of another <see cref="CheckpointVersion"/>; the run then starts over, which stores
+    /// nothing twice.
     /// </summary>
     private static Checkpoint? ReadCheckpoint(MigrationRunEntity run)
     {
@@ -1023,7 +1053,10 @@ internal class MigrationJob
 
         try
         {
-            return System.Text.Json.JsonSerializer.Deserialize<Checkpoint>(run.Checkpoint, s_outcomeJson);
+            return System.Text.Json.JsonSerializer.Deserialize<Checkpoint>(run.Checkpoint, s_outcomeJson)
+                is { Version: CheckpointVersion } saved
+                ? saved
+                : null;
         }
         catch (System.Text.Json.JsonException)
         {
@@ -1031,18 +1064,14 @@ internal class MigrationJob
         }
     }
 
-    /// <summary>
-    /// The job for a live run record, at the record's checkpoint. Every slice of a run has to be
-    /// given the same <see cref="ReadFirst"/>.
-    /// </summary>
+    /// <summary>The job for a live run record, at the record's checkpoint.</summary>
     internal static MigrationJob Resume(
         MigrationRunEntity run,
         StartMigrationRequest request,
         TenantContext tenant,
         ILogger logger,
         IServiceProvider serviceProvider,
-        TimeProvider timeProvider,
-        TimeSpan? readFirst)
+        TimeProvider timeProvider)
     {
         var job = new MigrationJob(
             run.Id,
@@ -1058,10 +1087,7 @@ internal class MigrationJob
             tenant,
             logger,
             serviceProvider,
-            timeProvider)
-        {
-            ReadFirst = readFirst,
-        };
+            timeProvider);
 
         job._revision = run.Revision;
         job._state = Enum.TryParse<MigrationJobState>(run.State, out var state) ? state : MigrationJobState.Pending;
@@ -1079,8 +1105,9 @@ internal class MigrationJob
 
         job._counted = saved.Counted;
         job._window = new ImportWindow(request.StartDate?.AsUtc(), saved.WindowTo);
+        job._split = saved.Split;
         job._pass = saved.Pass;
-        job._step = saved.Step;
+        job._next = saved.Next;
         job._documentWeighted = saved.DocumentWeighted;
         job._pullStartedAt = saved.PullStartedAt;
         job._recentDataReady = saved.RecentDataReady;
@@ -1281,8 +1308,11 @@ internal class MigrationJob
     /// <summary>The index in <see cref="Passes"/> of the part of the range an API run reads next.</summary>
     private int _pass;
 
-    /// <summary>The index, in the order they are imported, of the collection an API run reads next in <see cref="_pass"/>.</summary>
-    private int _step;
+    /// <summary>The collection an API run reads next in <see cref="_pass"/>, or null for the pass's first.</summary>
+    private string? _next;
+
+    /// <summary>Where <see cref="Passes"/> divides <see cref="_window"/>, fixed with it; null for a range read as one part.</summary>
+    private DateTime? _split;
 
     /// <summary>
     /// The time range this run imports: the requested dates, with the end no later than the moment
@@ -1321,17 +1351,20 @@ internal class MigrationJob
     /// The parts share no instant, and the boundary is a whole millisecond, which both cursors can
     /// write, so a record on it is read once.
     /// </remarks>
-    private ImportWindow[] Passes()
+    private ImportWindow[] Passes() => _split is { } split
+        ? [new ImportWindow(split, _window.To), new ImportWindow(_window.From, split, ToExclusive: true)]
+        : [_window];
+
+    /// <summary>The instant <see cref="ReadFirst"/> back from the end of <see cref="_window"/>, or null when the range starts no earlier.</summary>
+    private DateTime? SplitOfWindow()
     {
         if (ReadFirst is not { } recent)
-            return [_window];
+            return null;
 
         var split = _window.To - recent;
         split = split.AddTicks(-(split.Ticks % TimeSpan.TicksPerMillisecond));
 
-        return _window.From is { } from && from >= split
-            ? [_window]
-            : [new ImportWindow(split, _window.To), new ImportWindow(_window.From, split, ToExclusive: true)];
+        return _window.From is { } from && from >= split ? null : split;
     }
 
     /// <param name="anchored">
@@ -1415,6 +1448,7 @@ internal class MigrationJob
             _currentOperation = "Counting records";
             _phase = MigrationPhase.Counting;
             _window = RequestedWindow(anchored: true);
+            _split = SplitOfWindow();
 
             var counts = await Task.WhenAll(
                 collectionsToMigrate.Select(c => FetchCollectionCountAsync(httpClient, c.name, ct)));
@@ -1435,17 +1469,22 @@ internal class MigrationJob
         for (var p = _pass; p < passes.Length; p++)
         {
             var pass = new ImportPass(passes[p], Last: p == passes.Length - 1);
-            for (var s = _step; s < collectionsToMigrate.Count; s++)
+
+            // A collection the run no longer lists starts the pass again.
+            var first = _next is null ? 0 : Math.Max(0, collectionsToMigrate.FindIndex(c => c.name == _next));
+            for (var s = first; s < collectionsToMigrate.Count; s++)
             {
                 var (name, dated, migrate) = collectionsToMigrate[s];
+                var following = s + 1 < collectionsToMigrate.Count ? collectionsToMigrate[s + 1].name : null;
 
                 // A later pass reads only what is dated, and nothing more of a collection that failed.
                 if (p > 0 && (!dated || Progress(name).IsComplete))
                 {
-                    _step = s + 1;
+                    _next = following;
                     continue;
                 }
 
+                _next = name;
                 if (await PauseAsync(ct))
                     return;
 
@@ -1484,7 +1523,7 @@ internal class MigrationJob
                     }
                 }
 
-                _step = s + 1;
+                _next = following;
                 _advanced = true;
             }
 
@@ -1493,7 +1532,7 @@ internal class MigrationJob
             if (!_collectionProgress.Values.Any(c => c.FailureReason is not null))
                 _recentDataReady = true;
 
-            (_pass, _step) = (p + 1, 0);
+            (_pass, _next) = (p + 1, null);
         }
     }
 
@@ -2359,16 +2398,7 @@ internal class MigrationJob
             _phase = MigrationPhase.Counting;
             _window = RequestedWindow(anchored: false);
             foreach (var collectionName in collectionsToMigrate)
-            {
-                _collectionProgress[collectionName] = new CollectionProgress
-                {
-                    CollectionName = collectionName,
-                    TotalDocuments = ImportableFromMongo(collectionName)
-                        ? await database.GetCollection<BsonDocument>(collectionName)
-                            .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct)
-                        : 0,
-                };
-            }
+                _collectionProgress[collectionName] = await CountedAsync(collectionName);
             _documentWeighted = true;
             _pullStartedAt = UtcNow;
             _counted = true;
@@ -2380,6 +2410,10 @@ internal class MigrationJob
         {
             if (await PauseAsync(ct))
                 return;
+
+            // Read again, it is tallied again, against a fresh count.
+            if (DocumentsSeen(Progress(collectionName)) > 0)
+                _collectionProgress[collectionName] = await CountedAsync(collectionName);
 
             BeginCollection(collectionName, collectionName);
 
@@ -2406,6 +2440,15 @@ internal class MigrationJob
             UpdateOverallProgress();
             _advanced = true;
         }
+
+        async Task<CollectionProgress> CountedAsync(string collectionName) => new()
+        {
+            CollectionName = collectionName,
+            TotalDocuments = ImportableFromMongo(collectionName)
+                ? await database.GetCollection<BsonDocument>(collectionName)
+                    .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct)
+                : 0,
+        };
     }
 
     private static bool ImportableFromMongo(string collection) =>
@@ -2495,6 +2538,7 @@ internal class MigrationJob
                 Math.Max(totalDocs - outsideWindow, totalMigrated + totalFailed + tally.DocumentsSkipped),
                 totalMigrated, totalFailed, false, tally);
             UpdateOverallProgress();
+            await StoreProgressAsync(ct);
         }
 
         UpdateCollectionProgress(collection.Name,
@@ -2591,6 +2635,7 @@ internal class MigrationJob
                 IsComplete = false,
             };
             UpdateOverallProgress();
+            await StoreProgressAsync(ct);
         }
 
         _collectionProgress[collectionName] = Progress(collectionName) with

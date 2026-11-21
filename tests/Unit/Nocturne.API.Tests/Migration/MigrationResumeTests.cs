@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -99,8 +100,11 @@ public class MigrationResumeTests
 
         public PagedNightscout Source { get; } = new();
 
+        public IInterceptor? Interceptor { get; init; }
+
         public ServiceProvider BuildProvider() => MigrationJobHarness.BuildProvider(
             Source,
+            interceptor: Interceptor,
             entryOutcome: page =>
             {
                 Stored.AddRange(page.Select(e => e.Id!));
@@ -136,7 +140,7 @@ public class MigrationResumeTests
     }
 
     private static MigrationJob Resume(IServiceProvider provider, MigrationRunEntity run, TenantContext tenant, TimeProvider time) =>
-        MigrationJob.Resume(run, Request(), tenant, NullLogger.Instance, provider, time, MigrationJob.RecentSpan);
+        MigrationJob.Resume(run, Request(), tenant, NullLogger.Instance, provider, time);
 
     [Fact]
     public async Task A_job_run_a_step_per_slice_imports_what_one_slice_does()
@@ -242,6 +246,108 @@ public class MigrationResumeTests
         ended.State.Should().Be(nameof(MigrationJobState.Completed));
         ended.RequestEncrypted.Should().BeNull("the source's credentials are held only while the run is live");
         ended.Checkpoint.Should().BeNull();
+    }
+
+    /// <summary>
+    /// A killed process stores nothing on its way out, so the record is put back to what the job
+    /// wrote before the page it was reading: that write alone has to be enough to go on from.
+    /// </summary>
+    [Fact]
+    public async Task A_job_whose_process_died_goes_on_from_the_checkpoint_it_stored_before_its_page()
+    {
+        var import = new Import();
+        await using var provider = import.BuildProvider();
+        var time = new FakeTimeProvider(Start);
+        var tenant = MigrationJobHarness.NewTenant();
+        var service = MigrationJobHarness.CreateService(provider, time: time);
+        var job = await service.StartMigrationAsync(Request(), tenant);
+
+        using var stop = new CancellationTokenSource();
+        MigrationRunEntity? beforePage = null;
+        import.Source.OnDeviceStatusRequest = request =>
+        {
+            if (request != 3)
+                return;
+
+            beforePage = RunRecordAsync(provider, job.Id).GetAwaiter().GetResult();
+            stop.Cancel();
+        };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RunSliceAsync(tenant, stop.Token));
+
+        await using (var db = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync())
+        {
+            var run = await db.MigrationRuns.SingleAsync(r => r.Id == job.Id);
+            (run.Checkpoint, run.Revision, run.CollectionOutcomes) =
+                (beforePage!.Checkpoint, beforePage.Revision, beforePage.CollectionOutcomes);
+            await db.SaveChangesAsync();
+        }
+
+        import.Source.OnDeviceStatusRequest = null;
+        await MigrationJobHarness.RunToEndAsync(MigrationJobHarness.CreateService(provider, time: time), tenant);
+
+        import.Stored.Distinct().Should().BeEquivalentTo(Expected);
+        (await RunRecordAsync(provider, job.Id)).State.Should().Be(nameof(MigrationJobState.Completed));
+    }
+
+    /// <summary>Fails the first save that would end a run.</summary>
+    private sealed class FailingFinalWrite : SaveChangesInterceptor
+    {
+        private int _armed = 1;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var ending = eventData.Context!.ChangeTracker.Entries<MigrationRunEntity>()
+                .Any(e => e.Entity.State is nameof(MigrationJobState.Completed));
+
+            return ending && Interlocked.Exchange(ref _armed, 0) == 1
+                ? throw new DbUpdateException("the store did not answer")
+                : ValueTask.FromResult(result);
+        }
+    }
+
+    [Fact]
+    public async Task A_job_whose_end_could_not_be_stored_is_run_again_until_it_is()
+    {
+        var import = new Import { Interceptor = new FailingFinalWrite() };
+        await using var provider = import.BuildProvider();
+        var time = new FakeTimeProvider(Start);
+        var tenant = MigrationJobHarness.NewTenant();
+        var service = MigrationJobHarness.CreateService(provider, time: time);
+        var job = await service.StartMigrationAsync(Request(), tenant);
+
+        (await service.RunSliceAsync(tenant, CancellationToken.None)).Should().BeTrue(
+            "the record is still live, so the run is not over");
+        (await RunRecordAsync(provider, job.Id)).State.Should().Be(nameof(MigrationJobState.Running));
+
+        (await service.RunSliceAsync(tenant, CancellationToken.None)).Should().BeFalse();
+
+        var ended = await RunRecordAsync(provider, job.Id);
+        ended.State.Should().Be(nameof(MigrationJobState.Completed));
+        ended.RequestEncrypted.Should().BeNull();
+        import.Stored.Distinct().Should().BeEquivalentTo(Expected);
+    }
+
+    [Fact]
+    public async Task A_checkpoint_of_another_version_starts_the_run_over()
+    {
+        var import = new Import();
+        await using var provider = import.BuildProvider();
+        var time = new FakeTimeProvider(Start);
+        var tenant = MigrationJobHarness.NewTenant();
+        var service = MigrationJobHarness.CreateService(provider, time: time);
+        var job = await service.StartMigrationAsync(Request(), tenant);
+        await using (var db = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync())
+        {
+            var run = await db.MigrationRuns.SingleAsync(r => r.Id == job.Id);
+            run.Checkpoint = $$"""{"version":{{MigrationJob.CheckpointVersion + 1}},"counted":true,"pass":7,"next":"entries"}""";
+            await db.SaveChangesAsync();
+        }
+
+        await MigrationJobHarness.RunToEndAsync(service, tenant);
+
+        import.Stored.Distinct().Should().BeEquivalentTo(Expected);
+        (await RunRecordAsync(provider, job.Id)).State.Should().Be(nameof(MigrationJobState.Completed));
     }
 
     [Fact]

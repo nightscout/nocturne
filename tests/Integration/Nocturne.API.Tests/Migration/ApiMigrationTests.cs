@@ -160,6 +160,7 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
         };
 
         MigrationJobInfo? jobInfo;
+        Task running;
         using (_migration.HoldEntries())
         {
             var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
@@ -167,10 +168,12 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
             jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
             jobInfo.Should().NotBeNull();
 
+            running = MigrationJobPump.RunAsync(Fixture);
             var held = await PollUntilAsync(jobInfo!.Id, s => s.State != MigrationJobState.Pending);
             held.State.Should().Be(MigrationJobState.Running, "the job is waiting on the held entries");
         }
 
+        await running;
         var finalStatus = await PollUntilCompleteAsync(jobInfo.Id);
 
         finalStatus.State.Should().Be(MigrationJobState.Completed);
@@ -221,6 +224,8 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
 
     private async Task<MigrationJobStatus> PollUntilCompleteAsync(Guid jobId)
     {
+        await MigrationJobPump.RunAsync(Fixture);
+
         MigrationJobStatus? status = null;
         for (var i = 0; i < 120; i++)
         {
