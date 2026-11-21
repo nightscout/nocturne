@@ -113,6 +113,7 @@ public class ReadEndpointScopeEnforcementTests
             ["MyTenantsController.GetMyTenants"] = V4Reason.OwnData,
             ["MyTenantsController.GetOverview"] = V4Reason.ActionChecksAccess,
             ["MyTenantsController.GetReview"] = V4Reason.ActionChecksAccess,
+            ["MyTenantsController.GetPerson"] = V4Reason.ActionChecksAccess,
             ["PlatformController.GetTenants"] = V4Reason.OwnData,
             ["FoodsController.GetFavorites"] = V4Reason.OwnData,
             ["NotificationsController.GetNotifications"] = V4Reason.OwnData,

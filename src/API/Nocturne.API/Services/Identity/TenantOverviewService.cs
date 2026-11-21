@@ -35,6 +35,8 @@ public class TenantOverviewService : ITenantOverviewService
 
     private static readonly TimeSpan TraceWindow = TimeSpan.FromHours(3);
     private static readonly TimeSpan TraceBucket = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan PersonWindow = TimeSpan.FromHours(24);
+    private const int PersonEntryLimit = 10;
 
     private readonly ITenantMembershipRepository _members;
     private readonly IServiceProvider _scope;
@@ -64,17 +66,19 @@ public class TenantOverviewService : ITenantOverviewService
         var glucoseReadTenants = await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct);
 
         var items = new List<TenantOverviewItem>();
-        foreach (var (tenant, allowed, membershipLimitTo24Hours, effectivePermissions) in glucoseReadTenants)
+        foreach (var readable in glucoseReadTenants)
         {
-            var includeAlerts = Scope.Satisfies(allowed, Scope.AlertsRead);
-            var includeTherapy = Scope.Satisfies(allowed, Scope.TreatmentsRead);
-            var includeDevices = Scope.Satisfies(allowed, Scope.DevicesRead);
-            var historyClamped = MemberScopeResolver.IsHistoryClamped(
-                credentialLimitTo24Hours, membershipLimitTo24Hours, effectivePermissions);
+            var tenant = readable.Tenant;
+            var access = ItemAccess.Of(readable, credentialLimitTo24Hours);
+            var historyClamped = access.HistoryClamped;
 
             items.Add(await TryBuildAsync(
                 tenant,
-                () => BuildItemAsync(tenant, includeAlerts, includeTherapy, includeDevices, historyClamped, ct),
+                async () =>
+                {
+                    await using var scope = OpenTenantScope(tenant, historyClamped);
+                    return await BuildItemAsync(scope.ServiceProvider, tenant, access, ct);
+                },
                 () =>
                 {
                     var nowUtc = _time.GetUtcNow().UtcDateTime;
@@ -243,28 +247,78 @@ public class TenantOverviewService : ITenantOverviewService
         return result;
     }
 
-    private async Task<TenantOverviewItem> BuildItemAsync(
-        TenantRecord tenant,
-        bool includeAlerts,
-        bool includeTherapy,
-        bool includeDevices,
-        bool historyClamped,
-        CancellationToken ct)
+    public async Task<TenantPersonDetail?> GetPersonAsync(
+        Guid? subjectId, Guid tenantId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours = false,
+        CancellationToken ct = default)
     {
+        if (subjectId is not { } subject)
+            return null;
+
+        var readable = (await GetGlucoseReadTenantsAsync(subject, tokenScopes, authType, ct))
+            .FirstOrDefault(t => t.Tenant.Id == tenantId);
+        if (readable is null)
+            return null;
+
+        var tenant = readable.Tenant;
+        var access = ItemAccess.Of(readable, credentialLimitTo24Hours);
+        var to = _time.GetUtcNow().UtcDateTime;
+        var from = to - PersonWindow;
+
+        await using var scope = OpenTenantScope(tenant, access.HistoryClamped);
+        var services = scope.ServiceProvider;
+
+        var person = await BuildItemAsync(services, tenant, access, ct);
+        var readings = await services.GetRequiredService<ICanonicalGlucoseService>().GetWindowAsync(from, to, ct);
+        var entries = access.Therapy ? await ReadEntriesAsync(services, from, to, ct) : null;
+
+        return new TenantPersonDetail(person, ThinToBuckets(readings), entries, from, to);
+    }
+
+    private static async Task<List<TenantPersonEntry>> ReadEntriesAsync(
+        IServiceProvider services, DateTime from, DateTime to, CancellationToken ct)
+    {
+        var boluses = await services.GetRequiredService<IBolusRepository>().GetAsync(
+            from, to, device: null, source: null, limit: PersonEntryLimit, kind: BolusKind.Manual, ct: ct);
+        var intakes = await services.GetRequiredService<ICarbIntakeRepository>().GetAsync(
+            from, to, device: null, source: null, limit: PersonEntryLimit, ct: ct);
+
+        return boluses
+            .Select(b => new TenantPersonEntry(TenantPersonEntryKind.Bolus, b.Timestamp, b.Insulin, null))
+            .Concat(intakes.Select(c => new TenantPersonEntry(TenantPersonEntryKind.Carbs, c.Timestamp, null, c.Carbs)))
+            .OrderByDescending(e => e.Timestamp)
+            .Take(PersonEntryLimit)
+            .ToList();
+    }
+
+    /// <summary>What the caller may see of one tenant's item, and the clamp it is read under.</summary>
+    private readonly record struct ItemAccess(bool Alerts, bool Therapy, bool Devices, bool HistoryClamped)
+    {
+        public static ItemAccess Of(GlucoseReadTenant readable, bool credentialLimitTo24Hours) => new(
+            Scope.Satisfies(readable.AllowedScopes, Scope.AlertsRead),
+            Scope.Satisfies(readable.AllowedScopes, Scope.TreatmentsRead),
+            Scope.Satisfies(readable.AllowedScopes, Scope.DevicesRead),
+            MemberScopeResolver.IsHistoryClamped(
+                credentialLimitTo24Hours, readable.MembershipLimitTo24Hours, readable.EffectivePermissions));
+    }
+
+    private async Task<TenantOverviewItem> BuildItemAsync(
+        IServiceProvider services, TenantRecord tenant, ItemAccess access, CancellationToken ct)
+    {
+        var historyClamped = access.HistoryClamped;
         var nowUtc = _time.GetUtcNow().UtcDateTime;
-        await using var scope = OpenTenantScope(tenant, historyClamped);
-        var canonical = scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>();
+        var canonical = services.GetRequiredService<ICanonicalGlucoseService>();
         var latest = await canonical.GetLatestAsync(ct);
         var recent = await canonical.GetRecentAsync(nowUtc - TraceWindow, ct);
 
-        await using var db = await scope.ServiceProvider
+        await using var db = await services
             .GetRequiredService<INocturneDbContextFactory>()
             .CreateAsync(ct);
 
         int? activeAlertCount = null;
         AlertRuleSeverity? highestSeverity = null;
         List<V4TrackerStatus>? trackers = null;
-        if (includeAlerts)
+        if (access.Alerts)
         {
             var activeExcursions = await db.AlertExcursions.AsNoTracking()
                 .Include(e => e.AlertRule)
@@ -280,14 +334,14 @@ public class TenantOverviewService : ITenantOverviewService
                 .Min();
 
             trackers = TrackerStatusCondenser.Condense(
-                await scope.ServiceProvider.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(ct),
+                await services.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(ct),
                 nowUtc);
         }
 
         TenantOverviewTherapy? therapy = null;
-        if (includeTherapy)
+        if (access.Therapy)
         {
-            var onBoard = await scope.ServiceProvider.GetRequiredService<IIobCobReader>()
+            var onBoard = await services.GetRequiredService<IIobCobReader>()
                 .ReadTotalAsync(new DateTimeOffset(nowUtc).ToUnixTimeMilliseconds(), live: true, ct);
             therapy = new TenantOverviewTherapy(
                 onBoard.HasIob ? ScaledRounding.Round(onBoard.Iob.Iob, 2) : 0,
@@ -297,15 +351,15 @@ public class TenantOverviewService : ITenantOverviewService
         }
 
         TenantOverviewDevices? devices = null;
-        if (includeDevices)
+        if (access.Devices)
         {
-            var pump = await scope.ServiceProvider.GetRequiredService<IPumpSnapshotRepository>()
+            var pump = await services.GetRequiredService<IPumpSnapshotRepository>()
                 .GetLatestAsync(asOf: null, ct);
             devices = new TenantOverviewDevices(pump?.Reservoir, pump?.BatteryPercent, pump?.Timestamp);
         }
 
         var thresholds = _classifier.ResolveThresholds(
-            await scope.ServiceProvider.GetRequiredService<IAlertRepository>().GetEnabledRulesAsync(ct));
+            await services.GetRequiredService<IAlertRepository>().GetEnabledRulesAsync(ct));
 
         var reading = latest is null
             ? null

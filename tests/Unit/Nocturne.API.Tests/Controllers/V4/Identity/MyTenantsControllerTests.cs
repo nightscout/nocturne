@@ -8,6 +8,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -116,6 +117,80 @@ public class MyTenantsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
     }
+
+    [Fact]
+    public async Task A_person_is_read_for_the_named_tenant()
+    {
+        var tenantId = Guid.NewGuid();
+        var detail = new TenantPersonDetail(
+            new TenantOverviewItem(
+                tenantId, "family", "Family", null, null, GlucoseStatus.Unknown,
+                new TenantOverviewThresholds(55, 80, 180, 260), null, null, [], null, null, null, []),
+            [], null, default, default);
+        _overviewService
+            .Setup(s => s.GetPersonAsync(
+                _subjectId, tenantId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie,
+                false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(detail);
+
+        var result = await CreateController(Member()).GetPerson(tenantId, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(detail);
+    }
+
+    [Fact]
+    public async Task A_person_is_refused_to_an_unauthenticated_caller_and_nothing_is_read()
+    {
+        var result = await CreateController(AuthContext.Unauthenticated())
+            .GetPerson(Guid.NewGuid(), CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnauthorizedResult>();
+        VerifyNoPersonRead();
+    }
+
+    [Fact]
+    public async Task A_person_with_no_tenant_id_is_a_bad_request_and_nothing_is_read()
+    {
+        var result = await CreateController(Member()).GetPerson(Guid.Empty, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        VerifyNoPersonRead();
+    }
+
+    [Fact]
+    public async Task A_person_the_service_does_not_return_is_not_found()
+    {
+        var result = await CreateController(Member()).GetPerson(Guid.NewGuid(), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Theory]
+    [MemberData(nameof(SubjectlessCredentials))]
+    public async Task A_subjectless_session_is_answered_by_the_service_with_no_subject_for_a_person(
+        AuthType authType)
+    {
+        var tenantId = Guid.NewGuid();
+
+        var result = await CreateController(Subjectless(authType)).GetPerson(tenantId, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        _overviewService.Verify(
+            s => s.GetPersonAsync(
+                null, tenantId, It.IsAny<IReadOnlySet<string>>(), authType,
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    private void VerifyNoPersonRead() =>
+        _overviewService.Verify(
+            s => s.GetPersonAsync(
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     [Theory]
     [MemberData(nameof(SubjectlessCredentials))]

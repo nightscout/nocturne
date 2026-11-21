@@ -70,6 +70,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetReview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
+            ["MyTenantsController.GetPerson"] = "reads one of the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetMyTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
 
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",

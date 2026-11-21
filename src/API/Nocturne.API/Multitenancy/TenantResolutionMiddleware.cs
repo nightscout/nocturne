@@ -94,6 +94,8 @@ public class TenantResolutionMiddleware
         "/api/v4/me/tenants/overview",
         // The same aggregation over a period, reached from the same host.
         new TenantlessPath("/api/v4/me/tenants/overview/review", HttpMethods.Get),
+        // One person of the same aggregation, read for the panel beside the list.
+        new TenantlessPath("/api/v4/me/tenants/overview/person", HttpMethods.Get),
         // The subject's tenant list, which drives the tenantless dashboard's navigation
         // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
         // GET only: the same path takes a POST that creates a tenant, and self-service
