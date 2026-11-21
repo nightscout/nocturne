@@ -69,24 +69,51 @@ public class RequireInteractiveSessionTests
             .Should().BeTrue($"{controller.Name}.{action} manages credentials or sign-in factors");
     }
 
-    [Theory]
-    [InlineData(AuthType.SessionCookie)]
-    [InlineData(AuthType.LegacyJwt)]
-    [InlineData(AuthType.OidcToken)]
-    public void InteractiveCredential_IsAdmitted(AuthType authType) =>
-        Run(new AuthContext { IsAuthenticated = true, AuthType = authType, SubjectId = Guid.CreateVersion7() })
-            .Should().BeNull();
+    /// <summary>
+    /// Every credential type, and whether the filter admits it: only the ones a person's own sign-in
+    /// produces are admitted. <see cref="AuthType.LegacyJwt"/> is a session token presented as a
+    /// bearer; a JWT exchanged from an access token carries its grant and resolves as
+    /// <see cref="AuthType.OAuthAccessToken"/>.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<AuthType, bool> AdmittedByCredentialType =
+        new Dictionary<AuthType, bool>
+        {
+            [AuthType.None] = false,
+            [AuthType.SessionCookie] = true,
+            [AuthType.LegacyJwt] = true,
+            [AuthType.OidcToken] = true,
+            [AuthType.ApiKey] = false,
+            [AuthType.DirectGrant] = false,
+            [AuthType.OAuthAccessToken] = false,
+            [AuthType.Guest] = false,
+            [AuthType.InstanceKey] = false,
+            [AuthType.PlatformAccess] = false,
+        };
+
+    public static TheoryData<AuthType> CredentialTypes => new(Enum.GetValues<AuthType>());
+
+    [Fact]
+    public void EveryCredentialType_IsClassified() =>
+        AdmittedByCredentialType.Keys.Should().BeEquivalentTo(Enum.GetValues<AuthType>());
 
     [Theory]
-    [InlineData(AuthType.ApiKey)]
-    [InlineData(AuthType.DirectGrant)]
-    [InlineData(AuthType.OAuthAccessToken)]
-    [InlineData(AuthType.Guest)]
-    [InlineData(AuthType.InstanceKey)]
-    [InlineData(AuthType.PlatformAccess)]
-    public void DelegatedCredential_IsForbidden(AuthType authType) =>
-        Run(new AuthContext { IsAuthenticated = true, AuthType = authType, SubjectId = Guid.CreateVersion7() })
-            .Should().BeOfType<ForbidResult>();
+    [MemberData(nameof(CredentialTypes))]
+    public void OnlyASignInCredential_IsAdmitted(AuthType authType)
+    {
+        var result = Run(new AuthContext
+        {
+            IsAuthenticated = true, AuthType = authType, SubjectId = Guid.CreateVersion7(),
+        });
+
+        if (AdmittedByCredentialType.GetValueOrDefault(authType))
+        {
+            result.Should().BeNull();
+        }
+        else
+        {
+            result.Should().BeOfType<ForbidResult>();
+        }
+    }
 
     /// <summary>
     /// Left to the action: the recovery session a spent recovery code mints is not an
