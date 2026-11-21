@@ -56,7 +56,10 @@ final class CorpusScenarioTests: XCTestCase {
 
             let result = try XCTUnwrap(response["result"] as? NSDictionary)
             let expectedResult = try XCTUnwrap((expectedTick["rules"] as? [NSDictionary])?.first)
-            XCTAssertEqual(result, expectedResult, "tick \(String(describing: tick["at"]))")
+            // A snapshot pins `next_change_at` only by carrying it (the corpus README).
+            let compared = NSMutableDictionary(dictionary: result)
+            if expectedResult["next_change_at"] == nil { compared.removeObject(forKey: "next_change_at") }
+            XCTAssertEqual(compared, expectedResult, "tick \(String(describing: tick["at"]))")
 
             transitions.append(try XCTUnwrap(result["transition"] as? String))
             timers = try XCTUnwrap(response["timers"] as? [String: Any])
