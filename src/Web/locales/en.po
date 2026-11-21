@@ -4423,6 +4423,7 @@ msgid "Showing:"
 msgstr "Showing:"
 
 #: src/lib/components/meals/MealSuggestionRow.svelte
+#: src/lib/components/people/PeoplePage.svelte
 msgid "Review"
 msgstr "Review"
 
@@ -5729,6 +5730,7 @@ msgstr "<0/> Try again"
 
 #: ../portal/src/routes/roadmap/+page.svelte
 #: src/lib/components/alerts/HistoryCheck.svelte
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -10321,10 +10323,12 @@ msgstr "<0>The lighter shaded area</0> (10th-90th percentile) shows where you ar
 msgid "Target: ≥70%"
 msgstr "Target: ≥70%"
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "GMI"
 msgstr "GMI"
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "CV"
 msgstr "CV"
@@ -11291,6 +11295,7 @@ msgstr "Sleep patterns with overnight glucose overlay"
 #~ msgid "sessions"
 #~ msgstr "sessions"
 
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/print/ReportPrintHeader.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "Period"
@@ -18050,6 +18055,8 @@ msgstr "All features"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/components/people/ReviewRow.svelte
+#: src/lib/components/people/ReviewSummary.svelte
 msgid "in range"
 msgstr "in range"
 
@@ -19544,6 +19551,8 @@ msgstr "{0} · last 14 days"
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/ReviewBar.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -22135,6 +22144,7 @@ msgstr "{0} ({1}) vs {2} ({3})"
 msgid "Metric"
 msgstr "Metric"
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
@@ -26422,6 +26432,7 @@ msgstr "Time not used: {0}."
 
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/wizard/templates.svelte.ts
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
@@ -45166,9 +45177,8 @@ msgid_plural "# people."
 msgstr[0] "# person."
 msgstr[1] "# people."
 
-#: src/lib/components/people/PeoplePage.svelte
-msgid "<0/> Readings refresh every minute."
-msgstr "<0/> Readings refresh every minute."
+#~ msgid "<0/> Readings refresh every minute."
+#~ msgstr "<0/> Readings refresh every minute."
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "The list of people did not load."
@@ -45182,6 +45192,7 @@ msgstr "You follow no other people"
 msgid "When a person gives you access to their data, they show here."
 msgstr "When a person gives you access to their data, they show here."
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Person"
 msgstr "Person"
@@ -45220,6 +45231,7 @@ msgstr "Active alerts:"
 msgid "3 h ago"
 msgstr "3 h ago"
 
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PersonSummary.svelte
 msgid "Now"
 msgstr "Now"
@@ -45348,3 +45360,119 @@ msgstr "View which data sources are connected and whether they are syncing"
 #: src/lib/constants/scope-labels.svelte.ts
 msgid "Connect, change and remove data sources. Data from a connected source is added to your record"
 msgstr "Connect, change and remove data sources. Data from a connected source is added to your record"
+
+#: src/lib/components/people/LimitedData.svelte
+#: src/lib/components/people/LimitedData.svelte
+msgid "Limited data"
+msgstr "Limited data"
+
+#: src/lib/components/people/NoFigure.svelte
+#: src/lib/components/people/ReviewSummary.svelte
+#: src/lib/components/people/ReviewSummary.svelte
+#: src/lib/components/people/ReviewSummary.svelte
+msgid "No figure"
+msgstr "No figure"
+
+#. 0: formatMediumDateRange( new Date(reviewData.from), new Date(reviewData.to) )
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Statistics for {0}."
+msgstr "Statistics for {0}."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Readings refresh every minute."
+msgstr "Readings refresh every minute."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "View"
+msgstr "View"
+
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "The statistics did not load."
+msgstr "The statistics did not load."
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Distribution"
+msgstr "Distribution"
+
+#: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/ReviewRow.svelte
+msgid "Wear"
+msgstr "Wear"
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "Loading statistics"
+msgstr "Loading statistics"
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "24 hours only. Statistics for a period are not available."
+msgstr "24 hours only. Statistics for a period are not available."
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "You do not have access to this person's reports."
+msgstr "You do not have access to this person's reports."
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "No readings in this period."
+msgstr "No readings in this period."
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up less than 1 point from the previous {0} days"
+msgstr "Up less than 1 point from the previous {0} days"
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down less than 1 point from the previous {0} days"
+msgstr "Down less than 1 point from the previous {0} days"
+
+#: src/lib/components/people/review-phrases.svelte.ts
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "# point"
+msgid_plural "# points"
+msgstr[0] "# point"
+msgstr[1] "# points"
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up {0} from the previous {1} days"
+msgstr "Up {0} from the previous {1} days"
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down {0} from the previous {1} days"
+msgstr "Down {0} from the previous {1} days"
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "No change from the previous {0} days"
+msgstr "No change from the previous {0} days"
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up less than 1 point from the previous {0} days."
+msgstr "Up less than 1 point from the previous {0} days."
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down less than 1 point from the previous {0} days."
+msgstr "Down less than 1 point from the previous {0} days."
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up {0} from the previous {1} days."
+msgstr "Up {0} from the previous {1} days."
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down {0} from the previous {1} days."
+msgstr "Down {0} from the previous {1} days."
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "No change from the previous {0} days."
+msgstr "No change from the previous {0} days."
+
+#: src/lib/components/people/ReviewSummary.svelte
+msgid "Sensor wear"
+msgstr "Sensor wear"

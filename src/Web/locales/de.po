@@ -4423,6 +4423,7 @@ msgid "Showing:"
 msgstr "Angezeigt:"
 
 #: src/lib/components/meals/MealSuggestionRow.svelte
+#: src/lib/components/people/PeoplePage.svelte
 msgid "Review"
 msgstr "Überprüfen"
 
@@ -5729,6 +5730,7 @@ msgstr "<0/> Erneut versuchen"
 
 #: ../portal/src/routes/roadmap/+page.svelte
 #: src/lib/components/alerts/HistoryCheck.svelte
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -10321,10 +10323,12 @@ msgstr "<0>Der heller schattierte Bereich</0> (10.–90. Perzentil) zeigt, in we
 msgid "Target: ≥70%"
 msgstr "Ziel: ≥70 %"
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "GMI"
 msgstr "GMI"
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "CV"
 msgstr "CV"
@@ -11291,6 +11295,7 @@ msgstr "Schlafmuster mit nächtlicher Glukose-Überlagerung"
 #~ msgid "sessions"
 #~ msgstr ""
 
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/print/ReportPrintHeader.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "Period"
@@ -18050,6 +18055,8 @@ msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/components/people/ReviewRow.svelte
+#: src/lib/components/people/ReviewSummary.svelte
 msgid "in range"
 msgstr ""
 
@@ -19544,6 +19551,8 @@ msgstr ""
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/ReviewBar.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/utils/insight-messages.svelte.ts
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -22135,6 +22144,7 @@ msgstr ""
 msgid "Metric"
 msgstr ""
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
@@ -26422,6 +26432,7 @@ msgstr ""
 
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/wizard/templates.svelte.ts
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
@@ -45166,9 +45177,8 @@ msgid_plural "# people."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/lib/components/people/PeoplePage.svelte
-msgid "<0/> Readings refresh every minute."
-msgstr ""
+#~ msgid "<0/> Readings refresh every minute."
+#~ msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "The list of people did not load."
@@ -45182,6 +45192,7 @@ msgstr ""
 msgid "When a person gives you access to their data, they show here."
 msgstr ""
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Person"
 msgstr ""
@@ -45220,6 +45231,7 @@ msgstr ""
 msgid "3 h ago"
 msgstr ""
 
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PersonSummary.svelte
 msgid "Now"
 msgstr ""
@@ -45347,4 +45359,120 @@ msgstr ""
 
 #: src/lib/constants/scope-labels.svelte.ts
 msgid "Connect, change and remove data sources. Data from a connected source is added to your record"
+msgstr ""
+
+#: src/lib/components/people/LimitedData.svelte
+#: src/lib/components/people/LimitedData.svelte
+msgid "Limited data"
+msgstr ""
+
+#: src/lib/components/people/NoFigure.svelte
+#: src/lib/components/people/ReviewSummary.svelte
+#: src/lib/components/people/ReviewSummary.svelte
+#: src/lib/components/people/ReviewSummary.svelte
+msgid "No figure"
+msgstr ""
+
+#. 0: formatMediumDateRange( new Date(reviewData.from), new Date(reviewData.to) )
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Statistics for {0}."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Readings refresh every minute."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "View"
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "The statistics did not load."
+msgstr ""
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Distribution"
+msgstr ""
+
+#: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/ReviewRow.svelte
+msgid "Wear"
+msgstr ""
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "Loading statistics"
+msgstr ""
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "24 hours only. Statistics for a period are not available."
+msgstr ""
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "You do not have access to this person's reports."
+msgstr ""
+
+#: src/lib/components/people/ReviewNotice.svelte
+msgid "No readings in this period."
+msgstr ""
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up less than 1 point from the previous {0} days"
+msgstr ""
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down less than 1 point from the previous {0} days"
+msgstr ""
+
+#: src/lib/components/people/review-phrases.svelte.ts
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "# point"
+msgid_plural "# points"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up {0} from the previous {1} days"
+msgstr ""
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down {0} from the previous {1} days"
+msgstr ""
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "No change from the previous {0} days"
+msgstr ""
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up less than 1 point from the previous {0} days."
+msgstr ""
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down less than 1 point from the previous {0} days."
+msgstr ""
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Up {0} from the previous {1} days."
+msgstr ""
+
+#. 0: amount; 1: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "Down {0} from the previous {1} days."
+msgstr ""
+
+#. 0: days
+#: src/lib/components/people/review-phrases.svelte.ts
+msgid "No change from the previous {0} days."
+msgstr ""
+
+#: src/lib/components/people/ReviewSummary.svelte
+msgid "Sensor wear"
 msgstr ""
