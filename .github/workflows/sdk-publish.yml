@@ -116,7 +116,7 @@ jobs:
           fi
 
       - name: Filter spec to SDK endpoints (V4 + OAuth)
-        run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
+        run: node sdk/filter-v4-spec.js src/Web/packages/api-client/src/openapi.json sdk/openapi-v4.json
 
       - name: Upload V4 OpenAPI spec
         uses: actions/upload-artifact@v6

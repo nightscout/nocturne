@@ -8,7 +8,8 @@ import {
   cardTitle,
 } from "./card.test-utils.js";
 import { decodeActionValue, encodeTenantKey } from "../lib/action-value.js";
-import type { ActiveExcursion, AlertPayload } from "../types.js";
+import type { ActiveExcursionResponse } from "@nocturne/api-client";
+import type { AlertPayload } from "../types.js";
 
 const TENANT = "018f2a1b-3c4d-7000-8000-a1b2c3d4e5f6";
 const EXCURSION = "33333333-3333-3333-3333-333333333333";
@@ -146,8 +147,8 @@ describe("ActiveAlertsCard", () => {
   const excursion = (
     id: string,
     ruleName: string,
-    over: Partial<ActiveExcursion> = {},
-  ): ActiveExcursion => ({
+    over: Partial<ActiveExcursionResponse> = {},
+  ): ActiveExcursionResponse => ({
     id,
     ruleName,
     startedAt: new Date(Date.now() - 12 * 60_000).toISOString(),

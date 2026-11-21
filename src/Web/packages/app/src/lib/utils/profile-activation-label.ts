@@ -1,4 +1,4 @@
-import type { ProfileActivationDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { ProfileActivationDto } from "@nocturne/api-client";
 import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
 
 /** The app or connector that wrote an activation, by name; undefined when it carries neither. */

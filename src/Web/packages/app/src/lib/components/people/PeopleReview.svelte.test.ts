@@ -8,7 +8,7 @@ import {
   TenantReviewUnavailable,
   type TenantOverviewItem,
   type TenantReviewPerson,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import PeopleRoster from "./PeopleRoster.svelte";
 import {
   makePerson,

@@ -4,7 +4,7 @@
   import Play from "@lucide/svelte/icons/play";
   import Pause from "@lucide/svelte/icons/pause";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import { AlertReplayEventKind, type AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertReplayEventKind, type AlertRuleSeverity } from "@nocturne/api-client";
   import { severityVar } from "./severity";
   import { formatDateTimeCompact } from "#lib/utils/formatting.js";
 

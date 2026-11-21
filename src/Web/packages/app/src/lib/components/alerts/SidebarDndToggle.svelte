@@ -6,7 +6,7 @@
     get as getDnd,
     update as updateDnd,
   } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
-  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantAlertSettingsResponse } from "@nocturne/api-client";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";

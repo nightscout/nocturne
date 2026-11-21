@@ -8,7 +8,7 @@ import {
   TrackerCategory,
   TrackerMode,
   type TrackerTemplateDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import WithTooltipProvider from "#lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 
@@ -63,7 +63,7 @@ const TEMPLATES: TrackerTemplateDto[] = [
 vi.mock("#lib/api/generated/trackers.generated.remote.js", async () => {
   const { form } = await import("#lib/api/remote-server.js");
   const { formCoerce } = await import("#lib/api/generated/form-utils.generated.js");
-  const { CreateTrackerDefinitionRequestSchema } = await import("#lib/api/generated/schemas.js");
+  const { CreateTrackerDefinitionRequestSchema } = await import("@nocturne/api-client/schemas");
   return {
     getTemplates: () => remoteQuery(() => TEMPLATES),
     getTriggerEventTypes: () => remoteQuery(() => ["Sensor Start", "Sensor Change", "Site Change"]),

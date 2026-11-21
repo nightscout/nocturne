@@ -55,11 +55,27 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
 
+  packages/api-client:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.10
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/app:
     dependencies:
       '@napi-rs/canvas':
         specifier: ^1.1.0
         version: 1.1.0
+      '@nocturne/api-client':
+        specifier: workspace:*
+        version: link:../api-client
       '@nocturne/bot':
         specifier: workspace:*
         version: link:../bot
@@ -298,6 +314,9 @@ importers:
       '@chat-adapter/whatsapp':
         specifier: 4.29.0
         version: 4.29.0(zod@4.6.7)
+      '@nocturne/api-client':
+        specifier: workspace:*
+        version: link:../api-client
       '@nocturne/ui':
         specifier: workspace:*
         version: link:../ui
@@ -732,6 +751,9 @@ importers:
 
   packages/portal:
     dependencies:
+      '@nocturne/api-client':
+        specifier: workspace:*
+        version: link:../api-client
       '@nocturne/app':
         specifier: workspace:*
         version: link:../app

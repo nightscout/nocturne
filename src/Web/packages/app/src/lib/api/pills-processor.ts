@@ -18,7 +18,7 @@ import type {
 	StatusPillsConfig
 } from '#lib/types/status-pills.js';
 import type { Bolus, CarbIntake, ApsSnapshot, ProfileSummary } from '#lib/api/index.js';
-import type { V4BasalInjectionStatus } from '#lib/api/generated/nocturne-api-client.js';
+import type { V4BasalInjectionStatus } from '@nocturne/api-client';
 
 /**
  * DeviceStatus represents device state data from Loop, OpenAPS, or pump systems

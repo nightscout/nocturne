@@ -6,7 +6,7 @@
 <script lang="ts">
   import { untrack, type Snippet } from "svelte";
   import { runCustomReport } from "#lib/api/generated/customReports.generated.remote.js";
-  import type { CustomReportRunRequest, CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CustomReportRunRequest, CustomReportRunResponse } from "@nocturne/api-client";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
 

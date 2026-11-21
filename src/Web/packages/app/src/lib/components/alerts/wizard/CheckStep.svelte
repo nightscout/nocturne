@@ -1,6 +1,6 @@
 <script lang="ts">
   import { testFireDryRun } from "#lib/api/generated/alertRules.generated.remote.js";
-  import type { ReplayRuleDefinition } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ReplayRuleDefinition } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";

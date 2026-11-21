@@ -13,7 +13,7 @@
     type AlertReplayResult,
     type AlertReplayEvent,
     type AlertRuleResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { indexBy } from "#lib/utils/collections.js";
   import { time } from "#lib/utils/formatting.js";
   import type { ChartDataView } from "@nocturne/charts";

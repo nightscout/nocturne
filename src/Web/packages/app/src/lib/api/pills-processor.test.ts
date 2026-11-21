@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { AidAlgorithm, type ApsSnapshot } from "#lib/api/generated/nocturne-api-client.js";
+import { AidAlgorithm, type ApsSnapshot } from "@nocturne/api-client";
 import type { DeviceStatus } from "#lib/api/pills-processor.js";
 import type { Bolus, CarbIntake, ProfileSummary } from "#lib/api/index.js";
 

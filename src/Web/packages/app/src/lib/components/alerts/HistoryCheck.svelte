@@ -6,7 +6,7 @@
     type AlertFiringSearchResult,
     type AlertRuleSeverity,
     type ReplayRuleDefinition,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";

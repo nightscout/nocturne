@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { createRawSnippet } from "svelte";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { ConnectorStatusDto } from "@nocturne/api-client";
 import FirstReadingChartArea from "./FirstReadingChartArea.svelte";
 import CoachHarness from "./FirstReadingCoachHarness.test.svelte";
 import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";

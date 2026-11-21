@@ -1,7 +1,7 @@
 import {
   RailItemId,
   type DashboardRailPreference,
-} from "../../api/generated/nocturne-api-client";
+} from "@nocturne/api-client";
 import { isRecord } from "../../utils/type-guards";
 
 /** Every rail item, in the order the default rail shows them. */

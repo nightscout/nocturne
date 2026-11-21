@@ -32,7 +32,7 @@ import {
   WidgetId,
   type DashboardRailPreference,
   type UserDisplayPreferences,
-} from "../api/generated/nocturne-api-client";
+} from "@nocturne/api-client";
 import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
 import { parseRailPreference } from "../components/status-pills/rail";
 import { weekStartName } from "../components/calendar/calendar-date";

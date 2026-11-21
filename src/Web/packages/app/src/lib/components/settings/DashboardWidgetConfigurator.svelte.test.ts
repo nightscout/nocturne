@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   WidgetId,
   WidgetPlacement,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import type { TopWidgetId } from "#lib/components/dashboard/widget-registry.js";
 
 const top = (id: string, name: string, renderable = true) => ({

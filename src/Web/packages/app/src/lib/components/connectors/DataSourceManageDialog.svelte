@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ConnectionStream } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ConnectionStream } from "@nocturne/api-client";
   import { deleteDataSourceData as deleteDataSourceDataRemote } from "#lib/api/generated/services.generated.remote.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

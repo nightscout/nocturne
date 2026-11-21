@@ -5,7 +5,7 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { page } from "$app/state";
-  import { AuthErrorCode } from "#lib/api/generated/nocturne-api-client.js";
+  import { AuthErrorCode } from "@nocturne/api-client";
   import { getAuthStatus } from "#lib/api/generated/passkeys.generated.remote.js";
   import RecoveryNextStep from "#lib/components/auth/RecoveryNextStep.svelte";
   import { resolve } from "$app/paths";

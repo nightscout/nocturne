@@ -7,7 +7,7 @@
  * forwards as the thrown `HttpError`'s `body.message`.
  */
 
-import { TotpSetupFailure } from "#lib/api/generated/nocturne-api-client.js";
+import { TotpSetupFailure } from "@nocturne/api-client";
 import { describeSubmitError, errorMessage, errorStatus } from "#lib/forms/submit-error.js";
 
 const RESTART_SETUP = "Start it again from your security settings.";

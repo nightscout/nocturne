@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { timeDay } from "d3-time";
-import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import type { DailySummaryDay } from "@nocturne/api-client";
 import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
 import { regionFormat, type RegionFormat } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./YearHeatmap.test-harness.svelte";

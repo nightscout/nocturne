@@ -5,7 +5,7 @@ import OidcProviderDialog from "./OidcProviderDialog.svelte";
 import type {
 	OidcProviderResponse,
 	TenantRoleDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 function make_provider(
 	overrides: Partial<OidcProviderResponse> = {},

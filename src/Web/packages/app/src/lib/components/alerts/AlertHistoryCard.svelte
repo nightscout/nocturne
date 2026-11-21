@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatDayTime } from "#lib/utils/formatting.js";
-  import type { AlertHistoryResponse } from "#lib/api/generated/nocturne-api-client.js";
-  import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AlertHistoryResponse } from "@nocturne/api-client";
+  import { AlertConditionType } from "@nocturne/api-client";
   import {
     Card,
     CardContent,

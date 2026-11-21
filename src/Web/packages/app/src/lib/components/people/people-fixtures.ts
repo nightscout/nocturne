@@ -7,7 +7,7 @@ import {
   type TenantReviewPerson,
   type TenantReviewResponse,
   type TenantReviewStatistics,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const MINUTE_MS = 60_000;
 

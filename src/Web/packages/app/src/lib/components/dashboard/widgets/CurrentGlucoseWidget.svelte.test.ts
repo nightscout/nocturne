@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 
 const now = Date.UTC(2026, 5, 14, 9, 30, 0);

@@ -7,7 +7,7 @@ import {
   ConnectionKind,
   ConnectionStatus,
   type Connection,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 let deleteArgs: unknown[];
 let deleteImpl: () => Promise<unknown>;

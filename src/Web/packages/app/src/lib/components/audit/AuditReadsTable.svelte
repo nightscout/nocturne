@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ReadAccessAuditDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ReadAccessAuditDto } from "@nocturne/api-client";
   import type {
     Column,
     ColumnDef,

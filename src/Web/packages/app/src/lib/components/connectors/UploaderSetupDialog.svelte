@@ -13,7 +13,7 @@
   import XdripQuickConnect from "#lib/components/XdripQuickConnect.svelte";
   import PreludeQuickConnect from "#lib/components/PreludeQuickConnect.svelte";
   import AapsClientSetupCode from "#lib/components/AapsClientSetupCode.svelte";
-  import type { UploaderApp } from "#lib/api/generated/nocturne-api-client.js";
+  import type { UploaderApp } from "@nocturne/api-client";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";

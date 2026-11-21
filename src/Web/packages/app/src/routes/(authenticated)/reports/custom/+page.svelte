@@ -8,7 +8,7 @@
     deleteCustomReport,
     getCustomReports,
   } from "#lib/api/generated/customReports.generated.remote.js";
-  import type { CustomReportSummary } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CustomReportSummary } from "@nocturne/api-client";
   import { clearDraft, draftOwner, dropExpiredDrafts } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";

@@ -2,7 +2,7 @@ import type {
   CustomReportCatalogue,
   CustomReportDataset,
   CustomReportField,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import live from "./catalogue.fixture.json";
 
 /**

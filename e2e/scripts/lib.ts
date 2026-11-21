@@ -171,6 +171,7 @@ const API_INPUTS = [
 ];
 const WEB_INPUTS = ["src/Web", "Dockerfile.web"];
 const GENERATED_CLIENT = join(REPO_ROOT, "src/Web/packages/app/src/lib/api");
+const CLIENT_PACKAGE_SRC = join(REPO_ROOT, "src/Web/packages/api-client/src");
 const CLIENT_STAMP = join(E2E_DIR, ".state", "client-generated-from");
 
 export interface Images {
@@ -216,7 +217,7 @@ async function buildApi(ref: string) {
 async function ensureClient(apiHash: string): Promise<string> {
   const generated = join(GENERATED_CLIENT, "generated");
   const stamp = existsSync(CLIENT_STAMP) ? readFileSync(CLIENT_STAMP, "utf8").trim() : "";
-  if (stamp !== apiHash || !existsSync(generated)) {
+  if (stamp !== apiHash || !existsSync(generated) || !existsSync(CLIENT_PACKAGE_SRC)) {
     console.log("[e2e] regenerating the API client for the web image");
     await mustRun("dotnet", [
       "build", "src/API/Nocturne.API/Nocturne.API.csproj",
@@ -226,7 +227,7 @@ async function ensureClient(apiHash: string): Promise<string> {
     writeFileSync(CLIENT_STAMP, apiHash);
   }
   const hash = createHash("sha256");
-  const files = [join(GENERATED_CLIENT, "api-client.generated.ts"), ...listFiles(generated)].sort();
+  const files = [join(GENERATED_CLIENT, "api-client.generated.ts"), ...listFiles(generated), ...listFiles(CLIENT_PACKAGE_SRC)].sort();
   for (const file of files) {
     if (!existsSync(file)) continue;
     hash.update(file.slice(REPO_ROOT.length));

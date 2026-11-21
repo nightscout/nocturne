@@ -13,12 +13,12 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
-  import { ChannelType, AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+  import { ChannelType, AlertRuleSeverity } from "@nocturne/api-client";
   import type {
     ChannelStatusEntry,
     DeviceCapabilityCatalog,
     InAppRecipientResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { EmptyState } from "#lib/components/shared/index.js";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import { applyChannelDestination, type ChannelDef } from "./types";

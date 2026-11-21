@@ -4,7 +4,7 @@ import { page } from "vitest/browser";
 import type {
   DailySummaryResponse,
   GriTimelineResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const requests = vi.hoisted(() => ({
   metadata: vi.fn(),

@@ -14,7 +14,7 @@ The pipeline runs as part of the API build, in three stages:
 2. **The Zod generator** reads that OpenAPI document and writes a validator for each schema.
 3. **Remote function codegen** writes a SvelteKit remote function for each controller action marked `[RemoteQuery]`, `[RemoteCommand]` or `[RemoteFormData]`.
 
-The output goes to `src/Web/packages/app/src/lib/api/generated/`. It is not committed: the build regenerates it.
+The NSwag client, its OpenAPI document and the Zod schemas go to `src/Web/packages/api-client/src/`, the `@nocturne/api-client` package that the app and the bot both import. The remote functions go to `src/Web/packages/app/src/lib/api/generated/`. Neither is committed: the build regenerates them.
 
 ## Two OpenAPI documents
 

@@ -2,7 +2,7 @@
   import type {
     InAppNotificationDto,
     UndecryptableAlertChannel,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { formatList } from "#lib/utils/formatting.js";
   import { platformCategoryName } from "#lib/utils/platform-categories.js";
 

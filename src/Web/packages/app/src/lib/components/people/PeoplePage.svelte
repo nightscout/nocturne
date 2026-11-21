@@ -6,7 +6,7 @@
     getOverview,
     getReview,
   } from "#lib/api/generated/myTenants.generated.remote.js";
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/shared/index.js";
   import * as Sheet from "#lib/components/ui/sheet/index.js";

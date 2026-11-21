@@ -1,4 +1,4 @@
-import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
+import type { RustValidationIssue } from "@nocturne/api-client";
 import { parseCode, parseIssues } from "#lib/api/error-body.js";
 import { recordApiFailure } from "#lib/support/api-failure-log.js";
 import {

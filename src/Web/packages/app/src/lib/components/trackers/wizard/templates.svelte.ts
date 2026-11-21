@@ -1,7 +1,7 @@
 import type {
 	TrackerDefinitionDto,
 	TrackerTemplateDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { getNightscoutEventTypeLabel } from "#lib/constants/device-event-types.svelte.js";
 
 /**

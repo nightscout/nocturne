@@ -17,7 +17,7 @@
   } from "@nocturne/charts";
   import { computeTrackLayout } from "@nocturne/charts/core";
   import { GlucoseTrack, ThresholdRules } from "@nocturne/charts";
-  import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ChartThresholdsDto } from "@nocturne/api-client";
   import { resolveChartThresholds } from "@nocturne/charts/core";
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
   import { hourLabel } from "#lib/utils/formatting.js";

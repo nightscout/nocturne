@@ -9,7 +9,7 @@
  *      OpenApsStatus, LoopIob, LoopCob, Bolus, CarbIntake, DeviceEvent, Profile, etc.
  */
 
-import type { V4BasalInjectionStatus } from '#lib/api/generated/nocturne-api-client.js';
+import type { V4BasalInjectionStatus } from '@nocturne/api-client';
 
 /**
  * Alert levels for visual styling of pills

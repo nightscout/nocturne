@@ -23,7 +23,7 @@
     GriTimelinePeriod,
     TimeZoneUnavailableReason,
     YearOverviewColorPreferences,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getUnitLabel } from "#lib/utils/formatting.js";
   import { glucoseUnits, yearOverviewColors } from "#lib/stores/appearance-store.svelte.js";
 

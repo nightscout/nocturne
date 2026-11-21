@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { AlertRuleResponse } from "@nocturne/api-client";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const RULE_ID = "11111111-1111-1111-1111-111111111111";

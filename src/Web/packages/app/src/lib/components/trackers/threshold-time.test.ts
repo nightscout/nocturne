@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TrackerMode } from "#lib/api/generated/nocturne-api-client.js";
+import { TrackerMode } from "@nocturne/api-client";
 import { joinHours, splitHours, thresholdIssue } from "./threshold-time";
 
 describe("threshold time", () => {

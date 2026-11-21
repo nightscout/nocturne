@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import { relativeAge, toDate } from "#lib/utils/formatting.js";
   import History from "@lucide/svelte/icons/history";
   import { readingIsNotCurrent } from "./person.js";

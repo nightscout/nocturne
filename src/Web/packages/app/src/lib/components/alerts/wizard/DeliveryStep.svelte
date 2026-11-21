@@ -1,6 +1,6 @@
 <script lang="ts">
   import { z } from "zod";
-  import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertRuleSeverity } from "@nocturne/api-client";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import * as RadioGroup from "#lib/components/ui/radio-group/index.js";

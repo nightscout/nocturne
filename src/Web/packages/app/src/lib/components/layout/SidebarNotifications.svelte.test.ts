@@ -6,7 +6,7 @@ import { goto } from "$app/navigation";
 import {
   NotificationUrgency,
   type InAppNotificationDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const server = vi.hoisted(() => ({
   answer: (): Promise<unknown> => Promise.resolve(),

@@ -4,7 +4,7 @@
     type AvailableConnector,
     type GoogleHealthStatus,
     type UploaderApp,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Item } from "#lib/components/ui/item/index.js";

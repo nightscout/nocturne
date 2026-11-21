@@ -1,6 +1,6 @@
 <script lang="ts">
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
-	import type { DataQualitySettings } from '#lib/api/generated/nocturne-api-client.js';
+	import type { DataQualitySettings } from '@nocturne/api-client';
 	import { getUiSettings } from '#lib/api/ui-settings.remote.js';
 	import { patchDataQualitySettings } from '#lib/api/generated/uiSettings.generated.remote.js';
 	import { remoteErrorMessage } from '#lib/api/remote-error.js';

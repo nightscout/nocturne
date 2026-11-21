@@ -11,7 +11,7 @@
     import { glucoseUnits } from "@nocturne/app/stores/appearance-store.svelte";
     import ReplayView from "@nocturne/app/components/alerts/ReplayView.svelte";
     import { createStaticChartView, type TransformedChartData } from "@nocturne/charts";
-    import type { AlertReplayResult } from "@nocturne/app/api-client";
+    import type { AlertReplayResult } from "@nocturne/api-client";
     import { replay, validate } from "./engine";
     import type { GroupNode, SimRule, ValidationIssue } from "./wire";
     import { SCENARIOS, ticksFor, type ScenarioId } from "./fixtures";

@@ -2,12 +2,12 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
-import { AlertRuleSeverity, ChannelStatus, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertRuleSeverity, ChannelStatus, ChannelType } from "@nocturne/api-client";
 import type {
 	ChannelStatusResponse,
 	DeviceCapabilityCatalog,
 	InAppRecipientResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import type { ChannelDef } from "./types";
 import { page as pageState } from "$app/state";
 

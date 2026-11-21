@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getPerson } from "#lib/api/generated/myTenants.generated.remote.js";
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { Key } from "@nocturne/ui/keys";

@@ -1,5 +1,5 @@
 import { getContext, setContext } from "svelte";
-import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantOverviewItem } from "@nocturne/api-client";
 
 export interface PersonSelection {
   readonly selectedSlug: string | null;

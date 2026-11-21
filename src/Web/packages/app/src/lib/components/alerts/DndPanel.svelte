@@ -9,7 +9,7 @@
     get as getDnd,
     update as updateDnd,
   } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
-  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantAlertSettingsResponse } from "@nocturne/api-client";
   import { describeSubmitError } from "#lib/forms/index.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import Bell from "@lucide/svelte/icons/bell";

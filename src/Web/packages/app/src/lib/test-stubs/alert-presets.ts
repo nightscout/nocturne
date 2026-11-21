@@ -4,7 +4,7 @@ import {
 	AlertRuleSeverity,
 	TrackerCategory,
 	type AlertPresetResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 /** What `GET /api/v4/alert-rules/presets` answers, for a test that renders the alert wizard. */
 export const ALERT_PRESETS: AlertPresetResponse[] = [

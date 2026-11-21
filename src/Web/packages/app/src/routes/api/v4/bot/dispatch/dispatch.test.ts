@@ -39,7 +39,14 @@ const EVENT = {
   channelType: "discord_dm",
   destination: "channel-1",
   tenantSlug: "acme",
-  payload: { ruleName: "Low glucose" },
+  payload: {
+    ruleName: "Low glucose",
+    readingTimestamp: "2026-01-01T00:00:00.000Z",
+    excursionId: "018f2a1b-3c4d-7000-8000-000000000001",
+    tenantId: "018f2a1b-3c4d-7000-8000-a1b2c3d4e5f6",
+    subjectName: "Alex",
+    severity: "critical",
+  },
 };
 
 /** Invokes the handler the way SvelteKit would, with only what the route reads. */
@@ -134,6 +141,30 @@ describe("POST /api/v4/bot/dispatch", () => {
   it("rejects an event with no tenant slug", async () => {
     const { tenantSlug: _omitted, ...noSlug } = EVENT;
     const response = await post(noSlug, serviceHeaders);
+
+    expect(response.status).toBe(400);
+    expect(handleBotDispatch).not.toHaveBeenCalled();
+  });
+
+  it("dispatches an alert with a severity, a field and an id format this build does not know", async () => {
+    const payload = {
+      ...EVENT.payload,
+      severity: "emergency",
+      alertType: "glucose_variability",
+      kind: "digest",
+      batteryLevel: 40,
+      readingTimestamp: "2026-01-01T00:00:00",
+      excursionId: "33333333-3333-3333-3333-333333333333",
+    };
+    const response = await post({ ...EVENT, payload }, serviceHeaders);
+
+    expect(response.status).toBe(204);
+    expect(handleBotDispatch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an event whose payload lacks the excursion to acknowledge", async () => {
+    const { excursionId: _omitted, ...rest } = EVENT.payload;
+    const response = await post({ ...EVENT, payload: rest }, serviceHeaders);
 
     expect(response.status).toBe(400);
     expect(handleBotDispatch).not.toHaveBeenCalled();

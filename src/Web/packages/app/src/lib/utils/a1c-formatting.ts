@@ -1,5 +1,5 @@
 import { a1cName, a1cUnits } from "#lib/stores/appearance-store.svelte.js";
-import type { A1cDisplayValue } from "#lib/api/generated/nocturne-api-client.js";
+import type { A1cDisplayValue } from "@nocturne/api-client";
 
 export function a1cLabel(estimated = false): string {
   return `${estimated ? "e" : ""}${a1cName.current}`;

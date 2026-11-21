@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { DataQualitySettings } from "#lib/api/generated/nocturne-api-client.js";
+import type { DataQualitySettings } from "@nocturne/api-client";
 
 const { patchDataQualitySettings, refresh } = vi.hoisted(() => ({
   patchDataQualitySettings: vi.fn(),

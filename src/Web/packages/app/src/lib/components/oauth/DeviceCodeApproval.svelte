@@ -8,7 +8,7 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Shield from "@lucide/svelte/icons/shield";
   import X from "@lucide/svelte/icons/x";
-  import type { DeviceCodeInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import type { DeviceCodeInfo } from "@nocturne/api-client";
   import { getDeviceInfo } from "#routes/(authenticated)/oauth/oauth.remote.js";
   import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
   import FormError from "#lib/forms/FormError.svelte";

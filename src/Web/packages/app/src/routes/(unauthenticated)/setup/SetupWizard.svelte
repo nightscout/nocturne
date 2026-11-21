@@ -31,7 +31,7 @@
     UploaderApp,
     DataSourceInfo,
     PatientRelationship,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import StepSidebar from "./StepSidebar.svelte";
   import SetupChrome from "./SetupChrome.svelte";

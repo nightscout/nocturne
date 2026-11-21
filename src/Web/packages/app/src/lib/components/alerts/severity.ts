@@ -1,4 +1,4 @@
-import type { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+import type { AlertRuleSeverity } from "@nocturne/api-client";
 import { statusVar, type StatusToken } from "@nocturne/ui/tokens";
 
 export type SeveritySlot = "dot" | "chip" | "strip" | "text";

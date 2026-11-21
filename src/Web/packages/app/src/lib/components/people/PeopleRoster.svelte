@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import { bgLabel } from "#lib/utils/formatting.js";
   import PersonRow from "./PersonRow.svelte";
   import PersonSummary from "./PersonSummary.svelte";

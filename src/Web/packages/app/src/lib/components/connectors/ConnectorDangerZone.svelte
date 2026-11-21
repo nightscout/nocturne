@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatNumber } from "#lib/utils/formatting.js";
-  import type { ConnectorDataSummary } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ConnectorDataSummary } from "@nocturne/api-client";
   import { deleteConfiguration } from "#lib/api/generated/configurations.generated.remote.js";
   import { deleteConnectorData } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";

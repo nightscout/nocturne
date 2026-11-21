@@ -8,7 +8,7 @@ import {
   TenantOverviewAttentionKind,
   type TenantOverviewAttention,
   type TenantOverviewItem,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import AttentionReasons from "./AttentionReasons.svelte";
 import { makePerson } from "./people-fixtures.js";
 

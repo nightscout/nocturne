@@ -7,7 +7,7 @@ import {
   NotificationUrgency,
   TenantOverviewAttentionKind,
   type TenantOverviewItem,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import PeopleRoster from "./PeopleRoster.svelte";
 import { makePerson, minutesAgo } from "./people-fixtures.js";

@@ -16,8 +16,8 @@
   import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";
   import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
   import { z } from "zod";
-  import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
-  import type { HistoryExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertRuleSeverity } from "@nocturne/api-client";
+  import type { HistoryExcursionResponse } from "@nocturne/api-client";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

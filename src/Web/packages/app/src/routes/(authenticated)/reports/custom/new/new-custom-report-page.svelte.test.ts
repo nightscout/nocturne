@@ -6,7 +6,7 @@ import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 import { BUILDER_KIND, BUILDER_VERSION } from "#lib/components/reports/custom/workspace/saved-state.js";
 import { runOf, statisticsTemplate } from "../custom-report-fixtures.js";
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 
 type Spec = { panels: { id: string; tracks?: { layers: { id: string }[] }[] }[]; builder?: { kind: string; version: number; state: unknown } };
 

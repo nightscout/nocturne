@@ -4,7 +4,7 @@
     UploaderApp,
     UploaderSetupResponse,
     DataSourceInfo,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
   import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
   import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";

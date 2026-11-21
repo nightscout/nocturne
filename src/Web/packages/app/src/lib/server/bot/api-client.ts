@@ -10,7 +10,11 @@ import {
   getApiBaseUrl,
 } from "#lib/server/api-client-factory.js";
 import { getHashedInstanceKey } from "#lib/server/instance-key.js";
-import { AlertAcknowledgementOutcome, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  AlertAcknowledgementOutcome,
+  ChannelType,
+  type DirectoryCandidate as ApiDirectoryCandidate,
+} from "@nocturne/api-client";
 import { errorStatus } from "#lib/forms/submit-error.js";
 
 const CHANNEL_TYPES: readonly ChannelType[] = Object.values(ChannelType);
@@ -67,7 +71,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
       acknowledgeAsLinkedMember: async (linkId, request, signal) => {
         const res = await api.chatIdentityDirectory.acknowledgeAsLinkedMember(
           linkId,
-          { ...request, excursionId: request.excursionId ?? undefined },
+          request,
           signal,
         );
         const outcome = toOutcome(res.outcome);
@@ -203,15 +207,7 @@ export function buildScopedBotApiClient(
   return buildBotApiClient(scopedApiClient);
 }
 
-function mapCandidate(c: {
-  id?: string;
-  tenantId?: string;
-  tenantSlug?: string;
-  nocturneUserId?: string;
-  label?: string;
-  displayName?: string;
-  isDefault?: boolean;
-}): DirectoryCandidate {
+function mapCandidate(c: ApiDirectoryCandidate): DirectoryCandidate {
   return {
     id: c.id ?? "",
     tenantId: c.tenantId ?? "",

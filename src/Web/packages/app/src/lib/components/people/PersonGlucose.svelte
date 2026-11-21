@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
   import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";

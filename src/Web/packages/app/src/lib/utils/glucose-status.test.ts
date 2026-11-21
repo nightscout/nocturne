@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import {
   glucoseStatusStyles,
   getGlucoseStatusClass,

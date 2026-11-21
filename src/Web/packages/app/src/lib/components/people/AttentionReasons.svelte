@@ -2,7 +2,7 @@
   import {
     TenantOverviewAttentionKind,
     type TenantOverviewItem,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import {
     VALUE_TONE,
     alertLevel,

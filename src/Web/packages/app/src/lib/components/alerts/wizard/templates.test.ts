@@ -3,7 +3,7 @@ import {
 	TrackerCategory,
 	TrackerMode,
 	type TrackerDefinitionDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
 import { buildBody, parseRule } from "../types";
 import {

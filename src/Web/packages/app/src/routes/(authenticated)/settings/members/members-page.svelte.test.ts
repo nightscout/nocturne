@@ -8,7 +8,7 @@ import {
   type LockedOutMember,
   type TenantMemberDto,
   type TenantRoleDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({

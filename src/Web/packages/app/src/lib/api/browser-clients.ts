@@ -16,7 +16,7 @@ import {
   SensorGlucoseClient,
   TrackerLegacyFallbacksClient,
   TrackersClient,
-} from "./generated/nocturne-api-client";
+} from "@nocturne/api-client";
 
 type Http = NonNullable<ConstructorParameters<typeof SensorGlucoseClient>[1]>;
 

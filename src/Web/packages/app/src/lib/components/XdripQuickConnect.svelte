@@ -3,7 +3,7 @@
   import { browser } from "$app/env";
   import QRCode from "qrcode";
   import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
-  import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import type { DataSourceInfo } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
   import DeviceCodeApproval from "#lib/components/oauth/DeviceCodeApproval.svelte";

@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { ConnectionStream } from "#lib/api/generated/nocturne-api-client.js";
+import type { ConnectionStream } from "@nocturne/api-client";
 
 let deleteImpl: () => Promise<unknown>;
 let deleteArgs: unknown[];

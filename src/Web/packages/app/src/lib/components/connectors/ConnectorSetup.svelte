@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AvailableConnector } from "@nocturne/api-client";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,

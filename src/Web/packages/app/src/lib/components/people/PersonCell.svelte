@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import AttentionReasons from "./AttentionReasons.svelte";
   import { personName } from "./person.js";
 

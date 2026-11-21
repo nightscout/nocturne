@@ -1,4 +1,4 @@
-import { SyncDataType } from '#lib/api/generated/nocturne-api-client.js';
+import { SyncDataType } from '@nocturne/api-client';
 
 /**
  * Human-readable labels for record type keys returned by the API.

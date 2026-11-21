@@ -22,7 +22,7 @@ import {
   relativeTime as sharedRelativeTime,
   type RelativeTimeOptions,
 } from "@nocturne/ui/relative-time";
-import type { OverallAverages, Treatment, TreatmentSummary } from "#lib/api/generated/nocturne-api-client.js";
+import type { OverallAverages, Treatment, TreatmentSummary } from "@nocturne/api-client";
 import {
   formatClockTime,
   formatHourLabel,

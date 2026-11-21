@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, afterEach } from "vitest";
-import type { ActiveProfileSchedules } from "#lib/api/generated/nocturne-api-client.js";
+import type { ActiveProfileSchedules } from "@nocturne/api-client";
 import { timeFormat } from "#lib/stores/appearance-store.svelte.js";
 import ScheduleFooter from "./ScheduleFooter.svelte";
 

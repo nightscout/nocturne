@@ -13,7 +13,7 @@
   import {
     WidgetPlacement,
     type WidgetId,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getWidgetDefinitions } from "#lib/api/generated/metadatas.generated.remote.js";
   import {
     TOP_WIDGET_IDS,

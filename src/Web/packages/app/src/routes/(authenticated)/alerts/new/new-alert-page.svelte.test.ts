@@ -5,7 +5,7 @@ import { page as pageState } from "$app/state";
 import {
   AlertReplayEventKind,
   type AlertFiringSearchResult,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 

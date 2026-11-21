@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EventAnchorKind } from "#lib/api/index.js";
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
 import { STARTERS, starter } from "./starters.js";
