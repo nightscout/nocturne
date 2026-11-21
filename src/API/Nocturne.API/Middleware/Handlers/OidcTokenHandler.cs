@@ -278,9 +278,14 @@ public class OidcTokenHandler : IAuthHandler
     }
 
     /// <summary>
-    /// Build an AuthContext from validated OIDC claims, or null when the subject the identity
-    /// resolves to is not active.
+    /// Build an AuthContext from validated OIDC claims, or null when the identity is linked to no
+    /// subject or to one that is not active.
     /// </summary>
+    /// <remarks>
+    /// Read-only: a bearer token is not a sign-in, so it neither creates a subject for an identity not
+    /// seen before nor refreshes the profile of a known one. Both happen only at the provider callback,
+    /// after admission (<see cref="OidcAuthService.CompleteLoginAsync"/>).
+    /// </remarks>
     private async Task<AuthContext?> BuildAuthContextAsync(
         ClaimsPrincipal claims,
         OidcProvider provider,
@@ -288,39 +293,16 @@ public class OidcTokenHandler : IAuthHandler
         string token
     )
     {
-        // Extract standard claims
         var oidcSubjectId =
             claims.FindFirst("sub")?.Value ?? claims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var email = claims.FindFirst("email")?.Value ?? claims.FindFirst(ClaimTypes.Email)?.Value;
-        // email_verified speaks for the standard email claim only, so a remapped email is unverified.
-        var emailVerified = string.Equals(
-            claims.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-        var name =
-            claims.FindFirst("name")?.Value
-            ?? claims.FindFirst("preferred_username")?.Value
-            ?? claims.FindFirst(ClaimTypes.Name)?.Value
-            ?? email
-            ?? oidcSubjectId;
 
-        // Apply custom claim mappings from provider configuration
-        if (provider.ClaimMappings.Count > 0)
+        foreach (var mapping in provider.ClaimMappings)
         {
-            foreach (var mapping in provider.ClaimMappings)
+            if (string.Equals(mapping.Value, "email", StringComparison.OrdinalIgnoreCase)
+                && claims.FindFirst(mapping.Key)?.Value is { Length: > 0 } mappedEmail)
             {
-                var claimValue = claims.FindFirst(mapping.Key)?.Value;
-                if (!string.IsNullOrEmpty(claimValue))
-                {
-                    switch (mapping.Value.ToLowerInvariant())
-                    {
-                        case "email":
-                            email = claimValue;
-                            emailVerified &= mapping.Key == "email";
-                            break;
-                        case "name":
-                            name = claimValue;
-                            break;
-                    }
-                }
+                email = mappedEmail;
             }
         }
 
@@ -329,18 +311,9 @@ public class OidcTokenHandler : IAuthHandler
             throw new InvalidOperationException("OIDC token missing subject identifier");
         }
 
-        // Find or create subject from OIDC identity
-        var subject = await subjectService.FindOrCreateFromOidcAsync(
-            provider.Id,
-            oidcSubjectId,
-            provider.IssuerUrl,
-            email,
-            emailVerified,
-            name,
-            provider.DefaultRoles
-        );
+        var subject = await subjectService.FindFromOidcAsync(oidcSubjectId, provider.IssuerUrl);
 
-        if (!subject.IsActive)
+        if (subject is not { IsActive: true })
         {
             return null;
         }
