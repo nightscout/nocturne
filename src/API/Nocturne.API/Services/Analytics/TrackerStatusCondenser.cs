@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Widget;
 
@@ -22,7 +23,7 @@ public static class TrackerStatusCondenser
             }
 
             var definition = instance.Definition;
-            var urgency = CalculateUrgency(instance, definition, nowUtc);
+            var urgency = TrackerSchedule.UrgencyAt(instance, nowUtc);
 
             if (!ShouldShow(definition.DashboardVisibility, urgency))
             {
@@ -62,63 +63,6 @@ public static class TrackerStatusCondenser
         }
 
         return statuses;
-    }
-
-    private static NotificationUrgency CalculateUrgency(
-        TrackerInstance instance,
-        TrackerDefinition definition,
-        DateTime nowUtc
-    )
-    {
-        var thresholds = definition.NotificationThresholds
-            .OrderByDescending(t => t.Urgency)
-            .ToList();
-
-        if (!thresholds.Any())
-        {
-            return NotificationUrgency.Info;
-        }
-
-        if (definition.Mode == TrackerMode.Duration)
-        {
-            var ageHours = instance.AgeHoursAt(nowUtc);
-            var lifespanHours = definition.LifespanHours ?? 0;
-
-            foreach (var threshold in thresholds)
-            {
-                // Negative hours count back from the end of the lifespan.
-                var effectiveThresholdHours = threshold.Hours < 0
-                    ? lifespanHours + threshold.Hours
-                    : threshold.Hours;
-
-                if (ageHours >= effectiveThresholdHours)
-                {
-                    return threshold.Urgency;
-                }
-            }
-        }
-        else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
-        {
-            var hoursUntilEvent = (instance.ScheduledAt.Value - nowUtc).TotalHours;
-
-            foreach (var threshold in thresholds)
-            {
-                // Negative hours fire when approaching the event, positive hours when overdue.
-                if (threshold.Hours < 0)
-                {
-                    if (hoursUntilEvent <= Math.Abs(threshold.Hours) && hoursUntilEvent >= 0)
-                    {
-                        return threshold.Urgency;
-                    }
-                }
-                else if (hoursUntilEvent < 0 && Math.Abs(hoursUntilEvent) >= threshold.Hours)
-                {
-                    return threshold.Urgency;
-                }
-            }
-        }
-
-        return NotificationUrgency.Info;
     }
 
     private static bool ShouldShow(DashboardVisibility visibility, NotificationUrgency currentUrgency)

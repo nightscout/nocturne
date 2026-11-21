@@ -45,6 +45,18 @@ public static class TrackerSchedule
     }
 
     /// <summary>
+    /// The level a running <paramref name="instance"/> has reached at <paramref name="at"/>: the
+    /// highest urgency among the thresholds that fire at or before it, else
+    /// <see cref="NotificationUrgency.Info"/>.
+    /// </summary>
+    public static NotificationUrgency UrgencyAt(TrackerInstance instance, DateTime at) =>
+        instance.Definition.NotificationThresholds
+            .Where(t => FiresAt(instance, t) is { } firesAt && firesAt <= at)
+            .Select(t => t.Urgency)
+            .DefaultIfEmpty(NotificationUrgency.Info)
+            .Max();
+
+    /// <summary>
     /// Why a run that was ended by a newer one is over, as the history reads it: a run that reached its
     /// lifespan expired, one replaced before that was replaced early, and one with no lifespan has no
     /// term to have reached, so it is a plain completion.
