@@ -35,12 +35,12 @@ function crowd(count: number, flagged: string[] = []): TenantOverviewItem[] {
 }
 
 function renderRoster(people: TenantOverviewItem[]) {
-  return render(PeopleRoster, { props: { people, baseDomain: "example.com" } });
+  return render(PeopleRoster, { props: { people } });
 }
 
 function linkedNames() {
   return page
-    .getByTestId("person-link")
+    .getByTestId("person-row")
     .elements()
     .map((link) => link.querySelector("p")?.textContent?.trim());
 }
@@ -121,28 +121,13 @@ describe("PeopleRoster layout", () => {
       .element(page.getByTestId("people-column-labels"))
       .toHaveTextContent("Glucose, mg/dL");
   });
-
-  it("links the whole row to the person's site", async () => {
-    renderRoster(crowd(5));
-
-    await expect
-      .element(page.getByTestId("person-link").first())
-      .toHaveAttribute("href", expect.stringContaining("//person0.example.com"));
-  });
-
-  it("renders unlinked when there is no base domain", async () => {
-    render(PeopleRoster, { props: { people: crowd(5), baseDomain: null } });
-
-    await expect.element(page.getByText("Person0")).toBeVisible();
-    expect(page.getByTestId("person-link").elements()).toHaveLength(0);
-  });
 });
 
 describe.each([
   ["compact", 5],
   ["large", 1],
 ])("a person in the %s layout", (_layout, count) => {
-  const row = () => page.getByTestId("person-link").first();
+  const row = () => page.getByTestId("person-row").first();
 
   function renderOne(overrides: Partial<TenantOverviewItem>) {
     const people = crowd(count);
@@ -403,7 +388,7 @@ describe("PeopleRoster in mmol/L", () => {
     await expect
       .element(page.getByTestId("people-column-labels"))
       .toHaveTextContent("Glucose, mmol/L");
-    const row = page.getByTestId("person-link").first();
+    const row = page.getByTestId("person-row").first();
     await expect.element(row.getByText("5.5", { exact: true })).toBeVisible();
     await expect.element(row.getByTestId("bg-delta")).toHaveTextContent("+1.0");
     await expect.element(row.getByTestId("bg-delta")).toHaveTextContent("mmol/L");
@@ -488,7 +473,7 @@ describe("PeopleRoster on a narrow container", () => {
     });
     renderRoster(people);
 
-    const links = page.getByTestId("person-link");
+    const links = page.getByTestId("person-row");
     await expect.element(links.first()).toBeVisible();
     for (const link of links.elements()) {
       expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth);
@@ -504,10 +489,10 @@ describe("PeopleRoster on a narrow container", () => {
     await page.viewport(375, 900);
     renderRoster(crowd(5));
 
-    await expect.element(page.getByTestId("person-link").first()).toBeVisible();
+    await expect.element(page.getByTestId("person-row").first()).toBeVisible();
     expect(page.getByTestId("people-column-labels").element()).not.toBeVisible();
     await expect
-      .element(page.getByTestId("person-link").first().getByText("mg/dL").first())
+      .element(page.getByTestId("person-row").first().getByText("mg/dL").first())
       .toBeVisible();
   });
 });
@@ -516,10 +501,10 @@ describe("PeopleRoster compact row density", () => {
   it("keeps a row with no reasons, a trace and a pump cell to 48px", async () => {
     renderRoster(crowd(5));
 
-    const link = page.getByTestId("person-link").first();
+    const link = page.getByTestId("person-row").first();
     await expect.element(link.getByTestId("person-trace")).toBeInTheDocument();
     await expect.element(link.getByTestId("pump-cell")).toBeVisible();
-    for (const row of page.getByTestId("person-link").elements()) {
+    for (const row of page.getByTestId("person-row").elements()) {
       expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(48);
     }
   });

@@ -4,22 +4,20 @@
   import LimitedData from "./LimitedData.svelte";
   import NoFigure from "./NoFigure.svelte";
   import PersonCell from "./PersonCell.svelte";
-  import PersonLink from "./PersonLink.svelte";
+  import PersonSelect from "./PersonSelect.svelte";
   import ReviewBar from "./ReviewBar.svelte";
   import ReviewChange from "./ReviewChange.svelte";
   import ReviewNotice from "./ReviewNotice.svelte";
   import { onePlacePercent, wholePercent } from "./review-format.js";
   import { isNotReliable, type ReviewCell } from "./review-lens.js";
-  import { personHref } from "./person.js";
   import { REVIEW_ROW_GRID } from "./row-grid.js";
 
   interface Props {
     person: TenantOverviewItem;
-    baseDomain: string | null;
     cell: ReviewCell;
   }
 
-  const { person, baseDomain, cell }: Props = $props();
+  const { person, cell }: Props = $props();
 </script>
 
 {#snippet figure(value: number | undefined | null, digits: "whole" | "one")}
@@ -31,8 +29,8 @@
 {/snippet}
 
 <li>
-  <PersonLink
-    href={personHref(person, baseDomain)}
+  <PersonSelect
+    {person}
     class="flex flex-wrap items-center gap-x-3 gap-y-1 {REVIEW_ROW_GRID}"
   >
     <PersonCell {person} class="basis-full @2xl:basis-auto" />
@@ -85,5 +83,5 @@
     {:else if cell.kind !== "read-failed"}
       <ReviewNotice {cell} class="@2xl:col-[2/-1]" />
     {/if}
-  </PersonLink>
+  </PersonSelect>
 </li>

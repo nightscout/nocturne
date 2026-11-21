@@ -14,6 +14,9 @@ const overview = $state<{
 const refresh = vi.hoisted(() => ({ run: async () => {} }));
 
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  getPerson: () => {
+    throw new Error("No person is selected");
+  },
   getOverview: () => ({
     get current() {
       return overview.data;

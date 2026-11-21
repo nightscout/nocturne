@@ -48,6 +48,9 @@ vi.mock("#lib/utils/poll-while-visible.svelte.js", () => ({
 }));
 
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  getPerson: () => {
+    throw new Error("No person is selected");
+  },
   getOverview: () => ({
     get current() {
       return overview.data;
@@ -88,7 +91,7 @@ function reviewOf(people: ReturnType<typeof crowd>): TenantReviewResponse {
 
 function linkedNames() {
   return page
-    .getByTestId("person-link")
+    .getByTestId("person-row")
     .elements()
     .map((link) => link.querySelector("p")?.textContent?.trim());
 }
