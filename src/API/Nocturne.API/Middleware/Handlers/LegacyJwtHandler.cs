@@ -96,8 +96,8 @@ public class LegacyJwtHandler : IAuthHandler
         };
 
         _logger.LogDebug(
-            "Legacy JWT authentication successful for subject {SubjectName}",
-            authContext.SubjectName
+            "Legacy JWT authentication successful for subject {SubjectId}",
+            authContext.SubjectId
         );
         return Task.FromResult(AuthResult.Success(authContext));
     }

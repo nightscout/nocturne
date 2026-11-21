@@ -1051,8 +1051,8 @@ public class PasskeyController : ControllerBase
         }
 
         _logger.LogInformation(
-            "Invite: enrolling subject {SubjectId} ({Username}) for invite acceptance",
-            subjectId, username);
+            "Invite: enrolling subject {SubjectId} for invite acceptance",
+            subjectId);
 
         // Generate passkey registration options
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
