@@ -63,14 +63,14 @@ public class GlookoConnectorService
 
     private const string SyncSucceededMessage = "Sync completed successfully";
 
-    private async Task<bool> AuthenticateWithConfigAsync(GlookoSyncContext context)
-    {
-        var token = await ValidTokenAsync(context.Config, context.CancellationToken);
-        if (token is null)
-            return false;
+    protected override Task PrepareSignInAsync(
+        GlookoConnectorConfiguration config, CancellationToken cancellationToken) =>
+        ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
 
+    private async Task ApplySessionAsync(GlookoSyncContext context, TokenSession session)
+    {
         // The token IS the session cookie for Glooko
-        context.SessionCookie = token;
+        context.SessionCookie = session.Token;
 
         // Retrieve user data from cache metadata via the token provider's public accessor
         var cached = await TokenProvider.GetCachedSessionAsync();
@@ -80,7 +80,6 @@ public class GlookoConnectorService
         }
 
         TrackSuccessfulRequest();
-        return true;
     }
 
     /// <summary>
@@ -314,9 +313,10 @@ public class GlookoConnectorService
         }
     }
 
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         GlookoConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult
@@ -333,10 +333,7 @@ public class GlookoConnectorService
                 CancellationToken = cancellationToken
             };
 
-            await ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
-
-            if (!await AuthenticateWithConfigAsync(context))
-                return AuthenticationFailedResult();
+            await ApplySessionAsync(context, session);
 
             var activeTypes = ResolveActiveTypes(request, config);
 
@@ -381,10 +378,9 @@ public class GlookoConnectorService
                         + "Invalidating it and re-authenticating.",
                         ConnectorSource, context.PatientCode);
 
-                    TokenProvider.InvalidateToken();
                     context.ClearSessionAndProfile();
 
-                    if (!await AuthenticateWithConfigAsync(context))
+                    if (!await session.ReauthenticateAsync())
                     {
                         result.Success = false;
                         result.Message = "Re-authentication failed after Glooko denied data access";
@@ -392,6 +388,7 @@ public class GlookoConnectorService
                         break;
                     }
 
+                    await ApplySessionAsync(context, session);
                     await ConfigureTimezoneTimelineAsync(context, cancellationToken);
 
                     // Drop partial results from the aborted pass; the retry re-syncs from scratch

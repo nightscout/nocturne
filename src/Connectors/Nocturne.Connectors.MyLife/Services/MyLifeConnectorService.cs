@@ -75,9 +75,10 @@ public class MyLifeConnectorService(
     /// each batch before moving on. A configurable overlap tail preserves cross-month
     /// carb-bolus and temp-basal consolidation context.
     /// </summary>
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         MyLifeConnectorConfiguration config,
+        TokenSession tokenSession,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -86,18 +87,8 @@ public class MyLifeConnectorService(
 
         try
         {
-            // Establish the MyLife session up front. AcquireTokenAsync (reached via the token
-            // provider) performs the SOAP login and populates the session cache as a side effect;
-            // the token is cached so subsequent cycles reuse it. Without this call the session cache
-            // is never populated and every sync fails with "session not established".
-            if (await ValidTokenAsync(config, cancellationToken) is null)
-            {
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Sync failed: MyLife authentication unsuccessful",
-                    ConnectorSource);
-                return AuthenticationFailedResult();
-            }
-
+            // The sign-in that preceded this sync performed the SOAP login and populated the
+            // session cache as a side effect; without it every sync fails with "session not established".
             var session = sessionCache.Get(tenantAccessor.TenantId);
             if (session == null
                 || string.IsNullOrWhiteSpace(session.ServiceUrl)

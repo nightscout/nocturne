@@ -31,7 +31,7 @@ public class CareLinkConnectorService
     private string? _cachedBleVersion;
     private string? _lastAlarmKey;
     private string? _initialRefreshToken;
-    private string? _accessToken;
+    private TokenSession? _session;
 
     public CareLinkConnectorService(
         HttpClient httpClient,
@@ -53,7 +53,7 @@ public class CareLinkConnectorService
 
     public override string ServiceName => ServiceNames.CareLinkConnector;
 
-    private async Task<bool> AuthenticateWithConfigAsync(
+    protected override async Task PrepareSignInAsync(
         CareLinkConnectorConfiguration config, CancellationToken cancellationToken)
     {
         // Seed the token provider with persisted secrets so refresh is available immediately
@@ -69,34 +69,20 @@ public class CareLinkConnectorService
             savedTokenUrl,
             savedAudience);
         _initialRefreshToken = TokenProvider.CurrentRefreshToken;
-
-        var token = await ValidTokenAsync(config, cancellationToken);
-        if (token is null)
-            return false;
-
-        // Store the token for per-request use; never mutate DefaultRequestHeaders
-        _accessToken = token;
-        TrackSuccessfulRequest();
-        return true;
     }
 
     /// <inheritdoc />
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         CareLinkConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
 
-        // Authenticate with per-tenant config
-        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
-            return AuthenticationFailedResult();
-
-        if (string.IsNullOrEmpty(_accessToken))
-        {
-            _logger.LogError("[{ConnectorSource}] No access token available — authentication must succeed before sync", ConnectorSource);
-            return AuthenticationFailedResult();
-        }
+        // Held for per-request use; never mutate DefaultRequestHeaders
+        _session = session;
+        TrackSuccessfulRequest();
 
         // Authentication is where Auth0 rotates the refresh token, and a sync that then finds no
         // readable data still has to keep the new one: the old one is spent.
@@ -758,11 +744,11 @@ public class CareLinkConnectorService
     }
 
     /// <summary>
-    ///     Returns a per-request Authorization header dictionary using the token obtained during
-    ///     <see cref="AuthenticateAsync"/>. Avoids mutating <c>DefaultRequestHeaders</c> which is not thread-safe.
+    ///     Returns a per-request Authorization header dictionary using the run's token. Avoids
+    ///     mutating <c>DefaultRequestHeaders</c> which is not thread-safe.
     /// </summary>
     private Dictionary<string, string> AuthHeaders() =>
-        new() { ["Authorization"] = $"Bearer {_accessToken}" };
+        new() { ["Authorization"] = $"Bearer {_session!.Token}" };
 
     private async Task<HttpResponseMessage> AuthenticatedGetAsync(string url, CancellationToken ct)
     {
