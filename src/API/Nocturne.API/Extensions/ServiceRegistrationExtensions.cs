@@ -859,17 +859,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBodyWeightService, BodyWeightService>();
         services.AddScoped<IStepCountService, StepCountService>();
 
-        // Tracker services. The trigger is the IDeviceEventReactor adapter rather than a service any
-        // caller invokes: it runs from the V4 device-event write chokepoint, which is what makes a
-        // connector-ingested site change advance a tracker the same way a hand-entered one does.
-        services.AddScoped<IDeviceEventReactor, TrackerTriggerService>();
-        services.AddScoped<TrackerDeviceEventWriter>();
-        services.AddScoped<ITrackerService, TrackerService>();
-        // Tracker notifications ride the alert engine: thresholds are synthesised into
-        // managed tracker_age alert rules, backfilled daily (TrackerAlertRuleBackfillJob).
-        services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
-        services.AddScheduledJob<TrackerAlertRuleBackfillJob>();
-        services.AddScoped<ConsumableTrackerWriter>();
         services.AddScoped<ILegacyFallbackService, LegacyFallbackService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
         services.AddScoped<ISensorSessionInferenceService, SensorSessionInferenceService>();
@@ -881,12 +870,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
         services.AddScoped<DeviceDateClockResolver>();
         services.AddScoped<IDeviceReattributionService, DeviceReattributionService>();
-        services.AddScoped<IDeviceTrackerProvisioner, DeviceTrackerProvisioner>();
 
         // Canonical glucose stream (single-stream view for v1/v3, alarms, unfiltered analytics)
         services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();
-        services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
-        services.AddSingleton<AlertEvaluationWatermark>();
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
@@ -894,8 +880,6 @@ public static class ServiceRegistrationExtensions
         // Setup hub
         services.AddScoped<ISetupHubService, SetupHubService>();
         services.AddScoped<ISetupHubItem, ConnectDataItem>();
-        services.AddScoped<ISetupHubItem, AlertsItem>();
-        services.AddScoped<AlertSetupService>();
         services.AddScoped<ISetupHubItem, DevicesItem>();
         services.AddScoped<DeviceSetupService>();
         services.AddScoped<ISetupHubItem, TherapyItem>();
@@ -1090,14 +1074,14 @@ public static class ServiceRegistrationExtensions
 
         // Notification action handlers (scoped -- they may depend on scoped services)
         services.AddScoped<INotificationActionHandler, MealMatchActionHandler>();
-        services.AddScoped<INotificationActionHandler, AlertActionHandler>();
 
         return services;
     }
 
     /// <summary>
-    /// Alert engines, device health monitoring, compression low detection,
-    /// and all notifier implementations (SignalR, webhook).
+    /// Every alert and tracker host service: the alert engine and its orchestration, delivery
+    /// providers, trackers, device health monitoring, compression low detection, and the
+    /// notifiers (SignalR, webhook). <c>IAlertRepository</c> is registered by Infrastructure.
     /// </summary>
     public static IServiceCollection AddAlertingAndMonitoring(
         this IServiceCollection services,
@@ -1136,7 +1120,6 @@ public static class ServiceRegistrationExtensions
         services.AddAlertEvaluationEngine();
 
         // Alert engine core
-        services.AddScoped<IAlertRepository, AlertRepository>();
         services.Configure<AlertEvaluationOptions>(
             configuration.GetSection(AlertEvaluationOptions.SectionName));
         services.AddScoped<IReservoirEstimationService, ReservoirEstimationService>();
@@ -1178,6 +1161,26 @@ public static class ServiceRegistrationExtensions
 
         // Bot health tracking
         services.AddSingleton<BotHealthService>();
+
+        // Setup hub and notification wiring for alerts
+        services.AddScoped<ISetupHubItem, AlertsItem>();
+        services.AddScoped<AlertSetupService>();
+        services.AddScoped<INotificationActionHandler, AlertActionHandler>();
+        services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
+        services.AddSingleton<AlertEvaluationWatermark>();
+
+        // Trackers. The trigger is the IDeviceEventReactor adapter rather than a service any
+        // caller invokes: it runs from the V4 device-event write chokepoint, which is what makes a
+        // connector-ingested site change advance a tracker the same way a hand-entered one does.
+        services.AddScoped<IDeviceEventReactor, TrackerTriggerService>();
+        services.AddScoped<TrackerDeviceEventWriter>();
+        services.AddScoped<ITrackerService, TrackerService>();
+        // Tracker notifications ride the alert engine: thresholds are synthesised into
+        // managed tracker_age alert rules, backfilled daily (TrackerAlertRuleBackfillJob).
+        services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
+        services.AddScheduledJob<TrackerAlertRuleBackfillJob>();
+        services.AddScoped<ConsumableTrackerWriter>();
+        services.AddScoped<IDeviceTrackerProvisioner, DeviceTrackerProvisioner>();
 
         services.AddScheduledJob<AlertSweepJob>();
         services.AddScheduledJob<DeduplicationReconciliationJob>();
