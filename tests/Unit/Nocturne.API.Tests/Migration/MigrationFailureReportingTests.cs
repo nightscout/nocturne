@@ -148,7 +148,7 @@ public class MigrationFailureReportingTests
         // The migration client is a guarded connector client, so a mistyped host is refused before
         // the socket opens. Its message says which of "not found" and "forbidden address" happened;
         // the generic unreachable wording would throw that away.
-        var handler = new ThrowingHost(() => new Nocturne.Core.Models.Net.OutboundRefusedException(
+        var handler = new ThrowingHost(() => new Nocturne.Infrastructure.Outbound.OutboundRefusedException(
             "Could not find 'mynightscout.xyx'. Check the address is spelled correctly and that the site is online."));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);

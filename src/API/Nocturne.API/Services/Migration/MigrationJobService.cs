@@ -1331,7 +1331,7 @@ internal class MigrationJob
         {
             response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, sendToken);
         }
-        catch (Nocturne.Core.Models.Net.OutboundRefusedException ex)
+        catch (Nocturne.Infrastructure.Outbound.OutboundRefusedException ex)
         {
             throw new MigrationSourceException(ex.Message, MigrationFailureCause.Unreachable, ex);
         }

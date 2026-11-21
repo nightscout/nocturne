@@ -2,10 +2,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using FluentAssertions;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Xunit;
 
-namespace Nocturne.Core.Models.Tests.Net;
+namespace Nocturne.Infrastructure.Outbound.Tests;
 
 /// <summary>
 /// Checking a URL binds a name; the socket binds an address. These cover the join between the two:

@@ -7,7 +7,4 @@
     <ItemGroup>
         <ProjectReference Include="..\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
     </ItemGroup>
-    <ItemGroup>
-        <PackageReference Include="HtmlSanitizer"/>
-    </ItemGroup>
 </Project>

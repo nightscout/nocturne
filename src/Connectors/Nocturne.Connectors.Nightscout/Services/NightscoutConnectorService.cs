@@ -14,7 +14,7 @@ using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.Connectors.Nightscout.Services;
 

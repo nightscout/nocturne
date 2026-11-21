@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace Nocturne.Core.Models.Net;
+namespace Nocturne.Infrastructure.Outbound;
 
 /// <summary>
 /// Classifies a URL the server itself is about to fetch, for the paths where the URL was

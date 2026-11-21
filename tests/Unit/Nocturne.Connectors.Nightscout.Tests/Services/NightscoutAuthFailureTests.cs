@@ -9,7 +9,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;

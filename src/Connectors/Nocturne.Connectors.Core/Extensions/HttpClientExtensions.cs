@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Polly;
 
 namespace Nocturne.Connectors.Core.Extensions;

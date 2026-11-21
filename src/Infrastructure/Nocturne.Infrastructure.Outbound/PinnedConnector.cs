@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace Nocturne.Core.Models.Net;
+namespace Nocturne.Infrastructure.Outbound;
 
 /// <summary>
 /// Opens a connection to an address that has just been checked against an

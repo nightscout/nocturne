@@ -13,7 +13,7 @@ using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.API.Services.Migration;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
