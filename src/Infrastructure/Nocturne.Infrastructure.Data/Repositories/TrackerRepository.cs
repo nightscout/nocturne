@@ -742,7 +742,7 @@ public class TrackerRepository : ITrackerRepository, ITrackerConsumableLock
         db.TrackerPresets.Add(row);
         await db.SaveChangesAsync(cancellationToken);
 
-        return TrackerMapper.ToDomain(row);
+        return (await GetPresetByIdAsync(row.Id, cancellationToken))!;
     }
 
     /// <inheritdoc />
