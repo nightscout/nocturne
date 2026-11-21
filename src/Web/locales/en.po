@@ -1536,6 +1536,7 @@ msgstr "Authentication failed"
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
 #: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "<0/> Waiting for passkey..."
 msgstr "<0/> Waiting for passkey..."
@@ -1592,6 +1593,8 @@ msgstr "Verify recovery code"
 
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Back to sign in"
 msgstr "Back to sign in"
@@ -3267,6 +3270,7 @@ msgstr "Alerts"
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealSuggestionRow.svelte
 #: src/lib/components/members/JoinWelcome.svelte
+#: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Dismiss"
@@ -4348,6 +4352,7 @@ msgstr "Demo"
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "Sign in"
 msgstr "Sign in"
 
@@ -13119,9 +13124,8 @@ msgstr "Having trouble signing in? <0>Get help</0>"
 #~ msgid "Optional. Updates your display name if provided."
 #~ msgstr "Optional. Updates your display name if provided."
 
-#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
-msgid "<0/> Register passkey"
-msgstr "<0/> Register passkey"
+#~ msgid "<0/> Register passkey"
+#~ msgstr "<0/> Register passkey"
 
 #~ msgid "Passkey registered successfully."
 #~ msgstr "Passkey registered successfully."
@@ -21046,9 +21050,8 @@ msgstr "Your passkey is ready. Sign in with it to finish."
 #~ msgid "Your recovery code was accepted. It lets you set up a passkey for {0} — nothing else — and it expires in ten minutes."
 #~ msgstr "Your recovery code was accepted. It lets you set up a passkey for {0} — nothing else — and it expires in ten minutes."
 
-#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
-msgid "Register a passkey"
-msgstr "Register a passkey"
+#~ msgid "Register a passkey"
+#~ msgstr "Register a passkey"
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Passkey registered. Your recovery code is now used up."
@@ -25716,13 +25719,11 @@ msgstr "Switch…"
 msgid "Too many attempts. Wait a minute, then try again."
 msgstr "Too many attempts. Wait a minute, then try again."
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "That recovery code has expired or was already used. Ask an administrator for a new one."
-msgstr "That recovery code has expired or was already used. Ask an administrator for a new one."
+#~ msgid "That recovery code has expired or was already used. Ask an administrator for a new one."
+#~ msgstr "That recovery code has expired or was already used. Ask an administrator for a new one."
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Some accounts here have no way to sign in. If yours is one of them, sign in with one of your own recovery codes, or ask an administrator for a one-time recovery code."
-msgstr "Some accounts here have no way to sign in. If yours is one of them, sign in with one of your own recovery codes, or ask an administrator for a one-time recovery code."
+#~ msgid "Some accounts here have no way to sign in. If yours is one of them, sign in with one of your own recovery codes, or ask an administrator for a one-time recovery code."
+#~ msgstr "Some accounts here have no way to sign in. If yours is one of them, sign in with one of your own recovery codes, or ask an administrator for a one-time recovery code."
 
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 msgid "Recovery code from your administrator"
@@ -29137,10 +29138,8 @@ msgstr "We could not check that code. Try again."
 msgid "Could not sign you in just now. Try again."
 msgstr "Could not sign you in just now. Try again."
 
-#: src/lib/components/auth/LoginForm.svelte
-#: src/lib/components/auth/LoginForm.svelte
-msgid "Could not sign you in. Try again."
-msgstr "Could not sign you in. Try again."
+#~ msgid "Could not sign you in. Try again."
+#~ msgstr "Could not sign you in. Try again."
 
 #: src/lib/components/auth/RecoveryCodes.svelte
 msgid "The codes were not copied. Your browser blocked clipboard access. Download them, or write them down and confirm below."
@@ -29971,9 +29970,8 @@ msgstr "A date requests a one-time import of older data shared with Google Healt
 msgid "Draft save failed. Edits retry on next change"
 msgstr "Draft save failed. Edits retry on next change"
 
-#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
-msgid "We could not register a passkey. A recovery code is valid for ten minutes only. Sign in with another recovery code to try again."
-msgstr "We could not register a passkey. A recovery code is valid for ten minutes only. Sign in with another recovery code to try again."
+#~ msgid "We could not register a passkey. A recovery code is valid for ten minutes only. Sign in with another recovery code to try again."
+#~ msgstr "We could not register a passkey. A recovery code is valid for ten minutes only. Sign in with another recovery code to try again."
 
 #~ msgid "Your recovery code was accepted. It lets you set up a passkey for {0} and nothing else. It expires in ten minutes."
 #~ msgstr "Your recovery code was accepted. It lets you set up a passkey for {0} and nothing else. It expires in ten minutes."
@@ -30630,6 +30628,7 @@ msgid "Phone (E.164)"
 msgstr "Phone (E.164)"
 
 #: src/lib/components/alerts/channelText.svelte.ts
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "Email address"
 msgstr "Email address"
 
@@ -35636,6 +35635,7 @@ msgid "Sign-in help - Nocturne"
 msgstr "Sign-in help - Nocturne"
 
 #: src/routes/(unauthenticated)/auth/help/+page.svelte
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "Sign-in help"
 msgstr "Sign-in help"
 
@@ -35651,9 +35651,8 @@ msgstr "If you configure one, enter the code from the app on the sign-in page, s
 msgid "Recovery codes are one-time backup codes you received when you first created your account. Use them if you cannot access your passkey or authenticator app."
 msgstr "Recovery codes are one-time backup codes you received when you first created your account. Use them if you cannot access your passkey or authenticator app."
 
-#: src/routes/(unauthenticated)/auth/help/+page.svelte
-msgid "A code does not sign you in on its own. It gives you ten minutes to create a new passkey, and you sign in with that."
-msgstr "A code does not sign you in on its own. It gives you ten minutes to create a new passkey, and you sign in with that."
+#~ msgid "A code does not sign you in on its own. It gives you ten minutes to create a new passkey, and you sign in with that."
+#~ msgstr "A code does not sign you in on its own. It gives you ten minutes to create a new passkey, and you sign in with that."
 
 #: src/routes/(unauthenticated)/auth/help/+page.svelte
 msgid "External providers"
@@ -35736,13 +35735,11 @@ msgstr "<0/> Return home"
 msgid "By signing in, you agree to our <0>terms of service</0> and <1>privacy policy</1>"
 msgstr "By signing in, you agree to our <0>terms of service</0> and <1>privacy policy</1>"
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Recovery mode - Nocturne"
-msgstr "Recovery mode - Nocturne"
+#~ msgid "Recovery mode - Nocturne"
+#~ msgstr "Recovery mode - Nocturne"
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Recovery mode"
-msgstr "Recovery mode"
+#~ msgid "Recovery mode"
+#~ msgstr "Recovery mode"
 
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
 msgid "<0/> Back to clock faces"
@@ -36364,14 +36361,11 @@ msgstr "Connect chat account"
 msgid "<0/> Packing list"
 msgstr "<0/> Packing list"
 
-#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
-msgid "Register a passkey - Nocturne"
-msgstr "Register a passkey - Nocturne"
+#~ msgid "Register a passkey - Nocturne"
+#~ msgstr "Register a passkey - Nocturne"
 
-#. 0: username || "your account"
-#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
-msgid "Your recovery code was accepted. It lets you create a passkey for {0} and nothing else. It expires in ten minutes."
-msgstr "Your recovery code was accepted. It lets you create a passkey for {0} and nothing else. It expires in ten minutes."
+#~ msgid "Your recovery code was accepted. It lets you create a passkey for {0} and nothing else. It expires in ten minutes."
+#~ msgstr "Your recovery code was accepted. It lets you create a passkey for {0} and nothing else. It expires in ten minutes."
 
 #: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 msgid "We could not save that. Try again."
@@ -45520,3 +45514,175 @@ msgstr "Recent entries"
 #: src/lib/components/people/PeoplePage.svelte
 msgid "Readings update as they arrive."
 msgstr "Readings update as they arrive."
+
+#: src/lib/components/account/SecurityCredentialCard.svelte
+#: src/lib/components/settings/LinkedOidcIdentities.svelte
+msgid "Added just now"
+msgstr "Added just now"
+
+#: src/lib/components/auth/RecoveryNextStep.svelte
+msgid "<0>Request a new link</0> by email, or ask an administrator for a new code."
+msgstr "<0>Request a new link</0> by email, or ask an administrator for a new code."
+
+#: src/lib/components/auth/RecoveryNextStep.svelte
+msgid "Ask an administrator for a new code."
+msgstr "Ask an administrator for a new code."
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "You are back in your account."
+msgstr "You are back in your account."
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "The passkey you just added is marked \"Added just now\". Remove any older sign-in method you no longer have, such as the passkey on a lost phone. Nothing is removed unless you remove it."
+msgstr "The passkey you just added is marked \"Added just now\". Remove any older sign-in method you no longer have, such as the passkey on a lost phone. Nothing is removed unless you remove it."
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Check your sign-in methods."
+msgstr "Check your sign-in methods."
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Remove any sign-in method you no longer have, such as the passkey on a lost phone. Nothing is removed unless you remove it."
+msgstr "Remove any sign-in method you no longer have, such as the passkey on a lost phone. Nothing is removed unless you remove it."
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "Confirm your email address - Nocturne"
+msgstr "Confirm your email address - Nocturne"
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "Checking your link"
+msgstr "Checking your link"
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "Your email address is confirmed"
+msgstr "Your email address is confirmed"
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "This link does not work"
+msgstr "This link does not work"
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "This takes a moment."
+msgstr "This takes a moment."
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "You can close this page or carry on below."
+msgstr "You can close this page or carry on below."
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "The link has expired or was already used."
+msgstr "The link has expired or was already used."
+
+#: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
+msgid "Open Nocturne"
+msgstr "Open Nocturne"
+
+#: src/routes/(unauthenticated)/auth/error/+page.svelte
+msgid "Recovery ended"
+msgstr "Recovery ended"
+
+#: src/routes/(unauthenticated)/auth/error/+page.svelte
+msgid "The recovery session has ended. Start again with a new link or code."
+msgstr "The recovery session has ended. Start again with a new link or code."
+
+#: src/routes/(unauthenticated)/auth/error/+page.svelte
+msgid "Back to add a way to sign in"
+msgstr "Back to add a way to sign in"
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "Cannot sign in?"
+msgstr "Cannot sign in?"
+
+#: src/routes/(unauthenticated)/auth/help/+page.svelte
+msgid "A code does not sign you in on its own. It gives you ten minutes to add one new way to sign in, and you sign in with that."
+msgstr "A code does not sign you in on its own. It gives you ten minutes to add one new way to sign in, and you sign in with that."
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "That recovery code or link has expired or was already used."
+msgstr "That recovery code or link has expired or was already used."
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "Recover your account - Nocturne"
+msgstr "Recover your account - Nocturne"
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "Recover your account"
+msgstr "Recover your account"
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "Use a recovery code from an administrator, or open the link sent to your email. It lets you add one new way to sign in."
+msgstr "Use a recovery code from an administrator, or open the link sent to your email. It lets you add one new way to sign in."
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "We could not send a link just now. Try again."
+msgstr "We could not send a link just now. Try again."
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "Recovery by email is not available on this site."
+msgstr "Recovery by email is not available on this site."
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "Enter the email address on your account. If you confirmed it, we send a link that lets you add a new way to sign in."
+msgstr "Enter the email address on your account. If you confirmed it, we send a link that lets you add a new way to sign in."
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "If that address is confirmed on an account here, we have sent a link to it. It works for 30 minutes."
+msgstr "If that address is confirmed on an account here, we have sent a link to it. It works for 30 minutes."
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "<0/> Sending..."
+msgstr "<0/> Sending..."
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "<0/> Send link"
+msgstr "<0/> Send link"
+
+#: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
+msgid "An administrator of this site can also issue a recovery code. <0>Enter a recovery code</0>"
+msgstr "An administrator of this site can also issue a recovery code. <0>Enter a recovery code</0>"
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "The recovery session has ended."
+msgstr "The recovery session has ended."
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "We could not register a passkey. Try again. This screen works for ten minutes after the code is accepted."
+msgstr "We could not register a passkey. Try again. This screen works for ten minutes after the code is accepted."
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "We could not link that provider. Try again, or create a passkey."
+msgstr "We could not link that provider. Try again, or create a passkey."
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Add a way to sign in - Nocturne"
+msgstr "Add a way to sign in - Nocturne"
+
+#. 0: username || "your account"
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Your recovery code was accepted. It lets you add one way to sign in for {0} and nothing else. This screen works for ten minutes."
+msgstr "Your recovery code was accepted. It lets you add one way to sign in for {0} and nothing else. This screen works for ten minutes."
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Your passkey is ready. One more step finishes signing in."
+msgstr "Your passkey is ready. One more step finishes signing in."
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Your passkey is ready. Confirm it to finish signing in."
+msgstr "Your passkey is ready. Confirm it to finish signing in."
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Add a way to sign in"
+msgstr "Add a way to sign in"
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Or create a passkey"
+msgstr "Or create a passkey"
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "<0/> Create a passkey"
+msgstr "<0/> Create a passkey"
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Sign in on the sign-in page"
+msgstr "Sign in on the sign-in page"
