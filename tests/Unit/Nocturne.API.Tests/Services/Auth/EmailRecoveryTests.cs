@@ -84,7 +84,7 @@ public class EmailRecoveryTests : IDisposable
         new SharedSqliteFactory(_db.Options).AsNocturneFactory(tenantId);
 
     private AccountLinkService Links(Guid? tenantId = null) => new(
-        Contexts(tenantId ?? _tenantId), _loginCodes, new SubjectRepository(Contexts(tenantId ?? _tenantId)), _delivery,
+        Contexts(tenantId ?? _tenantId), _loginCodes, new SubjectRepository(Contexts(tenantId ?? _tenantId), AccountLinkRoutes.Off), _delivery,
         Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }));
 
     private async Task<Guid> SeedMemberAsync(
@@ -406,10 +406,10 @@ public class EmailRecoveryTests : IDisposable
             new Mock<IAuthAuditService>().Object,
             MockTenantAccessor.Create(tenant).Object,
             new Mock<ITenantService>().Object,
-            new TenantMemberService(new TenantMembershipRepository(contexts)),
-            new SubjectRepository(contexts),
+            new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off)),
+            new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts),
-            new TenantMembershipRepository(contexts),
+            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
             contexts,
             Options.Create(new OidcOptions()),
             NullLogger<PasskeyController>.Instance);
@@ -499,7 +499,7 @@ public class EmailRecoveryTests : IDisposable
         var contexts = Contexts(_tenantId);
         return await controller.RecoveryModeRedeem(
             new RecoveryModeRedeemRequest { Code = code }, _loginCodes,
-            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts))));
+            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off)), _delivery));
     }
 
     private static bool StartedASession(ActionResult<RecoveryModeRedeemResponse> result, ControllerBase controller) =>
@@ -665,8 +665,8 @@ public class EmailRecoveryTests : IDisposable
             new RecoverySession(failing.Object, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
             MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
-            new TenantMemberService(new TenantMembershipRepository(contexts)), new SubjectRepository(contexts),
-            new TenantRepository(contexts), new TenantMembershipRepository(contexts), contexts,
+            new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off)), new SubjectRepository(contexts, AccountLinkRoutes.Off),
+            new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
             Options.Create(new OidcOptions()), NullLogger<PasskeyController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
@@ -692,8 +692,8 @@ public class EmailRecoveryTests : IDisposable
             new RecoverySession(contexts, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
             MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
-            new TenantMemberService(new TenantMembershipRepository(contexts)), new SubjectRepository(contexts),
-            new TenantRepository(contexts), new TenantMembershipRepository(contexts), contexts,
+            new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off)), new SubjectRepository(contexts, AccountLinkRoutes.Off),
+            new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
             Options.Create(new OidcOptions()), NullLogger<PasskeyController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

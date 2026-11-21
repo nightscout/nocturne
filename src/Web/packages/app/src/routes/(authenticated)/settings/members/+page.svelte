@@ -39,6 +39,7 @@
   import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
   import RolesSection from "#lib/components/members/RolesSection.svelte";
+  import LockedOutMembers from "#lib/components/members/LockedOutMembers.svelte";
   import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
@@ -248,6 +249,10 @@
         <Users class="h-5 w-5" />
         Members &amp; invites
       </h2>
+
+      {#if canEditMemberRoles}
+        <LockedOutMembers />
+      {/if}
 
       {#if canManageMembers}
       <!-- Pending Requests -->

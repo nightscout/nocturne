@@ -83,7 +83,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
         }
         finally
         {
-            // Leaving a locked-out member behind would put the shared tenant into recovery mode.
+            // A locked-out member left behind would show on the shared tenant's recovery list.
             await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }

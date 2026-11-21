@@ -54,14 +54,14 @@ public class MembershipRequestServiceTests : IDisposable
 
         _service = new MembershipRequestService(
             new TenantRepository(_dbContext.AsFactory()),
-            new TenantMembershipRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
             _notificationService.Object,
             _audit.Object,
             TimeProvider.System,
-            NullLogger<MembershipRequestService>.Instance);
+            NullLogger<MembershipRequestService>.Instance, AccountLinkRoutes.Off);
 
         SeedData();
     }
@@ -576,7 +576,7 @@ public class MembershipRequestServiceTests : IDisposable
         subject.IsActive.Should().BeTrue();
         subject.ApprovalStatus.Should().Be("Approved");
         (await _dbContext.TenantMembers.AnyAsync(m => m.TenantId == _tenantId && m.SubjectId == requester)).Should().BeTrue();
-        (await new SubjectRepository(_dbContext.AsFactory()).ListPendingAccessRequestsAsync(CancellationToken.None))
+        (await new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off).ListPendingAccessRequestsAsync(CancellationToken.None))
             .Should().NotContain(s => s.Id == requester, "an approved requester leaves the platform administrators' list");
         AccessDecisionAudits(requester).Should().ContainSingle().Which.Should().Contain("Approved");
     }
@@ -621,7 +621,7 @@ public class MembershipRequestServiceTests : IDisposable
         var requester = await SeedRequesterAsync("Pending", isActive: false);
         var requestId = await RequestIdOf(requester);
 
-        (await new SubjectRepository(_dbContext.AsFactory()).DeleteAsync(requester, CancellationToken.None))
+        (await new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off).DeleteAsync(requester, CancellationToken.None))
             .Should().BeOfType<SubjectChange.Changed>();
 
         (await _service.GetPendingRequestsAsync(_tenantId)).Should().BeEmpty();
@@ -643,7 +643,7 @@ public class MembershipRequestServiceTests : IDisposable
         subject.IsActive.Should().BeFalse();
         subject.ApprovalStatus.Should().Be("Denied");
         (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == requester)).Should().BeFalse();
-        (await new SubjectRepository(_dbContext.AsFactory()).ListPendingAccessRequestsAsync(CancellationToken.None))
+        (await new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off).ListPendingAccessRequestsAsync(CancellationToken.None))
             .Should().NotContain(s => s.Id == requester);
         AccessDecisionAudits(requester).Should().ContainSingle().Which.Should().Contain("Denied");
     }

@@ -111,7 +111,7 @@ public class RoleRepositoryTests : IDisposable
     public async Task ADeleteTakesTheSubjectAssignmentsWithItInOneSave()
     {
         var role = await Roles().CreateAsync(new NewRole("custom", null, ["a"], IsSystemRole: false), CancellationToken.None);
-        var subjects = new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)));
+        var subjects = new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off);
         var one = await subjects.CreateAsync(new NewSubject("one", RoleNames: ["custom"]), CancellationToken.None);
         var two = await subjects.CreateAsync(new NewSubject("two", RoleNames: ["custom"]), CancellationToken.None);
 

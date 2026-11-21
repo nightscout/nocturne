@@ -123,13 +123,13 @@ internal sealed class DocsTenantFixture : IDisposable
             .ReturnsAsync(Db);
 
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
-            new Mock<ILogger<DemoTenantService>>().Object);
+            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off);
 
         return new ScalarAuthProvider(
             new OAuthClientRepository(dbFactory.Object.AsNocturneFactory()),

@@ -710,7 +710,7 @@ public class TotpServiceTests : IDisposable
     private TotpService CreateService()
     {
         var contexts = _dbContext.AsFactory();
-        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts), CreateTrustedDevices(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), CreateTrustedDevices(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
     }
 
     private TrustedDeviceService CreateTrustedDevices() => new(

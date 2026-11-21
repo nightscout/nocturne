@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -26,7 +27,8 @@ namespace Nocturne.API.Tests.Controllers;
 /// </summary>
 /// <remarks>
 /// An anonymous caller on a site's own host carries an empty permission trie, so the test host is
-/// a private site; recovery mode is a member with no way to sign in. One factory, so one rate
+/// a private site. A stuck follower is a member with no way to sign in on a site its owner can
+/// still reach; recovery mode is the owner unable to sign in. One factory, so one rate
 /// limiter: <c>passkey-register</c> allows 20 a minute and <c>login-handoff</c> 10 across the class.
 /// </remarks>
 public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionTests.Factory>
@@ -78,10 +80,11 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
     public enum Site
     {
         Private,
+        WithStuckFollower,
         InRecoveryMode,
     }
 
-    public static TheoryData<Site> Sites => [Site.Private, Site.InRecoveryMode];
+    public static TheoryData<Site> Sites => [Site.Private, Site.WithStuckFollower, Site.InRecoveryMode];
 
     #region The session
 
@@ -265,9 +268,103 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
 
     #endregion
 
+    #region A stuck member stops the site only when no member administrator can sign in
+
+    [Theory]
+    [InlineData(Site.WithStuckFollower, HttpStatusCode.OK)]
+    [InlineData(Site.InRecoveryMode, HttpStatusCode.ServiceUnavailable)]
+    public async Task An_ordinary_read_is_served_unless_the_site_is_in_recovery_mode(Site site, HttpStatusCode expected)
+    {
+        await using var _ = await ArrangeAsync(site);
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/entries.json?count=1");
+        request.Headers.Add("api-secret", TestDatabaseSeeder.Sha1Hex(AuthenticationTestFactory.ApiSecret));
+
+        var response = await _client.SendAsync(request);
+
+        await ShouldAnswerAsync(response, expected);
+    }
+
+    [Theory]
+    [InlineData(Site.WithStuckFollower, HttpStatusCode.OK)]
+    [InlineData(Site.InRecoveryMode, HttpStatusCode.ServiceUnavailable)]
+    public async Task A_device_upload_is_accepted_unless_the_site_is_in_recovery_mode(Site site, HttpStatusCode expected)
+    {
+        await using var _ = await ArrangeAsync(site);
+        var token = await IssueDeviceTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/entries")
+        {
+            Content = JsonContent.Create(new[]
+            {
+                new { type = "sgv", sgv = 120, date = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), direction = "Flat", device = "loop" },
+            }),
+        };
+        request.Headers.Add("Authorization", $"Bearer {token}");
+
+        var response = await _client.SendAsync(request);
+
+        await ShouldAnswerAsync(response, expected);
+    }
+
+    [Fact]
+    public async Task A_stuck_follower_is_listed_to_a_member_administrator_on_a_site_that_is_not_in_recovery_mode()
+    {
+        await using var arranged = await ArrangeAsync(Site.WithStuckFollower);
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/v4/member-recovery");
+        request.Headers.Add("api-secret", TestDatabaseSeeder.Sha1Hex(AuthenticationTestFactory.ApiSecret));
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray()
+            .Select(m => m.GetProperty("subjectId").GetGuid())
+            .Should().Equal(arranged.StuckFollowerId!.Value);
+    }
+
+    [Fact]
+    public async Task A_stuck_follower_spends_an_administrators_code_and_enrols_on_a_site_that_is_not_in_recovery_mode()
+    {
+        await using var arranged = await ArrangeAsync(Site.WithStuckFollower);
+        var code = await IssueAsync(arranged.StuckFollowerId!.Value, LoginCodePurpose.Recovery);
+
+        var redeemed = await PostAsync("/api/auth/passkey/recovery-mode/redeem", new { code }, null);
+
+        redeemed.StatusCode.Should().Be(HttpStatusCode.OK);
+        var setCookie = redeemed.Headers.GetValues("Set-Cookie")
+            .Single(h => h.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal));
+        var session = setCookie[(setCookie.IndexOf('=') + 1)..setCookie.IndexOf(';')];
+        var options = await PostAsync("/api/auth/passkey/register/options", new { username = StuckFollowerUsername }, session);
+        options.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private static async Task ShouldAnswerAsync(HttpResponseMessage response, HttpStatusCode expected)
+    {
+        response.StatusCode.Should().Be(expected);
+        if (expected == HttpStatusCode.ServiceUnavailable)
+        {
+            (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()
+                .Should().Be("recovery_mode_active");
+        }
+    }
+
+    private async Task<string> IssueDeviceTokenAsync()
+    {
+        Guid holder;
+        await using (var db = await TenantDbAsync())
+            holder = await db.DeviceSubjectOf(TestDatabaseSeeder.TenantId);
+        using var scope = _factory.Services.CreateScope();
+        var created = await scope.ServiceProvider.GetRequiredService<IDirectGrantService>().CreateAsync(
+            TestDatabaseSeeder.TenantId, holder, "Loop", [Scope.GlucoseReadWrite], null, false, null, null);
+        return created.Response!.Token;
+    }
+
+    #endregion
+
+    private const string StuckFollowerUsername = "stuck-follower";
+
     /// <summary>
-    /// A member holding <see cref="Address"/>, confirmed unless told otherwise. On a private site it
-    /// holds a passkey; in recovery mode it is the member who cannot sign in.
+    /// A member holding <see cref="Address"/>, confirmed unless told otherwise, and a passkey. With
+    /// <see cref="Site.WithStuckFollower"/> a follower who cannot sign in joins too; in recovery
+    /// mode the owner's passkey is set aside, so the site's only member administrator is stuck.
     /// </summary>
     private async Task<Arranged> ArrangeAsync(Site site, bool confirmed = true)
     {
@@ -282,29 +379,56 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         {
             Id = Guid.CreateVersion7(), TenantId = TestDatabaseSeeder.TenantId, SubjectId = memberId,
         });
-        if (site == Site.Private)
+        db.PasskeyCredentials.Add(new PasskeyCredentialEntity
         {
-            db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+            Id = Guid.CreateVersion7(), SubjectId = memberId, CredentialId = memberId.ToByteArray(), PublicKey = [1],
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        Guid? stuckFollowerId = null;
+        if (site == Site.WithStuckFollower)
+        {
+            stuckFollowerId = Guid.CreateVersion7();
+            db.Subjects.Add(new SubjectEntity
             {
-                Id = Guid.CreateVersion7(), SubjectId = memberId, CredentialId = memberId.ToByteArray(), PublicKey = [1],
-                CreatedAt = DateTime.UtcNow,
+                Id = stuckFollowerId.Value, Name = "Stuck follower", Username = StuckFollowerUsername, IsActive = true,
+            });
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TestDatabaseSeeder.TenantId, SubjectId = stuckFollowerId.Value,
+                DirectPermissions = [Scope.GlucoseRead],
             });
         }
+
+        List<PasskeyCredentialEntity> setAside = [];
+        if (site == Site.InRecoveryMode)
+        {
+            setAside = await db.PasskeyCredentials.AsNoTracking()
+                .Where(c => c.SubjectId == TestDatabaseSeeder.TestSubjectId).ToListAsync();
+            await db.PasskeyCredentials.Where(c => c.SubjectId == TestDatabaseSeeder.TestSubjectId).ExecuteDeleteAsync();
+        }
         await db.SaveChangesAsync();
-        return new Arranged(this, memberId);
+        return new Arranged(this, memberId, stuckFollowerId, setAside);
     }
 
-    private sealed class Arranged(PasskeyRecoverySessionTests tests, Guid emailMemberId) : IAsyncDisposable
+    private sealed class Arranged(
+        PasskeyRecoverySessionTests tests, Guid emailMemberId, Guid? stuckFollowerId, List<PasskeyCredentialEntity> setAside)
+        : IAsyncDisposable
     {
         public Guid EmailMemberId => emailMemberId;
+
+        public Guid? StuckFollowerId => stuckFollowerId;
 
         public async ValueTask DisposeAsync()
         {
             await using var db = await tests.TenantDbAsync();
-            await db.LoginCodes.Where(c => c.SubjectId == emailMemberId).ExecuteDeleteAsync();
-            await db.PasskeyCredentials.Where(c => c.SubjectId == emailMemberId).ExecuteDeleteAsync();
-            await db.TenantMembers.Where(m => m.SubjectId == emailMemberId).ExecuteDeleteAsync();
-            await db.Subjects.Where(s => s.Id == emailMemberId).ExecuteDeleteAsync();
+            Guid[] added = stuckFollowerId is { } follower ? [emailMemberId, follower] : [emailMemberId];
+            await db.LoginCodes.Where(c => added.Contains(c.SubjectId)).ExecuteDeleteAsync();
+            await db.PasskeyCredentials.Where(c => added.Contains(c.SubjectId)).ExecuteDeleteAsync();
+            await db.TenantMembers.Where(m => added.Contains(m.SubjectId)).ExecuteDeleteAsync();
+            await db.Subjects.Where(s => added.Contains(s.Id)).ExecuteDeleteAsync();
+            db.PasskeyCredentials.AddRange(setAside);
+            await db.SaveChangesAsync();
         }
     }
 

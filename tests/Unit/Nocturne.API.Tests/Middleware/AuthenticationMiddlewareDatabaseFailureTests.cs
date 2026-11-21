@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -60,6 +61,7 @@ public class AuthenticationMiddlewareDatabaseFailureTests
         var provider = new ServiceCollection()
             .AddSingleton(contexts.Object)
             .AddTransient<ITenantMembershipRepository, TenantMembershipRepository>()
+            .AddSingleton(AccountLinkRoutes.Off)
             .BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

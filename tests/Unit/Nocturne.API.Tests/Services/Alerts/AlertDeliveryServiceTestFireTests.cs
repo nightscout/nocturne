@@ -42,7 +42,7 @@ public class AlertDeliveryServiceTestFireTests
         var serviceProvider = new ServiceCollection().BuildServiceProvider();
         var service = new AlertDeliveryService(
             factory.AsNocturneFactory(),
-            new TenantMembershipRepository(factory.AsNocturneFactory()),
+            new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             tenantAccessor,
             Mock.Of<ISignalRBroadcastService>(),
             alarmRelay ?? Mock.Of<IEngineAlarmRelay>(),

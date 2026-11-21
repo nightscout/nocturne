@@ -25,11 +25,16 @@ public class SubjectRepository : ISubjectRepository
     private readonly INocturneDbContextFactory? _contexts;
     private readonly DbUnitOfWork? _unit;
     private readonly TimeProvider _time;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <summary>A repository whose calls each open their own context and save what they write.</summary>
-    public SubjectRepository(INocturneDbContextFactory contexts, TimeProvider? time = null)
+    /// <param name="contexts">Opens the context of each call.</param>
+    /// <param name="linkRoute">Decides who cannot sign in (<see cref="OrphanedSubjectFilter"/>).</param>
+    /// <param name="time">The clock; the system clock when null.</param>
+    public SubjectRepository(INocturneDbContextFactory contexts, IAccountLinkRoute linkRoute, TimeProvider? time = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _linkRoute = linkRoute ?? throw new ArgumentNullException(nameof(linkRoute));
         _time = time ?? TimeProvider.System;
     }
 
@@ -39,9 +44,13 @@ public class SubjectRepository : ISubjectRepository
     /// transaction with its tenant and membership. A read tracks its rows, so a write on the same
     /// unit edits the rows it read in place.
     /// </summary>
-    public SubjectRepository(DbUnitOfWork unit, TimeProvider? time = null)
+    /// <param name="unit">The caller's unit of work.</param>
+    /// <param name="linkRoute">Decides who cannot sign in (<see cref="OrphanedSubjectFilter"/>).</param>
+    /// <param name="time">The clock; the system clock when null.</param>
+    public SubjectRepository(DbUnitOfWork unit, IAccountLinkRoute linkRoute, TimeProvider? time = null)
     {
         _unit = unit ?? throw new ArgumentNullException(nameof(unit));
+        _linkRoute = linkRoute ?? throw new ArgumentNullException(nameof(linkRoute));
         _time = time ?? TimeProvider.System;
     }
 
@@ -172,7 +181,8 @@ public class SubjectRepository : ISubjectRepository
         // named is decided by EmailAddresses.AreSame below, so no SQL comparison restates it.
         var confirmed = await Subjects(db)
             .ExcludeDemo()
-            .Where(s => s.IsActive && !s.IsSystemSubject && s.Email != null && s.EmailConfirmedAt != null
+            .Where(OrphanedSubjectFilter.HoldsConfirmedEmail)
+            .Where(s => s.IsActive && !s.IsSystemSubject
                 && db.TenantMembers.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id))
             .ToListAsync(ct);
         return confirmed
@@ -277,7 +287,7 @@ public class SubjectRepository : ISubjectRepository
     /// lock of each tenant it belongs to first (<see cref="TenantOwnerLock"/>), so it runs inside a
     /// transaction.
     /// </summary>
-    private static async Task<SubjectChange> ApplyEditAsync(
+    private async Task<SubjectChange> ApplyEditAsync(
         NocturneDbContext db, Guid subjectId, SubjectEdit edit, CancellationToken ct)
     {
         var entity = await db.Subjects.FirstOrDefaultAsync(s => s.Id == subjectId, ct);
@@ -286,7 +296,7 @@ public class SubjectRepository : ISubjectRepository
 
         if (edit.IsActive is false && entity.IsActive)
         {
-            var lastOwnerOf = await db.LockTenantsOfSubjectAsync(subjectId, ct);
+            var lastOwnerOf = await db.LockTenantsOfSubjectAsync(subjectId, _linkRoute, ct);
             if (lastOwnerOf.Count > 0)
                 return new SubjectChange.LastOwnerOf(lastOwnerOf);
         }
@@ -437,7 +447,7 @@ public class SubjectRepository : ISubjectRepository
 
             if (entity.IsActive)
             {
-                var lastOwnerOf = await db.LockTenantsOfSubjectAsync(subjectId, ct);
+                var lastOwnerOf = await db.LockTenantsOfSubjectAsync(subjectId, _linkRoute, ct);
                 if (lastOwnerOf.Count > 0)
                     return new SubjectChange.LastOwnerOf(lastOwnerOf);
             }
@@ -743,16 +753,9 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
-        return await db.WorkingOidcIdentities()
-            .Where(i => i.ProviderId == providerId)
-            .Select(i => i.Subject!)
-            .Where(s => s.IsActive
-                && !s.IsSystemSubject
-                && !s.IsDemoSubject
-                && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
-                && !db.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id && o.ProviderId != providerId))
-            .Select(s => s.Id)
-            .Distinct()
+        return await db.Subjects
+            .Where(s => db.WorkingOidcIdentities().Any(i => i.SubjectId == s.Id && i.ProviderId == providerId))
+            .WhoCannotSignIn(db, _linkRoute, withoutProvider: providerId)
             .CountAsync(ct);
     }
 
@@ -765,13 +768,6 @@ public class SubjectRepository : ISubjectRepository
             .AnyAsync(m =>
                 db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
                 db.WorkingOidcIdentities().Any(o => o.SubjectId == m.SubjectId), ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<bool> HasOrphanedMemberAsync(Guid tenantId, CancellationToken ct)
-    {
-        await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
-        return await db.OrphanedSubjectsOf(tenantId).AnyAsync(ct);
     }
 
     /// <inheritdoc/>

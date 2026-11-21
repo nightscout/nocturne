@@ -28,7 +28,7 @@ public class SubjectServiceSignInMethodTests : IDisposable
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
         _service = new SubjectService(
-            new SubjectRepository(_db.AsFactory()),
+            new SubjectRepository(_db.AsFactory(), AccountLinkRoutes.Off),
             Mock.Of<IAuthAuditService>(),
             _recoveryCodes.Object,
             NullLogger<SubjectService>.Instance,

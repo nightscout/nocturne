@@ -53,6 +53,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private readonly AlertRuleRetirement _retirement;
     private readonly TimeProvider _time;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
     public TrackerAlertRuleSyncService(
@@ -62,7 +63,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         AlertRuleRearm rearm,
         AlertRuleRetirement retirement,
         TimeProvider timeProvider,
-        ILogger<TrackerAlertRuleSyncService> logger)
+        ILogger<TrackerAlertRuleSyncService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _contextFactory = contextFactory;
         _scopeClassifier = scopeClassifier;
@@ -71,6 +73,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         _retirement = retirement;
         _time = timeProvider;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     /// <summary>The <see cref="AlertRuleRecord.ManagedBy"/> tag for a tracker definition's rules.</summary>
@@ -113,7 +116,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             && !(definition.LowReservoirUnits is not null && TrackerCoverage.HoldsInsulin(definition)))
             return;
 
-        var recipient = await InAppRecipientOfAsync(new TenantMembershipRepository(unit), tenantId, definition, ct);
+        var recipient = await InAppRecipientOfAsync(new TenantMembershipRepository(unit, _linkRoute), tenantId, definition, ct);
 
         // The rule each threshold is delivered by, staged on the unit as it is decided.
         var ruleOf = definition.NotificationThresholds.ToDictionary(t => t.Id, t => t.AlertRuleId);

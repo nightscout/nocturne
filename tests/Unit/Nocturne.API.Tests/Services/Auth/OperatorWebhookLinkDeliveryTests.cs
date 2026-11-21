@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.TestDoubles;
 using Xunit;
@@ -34,13 +35,16 @@ public class OperatorWebhookLinkDeliveryTests
 
     private readonly ListLogger<OperatorWebhookLinkDelivery> _logger = new();
 
-    private OperatorWebhookLinkDelivery Delivery(Handler handler, string? url = WebhookUrl)
+    private OperatorWebhookLinkDelivery Delivery(Handler handler, string? url = WebhookUrl, string baseDomain = "nocturne.example")
     {
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(OperatorWebhookLinkDelivery.HttpClientName))
             .Returns(() => new HttpClient(handler, disposeHandler: false));
         return new OperatorWebhookLinkDelivery(
-            factory.Object, Options.Create(new OperatorConfiguration { AccountLinkWebhookUrl = url }), _logger);
+            factory.Object,
+            Options.Create(new OperatorConfiguration { AccountLinkWebhookUrl = url }),
+            Options.Create(new BaseDomainOptions { BaseDomain = baseDomain }),
+            _logger);
     }
 
     private static AccountLinkMessage Message(AccountLinkKind kind = AccountLinkKind.Recovery) => new(
@@ -151,5 +155,20 @@ public class OperatorWebhookLinkDeliveryTests
         delivery.IsConfigured.Should().BeFalse();
         (await delivery.DeliverAsync(Message(), default)).Should().BeFalse();
         handler.Requests.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(WebhookUrl, "nocturne.example", true)]
+    [InlineData(WebhookUrl, "", false)]
+    [InlineData(null, "nocturne.example", false)]
+    [InlineData(null, "", false)]
+    public async Task ALinkCanBeSentOnlyWithBothAWebhookAndABaseDomainToBuildItOn(string? url, string baseDomain, bool configured)
+    {
+        var handler = Answering(HttpStatusCode.OK);
+        var delivery = Delivery(handler, url, baseDomain);
+
+        delivery.IsConfigured.Should().Be(configured);
+        (await delivery.DeliverAsync(Message(), default)).Should().Be(configured);
+        handler.Requests.Should().HaveCount(configured ? 1 : 0);
     }
 }

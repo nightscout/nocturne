@@ -64,6 +64,7 @@ public class AuthenticationMiddlewarePlatformAdminTests
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddSingleton(AccountLinkRoutes.Off);
         var provider = services.BuildServiceProvider();
 
         using (var seedScope = provider.CreateScope())

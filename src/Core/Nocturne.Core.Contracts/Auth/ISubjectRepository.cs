@@ -108,7 +108,7 @@ public interface ISubjectRepository
     /// </summary>
     /// <remarks>
     /// Deactivating an active subject is refused with <see cref="SubjectChange.LastOwnerOf"/> while it
-    /// is the last owner who can sign in of any tenant, since a deactivated owner no longer counts.
+    /// is the last owner of any tenant by <c>TenantOwnerFilter.IsLastOwnerAsync</c>, since a deactivated owner no longer counts.
     /// The check holds the owner lock of each tenant the subject belongs to, in ascending tenant id,
     /// until the change commits. Over a unit, deactivate inside the unit's commit.
     /// </remarks>
@@ -148,9 +148,10 @@ public interface ISubjectRepository
     /// </summary>
     /// <remarks>
     /// Refused with <see cref="SubjectChange.LastOwnerOf"/> while an active subject is the last owner
-    /// who can sign in of any tenant, whether or not the tenant has other members: the cascade would
-    /// remove its membership. An inactive subject is never refused, since it counts as no owner. The check holds the owner lock of each tenant the subject belongs to, in
-    /// ascending tenant id, until the delete commits.
+    /// of any tenant by <c>TenantOwnerFilter.IsLastOwnerAsync</c>, whether or not the tenant has other members: the cascade would remove
+    /// its membership. An inactive subject is never refused, since it counts as no owner. The check
+    /// holds the owner lock of each tenant the subject belongs to, in ascending tenant id, until the
+    /// delete commits.
     /// </remarks>
     Task<SubjectChange> DeleteAsync(Guid subjectId, CancellationToken ct);
 
@@ -235,9 +236,8 @@ public interface ISubjectRepository
     Task<FactorRemovalResult> TryRemoveFactorAsync(Guid subjectId, SignInFactor factor, CancellationToken ct);
 
     /// <summary>
-    /// How many subjects would be left with no sign-in method if provider
-    /// <paramref name="providerId"/> went away: active, non-system, non-demo subjects whose only
-    /// working factor is an identity at that provider.
+    /// How many subjects holding a working identity at <paramref name="providerId"/>, on any tenant,
+    /// would be unable to sign in if that provider went away (<c>OrphanedSubjectFilter</c>).
     /// </summary>
     Task<int> CountStrandedByProviderAsync(Guid providerId, CancellationToken ct);
 
@@ -251,13 +251,6 @@ public interface ISubjectRepository
     /// pinned by <c>SystemPinnedAllowlistTests</c>.
     /// </remarks>
     Task<bool> TenantHasCredentialedMemberAsync(Guid tenantId, CancellationToken ct);
-
-    /// <summary>
-    /// Whether <paramref name="tenantId"/> has an active, non-system, non-demo member with no
-    /// passkey and no working OIDC identity: an account that cannot sign in at all.
-    /// </summary>
-    /// <remarks>System-pinned, as <see cref="TenantHasCredentialedMemberAsync"/> is.</remarks>
-    Task<bool> HasOrphanedMemberAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>When any subject was last updated, read as the scope's reader; null when there is none.</summary>
     Task<DateTime?> LastModifiedAsync(CancellationToken ct);

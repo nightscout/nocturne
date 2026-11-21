@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -30,9 +31,8 @@ internal static class TenantOwnerLock
     }
 
     /// <summary>
-    /// Takes the owner lock of every tenant the subject belongs to, then returns those whose owner the
-    /// subject is and where no other owner who can sign in would remain
-    /// (<see cref="TenantOwnerFilter.IsLastOwnerAsync"/>). The check reads after the locks, so it sees
+    /// Takes the owner lock of every tenant the subject belongs to, then returns those whose last
+    /// owner the subject is (<see cref="TenantOwnerFilter.IsLastOwnerAsync"/>). The check reads after the locks, so it sees
     /// every write that held one first.
     /// </summary>
     /// <remarks>
@@ -45,7 +45,7 @@ internal static class TenantOwnerLock
     /// </remarks>
     /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
     internal static async Task<IReadOnlyList<LastOwnerTenant>> LockTenantsOfSubjectAsync(
-        this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+        this NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
     {
         await db.LockSubjectRowAsync(subjectId, ct);
 
@@ -60,7 +60,7 @@ internal static class TenantOwnerLock
         var lastOwnerOf = new List<Guid>();
         foreach (var membership in memberships)
         {
-            if (await db.TenantMembers.AsNoTracking().IsLastOwnerAsync(membership.TenantId, membership.Id, ct))
+            if (await db.IsLastOwnerAsync(membership.TenantId, membership.Id, linkRoute, ct))
                 lastOwnerOf.Add(membership.TenantId);
         }
 

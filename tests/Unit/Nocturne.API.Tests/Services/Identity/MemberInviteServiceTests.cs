@@ -54,13 +54,13 @@ public class MemberInviteServiceTests : IDisposable
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
-            new TenantMembershipRepository(_dbContext.AsFactory()), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory()),
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
             _jwtService.Object,
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), _time),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             _time,
-            logger.Object);
+            logger.Object, AccountLinkRoutes.Off);
 
         // Seed tenant and subjects
         SeedData();

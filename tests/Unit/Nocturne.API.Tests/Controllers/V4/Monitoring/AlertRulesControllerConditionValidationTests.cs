@@ -37,7 +37,7 @@ public class AlertRulesControllerConditionValidationTests
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(ctx),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(ctx)),
             new AlertRuleRepository(new TestNocturneDbContextFactory(ctx)),
             MockTenantAccessor.Create(ctx.TenantId).Object,

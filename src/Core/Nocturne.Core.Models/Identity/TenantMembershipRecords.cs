@@ -119,10 +119,15 @@ public sealed record MembershipRequestDecision(string Status, Guid? DecidedBySub
 public sealed record SubjectMembership(TenantRecord Tenant, TenantMemberRecord Membership);
 
 /// <summary>
-/// What the setup gate decides from: whether any member holds a credential, and whether any
-/// member can sign in with nothing at all. Null is read when the tenant has no member.
+/// What the setup gate decides from. Null is read when the tenant has no member.
 /// </summary>
-public sealed record SetupGate(bool HasCredentials, bool HasOrphans);
+/// <param name="HasCredentials">Whether any member holds a passkey or a working OIDC identity.
+/// Until one does the site is in first-run setup.</param>
+/// <param name="RecoveryMode">Whether the site is in recovery mode, as
+/// <c>ITenantMembershipRepository.ReadSetupGateAsync</c> decides it. A site with a stuck member that
+/// is not in recovery mode keeps serving; whether a given administrator may recover a given member
+/// is decided when they try.</param>
+public sealed record SetupGate(bool HasCredentials, bool RecoveryMode);
 
 /// <summary>The counts a refused setup gate logs.</summary>
 public sealed record SetupCredentialCounts(int Members, int Passkeys, int OidcIdentities);
@@ -140,8 +145,8 @@ public sealed record PlatformAdminMembership(Guid SubjectId, Guid TenantId, stri
 public sealed record PlatformAdminDirectory(IReadOnlyList<PlatformAdminMembership> Memberships, int ActivePlatformAdmins);
 
 /// <summary>
-/// What removing every membership of a subject did: how many it removed, and the tenants that
-/// were left with no owner who can sign in because of it.
+/// What removing every membership of a subject did: how many it removed, and the tenants whose
+/// last owner it was by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.
 /// </summary>
 public sealed record SubjectMembershipsRemoval(int Removed, IReadOnlyList<LastOwnerTenant> TenantsLeftWithoutOwner);
 

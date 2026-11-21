@@ -247,6 +247,21 @@ public class TenantControllerLoginCodeTests : IDisposable
         (await _tenantContext.LoginCodes.AnyAsync()).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(true, StatusCodes.Status409Conflict)]
+    [InlineData(false, StatusCodes.Status200OK)]
+    public async Task IssueRecoveryCode_ForAMemberWithAConfirmedAddress_IsRefusedOnlyWhileDeliveryIsConfigured(bool delivery, int status)
+    {
+        var member = await _tenantContext.Subjects.FindAsync(_memberSubjectId);
+        member!.SetEmail("owner@example.test");
+        member.ConfirmEmail("owner@example.test", DateTime.UtcNow);
+        await _tenantContext.SaveChangesAsync();
+
+        var result = await IssueRecoveryCodeAsync(AccountLinkRoutes.Of(delivery));
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(status);
+    }
+
     [Fact]
     public async Task A_code_its_member_may_not_redeem_is_refused_and_not_spent()
     {
@@ -292,12 +307,15 @@ public class TenantControllerLoginCodeTests : IDisposable
         (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
     }
 
-    private Task<IActionResult> IssueRecoveryCodeAsync()
+    private Task<IActionResult> IssueRecoveryCodeAsync(IAccountLinkRoute? linkRoute = null)
     {
+        linkRoute ??= AccountLinkRoutes.Off;
         var contexts = _db.ContextFactory.AsNocturneFactory();
         return _controller.IssueRecoveryCode(
             _tenantId, _memberSubjectId, contexts, _loginCodeService,
-            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts))), CancellationToken.None);
+            new MemberRecoveryEligibility(
+                new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute)), linkRoute),
+            CancellationToken.None);
     }
 
     private TenantDetailDto TenantDetail(bool isActive) => new(
@@ -311,7 +329,7 @@ public class TenantControllerLoginCodeTests : IDisposable
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>
         await _controller.IssueLoginCode(
             tenantId, subjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService,
-            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()), CancellationToken.None);
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), CancellationToken.None);
 
     private async Task<LoginCode> IssueAsync(Guid subjectId)
     {

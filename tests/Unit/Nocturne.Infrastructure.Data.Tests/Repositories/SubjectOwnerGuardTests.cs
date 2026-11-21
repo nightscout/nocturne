@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -32,17 +33,29 @@ public class SubjectOwnerGuardTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private TenantMembershipRepository Members() => new(new TestNocturneDbContextFactory(_db.CreateContext(_home)));
+    private TenantMembershipRepository Members() => new(new TestNocturneDbContextFactory(_db.CreateContext(_home)), AccountLinkRoutes.Off);
 
-    private SubjectRepository Subjects() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)));
+    private SubjectRepository Subjects() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off);
 
     private Task<Guid> SubjectAsync(string name, bool active = true) =>
         Subjects().CreateAsync(new NewSubject(name, IsActive: active), CancellationToken.None);
 
-    private async Task JoinAsync(Guid tenant, Guid subject, bool owner) =>
+    /// <summary>Adds the membership and, unless <paramref name="signsIn"/> is false, a passkey the subject signs in with.</summary>
+    private async Task JoinAsync(Guid tenant, Guid subject, bool owner, bool signsIn = true)
+    {
         (await Members().AddMemberAsync(
             new NewTenantMember(tenant, subject, [owner ? _ownerRoles[tenant] : _caretakerRoles[tenant]]), CancellationToken.None))
             .Should().BeTrue();
+        using var db = _db.CreateContext();
+        if (signsIn && !db.PasskeyCredentials.Any(p => p.SubjectId == subject))
+        {
+            db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+            {
+                Id = Guid.CreateVersion7(), SubjectId = subject, CredentialId = subject.ToByteArray(), PublicKey = [1],
+            });
+            db.SaveChanges();
+        }
+    }
 
     private async Task<bool> IsActiveAsync(Guid subject) => (await Subjects().GetAsync(subject, CancellationToken.None))!.IsActive;
 
@@ -192,7 +205,7 @@ public class SubjectOwnerGuardTests : IDisposable
 
         await using var unit = DbUnitOfWork.Own(_db.CreateContext(Guid.Empty));
         var change = await unit.CommitAsync(ct =>
-            new SubjectRepository(unit).UpdateAsync(owner, new SubjectEdit(IsActive: false), ct));
+            new SubjectRepository(unit, AccountLinkRoutes.Off).UpdateAsync(owner, new SubjectEdit(IsActive: false), ct));
 
         RefusedTenants(change).Should().Equal(new LastOwnerTenant(_home, "home"));
         (await IsActiveAsync(owner)).Should().BeTrue();

@@ -61,6 +61,7 @@ public class GuestSessionHandlerTests
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(_dbName));
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddScoped<IGuestLinkService, GuestLinkService>();
         services.AddScoped<GrantRevocationService>();
         var provider = services.BuildServiceProvider();

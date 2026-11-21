@@ -42,6 +42,7 @@ public class MembershipRequestService : IMembershipRequestService
     private readonly IAuthAuditService _audit;
     private readonly TimeProvider _time;
     private readonly ILogger<MembershipRequestService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     public MembershipRequestService(
         ITenantRepository tenants,
@@ -52,7 +53,8 @@ public class MembershipRequestService : IMembershipRequestService
         IInAppNotificationService notificationService,
         IAuthAuditService audit,
         TimeProvider timeProvider,
-        ILogger<MembershipRequestService> logger)
+        ILogger<MembershipRequestService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
         _members = members ?? throw new ArgumentNullException(nameof(members));
@@ -63,6 +65,7 @@ public class MembershipRequestService : IMembershipRequestService
         _audit = audit;
         _time = timeProvider;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     /// <inheritdoc />
@@ -153,8 +156,8 @@ public class MembershipRequestService : IMembershipRequestService
         var activated = false;
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(_contexts, tenantId, ct))
         {
-            var members = new TenantMembershipRepository(unit);
-            var subjects = new SubjectRepository(unit, _time);
+            var members = new TenantMembershipRepository(unit, _linkRoute);
+            var subjects = new SubjectRepository(unit, _linkRoute, _time);
             try
             {
                 refusal = await unit.CommitAsync<DecideMembershipRequestResult?>(async token =>
@@ -233,8 +236,8 @@ public class MembershipRequestService : IMembershipRequestService
         var denied = false;
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(_contexts, tenantId, ct))
         {
-            var members = new TenantMembershipRepository(unit);
-            var subjects = new SubjectRepository(unit, _time);
+            var members = new TenantMembershipRepository(unit, _linkRoute);
+            var subjects = new SubjectRepository(unit, _linkRoute, _time);
             decided = await unit.CommitAsync(async token =>
             {
                 denied = false;

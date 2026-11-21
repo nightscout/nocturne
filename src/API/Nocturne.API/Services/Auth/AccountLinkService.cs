@@ -14,7 +14,7 @@ public enum AccountLinkSend
     /// <summary>The link was handed to the delivery route.</summary>
     Sent,
 
-    /// <summary>No delivery route is configured, or the site has no address to link to.</summary>
+    /// <summary>No link can be minted and sent (<see cref="IAccountLinkRoute.IsConfigured"/>).</summary>
     NotConfigured,
 
     /// <summary>The account holds no address.</summary>
@@ -92,8 +92,8 @@ public sealed class AccountLinkService(
         string? userAgent,
         CancellationToken ct)
     {
-        if (baseDomain.Value.TenantOrigin(tenant.Slug) is not { } origin)
-            return AccountLinkSend.NotConfigured;
+        // Reached only past IAccountLinkRoute.IsConfigured, which requires the base domain.
+        var origin = baseDomain.Value.TenantOrigin(tenant.Slug)!;
 
         await using var db = await contexts.CreateAsync(ct);
         if (await loginCodes.IssueEmailedAsync(db, subject.Id, purpose, email, ipAddress, userAgent, actor, ct)

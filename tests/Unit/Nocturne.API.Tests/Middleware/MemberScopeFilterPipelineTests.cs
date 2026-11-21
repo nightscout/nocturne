@@ -380,11 +380,11 @@ public class MemberScopeFilterPipelineTests
         httpContext.Items["GrantedScopes"] = Scope.Normalize(credentialScopes);
         httpContext.Items["PermissionTrie"] = new PermissionTrie();
         (await RequestMembership.ReadAsync(
-                new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None))
+                new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None))
             .Membership.StoreOn(httpContext);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(httpContext);
 
         return httpContext;

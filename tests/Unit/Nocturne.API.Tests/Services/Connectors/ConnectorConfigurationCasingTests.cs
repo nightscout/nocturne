@@ -52,7 +52,7 @@ public class ConnectorConfigurationCasingTests : IDisposable
 
         _service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),

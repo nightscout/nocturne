@@ -35,8 +35,8 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
     private TenantService Provisioner() => new(
         new SharedSqliteFactory(_db.Options).AsNocturneFactory(),
         new TenantRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
-        new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
-        new SubjectRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
+        new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -44,7 +44,7 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        NullLogger<TenantService>.Instance);
+        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off);
 
     private async Task<Guid> SeedSubjectAsync(string email)
     {

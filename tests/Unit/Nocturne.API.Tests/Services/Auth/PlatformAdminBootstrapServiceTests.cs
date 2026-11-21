@@ -135,8 +135,8 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
     private Task<bool> EnsureFirstOwnerAsync(Guid subjectId) =>
         new PlatformAdminBootstrapService(
             new TenantRepository(_sqlite.ContextFactory.AsNocturneFactory()),
-            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory()),
-            new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             Options.Create(new PlatformOptions { AdminSubjectIds = [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
             .EnsureFirstOwnerIsPlatformAdminAsync(subjectId, CancellationToken.None);
@@ -144,8 +144,8 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
             new TenantRepository(_sqlite.ContextFactory.AsNocturneFactory()),
-            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory()),
-            new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory()),
+            new TenantMembershipRepository(_sqlite.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(_sqlite.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
             .BootstrapAsync(CancellationToken.None);

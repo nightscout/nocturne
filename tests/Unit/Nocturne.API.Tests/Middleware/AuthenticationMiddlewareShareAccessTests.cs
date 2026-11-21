@@ -50,7 +50,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         _publicAccess = new PublicAccessCacheService(
-            new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance);
+            new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), NullLogger<PublicAccessCacheService>.Instance);
     }
 
     private AuthenticationMiddleware Build(params IAuthHandler[] handlers) =>
@@ -89,6 +89,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         services.AddSingleton<IJwtService>(jwt);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddSingleton(AccountLinkRoutes.Off);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var handler = new SessionCookieHandler(
@@ -105,6 +106,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         // is orthogonal to the share gate under test, so it is satisfied rather than exercised.
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddSingleton(AccountLinkRoutes.Off);
         var ctx = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         ctx.Items["TenantContext"] =
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);

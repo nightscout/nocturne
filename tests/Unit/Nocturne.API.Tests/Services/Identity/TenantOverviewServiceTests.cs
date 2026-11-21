@@ -602,7 +602,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         var service = new TenantOverviewService(
-            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory()),
+            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
@@ -1098,7 +1098,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
-            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory()),
+            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

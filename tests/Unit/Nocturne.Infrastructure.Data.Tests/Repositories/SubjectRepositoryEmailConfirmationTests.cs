@@ -27,7 +27,7 @@ public class SubjectRepositoryEmailConfirmationTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private SubjectRepository Subjects() =>
-        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)));
+        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), AccountLinkRoutes.Off);
 
     private async Task<Guid> ConfirmedSubjectAsync(string email = "a@example.test")
     {
@@ -278,7 +278,7 @@ public class SubjectRepositoryEmailConfirmationTests : IDisposable
     {
         var id = await Subjects().CreateAsync(new NewSubject("Person", Email: "a@example.test"), CancellationToken.None);
         await using var unit = await OpenUnitAsync();
-        var inUnit = new SubjectRepository(unit);
+        var inUnit = new SubjectRepository(unit, AccountLinkRoutes.Off);
         await inUnit.UpdateAsync(id, new SubjectEdit(Name: "Renamed"), CancellationToken.None);
 
         await inUnit.ConfirmEmailAsync(id, "a@example.test", First, CancellationToken.None);
@@ -297,7 +297,7 @@ public class SubjectRepositoryEmailConfirmationTests : IDisposable
     {
         var id = await Subjects().CreateAsync(new NewSubject("Person", Email: "a@example.test"), CancellationToken.None);
         await using var admin = await OpenUnitAsync();
-        await new SubjectRepository(admin).UpdateProfileAsync(
+        await new SubjectRepository(admin, AccountLinkRoutes.Off).UpdateProfileAsync(
             id, new SubjectProfile("Person", "z@example.test", null), CancellationToken.None);
 
         (await Subjects().ConfirmEmailAsync(id, "a@example.test", First, CancellationToken.None))
@@ -329,9 +329,9 @@ public class SubjectRepositoryEmailConfirmationTests : IDisposable
         var id = await Subjects().CreateAsync(new NewSubject("Person", Email: "a@example.test"), CancellationToken.None);
         await using var provider = await OpenUnitAsync();
         await using var admin = await OpenUnitAsync();
-        await new SubjectRepository(provider).UpdateAsync(
+        await new SubjectRepository(provider, AccountLinkRoutes.Off).UpdateAsync(
             id, new SubjectEdit(Email: "v@example.test", EmailConfirmedAt: Later), CancellationToken.None);
-        await new SubjectRepository(admin).UpdateProfileAsync(
+        await new SubjectRepository(admin, AccountLinkRoutes.Off).UpdateProfileAsync(
             id, new SubjectProfile("Person", "m@example.test", null), CancellationToken.None);
 
         var (first, last) = providerSavesLast ? (admin, provider) : (provider, admin);

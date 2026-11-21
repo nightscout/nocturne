@@ -3,7 +3,12 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
-import { RoleAccessLevel, type TenantMemberDto, type TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  RoleAccessLevel,
+  type LockedOutMember,
+  type TenantMemberDto,
+  type TenantRoleDto,
+} from "#lib/api/generated/nocturne-api-client.js";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({
@@ -13,9 +18,11 @@ const mocks = vi.hoisted(() => ({
   setMemberRoles: vi.fn(),
   setMemberPermissions: vi.fn(),
   setMemberLimitTo24Hours: vi.fn(),
+  getLockedOutMembers: vi.fn(),
 }));
 
 let members: TenantMemberDto[];
+let lockedOut: LockedOutMember[] = [];
 
 const viewer: TenantRoleDto = {
   id: "22222222-2222-2222-2222-222222222222",
@@ -55,6 +62,13 @@ vi.mock("#lib/api/generated/membershipRequests.generated.remote.js", () => ({
   },
   approveRequest: () => Promise.resolve(),
   denyRequest: () => Promise.resolve(),
+}));
+vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
+  getLockedOutMembers: () => {
+    mocks.getLockedOutMembers();
+    return remoteQuery(() => lockedOut);
+  },
+  issueRecoveryCode: vi.fn(),
 }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
 vi.mock("#lib/components/members/PublicAccessCard.svelte", () => ({ default: () => {} }));
@@ -218,5 +232,49 @@ describe("members page loading roles and pending requests", () => {
     await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
     expect(mocks.getPendingRequests).toHaveBeenCalled();
     expect(mocks.getRoles).toHaveBeenCalled();
+  });
+});
+
+describe("members page listing members who cannot sign in", () => {
+  const stuck: LockedOutMember = {
+    subjectId: "66666666-6666-6666-6666-666666666666",
+    name: "Sam",
+    username: "sam",
+    hasRecoveryCodes: false,
+    operatorOnly: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    lockedOut = [stuck];
+  });
+
+  it("shows them to a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Members who cannot sign in")).toBeVisible();
+    await expect.element(browserPage.getByText("Sam", { exact: true })).toBeVisible();
+  });
+
+  it("shows nothing to a caller with members.manage when nobody is stuck", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    lockedOut = [];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(mocks.getLockedOutMembers).toHaveBeenCalled();
+    expect(browserPage.getByText("Members who cannot sign in").elements()).toHaveLength(0);
+  });
+
+  it("neither requests nor shows them for a caller who can only invite", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(mocks.getLockedOutMembers).not.toHaveBeenCalled();
+    expect(browserPage.getByText("Members who cannot sign in").elements()).toHaveLength(0);
   });
 });

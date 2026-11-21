@@ -59,7 +59,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory()), TimeProvider.System);
+        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task CreateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
     {
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory(), AccountLinkRoutes.Off) { CallBase = true };
         repository
             .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(UniqueViolation());
@@ -236,7 +236,7 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task CreateRoleAsync_FailingOnSomethingOtherThanTheSlugIndex_Throws()
     {
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory(), AccountLinkRoutes.Off) { CallBase = true };
         repository
             .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DbUpdateException(
@@ -351,7 +351,7 @@ public class TenantRoleServiceTests : IDisposable
     public async Task UpdateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
     {
         var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory(), AccountLinkRoutes.Off) { CallBase = true };
         repository
             .Setup(r => r.UpdateRoleAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<TenantRoleEdit>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))

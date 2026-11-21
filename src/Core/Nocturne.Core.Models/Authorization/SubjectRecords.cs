@@ -114,7 +114,7 @@ public abstract record EmailConfirmation
     public sealed record AddressMismatch : EmailConfirmation;
 }
 
-/// <summary>A tenant a change to a subject would leave without an owner who can sign in.</summary>
+/// <summary>A tenant whose last owner a subject is, by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.</summary>
 public sealed record LastOwnerTenant(Guid TenantId, string Slug);
 
 /// <summary>

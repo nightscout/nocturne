@@ -88,8 +88,8 @@ public class SetupControllerTests : IDisposable
         _platformOptions = new PlatformOptions();
         _platformAdminBootstrap = new PlatformAdminBootstrapService(
             new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
-            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
-            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             Options.Create(_platformOptions),
             NullLogger<PlatformAdminBootstrapService>.Instance);
 
@@ -109,15 +109,15 @@ public class SetupControllerTests : IDisposable
             _recoveryCodeService.Object,
             _sessionService.Object,
             _subjectService.Object,
-            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
-            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             _oidcOptions,
             _oidcAuthService.Object,
             Options.Create(operatorConfig),
             httpClientFactory,
             _platformAdminBootstrap,
-            new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory())),
+            new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off)),
             logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

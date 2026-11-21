@@ -21,7 +21,8 @@ public class AccessRequestService(
     ITenantRoleService tenantRoleService,
     IInAppNotificationService notificationService,
     TimeProvider time,
-    ILogger<AccessRequestService> logger) : IAccessRequestService
+    ILogger<AccessRequestService> logger,
+    IAccountLinkRoute linkRoute) : IAccessRequestService
 {
     /// <inheritdoc />
     public async Task<ApproveAccessRequestResult> ApproveAsync(
@@ -54,10 +55,10 @@ public class AccessRequestService(
 
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, tenant, ct))
         {
-            if (await new SubjectRepository(unit).UpdateAsync(subjectId, SubjectEdit.AccessApproved, ct) is SubjectChange.NotFound)
+            if (await new SubjectRepository(unit, linkRoute).UpdateAsync(subjectId, SubjectEdit.AccessApproved, ct) is SubjectChange.NotFound)
                 return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.NotFound);
 
-            var tenantMembers = new TenantMembershipRepository(unit);
+            var tenantMembers = new TenantMembershipRepository(unit, linkRoute);
             if (!await tenantMembers.AddMemberAsync(
                     new NewTenantMember(
                         tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours),

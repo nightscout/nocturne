@@ -44,7 +44,7 @@ public class SubjectRepositoryTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private SubjectRepository Subjects(Guid? tenant = null) =>
-        new(new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? _tenant)));
+        new(new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? _tenant)), AccountLinkRoutes.Off);
 
     private Task<Guid> CreateAsync(NewSubject subject) => Subjects().CreateAsync(subject, CancellationToken.None);
 
@@ -420,11 +420,31 @@ public class SubjectRepositoryTests : IDisposable
 
         (await Subjects().TenantHasCredentialedMemberAsync(_tenant, CancellationToken.None)).Should().BeTrue();
         (await Subjects().TenantHasCredentialedMemberAsync(_otherTenant, CancellationToken.None)).Should().BeFalse("the demo visitor holds nothing");
-        (await Subjects().HasOrphanedMemberAsync(_tenant, CancellationToken.None)).Should().BeTrue();
-        (await Subjects().HasOrphanedMemberAsync(_otherTenant, CancellationToken.None)).Should().BeFalse("a demo visitor is no orphan");
         (await Subjects().CountStrandedByProviderAsync(_provider, CancellationToken.None))
             .Should().Be(1, "the subject with a passkey too is not stranded");
         (await Subjects().CountStrandedByProviderAsync(_disabledProvider, CancellationToken.None)).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public async Task AMemberWhoseOnlyIdentityIsAtTheProviderIsStrandedUnlessALinkCanReachTheirConfirmedAddress(
+        bool delivery, int stranded)
+    {
+        var member = await CreateAsync(new NewSubject("Linked"));
+        AddMember(_tenant, member);
+        await LinkAsync(member, _provider, "ext-1");
+        using (var db = _db.CreateContext())
+        {
+            var row = db.Subjects.Single(s => s.Id == member);
+            row.SetEmail("linked@example.test");
+            row.ConfirmEmail("linked@example.test", DateTime.UtcNow);
+            db.SaveChanges();
+        }
+        var subjects = new SubjectRepository(
+            new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), AccountLinkRoutes.Of(delivery));
+
+        (await subjects.CountStrandedByProviderAsync(_provider, CancellationToken.None)).Should().Be(stranded);
     }
 
     [Fact]
@@ -433,7 +453,7 @@ public class SubjectRepositoryTests : IDisposable
         Guid created;
         await using (var unit = DbUnitOfWork.Own(_db.CreateContext()))
         {
-            var staged = new SubjectRepository(unit);
+            var staged = new SubjectRepository(unit, AccountLinkRoutes.Off);
             created = await staged.CreateAsync(new NewSubject("Staged", RoleNames: ["admin"]), CancellationToken.None);
             await staged.AddOidcIdentityAsync(
                 new NewSubjectOidcIdentity(created, _provider, "ext", "https://issuer.example", null, Now), CancellationToken.None);
@@ -450,11 +470,11 @@ public class SubjectRepositoryTests : IDisposable
         (await Subjects().FindByOidcIdentityAsync("ext", "https://issuer.example", CancellationToken.None))!.Subject.Id.Should().Be(created);
 
         await using var pinned = DbUnitOfWork.Own(_db.CreateContext());
-        var cannotPin = () => new SubjectRepository(pinned).IsDemoSubjectAsync(created, CancellationToken.None);
+        var cannotPin = () => new SubjectRepository(pinned, AccountLinkRoutes.Off).IsDemoSubjectAsync(created, CancellationToken.None);
         await cannotPin.Should().ThrowAsync<InvalidOperationException>("a unit runs on its own context and pins no other");
-        var cannotDelete = () => new SubjectRepository(pinned).DeleteAsync(created, CancellationToken.None);
+        var cannotDelete = () => new SubjectRepository(pinned, AccountLinkRoutes.Off).DeleteAsync(created, CancellationToken.None);
         await cannotDelete.Should().ThrowAsync<InvalidOperationException>("a unit's owner commits; the delete's transaction is its own");
-        var cannotRemove = () => new SubjectRepository(pinned).TryRemoveFactorAsync(created, new SignInFactor.Passkey(Guid.NewGuid()), CancellationToken.None);
+        var cannotRemove = () => new SubjectRepository(pinned, AccountLinkRoutes.Off).TryRemoveFactorAsync(created, new SignInFactor.Passkey(Guid.NewGuid()), CancellationToken.None);
         await cannotRemove.Should().ThrowAsync<InvalidOperationException>();
     }
 }

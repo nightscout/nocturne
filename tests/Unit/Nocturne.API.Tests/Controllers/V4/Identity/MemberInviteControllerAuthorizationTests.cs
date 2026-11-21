@@ -86,7 +86,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
-            new TenantMembershipRepository(_dbContext.AsFactory()))
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
@@ -231,7 +231,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     {
         _tenantService
             .Setup(s => s.RemoveMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MemberRemovalResult(false, "Cannot remove the last owner of a tenant"));
+            .ReturnsAsync(new MemberRemovalResult(false, "Cannot remove the only owner, or the last owner who can sign in"));
 
         var controller = BuildController(Scope.MembersManage);
 
@@ -240,7 +240,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Detail.Should().Be("Cannot remove the last owner of a tenant");
+        details.Detail.Should().Be("Cannot remove the only owner, or the last owner who can sign in");
     }
 
     /// <summary>

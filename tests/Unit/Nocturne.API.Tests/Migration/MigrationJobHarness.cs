@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Health;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.EntityFrameworkCore;
@@ -92,6 +93,7 @@ internal static class MigrationJobHarness
                     o.AddInterceptors(interceptor);
             })
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(handler))

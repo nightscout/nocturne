@@ -80,6 +80,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
             .UseSqlite(_db.Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 

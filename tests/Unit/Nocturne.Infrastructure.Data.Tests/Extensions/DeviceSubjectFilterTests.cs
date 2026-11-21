@@ -67,9 +67,9 @@ public class DeviceSubjectFilterTests : IDisposable
     {
         await _context.DeviceSubjectOf(_tenant);
 
-        // It holds a membership and can never hold a passkey, which is the shape that puts a tenant
-        // into recovery mode for every request.
-        (await _context.OrphanedSubjectsOf(_tenant).ToListAsync()).Should().BeEmpty();
+        // It holds a membership and can never hold a passkey or an address, which is the shape of a
+        // locked-out account.
+        (await _context.OrphanedSubjectsOf(_tenant, AccountLinkRoutes.Off).ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]

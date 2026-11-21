@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -15,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </remarks>
 public static class TenantOwnerFilter
 {
-    /// <summary>The tenant's memberships held by a person who can sign in: not a system subject, not deactivated.</summary>
+    /// <summary>The tenant's memberships held by a person: active and not a system subject.</summary>
     public static IQueryable<TenantMemberEntity> PeopleOf(
         this IQueryable<TenantMemberEntity> members, Guid tenantId) =>
         members.Where(m => m.TenantId == tenantId
@@ -37,17 +38,43 @@ public static class TenantOwnerFilter
             .OrderBy(m => m.SysCreatedAt)
             .ThenBy(m => m.Id);
 
-    public const string LastOwnerRefusal = "Cannot remove the last owner of a tenant";
+    public const string LastOwnerRefusal = "Cannot remove the only owner, or the last owner who can sign in";
 
     /// <summary>
-    /// Whether the member holds the owner role and no other active owner would remain if it stopped.
+    /// Whether the member holds the owner role and stopping would leave the tenant with no active
+    /// owner, or, when the member can sign in (<see cref="OrphanedSubjectFilter"/>), with no other
+    /// owner who can.
     /// </summary>
+    /// <remarks>
+    /// An owner holds <see cref="Scope.FullAccess"/>, so an owner who can sign in is a member
+    /// administrator who can, and while one remains the site is not in recovery mode
+    /// (<see cref="Core.Models.Identity.SetupGate.RecoveryMode"/>). The guard keeps the last of them
+    /// and the last owner of any kind. An owner who cannot sign in may go while another owner
+    /// remains: that removes no way in.
+    /// </remarks>
+    /// <param name="db">The context the caller holds the owner lock on (<see cref="TenantOwnerLock"/>).</param>
+    /// <param name="tenantId">The tenant whose owners are counted.</param>
+    /// <param name="memberId">The membership that would stop being an owner.</param>
+    /// <param name="linkRoute">Decides who cannot sign in.</param>
+    /// <param name="ct">Cancels the read.</param>
     public static async Task<bool> IsLastOwnerAsync(
-        this IQueryable<TenantMemberEntity> members,
+        this NocturneDbContext db,
         Guid tenantId,
         Guid memberId,
-        CancellationToken ct = default) =>
-        await members.AnyAsync(
-            m => m.Id == memberId && m.TenantId == tenantId && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner), ct)
-        && !await members.OwnersOf(tenantId).AnyAsync(m => m.Id != memberId, ct);
+        IAccountLinkRoute linkRoute,
+        CancellationToken ct = default)
+    {
+        var stuck = db.OrphanedSubjectsOf(tenantId, linkRoute);
+        var member = await db.TenantMembers.AsNoTracking()
+            .Where(m => m.Id == memberId && m.TenantId == tenantId && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+            .Select(m => new { CanSignIn = !stuck.Any(s => s.Id == m.SubjectId) })
+            .FirstOrDefaultAsync(ct);
+        if (member is null)
+            return false;
+
+        var otherOwners = db.TenantMembers.AsNoTracking().OwnersOf(tenantId).Where(m => m.Id != memberId);
+        if (!await otherOwners.AnyAsync(ct))
+            return true;
+        return member.CanSignIn && !await otherOwners.AnyAsync(m => !stuck.Any(s => s.Id == m.SubjectId), ct);
+    }
 }

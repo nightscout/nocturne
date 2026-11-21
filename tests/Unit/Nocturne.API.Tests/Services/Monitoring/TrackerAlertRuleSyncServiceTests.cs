@@ -54,7 +54,7 @@ public class TrackerAlertRuleSyncServiceTests
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object, Mock.Of<IUnevaluableRuleNotice>()),
             _clock,
-            NullLogger<TrackerAlertRuleSyncService>.Instance);
+            NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);
     }
 
     private readonly Mock<IAlertReferenceService> _referenceService = new();

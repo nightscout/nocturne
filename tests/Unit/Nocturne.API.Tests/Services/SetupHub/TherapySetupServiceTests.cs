@@ -69,7 +69,7 @@ public class TherapySetupServiceTests : IDisposable
             TimeProvider.System);
     }
 
-    private SetupHubService Hub() => new(_factory, new TenantRepository(_factory), new TenantMembershipRepository(_factory), [new TherapyItem(_factory)]);
+    private SetupHubService Hub() => new(_factory, new TenantRepository(_factory), new TenantMembershipRepository(_factory, AccountLinkRoutes.Off), [new TherapyItem(_factory)]);
 
     private ProfileDecomposer Decomposer() => new(
         SettingsRepo,

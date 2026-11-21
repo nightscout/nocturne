@@ -61,14 +61,14 @@ public class EmailConfirmationTests : IDisposable
         http.SetTenantContext(_tenant);
         if (signedIn is { } subjectId)
             http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId, TenantId = _tenantId };
-        return new EmailConfirmationController(new SubjectRepository(_contexts), _contexts, _loginCodes)
+        return new EmailConfirmationController(new SubjectRepository(_contexts, AccountLinkRoutes.Off), _contexts, _loginCodes)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
     }
 
     private AccountLinkService Links() => new(
-        _contexts, _loginCodes, new SubjectRepository(_contexts), _delivery,
+        _contexts, _loginCodes, new SubjectRepository(_contexts, AccountLinkRoutes.Off), _delivery,
         Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }));
 
     private async Task<Guid> SeedMemberAsync(string? email = Address, bool confirmed = false)

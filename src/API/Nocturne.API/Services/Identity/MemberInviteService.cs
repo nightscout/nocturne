@@ -40,6 +40,7 @@ public class MemberInviteService : IMemberInviteService
     private readonly BaseDomainOptions _baseDomain;
     private readonly TimeProvider _time;
     private readonly ILogger<MemberInviteService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <param name="members">For the roles and memberships an invite names.</param>
     /// <param name="invites">The stored invites.</param>
@@ -59,7 +60,8 @@ public class MemberInviteService : IMemberInviteService
         ITenantRoleService tenantRoleService,
         IOptions<BaseDomainOptions> baseDomainOptions,
         TimeProvider timeProvider,
-        ILogger<MemberInviteService> logger)
+        ILogger<MemberInviteService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _members = members ?? throw new ArgumentNullException(nameof(members));
         _invites = invites ?? throw new ArgumentNullException(nameof(invites));
@@ -70,6 +72,7 @@ public class MemberInviteService : IMemberInviteService
         _baseDomain = baseDomainOptions.Value;
         _time = timeProvider;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     /// <inheritdoc />
@@ -208,7 +211,7 @@ public class MemberInviteService : IMemberInviteService
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(_contexts, invite.TenantId))
         {
             var invites = new MemberInviteRepository(unit);
-            var members = new TenantMembershipRepository(unit);
+            var members = new TenantMembershipRepository(unit, _linkRoute);
             try
             {
                 refusal = await unit.CommitAsync<AcceptMemberInviteResult?>(async token =>

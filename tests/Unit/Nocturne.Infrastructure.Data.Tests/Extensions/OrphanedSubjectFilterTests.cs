@@ -1,14 +1,17 @@
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Extensions;
 
 /// <summary>
-/// A tenant answers 503 recovery_mode for as long as this reports anybody, so a subject it names
-/// wrongly takes the whole tenant offline and one it misses leaves somebody locked out with no way
-/// back in.
+/// This set decides recovery mode, the members an administrator is shown and who a recovery code
+/// may be issued for, so a subject it names wrongly can take a site offline and one it misses leaves
+/// somebody locked out with no way back in.
 /// </summary>
 [Trait("Category", "Unit")]
 public class OrphanedSubjectFilterTests : IDisposable
@@ -39,10 +42,11 @@ public class OrphanedSubjectFilterTests : IDisposable
         bool isDemoSubject = false,
         bool withPasskey = false,
         bool withOidc = false,
-        bool oidcProviderEnabled = true)
+        bool oidcProviderEnabled = true,
+        Email email = Email.None)
     {
         var subjectId = Guid.CreateVersion7();
-        _context.Subjects.Add(new SubjectEntity
+        var subject = new SubjectEntity
         {
             Id = subjectId,
             Name = name,
@@ -50,7 +54,12 @@ public class OrphanedSubjectFilterTests : IDisposable
             IsSystemSubject = isSystemSubject,
             IsDemoSubject = isDemoSubject,
             ApprovalStatus = "Approved",
-        });
+        };
+        if (email != Email.None)
+            subject.SetEmail($"{name.Replace(' ', '-').ToLowerInvariant()}@example.test");
+        if (email == Email.Confirmed)
+            subject.ConfirmEmail(subject.Email, new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc));
+        _context.Subjects.Add(subject);
         _context.TenantMembers.Add(new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
@@ -95,8 +104,67 @@ public class OrphanedSubjectFilterTests : IDisposable
         return subjectId;
     }
 
-    private async Task<List<string>> OrphansAsync() =>
-        await _context.OrphanedSubjectsOf(_tenant).Select(s => s.Name).ToListAsync();
+    public enum Factor { Passkey, ProviderIdentity, Neither }
+
+    public enum Email { Confirmed, Unconfirmed, None }
+
+    private static IAccountLinkRoute Route(bool configured) =>
+        Mock.Of<IAccountLinkRoute>(r => r.IsConfigured == configured);
+
+    private async Task<List<string>> OrphansAsync(bool delivery = false) =>
+        await _context.OrphanedSubjectsOf(_tenant, Route(delivery)).Select(s => s.Name).ToListAsync();
+
+    [Theory]
+    [InlineData(Factor.Passkey, Email.Confirmed, true, false)]
+    [InlineData(Factor.Passkey, Email.Confirmed, false, false)]
+    [InlineData(Factor.Passkey, Email.Unconfirmed, true, false)]
+    [InlineData(Factor.Passkey, Email.Unconfirmed, false, false)]
+    [InlineData(Factor.Passkey, Email.None, true, false)]
+    [InlineData(Factor.Passkey, Email.None, false, false)]
+    [InlineData(Factor.ProviderIdentity, Email.Confirmed, true, false)]
+    [InlineData(Factor.ProviderIdentity, Email.Confirmed, false, false)]
+    [InlineData(Factor.ProviderIdentity, Email.Unconfirmed, true, false)]
+    [InlineData(Factor.ProviderIdentity, Email.Unconfirmed, false, false)]
+    [InlineData(Factor.ProviderIdentity, Email.None, true, false)]
+    [InlineData(Factor.ProviderIdentity, Email.None, false, false)]
+    // A recovery link reaches a confirmed address only while there is a route to deliver it.
+    [InlineData(Factor.Neither, Email.Confirmed, true, false)]
+    [InlineData(Factor.Neither, Email.Confirmed, false, true)]
+    [InlineData(Factor.Neither, Email.Unconfirmed, true, true)]
+    [InlineData(Factor.Neither, Email.Unconfirmed, false, true)]
+    [InlineData(Factor.Neither, Email.None, true, true)]
+    [InlineData(Factor.Neither, Email.None, false, true)]
+    public async Task An_account_cannot_sign_in_when_it_has_no_factor_and_no_deliverable_confirmed_address(
+        Factor factor, Email email, bool delivery, bool cannotSignIn)
+    {
+        SeedMember(
+            "Member",
+            withPasskey: factor == Factor.Passkey,
+            withOidc: factor == Factor.ProviderIdentity,
+            email: email);
+
+        (await OrphansAsync(delivery)).Should().HaveCount(cannotSignIn ? 1 : 0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_predicate_leaves_to_email_exactly_the_accounts_a_recovery_link_would_be_sent_to(bool delivery)
+    {
+        var ids = Enum.GetValues<Email>().ToDictionary(e => SeedMember(e.ToString(), email: e), e => e.ToString());
+
+        var sentTo = new List<string>();
+        var lookup = new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), AccountLinkRoutes.Off);
+        foreach (var subject in _context.Subjects.AsNoTracking().Where(s => s.Email != null).ToList())
+        {
+            var recipients = await lookup.FindMembersByConfirmedEmailAsync(_tenant, subject.Email!.ToUpperInvariant(), CancellationToken.None);
+            sentTo.AddRange(recipients.Select(r => ids[r.Id]));
+        }
+
+        var stuck = await OrphansAsync(delivery);
+        ids.Values.Except(stuck).Should().BeEquivalentTo(delivery ? sentTo : []);
+        sentTo.Should().NotBeEmpty("the table holds an account a link would reach");
+    }
 
     [Fact]
     public async Task A_member_with_no_passkey_and_no_provider_is_locked_out()
