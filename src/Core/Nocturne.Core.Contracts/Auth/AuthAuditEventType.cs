@@ -73,6 +73,12 @@ public static class AuthAuditEventType
     public const string SubjectUpdated = "subject_updated";
 
     /// <summary>
+    /// Event type when an operator confirms a member's email address through the platform-admin API.
+    /// The details carry no address.
+    /// </summary>
+    public const string EmailConfirmedByOperator = "email_confirmed_by_operator";
+
+    /// <summary>
     /// Event type when a subject is deleted.
     /// </summary>
     public const string SubjectDeleted = "subject_deleted";

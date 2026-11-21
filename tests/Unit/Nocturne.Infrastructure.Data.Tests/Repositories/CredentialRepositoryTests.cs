@@ -28,7 +28,7 @@ public class CredentialRepositoryTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant);
         using var db = _db.CreateContext();
-        db.Subjects.Add(new SubjectEntity { Id = _holder, Name = "Holder", Username = "holder", Email = "h@x.example" });
+        db.Subjects.Add(new SubjectEntity { Id = _holder, Name = "Holder", Username = "holder" });
         db.Subjects.Add(new SubjectEntity { Id = _stranger, Name = "Stranger" });
         db.Subjects.Add(new SubjectEntity { Id = _system, Name = "Public", IsSystemSubject = true });
         db.SaveChanges();

@@ -57,11 +57,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// The current UTC time truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores, so
     /// that a stamp held in memory equals the one read back from its row.
     /// </summary>
-    public static DateTime UtcNowAtStoredPrecision()
-    {
-        var now = DateTime.UtcNow;
-        return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
-    }
+    public static DateTime UtcNowAtStoredPrecision() => AtStoredPrecision(DateTime.UtcNow);
+
+    /// <summary><paramref name="value"/> truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores.</summary>
+    public static DateTime AtStoredPrecision(DateTime value) =>
+        value.AddTicks(-(value.Ticks % TimeSpan.TicksPerMicrosecond));
 
     /// <summary>
     /// Initializes a new instance of the NocturneDbContext class

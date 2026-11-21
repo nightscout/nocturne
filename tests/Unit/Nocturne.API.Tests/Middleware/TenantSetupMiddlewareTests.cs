@@ -630,7 +630,6 @@ public class TenantSetupMiddlewareTests : IDisposable
         {
             Id = sharedSubjectId,
             Name = "Shared User",
-            Email = "user@example.com",
             IsActive = true,
             IsSystemSubject = false,
         });
@@ -712,7 +711,6 @@ public class TenantSetupMiddlewareTests : IDisposable
         {
             Id = sharedSubjectId,
             Name = "Shared User",
-            Email = "user@example.com",
             IsActive = true,
             IsSystemSubject = false,
         });

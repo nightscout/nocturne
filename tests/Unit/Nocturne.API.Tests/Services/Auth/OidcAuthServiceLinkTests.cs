@@ -69,8 +69,8 @@ public class OidcAuthServiceLinkTests
             IsEnabled = true,
         };
 
-    private static OidcAuthService.OidcIdTokenClaims Claims(string sub = "ext-1", string? email = "user@x")
-        => new() { Sub = sub, Email = email };
+    private static OidcAuthService.OidcIdTokenClaims Claims(string sub = "ext-1", string? email = "user@x", bool? emailVerified = null)
+        => new() { Sub = sub, Email = email, EmailVerified = emailVerified };
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -81,7 +81,7 @@ public class OidcAuthServiceLinkTests
         var newIdentityId = Guid.NewGuid();
 
         _subjectService
-            .Setup(s => s.AttachOidcIdentityAsync(subjectId, provider.Id, "ext-1", provider.IssuerUrl, "user@x"))
+            .Setup(s => s.AttachOidcIdentityAsync(subjectId, provider.Id, "ext-1", provider.IssuerUrl, "user@x", false))
             .ReturnsAsync((OidcLinkOutcome.Created, (Guid?)newIdentityId));
 
         var result = await _service.AttachVerifiedIdentityAsync(
@@ -92,7 +92,7 @@ public class OidcAuthServiceLinkTests
         result.ReturnUrl.Should().Be("/x");
 
         _subjectService.Verify(
-            s => s.AttachOidcIdentityAsync(subjectId, provider.Id, "ext-1", provider.IssuerUrl, "user@x"),
+            s => s.AttachOidcIdentityAsync(subjectId, provider.Id, "ext-1", provider.IssuerUrl, "user@x", false),
             Times.Once);
     }
 
@@ -109,7 +109,7 @@ public class OidcAuthServiceLinkTests
         result.Success.Should().BeFalse();
         result.Error.Should().Be("invalid_intent");
         _subjectService.Verify(
-            s => s.AttachOidcIdentityAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()),
+            s => s.AttachOidcIdentityAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()),
             Times.Never);
     }
 
@@ -126,7 +126,7 @@ public class OidcAuthServiceLinkTests
         result.Success.Should().BeFalse();
         result.Error.Should().Be("invalid_state");
         _subjectService.Verify(
-            s => s.AttachOidcIdentityAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()),
+            s => s.AttachOidcIdentityAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()),
             Times.Never);
     }
 
@@ -139,7 +139,7 @@ public class OidcAuthServiceLinkTests
 
         _subjectService
             .Setup(s => s.AttachOidcIdentityAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()))
             .ReturnsAsync((OidcLinkOutcome.AlreadyLinkedToSelf, (Guid?)existing));
 
         var result = await _service.AttachVerifiedIdentityAsync(
@@ -157,7 +157,7 @@ public class OidcAuthServiceLinkTests
 
         _subjectService
             .Setup(s => s.AttachOidcIdentityAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()))
             .ReturnsAsync((OidcLinkOutcome.AlreadyLinkedToOther, (Guid?)null));
 
         var result = await _service.AttachVerifiedIdentityAsync(
@@ -165,5 +165,27 @@ public class OidcAuthServiceLinkTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("identity_already_linked");
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(null, false)]
+    public async Task AttachVerifiedIdentityAsync_PassesOnlyAVerifiedAssertionAsVerified(bool? claimed, bool passed)
+    {
+        var subjectId = Guid.NewGuid();
+        var provider = Provider();
+        _subjectService
+            .Setup(s => s.AttachOidcIdentityAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((OidcLinkOutcome.Created, (Guid?)Guid.NewGuid()));
+
+        await _service.AttachVerifiedIdentityAsync(
+            LinkState(subjectId), provider, Claims(emailVerified: claimed), subjectId);
+
+        _subjectService.Verify(
+            s => s.AttachOidcIdentityAsync(subjectId, provider.Id, "ext-1", provider.IssuerUrl, "user@x", passed),
+            Times.Once);
     }
 }
