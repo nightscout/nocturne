@@ -285,8 +285,7 @@ public class OidcController : ControllerBase
                 : JsonSerializer.Serialize(new { method = "oidc" }));
 
         _logger.LogInformation(
-            "OIDC login successful for user {Name} (subject: {SubjectId})",
-            result.UserInfo?.Name,
+            "OIDC login successful for subject {SubjectId}",
             result.Tokens?.SubjectId
         );
 

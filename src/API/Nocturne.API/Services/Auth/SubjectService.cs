@@ -103,11 +103,7 @@ public class SubjectService : ISubjectService
                 };
             }
 
-            _logger.LogDebug(
-                "Found existing subject {SubjectId} for OIDC identity {OidcSubjectId}",
-                existing.Id,
-                oidcSubjectId
-            );
+            _logger.LogDebug("Found existing subject {SubjectId} for an OIDC identity", existing.Id);
             return MapToModel(existing);
         }
 
@@ -120,11 +116,7 @@ public class SubjectService : ISubjectService
                 EmailConfirmedAt: verifiedEmail is null ? null : now),
             CancellationToken.None);
 
-        _logger.LogInformation(
-            "Created new subject {SubjectId} for OIDC identity {OidcSubjectId}",
-            subjectId,
-            oidcSubjectId
-        );
+        _logger.LogInformation("Created new subject {SubjectId} for an OIDC identity", subjectId);
         return MapToModel((await _subjects.GetAsync(subjectId, CancellationToken.None))!);
     }
 
@@ -143,7 +135,7 @@ public class SubjectService : ISubjectService
 
         var created = (await _subjects.GetAsync(subjectId, CancellationToken.None))!;
 
-        _logger.LogInformation("Created subject {SubjectId} ({Name})", created.Id, created.Name);
+        _logger.LogInformation("Created subject {SubjectId}", created.Id);
 
         await _auditService.LogAsync(AuthAuditEventType.SubjectCreated, created.Id, success: true,
             detailsJson: JsonSerializer.Serialize(new { name = created.Name }));
@@ -186,7 +178,7 @@ public class SubjectService : ISubjectService
 
         if (subject.IsSystemSubject)
         {
-            _logger.LogWarning("Attempted to delete system subject {SubjectId} ({Name})", subjectId, subject.Name);
+            _logger.LogWarning("Attempted to delete system subject {SubjectId}", subjectId);
             return new SubjectChange.NotFound();
         }
 

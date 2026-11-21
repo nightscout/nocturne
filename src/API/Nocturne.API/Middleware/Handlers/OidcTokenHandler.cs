@@ -140,8 +140,8 @@ public class OidcTokenHandler : IAuthHandler
             }
 
             _logger.LogDebug(
-                "OIDC token authentication successful for subject {SubjectName} from provider {Provider}",
-                authContext.SubjectName,
+                "OIDC token authentication successful for subject {SubjectId} from provider {Provider}",
+                authContext.SubjectId,
                 provider.Name
             );
 

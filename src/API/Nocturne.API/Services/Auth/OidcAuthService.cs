@@ -446,10 +446,9 @@ public class OidcAuthService : IOidcAuthService
         };
 
         _logger.LogInformation(
-            "OIDC authentication successful for user {Name} ({Email}) via {Provider}",
-            subject.Name,
-            subject.Email ?? "no email",
-            provider.Name
+            "OIDC authentication successful for subject {SubjectId} via provider {ProviderId}",
+            subject.Id,
+            provider.Id
         );
 
         return OidcCallbackResult.Succeeded(

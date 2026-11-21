@@ -1,11 +1,11 @@
 using System.Threading;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -33,6 +33,7 @@ public class OidcAuthServiceLoginGateTests
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Mock<IMemberInviteService> _memberInviteService = new();
     private readonly Mock<ITotpService> _totpService = new();
+    private readonly ListLogger<OidcAuthService> _logger = new();
     private readonly OidcAuthService _service;
 
     public OidcAuthServiceLoginGateTests()
@@ -56,7 +57,7 @@ public class OidcAuthServiceLoginGateTests
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance);
+            _logger);
     }
 
     private static OidcAuthService.OidcStateData LoginState(string tenantSlug = "erik", string returnUrl = "/")
@@ -271,6 +272,29 @@ public class OidcAuthServiceLoginGateTests
         _sessionService.Verify(
             s => s.IssueSessionAsync(subject.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnSuccess_LogsTheSubjectAndProviderIdsAndNoPersonalData()
+    {
+        var subject = SetupResolvedSubject();
+        var provider = Provider();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), provider, Claims(), Guid.NewGuid(), ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeTrue();
+        var logged = string.Join(" ", _logger.Entries.Select(e => e.Message));
+        logged.Should().Contain(subject.Id.ToString());
+        logged.Should().Contain(provider.Id.ToString());
+        logged.Should().NotContain(subject.Email!);
+        logged.Should().NotContain(subject.Name);
+        logged.Should().NotContain(Claims().Sub);
     }
 
     [Fact]

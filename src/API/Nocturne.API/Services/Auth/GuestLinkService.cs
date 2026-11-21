@@ -173,7 +173,7 @@ public class GuestLinkService : IGuestLinkService
             return new GuestLinkActivationResult(false, null, "Invalid or expired code");
         }
 
-        _logger.LogInformation("Guest link {GrantId} activated from {IpAddress}", grant.Id, ipAddress);
+        _logger.LogInformation("Guest link {GrantId} activated", grant.Id);
 
         return new GuestLinkActivationResult(true, ToSession(grant), null);
     }
