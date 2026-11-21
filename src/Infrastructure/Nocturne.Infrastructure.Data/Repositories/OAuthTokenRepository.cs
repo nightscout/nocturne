@@ -284,6 +284,13 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task DeleteDeviceCodeAsync(Guid id, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        await lease.Context.OAuthDeviceCodes.Where(d => d.Id == id).ExecuteDeleteAsync(ct);
+    }
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Pinned because the sweep runs from a hosted service, whose root-resolved factory reads as no
     /// tenant and under FORCE ROW LEVEL SECURITY would see none of the rows.

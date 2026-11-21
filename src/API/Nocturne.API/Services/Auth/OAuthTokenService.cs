@@ -566,19 +566,20 @@ public class OAuthTokenService : IOAuthTokenService
                 "Device code exchange failed: grant {GrantId} not found or revoked",
                 entity.GrantId
             );
-            return OAuthTokenResult.Fail("server_error", "Grant not found.");
+            return await RefuseApprovedDeviceCodeAsync(
+                entity.Id, OAuthTokenResult.Fail("server_error", "Grant not found."), ct);
         }
 
         var subject = await _subjectService.GetSubjectByIdAsync(grantInfo.SubjectId);
         if (subject == null)
         {
-            return SubjectNotFoundFailure();
+            return await RefuseApprovedDeviceCodeAsync(entity.Id, SubjectNotFoundFailure(), ct);
         }
 
         if (!subject.IsActive)
         {
             _logger.LogWarning("Device code exchange failed: subject is not active");
-            return InvalidDeviceCodeFailure();
+            return await RefuseApprovedDeviceCodeAsync(entity.Id, InvalidDeviceCodeFailure(), ct);
         }
 
         if (!await _tokens.TryRedeemDeviceCodeAsync(entity.Id, UtcNow, ct))
@@ -597,6 +598,19 @@ public class OAuthTokenService : IOAuthTokenService
         );
 
         return result;
+    }
+
+    /// <summary>
+    /// Ends an approved device code that cannot be exchanged, so every later poll with it is
+    /// answered as one with an unknown code. Deleted rather than redeemed: a redeemed code presented
+    /// again revokes its grant as a replay, and the approval may have reused a grant the subject
+    /// already holds for the client.
+    /// </summary>
+    private async Task<OAuthTokenResult> RefuseApprovedDeviceCodeAsync(
+        Guid deviceCodeId, OAuthTokenResult failure, CancellationToken ct)
+    {
+        await _tokens.DeleteDeviceCodeAsync(deviceCodeId, ct);
+        return failure;
     }
 
     /// <summary>
