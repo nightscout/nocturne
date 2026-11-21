@@ -199,9 +199,9 @@ public class TenantControllerLoginCodeTests : IDisposable
         var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
         stored.Purpose.Should().Be(LoginCodePurpose.OperatorRecovery);
 
-        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, [LoginCodePurpose.Login], null, null))
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, [LoginCodePurpose.Login], admits: null, withSpend: null, null, null))
             .Should().BeNull("a recovery code is not a sign-in");
-        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, null, null))
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, admits: null, withSpend: null, null, null))
             .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.OperatorRecovery));
     }
 
@@ -213,7 +213,7 @@ public class TenantControllerLoginCodeTests : IDisposable
 
         await IssueRecoveryCodeAsync();
 
-        (await _loginCodeService.RedeemAsync(_tenantContext, first.Code, LoginCodeService.RecoveryPurposes, null, null))
+        (await _loginCodeService.RedeemAsync(_tenantContext, first.Code, LoginCodeService.RecoveryPurposes, admits: null, withSpend: null, null, null))
             .Should().BeNull();
     }
 
@@ -234,11 +234,46 @@ public class TenantControllerLoginCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_code_its_member_may_not_redeem_is_refused_and_not_spent()
+    {
+        var issued = await IssueAsync(_memberSubjectId);
+        var spentWith = false;
+
+        (await _loginCodeService.RedeemAsync(
+                _tenantContext, issued.Code, [LoginCodePurpose.Login],
+                admits: (_, _) => Task.FromResult(false),
+                withSpend: (_, _) => { spentWith = true; return Task.CompletedTask; },
+                null, null))
+            .Should().BeNull();
+
+        spentWith.Should().BeFalse();
+        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_code_is_not_spent_when_the_work_that_commits_with_it_fails()
+    {
+        var issued = await IssueAsync(_memberSubjectId);
+
+        var redeeming = () => _loginCodeService.RedeemAsync(
+            _tenantContext, issued.Code, [LoginCodePurpose.Login],
+            admits: null,
+            withSpend: (_, _) => throw new InvalidOperationException("the accompanying write failed"),
+            null, null);
+
+        await redeeming.Should().ThrowAsync<InvalidOperationException>();
+        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
+        (await _loginCodeService.RedeemAsync(
+                _tenantContext, issued.Code, [LoginCodePurpose.Login], admits: null, withSpend: null, null, null))
+            .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.Login));
+    }
+
+    [Fact]
     public async Task A_login_code_does_not_redeem_as_a_recovery_code()
     {
         var issued = await IssueAsync(_memberSubjectId);
 
-        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, null, null))
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, admits: null, withSpend: null, null, null))
             .Should().BeNull();
         (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
     }

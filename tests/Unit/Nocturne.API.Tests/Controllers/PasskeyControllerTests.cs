@@ -56,6 +56,7 @@ public class PasskeyControllerTests : IDisposable
     private readonly Mock<ITenantService> _tenantService;
     private readonly Mock<IInAppNotificationService> _notifications = new();
     private readonly Mock<IAuthAuditService> _requestAudit = new();
+    private readonly Mock<IAuthAuditService> _auditService = new();
     private readonly Mock<IPasskeyCredentialRepository> _passkeyCredentials = new();
     private readonly PasskeyController _controller;
 
@@ -92,8 +93,6 @@ public class PasskeyControllerTests : IDisposable
 
         var logger = new Mock<ILogger<PasskeyController>>();
 
-        var auditService = new Mock<IAuthAuditService>();
-
         _tenantService = new Mock<ITenantService>();
 
         _controller = new PasskeyController(
@@ -104,7 +103,7 @@ public class PasskeyControllerTests : IDisposable
             _jwtService.Object,
             _sessionService.Object,
             _subjectService.Object,
-            auditService.Object,
+            _auditService.Object,
             _tenantAccessor.Object,
             _tenantService.Object,
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
@@ -462,8 +461,24 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.RedeemAsync(
                 It.IsAny<NocturneDbContext>(), "issued-code",
                 It.Is<IReadOnlyCollection<LoginCodePurpose>>(p => p.SequenceEqual(LoginCodeService.RecoveryPurposes)),
+                It.IsAny<Func<RedeemedLoginCode, CancellationToken, Task<bool>>?>(),
+                It.IsAny<Func<RedeemedLoginCode, CancellationToken, Task>?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(subjectId is { } id ? new RedeemedLoginCode(id, purpose) : null);
+            .Returns(async (
+                NocturneDbContext _, string _, IReadOnlyCollection<LoginCodePurpose> _,
+                Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits,
+                Func<RedeemedLoginCode, CancellationToken, Task>? withSpend,
+                string? _, string? _, CancellationToken ct) =>
+            {
+                if (subjectId is not { } id)
+                    return null;
+                var code = new RedeemedLoginCode(id, purpose);
+                if (admits is not null && !await admits(code, ct))
+                    return (RedeemedLoginCode?)null;
+                if (withSpend is not null)
+                    await withSpend(code, ct);
+                return code;
+            });
         return loginCodes;
     }
 
@@ -1819,6 +1834,27 @@ public class PasskeyControllerTests : IDisposable
 
         result.Result.Should().BeOfType<OkObjectResult>();
         _trustedDevices.Verify(t => t.RevokeAllAsync(subjectId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecoveryVerify_RecordsAnUnfinishedSignInRatherThanALogin()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        _recoveryCodeService.Setup(s => s.VerifyAndConsumeAsync(subjectId, "ABCD-1234")).ReturnsAsync(true);
+        StubRecoveryTokenMinting();
+
+        await _controller.RecoveryVerify(new RecoveryVerifyRequest { Username = "rhys", Code = "ABCD-1234" });
+
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, true,
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()), Times.Never,
+            "the recovery session enrols a passkey and signs no one in");
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, false,
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.Is<string?>(d => d != null && d.Contains("\"method\":\"recovery_code\"") && d.Contains("\"passkeyEnrolmentPending\":true")),
+            It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()), Times.Once);
     }
 
     [Fact]

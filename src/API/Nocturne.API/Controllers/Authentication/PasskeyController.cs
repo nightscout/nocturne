@@ -387,19 +387,25 @@ public class PasskeyController : ControllerBase
         }
 
         await using var db = await _dbContextFactory.CreateAsync();
+        SubjectRecord? subject = null;
         var redeemed = await loginCodeService.RedeemAsync(
             db, request.Code.Trim(), LoginCodeService.RecoveryPurposes,
+            admits: async (code, ct) =>
+            {
+                subject = MemberRecoveryEligibility.AllowsRedemption(
+                        await eligibility.CheckAsync(db, _tenantAccessor.TenantId, code.SubjectId, ct), code.Purpose)
+                    ? await _subjects.GetAsync(code.SubjectId, ct)
+                    : null;
+                return subject is not null;
+            },
+            // Whoever held the member's own recovery codes, the member's way back in is now this
+            // enrolment, so codes they may have lost stop working.
+            withSpend: (code, _) => _recoveryCodeService.InvalidateAllAsync(code.SubjectId),
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             HttpContext.RequestAborted);
 
-        var subject = redeemed is not null
-            && MemberRecoveryEligibility.AllowsRedemption(
-                await eligibility.CheckAsync(db, _tenantAccessor.TenantId, redeemed.SubjectId, HttpContext.RequestAborted),
-                redeemed.Purpose)
-            ? await _subjects.GetAsync(redeemed.SubjectId, HttpContext.RequestAborted)
-            : null;
-        if (subject is null)
+        if (redeemed is null || subject is null)
         {
             return Problem(
                 detail: "This recovery code has expired or was already used.",
@@ -407,9 +413,6 @@ public class PasskeyController : ControllerBase
                 title: "Bad Request");
         }
 
-        // Whoever held the member's own recovery codes, the member's way back in is now this
-        // enrolment, so codes they may have lost stop working.
-        await _recoveryCodeService.InvalidateAllAsync(subject.Id);
         StartRecoverySession(subject);
 
         return Ok(new RecoveryModeRedeemResponse { Username = subject.Username ?? subject.Name });
@@ -652,10 +655,12 @@ public class PasskeyController : ControllerBase
                 detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "recovery_code" }));
         }
 
-        await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: true,
+        // Not a completed login: the recovery session only enrols a passkey, and the sign-in with
+        // that passkey writes the success row.
+        await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: false,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
             userAgent: Request.Headers.UserAgent.ToString(),
-            detailsJson: JsonSerializer.Serialize(new { method = "recovery_code" }));
+            detailsJson: JsonSerializer.Serialize(new { method = "recovery_code", passkeyEnrolmentPending = true }));
 
         StartRecoverySession(subject);
 

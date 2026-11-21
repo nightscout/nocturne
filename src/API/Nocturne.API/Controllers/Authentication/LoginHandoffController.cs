@@ -72,7 +72,7 @@ public class LoginHandoffController : ControllerBase
         var userAgent = Request.Headers.UserAgent.ToString();
 
         var redeemed = await _loginCodeService.RedeemAsync(
-            db, request.Code, [LoginCodePurpose.Login], ipAddress, userAgent, ct);
+            db, request.Code, [LoginCodePurpose.Login], admits: null, withSpend: null, ipAddress, userAgent, ct);
 
         if (redeemed is null)
         {
