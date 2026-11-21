@@ -256,7 +256,13 @@
           aria-label="Color theme"
           value={currentTheme}
           onValueChange={(theme) => {
-            if (theme === "nocturne" || theme === "trio" || theme === "aaps" || theme === "classic")
+            if (
+              theme === "nocturne" ||
+              theme === "trio" ||
+              theme === "aaps" ||
+              theme === "classic" ||
+              theme === "nightscout"
+            )
               handleThemeChange(theme);
           }}
         >
@@ -416,6 +422,46 @@
                 class="h-4 w-4 rounded-full"
                 style="background: #0099ff"
                 title="Classic blue"
+              ></div>
+            </div>
+          </RadioGroup.Card>
+
+          <!-- Nightscout Theme -->
+          <RadioGroup.Card value="nightscout">
+            {#if currentTheme === "nightscout"}
+              <Badge class="absolute right-2 top-2" variant="default">
+                Active
+              </Badge>
+            {/if}
+            <div class="font-semibold">Nightscout</div>
+            <p class="text-sm text-muted-foreground">
+              Use the Nightscout dashboard layout, pills, and chart
+            </p>
+            <div class="flex gap-1 mt-2">
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #4cff00"
+                title="In range"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #ffff00"
+                title="Warning"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #ff0000"
+                title="Urgent"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #0099ff"
+                title="Insulin"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #ff00ff"
+                title="Forecast"
               ></div>
             </div>
           </RadioGroup.Card>

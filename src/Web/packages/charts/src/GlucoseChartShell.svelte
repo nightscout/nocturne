@@ -9,7 +9,7 @@
     LegendState,
   } from "./context.svelte.js";
   import { setGlucoseChartContext } from "./context.svelte.js";
-  import { computeTrackLayout } from "./view/track-layout.js";
+  import { computeNightscoutTrackLayout, computeTrackLayout } from "./view/track-layout.js";
   import {
     formatHourLabel,
     formatWeekdayDate,
@@ -42,6 +42,10 @@
     overlays?: Snippet<[GlucoseChartContext]>;
     /** Draws at this size instead of measuring its box, which lets the server render it. */
     size?: { width: number; height: number };
+    /** "nightscout" lays the tracks out as cgm-remote-monitor's focus chart (`computeNightscoutTrackLayout`). */
+    layoutMode?: "default" | "nightscout";
+    /** Classes for the time axis labels. */
+    timeAxisClass?: string;
   }
 
   const {
@@ -62,37 +66,41 @@
     tracks,
     overlays,
     size,
+    layoutMode = "default",
+    timeAxisClass = "text-xs fill-muted-foreground",
   }: Props = $props();
 
   let chartHeight = $state(0);
 
   const layout = $derived(
-    computeTrackLayout(
-      chartHeight,
-      view.thresholds.glucoseYMax,
-      view.maxBasalRate,
-      view.maxIOB,
-      {
-        basal: legend?.basal ?? true,
-        iob: legend?.iob ?? true,
-        cob: legend?.cob ?? true,
-      },
-      {
-        pumpMode:
-          (legend?.pumpModes ?? true) &&
-          view.displayPumpModeSpans.length > 0,
-        override:
-          (legend?.overrideSpans ?? false) &&
-          view.displayOverrideSpans.length > 0,
-        profile:
-          (legend?.profileSpans ?? false) &&
-          view.displayProfileSpans.length > 0,
-        activity:
-          (legend?.activitySpans ?? false) &&
-          view.displayActivitySpans.length > 0,
-      },
-      view.minIOB
-    )
+    layoutMode === "nightscout"
+      ? computeNightscoutTrackLayout(chartHeight, view.thresholds.glucoseYMax, view.maxBasalRate)
+      : computeTrackLayout(
+          chartHeight,
+          view.thresholds.glucoseYMax,
+          view.maxBasalRate,
+          view.maxIOB,
+          {
+            basal: legend?.basal ?? true,
+            iob: legend?.iob ?? true,
+            cob: legend?.cob ?? true,
+          },
+          {
+            pumpMode:
+              (legend?.pumpModes ?? true) &&
+              view.displayPumpModeSpans.length > 0,
+            override:
+              (legend?.overrideSpans ?? false) &&
+              view.displayOverrideSpans.length > 0,
+            profile:
+              (legend?.profileSpans ?? false) &&
+              view.displayProfileSpans.length > 0,
+            activity:
+              (legend?.activitySpans ?? false) &&
+              view.displayActivitySpans.length > 0,
+          },
+          view.minIOB
+        )
   );
 
   // Paper carries no forecast, so its axis ends where the period does.
@@ -176,7 +184,7 @@
             ticks={hourTicks}
             format={tickLabel}
             tickOcclusion
-            tickLabelProps={{ class: "text-xs fill-muted-foreground", fontSize: 12 }}
+            tickLabelProps={{ class: timeAxisClass, fontSize: layoutMode === "nightscout" ? 16 : 12 }}
           />
         {/if}
       </Svg>

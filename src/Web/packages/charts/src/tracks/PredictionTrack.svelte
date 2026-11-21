@@ -8,9 +8,13 @@
     displayMode?: PredictionDisplayMode;
     /** The viewer's switch for forecasts; off draws nothing. */
     enabled?: boolean;
+    /** "line" (default) or Nightscout's hollow "dots". */
+    markStyle?: "line" | "dots";
+    /** Radius of a forecast dot. */
+    dotRadius?: number;
   }
 
-  let { displayMode = "cone", enabled = true }: Props = $props();
+  let { displayMode = "cone", enabled = true, markStyle, dotRadius }: Props = $props();
 
   const ctx = getGlucoseChartContext();
 
@@ -34,5 +38,7 @@
     }}
     glucoseData={ctx.view.glucoseData}
     labels={ctx.labels}
+    {markStyle}
+    {dotRadius}
   />
 </ChartClipPath>
