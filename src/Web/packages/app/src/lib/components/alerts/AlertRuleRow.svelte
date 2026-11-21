@@ -20,6 +20,7 @@
   import { severity } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import { nodeFromApi } from "./types";
+  import { endsLowCover, lastLowCoverMessage } from "./lastLowCover";
   import { conditionLabel } from "./conditionLabel.svelte";
   import { findChannelMeta } from "./channelMeta";
   import { channelLabel } from "./channelText.svelte";
@@ -67,6 +68,17 @@
   );
 
   let severityClass = $derived(severity(rule.severity, "dot"));
+
+  let confirmingDisable = $state(false);
+
+  // The switch stays where the server last put it until the change is confirmed.
+  function requestToggle(): void {
+    if (endsLowCover(rule) && rule.isEnabled) {
+      confirmingDisable = true;
+    } else {
+      onToggleEnabled();
+    }
+  }
 
   let attention = $derived(
     [reviewReasonMessage(rule.reviewReason), storedConditionIssuesMessage(rule.conditionIssues)]
@@ -147,11 +159,22 @@
   <div class="flex items-center gap-1 shrink-0">
     {#if canManage}
       <Switch
-        checked={rule.isEnabled ?? false}
-        onCheckedChange={onToggleEnabled}
+        bind:checked={() => rule.isEnabled ?? false, requestToggle}
         disabled={isToggling}
         aria-label="Enable rule"
       />
+      <ConfirmDialog
+        bind:open={confirmingDisable}
+        title={`Disable "${rule.name}"?`}
+        confirmLabel="Disable"
+        destructive
+        busy={isToggling}
+        onConfirm={onToggleEnabled}
+      >
+        {#snippet description()}
+          {lastLowCoverMessage}
+        {/snippet}
+      </ConfirmDialog>
     {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
@@ -205,6 +228,9 @@
               </DropdownMenu.Item>
             {/snippet}
             {#snippet description()}
+              {#if endsLowCover(rule)}
+                {lastLowCoverMessage}
+              {/if}
               This rule will stop firing immediately. Existing alert history
               is preserved. This action cannot be undone.
             {/snippet}
