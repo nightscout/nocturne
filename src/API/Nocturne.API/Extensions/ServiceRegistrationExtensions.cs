@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -528,24 +527,12 @@ public static class ServiceRegistrationExtensions
                     )
             );
 
-            options.OnRejected = async (context, ct) =>
-            {
-                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-                {
-                    context.HttpContext.Response.Headers.RetryAfter =
-                        ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-                }
-                await context.HttpContext.Response.WriteAsJsonAsync(
-                    new
-                    {
-                        error = "rate_limit_exceeded",
-                        error_description = "Too many requests. Please try again later.",
-                    },
-                    ct
-                );
-            };
+            options.OnRejected = (context, ct) => new ValueTask(RateLimitRejection.WriteAsync(
+                context.HttpContext,
+                context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter) ? retryAfter : null,
+                ct));
         });
+        services.AddSingleton<DelegatedConnectorSyncLimiter>();
 
         return services;
     }

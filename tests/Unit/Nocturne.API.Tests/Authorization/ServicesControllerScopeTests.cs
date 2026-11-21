@@ -11,38 +11,54 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// Guards the tenant-administration actions on <see cref="ServicesController"/>: deleting a data
-/// source's or a connector's data, deleting demo data, triggering a connector sync, and resetting a
-/// connector's cursor. Each is the same tenant-administration decision as connector configuration,
-/// so each carries <see cref="DenyDemoSubjectAttribute"/> and <see cref="Scope.TenantSettings"/>.
+/// Guards the administering actions on <see cref="ServicesController"/>. Deleting a data source's,
+/// a connection's or a connector's data, and deleting demo data, remove health records and carry
+/// <see cref="Scope.TenantSettings"/>. Triggering a connector sync and resetting a connector's cursor
+/// only drive a connector and carry <see cref="Scope.ConnectorsReadWrite"/>; the connector state
+/// reads carry <see cref="Scope.ConnectorsRead"/>. Every administering action also carries
+/// <see cref="DenyDemoSubjectAttribute"/>.
 /// </summary>
 /// <remarks>
-/// <see cref="V4WriteScopeGatingTests"/> files this controller as a <c>tenant.settings</c>
-/// exemption; this class is the behavioural half that pins who keeps access. The gate must admit the
-/// Administrator seed role, which holds <see cref="Scope.TenantSettings"/> but not
-/// <see cref="Scope.FullAccess"/>, so a superuser gate here would lock it out.
+/// <see cref="V4WriteScopeGatingTests"/> maps each write action to its scope; this class is the
+/// behavioural half that pins who keeps access. The gates must admit the Administrator seed role,
+/// which holds <see cref="Scope.TenantSettings"/> but not <see cref="Scope.FullAccess"/>, so a
+/// superuser gate here would lock it out.
 /// </remarks>
 public class ServicesControllerScopeTests
 {
-    /// <summary>The tenant-administration actions, pinned by name so a rename cannot drop the gate silently.</summary>
-    private static readonly string[] AdministeringActions =
+    /// <summary>
+    /// The administering actions and the scope each requires, pinned by name so a rename cannot drop
+    /// the gate silently.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> AdministeringActionScopes =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [nameof(ServicesController.DeleteDemoData)] = Scope.TenantSettings,
+            [nameof(ServicesController.DeleteDataSourceData)] = Scope.TenantSettings,
+            [nameof(ServicesController.DeleteConnectionRecords)] = Scope.TenantSettings,
+            [nameof(ServicesController.DeleteConnectorData)] = Scope.TenantSettings,
+            [nameof(ServicesController.TriggerConnectorSync)] = Scope.ConnectorsReadWrite,
+            [nameof(ServicesController.ResetConnectorCursor)] = Scope.ConnectorsReadWrite,
+        };
+
+    private static readonly string[] ConnectorReadActions =
     [
-        nameof(ServicesController.DeleteDemoData),
-        nameof(ServicesController.DeleteDataSourceData),
-        nameof(ServicesController.DeleteConnectorData),
-        nameof(ServicesController.TriggerConnectorSync),
-        nameof(ServicesController.ResetConnectorCursor),
+        nameof(ServicesController.GetAvailableConnectors),
+        nameof(ServicesController.GetConnectorDataSummary),
+        nameof(ServicesController.GetConnectorSyncStatus),
     ];
+
+    private static IEnumerable<string> AdministeringActions => AdministeringActionScopes.Keys;
 
     [Theory]
     [MemberData(nameof(AdministeringActionNames))]
-    public void AdministeringAction_RequiresTenantSettingsAndRefusesTheDemoSubject(string actionName)
+    public void AdministeringAction_RequiresItsScopeAndRefusesTheDemoSubject(string actionName)
     {
         var action = Action(actionName);
 
         action.GetCustomAttributes(inherit: true).OfType<RequireScopeAttribute>()
             .SelectMany(a => a.Scopes)
-            .Should().Contain(Scope.TenantSettings);
+            .Should().Equal(AdministeringActionScopes[actionName]);
 
         action.GetCustomAttributes(inherit: true).OfType<DenyDemoSubjectAttribute>()
             .Should().NotBeEmpty("the demo member holds tenant.settings, so the shared demo account "
@@ -50,7 +66,40 @@ public class ServicesControllerScopeTests
     }
 
     [Theory]
+    [MemberData(nameof(ConnectorReadActionNames))]
+    public void ConnectorReadAction_RequiresConnectorsRead(string actionName)
+    {
+        Action(actionName).GetCustomAttributes(inherit: true).OfType<RequireScopeAttribute>()
+            .SelectMany(a => a.Scopes)
+            .Should().Equal(Scope.ConnectorsRead);
+    }
+
+    [Fact]
+    public void ConnectorsReadWriteCredentialOnAnOwnerMembership_DrivesConnectorsButCannotDeleteData()
+    {
+        var scopes = MemberScopeResolver.Resolve(
+            new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Owner]),
+            AuthType.OAuthAccessToken,
+            new HashSet<string> { Scope.ConnectorsReadWrite });
+
+        foreach (var actionName in ConnectorReadActions.Concat(
+                     AdministeringActions.Where(a => AdministeringActionScopes[a] == Scope.ConnectorsReadWrite)))
+        {
+            Evaluate(actionName, authenticated: true, scopes)
+                .Should().BeNull($"connectors.readwrite must reach {actionName}");
+        }
+
+        foreach (var actionName in AdministeringActions.Where(a => AdministeringActionScopes[a] == Scope.TenantSettings))
+        {
+            Evaluate(actionName, authenticated: true, scopes)
+                .Should().BeOfType<ScopeForbiddenResult>(
+                    $"deleting health records is tenant administration, so connectors.readwrite must not reach {actionName}");
+        }
+    }
+
+    [Theory]
     [MemberData(nameof(AdministeringActionNames))]
+    [MemberData(nameof(ConnectorReadActionNames))]
     public void Administrator_PassesTheScopeFilter(string actionName)
     {
         Evaluate(actionName, authenticated: true, SeedRoleScopes(RoleSeeds.Admin))
@@ -68,7 +117,7 @@ public class ServicesControllerScopeTests
         scopes.Should().NotContain(Scope.TenantSettings);
         scopes.Should().NotContain(Scope.FullAccess);
 
-        foreach (var actionName in AdministeringActions)
+        foreach (var actionName in AdministeringActions.Concat(ConnectorReadActions))
         {
             Evaluate(actionName, authenticated: true, scopes)
                 .Should().BeOfType<ScopeForbiddenResult>(
@@ -86,13 +135,9 @@ public class ServicesControllerScopeTests
         }
     }
 
-    public static TheoryData<string> AdministeringActionNames()
-    {
-        var data = new TheoryData<string>();
-        foreach (var name in AdministeringActions)
-            data.Add(name);
-        return data;
-    }
+    public static TheoryData<string> AdministeringActionNames() => [.. AdministeringActions];
+
+    public static TheoryData<string> ConnectorReadActionNames() => [.. ConnectorReadActions];
 
     private static MethodInfo Action(string name) =>
         typeof(ServicesController).GetMethod(name, BindingFlags.Public | BindingFlags.Instance)

@@ -79,7 +79,7 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     public static DateTime? HistoryStart(int historyDays, DateTime now) =>
         historyDays is > WholeHistory and <= LongestHistoryDays ? now.AddDays(-historyDays) : null;
 
-    [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false")]
+    [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false", SendsRecords = true)]
     public bool WriteBackEnabled { get; set; } = false;
 
     [ConnectorProperty(ConnectorPropertyKey.WriteBackBatchSize, DefaultValue = "50", MinValue = 1, MaxValue = 500)]

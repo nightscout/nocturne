@@ -251,8 +251,9 @@ public partial class CareLinkConnectController : ControllerBase
     /// <summary>
     /// Whether the caller may sign a CareLink account into this tenant. The flow stores a refresh
     /// token as the connector secret and writes the signed-in account into the connector
-    /// configuration, so it takes the same <see cref="Scope.TenantSettings"/> as the
-    /// rest of the connector configuration surface — or a desktop link token, whose scope resolves
+    /// configuration. It is a browser ceremony for the person who administers the tenant, so it takes
+    /// <see cref="Scope.TenantSettings"/> and not a connector scope an app can be given; or a desktop
+    /// link token, whose scope resolves
     /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
     /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
     /// </summary>

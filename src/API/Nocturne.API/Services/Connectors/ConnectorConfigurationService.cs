@@ -183,6 +183,30 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The documents are bound over the instance's own settings (<c>CONNECT_{NAME}_*</c>), as every
+    /// tenant's connector is, so a secret or a record sink the instance turns on counts.
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> GetDelegatedRefusalsAsync(
+        string connectorName,
+        JsonDocument configuration,
+        CancellationToken ct = default)
+    {
+        var configType = FindConfigurationType(connectorName, _logger);
+        if (configType is null || Activator.CreateInstance(configType) is not BaseConnectorConfiguration baseline)
+            return [DelegatedConfigurationGuard.WholeConfiguration];
+
+        var bindingName = configType.GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName ?? connectorName;
+        _configuration.BindConnectorConfiguration(baseline, bindingName);
+
+        var entity = await _configurations.FindAsync(connectorName, ct);
+        var stored = entity is null ? null : JsonDocument.Parse(entity.ConfigurationJson);
+        var holdsStoredSecret = entity is not null && !string.IsNullOrEmpty(entity.SecretsJson) && entity.SecretsJson != "{}";
+
+        return DelegatedConfigurationGuard.RefusedKeys(baseline, stored, configuration, holdsStoredSecret);
+    }
+
+    /// <inheritdoc />
     public async Task SaveSecretsAsync(
         string connectorName,
         Dictionary<string, string> secrets,
@@ -484,7 +508,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             foreach (var type in assembly.LoadableTypes(logger))
             {
                 var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
-                if (attr != null && attr.ConnectorName.Equals(connectorName, StringComparison.OrdinalIgnoreCase))
+                if (attr != null && ConnectorNames.Canonical(attr.ConnectorName) == ConnectorNames.Canonical(connectorName))
                 {
                     return type;
                 }

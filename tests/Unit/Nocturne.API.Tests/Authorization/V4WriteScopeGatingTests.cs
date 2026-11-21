@@ -76,13 +76,11 @@ public class V4WriteScopeGatingTests
         public const string IdentityAndDelegation = "identity/delegation state, governed by RBAC atoms";
 
         /// <summary>
-        /// Tenant administration (connector configuration and the connector data-deletion and
-        /// sync-trigger actions), gated on <see cref="Scope.TenantSettings"/>. An administration
+        /// Tenant administration, gated on <see cref="Scope.TenantSettings"/>. An administration
         /// atom, absent from <see cref="Scope.AllScopes"/>, so no data-category scope names it.
         /// Asserted per controller by
-        /// <see cref="EveryExemptionClaimingAnAttribute_ActuallyCarriesIt"/>, and behaviourally by
-        /// <see cref="ConnectorConfigurationScopeTests"/> and
-        /// <see cref="ServicesControllerScopeTests"/>.
+        /// <see cref="EveryExemptionClaimingAnAttribute_ActuallyCarriesIt"/>, and behaviourally for
+        /// the connector settings controllers by <see cref="ConnectorConfigurationScopeTests"/>.
         /// </summary>
         public const string TenantSettingsScope = "tenant administration, gated on tenant.settings";
 
@@ -183,7 +181,6 @@ public class V4WriteScopeGatingTests
             // CompatibilityController repeats [RequireSuperuser] per action rather than carrying it on
             // the class.
             ["CompatibilityController"] = NotDataCategory.SuperuserAttribute,
-            ["ServicesController"] = NotDataCategory.TenantSettingsScope,
             ["RejectedUploadsController"] = NotDataCategory.TenantSettingsScope,
 
             ["DevAdminController"] = NotDataCategory.DevelopmentOnly,
@@ -205,7 +202,6 @@ public class V4WriteScopeGatingTests
             ["SessionsController"] = NotDataCategory.IdentityAndDelegation,
             ["ShareLinkController"] = NotDataCategory.IdentityAndDelegation,
 
-            ["ConfigurationController"] = NotDataCategory.TenantSettingsScope,
             ["MyFitnessPalSettingsController"] = NotDataCategory.TenantSettingsScope,
             ["WebhookSettingsController"] = NotDataCategory.TenantSettingsScope,
 
@@ -398,6 +394,10 @@ public class V4WriteScopeGatingTests
             // configuration written from the Patient Record settings form alongside therapy settings.
             ["BodyWeightController"] = Scope.TherapyReadWrite,
             ["GoogleHealthController"] = Scope.TenantSettings,
+
+            // connectors: a connector's configuration and secrets. ConnectorConfigurationScopeTests
+            // pins who keeps it.
+            ["ConfigurationController"] = Scope.ConnectorsReadWrite,
             ["OuraController"] = Scope.TenantSettings,
 
             // treatments: state_spans is the decomposed form of the legacy treatment events
@@ -502,6 +502,16 @@ public class V4WriteScopeGatingTests
             ["ActivityController.CreateActivities"] = Scope.TreatmentsReadWrite,
             ["ActivityController.UpdateActivity"] = Scope.TreatmentsReadWrite,
             ["ActivityController.DeleteActivity"] = Scope.TreatmentsReadWrite,
+
+            // Deleting imported records removes health data across categories, which is tenant
+            // administration. Triggering a sync or re-pull only drives a connector. The behavioural
+            // half is ServicesControllerScopeTests.
+            ["ServicesController.DeleteDemoData"] = Scope.TenantSettings,
+            ["ServicesController.DeleteDataSourceData"] = Scope.TenantSettings,
+            ["ServicesController.DeleteConnectionRecords"] = Scope.TenantSettings,
+            ["ServicesController.DeleteConnectorData"] = Scope.TenantSettings,
+            ["ServicesController.TriggerConnectorSync"] = Scope.ConnectorsReadWrite,
+            ["ServicesController.ResetConnectorCursor"] = Scope.ConnectorsReadWrite,
         };
 
     [Fact]

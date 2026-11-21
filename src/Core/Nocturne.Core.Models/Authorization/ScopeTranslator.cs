@@ -74,6 +74,7 @@ public static class ScopeTranslator
         new("reports", [Scope.ReportsRead], []),
         new("identity", [Scope.IdentityRead], []),
         new("sharing", [], [Scope.SharingReadWrite]),
+        new("connectors", [Scope.ConnectorsRead], [Scope.ConnectorsReadWrite]),
 
         // The legacy activity collection is the merged read plane over four Nocturne storages, so
         // it carries all three dedicated categories, and a grant holds it only when it holds all
@@ -190,6 +191,11 @@ public static class ScopeTranslator
         {
             return new HashSet<string> { "*" };
         }
+
+        // The tenant-administration atoms are enforced against granted scopes only, and
+        // tenant.settings satisfies the connector scopes, so they are dropped here rather than
+        // reaching the trie through the satisfaction checks below.
+        granted.IntersectWith(Scope.ValidRequestScopes);
 
         var permissions = new HashSet<string>();
 

@@ -97,6 +97,14 @@ public interface IConnectorConfigurationService
     Task<ConnectorConfigurationResponse> SaveConfigurationAsync(string connectorName, JsonDocument configuration, string? modifiedBy = null, CancellationToken ct = default);
 
     /// <summary>
+    /// The keys of <paramref name="configuration"/> a delegated credential may not save over the
+    /// stored configuration: a changed destination while the connector holds a secret, or a property
+    /// that sends the tenant's records out turned on. The whole configuration is refused when the
+    /// connector is unknown.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetDelegatedRefusalsAsync(string connectorName, JsonDocument configuration, CancellationToken ct = default);
+
+    /// <summary>
     /// The top-level keys a connector's configuration type binds, secrets and sync toggles
     /// included, each with its property type, or null when the connector or its type is unknown.
     /// The enabled flag is in the map only as <c>enabled</c>; <see cref="ConnectorEnabledKey"/>
