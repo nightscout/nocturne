@@ -19,6 +19,7 @@ use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
 use nocturne_alerts_core::facts::{self, ContextFact, RuleConditions};
+use nocturne_alerts_core::leaf_identity::nodes_with_paths;
 use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload};
 use nocturne_alerts_core::paths::{AUTO_RESOLVE_ROOT, node_child_path};
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
@@ -381,10 +382,13 @@ pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
     }
     .map_err(|e| format!("malformed condition node: {e}"))?;
     let root = root_override.unwrap_or_else(|| node.kind().name().to_owned());
-    let mut paths = Vec::new();
-    let mut leaves = Vec::new();
-    walk_paths(&node, root.clone(), &mut paths, &mut leaves);
-    let leaves = leaves.iter().enumerate();
+    let nodes = nodes_with_paths(&node, root.clone());
+    let leaves = nodes
+        .iter()
+        .filter(|(node, _)| node.container().is_none())
+        .map(|(_, path)| path)
+        .enumerate();
+    let paths: Vec<&String> = nodes.iter().map(|(_, path)| path).collect();
     Ok(ok(json!({
         "root": root,
         "paths": paths,
@@ -392,19 +396,6 @@ pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
             .map(|(leaf_id, path)| json!({ "leaf_id": leaf_id, "path": path }))
             .collect::<Vec<_>>(),
     })))
-}
-
-/// Pre-order; leaves are pushed in leaf-id order.
-fn walk_paths(node: &Node, path: String, paths: &mut Vec<String>, leaves: &mut Vec<String>) {
-    paths.push(path.clone());
-    match node.container() {
-        Some(container) => {
-            for (i, child) in container.children().enumerate() {
-                walk_paths(child, node_child_path(&path, i, child), paths, leaves);
-            }
-        }
-        None => leaves.push(path),
-    }
 }
 
 /// [`RuleBodyRequest`] plus, optionally, an auto-resolve tree to describe.

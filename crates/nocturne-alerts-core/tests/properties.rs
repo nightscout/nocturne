@@ -10,13 +10,18 @@
     reason = "test code"
 )]
 
+#[path = "common/clock.rs"]
+mod clock;
 #[path = "common/generators.rs"]
 mod generators;
+#[path = "common/quiet.rs"]
+mod quiet;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{DateTime, TimeDelta, Utc};
 use proptest::collection::vec;
+use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::strategy::ValueTree;
@@ -37,6 +42,7 @@ use nocturne_alerts_core::model::{
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind};
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
+use clock::{clock_context, naming_the_context};
 use generators::{
     RULE_ID, Tick, arbitrary_json, base, composite, is_container, mutated, mutations, node,
     node_value, payload, rule_spec, simple_leaf, ticks, tree, word,
@@ -889,5 +895,127 @@ proptest! {
             Ok(()) => prop_assert_eq!(issues, None),
             Err(reason) => prop_assert_eq!(issues, Some(vec![ParseError::new(kind.name(), reason)])),
         }
+    }
+}
+
+/// A tracker state a rule can be left in: each of the four, and idle
+/// awaiting re-arm.
+fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
+    let kinds = select(vec![
+        (TrackerStateKind::Idle, false),
+        (TrackerStateKind::Idle, true),
+        (TrackerStateKind::Confirming, false),
+        (TrackerStateKind::Active, false),
+        (TrackerStateKind::Hysteresis, false),
+    ]);
+    option::of((kinds, 0..3i32, 0..=3600i64).prop_map(
+        move |((state, awaiting_rearm), count, ago)| {
+            let since = now - TimeDelta::seconds(ago);
+            TrackerState {
+                state,
+                confirmation_count: if state == TrackerStateKind::Confirming {
+                    count + 1
+                } else {
+                    0
+                },
+                active_excursion: matches!(
+                    state,
+                    TrackerStateKind::Active | TrackerStateKind::Hysteresis
+                )
+                .then_some(1),
+                updated_at: since,
+                hysteresis_started_at: (state == TrackerStateKind::Hysteresis).then_some(since),
+                awaiting_rearm,
+            }
+        },
+    ))
+    .boxed()
+}
+
+/// A rule of any kinds, a context holding every clock anchor, the tracker it
+/// starts from, the earlier evaluations that leave its timers, and `now`.
+#[derive(Debug, Clone)]
+struct ClockCase {
+    rule: Value,
+    context: Value,
+    tracker: Option<TrackerState>,
+    earlier: Vec<i64>,
+    now: DateTime<Utc>,
+}
+
+fn clock_case() -> impl Strategy<Value = ClockCase> {
+    (0..=604_800i64, 0..10_000_000i64).prop_flat_map(|(seconds, ticks)| {
+        let now = base() + TimeDelta::seconds(seconds) + TimeDelta::nanoseconds(ticks * 100);
+        (
+            tree(),
+            option::of(tree()),
+            0..4i32,
+            0..10i32,
+            clock_context(now),
+            seeded_tracker(now),
+            vec(1..=3600i64, 0..=2),
+        )
+            .prop_map(
+                move |(
+                    body,
+                    resolve,
+                    confirmation_readings,
+                    hysteresis_minutes,
+                    context,
+                    tracker,
+                    mut earlier,
+                )| {
+                    let body = naming_the_context(body);
+                    let kind = body["type"].as_str().expect("a node type").to_owned();
+                    earlier.sort_unstable_by(|a, b| b.cmp(a));
+                    ClockCase {
+                        rule: json!({
+                            "id": RULE_ID.to_string(),
+                            "condition_type": kind,
+                            "condition_params": body[&kind],
+                            "confirmation_readings": confirmation_readings,
+                            "hysteresis_minutes": hysteresis_minutes,
+                            "auto_resolve_enabled": resolve.is_some(),
+                            "auto_resolve_params": resolve.map(naming_the_context),
+                        }),
+                        context,
+                        tracker,
+                        earlier,
+                        now,
+                    }
+                },
+            )
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// §5.3, from the post-state: with `N` the `next_change_at` of the
+    /// evaluation at `now` (or `now + 3 days` when it has none), `N > now`,
+    /// and at every sampled tick `t` in `(now, N)` an evaluation from the state
+    /// the evaluation at `now` left repeats its root and leaves, with no
+    /// transition but `continues` and no auto-resolve. The state before `now`
+    /// is a seeded tracker and the timers left by earlier evaluations.
+    #[test]
+    fn the_outcome_is_constant_until_the_next_change(case in clock_case()) {
+        let rule = rule_from_wire(case.rule.clone());
+        let context: SensorContext = serde_json::from_value(case.context.clone()).expect("a context");
+        prop_assume!(evaluate_rule(&rule, &context, case.now, &mut EngineState::new(), false)
+            .evaluation
+            .is_some());
+        let before = || {
+            let mut state = EngineState::new();
+            if let Some(tracker) = case.tracker {
+                state.tracker.restore_state(RULE_ID, tracker);
+            }
+            for &ago in &case.earlier {
+                let at = case.now - TimeDelta::seconds(ago);
+                evaluate_rule(&rule, &context, at, &mut state, false);
+            }
+            state
+        };
+        quiet::quiet_until_next_change(&rule, &context, before, case.now)
+            .map_err(TestCaseError::fail)?;
     }
 }

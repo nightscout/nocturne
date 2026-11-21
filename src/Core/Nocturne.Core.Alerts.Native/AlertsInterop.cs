@@ -31,13 +31,14 @@ public static partial class AlertsInterop
     private const string ReplayExport = "nocturne_alerts_replay";
     private const string DescribeExport = "nocturne_alerts_describe";
     private const string ReferencesWallClockExport = "nocturne_alerts_references_wall_clock";
+    private const string RuleReadsExport = "nocturne_alerts_rule_reads";
 
     /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
     private static readonly string[] BoundExports =
     [
         FreeStringExport, VersionExport, TzdbVersionExport, EvaluateExport, EvaluateNodeExport,
         LeafPathsExport, ClassifyExport, ValidateExport, ReplayExport, DescribeExport,
-        ReferencesWallClockExport,
+        ReferencesWallClockExport, RuleReadsExport,
         TrackerProcessExport, TrackerForceCloseExport, TrackerCloseElapsedHysteresisExport,
     ];
 
@@ -182,6 +183,13 @@ public static partial class AlertsInterop
     [LibraryImport(LibraryName, EntryPoint = ReferencesWallClockExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ReferencesWallClockNative(string requestJson);
 
+    /// <summary>
+    /// The context facts a rule reads. Request/response are the JSON envelopes documented in
+    /// crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = RuleReadsExport, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr RuleReadsNative(string requestJson);
+
     /// <summary>Get the nocturne_alerts library version as a managed string.</summary>
     public static string GetVersion() => ConsumeString(VersionNative(), string.Empty);
 
@@ -212,6 +220,9 @@ public static partial class AlertsInterop
     /// <summary>Raw references-wall-clock call: request envelope JSON in, response envelope JSON out.</summary>
     public static string ReferencesWallClock(string requestJson) =>
         ConsumeString(ReferencesWallClockNative(requestJson), "{}");
+
+    /// <summary>Raw rule-reads call: request envelope JSON in, response envelope JSON out.</summary>
+    public static string RuleReads(string requestJson) => ConsumeString(RuleReadsNative(requestJson), "{}");
 
     private static string ConsumeString(IntPtr ptr, string fallback)
     {

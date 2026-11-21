@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "name": "next-change-sensor-age",
+  "description": "sensor_age in days changes when the sensor reaches its age",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sensor_age",
+      "condition_params": {
+        "operator": ">=",
+        "value": 10
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "context": {
+        "last_sensor_start_at": "2026-02-20T18:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

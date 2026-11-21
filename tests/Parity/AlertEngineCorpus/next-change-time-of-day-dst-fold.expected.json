@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "scenario": "next-change-time-of-day-dst-fold",
+  "ticks": [
+    {
+      "at": "2026-04-04T15:40:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          },
+          "next_change_at": "2026-04-04T16:00:00Z"
+        }
+      ]
+    }
+  ]
+}

@@ -169,6 +169,50 @@ public class StaleRuleDecisionSeamTests
         await ShouldStayActiveAsync(fixture);
     }
 
+    private static AlertRule SignalLoss() => new()
+    {
+        Id = RuleId,
+        Name = "loss",
+        ConditionType = AlertConditionType.SignalLoss,
+        ConditionParams = """{"timeout_minutes":15}""",
+        ConfirmationReadings = 1,
+    };
+
+    /// <summary>A reading five minutes before the evaluation, so signal loss is ten minutes off.</summary>
+    private static SensorContext RecentReading() => Glucose(120) with
+    {
+        LatestTimestamp = T0.AddMinutes(-5),
+        LastReadingAt = T0.AddMinutes(-5),
+    };
+
+    [NativeFact]
+    public async Task A_pre_edit_evaluation_records_no_next_change()
+    {
+        var rule = SignalLoss();
+        var preEdit = Snapshot(rule);
+        var fixture = await BuildAsync(rule, r => r.ConditionParams = """{"timeout_minutes":30}""");
+
+        await fixture.Engine.EvaluateRuleAsync(preEdit, RecentReading(), AlertEngineOptions.Default, CancellationToken.None);
+
+        var state = await fixture.Store.GetTrackerStateAsync(RuleId);
+        state.Should().BeEquivalentTo(new { State = "active", NextChangeKnown = false, NextChangeAt = (DateTime?)null });
+    }
+
+    /// <summary>The open excursion enters a window of no minutes, which closes at the next tick.</summary>
+    [NativeFact]
+    public async Task An_evaluation_of_the_current_rule_records_its_next_change()
+    {
+        var rule = SignalLoss();
+        var fixture = await BuildAsync(rule, _ => { });
+
+        var evaluation = await fixture.Engine.EvaluateRuleAsync(
+            Snapshot(rule), RecentReading(), AlertEngineOptions.Default, CancellationToken.None);
+
+        evaluation.NextChangeAt.Should().Be(T0.AddTicks(1));
+        var state = await fixture.Store.GetTrackerStateAsync(RuleId);
+        state.Should().BeEquivalentTo(new { State = "hysteresis", NextChangeKnown = true, NextChangeAt = (DateTime?)T0.AddTicks(1) });
+    }
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]

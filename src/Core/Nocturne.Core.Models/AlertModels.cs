@@ -636,6 +636,24 @@ public class AlertTrackerState
     /// nothing until an evaluation finds its condition false (docs/alerts/engine-semantics.md §6.3).
     /// </summary>
     public bool AwaitingRearm { get; set; }
+
+    /// <summary>
+    /// The next change (docs/alerts/engine-semantics.md §5.3) the rule's last full evaluation
+    /// reported, null when it reported none. Read only while <see cref="NextChangeKnown"/>.
+    /// </summary>
+    public DateTime? NextChangeAt { get; set; }
+
+    /// <summary>
+    /// Whether <see cref="NextChangeAt"/> was recorded by a full evaluation of the rule as it now
+    /// stands, with nothing but such an evaluation writing the state since.
+    /// </summary>
+    public bool NextChangeKnown { get; set; }
+
+    /// <summary>
+    /// The glucose facts of the context <see cref="NextChangeAt"/> was computed from: it holds
+    /// only while a context carries the same ones.
+    /// </summary>
+    public string? NextChangeGlucose { get; set; }
 }
 
 /// <summary>

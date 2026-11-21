@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
@@ -5,6 +6,33 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts;
+
+/// <summary>
+/// The next change (docs/alerts/engine-semantics.md §5.3) a full evaluation of a rule reported,
+/// <see cref="At"/> null when it reported none, and the <see cref="Glucose"/> facts it was
+/// computed from, for <see cref="ExcursionTransitionWriter"/> to record with its decision.
+/// </summary>
+internal readonly record struct NextChange(DateTime? At, string Glucose)
+{
+    /// <summary>
+    /// The glucose facts of <paramref name="context"/>, the only facts a rule that waits for its
+    /// next change reads. A value holds for a context only while these match: a reading deleted,
+    /// edited or recomputed, or an evaluation that failed or was dropped, leaves a value computed
+    /// from other facts. The glucose bucket is in it because evaluation derives the bucket from
+    /// the schedule at its own time, so a context that has not derived it never matches one that
+    /// has.
+    /// </summary>
+    public static string GlucoseOf(SensorContext context) => string.Join(
+        '|',
+        Instant(context.LatestTimestamp),
+        context.LatestValue?.ToString(CultureInfo.InvariantCulture),
+        context.TrendRate?.ToString(CultureInfo.InvariantCulture),
+        context.TrendBucket?.ToString(),
+        Instant(context.LastReadingAt),
+        context.GlucoseBucket?.ToString());
+
+    private static string? Instant(DateTime? at) => at?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+}
 
 /// <summary>
 /// Persists a <see cref="TrackerDecision"/>: the excursion rows its transition implies, the rule's
@@ -41,8 +69,13 @@ internal static class ExcursionTransitionWriter
     /// A decision made against <paramref name="decidedAgainst"/> is stale too once the rule, read
     /// under the same lock, no longer holds those fields, and is dropped the same way. A rule edit
     /// saves the rule under this lock (<see cref="AlertRuleRearm"/>), so an evaluation that loaded
-    /// the rule before the edit cannot land a hold the edit cleared. A decision that does not
-    /// depend on the rule passes no <paramref name="decidedAgainst"/>.
+    /// the rule before the edit cannot land a hold, or a next change, the edit cleared. A decision
+    /// that does not depend on the rule passes no <paramref name="decidedAgainst"/>.
+    /// </para>
+    /// <para>
+    /// A full evaluation passes the <paramref name="nextChange"/> it reported, which is written
+    /// whenever it differs from the stored one. Any other write leaves the rule's next change
+    /// unknown, since it moved state the recorded value was read from.
     /// </para>
     /// </remarks>
     /// <returns>
@@ -59,14 +92,17 @@ internal static class ExcursionTransitionWriter
         DateTime now,
         CancellationToken ct,
         bool autoResolved = false,
-        IReadOnlyList<RustTimerOp>? timerOps = null)
+        IReadOnlyList<RustTimerOp>? timerOps = null,
+        NextChange? nextChange = null)
     {
-        if (!Changes(prior, decision, autoResolved) && timerOps is not { Count: > 0 })
+        if (!Changes(prior, decision, autoResolved)
+            && timerOps is not { Count: > 0 }
+            && !(nextChange is not null && NextChangeMoved(prior, nextChange)))
             return (Unwritten(prior, decision), null);
 
         var written = await repository.ExecuteInTransactionAsync(
             (tx, token) => WriteAsync(
-                tx, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, timerOps, token),
+                tx, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, timerOps, nextChange, token),
             LandedAsync,
             ct);
         return (written.Transition, written.AutoResolve);
@@ -95,6 +131,17 @@ internal static class ExcursionTransitionWriter
             || post.HasExcursion != prior.ActiveExcursionId.HasValue
             || post.HysteresisStartedAt != prior.HysteresisStartedAt
             || post.AwaitingRearm != prior.AwaitingRearm);
+
+    /// <summary>
+    /// Whether recording <paramref name="nextChange"/>, or none for a write that is not a full
+    /// evaluation, changes what <paramref name="prior"/> holds.
+    /// </summary>
+    private static bool NextChangeMoved(AlertTrackerState? prior, NextChange? nextChange) =>
+        nextChange is { } recorded
+            ? prior is not { NextChangeKnown: true }
+              || !SameInstant(prior.NextChangeAt, recorded.At)
+              || prior.NextChangeGlucose != recorded.Glucose
+            : prior is { NextChangeKnown: true };
 
     private static ExcursionTransition Unwritten(AlertTrackerState? prior, TrackerDecision decision) =>
         decision.Type == ExcursionTransitionType.ExcursionContinues
@@ -139,7 +186,10 @@ internal static class ExcursionTransitionWriter
                && stored.ActiveExcursionId == wrote.ActiveExcursionId
                && stored.AwaitingRearm == wrote.AwaitingRearm
                && SameInstant(stored.UpdatedAt, wrote.UpdatedAt)
-               && SameInstant(stored.HysteresisStartedAt, wrote.HysteresisStartedAt);
+               && SameInstant(stored.HysteresisStartedAt, wrote.HysteresisStartedAt)
+               && stored.NextChangeKnown == wrote.NextChangeKnown
+               && SameInstant(stored.NextChangeAt, wrote.NextChangeAt)
+               && stored.NextChangeGlucose == wrote.NextChangeGlucose;
     }
 
     private static bool Same(AlertTrackerState? stored, AlertTrackerState? prior) =>
@@ -150,7 +200,10 @@ internal static class ExcursionTransitionWriter
               && stored.ActiveExcursionId == prior.ActiveExcursionId
               && stored.AwaitingRearm == prior.AwaitingRearm
               && SameInstant(stored.UpdatedAt, prior.UpdatedAt)
-              && SameInstant(stored.HysteresisStartedAt, prior.HysteresisStartedAt);
+              && SameInstant(stored.HysteresisStartedAt, prior.HysteresisStartedAt)
+              && stored.NextChangeKnown == prior.NextChangeKnown
+              && SameInstant(stored.NextChangeAt, prior.NextChangeAt)
+              && stored.NextChangeGlucose == prior.NextChangeGlucose;
 
     /// <summary>Equal to the microsecond, the precision the store keeps.</summary>
     private static bool SameInstant(DateTime? stored, DateTime? wrote) =>
@@ -168,6 +221,7 @@ internal static class ExcursionTransitionWriter
         DateTime now,
         bool autoResolved,
         IReadOnlyList<RustTimerOp>? timerOps,
+        NextChange? nextChange,
         CancellationToken ct)
     {
         await repository.LockRuleAsync(ruleId, ct);
@@ -239,8 +293,9 @@ internal static class ExcursionTransitionWriter
         }
 
         AlertTrackerState? state = null;
+        var nextChangeMoved = NextChangeMoved(prior, nextChange);
         if (decision.Post is { } post
-            && (StateChanged(prior, post) || (post.HasExcursion ? activeId : null) != priorId))
+            && (StateChanged(prior, post) || (post.HasExcursion ? activeId : null) != priorId || nextChangeMoved))
         {
             state = new AlertTrackerState
             {
@@ -251,9 +306,26 @@ internal static class ExcursionTransitionWriter
                 UpdatedAt = post.UpdatedAt,
                 HysteresisStartedAt = post.HysteresisStartedAt,
                 AwaitingRearm = post.AwaitingRearm,
+                NextChangeAt = nextChange?.At,
+                NextChangeKnown = nextChange is not null,
+                NextChangeGlucose = nextChange?.Glucose,
             };
-            await repository.UpsertTrackerStateAsync(state, ct);
         }
+        else if (prior is not null && nextChange is null && nextChangeMoved)
+        {
+            state = new AlertTrackerState
+            {
+                AlertRuleId = ruleId,
+                State = prior.State,
+                ConfirmationCount = prior.ConfirmationCount,
+                ActiveExcursionId = prior.ActiveExcursionId,
+                UpdatedAt = prior.UpdatedAt,
+                HysteresisStartedAt = prior.HysteresisStartedAt,
+                AwaitingRearm = prior.AwaitingRearm,
+            };
+        }
+        if (state is not null)
+            await repository.UpsertTrackerStateAsync(state, ct);
 
         return new Written(transition, autoResolve, state, now);
     }

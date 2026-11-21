@@ -234,6 +234,13 @@ public sealed record RustRuleResult
     /// <summary>Sustained-timer mutations performed during the call, in execution order; omitted when none.</summary>
     [JsonPropertyName("timer_ops")]
     public List<RustTimerOp>? TimerOps { get; init; }
+
+    /// <summary>
+    /// When an evaluation from the returned state can next differ with only the clock moving
+    /// (docs/alerts/engine-semantics.md §5.3); omitted when none can.
+    /// </summary>
+    [JsonPropertyName("next_change_at")]
+    public DateTime? NextChangeAt { get; init; }
 }
 
 /// <summary>Tracker transition wire values in <see cref="RustRuleResult.Transition"/>.</summary>
@@ -506,8 +513,8 @@ public sealed record RustReplayRuleTick
 }
 
 /// <summary>
-/// Request envelope for <c>nocturne_alerts_references_wall_clock</c>: a stored rule's body and
-/// auto-resolve configuration.
+/// Request envelope for <c>nocturne_alerts_references_wall_clock</c> and
+/// <c>nocturne_alerts_rule_reads</c>: a stored rule's body and auto-resolve configuration.
 /// </summary>
 public sealed record RustRuleConditionsRequest
 {
@@ -544,6 +551,22 @@ public sealed record RustWallClockResponse : IRustResponseEnvelope
 
     [JsonPropertyName("references_wall_clock")]
     public bool? ReferencesWallClock { get; init; }
+}
+
+/// <summary>Response envelope for <c>nocturne_alerts_rule_reads</c>.</summary>
+public sealed record RustRuleReadsResponse : IRustResponseEnvelope
+{
+    [JsonPropertyName("schema_version"), JsonRequired]
+    public int SchemaVersion { get; init; }
+
+    [JsonRequired]
+    public bool Ok { get; init; }
+
+    /// <summary>Error message when <see cref="Ok"/> is false.</summary>
+    public string? Error { get; init; }
+
+    /// <summary>The context facts the rule reads, by wire name (docs/alerts/engine-semantics.md §5.2).</summary>
+    public List<string>? Reads { get; init; }
 }
 
 /// <summary>Request envelope for <c>nocturne_alerts_describe</c>.</summary>

@@ -89,7 +89,7 @@ internal sealed class RustBackedAlertEngine(
         // since the snapshot was loaded.
         var (transition, autoResolveTransition) = await ExcursionTransitionWriter.ApplyAsync(
             trackerRepository, logger, rule.Id, trackerState, decision, AlertRuleConditions.Of(ruleRow), now, ct,
-            result.AutoResolved, result.TimerOps);
+            result.AutoResolved, result.TimerOps, RecordedNextChange(rule, result, context));
 
         return new AlertEngineEvaluation
         {
@@ -99,7 +99,49 @@ internal sealed class RustBackedAlertEngine(
             LeafValues = options.IncludeLeafValues
                 ? result.Leaves!.ToDictionary(l => l.LeafId, l => l.Value)
                 : null,
+            NextChangeAt = result.NextChangeAt,
         };
+    }
+
+    /// <summary>
+    /// The next change to record for <paramref name="rule"/>: only one that
+    /// <see cref="RuleTrees.WaitsForNextChange"/> is ever read, so no other is written, and none
+    /// from a library that does not report it (<see cref="RustAlertEngine.ReportsNextChange()"/>).
+    /// </summary>
+    private NextChange? RecordedNextChange(AlertRuleSnapshot rule, RustRuleResult result, SensorContext context)
+    {
+        try
+        {
+            return LibraryReportsNextChange() && RuleTrees.WaitsForNextChange(rule)
+                ? new NextChange(result.NextChangeAt, NextChange.GlucoseOf(context))
+                : null;
+        }
+        catch (RustAlertEngineException ex)
+        {
+            logger.LogWarning(ex,
+                "The engine could not read the condition trees of rule {AlertRuleId}; its next change is not recorded",
+                rule.Id);
+            return null;
+        }
+    }
+
+    private static int _warnedOfNoNextChange;
+
+    /// <summary>
+    /// <see cref="RustAlertEngine.ReportsNextChange()"/>, warning the first time in the process
+    /// that it does not.
+    /// </summary>
+    private bool LibraryReportsNextChange()
+    {
+        if (RustAlertEngine.ReportsNextChange())
+            return true;
+        if (Interlocked.Exchange(ref _warnedOfNoNextChange, 1) == 0)
+        {
+            logger.LogWarning(
+                "The alert engine library {Version} does not report next changes; the sweep evaluates every wall-clock rule on every run",
+                RustAlertEngine.Version());
+        }
+        return false;
     }
 
     /// <inheritdoc/>

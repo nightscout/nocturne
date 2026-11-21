@@ -14,6 +14,7 @@ use crate::excursion::{
 };
 use crate::leaf_identity::collect_leaves;
 use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
+use crate::next_change::next_change_at;
 use crate::paths::AUTO_RESOLVE_ROOT;
 use crate::sustained::{TimerOp, TimerStore};
 
@@ -136,6 +137,9 @@ pub struct Evaluation {
     pub auto_resolved: bool,
     /// Timer mutations from the root evaluation then auto-resolve, in order.
     pub timer_ops: Vec<TimerOp>,
+    /// When an evaluation from the state this one left can next differ with
+    /// only `now` advancing (engine-semantics.md §5.3); `None` when none can.
+    pub next_change_at: Option<DateTime<Utc>>,
 }
 
 /// An instant as RFC 3339 UTC: whole seconds without a fraction, sub-second
@@ -209,6 +213,9 @@ impl RuleOutcome {
                 e.timer_ops.iter().map(TimerOp::to_json).collect(),
             );
         }
+        if let Some(at) = e.next_change_at {
+            o.insert("next_change_at".into(), format_instant(at).into());
+        }
         Value::Object(o)
     }
 }
@@ -252,7 +259,7 @@ pub fn evaluate_parsed_rule(
     state: &mut EngineState,
     log_leaves: bool,
 ) -> RuleOutcome {
-    let body = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
+    let outcome = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
 
     // Awaiting re-arm, the resolve tree is read before the tracker, and is
     // then the evaluation's only read of it (engine-semantics.md §6.3).
@@ -273,19 +280,21 @@ pub fn evaluate_parsed_rule(
     let transition =
         state
             .tracker
-            .process_evaluation(rule.id, config, body.root, auto_resolve_met, now);
+            .process_evaluation(rule.id, config, outcome.root, auto_resolve_met, now);
     let auto_resolved =
         !awaiting && rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
+    let next_change_at = next_change_at(rule, body, ctx, now, state);
 
     RuleOutcome {
         rule_id: rule.id,
         evaluation: Some(Evaluation {
-            root: body.root,
-            leaves: body.leaves,
+            root: outcome.root,
+            leaves: outcome.leaves,
             transition,
             tracker: state.tracker.state(rule.id).copied(),
             auto_resolved,
             timer_ops: state.timers.drain_ops(),
+            next_change_at,
         }),
     }
 }

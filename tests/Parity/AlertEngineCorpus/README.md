@@ -35,6 +35,10 @@ NOCTURNE_CORPUS_BLESS=1 cargo test -p nocturne-alerts-core --test parity --test 
 Only a scenario with no `.expected.json` is written; without `NOCTURNE_CORPUS_BLESS=1` a
 missing snapshot fails the suite.
 
+A result's `next_change_at` (engine-semantics.md §5.3) is pinned only by a snapshot that
+carries it. Snapshots written before the engine reported it omit it, and every consumer
+compares it only where the snapshot has it; the `next-change-*` scenarios pin it.
+
 Consumers:
 
 1. `crates/nocturne-alerts-core` Rust tests (`tests/parity.rs`, `tests/replay_parity.rs`),

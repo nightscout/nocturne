@@ -125,6 +125,7 @@ internal static class EngineTestHarness
                 },
             AutoResolved = evaluation.AutoResolved ? true : null,
             TimerOps = trackerRepo.Timers.DrainOps() is { Count: > 0 } ops ? ops : null,
+            NextChangeAt = evaluation.NextChangeAt,
         };
     }
 }

@@ -42,8 +42,8 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
         | ConditionKind::RateOfChange
         | ConditionKind::SignalLoss
         | ConditionKind::Staleness
-        | ConditionKind::Trend
-        | ConditionKind::GlucoseBucket => &[F::Glucose],
+        | ConditionKind::Trend => &[F::Glucose],
+        ConditionKind::GlucoseBucket => &[F::Glucose, F::TimeZone],
         ConditionKind::Predicted => &[F::Predictions],
         ConditionKind::Iob | ConditionKind::TempBasal | ConditionKind::TimeSinceLastBolus => {
             &[F::Insulin]
@@ -166,10 +166,11 @@ mod tests {
         StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
     };
     use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket};
+    use crate::eval::elapsed::clock_leaf;
     use crate::eval::{Env, eval_payload};
     use crate::model::Payload;
     use crate::sustained::TimerStore;
-    use crate::wall_clock::references_wall_clock;
+    use crate::wall_clock::{is_wall_clock, references_wall_clock};
     use ContextFact as F;
 
     const ALERT_ID: Uuid = Uuid::from_u128(1);
@@ -213,6 +214,10 @@ mod tests {
         );
         assert_eq!(reads(ConditionKind::LoopEnactionStale), &[F::Aps]);
         assert_eq!(reads(ConditionKind::TimeOfDay), &[F::TimeZone]);
+        assert_eq!(
+            reads(ConditionKind::GlucoseBucket),
+            &[F::Glucose, F::TimeZone]
+        );
         assert!(reads(ConditionKind::Sustained).is_empty());
     }
 
@@ -270,6 +275,22 @@ mod tests {
         assert!(body("RateOfChange", &rate).is_empty());
         assert!(body("1", &rate).is_empty());
         assert!(body("no_such_kind", &json!({})).is_empty());
+    }
+
+    /// A host places the reading in the target-range schedule at the tenant's
+    /// local time, so a time zone or schedule write moves the bucket without a
+    /// reading (engine-semantics.md §5.2).
+    #[test]
+    fn a_glucose_bucket_reads_the_time_zone_too() {
+        let tree = json!({"operator": "or", "conditions": [
+            {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
+            {"type": "glucose_bucket", "glucose_bucket": {"buckets": ["low"]}}
+        ]});
+        assert_eq!(body("composite", &tree), [F::Glucose, F::TimeZone]);
+        assert!(references_any(
+            &RuleConditions::body("composite", &tree),
+            &[F::TimeZone]
+        ));
     }
 
     #[test]
@@ -445,7 +466,8 @@ mod tests {
             trend_rate: glucose.then(|| Decimal::from(-3)),
             last_reading_at: glucose.then(|| ago(20)),
             trend_bucket: glucose.then_some(TrendBucket::FallingFast),
-            glucose_bucket: glucose.then_some(GlucoseBucket::Low),
+            // A host derives the bucket from the reading in the tenant zone.
+            glucose_bucket: (glucose && has(F::TimeZone)).then_some(GlucoseBucket::Low),
             predictions: if has(F::Predictions) {
                 vec![PredictedPoint {
                     offset_minutes: 10,
@@ -575,6 +597,19 @@ mod tests {
         let mut timers = TimerStore::default();
         let mut env = Env::new(now(), Uuid::nil(), &ctx, &mut timers);
         eval_payload(&sample(kind), kind.name(), &mut env)
+    }
+
+    /// Evaluation and the next-change scan read exactly the §5.1 kinds as
+    /// measured against `now`.
+    #[test]
+    fn the_clock_leaves_are_the_wall_clock_kinds() {
+        for &kind in ConditionKind::ALL {
+            assert_eq!(
+                clock_leaf(&sample(kind), &context(&[])).is_some(),
+                is_wall_clock(kind),
+                "{kind:?}"
+            );
+        }
     }
 
     #[test]

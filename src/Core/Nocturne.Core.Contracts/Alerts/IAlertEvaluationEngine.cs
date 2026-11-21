@@ -54,6 +54,12 @@ public sealed record AlertEngineEvaluation
     /// <see cref="AlertEngineOptions.IncludeLeafValues"/> was requested.
     /// </summary>
     public IReadOnlyDictionary<int, bool>? LeafValues { get; init; }
+
+    /// <summary>
+    /// When an evaluation from the state this one left can next differ with only the clock
+    /// moving (docs/alerts/engine-semantics.md §5.3), or null when none can.
+    /// </summary>
+    public DateTime? NextChangeAt { get; init; }
 }
 
 /// <summary>

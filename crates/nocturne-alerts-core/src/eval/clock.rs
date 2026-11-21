@@ -4,7 +4,8 @@ use chrono::{DateTime, Datelike, NaiveDateTime, Utc, Weekday};
 use chrono_tz::Tz;
 
 use super::Env;
-use crate::compare::{Unit, elapsed};
+use super::elapsed::{ClockLeaf, Elapsed, Measure};
+use crate::context::SensorContext;
 use crate::enums::DayOfWeek;
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
 
@@ -21,13 +22,16 @@ fn find_tz(id: &str) -> Option<Tz> {
     })
 }
 
-/// `now` as wall time in the tenant's zone, or UTC when it has none or it
-/// does not resolve.
-fn tenant_local(env: &Env) -> NaiveDateTime {
-    local(
-        env.now,
-        env.ctx.tenant_time_zone_id.as_deref().and_then(zone),
-    )
+/// The tenant's zone, or `None` for UTC when it has none or it does not
+/// resolve.
+pub(crate) fn tenant_zone(ctx: &SensorContext) -> Option<Tz> {
+    ctx.tenant_time_zone_id.as_deref().and_then(zone)
+}
+
+/// The zone a `time_of_day` window is read in: the per-rule timezone, else
+/// the tenant's.
+pub(crate) fn time_of_day_zone(p: &TimeOfDayPayload, ctx: &SensorContext) -> Option<Tz> {
+    p.timezone.or_else(|| tenant_zone(ctx))
 }
 
 /// A non-empty zone id that resolves.
@@ -35,22 +39,18 @@ fn zone(id: &str) -> Option<Tz> {
     Some(id).filter(|id| !id.is_empty()).and_then(find_tz)
 }
 
-fn local(now: DateTime<Utc>, tz: Option<Tz>) -> NaiveDateTime {
+/// `now` as wall time in `tz`, UTC when `None`.
+pub(crate) fn local(now: DateTime<Utc>, tz: Option<Tz>) -> NaiveDateTime {
     tz.map_or_else(
         || now.naive_utc(),
         |tz| now.with_timezone(&tz).naive_local(),
     )
 }
 
-/// Half-open `[from, to)` window; `from > to` wraps midnight. A per-rule
-/// timezone wins; without one the window is in the tenant's zone.
+/// Half-open `[from, to)` window; `from > to` wraps midnight.
 pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
     let (from, to) = (p.from, p.to);
-    let local = match p.timezone {
-        Some(tz) => local(env.now, Some(tz)),
-        None => tenant_local(env),
-    };
-    let current = local.time();
+    let current = local(env.now, time_of_day_zone(p, env.ctx)).time();
     if from <= to {
         current >= from && current < to
     } else {
@@ -60,7 +60,7 @@ pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
 
 /// Today, in the tenant's zone, is one of `days`.
 pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
-    let today = match tenant_local(env).weekday() {
+    let today = match local(env.now, tenant_zone(env.ctx)).weekday() {
         Weekday::Sun => DayOfWeek::Sunday,
         Weekday::Mon => DayOfWeek::Monday,
         Weekday::Tue => DayOfWeek::Tuesday,
@@ -74,12 +74,20 @@ pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
 
 /// Elapsed minutes since `anchor` as a double; a missing anchor is +infinity,
 /// so `>` and `>=` hold on cold start, unlike loop_stale.
-pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>, env: &Env) -> bool {
-    let since = match anchor {
-        Some(anchor) => elapsed(env.now, anchor, Unit::Minutes),
-        None => Some(f64::INFINITY),
-    };
-    since.is_some_and(|since| p.operator.apply(since, f64::from(p.minutes.get())))
+pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>) -> ClockLeaf {
+    let minutes = f64::from(p.minutes.get());
+    anchor.map_or(
+        ClockLeaf::Fixed(p.operator.apply(f64::INFINITY, minutes)),
+        |anchor| {
+            ClockLeaf::Measured(Elapsed {
+                anchor,
+                measure: Measure::Minutes {
+                    op: p.operator,
+                    minutes,
+                },
+            })
+        },
+    )
 }
 
 #[cfg(test)]
