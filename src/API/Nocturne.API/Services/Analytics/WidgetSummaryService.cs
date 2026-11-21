@@ -9,8 +9,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
 using Nocturne.API.Services.Glucose;

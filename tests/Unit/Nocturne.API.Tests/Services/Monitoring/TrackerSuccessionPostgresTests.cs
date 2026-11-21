@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
@@ -10,6 +11,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -65,7 +67,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
     private sealed class MeetAfterReadRepository(NocturneDbContext context, Rendezvous rendezvous)
         : TrackerRepository(context.AsFactory())
     {
-        public override async Task<List<TrackerInstanceEntity>> GetActiveInstancesForDefinitionAsync(
+        public override async Task<IReadOnlyList<TrackerInstance>> GetActiveInstancesForDefinitionAsync(
             Guid definitionId, CancellationToken cancellationToken = default)
         {
             var running = await base.GetActiveInstancesForDefinitionAsync(definitionId, cancellationToken);
@@ -96,7 +98,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         return tenant;
     }
 
-    private async Task<TrackerDefinitionEntity> SeedDefinitionAsync(Guid tenant, TrackerMode mode, DateTime? runningSince)
+    private async Task<TrackerDefinition> SeedDefinitionAsync(Guid tenant, TrackerMode mode, DateTime? runningSince)
     {
         var definition = new TrackerDefinitionEntity
         {
@@ -121,14 +123,15 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
             });
         }
         await seed.SaveChangesAsync();
-        return definition;
+        return TrackerMapper.ToDomain(definition);
     }
 
     private static Task<TrackerSuccessionResult> StartAsync(
-        TrackerRepository repository, TrackerDefinitionEntity definition, DateTime startedAt, DateTime? scheduledAt = null) =>
+        TrackerRepository repository, TrackerDefinition definition, DateTime startedAt, DateTime? scheduledAt = null) =>
         TrackerSuccession.StartAsync(
             repository,
             Mock.Of<ISignalRBroadcastService>(),
+            TimeProvider.System,
             NullLogger.Instance,
             definition,
             startedAt,
@@ -217,10 +220,11 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
     }
 
     private static Task<TrackerSuccessionResult> StartFromEventAsync(
-        TrackerRepository repository, TrackerDefinitionEntity definition, DateTime startedAt, string eventId) =>
+        TrackerRepository repository, TrackerDefinition definition, DateTime startedAt, string eventId) =>
         TrackerSuccession.StartAsync(
             repository,
             Mock.Of<ISignalRBroadcastService>(),
+            TimeProvider.System,
             NullLogger.Instance,
             definition,
             startedAt,
@@ -231,7 +235,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
             CancellationToken.None);
 
     private static Task<TrackerStartRevert?> RevertAsync(
-        TrackerRepository repository, TrackerDefinitionEntity definition, string eventId) =>
+        TrackerRepository repository, TrackerDefinition definition, string eventId) =>
         repository.ExecuteUnderDefinitionLockAsync(
             definition.Id, (tx, ct) => tx.RevertStartAsync(definition.Id, eventId, ct));
 
@@ -300,7 +304,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         await using var read = Context(tenant);
         var found = await new TrackerRepository(read.AsFactory()).GetRunningStartedByAsync(["replaced", "running", "unknown"]);
 
-        found.Should().ContainSingle().Which.Should().Match<TrackerInstanceEntity>(
+        found.Should().ContainSingle().Which.Should().Match<TrackerInstance>(
             i => i.StartTreatmentId == "running" && i.Definition.Id == definition.Id);
     }
 
@@ -332,7 +336,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         {
             var repository = new TrackerRepository(db.AsFactory());
             result = await TrackerSuccession.StartAsync(
-                repository, Mock.Of<ISignalRBroadcastService>(), NullLogger.Instance, definition, Now.AddMinutes(-10),
+                repository, Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger.Instance, definition, Now.AddMinutes(-10),
                 completionNotes: null, completeTreatmentId: "recorded",
                 (tx, ct) => tx.StartInstanceAsync(
                     definition.Id, OwnerId, startTreatmentId: "recorded", startedAt: Now.AddMinutes(-10), cancellationToken: ct),
@@ -391,20 +395,12 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var tenant = await SeedTenantAsync();
         await using var db = Context(tenant);
         var repository = new TrackerRepository(db.AsFactory(), new FakeTimeProvider(Now));
-        var definition = await repository.CreateDefinitionAsync(new TrackerDefinitionEntity
-        {
-            CreatedBy = OwnerId,
-            Name = "Reservoir",
-            Category = TrackerCategory.Reservoir,
-            Mode = TrackerMode.Duration,
-            LifespanHours = 72,
-        });
+        var definition = await repository.CreateDefinitionAsync(TrackerDefinition.Restore(
+            Guid.Empty, "Reservoir", TrackerCategory.Reservoir, TrackerMode.Duration, OwnerId, lifespanHours: 72));
 
-        definition.Mode = TrackerMode.Event;
-        definition.LifespanHours = null;
-        definition.LowReservoirUnits = 20;
-        definition.LowReservoirUrgency = NotificationUrgency.Hazard;
-        await repository.UpdateDefinitionAsync(definition.Id, definition);
+        await repository.UpdateDefinitionAsync(TrackerDefinition.Restore(
+            definition.Id, "Reservoir", TrackerCategory.Reservoir, TrackerMode.Event, OwnerId,
+            lowReservoirUnits: 20, lowReservoirUrgency: NotificationUrgency.Hazard));
 
         var stored = await repository.GetDefinitionByIdAsync(definition.Id);
         stored!.Mode.Should().Be(TrackerMode.Event);
@@ -414,8 +410,8 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         stored.UpdatedAt.Should().Be(Now);
     }
 
-    private static Task<List<TrackerInstanceEntity>> ReopenAsync(
-        TrackerRepository repository, TrackerDefinitionEntity definition, string eventId) =>
+    private static Task<IReadOnlyList<TrackerInstance>> ReopenAsync(
+        TrackerRepository repository, TrackerDefinition definition, string eventId) =>
         repository.ExecuteUnderDefinitionLockAsync(
             definition.Id, (tx, ct) => tx.ReopenCompletedByAsync(definition.Id, [eventId], ct));
 

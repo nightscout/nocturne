@@ -1,16 +1,15 @@
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Monitoring;
 
 /// <summary>
 /// Records the device event a definition names for a manual start or completion
-/// (<see cref="TrackerDefinitionEntity.StartEventType"/>, <see cref="TrackerDefinitionEntity.CompletionEventType"/>),
+/// (<see cref="TrackerDefinition.StartEventType"/>, <see cref="TrackerDefinition.CompletionEventType"/>),
 /// which hold Nightscout event names mapped through <see cref="TreatmentTypeMaps.DeviceEventTypeMap"/>.
 /// </summary>
 /// <remarks>
@@ -25,28 +24,10 @@ public sealed class TrackerDeviceEventWriter(
     ILogger<TrackerDeviceEventWriter> logger)
 {
     /// <summary>
-    /// Canonicalises a requested event name against <see cref="TreatmentTypeMaps.DeviceEventTypeMap"/>.
-    /// Blank is "not supplied"; a name with no device event is an error naming <paramref name="field"/>.
-    /// </summary>
-    public static bool TryNormalise(string? requested, string field, out string? normalised, out string? error)
-    {
-        normalised = null;
-        error = null;
-        if (string.IsNullOrWhiteSpace(requested))
-            return true;
-
-        var name = requested.Trim();
-        normalised = TreatmentTypeMaps.DeviceEventTypeMap.Keys
-            .FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase));
-        if (normalised is null)
-            error = $"{field} '{name}' is not a device event";
-        return error is null;
-    }
-
-    /// <summary>
     /// Writes the device event <paramref name="eventType"/> names at <paramref name="at"/>, keyed on
     /// <paramref name="syncIdentifier"/>. Writes nothing for no name, or for a name with no device
-    /// event, which a definition saved before <see cref="TryNormalise"/> can still hold.
+    /// event, which a definition saved before <see cref="TrackerEventTypes.TryNormaliseDeviceEvent"/>
+    /// can still hold.
     /// </summary>
     /// <remarks>
     /// A failed write is logged and swallowed, as <c>DeviceEventRepository.OnLiveCreatedAsync</c> does:

@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Analytics;
@@ -7,7 +6,6 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Reports.Datasets;
 
@@ -205,12 +203,9 @@ internal sealed class TrackersDataset : LaneDataset
     protected override async Task<LaneRead> ReadAsync(ReportDatasetRequest request, long from, long to, int limit, CancellationToken cancellationToken)
     {
         var (start, end) = (Utc(from), Utc(to));
-        await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
-        var instances = await db.TrackerInstances.AsNoTracking()
-            .Where(i => i.StartedAt < end && (i.CompletedAt == null || i.CompletedAt > start))
-            .OrderBy(i => i.StartedAt).Take(limit)
-            .Select(i => new { i.StartedAt, i.CompletedAt, i.Definition.Name, i.Definition.Category })
-            .ToListAsync(cancellationToken);
+        var instances = (await request.Services.GetRequiredService<ITrackerRepository>()
+                .GetRunsOverlappingAsync(start, end, limit, cancellationToken))
+            .Select(i => new { i.StartedAt, i.CompletedAt, i.Definition.Name, i.Definition.Category });
         var now = (request.Now ?? request.To).ToUnixTimeMilliseconds();
         return new([.. instances.Select(i =>
         {

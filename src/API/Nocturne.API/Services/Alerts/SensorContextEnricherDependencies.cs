@@ -9,7 +9,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.Alerts;
 

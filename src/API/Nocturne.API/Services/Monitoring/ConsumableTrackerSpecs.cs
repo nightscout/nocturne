@@ -1,9 +1,6 @@
 using Nocturne.Core.Constants;
-using System.Text.Json;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -228,30 +225,16 @@ public static class ConsumableTrackerSpecs
     /// the lifespan ends, a hazard when it has, and for hardware with a grace period, an urgent
     /// alert <see cref="UrgentHoursBeforeStop"/> before it stops.
     /// </summary>
-    public static IReadOnlyList<TrackerNotificationThresholdEntity> Thresholds(ConsumableTrackerSpec spec)
+    public static IReadOnlyList<TrackerNotificationThreshold> Thresholds(ConsumableTrackerSpec spec)
     {
-        List<TrackerNotificationThresholdEntity> thresholds =
+        List<TrackerNotificationThreshold> thresholds =
         [
-            new()
-            {
-                Urgency = NotificationUrgency.Warn,
-                Hours = -WarnHoursBeforeEnd,
-                DisplayOrder = 0,
-            },
-            new()
-            {
-                Urgency = NotificationUrgency.Hazard,
-                Hours = spec.LifespanHours,
-                DisplayOrder = 1,
-            },
+            new(Guid.Empty, NotificationUrgency.Warn, -WarnHoursBeforeEnd, null, DisplayOrder: 0),
+            new(Guid.Empty, NotificationUrgency.Hazard, spec.LifespanHours, null, DisplayOrder: 1),
         ];
         if (spec.GraceHours is { } grace && grace > UrgentHoursBeforeStop)
-            thresholds.Add(new()
-            {
-                Urgency = NotificationUrgency.Urgent,
-                Hours = spec.LifespanHours + grace - UrgentHoursBeforeStop,
-                DisplayOrder = 2,
-            });
+            thresholds.Add(new(
+                Guid.Empty, NotificationUrgency.Urgent, spec.LifespanHours + grace - UrgentHoursBeforeStop, null, DisplayOrder: 2));
         return thresholds;
     }
 
@@ -265,26 +248,28 @@ public static class ConsumableTrackerSpecs
     /// An unsaved Duration definition of <paramref name="spec"/>, created by <paramref name="userId"/>,
     /// with its <see cref="Thresholds"/> unless <paramref name="withThresholds"/> is false.
     /// </summary>
-    public static TrackerDefinitionEntity ToDefinition(
-        ConsumableTrackerSpec spec, string userId, bool withThresholds = true)
+    /// <exception cref="InvalidOperationException">The spec breaks a rule every definition keeps.</exception>
+    public static TrackerDefinition ToDefinition(
+        ConsumableTrackerSpec spec, string userId, DateTime createdAt, bool withThresholds = true)
     {
-        var definition = new TrackerDefinitionEntity
-        {
-            CreatedBy = userId,
-            Name = spec.Name,
-            Category = spec.Category,
-            Icon = spec.Icon,
-            LifespanHours = spec.LifespanHours,
-            TriggerEventTypes = JsonSerializer.Serialize(spec.Triggers),
-            EndEventTypes = JsonSerializer.Serialize(spec.Ends ?? []),
-            Covers = TrackerCoverage.Serialize(spec.Covers ?? []),
-            DeviceComponent = spec.Component,
-            StartEventType = spec.Triggers.FirstOrDefault(),
-            Mode = TrackerMode.Duration,
-        };
-        if (withThresholds)
-            foreach (var threshold in Thresholds(spec))
-                definition.NotificationThresholds.Add(threshold);
-        return definition;
+        var result = TrackerDefinition.Create(
+            new TrackerDefinitionDraft
+            {
+                Name = spec.Name,
+                Category = spec.Category,
+                Icon = spec.Icon,
+                LifespanHours = spec.LifespanHours,
+                TriggerEventTypes = spec.Triggers,
+                EndEventTypes = spec.Ends ?? [],
+                Covers = [.. (spec.Covers ?? []).Select(c => c.ToString())],
+                DeviceComponent = spec.Component,
+                StartEventType = spec.Triggers.FirstOrDefault(),
+                Mode = TrackerMode.Duration,
+                NotificationThresholds = withThresholds ? Thresholds(spec) : [],
+            },
+            userId,
+            createdAt);
+        return result.Definition
+            ?? throw new InvalidOperationException($"The {spec.Name} tracker spec is not a valid definition: {result.Error!.Message}");
     }
 }

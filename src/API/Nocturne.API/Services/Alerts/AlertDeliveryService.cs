@@ -204,7 +204,7 @@ internal sealed class AlertDeliveryService(
         // Synthesise a parent excursion so the delivery rows have somewhere to hang. The
         // excursion is opened and immediately resolved — it never participates in tracker
         // state because we don't go through IExcursionTracker (which would mutate the live
-        // ActiveExcursionId on AlertTrackerStateEntity and confuse the orchestrator).
+        // ActiveExcursionId on the rule's alert tracker state and confuse the orchestrator).
         //
         // device_action channels are the exception: push-mode devices actuate from the
         // active-intents snapshot, which only surfaces excursions that have not yet ended.

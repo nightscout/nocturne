@@ -1,6 +1,5 @@
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Widget;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Analytics;
 
@@ -11,7 +10,7 @@ namespace Nocturne.API.Services.Analytics;
 /// </summary>
 public static class TrackerStatusCondenser
 {
-    public static List<V4TrackerStatus> Condense(IEnumerable<TrackerInstanceEntity> instances, DateTime nowUtc)
+    public static List<V4TrackerStatus> Condense(IEnumerable<TrackerInstance> instances, DateTime nowUtc)
     {
         var statuses = new List<V4TrackerStatus>();
 
@@ -44,12 +43,12 @@ public static class TrackerStatusCondenser
 
             if (definition.Mode == TrackerMode.Duration)
             {
-                status.AgeHours = Math.Round(instance.AgeHours * 10) / 10;
+                status.AgeHours = Math.Round(instance.AgeHoursAt(nowUtc) * 10) / 10;
 
                 if (definition.LifespanHours.HasValue && definition.LifespanHours.Value > 0)
                 {
                     status.PercentElapsed = Math.Round(
-                        (instance.AgeHours / definition.LifespanHours.Value) * 100
+                        (instance.AgeHoursAt(nowUtc) / definition.LifespanHours.Value) * 100
                     );
                 }
             }
@@ -66,8 +65,8 @@ public static class TrackerStatusCondenser
     }
 
     private static NotificationUrgency CalculateUrgency(
-        TrackerInstanceEntity instance,
-        TrackerDefinitionEntity definition,
+        TrackerInstance instance,
+        TrackerDefinition definition,
         DateTime nowUtc
     )
     {
@@ -82,7 +81,7 @@ public static class TrackerStatusCondenser
 
         if (definition.Mode == TrackerMode.Duration)
         {
-            var ageHours = instance.AgeHours;
+            var ageHours = instance.AgeHoursAt(nowUtc);
             var lifespanHours = definition.LifespanHours ?? 0;
 
             foreach (var threshold in thresholds)

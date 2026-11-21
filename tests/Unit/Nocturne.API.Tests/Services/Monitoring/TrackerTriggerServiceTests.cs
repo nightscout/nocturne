@@ -1,8 +1,8 @@
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Realtime;
@@ -11,7 +11,6 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -29,9 +28,9 @@ public class TrackerTriggerServiceTests
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly TrackerTriggerService _sut;
 
-    private readonly List<TrackerDefinitionEntity> _definitions = [];
-    private readonly Dictionary<Guid, List<TrackerInstanceEntity>> _activeByDefinition = [];
-    private readonly List<TrackerInstanceEntity> _started = [];
+    private readonly List<TrackerDefinition> _definitions = [];
+    private readonly Dictionary<Guid, List<TrackerInstance>> _activeByDefinition = [];
+    private readonly List<TrackerInstance> _started = [];
     private readonly List<(Guid InstanceId, CompletionReason Reason, DateTime? CompletedAt, string? CompleteTreatmentId)> _completed = [];
 
     public TrackerTriggerServiceTests()
@@ -52,10 +51,10 @@ public class TrackerTriggerServiceTests
             .ReturnsAsync((Guid definitionId, string userId, string? startNotes, string? startTreatmentId,
                 DateTime? startedAt, DateTime? scheduledAt, CancellationToken _) =>
             {
-                var instance = new TrackerInstanceEntity
+                var instance = new TrackerInstance
                 {
                     Id = Guid.NewGuid(),
-                    DefinitionId = definitionId,
+                    Definition = _definitions.Single(d => d.Id == definitionId),
                     CreatedBy = userId,
                     StartNotes = startNotes,
                     StartTreatmentId = startTreatmentId,
@@ -80,10 +79,12 @@ public class TrackerTriggerServiceTests
 
                 var instance = _activeByDefinition.Values
                     .SelectMany(list => list)
-                    .First(i => i.Id == instanceId);
+                    .First(i => i.Id == instanceId) with
+                {
+                    CompletedAt = completedAt ?? DateTime.UtcNow,
+                    CompletionReason = reason,
+                };
 
-                instance.CompletedAt = completedAt ?? DateTime.UtcNow;
-                instance.CompletionReason = reason;
                 _activeByDefinition[instance.DefinitionId] =
                     [.. _activeByDefinition[instance.DefinitionId].Where(i => i.Id != instanceId)];
                 return instance;
@@ -98,18 +99,26 @@ public class TrackerTriggerServiceTests
 
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
-                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<List<TrackerInstanceEntity>>>>(),
-                It.IsAny<Func<ITrackerRepository, List<TrackerInstanceEntity>, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<List<TrackerInstanceEntity>>> work,
-                Func<ITrackerRepository, List<TrackerInstanceEntity>, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<List<TrackerInstance>>>>(),
+                It.IsAny<Func<ITrackerRepository, List<TrackerInstance>, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<List<TrackerInstance>>> work,
+                Func<ITrackerRepository, List<TrackerInstance>, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
+
+        _repository
+            .Setup(r => r.ExecuteUnderDefinitionLockAsync(
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<IReadOnlyList<TrackerInstance>>>>(),
+                It.IsAny<Func<ITrackerRepository, IReadOnlyList<TrackerInstance>, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<IReadOnlyList<TrackerInstance>>> work,
+                Func<ITrackerRepository, IReadOnlyList<TrackerInstance>, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
 
         _sut = new TrackerTriggerService(
             _repository.Object,
             _broadcast.Object,
+            TimeProvider.System,
             NullLogger<TrackerTriggerService>.Instance);
     }
 
-    private TrackerDefinitionEntity GivenDefinition(
+    private TrackerDefinition GivenDefinition(
         string[]? triggerEventTypes = null,
         int? lifespanHours = 72,
         TrackerMode mode = TrackerMode.Duration,
@@ -117,28 +126,26 @@ public class TrackerTriggerServiceTests
         string? triggerNotesContains = null,
         string[]? endEventTypes = null)
     {
-        var definition = new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(),
-            Name = "Infusion Site",
-            CreatedBy = userId,
-            LifespanHours = lifespanHours,
-            Mode = mode,
-            TriggerNotesContains = triggerNotesContains,
-            TriggerEventTypes = JsonSerializer.Serialize(triggerEventTypes ?? ["Site Change"]),
-            EndEventTypes = JsonSerializer.Serialize(endEventTypes ?? []),
-        };
+        var definition = TrackerDefinition.Restore(
+            Guid.NewGuid(),
+            "Infusion Site",
+            mode: mode,
+            createdBy: userId,
+            lifespanHours: lifespanHours,
+            triggerNotesContains: triggerNotesContains,
+            triggerEventTypes: triggerEventTypes ?? ["Site Change"],
+            endEventTypes: endEventTypes ?? []);
         _definitions.Add(definition);
         return definition;
     }
 
-    private TrackerInstanceEntity GivenActiveInstance(
-        TrackerDefinitionEntity definition, DateTime startedAt, string? startTreatmentId = null)
+    private TrackerInstance GivenActiveInstance(
+        TrackerDefinition definition, DateTime startedAt, string? startTreatmentId = null)
     {
-        var instance = new TrackerInstanceEntity
+        var instance = new TrackerInstance
         {
             Id = Guid.NewGuid(),
-            DefinitionId = definition.Id,
+            Definition = definition,
             CreatedBy = definition.CreatedBy,
             StartedAt = startedAt,
             StartTreatmentId = startTreatmentId,
@@ -377,18 +384,6 @@ public class TrackerTriggerServiceTests
     }
 
     [Fact]
-    public async Task MalformedTriggerList_IsIgnoredWithoutThrowing()
-    {
-        var definition = GivenDefinition();
-        definition.TriggerEventTypes = "{not json";
-
-        var act = async () => await _sut.OnCreatedAsync([Event(new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc))]);
-
-        await act.Should().NotThrowAsync();
-        _started.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task NoDeviceEvents_TouchesNothing()
     {
         GivenDefinition();
@@ -444,8 +439,8 @@ public class TrackerTriggerServiceTests
     /// reopening the runs in <paramref name="replaced"/> keyed by the reverted run.
     /// </summary>
     private void GivenRunsStartedByDeletes(
-        IReadOnlyList<TrackerInstanceEntity> runs,
-        IReadOnlyDictionary<Guid, TrackerInstanceEntity[]>? replaced = null)
+        IReadOnlyList<TrackerInstance> runs,
+        IReadOnlyDictionary<Guid, TrackerInstance[]>? replaced = null)
     {
         var running = runs.Where(r => r.CompletedAt == null).ToList();
         _repository
@@ -471,21 +466,17 @@ public class TrackerTriggerServiceTests
                     return null;
                 running.Remove(run);
                 var reopened = replaced?.GetValueOrDefault(run.Id) ?? [];
-                foreach (var resumed in reopened)
-                {
-                    resumed.CompletedAt = null;
-                    running.Add(resumed);
-                }
-                return new TrackerStartRevert(run, reopened);
+                var resumed = reopened.Select(i => i with { CompletedAt = null }).ToList();
+                running.AddRange(resumed);
+                return new TrackerStartRevert(run, resumed);
             });
     }
 
-    private static TrackerInstanceEntity Run(
-        TrackerDefinitionEntity definition, DeviceEvent? startedBy, DateTime startedAt, DateTime? completedAt = null) =>
+    private static TrackerInstance Run(
+        TrackerDefinition definition, DeviceEvent? startedBy, DateTime startedAt, DateTime? completedAt = null) =>
         new()
         {
             Id = Guid.NewGuid(),
-            DefinitionId = definition.Id,
             CreatedBy = definition.CreatedBy,
             Definition = definition,
             StartTreatmentId = startedBy?.Id.ToString(),
@@ -493,7 +484,7 @@ public class TrackerTriggerServiceTests
             CompletedAt = completedAt,
         };
 
-    private void VerifyBroadcast(TrackerRealtimeAction action, TrackerInstanceEntity instance, Times times) =>
+    private void VerifyBroadcast(TrackerRealtimeAction action, TrackerInstance instance, Times times) =>
         _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
             action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id)), times);
 
@@ -506,7 +497,7 @@ public class TrackerTriggerServiceTests
         var deviceEvent = Event(T0);
         var previous = Run(definition, null, T0.AddDays(-3), completedAt: T0);
         var started = Run(definition, deviceEvent, T0);
-        GivenRunsStartedByDeletes([started], new Dictionary<Guid, TrackerInstanceEntity[]> { [started.Id] = [previous] });
+        GivenRunsStartedByDeletes([started], new Dictionary<Guid, TrackerInstance[]> { [started.Id] = [previous] });
 
         await _sut.OnDeletedAsync([deviceEvent]);
 
@@ -555,7 +546,7 @@ public class TrackerTriggerServiceTests
         var third = Run(definition, newer, T0);
         GivenRunsStartedByDeletes(
             [first, second, third],
-            new Dictionary<Guid, TrackerInstanceEntity[]> { [third.Id] = [second], [second.Id] = [first] });
+            new Dictionary<Guid, TrackerInstance[]> { [third.Id] = [second], [second.Id] = [first] });
 
         await _sut.OnDeletedAsync([older, newer]);
 
@@ -634,7 +625,7 @@ public class TrackerTriggerServiceTests
         followed.Should().BeEquivalentTo([following.Id]);
     }
 
-    private TrackerDefinitionEntity GivenPodDefinition() =>
+    private TrackerDefinition GivenPodDefinition() =>
         GivenDefinition(
             triggerEventTypes: ["Pod Change", "Pod Activated"],
             endEventTypes: ["Pod Deactivated"]);
@@ -722,10 +713,10 @@ public class TrackerTriggerServiceTests
     [Fact]
     public void EndNormalisation_RejectsAnEventThatIsNotAnEnd()
     {
-        TrackerTriggerService.TryNormaliseEnds(["pod deactivated", " "], out var ends, out _).Should().BeTrue();
+        TrackerEventTypes.TryNormaliseEnds(["pod deactivated", " "], out var ends, out _).Should().BeTrue();
         ends.Should().Equal("Pod Deactivated");
 
-        TrackerTriggerService.TryNormaliseEnds(["Site Change"], out _, out var error).Should().BeFalse();
+        TrackerEventTypes.TryNormaliseEnds(["Site Change"], out _, out var error).Should().BeFalse();
         error.Should().Contain("Site Change");
     }
 

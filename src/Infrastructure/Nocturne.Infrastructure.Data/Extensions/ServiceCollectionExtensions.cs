@@ -225,6 +225,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDndWindowRepository, DndWindowRepository>();
         services.AddScoped<ITenantAlertSettingsRepository, TenantAlertSettingsRepository>();
         services.AddScoped<ITrackerRepository, TrackerRepository>();
+        services.AddScoped<ITrackerConsumableLock, TrackerRepository>();
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
         services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.Devices;
@@ -37,6 +38,7 @@ public interface IDeviceTrackerProvisioner
 /// <inheritdoc />
 internal sealed class DeviceTrackerProvisioner(
     ITrackerRepository trackers,
+    ITrackerConsumableLock consumableLock,
     ConsumableTrackerWriter writer,
     ILogger<DeviceTrackerProvisioner> logger)
     : IDeviceTrackerProvisioner
@@ -54,7 +56,7 @@ internal sealed class DeviceTrackerProvisioner(
         List<CreatedConsumableTracker> created;
         try
         {
-            created = await trackers.ExecuteUnderConsumableLockAsync(
+            created = await consumableLock.ExecuteAsync(
                 async (tx, unit, token) =>
                 {
                     var existing = await tx.GetAllDefinitionsAsync(token);

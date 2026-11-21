@@ -75,8 +75,8 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             .ToList();
 
         var trackerMarkers = ChartDataService.MapTrackerMarkers(
-            context.TrackerDefinitions,
-            context.TrackerInstances,
+            context.Trackers,
+            context.RunningTrackers,
             context.StartTime,
             context.EndTime
         );

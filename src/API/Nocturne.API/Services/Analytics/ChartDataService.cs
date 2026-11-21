@@ -9,7 +9,6 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Analytics;
 
@@ -383,8 +382,8 @@ public class ChartDataService : IChartDataService
     }
 
     internal static List<TrackerMarkerDto> MapTrackerMarkers(
-        IEnumerable<TrackerDefinitionEntity> trackerDefs,
-        IEnumerable<TrackerInstanceEntity> trackerInstances,
+        IEnumerable<TrackerDefinition> trackerDefs,
+        IEnumerable<TrackerInstance> trackerInstances,
         long startTime,
         long endTime
     )

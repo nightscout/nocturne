@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Tests.Infrastructure;

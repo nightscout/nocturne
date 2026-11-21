@@ -91,7 +91,7 @@ public class AlertReplayServiceTests
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
-            new Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository>().Object,
+            new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
             Options.Create(new AlertEvaluationOptions()));
         _enricher = new SensorContextEnricher(

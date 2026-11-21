@@ -1,12 +1,9 @@
-using System.Text.Json;
 using Nocturne.API.Services.Realtime;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -23,107 +20,28 @@ namespace Nocturne.API.Services.Monitoring;
 /// events <see cref="TrackerDeviceEventWriter"/> records.
 /// </remarks>
 /// <seealso cref="IDeviceEventReactor"/>
-/// <seealso cref="TrackerDefinitionEntity.TriggerEventTypes"/>
+/// <seealso cref="TrackerDefinition.TriggerEventTypes"/>
 public class TrackerTriggerService : IDeviceEventReactor
 {
-    /// <summary>
-    /// The event types a definition may list in <see cref="TrackerDefinitionEntity.TriggerEventTypes"/>:
-    /// the device events that mean something was changed. Pump suspend and resume are device events
-    /// too, but pausing a pump ends nobody's sensor.
-    /// </summary>
-    public static readonly IReadOnlyList<string> TriggerableEventTypes =
-    [
-        TreatmentTypes.SensorStart,
-        TreatmentTypes.SensorChange,
-        TreatmentTypes.SensorStop,
-        TreatmentTypes.TransmitterSensorInsert,
-        TreatmentTypes.SiteChange,
-        TreatmentTypes.CannulaChange,
-        TreatmentTypes.PodChange,
-        TreatmentTypes.PodActivated,
-        TreatmentTypes.InsulinChange,
-        TreatmentTypes.ReservoirChangeEvent,
-        TreatmentTypes.PumpBatteryChange,
-    ];
-
-    /// <summary>
-    /// The event types a definition may list in <see cref="TrackerDefinitionEntity.EndEventTypes"/>:
-    /// the device events that mean something came off with nothing yet in its place.
-    /// </summary>
-    public static readonly IReadOnlyList<string> EndingEventTypes =
-    [
-        TreatmentTypes.SensorStop,
-        TreatmentTypes.PodDeactivated,
-    ];
-
-    /// <summary>The <see cref="TriggerableEventTypes"/> spelling of <paramref name="name"/>, or null.</summary>
-    public static string? CanonicalTrigger(string name) => Canonical(TriggerableEventTypes, name);
-
-    /// <summary>The <see cref="EndingEventTypes"/> spelling of <paramref name="name"/>, or null.</summary>
-    public static string? CanonicalEnd(string name) => Canonical(EndingEventTypes, name);
-
-    private static string? Canonical(IReadOnlyList<string> allowed, string name) =>
-        allowed.FirstOrDefault(t => string.Equals(t, name.Trim(), StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>
-    /// Canonicalises a requested trigger list against <see cref="TriggerableEventTypes"/>. Blank entries
-    /// are dropped, so a form can post one empty value to mean "none"; an unknown name is an error
-    /// rather than a trigger that silently never fires. Null passes through as "not supplied".
-    /// </summary>
-    public static bool TryNormaliseTriggers(
-        IEnumerable<string>? requested,
-        out List<string>? normalised,
-        out string? error) =>
-        TryNormalise(requested, CanonicalTrigger, "restart", out normalised, out error);
-
-    /// <summary>As <see cref="TryNormaliseTriggers"/>, for an end list against <see cref="EndingEventTypes"/>.</summary>
-    public static bool TryNormaliseEnds(
-        IEnumerable<string>? requested,
-        out List<string>? normalised,
-        out string? error) =>
-        TryNormalise(requested, CanonicalEnd, "end", out normalised, out error);
-
-    private static bool TryNormalise(
-        IEnumerable<string>? requested,
-        Func<string, string?> canonicalise,
-        string verb,
-        out List<string>? normalised,
-        out string? error)
-    {
-        normalised = null;
-        error = null;
-        if (requested is null)
-            return true;
-
-        normalised = [];
-        foreach (var name in requested.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()))
-        {
-            var canonical = canonicalise(name);
-            if (canonical is null)
-            {
-                error = $"'{name}' is not an event a tracker can {verb} on";
-                return false;
-            }
-            if (!normalised.Contains(canonical))
-                normalised.Add(canonical);
-        }
-        return true;
-    }
-
     private readonly ITrackerRepository _trackerRepository;
     private readonly ISignalRBroadcastService _broadcast;
+    private readonly TimeProvider _time;
     private readonly ILogger<TrackerTriggerService> _logger;
 
     public TrackerTriggerService(
         ITrackerRepository trackerRepository,
         ISignalRBroadcastService broadcast,
+        TimeProvider timeProvider,
         ILogger<TrackerTriggerService> logger
     )
     {
         _trackerRepository = trackerRepository;
         _broadcast = broadcast;
+        _time = timeProvider;
         _logger = logger;
     }
+
+    private DateTime UtcNow => _time.GetUtcNow().UtcDateTime;
 
     /// <inheritdoc />
     public Task OnCreatedAsync(IReadOnlyList<DeviceEvent> created, CancellationToken ct = default)
@@ -180,14 +98,14 @@ public class TrackerTriggerService : IDeviceEventReactor
     /// A run started at or after that moment is newer than the end, so it is left running; that also
     /// makes a re-published or backfilled end a no-op once the next run has started.
     /// </summary>
-    private async Task EndAsync(TrackerDefinitionEntity definition, DeviceEvent deviceEvent, CancellationToken ct)
+    private async Task EndAsync(TrackerDefinition definition, DeviceEvent deviceEvent, CancellationToken ct)
     {
         var endedBy = deviceEvent.Id.ToString();
         var ended = await _trackerRepository.ExecuteUnderDefinitionLockAsync(
             definition.Id,
             async (tx, token) =>
             {
-                List<TrackerInstanceEntity> completed = [];
+                List<TrackerInstance> completed = [];
                 foreach (var run in await tx.GetActiveInstancesForDefinitionAsync(definition.Id, token))
                 {
                     if (run.StartedAt >= deviceEvent.Timestamp)
@@ -222,7 +140,7 @@ public class TrackerTriggerService : IDeviceEventReactor
                 definition.Name,
                 deviceEvent.EventType);
             await _broadcast.BroadcastTrackerUpdateAsync(
-                TrackerRealtimeAction.Complete, TrackerInstanceDto.FromEntity(instance));
+                TrackerRealtimeAction.Complete, TrackerInstanceDto.From(instance, UtcNow));
         }
     }
 
@@ -241,7 +159,7 @@ public class TrackerTriggerService : IDeviceEventReactor
 
         var deletedIds = deleted.Select(e => e.Id.ToString()).ToHashSet();
         // Newest first, so of a chain of deleted changes each undo exposes the run the next one started.
-        var pending = new Stack<TrackerInstanceEntity>(
+        var pending = new Stack<TrackerInstance>(
             (await _trackerRepository.GetRunningStartedByAsync(deletedIds, ct)).OrderBy(i => i.StartedAt));
 
         while (pending.TryPop(out var run))
@@ -261,11 +179,11 @@ public class TrackerTriggerService : IDeviceEventReactor
                 run.Definition.Name);
 
             await _broadcast.BroadcastTrackerUpdateAsync(
-                TrackerRealtimeAction.Delete, TrackerInstanceDto.FromEntity(revert.Removed));
+                TrackerRealtimeAction.Delete, TrackerInstanceDto.From(revert.Removed, UtcNow));
             foreach (var reopened in revert.Reopened)
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(reopened));
+                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.From(reopened, UtcNow));
                 if (reopened.StartTreatmentId is { } startedBy && deletedIds.Contains(startedBy))
                     pending.Push(reopened);
             }
@@ -302,7 +220,7 @@ public class TrackerTriggerService : IDeviceEventReactor
                     instance.Id,
                     instance.Definition.Name);
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(instance));
+                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.From(instance, UtcNow));
             }
         }
     }
@@ -329,7 +247,7 @@ public class TrackerTriggerService : IDeviceEventReactor
     /// timestamp, unless a guard says this event does not represent a new change.
     /// </summary>
     private async Task AdvanceAsync(
-        TrackerDefinitionEntity definition,
+        TrackerDefinition definition,
         DeviceEvent deviceEvent,
         bool replay,
         CancellationToken ct
@@ -344,6 +262,7 @@ public class TrackerTriggerService : IDeviceEventReactor
         var succession = await TrackerSuccession.StartAsync(
             _trackerRepository,
             _broadcast,
+            _time,
             _logger,
             definition,
             deviceEvent.Timestamp,
@@ -384,7 +303,7 @@ public class TrackerTriggerService : IDeviceEventReactor
     /// Applies the definition's optional notes substring filter, which distinguishes trackers that share
     /// an event type (two pump sites logged as "Site Change" with different notes, say).
     /// </summary>
-    private static bool MatchesNotesFilter(TrackerDefinitionEntity definition, DeviceEvent deviceEvent)
+    private static bool MatchesNotesFilter(TrackerDefinition definition, DeviceEvent deviceEvent)
     {
         if (string.IsNullOrWhiteSpace(definition.TriggerNotesContains))
             return true;
@@ -394,41 +313,20 @@ public class TrackerTriggerService : IDeviceEventReactor
     }
 
     /// <summary>
-    /// Reads a definition's trigger list, which stores Nightscout event-type names, and resolves the
-    /// ones in <see cref="TriggerableEventTypes"/> (through <see cref="CanonicalTrigger"/>, as the
-    /// definition DTO does) to their device event types. Any other stored name is ignored.
+    /// Resolves a definition's trigger list, which holds Nightscout event-type names, to device event
+    /// types: the names in <see cref="TrackerEventTypes.TriggerableEventTypes"/>, through
+    /// <see cref="TrackerEventTypes.CanonicalTrigger"/> as the definition DTO reads them. Any other
+    /// name is ignored.
     /// </summary>
-    internal static HashSet<DeviceEventType> ParseTriggerEventTypes(string? json) =>
-        ParseEventTypes(json, CanonicalTrigger);
-
-    /// <inheritdoc cref="ParseTriggerEventTypes(string?)"/>
     internal static HashSet<DeviceEventType> ParseTriggerEventTypes(IEnumerable<string> eventTypes) =>
-        ParseEventTypes(eventTypes, CanonicalTrigger);
+        ParseEventTypes(eventTypes, TrackerEventTypes.CanonicalTrigger);
 
     /// <summary>
-    /// As <see cref="ParseTriggerEventTypes(string?)"/>, for a definition's end list against
-    /// <see cref="EndingEventTypes"/>.
+    /// As <see cref="ParseTriggerEventTypes"/>, for a definition's end list against
+    /// <see cref="TrackerEventTypes.EndingEventTypes"/>.
     /// </summary>
-    internal static HashSet<DeviceEventType> ParseEndEventTypes(string? json) =>
-        ParseEventTypes(json, CanonicalEnd);
-
-    private static HashSet<DeviceEventType> ParseEventTypes(string? json, Func<string, string?> canonicalise)
-    {
-        if (string.IsNullOrEmpty(json))
-            return [];
-
-        List<string>? eventTypes;
-        try
-        {
-            eventTypes = JsonSerializer.Deserialize<List<string>>(json);
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-
-        return eventTypes is null ? [] : ParseEventTypes(eventTypes, canonicalise);
-    }
+    internal static HashSet<DeviceEventType> ParseEndEventTypes(IEnumerable<string> eventTypes) =>
+        ParseEventTypes(eventTypes, TrackerEventTypes.CanonicalEnd);
 
     private static HashSet<DeviceEventType> ParseEventTypes(IEnumerable<string> eventTypes, Func<string, string?> canonicalise) =>
         [.. eventTypes

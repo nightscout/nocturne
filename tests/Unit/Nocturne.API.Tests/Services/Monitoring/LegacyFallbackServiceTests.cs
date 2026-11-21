@@ -1,11 +1,11 @@
 using System.Reflection;
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
@@ -15,7 +15,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -26,11 +25,12 @@ public class LegacyFallbackServiceTests
     private static readonly DateTime Now = new(2026, 10, 25, 12, 0, 0, DateTimeKind.Utc);
     private const string UserId = "11111111-1111-1111-1111-111111111111";
 
-    private readonly List<TrackerDefinitionEntity> _definitions = [];
-    private readonly List<TrackerInstanceEntity> _instances = [];
+    private readonly List<TrackerDefinition> _definitions = [];
+    private readonly List<TrackerInstance> _instances = [];
     private readonly Dictionary<DeviceEventType, List<DeviceEvent>> _events = [];
     private readonly List<PatientDevice> _devices = [];
     private readonly Mock<ITrackerRepository> _trackers = new();
+    private readonly Mock<ITrackerConsumableLock> _lock = new();
     private readonly Mock<IDeviceEventRepository> _deviceEvents = new();
     private readonly Mock<ITrackerAlertRuleSyncService> _ruleSync = new();
     private readonly Mock<IDeviceEventReactor> _reactor = new();
@@ -49,12 +49,12 @@ public class LegacyFallbackServiceTests
             .ReturnsAsync(() => [.. _definitions]);
         _trackers.Setup(t => t.GetDefinitionByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => _definitions.FirstOrDefault(d => d.Id == id));
-        _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TrackerDefinitionEntity d, CancellationToken _) =>
+        _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerDefinition d, CancellationToken _) =>
             {
-                d.Id = Guid.NewGuid();
-                _definitions.Add(d);
-                return d;
+                var stored = d.Stored();
+                _definitions.Add(stored);
+                return stored;
             });
         _trackers.Setup(t => t.GetActiveInstancesForDefinitionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) =>
@@ -65,10 +65,9 @@ public class LegacyFallbackServiceTests
             .ReturnsAsync((Guid definitionId, string createdBy, string? _, string? startTreatmentId,
                 DateTime? startedAt, DateTime? _, CancellationToken _) =>
             {
-                var instance = new TrackerInstanceEntity
+                var instance = new TrackerInstance
                 {
                     Id = Guid.NewGuid(),
-                    DefinitionId = definitionId,
                     CreatedBy = createdBy,
                     StartTreatmentId = startTreatmentId,
                     StartedAt = startedAt!.Value,
@@ -79,7 +78,7 @@ public class LegacyFallbackServiceTests
             });
         _trackers.Setup(t => t.GetInstanceByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => _instances.FirstOrDefault(i => i.Id == id));
-        _trackers.Setup(t => t.ExecuteUnderConsumableLockAsync(
+        _lock.Setup(t => t.ExecuteAsync(
                 It.IsAny<Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<It.IsAnyType>>>(),
                 It.IsAny<Func<ITrackerRepository, It.IsAnyType, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))
@@ -113,7 +112,7 @@ public class LegacyFallbackServiceTests
             _deviceEvents.Object, _ruleSync.Object, _reactor.Object, _broadcast.Object, time,
             NullLogger<ConsumableTrackerWriter>.Instance);
         _service = new LegacyFallbackService(
-            _trackers.Object, _deviceEvents.Object, patientDevices.Object, writer, time,
+            _trackers.Object, _lock.Object, _deviceEvents.Object, patientDevices.Object, writer, time,
             NullLogger<LegacyFallbackService>.Instance);
     }
 
@@ -147,13 +146,7 @@ public class LegacyFallbackServiceTests
     }
 
     private void ExistingTracker(params string[] triggers) =>
-        _definitions.Add(new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(),
-            Name = "Existing",
-            Mode = TrackerMode.Duration,
-            TriggerEventTypes = JsonSerializer.Serialize(triggers),
-        });
+        _definitions.Add(TrackerDefinition.Restore(Guid.NewGuid(), "Existing", triggerEventTypes: triggers));
 
     [Fact]
     public async Task AnUncoveredKindWithARecentEvent_HasAFallback()
@@ -255,11 +248,11 @@ public class LegacyFallbackServiceTests
     public async Task TheFallbacksSchedule_IsTheScheduleOfTheTrackerItConvertsInto()
     {
         Event(DeviceEventType.SensorStart, Now.AddDays(-9));
-        var fallback = LegacyFallbackDto.From((await _service.GetAsync(readDeviceAges: true)).Fallbacks.Single());
+        var fallback = LegacyFallbackDto.From((await _service.GetAsync(readDeviceAges: true)).Fallbacks.Single(), Now);
 
         var conversion = await _service.CreateTrackersAsync([LegacyConsumableKind.Sensor], UserId);
 
-        var run = TrackerInstanceDto.FromEntity(conversion.Instances.Single());
+        var run = TrackerInstanceDto.From(conversion.Instances.Single(), Now);
         run.Schedule.Should().BeEquivalentTo(fallback.Schedule, o => o.WithStrictOrdering());
         run.StartedAt.Should().Be(fallback.LatestEventAt);
         run.ExpectedEndAt.Should().Be(fallback.ExpectedEndAt);
@@ -393,7 +386,7 @@ public class LegacyFallbackServiceTests
     {
         Event(DeviceEventType.SiteChange, Now.AddHours(-20));
         Delegate? verify = null;
-        _trackers.Setup(t => t.ExecuteUnderConsumableLockAsync(
+        _lock.Setup(t => t.ExecuteAsync(
                 It.IsAny<Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<It.IsAnyType>>>(),
                 It.IsAny<Func<ITrackerRepository, It.IsAnyType, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))
@@ -413,7 +406,7 @@ public class LegacyFallbackServiceTests
         (await check(empty, null, default)).Should().BeTrue();
         (await check(_trackers.Object, new(definition, spec, run, null), default)).Should().BeTrue();
         (await check(_trackers.Object, new(definition, spec, null, null), default)).Should().BeTrue();
-        (await check(_trackers.Object, new(definition, spec, new TrackerInstanceEntity { Id = Guid.NewGuid() }, null), default))
+        (await check(_trackers.Object, new(definition, spec, new TrackerInstance { Id = Guid.NewGuid(), Definition = definition }, null), default))
             .Should().BeFalse();
         (await check(empty, new(definition, spec, null, null), default)).Should().BeFalse();
     }
@@ -421,10 +414,7 @@ public class LegacyFallbackServiceTests
     [Fact]
     public async Task AHandRunSensorTracker_HidesTheSensorFallback()
     {
-        _definitions.Add(new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(), Name = "My sensor", Category = TrackerCategory.Sensor, Mode = TrackerMode.Duration,
-        });
+        _definitions.Add(TrackerDefinition.Restore(Guid.NewGuid(), "My sensor", TrackerCategory.Sensor, TrackerMode.Duration));
         Event(DeviceEventType.SensorStart, Now.AddDays(-2));
 
         (await _service.GetAsync(readDeviceAges: true)).Fallbacks.Should().BeEmpty();

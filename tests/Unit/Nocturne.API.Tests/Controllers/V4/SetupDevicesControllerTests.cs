@@ -40,6 +40,7 @@ public class SetupDevicesControllerTests
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             Mock.Of<IDeviceReattributionService>(),
             new TrackerRepository(factory),
+            new TrackerRepository(factory),
             Mock.Of<ITrackerAlertRuleSyncService>(),
             Mock.Of<ITherapySettingsResolver>(t =>
                 t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>())

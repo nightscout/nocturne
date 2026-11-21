@@ -169,8 +169,7 @@ internal static class ReportDataSources
                 var (start, end) = (Mills(from), Mills(to));
                 return db.SystemEvents.AnyAsync(e => e.Mills >= start && e.Mills < end, ct);
             },
-            [Trackers] = (db, r, from, to, _, ct) =>
-                db.TrackerInstances.AnyAsync(e => e.StartedAt < to && (e.CompletedAt == null || e.CompletedAt >= from), ct),
+            [Trackers] = (db, r, from, to, _, ct) => r.Trackers.AnyRunInAsync(from, to, ct),
             [SleepStage] = (db, r, from, to, _, ct) => r.Sleep.AnyStageOverlappingAsync(from, to, ct),
             [SleepBiometrics] = (db, r, from, to, _, ct) => r.Sleep.AnyBiometricSampleInAsync(from, to, ct),
             [LabHbA1c] = (db, r, from, to, zone, ct) =>
@@ -279,4 +278,5 @@ internal sealed record ReportSourceRepositories(
     IObservedHealthSeriesRepository<StepCount> Steps,
     IBodyWeightRepository Weight,
     ISleepSessionRepository Sleep,
-    IDndWindowRepository Dnd);
+    IDndWindowRepository Dnd,
+    ITrackerRepository Trackers);
