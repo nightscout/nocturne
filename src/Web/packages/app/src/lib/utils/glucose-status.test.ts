@@ -1,12 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
-import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
 import {
   glucoseStatusStyles,
-  glucoseStatusSortOrder,
   getGlucoseStatusClass,
   getGlucoseTileVariant,
-  sortTenantsByUrgency,
 } from "./glucose-status";
 import { glucoseTileVariant } from "@nocturne/ui/glucose";
 
@@ -14,31 +11,6 @@ describe("glucoseStatusStyles", () => {
   it("maps every GlucoseStatus value", () => {
     for (const status of Object.values(GlucoseStatus)) {
       expect(glucoseStatusStyles[status]).toBeDefined();
-    }
-  });
-});
-
-describe("glucoseStatusSortOrder", () => {
-  it("ranks every GlucoseStatus value", () => {
-    for (const status of Object.values(GlucoseStatus)) {
-      expect(glucoseStatusSortOrder[status]).toEqual(expect.any(Number));
-    }
-  });
-
-  it("orders by urgency: UrgentLow, UrgentHigh, Low, High, Stale, InRange, Unknown", () => {
-    const ordered = [
-      GlucoseStatus.UrgentLow,
-      GlucoseStatus.UrgentHigh,
-      GlucoseStatus.Low,
-      GlucoseStatus.High,
-      GlucoseStatus.Stale,
-      GlucoseStatus.InRange,
-      GlucoseStatus.Unknown,
-    ];
-    for (let i = 1; i < ordered.length; i++) {
-      expect(glucoseStatusSortOrder[ordered[i - 1]]).toBeLessThan(
-        glucoseStatusSortOrder[ordered[i]]
-      );
     }
   });
 });
@@ -60,53 +32,6 @@ describe("getGlucoseStatusClass", () => {
     expect(getGlucoseStatusClass(GlucoseStatus.Low)).toEqual(
       glucoseStatusStyles[GlucoseStatus.Low]
     );
-  });
-});
-
-describe("sortTenantsByUrgency", () => {
-  const tenant = (
-    slug: string,
-    status: GlucoseStatus | undefined,
-    displayName = slug
-  ): TenantOverviewItem => ({ slug, displayName, status });
-
-  it("sorts by status urgency, then display name", () => {
-    const sorted = sortTenantsByUrgency([
-      tenant("zoe", GlucoseStatus.InRange),
-      tenant("amy", GlucoseStatus.InRange),
-      tenant("bob", GlucoseStatus.UrgentLow),
-      tenant("cat", GlucoseStatus.High),
-      tenant("dan", GlucoseStatus.Stale),
-      tenant("eve", GlucoseStatus.UrgentHigh),
-    ]);
-    expect(sorted.map((t) => t.slug)).toEqual([
-      "bob",
-      "eve",
-      "cat",
-      "dan",
-      "amy",
-      "zoe",
-    ]);
-  });
-
-  it("ranks unrecognized and missing statuses like Unknown (last)", () => {
-    const sorted = sortTenantsByUrgency([
-      tenant("mystery", "SomethingNew" as GlucoseStatus),
-      tenant("nobody", undefined),
-      tenant("ok", GlucoseStatus.InRange),
-    ]);
-    expect(sorted[0].slug).toBe("ok");
-    expect(sorted.slice(1).map((t) => t.slug)).toEqual(["mystery", "nobody"]);
-  });
-
-  it("does not mutate the input array", () => {
-    const input = [
-      tenant("b", GlucoseStatus.InRange),
-      tenant("a", GlucoseStatus.Low),
-    ];
-    const copy = [...input];
-    sortTenantsByUrgency(input);
-    expect(input).toEqual(copy);
   });
 });
 

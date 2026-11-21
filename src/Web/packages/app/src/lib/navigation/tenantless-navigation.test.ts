@@ -7,7 +7,7 @@ describe("filterTenantlessNav", () => {
       { title: "Dashboard", href: "/" },
       { title: "Calendar", href: "/calendar" },
       { title: "Clock", href: "/clock" },
-      { title: "Tenants", href: "/tenants" },
+      { title: "People", href: "/tenants" },
     ];
 
     expect(filterTenantlessNav(items)).toEqual([{ title: "Dashboard", href: "/" }]);

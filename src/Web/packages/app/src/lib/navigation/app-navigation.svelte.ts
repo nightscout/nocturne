@@ -215,7 +215,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
   if (viewer.tenantCount > 1) {
     items.push({
       id: "tenants",
-      title: "Tenants",
+      title: "People",
       href: "/tenants",
       icon: Users,
     });

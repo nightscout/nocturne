@@ -1,5 +1,5 @@
 <script lang="ts">
-  import TenantsOverview from "#lib/components/tenants/TenantsOverview.svelte";
+  import PeoplePage from "#lib/components/people/PeoplePage.svelte";
 </script>
 
-<TenantsOverview />
+<PeoplePage />
