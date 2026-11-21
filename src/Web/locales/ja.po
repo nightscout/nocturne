@@ -45516,3 +45516,7 @@ msgstr ""
 #: src/lib/components/people/PersonPanel.svelte
 msgid "Recent entries"
 msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Readings update as they arrive."
+msgstr ""

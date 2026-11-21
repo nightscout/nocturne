@@ -45516,3 +45516,7 @@ msgstr "This person's data did not load."
 #: src/lib/components/people/PersonPanel.svelte
 msgid "Recent entries"
 msgstr "Recent entries"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Readings update as they arrive."
+msgstr "Readings update as they arrive."
