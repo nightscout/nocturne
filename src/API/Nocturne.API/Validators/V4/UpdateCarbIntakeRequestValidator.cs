@@ -17,7 +17,7 @@ namespace Nocturne.API.Validators.V4;
 /// </list>
 /// </remarks>
 /// <seealso cref="UpdateCarbIntakeRequest"/>
-/// <seealso cref="Controllers.V4.Treatments.NutritionController"/>
+/// <seealso cref="Controllers.V4.Treatments.CarbIntakeController"/>
 public class UpdateCarbIntakeRequestValidator : AbstractValidator<UpdateCarbIntakeRequest>
 {
     /// <summary>

@@ -40,7 +40,7 @@ export const getDayInReviewData = query(
 			await Promise.all([
 				apiClient.sensorGlucose.getAll(dayStart, dayEnd, 10000),
 				apiClient.bolus.getAll(dayStart, dayEnd, 1000),
-				apiClient.nutrition.getCarbIntakes(dayStart, dayEnd, 1000),
+				apiClient.carbIntake.getAll(dayStart, dayEnd, 1000),
 				getApsSnapshots({ from: dayStart, to: dayEnd, limit: 1000, sort: 'timestamp_asc' }),
 				getInsulinDeliveryStatistics({ startDate: dayStart, endDate: dayEnd, includeBoluses: true }),
 			]);

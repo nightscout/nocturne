@@ -36,12 +36,12 @@ vi.mock("#lib/api/generated/bolus.generated.remote.js", async (importOriginal) =
     update: form(formCoerce(z.object({ id: z.string(), request: schemas.UpdateBolusRequestSchema })), handlers["bolus.update"]),
   };
 });
-vi.mock("#lib/api/generated/nutritions.generated.remote.js", async (importOriginal) => {
+vi.mock("#lib/api/generated/carbIntakes.generated.remote.js", async (importOriginal) => {
   const { form, formCoerce, z, schemas } = await kit();
   return {
     ...(await importOriginal<object>()),
-    createCarbIntake: form(formCoerce(schemas.CreateCarbIntakeRequestSchema), handlers["carbs.create"]),
-    updateCarbIntake: form(formCoerce(z.object({ id: z.string(), request: schemas.UpdateCarbIntakeRequestSchema })), handlers["carbs.update"]),
+    create: form(formCoerce(schemas.CreateCarbIntakeRequestSchema), handlers["carbs.create"]),
+    update: form(formCoerce(z.object({ id: z.string(), request: schemas.UpdateCarbIntakeRequestSchema })), handlers["carbs.update"]),
   };
 });
 vi.mock("#lib/api/generated/bgChecks.generated.remote.js", async (importOriginal) => {

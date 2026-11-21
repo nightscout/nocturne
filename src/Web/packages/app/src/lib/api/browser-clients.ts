@@ -5,13 +5,13 @@ import {
   ApsSnapshotClient,
   BGCheckClient,
   BolusClient,
+  CarbIntakeClient,
   ClockFaceAlertsClient,
   ClockFacesClient,
   CurrentTherapyStateClient,
   DeviceEventClient,
   NoteClient,
   NotificationsClient,
-  NutritionClient,
   ProfileClient,
   SensorGlucoseClient,
   TrackerLegacyFallbacksClient,
@@ -41,13 +41,13 @@ function browserHttp(): Http {
 export const apsSnapshotClient = () => new ApsSnapshotClient("", browserHttp());
 export const bgCheckClient = () => new BGCheckClient("", browserHttp());
 export const bolusClient = () => new BolusClient("", browserHttp());
+export const carbIntakeClient = () => new CarbIntakeClient("", browserHttp());
 export const clockFaceAlertsClient = () => new ClockFaceAlertsClient("", browserHttp());
 export const clockFacesClient = () => new ClockFacesClient("", browserHttp());
 export const currentTherapyStateClient = () => new CurrentTherapyStateClient("", browserHttp());
 export const deviceEventClient = () => new DeviceEventClient("", browserHttp());
 export const noteClient = () => new NoteClient("", browserHttp());
 export const notificationsClient = () => new NotificationsClient("", browserHttp());
-export const nutritionClient = () => new NutritionClient("", browserHttp());
 export const profileClient = () => new ProfileClient("", browserHttp());
 export const sensorGlucoseClient = () => new SensorGlucoseClient("", browserHttp());
 export const trackerLegacyFallbacksClient = () =>

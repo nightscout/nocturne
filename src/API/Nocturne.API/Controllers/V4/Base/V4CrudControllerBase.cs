@@ -123,8 +123,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="requests">The records to write, at most 1000 of them.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
-    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, basal
-    /// injections, sensor glucose, notes, device events and BG checks upsert on the sync key: an item
+    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, carb
+    /// intakes, basal injections, sensor glucose, notes, device events and BG checks upsert on the sync key: an item
     /// carrying both `dataSource` and `syncIdentifier` updates in place the row already matched by
     /// that pair, and an item whose pair is held by a record the owner deleted is skipped. Every other
     /// type — calibrations, meter readings and bolus calculations — inserts, as does any item not
@@ -159,7 +159,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         await RecordUpsertTargetsAsync(footprint, models, ct);
         var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
         footprint?.AddRange(written.Select(w => w.Timestamp));
-        return StatusCode(StatusCodes.Status201Created, await OnAfterBulkCreateAsync(written, ct));
+        var returned = await OnAfterBulkCreateAsync(written, ct);
+        await OnBeforeReturnAsync(returned, ct);
+        return StatusCode(StatusCodes.Status201Created, returned);
     }
 
     /// <summary>
@@ -199,6 +201,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         {
             var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.AddRange([existing.Timestamp, updated.Timestamp]);
+            await OnBeforeReturnAsync([updated], ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -256,7 +259,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
-        var data = await Repository.GetDeletedAsync(limit, offset, ct);
+        var data = (await Repository.GetDeletedAsync(limit, offset, ct)).ToList();
+        await OnBeforeReturnAsync(data, ct);
         var total = await Repository.CountDeletedAsync(ct);
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
@@ -289,6 +293,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
             var restored = await Repository.RestoreAsync(id, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.Add(restored.Timestamp);
             await OnAfterRestoreAsync(restored, ct);
+            await OnBeforeReturnAsync([restored], ct);
             return Ok(restored);
         }
         catch (KeyNotFoundException)
@@ -324,6 +329,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var result = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
         TenantCacheWriteFootprint.Of(HttpContext)?.AddRange(result.Restored.Select(r => r.Timestamp));
+        await OnBeforeReturnAsync([.. result.Restored], ct);
         return Ok(result);
     }
 

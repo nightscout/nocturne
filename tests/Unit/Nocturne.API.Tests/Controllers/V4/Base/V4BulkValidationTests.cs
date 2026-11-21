@@ -158,6 +158,7 @@ public class V4BulkValidationTests
         [typeof(BolusCalculationController)] = new("Bolus calculation", "calculation", "calculations"),
         [typeof(BolusController)] = new("Bolus", "bolus", "boluses"),
         [typeof(CalibrationController)] = new("Calibration", "calibration", "calibrations"),
+        [typeof(CarbIntakeController)] = new("Carb intake", "intake", "intakes"),
         [typeof(DeviceEventController)] = new("Device event", "event", "events"),
         [typeof(MeterGlucoseController)] = new("Meter glucose", "reading", "readings"),
         [typeof(NoteController)] = new("Note", "note", "notes"),
@@ -261,7 +262,6 @@ public class V4BulkValidationTests
         Rejected((await ApsController().CreateApsSnapshots([])).Result, "APS snapshot data is required");
         Rejected((await PumpController().CreatePumpSnapshots([])).Result, "Pump snapshot data is required");
         Rejected((await UploaderController().CreateUploaderSnapshots([])).Result, "Uploader snapshot data is required");
-        Rejected((await CarbIntakes().CreateCarbIntakesBulk([])).Result, "Carb intake data is required");
         Rejected((await TempBasals().CreateTempBasals([])).Result, "Temp basal data is required");
     }
 
@@ -274,9 +274,6 @@ public class V4BulkValidationTests
         Rejected(
             (await UploaderController().CreateUploaderSnapshots(Fill(1001, () => new UpsertUploaderSnapshotRequest()))).Result,
             "Bulk operations are limited to 1000 snapshots per request");
-        Rejected(
-            (await CarbIntakes().CreateCarbIntakesBulk(Fill(1001, () => new CreateCarbIntakeRequest()))).Result,
-            "Bulk operations are limited to 1000 intakes per request");
         Rejected(
             (await TempBasals().CreateTempBasals(Fill(1001, () => new CreateTempBasalRequest()))).Result,
             "Bulk operations are limited to 1000 temp basals per request");
@@ -519,14 +516,6 @@ public class V4BulkValidationTests
 
     private static UploaderSnapshotController UploaderController() =>
         WithContext(new UploaderSnapshotController(Mock.Of<IUploaderSnapshotRepository>()));
-
-    private static NutritionController CarbIntakes() =>
-        WithContext(new NutritionController(
-            Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<IBolusRepository>(),
-            Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IFoodRepository>(),
-            Mock.Of<IMealReadService>()));
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));
