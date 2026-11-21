@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.Authentication;
 [Tags("Authentication")]
 [Authorize]
 [RequireInteractiveSession]
+[ErrorEnvelope]
 [Produces("application/json")]
 public class TrustedDevicesController : ControllerBase
 {
