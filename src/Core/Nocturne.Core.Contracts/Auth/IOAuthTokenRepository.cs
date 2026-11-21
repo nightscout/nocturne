@@ -118,6 +118,9 @@ public interface IOAuthTokenRepository
     /// </summary>
     Task<bool> TryRedeemDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct);
 
+    /// <summary>Deletes the device code <paramref name="id"/>.</summary>
+    Task DeleteDeviceCodeAsync(Guid id, CancellationToken ct);
+
     /// <summary>
     /// Deletes the device codes and authorization codes of <paramref name="tenantId"/> that
     /// expired before <paramref name="cutoff"/>.

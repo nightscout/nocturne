@@ -115,23 +115,14 @@ public class InactiveSubjectCredentialIntegrationTests : ApiIntegrationTestBase
         var (subjectId, client) = await SignInAsync(conn, "Approving Member");
         using var _ = client;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
-        var authorization = await client.PostAsync("/api/oauth/device", Form(
-            ("client_id", clientId),
-            ("scope", "glucose.read")));
-        authorization.EnsureSuccessStatusCode();
-        var device = JsonSerializer.Deserialize<JsonElement>(await authorization.Content.ReadAsStringAsync());
-        var approval = await client.PostAsync("/api/oauth/device-approve", Form(
-            ("user_code", device.GetProperty("user_code").GetString()!),
-            ("approved", "true")));
-        approval.EnsureSuccessStatusCode();
+        var deviceCode = await ApprovedDeviceCodeAsync(client, clientId);
         var invalidCodeAnswer = await ShapeOfAsync(
             await ExchangeDeviceCodeAsync(client, clientId, $"unknown-{Guid.NewGuid():N}"));
 
         await SetActiveAsync(conn, subjectId, false);
         try
         {
-            var response = await ExchangeDeviceCodeAsync(
-                client, clientId, device.GetProperty("device_code").GetString()!);
+            var response = await ExchangeDeviceCodeAsync(client, clientId, deviceCode);
 
             (await ShapeOfAsync(response)).Should().Be(invalidCodeAnswer);
             (await CountRefreshTokensOfAsync(conn, clientId)).Should().Be(0);
@@ -140,6 +131,45 @@ public class InactiveSubjectCredentialIntegrationTests : ApiIntegrationTestBase
         {
             await SetActiveAsync(conn, subjectId, true);
         }
+    }
+
+    [Fact]
+    public async Task A_refused_device_code_is_answered_as_an_unknown_one_on_every_later_poll()
+    {
+        await using var conn = await OpenAsync();
+        var (subjectId, client) = await SignInAsync(conn, "Polling Member");
+        using var _ = client;
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
+        var deviceCode = await ApprovedDeviceCodeAsync(client, clientId);
+        var unknownCode = $"unknown-{Guid.NewGuid():N}";
+        await ExchangeDeviceCodeAsync(client, clientId, unknownCode);
+        var unknownCodeAnswer = await ShapeOfAsync(await ExchangeDeviceCodeAsync(client, clientId, unknownCode));
+
+        await SetActiveAsync(conn, subjectId, false);
+        try
+        {
+            (await ShapeOfAsync(await ExchangeDeviceCodeAsync(client, clientId, deviceCode)))
+                .Should().Be(unknownCodeAnswer);
+
+            (await ShapeOfAsync(await ExchangeDeviceCodeAsync(client, clientId, deviceCode)))
+                .Should().Be(unknownCodeAnswer, "a poll inside the interval reads as one on an unknown code");
+
+            await RewindDevicePollsOfAsync(conn, clientId);
+            (await ShapeOfAsync(await ExchangeDeviceCodeAsync(client, clientId, deviceCode)))
+                .Should().Be(unknownCodeAnswer, "a poll after the interval reads as one on an unknown code");
+        }
+        finally
+        {
+            await SetActiveAsync(conn, subjectId, true);
+        }
+
+        await RewindDevicePollsOfAsync(conn, clientId);
+        (await ShapeOfAsync(await ExchangeDeviceCodeAsync(client, clientId, deviceCode)))
+            .Should().Be(unknownCodeAnswer, "the refusal spent the code, and reactivation does not revive it");
+        (await CountRefreshTokensOfAsync(conn, clientId)).Should().Be(0);
+
+        var renewed = await ExchangeDeviceCodeAsync(client, clientId, await ApprovedDeviceCodeAsync(client, clientId));
+        renewed.StatusCode.Should().Be(HttpStatusCode.OK, await renewed.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -230,6 +260,20 @@ public class InactiveSubjectCredentialIntegrationTests : ApiIntegrationTestBase
             ("redirect_uri", "http://localhost:9999/callback"),
             ("client_id", clientId)));
 
+    private static async Task<string> ApprovedDeviceCodeAsync(HttpClient client, string clientId)
+    {
+        var authorization = await client.PostAsync("/api/oauth/device", Form(
+            ("client_id", clientId),
+            ("scope", "glucose.read")));
+        authorization.EnsureSuccessStatusCode();
+        var device = JsonSerializer.Deserialize<JsonElement>(await authorization.Content.ReadAsStringAsync());
+        var approval = await client.PostAsync("/api/oauth/device-approve", Form(
+            ("user_code", device.GetProperty("user_code").GetString()!),
+            ("approved", "true")));
+        approval.EnsureSuccessStatusCode();
+        return device.GetProperty("device_code").GetString()!;
+    }
+
     private static Task<HttpResponseMessage> ExchangeDeviceCodeAsync(
         HttpClient client, string clientId, string deviceCode) =>
         client.PostAsync("/api/oauth/token", Form(
@@ -269,6 +313,15 @@ public class InactiveSubjectCredentialIntegrationTests : ApiIntegrationTestBase
                 WHERE client_id IN (SELECT id FROM oauth_clients WHERE client_id = @key)
                 RETURNING 1)
             SELECT count(*)::int FROM revoked;
+            """, clientId);
+
+    private static Task<int> RewindDevicePollsOfAsync(NpgsqlConnection conn, string clientId) =>
+        ScalarAsync<int>(conn, """
+            WITH rewound AS (
+                UPDATE oauth_device_codes SET last_polled_at = last_polled_at - make_interval(secs => "interval" + 1)
+                WHERE client_id = @key AND last_polled_at IS NOT NULL
+                RETURNING 1)
+            SELECT count(*)::int FROM rewound;
             """, clientId);
 
     private static async Task<T> ScalarAsync<T>(NpgsqlConnection conn, string sql, object key)

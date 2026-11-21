@@ -746,6 +746,27 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.False(await db.OAuthRefreshTokens.AnyAsync());
     }
 
+    [Fact]
+    public async Task ExchangeDeviceCodeAsync_ApprovedIntoARevokedGrant_EndsTheCodeSoTheNextPollIsAnsweredAsAnUnknownCodeIs()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db, revokedAt: DateTime.UtcNow.AddMinutes(-1));
+        await SeedDeviceCodeAsync(db,
+            approvedAt: DateTime.UtcNow.AddMinutes(-1),
+            grantId: grantId,
+            subjectId: _testSubjectId);
+        var unknown = await CreateService(db).ExchangeDeviceCodeAsync("unknown-device-code", TestClientId);
+
+        var refused = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+        var next = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.Equal(("server_error", "Grant not found."), (refused.Error, refused.ErrorDescription));
+        Assert.Equal((unknown.Error, unknown.ErrorDescription), (next.Error, next.ErrorDescription));
+        Assert.False(await db.OAuthRefreshTokens.AnyAsync());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
