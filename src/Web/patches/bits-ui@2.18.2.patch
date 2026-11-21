@@ -1,0 +1,31 @@
+diff --git a/dist/bits/command/command.svelte.js b/dist/bits/command/command.svelte.js
+index 5cabd95..089ed1f 100644
+--- a/dist/bits/command/command.svelte.js
++++ b/dist/bits/command/command.svelte.js
+@@ -274,7 +274,7 @@ export class CommandRootState {
+      */
+     getValidItems() {
+         const node = this.opts.ref.current;
+-        if (!node)
++        if (!(node instanceof Element))
+             return [];
+         const validItems = Array.from(node.querySelectorAll(COMMAND_VALID_ITEM_SELECTOR)).filter((el) => !!el);
+         return validItems;
+@@ -287,7 +287,7 @@ export class CommandRootState {
+      */
+     getVisibleItems() {
+         const node = this.opts.ref.current;
+-        if (!node)
++        if (!(node instanceof Element))
+             return [];
+         const visibleItems = Array.from(node.querySelectorAll(COMMAND_ITEM_SELECTOR)).filter((el) => !!el);
+         return visibleItems;
+@@ -339,7 +339,7 @@ export class CommandRootState {
+      */
+     #getSelectedItem() {
+         const node = this.opts.ref.current;
+-        if (!node)
++        if (!(node instanceof Element))
+             return;
+         const selectedNode = node.querySelector(`${COMMAND_VALID_ITEM_SELECTOR}[data-selected]`);
+         if (!selectedNode)
