@@ -298,6 +298,18 @@ public class OAuthTokenService : IOAuthTokenService
         // Update grant last used
         await _grantService.UpdateLastUsedAsync(oauthToken.GrantId, null, null, ct);
 
+        var accessToken = await GenerateAccessTokenAsync(
+            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject);
+
+        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
+        var scopeStr = string.Join(" ", grant.Scopes);
+
+        return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
+    }
+
+    private async Task<string> GenerateAccessTokenAsync(
+        Guid grantId, Guid tenantId, IReadOnlyList<string> scopes, string? clientId, bool limitTo24Hours, Subject subject)
+    {
         var subjectInfo = new SubjectInfo
         {
             Id = subject.Id,
@@ -306,23 +318,18 @@ public class OAuthTokenService : IOAuthTokenService
         };
 
         var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-        var permissions = ScopeTranslator.ToPermissions(grant.Scopes).ToList();
+        var permissions = ScopeTranslator.ToPermissions(scopes).ToList();
 
-        var accessToken = _jwtService.GenerateAccessToken(
+        return _jwtService.GenerateAccessToken(
             subjectInfo,
             permissions,
             roles,
-            grant.Scopes,
-            grant.ClientId,
-            limitTo24Hours: grant.LimitTo24Hours,
-            tenantId: grant.TenantId,
-            grantId: grant.Id
+            scopes,
+            clientId,
+            limitTo24Hours: limitTo24Hours,
+            tenantId: tenantId,
+            grantId: grantId
         );
-
-        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
-        var scopeStr = string.Join(" ", grant.Scopes);
-
-        return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
     }
 
     private static OAuthTokenResult RevokedTokenFailure() =>
@@ -622,26 +629,8 @@ public class OAuthTokenService : IOAuthTokenService
     private async Task<OAuthTokenResult> MintTokenPairAsync(
         OAuthGrantInfo grant, Subject subject, CancellationToken ct)
     {
-        var subjectInfo = new SubjectInfo
-        {
-            Id = subject.Id,
-            Name = subject.Name,
-            Email = subject.Email,
-        };
-
-        var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-        var permissions = ScopeTranslator.ToPermissions(grant.Scopes).ToList();
-
-        var accessToken = _jwtService.GenerateAccessToken(
-            subjectInfo,
-            permissions,
-            roles,
-            grant.Scopes,
-            grant.ClientId,
-            limitTo24Hours: grant.LimitTo24Hours,
-            tenantId: grant.TenantId,
-            grantId: grant.Id
-        );
+        var accessToken = await GenerateAccessTokenAsync(
+            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject);
 
         // Generate and store refresh token
         var refreshToken = _jwtService.GenerateRefreshToken();

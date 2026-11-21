@@ -279,7 +279,6 @@ public class TenantController : ControllerBase
     /// <summary>
     /// Mints a single-use code that signs a member in on the tenant's own host, for a caller that
     /// has already established which browser the member is at.
-    /// The code is redeemed at <c>POST /api/auth/handoff</c> on the tenant's host and grants no more than a direct grant for the same member. The audit trail names the calling platform admin, not the member.
     /// </summary>
     /// <remarks>
     /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host. It grants no more than

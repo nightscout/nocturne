@@ -133,7 +133,11 @@ public abstract record SubjectChange
 }
 
 /// <summary>What keeps a subject's credentials valid between requests.</summary>
-public sealed record SubjectSignInState(bool IsActive, bool IsPlatformAdmin);
+public sealed record SubjectSignInState(bool IsActive, bool IsPlatformAdmin)
+{
+    /// <summary>Whether the subject may act as a platform admin now: only an active subject may.</summary>
+    public bool IsActivePlatformAdmin => IsActive && IsPlatformAdmin;
+}
 
 /// <summary>What assigning a global role to a subject found.</summary>
 public enum RoleAssignment
