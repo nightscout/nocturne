@@ -26,6 +26,8 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/tenants/overview/review")]
     // Drives the panel beside the list.
     [InlineData("/api/v4/me/tenants/overview/person")]
+    // Names the tenants whose live changes the same page hears about.
+    [InlineData("/api/v4/me/overview-admission")]
     // Drives the navigation and tenant switcher.
     [InlineData("/api/v4/me/tenants")]
     // Reports the caller's own global subject-role scopes; nothing tenant-derived.

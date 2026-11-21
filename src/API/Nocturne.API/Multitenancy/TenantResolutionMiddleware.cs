@@ -96,6 +96,10 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/v4/me/tenants/overview/review", HttpMethods.Get),
         // One person of the same aggregation, read for the panel beside the list.
         new TenantlessPath("/api/v4/me/tenants/overview/person", HttpMethods.Get),
+        // The tenants whose live changes the same page hears about, which the web app signs into
+        // the bridge's overview ticket. Keyed on SubjectId and refused to every credential issued
+        // for one tenant.
+        new TenantlessPath("/api/v4/me/overview-admission", HttpMethods.Get),
         // The subject's tenant list, which drives the tenantless dashboard's navigation
         // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
         // GET only: the same path takes a POST that creates a tenant, and self-service

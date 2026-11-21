@@ -68,18 +68,29 @@ class FakeSocket {
 }
 
 let lastSocket: FakeSocket | null = null;
+let lastUrl: string | null = null;
 
 vi.mock("socket.io-client", () => ({
   io: (
-    _url: string,
+    url: string,
     options: { auth: (cb: (data: unknown) => void) => void }
   ) => {
+    lastUrl = url;
     lastSocket = new FakeSocket(options);
     return lastSocket;
   },
 }));
 
-const { WebSocketClient } = await import("./websocket-client.svelte");
+const { WebSocketClient: Client } = await import("./websocket-client.svelte");
+
+/** Every client a test builds, destroyed after it so no retry timer it left fires into the next. */
+const built: InstanceType<typeof Client>[] = [];
+class WebSocketClient extends Client {
+  constructor(config: WebSocketConfig) {
+    super(config);
+    built.push(this);
+  }
+}
 
 const config: WebSocketConfig = {
   url: "http://tenant.example.test",
@@ -114,8 +125,10 @@ function stubTicketSequence(bodies: PromiseLike<unknown>[]) {
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 afterEach(() => {
+  for (const client of built.splice(0)) client.destroy();
   vi.unstubAllGlobals();
   lastSocket = null;
+  lastUrl = null;
 });
 
 describe("WebSocketClient handshake ticket handling", () => {
@@ -595,5 +608,85 @@ describe("WebSocketClient tracker updates", () => {
     });
 
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe("WebSocketClient on another bridge namespace", () => {
+  const overviewConfig: WebSocketConfig = {
+    ...config,
+    url: "http://example.test",
+    namespace: "/overview",
+    ticketPath: "/realtime/overview-ticket",
+  };
+
+  it("joins the tenant namespace with a ticket from /realtime/ticket when it names neither", async () => {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+
+    new WebSocketClient(config).connect();
+    await lastSocket!.handshake();
+
+    expect(lastUrl).toBe("http://tenant.example.test");
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("http://tenant.example.test/realtime/ticket");
+  });
+
+  it("joins its namespace with a ticket from its own ticket path", async () => {
+    stubTicketEndpoint({ token: "an-overview-ticket" });
+    const client = new WebSocketClient(overviewConfig);
+
+    await client.connectIfAdmitted();
+    await lastSocket!.handshake();
+
+    expect(lastUrl).toBe("http://example.test/overview");
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toEqual([
+      "http://example.test/realtime/overview-ticket",
+    ]);
+    expect(client.connectionStatus).toBe("connected");
+  });
+
+  it("opens no socket for a denied viewer, and does not ask again", async () => {
+    stubTicketEndpoint({ token: null });
+    const client = new WebSocketClient(overviewConfig);
+
+    await client.connectIfAdmitted();
+    await new Promise((resolve) => setTimeout(resolve, overviewConfig.maxReconnectDelay * 2));
+
+    expect(lastSocket).toBeNull();
+    expect(client.connectionStatus).toBe("unauthorized");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the socket after a transient ticket failure, so its handshake retries", async () => {
+    stubTicketEndpoint({ token: null, retry: true });
+    const client = new WebSocketClient(overviewConfig);
+
+    await client.connectIfAdmitted();
+
+    expect(lastSocket).not.toBeNull();
+  });
+
+  it("opens no socket when it is closed while its ticket is in flight", async () => {
+    let release: (() => void) | undefined;
+    stubTicketSequence([new Promise((resolve) => (release = () => resolve({ token: "late" })))]);
+    const client = new WebSocketClient(overviewConfig);
+
+    const admitted = client.connectIfAdmitted();
+    client.disconnect();
+    release!();
+    await admitted;
+
+    expect(lastSocket).toBeNull();
+  });
+
+  it("hands an overview ping to its handler", async () => {
+    stubTicketEndpoint({ token: "an-overview-ticket" });
+    const client = new WebSocketClient(overviewConfig);
+    const handler = vi.fn();
+    client.on("overviewUpdate", handler);
+    await client.connectIfAdmitted();
+    await lastSocket!.handshake();
+
+    lastSocket!.handlers.get("overviewUpdate")?.({ tenantId: "0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b" });
+
+    expect(handler).toHaveBeenCalledOnce();
   });
 });

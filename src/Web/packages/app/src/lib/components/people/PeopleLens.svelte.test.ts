@@ -47,6 +47,8 @@ vi.mock("#lib/utils/poll-while-visible.svelte.js", () => ({
   },
 }));
 
+vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
+
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
   getPerson: () => {
     throw new Error("No person is selected");
