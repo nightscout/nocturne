@@ -2,13 +2,13 @@
   import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
   import { relativeAge, toDate } from "#lib/utils/formatting.js";
   import Battery from "@lucide/svelte/icons/battery";
-  import AttentionReasons from "./AttentionReasons.svelte";
   import PersonAlerts from "./PersonAlerts.svelte";
+  import PersonCell from "./PersonCell.svelte";
   import PersonGlucose from "./PersonGlucose.svelte";
   import PersonLink from "./PersonLink.svelte";
   import PersonTrace from "./PersonTrace.svelte";
   import ReadingAge from "./ReadingAge.svelte";
-  import { personHref, personName } from "./person.js";
+  import { personHref } from "./person.js";
   import { ROW_GRID } from "./row-grid.js";
 
   interface Props {
@@ -18,7 +18,6 @@
 
   const { person, baseDomain }: Props = $props();
 
-  const name = $derived(personName(person));
   const reservoirUnits = $derived(person.devices?.reservoirUnits);
   const batteryPercent = $derived(person.devices?.pumpBatteryPercent);
   const snapshotAt = $derived(toDate(person.devices?.snapshotAt));
@@ -29,10 +28,7 @@
     href={personHref(person, baseDomain)}
     class="flex flex-wrap items-center gap-x-3 gap-y-1 {ROW_GRID}"
   >
-    <div class="min-w-0 basis-full space-y-0.5 @2xl:basis-auto">
-      <p class="truncate text-sm font-medium" title={name}>{name}</p>
-      <AttentionReasons {person} />
-    </div>
+    <PersonCell {person} class="basis-full @2xl:basis-auto" />
     <PersonGlucose {person} size="xs" />
     <ReadingAge {person} />
     <div class="hidden @4xl:block">
