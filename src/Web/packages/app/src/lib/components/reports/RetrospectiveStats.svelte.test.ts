@@ -5,6 +5,7 @@ import { Direction } from "#lib/api/generated/nocturne-api-client.js";
 
 let reportedDirection: string | undefined;
 let reportedError: unknown;
+let reportedDelta = 4;
 
 vi.mock("#lib/api/generated/retrospectives.generated.remote.js", () => ({
   getRetrospectiveData: () => ({
@@ -12,7 +13,7 @@ vi.mock("#lib/api/generated/retrospectives.generated.remote.js", () => ({
       ? undefined
       : {
           time: 0,
-          glucose: { value: 120, direction: reportedDirection, delta: 4 },
+          glucose: { value: 120, direction: reportedDirection, delta: reportedDelta },
         },
     error: reportedError,
     refresh: () => {},
@@ -21,8 +22,9 @@ vi.mock("#lib/api/generated/retrospectives.generated.remote.js", () => ({
 
 import RetrospectiveStats from "./RetrospectiveStats.svelte";
 
-function renderWithDirection(direction: string | undefined) {
+function renderWithDirection(direction: string | undefined, delta = 4) {
   reportedDirection = direction;
+  reportedDelta = delta;
   reportedError = undefined;
   render(RetrospectiveStats, { props: { time: 0 } });
 }
@@ -43,6 +45,15 @@ describe("RetrospectiveStats", () => {
         page.getByText("That timestamp is before this tenant had data.")
       )
       .toBeVisible();
+  });
+
+  it.each([
+    [-12, "-12"],
+    [4, "+4"],
+  ])("shows a delta of %d with its sign", async (delta, shown) => {
+    renderWithDirection(Direction.Flat, delta);
+
+    await expect.element(page.getByText(shown, { exact: true })).toBeVisible();
   });
 
   it("labels a reported trend", async () => {
