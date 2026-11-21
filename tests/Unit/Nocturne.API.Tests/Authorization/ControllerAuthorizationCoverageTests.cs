@@ -128,12 +128,6 @@ public class ControllerAuthorizationCoverageTests
 
         /// <summary>Answers only for a token issued to the caller; any other reads as inactive.</summary>
         public const string OwnTokens = "answers only for the caller's own tokens";
-
-        /// <summary>
-        /// Writes tenant state that no scope governs yet. Recorded so the decision is visible rather
-        /// than answered here.
-        /// </summary>
-        public const string Undecided = "tenant state, governing scope undecided";
     }
 
     /// <summary>
@@ -164,7 +158,6 @@ public class ControllerAuthorizationCoverageTests
             ["PasskeyController.RemoveCredential"] = NoScope.OwnCredentials,
             ["PasskeyController.RegenerateRecoveryCodes"] = NoScope.OwnCredentials,
             ["PasskeyController.GetRecoveryStatus"] = NoScope.OwnCredentials,
-            ["PasskeyController.CompleteOnboarding"] = NoScope.Undecided,
             ["TotpController.Setup"] = NoScope.OwnCredentials,
             ["TotpController.VerifySetup"] = NoScope.OwnCredentials,
             ["TotpController.ListCredentials"] = NoScope.OwnCredentials,

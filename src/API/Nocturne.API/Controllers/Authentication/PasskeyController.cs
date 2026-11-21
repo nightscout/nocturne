@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -809,6 +810,8 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("onboarding/complete")]
     [Authorize]
+    [RequireScope(Scope.TenantSettings)]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetAuthStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> CompleteOnboarding()

@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -40,6 +42,7 @@ public class ConnectorFoodEntriesController : ControllerBase
     /// </summary>
     [HttpPost("import")]
     [Authorize]
+    [RequireScope(Scope.FoodReadWrite)]
     [ProducesResponseType(typeof(ConnectorFoodEntry[]), 200)]
     public async Task<ActionResult<ConnectorFoodEntry[]>> ImportEntries(
         [FromBody] ConnectorFoodEntryImport[] imports

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Models.Alerts;
 
@@ -22,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 public class SystemController(BotHealthService botHealth) : ControllerBase
 {
     [HttpPost("heartbeat")]
+    [RequireInstanceKeyAuth]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult Heartbeat([FromBody] HeartbeatRequest request)
     {

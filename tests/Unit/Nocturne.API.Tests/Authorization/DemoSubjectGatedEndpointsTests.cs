@@ -75,6 +75,12 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(ConfigurationController), nameof(ConfigurationController.SaveSecrets) },
         { typeof(ConnectorStatusController), nameof(ConnectorStatusController.GetStatus) },
 
+        // Tenant administration. tenant.settings is in the demo role, so the scope admits the
+        // visitor, and the setting would follow every later one.
+        { typeof(GlucoseProcessingSettingsController), nameof(GlucoseProcessingSettingsController.SetPreference) },
+        { typeof(GlucoseProcessingSettingsController), nameof(GlucoseProcessingSettingsController.SetSourceDefaults) },
+        { typeof(PasskeyController), nameof(PasskeyController.CompleteOnboarding) },
+
         // Completing the CareLink flow writes the signed-in Medtronic username and country into
         // the tenant's connector configuration, which GET returns in the clear. The service also
         // guards the write, but this flow stores a refresh token as a connector secret on the way

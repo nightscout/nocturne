@@ -76,13 +76,6 @@ public class V4WriteScopeGatingTests
         public const string IdentityAndDelegation = "identity/delegation state, governed by RBAC atoms";
 
         /// <summary>
-        /// Caller-supplied import of raw nutritional records from a connector's companion app
-        /// (MyFitnessPal, Glooko). It writes connector_food_entries, so it is a data write; which
-        /// write scope should govern it is an open question this entry records rather than answers.
-        /// </summary>
-        public const string ConnectorFoodImport = "connector food-entry import; governing write scope undecided";
-
-        /// <summary>
         /// Tenant administration (connector configuration and the connector data-deletion and
         /// sync-trigger actions), gated on <see cref="Scope.TenantSettings"/>. An administration
         /// atom, absent from <see cref="Scope.AllScopes"/>, so no data-category scope names it.
@@ -124,9 +117,8 @@ public class V4WriteScopeGatingTests
         public const string AnonymousByDeclaration = "anonymous endpoint, no credential to scope";
 
         /// <summary>
-        /// Tenant-wide operational configuration or an operational log row: audit and analytics
-        /// collection settings, glucose-processing preferences, system events. Not a patient record,
-        /// and the taxonomy has no scope that names it — <see cref="ShareDataCategories"/> classifies
+        /// Tenant-wide operational configuration: audit and analytics collection settings. Not a
+        /// patient record, and the taxonomy has no scope that names it — <see cref="ShareDataCategories"/> classifies
         /// tables of observations. Needs a scope of its own before it can be gated.
         /// </summary>
         public const string TenantOperationalConfig = "tenant operational config, no scope in the taxonomy";
@@ -156,10 +148,12 @@ public class V4WriteScopeGatingTests
         public const string OwnMembership = "the caller's own membership, can only narrow or ask";
 
         /// <summary>
-        /// Writes state that no scope governs yet. Recorded so the decision is visible rather than
-        /// answered here.
+        /// Binds something to the caller's own subject, so only the person's own sign-in may do it
+        /// (<c>[RequireInteractiveSession]</c>, asserted by
+        /// <see cref="EveryExemptionClaimingAnAttribute_ActuallyCarriesIt"/>). No scope applies: a
+        /// delegated credential holding every scope still is not the person.
         /// </summary>
-        public const string Undecided = "governing scope undecided";
+        public const string OwnSignIn = "binds to the caller's own subject, from their own sign-in";
 
         /// <summary>
         /// A record that the caller saw a firing alarm. Gated on <c>alerts.read</c> so a share or
@@ -211,8 +205,6 @@ public class V4WriteScopeGatingTests
             ["SessionsController"] = NotDataCategory.IdentityAndDelegation,
             ["ShareLinkController"] = NotDataCategory.IdentityAndDelegation,
 
-            ["ConnectorFoodEntriesController"] = NotDataCategory.ConnectorFoodImport,
-
             ["ConfigurationController"] = NotDataCategory.TenantSettingsScope,
             ["MyFitnessPalSettingsController"] = NotDataCategory.TenantSettingsScope,
             ["WebhookSettingsController"] = NotDataCategory.TenantSettingsScope,
@@ -239,12 +231,17 @@ public class V4WriteScopeGatingTests
 
             ["AnalyticsController"] = NotDataCategory.TenantOperationalConfig,
             ["AuditController"] = NotDataCategory.TenantOperationalConfig,
-            ["GlucoseProcessingSettingsController"] = NotDataCategory.TenantOperationalConfig,
-            ["SystemEventsController"] = NotDataCategory.TenantOperationalConfig,
             ["TenantSettingsController"] = NotDataCategory.TenantOperationalConfig,
 
+            // The preferred processing and the source defaults are one value for the whole tenant,
+            // applied to every member's view and every upload.
+            ["GlucoseProcessingSettingsController"] = NotDataCategory.TenantSettingsScope,
+
             ["SupportController"] = NotDataCategory.OutboundOnly,
-            ["SystemController"] = NotDataCategory.OutboundOnly,
+
+            // The heartbeat sets the instance-wide chat-channel availability; only the web app's own
+            // bot process, which presents the instance key, reports it.
+            ["SystemController"] = V4ScopeGuardExemptions.InstanceKey,
         };
 
     /// <summary>
@@ -316,7 +313,7 @@ public class V4WriteScopeGatingTests
             ["GuestLinkController.DismissGuestLink"] = NotDataCategory.OwnIdentity,
 
             // Links the chat account the pending token names to the caller's own subject.
-            ["ChatIdentityController.ClaimLink"] = NotDataCategory.Undecided,
+            ["ChatIdentityController.ClaimLink"] = NotDataCategory.OwnSignIn,
             // [InviteTokenAuthorized]: the invite token admits an identity with no scopes at all.
             ["MemberInviteController.AcceptInvite"] = NotDataCategory.CapabilityToken,
 
@@ -327,15 +324,6 @@ public class V4WriteScopeGatingTests
             ["MyTenantsController.CreateTenant"] = NotDataCategory.CreatesOwnTenant,
             ["PlatformController.CreateTenant"] = NotDataCategory.CreatesOwnTenant,
             ["TenantCreationInviteController.Redeem"] = NotDataCategory.CreatesOwnTenant,
-
-            // Any authenticated credential may write these today.
-            ["ConnectorFoodEntriesController.ImportEntries"] = NotDataCategory.ConnectorFoodImport,
-            ["GlucoseProcessingSettingsController.SetPreference"] = NotDataCategory.TenantOperationalConfig,
-            ["GlucoseProcessingSettingsController.SetSourceDefaults"] = NotDataCategory.TenantOperationalConfig,
-            ["SystemEventsController.CreateSystemEvent"] = NotDataCategory.TenantOperationalConfig,
-            ["SystemEventsController.DeleteSystemEvent"] = NotDataCategory.TenantOperationalConfig,
-            // Sets the instance-wide chat-channel availability that GetChannelStatuses reports.
-            ["SystemController.Heartbeat"] = NotDataCategory.Undecided,
         };
 
     /// <summary>
@@ -380,6 +368,10 @@ public class V4WriteScopeGatingTests
             // controllers (ApsSnapshotController's bulk write requires devices.readwrite).
             ["DeviceEventController"] = Scope.DevicesReadWrite,
 
+            // devices: system_events are the alarms, warnings and notices a pump or sensor raised,
+            // read under devices.read like the device events beside them.
+            ["SystemEventsController"] = Scope.DevicesReadWrite,
+
             // therapy: therapy_settings and the basal / carb ratio / sensitivity / target range
             // schedules are the therapy category (therapy.read on the read side); v1 and v3 profile
             // writes require therapy.readwrite.
@@ -397,6 +389,10 @@ public class V4WriteScopeGatingTests
             // food: foods sits under food.read and user_food_favorites is the same category;
             // v1 and v3 food writes require food.readwrite.
             ["FoodsController"] = Scope.FoodReadWrite,
+
+            // food: connector_food_entries are the raw nutrition records a food app logged, which
+            // meal matching turns into suggested carb intakes.
+            ["ConnectorFoodEntriesController"] = Scope.FoodReadWrite,
 
             // therapy: body_weights has no category scope of its own. The record is patient clinical
             // configuration written from the Patient Record settings form alongside therapy settings.
@@ -819,11 +815,21 @@ public class V4WriteScopeGatingTests
                     a => a is RequireScopeAttribute scope
                          && scope.Scopes.Contains(Scope.TenantSettings, StringComparer.Ordinal)),
                 NotDataCategory.DevelopmentOnly => controller.Namespace == V4Namespace + ".DevOnly",
+                V4ScopeGuardExemptions.InstanceKey => CarriesAttribute(controller, nameof(RequireInstanceKeyAuthAttribute)),
                 _ => true,
             };
 
             if (!holds)
                 broken.Add($"{name} claims '{reason}' but does not carry it");
+        }
+
+        foreach (var (key, reason) in GateExemptWriteActions.Where(e => e.Value == NotDataCategory.OwnSignIn))
+        {
+            var parts = key.Split('.', 2);
+            var controller = V4Controllers().Single(t => t.Name == parts[0]);
+            var action = WriteActions(controller).Single(a => a.Name == parts[1]);
+            if (!AppliedAttributes(controller, action).OfType<RequireInteractiveSessionAttribute>().Any())
+                broken.Add($"{key} claims '{reason}' but does not carry [RequireInteractiveSession]");
         }
 
         broken.Should().BeEmpty(string.Join("; ", broken));
