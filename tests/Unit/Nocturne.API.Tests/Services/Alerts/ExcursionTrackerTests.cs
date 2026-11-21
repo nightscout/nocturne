@@ -20,7 +20,7 @@ public class ExcursionTrackerTests
     private readonly ExcursionTracker _tracker;
     private readonly Guid _ruleId = Guid.NewGuid();
 
-    // Default rule with confirmation=3, hysteresis=5 min
+    // Default rule with hysteresis=5 min
     private readonly AlertRule _defaultRule;
 
     public ExcursionTrackerTests()
@@ -35,7 +35,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Test Rule",
-            ConfirmationReadings = 3,
             HysteresisMinutes = 5,
         };
     }
@@ -70,31 +69,12 @@ public class ExcursionTrackerTests
     }
 
     [NativeFact]
-    public async Task Idle_TrueEvaluation_WithConfirmationGreaterThan1_TransitionsToConfirming()
-    {
-        SetupRule();
-        SetupTrackerState(null);
-        AlertTrackerState? savedState = null;
-        _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
-            .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
-            .Returns(Task.CompletedTask);
-
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-
-        result.Type.Should().Be(ExcursionTransitionType.None);
-        savedState.Should().NotBeNull();
-        savedState!.State.Should().Be("confirming");
-        savedState.ConfirmationCount.Should().Be(1);
-    }
-
-    [NativeFact]
-    public async Task Idle_TrueEvaluation_WithConfirmation1_GoesDirectlyToActive()
+    public async Task Idle_TrueEvaluation_OpensAnExcursion()
     {
         var rule = new AlertRule
         {
             Id = _ruleId,
             Name = "Immediate Rule",
-            ConfirmationReadings = 1,
             HysteresisMinutes = 5,
         };
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
@@ -120,17 +100,16 @@ public class ExcursionTrackerTests
 
     #endregion
 
-    #region CONFIRMING state transitions
+    #region Stored confirming state
 
     [NativeFact]
-    public async Task Confirming_FalseEvaluation_ResetsToIdle()
+    public async Task StoredConfirming_FalseEvaluation_ReadsAsIdle()
     {
         SetupRule();
         SetupTrackerState(new AlertTrackerState
         {
             AlertRuleId = _ruleId,
             State = "confirming",
-            ConfirmationCount = 2,
         });
 
         AlertTrackerState? savedState = null;
@@ -142,41 +121,16 @@ public class ExcursionTrackerTests
 
         result.Type.Should().Be(ExcursionTransitionType.None);
         savedState!.State.Should().Be("idle");
-        savedState.ConfirmationCount.Should().Be(0);
     }
 
     [NativeFact]
-    public async Task Confirming_TrueEvaluation_IncreasesCounter()
+    public async Task StoredConfirming_TrueEvaluation_OpensAnExcursion()
     {
-        SetupRule(); // confirmation_readings = 3
+        SetupRule();
         SetupTrackerState(new AlertTrackerState
         {
             AlertRuleId = _ruleId,
             State = "confirming",
-            ConfirmationCount = 1,
-        });
-
-        AlertTrackerState? savedState = null;
-        _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
-            .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
-            .Returns(Task.CompletedTask);
-
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-
-        result.Type.Should().Be(ExcursionTransitionType.None);
-        savedState!.State.Should().Be("confirming");
-        savedState.ConfirmationCount.Should().Be(2);
-    }
-
-    [NativeFact]
-    public async Task Confirming_ReachesThreshold_OpensExcursion()
-    {
-        SetupRule(); // confirmation_readings = 3
-        SetupTrackerState(new AlertTrackerState
-        {
-            AlertRuleId = _ruleId,
-            State = "confirming",
-            ConfirmationCount = 2, // One more needed
         });
 
         var excursionId = Guid.NewGuid();
@@ -194,51 +148,6 @@ public class ExcursionTrackerTests
         result.ExcursionId.Should().Be(excursionId);
         savedState!.State.Should().Be("active");
         savedState.ActiveExcursionId.Should().Be(excursionId);
-    }
-
-    [NativeFact]
-    public async Task ConfirmationCounter_PreservedBetweenCalls()
-    {
-        SetupRule(); // confirmation_readings = 3
-        SetupTrackerState(null);
-
-        // Track saved states across calls
-        var savedStates = new List<AlertTrackerState>();
-        _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
-            .Callback<AlertTrackerState, CancellationToken>((s, _) =>
-            {
-                savedStates.Add(new AlertTrackerState
-                {
-                    AlertRuleId = s.AlertRuleId,
-                    State = s.State,
-                    ConfirmationCount = s.ConfirmationCount,
-                    ActiveExcursionId = s.ActiveExcursionId,
-                    UpdatedAt = s.UpdatedAt,
-                });
-                // Update the mock to return this state on next call
-                _mockRepo.Setup(x => x.GetTrackerStateAsync(_ruleId, It.IsAny<CancellationToken>()))
-                    .ReturnsAsync(s);
-            })
-            .Returns(Task.CompletedTask);
-
-        var excursionId = Guid.NewGuid();
-        _mockRepo.Setup(x => x.CreateExcursionAsync(_ruleId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AlertExcursion { Id = excursionId, AlertRuleId = _ruleId });
-
-        // Call 1: idle -> confirming (count=1)
-        var r1 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r1.Type.Should().Be(ExcursionTransitionType.None);
-        savedStates[0].ConfirmationCount.Should().Be(1);
-
-        // Call 2: confirming -> confirming (count=2)
-        var r2 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r2.Type.Should().Be(ExcursionTransitionType.None);
-        savedStates[1].ConfirmationCount.Should().Be(2);
-
-        // Call 3: confirming -> active (count reaches 3)
-        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r3.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
-        r3.ExcursionId.Should().Be(excursionId);
     }
 
     #endregion
@@ -385,7 +294,6 @@ public class ExcursionTrackerTests
         result.ExcursionId.Should().Be(excursionId);
         savedState!.State.Should().Be("idle");
         savedState.ActiveExcursionId.Should().BeNull();
-        savedState.ConfirmationCount.Should().Be(0);
 
         _mockRepo.Verify(
             x => x.CloseExcursionAsync(excursionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
@@ -414,7 +322,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Quick Rule",
-            ConfirmationReadings = 1,
             HysteresisMinutes = 5,
         };
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
@@ -467,7 +374,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Lifecycle Rule",
-            ConfirmationReadings = 2,
             HysteresisMinutes = 3,
         };
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
@@ -489,36 +395,31 @@ public class ExcursionTrackerTests
         _mockRepo.Setup(x => x.CreateExcursionAsync(_ruleId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AlertExcursion { Id = excursionId, AlertRuleId = _ruleId });
 
-        // 1. idle -> confirming (first true)
+        // 1. idle -> active (first true)
         var r1 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r1.Type.Should().Be(ExcursionTransitionType.None);
-        currentState!.State.Should().Be("confirming");
+        r1.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
 
-        // 2. confirming -> active (second true, reaches threshold)
+        // 2. active -> active (true continues)
         var r2 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r2.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        r2.Type.Should().Be(ExcursionTransitionType.ExcursionContinues);
 
-        // 3. active -> active (true continues)
-        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r3.Type.Should().Be(ExcursionTransitionType.ExcursionContinues);
+        // 3. active -> hysteresis (false)
+        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
+        r3.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
 
-        // 4. active -> hysteresis (false)
-        var r4 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
-        r4.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
-
-        // 5. hysteresis -> active (true before expiry)
+        // 4. hysteresis -> active (true before expiry)
         _timeProvider.Advance(TimeSpan.FromMinutes(1));
-        var r5 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
-        r5.Type.Should().Be(ExcursionTransitionType.HysteresisResumed);
+        var r4 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
+        r4.Type.Should().Be(ExcursionTransitionType.HysteresisResumed);
 
-        // 6. active -> hysteresis again (false)
-        var r6 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
-        r6.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
+        // 5. active -> hysteresis again (false)
+        var r5 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
+        r5.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
 
-        // 7. hysteresis -> idle (false after expiry)
+        // 6. hysteresis -> idle (false after expiry)
         _timeProvider.Advance(TimeSpan.FromMinutes(4));
-        var r7 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
-        r7.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+        var r6 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
+        r6.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         currentState!.State.Should().Be("idle");
     }
 
@@ -536,7 +437,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Window Rule",
-            ConfirmationReadings = 1,
             HysteresisMinutes = hysteresisMinutes,
         });
         SetupTrackerState(initial);
@@ -789,7 +689,6 @@ public class ExcursionTrackerTests
             AlertRuleId = _ruleId,
             State = "active",
             ActiveExcursionId = excursionId,
-            ConfirmationCount = 0,
         });
 
         AlertTrackerState? savedState = null;
@@ -805,7 +704,6 @@ public class ExcursionTrackerTests
 
         savedState!.State.Should().Be("idle");
         savedState.ActiveExcursionId.Should().BeNull();
-        savedState.ConfirmationCount.Should().Be(0);
 
         _mockRepo.Verify(
             x => x.CloseExcursionAsync(excursionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
@@ -860,14 +758,12 @@ public class ExcursionTrackerTests
     }
 
     [NativeFact]
-    public async Task ForceClose_FromConfirming_NoOp()
+    public async Task ForceClose_FromStoredConfirming_NoOp()
     {
-        // confirming has no excursion id yet
         SetupTrackerState(new AlertTrackerState
         {
             AlertRuleId = _ruleId,
             State = "confirming",
-            ConfirmationCount = 2,
             ActiveExcursionId = null,
         });
 
@@ -952,13 +848,12 @@ public class ExcursionTrackerTests
     }
 
     [NativeFact]
-    public async Task GetActiveExcursionId_FromConfirming_ReturnsNull()
+    public async Task GetActiveExcursionId_FromStoredConfirming_ReturnsNull()
     {
         SetupTrackerState(new AlertTrackerState
         {
             AlertRuleId = _ruleId,
             State = "confirming",
-            ConfirmationCount = 2,
         });
 
         var result = await _tracker.GetActiveExcursionIdAsync(_ruleId, CancellationToken.None);
@@ -1046,8 +941,8 @@ public class ExcursionTrackerTests
         SetupTrackerState(null);
         var snapshot = SnapshotOf(_defaultRule);
         _mockRepo.SetupSequence(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AlertRule { Id = _ruleId, ConfirmationReadings = 1 })
-            .ReturnsAsync(new AlertRule { Id = _ruleId, ConfirmationReadings = 1, ConditionParams = "{\"edited\":true}" });
+            .ReturnsAsync(new AlertRule { Id = _ruleId })
+            .ReturnsAsync(new AlertRule { Id = _ruleId, ConditionParams = "{\"edited\":true}" });
 
         var result = await _tracker.ProcessEvaluationAsync(snapshot, true, null, CancellationToken.None);
 

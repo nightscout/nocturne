@@ -13,7 +13,6 @@
           "low"
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -24,7 +23,6 @@
       "condition_params": {
         "buckets": []
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

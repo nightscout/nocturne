@@ -117,7 +117,6 @@ public class FfiCorpusParityTests
         Id = rule.Id,
         ConditionType = rule.ConditionType,
         ConditionParams = rule.ConditionParams,
-        ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveParams,

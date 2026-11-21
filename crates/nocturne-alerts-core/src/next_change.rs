@@ -33,16 +33,13 @@ pub const RESOLUTION: TimeDelta = TimeDelta::nanoseconds(100);
 /// `rule` from `state`, the state this one left, can do anything other than
 /// repeat this one's root and leaves with no transition, or `None` when none
 /// can. A lower bound on the 100 ns tick grid: nothing observable changes at
-/// a tick before it. `held` is an evaluation whose unknown root the tracker
-/// held (§6.4): the next one with the same facts holds too, so confirmation
-/// cannot move.
+/// a tick before it.
 pub(crate) fn next_change_at(
     rule: &Rule,
     body: &Node,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     state: &EngineState,
-    held: bool,
 ) -> Option<DateTime<Utc>> {
     let mut scan = Scan {
         now,
@@ -71,8 +68,7 @@ pub(crate) fn next_change_at(
                     }
                 }
             }
-            TrackerStateKind::Confirming if !held => scan.candidate(due_now),
-            TrackerStateKind::Confirming | TrackerStateKind::Idle | TrackerStateKind::Active => {}
+            TrackerStateKind::Idle | TrackerStateKind::Active => {}
         }
     }
     scan.earliest

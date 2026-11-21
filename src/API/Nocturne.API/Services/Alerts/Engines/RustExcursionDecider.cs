@@ -45,7 +45,6 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursio
 
     private static RustTrackerConfig ToWire(TrackerConfig config) => new()
     {
-        ConfirmationReadings = config.ConfirmationReadings,
         HysteresisMinutes = config.HysteresisMinutes,
     };
 

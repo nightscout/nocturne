@@ -18,7 +18,7 @@ public class TrackerBindingTests
         NextExcursionOrdinal = 2,
     };
 
-    private const string PostTracker = """{"state":"idle","confirmation_count":0,"updated_at":"2026-01-05T12:00:00Z","next_excursion_ordinal":2}""";
+    private const string PostTracker = """{"state":"idle","updated_at":"2026-01-05T12:00:00Z","next_excursion_ordinal":2}""";
 
     private static string Response(string transition, string tracker = PostTracker, int schemaVersion = 1) =>
         $$"""{"schema_version":{{schemaVersion}},"ok":true,"transition":{{transition}},"tracker":{{tracker}}}""";

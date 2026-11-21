@@ -38,7 +38,6 @@ fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
         id: id(n),
         condition_type: kind,
         condition_params: params,
-        confirmation_readings: 1,
         hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,

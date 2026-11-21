@@ -13,7 +13,6 @@
         "is_active": true,
         "for_minutes": null
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -27,7 +26,6 @@
         "is_active": true,
         "for_minutes": 20
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -41,7 +39,6 @@
         "is_active": false,
         "for_minutes": null
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -55,7 +52,6 @@
         "is_active": true,
         "for_minutes": null
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

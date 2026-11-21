@@ -5,7 +5,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
 /// Per-rule state machine tracker. 1:1 with AlertRuleEntity (PK = AlertRuleId).
-/// States: idle -> confirming -> active -> hysteresis -> idle.
+/// States: idle -> active -> hysteresis -> idle.
 /// </summary>
 [Table("alert_tracker_state")]
 public class AlertTrackerStateEntity : ITenantScoped
@@ -24,17 +24,11 @@ public class AlertTrackerStateEntity : ITenantScoped
     public Guid TenantId { get; set; }
 
     /// <summary>
-    /// Current state: "idle" | "confirming" | "active" | "hysteresis"
+    /// Current state: "idle" | "active" | "hysteresis"
     /// </summary>
     [Column("state")]
     [MaxLength(16)]
     public string State { get; set; } = "idle";
-
-    /// <summary>
-    /// Number of consecutive confirming readings observed.
-    /// </summary>
-    [Column("confirmation_count")]
-    public int ConfirmationCount { get; set; }
 
     /// <summary>
     /// FK to the currently-open excursion, if any.

@@ -110,17 +110,15 @@ fn tracker_object() -> BoxedStrategy<Value> {
     let state = select(vec!["idle", "confirming", "active", "hysteresis", "stale"]);
     (
         state,
-        0..5i32,
         option::of(0..5u32),
         timestamp(),
         option::of(timestamp()),
         any::<bool>(),
         0..5u32,
     )
-        .prop_map(|(state, count, excursion, updated, started, rearm, next)| {
+        .prop_map(|(state, excursion, updated, started, rearm, next)| {
             json!({
                 "state": state,
-                "confirmation_count": count,
                 "active_excursion_ordinal": excursion,
                 "updated_at": updated,
                 "hysteresis_started_at": started,
@@ -162,12 +160,9 @@ fn flag() -> BoxedStrategy<Value> {
 }
 
 fn tracker_config() -> BoxedStrategy<Value> {
-    (option::of(-2..5i32), option::of(-2..40i32))
-        .prop_map(|(c, h)| {
+    option::of(-2..40i32)
+        .prop_map(|h| {
             let mut config = Map::new();
-            if let Some(c) = c {
-                config.insert("confirmation_readings".into(), c.into());
-            }
             if let Some(h) = h {
                 config.insert("hysteresis_minutes".into(), h.into());
             }

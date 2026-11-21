@@ -78,9 +78,6 @@ public sealed record RustAlertRule
     [JsonPropertyName("condition_params")]
     public required JsonElement ConditionParams { get; init; }
 
-    [JsonPropertyName("confirmation_readings")]
-    public int ConfirmationReadings { get; init; } = 1;
-
     [JsonPropertyName("hysteresis_minutes")]
     public int HysteresisMinutes { get; init; }
 
@@ -113,7 +110,7 @@ public sealed record RustAlertRule
 
 /// <summary>
 /// Persisted tracker state carried in and out of every evaluate call. The
-/// per-rule fields (<see cref="State"/>, <see cref="ConfirmationCount"/>,
+/// per-rule fields (<see cref="State"/>,
 /// <see cref="ActiveExcursionOrdinal"/>, <see cref="UpdatedAt"/>) are absent
 /// until the rule has been evaluated at least once;
 /// <see cref="NextExcursionOrdinal"/> is shared across all rules of a tenant
@@ -121,11 +118,8 @@ public sealed record RustAlertRule
 /// </summary>
 public sealed record RustTrackerState
 {
-    /// <summary><c>idle | confirming | active | hysteresis</c>, or null when no state exists yet.</summary>
+    /// <summary><c>idle | active | hysteresis</c>, or null when no state exists yet.</summary>
     public string? State { get; init; }
-
-    [JsonPropertyName("confirmation_count")]
-    public int ConfirmationCount { get; init; }
 
     /// <summary>1-based ordinal of the active excursion, when one is active.</summary>
     [JsonPropertyName("active_excursion_ordinal")]

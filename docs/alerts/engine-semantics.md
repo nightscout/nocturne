@@ -513,12 +513,9 @@ The excursion tracker dedupes: a continuing outage is `continues`, and the first
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
 any other.
 
-A periodic evaluation is an evaluation to the tracker, so it advances confirmation (§6).
-The backend stores no `ConfirmationReadings` or `HysteresisMinutes`: every rule reads 1
-and 0, and the alerts redesign migrated both into `sustained` wrappers, which are
-cadence-independent. So no stored rule is affected. A host that does carry `confirmation_readings > 1` for a wall-clock rule would
-confirm it N× faster at a shorter periodic cadence. It should express that confirmation as
-`sustained` instead.
+A periodic evaluation is an evaluation to the tracker (§6). The backend stores no
+`HysteresisMinutes`: every rule reads 0, and the alerts redesign migrated it into
+`sustained` wrappers, which are cadence-independent. So no stored rule is affected.
 
 ### 5.2 Context facts
 
@@ -604,7 +601,6 @@ even when the root does not. Containers contribute only through their children, 
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
 | Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. This holds for an evaluation the rule held (§6.4) as well. |
-| Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. Nothing after an evaluation the rule held: the next one, with the same facts, holds too until another node's contribution changes the root. |
 | Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the forecast's start, not to `now` (§3). |
 
 A leaf unknown because its anchor is more than 5 minutes ahead of `now` contributes
@@ -625,8 +621,6 @@ found by searching the comparison evaluation makes, so the decimal rounding of �
 it with the truth it changes: a fractional bound can hold before the exact instant it
 names. A negative elapsed time (before a scheduled `tracker_age` event) truncates toward
 zero, so it flips within the tick before the bound and is reported at that tick.
-Confirmation (§6) counts evaluations, not time, so a rule whose tracker is `confirming`
-cannot wait: its next evaluation changes it, and it reports the first tick after `now`.
 
 A host may schedule its next evaluation of a rule at `next_change_at`, or pre-arm what that
 evaluation would deliver, instead of evaluating on a timer, as long as no fact the rule
@@ -634,7 +628,7 @@ reads moves without an evaluation of the rule (§5.1). Any evaluation of the rul
 path, replaces the value; a rule edit drops it. The replay driver (§8) does not report it.
 
 The backend's sweep waits for it only for a wall-clock rule that reads nothing but
-`glucose` (§5.2), whose tracker is not `confirming`, and only while its context measures a
+`glucose` (§5.2), and only while its context measures a
 usable canonical reading and carries the glucose facts the recorded value was computed from.
 A reading deleted, edited or recomputed moves those facts without an evaluation, as does an
 evaluation that failed or was dropped, so the sweep then evaluates. `predictions` does not qualify: the backend
@@ -647,8 +641,7 @@ reading. Every other wall-clock rule keeps the 30 s cadence.
 
 A held evaluation (§6.4) records its next change like any other: the value is read from the
 state the evaluation left, which is the state it found, and it is keyed by the context's glucose
-facts, so a reading arriving moves the key and the sweep evaluates. A held rule still
-`confirming` is never waited for, as above. A rule
+facts, so a reading arriving moves the key and the sweep evaluates. A rule
 never evaluated before keeps no state after a held evaluation, so nothing is recorded and the
 sweep evaluates it on its cadence.
 
@@ -735,27 +728,25 @@ host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_a
 
 ## 6. Excursion state machine (`ExcursionTracker`)
 
-Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt,
-HysteresisStartedAt, AwaitingRearm}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
-(default 1), `HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
+Per-rule persisted state: `{State, ActiveExcursionId, UpdatedAt,
+HysteresisStartedAt, AwaitingRearm}` with states `idle | active | hysteresis`. Rule inputs:
+`HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
 read as known by `OnUnknown`, = one `ProcessEvaluationAsync(ruleId, conditionMet,
 autoResolveMet)` call, where `autoResolveMet` is read only while the rule awaits re-arm
 (§6.3). An evaluation the rule holds makes no such call (§6.4). **Every call**, regardless of
 transition, decides `state.UpdatedAt = now`. The host persists a decision only when it changes another field: the only reader of
 `UpdatedAt` is the hysteresis-start adoption below, and the decision that adopts it persists
-the start. A stored state string naming none of the four states is read as
-`active` when the row holds an `ActiveExcursionId`, so that excursion goes on to close,
-and as `idle` otherwise, so the rule can fire again; its confirmation count, hysteresis
-start and re-arm flag (§6.3) are dropped. Every operation reads it so.
+the start. A stored state string naming none of the three states, `confirming` among them,
+is read as `active` when the row holds an `ActiveExcursionId`, so that excursion goes on to
+close, and as `idle` otherwise, so the rule can fire again; its hysteresis start and re-arm
+flag (§6.3) are dropped. Every operation reads it so.
 
 | State | met | Result |
 |---|---|---|
 | idle, awaiting re-arm | true, and `autoResolveMet` | None (§6.3) |
 | idle, awaiting re-arm | false, or not `autoResolveMet` | clear `AwaitingRearm`, then as idle below in the same call |
 | idle | false | None |
-| idle | true | `ConfirmationReadings <= 1` ⇒ open excursion → **active**, emit `ExcursionOpened`. Else → **confirming**, `ConfirmationCount = 1`, emit None |
-| confirming | false | → **idle**, count reset, None (a single false fully resets confirmation) |
-| confirming | true | `++ConfirmationCount`; if `count >= ConfirmationReadings` ⇒ open → **active**, `ExcursionOpened` (count resets to 0 on open) |
+| idle | true | open excursion → **active**, emit `ExcursionOpened` |
 | active | true | `ExcursionContinues` |
 | active | false | → **hysteresis**, `HysteresisStartedAt = now` (state and excursion row), emit `HysteresisStarted` |
 | hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` (same excursion) |
@@ -805,8 +796,7 @@ evaluates the auto-resolve tree, before the tracker, at the same `auto_resolve` 
 against the same timers as the post-tracker pass (§7 step 5), so a `sustained` inside it
 keeps its first-true instant and keeps running. An evaluation that finds both the condition
 and the auto-resolve tree true opens nothing. The first that finds either false clears
-`AwaitingRearm` and carries on as an idle evaluation: a true condition then opens (or starts
-confirming) in that same evaluation, so a relapse — the condition still holding while what
+`AwaitingRearm` and carries on as an idle evaluation: a true condition then opens in that same evaluation, so a relapse — the condition still holding while what
 resolved it no longer does — alerts at once. An auto-resolve that is disabled, absent,
 malformed or cannot be evaluated reads as false and re-arms. Only a known false re-arms: an
 auto-resolve tree that is unknown keeps the hold as a true one does (the tracker's
@@ -816,7 +806,7 @@ tree.
 Nothing flips while both trees hold, so evaluations against one stale reading (§5.1) stay
 quiet. An auto-resolve tree that flaps while the body holds re-arms on every false
 evaluation, so each flip back and forth opens and dispatches again. Wrapping the tree in
-`sustained` damps that, as does `ConfirmationReadings > 1` on a host that carries it.
+`sustained` damps that.
 
 An auto-resolve close from `hysteresis` (the last evaluation found the condition
 false) does not set `AwaitingRearm`, nor does any other close reason. A manual close while
@@ -843,7 +833,7 @@ three words, stored as a string; any other word is an error in the `evaluate` en
 | `met` | read as true, then exactly as a known true root |
 | `not_met` | read as false, then exactly as a known false root |
 
-A **held** evaluation makes no `ProcessEvaluationAsync` call. State, `ConfirmationCount`, the
+A **held** evaluation makes no `ProcessEvaluationAsync` call. State, the
 open excursion, `HysteresisStartedAt`, `AwaitingRearm` and `UpdatedAt` stay as they were, and
 the transition is `none`. The one thing that still moves is time: an excursion in hysteresis
 whose window has elapsed closes, as `CloseElapsedHysteresisAsync` closes it (§6.1), with
@@ -933,8 +923,8 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
   only to rules in the set. A cycle keeps the given order for every rule. Two rules
   with one id are an error.
 - **State.** One fresh timer store for the whole call; nothing is read from or written to
-  persistent state. The excursion tracker is **not** consulted: confirmation and
-  hysteresis do not apply, and replay's firing state is replay-local.
+  persistent state. The excursion tracker is **not** consulted: hysteresis
+  does not apply, and replay's firing state is replay-local.
 - **No reading.** A tick context with neither `LatestTimestamp` nor `LastReadingAt` reads
   `LastReadingAt = tick`, so a tick before the window's first reading reads as zero
   staleness and `signal_loss` cannot fire on an outage that began before the window.

@@ -453,7 +453,6 @@ fn hysteresis_start_round_trips_and_anchors_expiry() {
         "2026-01-05T12:05:00Z",
         json!({
             "state": "active",
-            "confirmation_count": 0,
             "active_excursion_ordinal": 1,
             "updated_at": "2026-01-05T12:00:00Z",
             "next_excursion_ordinal": 2,
@@ -493,7 +492,6 @@ fn hysteresis_state_without_a_start_adopts_updated_at() {
         "2026-01-05T12:30:00Z",
         json!({
             "state": "hysteresis",
-            "confirmation_count": 0,
             "active_excursion_ordinal": 1,
             "updated_at": "2026-01-05T12:10:00Z",
             "next_excursion_ordinal": 2,
@@ -582,7 +580,6 @@ fn evaluate_reports_a_reading_dated_ahead_and_holds_the_open_excursion() {
             "now": "2026-01-05T12:00:00Z",
             "tracker": {
                 "state": "active",
-                "confirmation_count": 0,
                 "active_excursion_ordinal": 1,
                 "updated_at": "2026-01-05T11:00:00Z",
                 "next_excursion_ordinal": 2
@@ -919,7 +916,7 @@ fn evaluate_rejects_tracker_state_without_updated_at() {
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
-        "tracker": { "state": "active", "confirmation_count": 0, "next_excursion_ordinal": 2 },
+        "tracker": { "state": "active", "next_excursion_ordinal": 2 },
     });
     assert_error(&evaluate(&request), "tracker.updated_at is required");
 }

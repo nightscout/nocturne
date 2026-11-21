@@ -31,7 +31,7 @@ fn process_at(tracker: &Value, met: bool, now: &str, hysteresis_minutes: i32) ->
     let response = process(&json!({
         "schema_version": 1,
         "tracker": tracker,
-        "config": { "confirmation_readings": 1, "hysteresis_minutes": hysteresis_minutes },
+        "config": { "hysteresis_minutes": hysteresis_minutes },
         "condition_met": met,
         "now": now,
     }));
@@ -50,7 +50,6 @@ fn process_opens_continues_and_enters_hysteresis() {
         opened["tracker"],
         json!({
             "state": "active",
-            "confirmation_count": 0,
             "active_excursion_ordinal": 1,
             "updated_at": "2026-01-05T12:00:00Z",
             "next_excursion_ordinal": 2,
@@ -75,30 +74,23 @@ fn process_opens_continues_and_enters_hysteresis() {
 }
 
 #[test]
-fn process_counts_confirmations_before_opening() {
-    let request = |tracker: &Value, now: &str| {
-        json!({
-            "schema_version": 1,
-            "tracker": tracker,
-            "config": { "confirmation_readings": 2 },
-            "condition_met": true,
-            "now": now,
-        })
-    };
-    let first = process(&request(
-        &json!({ "next_excursion_ordinal": 7 }),
-        "2026-01-05T12:00:00Z",
-    ));
-    assert_eq!(first["transition"], json!({ "type": "none" }));
-    assert_eq!(first["tracker"]["state"], json!("confirming"));
-    assert_eq!(first["tracker"]["confirmation_count"], json!(1));
+fn a_stored_confirming_state_reads_as_idle() {
+    let stored = json!({
+        "state": "confirming",
+        "updated_at": "2026-01-05T11:55:00Z",
+        "next_excursion_ordinal": 7,
+    });
 
-    let second = process(&request(&first["tracker"], "2026-01-05T12:05:00Z"));
+    let quiet = process_at(&stored, false, "2026-01-05T12:00:00Z", 0);
+    assert_eq!(quiet["transition"], json!({ "type": "none" }));
+    assert_eq!(quiet["tracker"]["state"], json!("idle"));
+
+    let fires = process_at(&stored, true, "2026-01-05T12:00:00Z", 0);
     assert_eq!(
-        second["transition"],
+        fires["transition"],
         json!({ "type": "opened", "excursion_ordinal": 7 })
     );
-    assert_eq!(second["tracker"]["next_excursion_ordinal"], json!(8));
+    assert_eq!(fires["tracker"]["state"], json!("active"));
 }
 
 #[test]
@@ -119,7 +111,6 @@ fn force_close_reports_the_excursion_it_closed() {
         closed["tracker"],
         json!({
             "state": "idle",
-            "confirmation_count": 0,
             "updated_at": "2026-01-05T12:03:00Z",
             "next_excursion_ordinal": 2,
         })
@@ -130,7 +121,7 @@ fn process_resolving(tracker: &Value, met: bool, auto_resolve_met: bool, now: &s
     let response = process(&json!({
         "schema_version": 1,
         "tracker": tracker,
-        "config": { "confirmation_readings": 1, "hysteresis_minutes": 0 },
+        "config": { "hysteresis_minutes": 0 },
         "condition_met": met,
         "auto_resolve_met": auto_resolve_met,
         "now": now,
@@ -178,7 +169,6 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
     let stored = |excursion: Option<u32>| {
         let mut tracker = json!({
             "state": "firing",
-            "confirmation_count": 2,
             "updated_at": "2026-01-05T11:55:00Z",
             "hysteresis_started_at": "2026-01-05T11:50:00Z",
             "awaiting_rearm": true,
@@ -228,7 +218,6 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
         swept["tracker"],
         json!({
             "state": "idle",
-            "confirmation_count": 0,
             "updated_at": "2026-01-05T11:55:00Z",
             "next_excursion_ordinal": 4,
         })
@@ -259,7 +248,6 @@ fn force_close_without_an_excursion_changes_nothing() {
 fn in_hysteresis(started_at: Option<&str>) -> Value {
     let mut tracker = json!({
         "state": "hysteresis",
-        "confirmation_count": 0,
         "active_excursion_ordinal": 4,
         "updated_at": "2026-01-05T12:10:00Z",
         "next_excursion_ordinal": 5,
@@ -297,7 +285,6 @@ fn close_elapsed_hysteresis_closes_at_the_window_end() {
         closed["tracker"],
         json!({
             "state": "idle",
-            "confirmation_count": 0,
             "updated_at": "2026-01-05T12:35:00Z",
             "next_excursion_ordinal": 5,
         })
@@ -361,7 +348,6 @@ fn tracker_entry_points_reject_unusable_requests() {
 
 fn tracker_config(rule: &Value) -> Value {
     json!({
-        "confirmation_readings": rule.get("confirmation_readings").cloned().unwrap_or(json!(1)),
         "hysteresis_minutes": rule.get("hysteresis_minutes").cloned().unwrap_or(json!(0)),
     })
 }

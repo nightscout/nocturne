@@ -85,7 +85,6 @@ fn sustained_tree() -> BoxedStrategy<Value> {
 #[derive(Debug, Clone)]
 pub(crate) struct RuleSpec {
     body: Value,
-    confirmation_readings: i32,
     hysteresis_minutes: i32,
     auto_resolve: Option<Value>,
     on_unknown: &'static str,
@@ -100,7 +99,6 @@ impl RuleSpec {
             "id": RULE_ID.to_string(),
             "condition_type": "composite",
             "condition_params": params,
-            "confirmation_readings": self.confirmation_readings,
             "hysteresis_minutes": self.hysteresis_minutes,
             "auto_resolve_enabled": self.auto_resolve.is_some(),
             "auto_resolve_params": self.auto_resolve,
@@ -124,24 +122,15 @@ pub(crate) fn glucose_freshness_minutes() -> BoxedStrategy<Option<i64>> {
 pub(crate) fn rule_spec() -> impl Strategy<Value = RuleSpec> {
     (
         sustained_tree(),
-        0..4i32,
         0..10i32,
         option::of(sustained_tree()),
         on_unknown(),
         glucose_freshness_minutes(),
     )
         .prop_map(
-            |(
-                body,
-                confirmation_readings,
-                hysteresis_minutes,
-                auto_resolve,
-                on_unknown,
-                glucose_freshness_minutes,
-            )| {
+            |(body, hysteresis_minutes, auto_resolve, on_unknown, glucose_freshness_minutes)| {
                 RuleSpec {
                     body,
-                    confirmation_readings,
                     hysteresis_minutes,
                     auto_resolve,
                     on_unknown,

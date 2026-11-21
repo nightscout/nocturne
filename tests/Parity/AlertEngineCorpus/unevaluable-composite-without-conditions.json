@@ -10,7 +10,6 @@
       "condition_params": {
         "operator": "and"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -29,7 +28,6 @@
           }
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -41,7 +39,6 @@
         "direction": "below",
         "value": 70
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

@@ -122,7 +122,6 @@ internal static class EngineTestHarness
                 : new ExpectedTrackerState
                 {
                     State = state.State,
-                    ConfirmationCount = state.ConfirmationCount,
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
                     HysteresisStartedAt = state.HysteresisStartedAt,
                     AwaitingRearm = state.AwaitingRearm ? true : null,

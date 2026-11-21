@@ -84,7 +84,6 @@ preserves sub-second precision when present.
     "id": "00000000-0000-0000-0000-000000000001",
     "condition_type": "sustained",          // canonical wire string
     "condition_params": { /* payload */ },  // payload object as stored
-    "confirmation_readings": 1,             // default 1
     "hysteresis_minutes": 0,                // default 0
     "auto_resolve_enabled": false,          // default false
     "auto_resolve_params": { "type": "…" }, // full ConditionNode or null
@@ -97,8 +96,7 @@ preserves sub-second precision when present.
     "sustained": "2026-01-05T11:55:00Z"     // condition path -> first-true instant
   },
   "tracker": {                              // optional; absent = never evaluated
-    "state": "active",                      // idle|confirming|active|hysteresis; absent = no per-rule state yet; any other string reads as active with an excursion, else idle (semantics §6)
-    "confirmation_count": 0,
+    "state": "active",                      // idle|active|hysteresis; absent = no per-rule state yet; any other string, a stored "confirming" included, reads as active with an excursion, else idle (semantics §6)
     "active_excursion_ordinal": 3,          // present only while an excursion is active
     "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
     "hysteresis_started_at": null,          // set only in hysteresis; absent there = adopt updated_at once
@@ -126,14 +124,13 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
   "result": { /* ExpectedRuleResult corpus shape:
                  rule_id, skipped?, root, unknown?, leaves[{leaf_id, value,
                  unknown?}], transition, close_reason?,
-                 tracker {state, confirmation_count, excursion?,
+                 tracker {state, excursion?,
                           hysteresis_started_at?, awaiting_rearm?},
                  auto_resolved?, timer_ops[], next_change_at?,
                  clock_anomaly? */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
     "state": "active",
-    "confirmation_count": 0,
     "active_excursion_ordinal": 3,
     "updated_at": "2026-01-05T12:00:00Z",
     "hysteresis_started_at": "…",                     // present only while in hysteresis
@@ -212,7 +209,7 @@ so `schema_version` stays 1.
   node, value the first-true instant. Persist the response `timers` object and
   send it back on the rule's next evaluation. (It is keyed by path only — the
   rule id is implicit in the call.)
-- **`tracker`** per-rule fields (`state`, `confirmation_count`,
+- **`tracker`** per-rule fields (`state`,
   `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`,
   `awaiting_rearm`) round-trip the same way and are absent until the rule's first non-skipped
   evaluation. `hysteresis_started_at` is what hysteresis expiry measures
@@ -568,7 +565,7 @@ the rule has never been evaluated):
 ```jsonc
 // nocturne_alerts_tracker_process: one evaluation's truth
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
-  "config": { "confirmation_readings": 1, "hysteresis_minutes": 0 },  // both optional
+  "config": { "hysteresis_minutes": 0 },  // optional
   "condition_met": true,
   "auto_resolve_met": true }                 // optional, default false; see below
 
@@ -587,8 +584,7 @@ the rule has never been evaluated):
 this evaluation, true unless the tree is known false (an unknown tree keeps the
 hold), and is read only while the tracker awaits re-arm (§6.3): the rule then
 stays held off when both it and `condition_met` are true, and otherwise re-arms and goes on through
-the state machine in the same call, so a `condition_met` of true opens (or
-starts confirming) at once. Evaluate the tree at the `auto_resolve` root with
+the state machine in the same call, so a `condition_met` of true opens at once. Evaluate the tree at the `auto_resolve` root with
 `nocturne_alerts_evaluate_node` before this call when the stored tracker has
 `awaiting_rearm`; a rule without an enabled, evaluable tree sends false.
 
@@ -639,7 +635,7 @@ Request:
 
 - **Order.** Rules are evaluated so that every rule runs after the rules its
   `alert_state` leaves reference; a reference cycle keeps the given order.
-  `confirmation_readings` and `hysteresis_minutes` are ignored.
+  `hysteresis_minutes` is ignored.
 - **Active alerts.** A tick context's `active_alerts` is replaced by the
   replay's own: a rule is in it, `firing` from the tick it fired, until it
   clears or auto-resolves. A rule's fire is visible to rules later in the

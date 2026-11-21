@@ -17,7 +17,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           },
           "next_change_at": "2026-03-02T12:11:00Z"
@@ -34,7 +33,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           },
           "next_change_at": "2026-03-02T12:30:00Z"
@@ -58,7 +56,6 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         },
@@ -74,7 +71,6 @@
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           },
           "next_change_at": "2026-03-02T12:30:00Z"
@@ -98,7 +94,6 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         },
@@ -114,7 +109,6 @@
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           },
           "next_change_at": "2026-03-02T12:30:00.000000100Z"
@@ -138,7 +132,6 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         },
@@ -156,7 +149,6 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           }
         }

@@ -12,7 +12,6 @@
         "operator": "\u003E=",
         "value": 2
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -25,7 +24,6 @@
         "operator": "\u003C=",
         "value": 50
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
