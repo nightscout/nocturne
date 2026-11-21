@@ -142,7 +142,7 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
 
             case AuthType.PlatformAccess:
                 return source.SubjectId is { } admin
-                       && await SubjectAsync(admin) is { IsActive: true, IsPlatformAdmin: true }
+                       && await SubjectAsync(admin) is { IsActivePlatformAdmin: true }
                        && (source.ExpiresAt is null || source.ExpiresAt > timeProvider.GetUtcNow())
                        && !(source.GrantId is { } jti && await IsTokenRevokedAsync(jti))
                     ? granted

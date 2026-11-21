@@ -91,7 +91,7 @@ public class PlatformAccessCookieHandler : IAuthHandler
         var state = await scope.ServiceProvider.GetRequiredService<ISubjectRepository>()
             .GetSignInStateAsync(claims.SubjectId, context.RequestAborted);
 
-        if (state is not { IsActive: true, IsPlatformAdmin: true })
+        if (state is not { IsActivePlatformAdmin: true })
         {
             _logger.LogWarning(
                 "Platform-access grant rejected: subject {SubjectId} is no longer an active platform admin",
