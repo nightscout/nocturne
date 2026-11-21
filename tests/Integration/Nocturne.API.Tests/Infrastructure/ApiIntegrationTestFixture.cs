@@ -11,12 +11,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.Jobs;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
@@ -483,11 +485,25 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
                     sp.GetRequiredService<ILogger<JwtService>>(),
                     JwtClock)));
                 ContextOpenLog.Register(services);
+                RemoveJobScheduler(services);
             });
         });
         factory.UseKestrel(options => options.ListenLocalhost(port));
         return factory;
     }
+
+    /// <summary>
+    /// Takes <see cref="JobScheduler"/> out of a test host. A test that needs a job runs it itself.
+    /// </summary>
+    /// <remarks>
+    /// The cleanup's TRUNCATE takes its locks one table at a time while the scheduler's alert sweep
+    /// writes, and no order of the table list is safe from both of the sweep's orders. Its transition
+    /// (<see cref="Nocturne.API.Services.Alerts.ExcursionTransitionWriter"/>) reads a rule, then its
+    /// tracker state, then its timers and excursion: parent before child. Its lone insert of an alert
+    /// instance or delivery locks the child, then the parent in the foreign key check.
+    /// </remarks>
+    internal static void RemoveJobScheduler(IServiceCollection services) =>
+        services.Remove(services.Single(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(JobScheduler)));
 
     private static int FreeLoopbackPort()
     {
