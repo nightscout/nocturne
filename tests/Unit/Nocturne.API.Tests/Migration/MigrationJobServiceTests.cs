@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -36,6 +37,7 @@ public class MigrationJobServiceTests
         var provider = existingProvider ?? new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .BuildServiceProvider();
 
         var service = new MigrationJobService(

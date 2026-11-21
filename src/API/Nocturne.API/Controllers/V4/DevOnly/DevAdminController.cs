@@ -1192,7 +1192,10 @@ public class DevAdminController : ControllerBase
     /// next startup re-seed) and, if no other credentialed member remains,
     /// creates a synthetic "keeper" member so the tenant reports
     /// recovery_mode_active instead of setup_required. Defaults to the first
-    /// owner-role member.
+    /// owner-role member. <c>recoveryMode</c> in the answer is what the setup gate
+    /// then reads (<see cref="ITenantMembershipRepository.ReadSetupGateAsync"/>): a
+    /// target that is not the tenant's last member administrator who could sign in,
+    /// or one a recovery link can still reach, leaves the site serving.
     /// </summary>
     [HttpPost("tenants/{id:guid}/recovery-mode")]
     public async Task<ActionResult> EnterRecoveryMode(
@@ -1269,9 +1272,11 @@ public class DevAdminController : ControllerBase
             "Dev recovery-mode: orphaned subject {SubjectId} on tenant {Slug} (keeper: {Keeper})",
             target.SubjectId, tenant.Slug, keeperSubjectId);
 
+        var gate = await _members.ReadSetupGateAsync(tenant.Id, ct);
+
         return Ok(new
         {
-            recoveryMode = true,
+            recoveryMode = gate?.RecoveryMode == true,
             orphanedSubjectId = target.SubjectId,
             keeperSubjectId,
         });

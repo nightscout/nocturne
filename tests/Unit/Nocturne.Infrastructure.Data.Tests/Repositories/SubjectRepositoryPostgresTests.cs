@@ -68,7 +68,7 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var subjects = new SubjectRepository(new Factory(Context, tenant));
+        var subjects = new SubjectRepository(new Factory(Context, tenant), AccountLinkRoutes.Off);
         var credentialed = await subjects.CreateAsync(new NewSubject($"{slug}-credentialed"), CancellationToken.None);
         var orphan = await subjects.CreateAsync(new NewSubject($"{slug}-orphan"), CancellationToken.None);
         // A flag that reads true when the row is visible, so a hidden row is told from a false one.
@@ -91,23 +91,11 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
     {
         var a = await SeedTenantAsync("a");
         var b = await SeedTenantAsync("b");
-        await using (var db = Context(b.Tenant))
-        {
-            // Tenant b's orphan gets a passkey, so b has credentials and no orphan.
-            db.PasskeyCredentials.Add(new PasskeyCredentialEntity
-            {
-                Id = Guid.CreateVersion7(), SubjectId = b.Orphan, CredentialId = Guid.NewGuid().ToByteArray(), PublicKey = [1],
-            });
-            await db.SaveChangesAsync();
-        }
-        var readingAsB = new SubjectRepository(new Factory(Context, b.Tenant));
-        var readingAsNoOne = new SubjectRepository(new Factory(Context, Guid.Empty));
+        var readingAsB = new SubjectRepository(new Factory(Context, b.Tenant), AccountLinkRoutes.Off);
+        var readingAsNoOne = new SubjectRepository(new Factory(Context, Guid.Empty), AccountLinkRoutes.Off);
 
         (await readingAsB.TenantHasCredentialedMemberAsync(a.Tenant, CancellationToken.None)).Should().BeTrue();
-        (await readingAsB.HasOrphanedMemberAsync(a.Tenant, CancellationToken.None)).Should().BeTrue();
         (await readingAsNoOne.TenantHasCredentialedMemberAsync(a.Tenant, CancellationToken.None)).Should().BeTrue();
-        (await readingAsNoOne.HasOrphanedMemberAsync(a.Tenant, CancellationToken.None)).Should().BeTrue();
-        (await readingAsNoOne.HasOrphanedMemberAsync(b.Tenant, CancellationToken.None)).Should().BeFalse();
         (await readingAsNoOne.TenantHasCredentialedMemberAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeFalse();
     }
 
@@ -149,11 +137,11 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
     {
         var a = await SeedTenantAsync("c");
         var factory = new SubjectScopedFactory(Context, scopeSubject: a.Orphan);
-        var subjects = new SubjectRepository(factory);
+        var subjects = new SubjectRepository(factory, AccountLinkRoutes.Off);
 
         // Read as the scope, the credentialed subject's row is hidden by subject_pin; the repository
         // reaches it only by pinning the read to that subject.
-        (await new SubjectRepository(new Factory(Context, Guid.Empty)).IsPlatformAdminAsync(a.Credentialed, CancellationToken.None))
+        (await new SubjectRepository(new Factory(Context, Guid.Empty), AccountLinkRoutes.Off).IsPlatformAdminAsync(a.Credentialed, CancellationToken.None))
             .Should().BeTrue("unpinned, the flag is there to read");
         (await subjects.IsPlatformAdminAsync(a.Credentialed, CancellationToken.None)).Should().BeFalse("the scope's reader is another subject");
         (await subjects.GetSignInStateAsync(a.Credentialed, CancellationToken.None)).Should().Be(new SubjectSignInState(true, true));

@@ -673,11 +673,12 @@ public class MemberScopeMiddlewareTests
         services.AddSingleton(db.ContextFactory);
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         await using var provider = services.BuildServiceProvider();
 
         var detached = new GatedFactory(provider.GetRequiredService<INocturneDbContextFactory>());
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(detached), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(detached, AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
 
         await using (var request = provider.CreateAsyncScope())
         {
@@ -692,7 +693,7 @@ public class MemberScopeMiddlewareTests
             };
             context.Items["GrantedScopes"] = Scope.Normalize([]);
             context.Items["PermissionTrie"] = new PermissionTrie();
-            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()), subjectId);
+            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off), subjectId);
 
             await middleware.InvokeAsync(context);
 
@@ -787,10 +788,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
-        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return (category, scoped);
@@ -837,10 +838,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
-        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return context;

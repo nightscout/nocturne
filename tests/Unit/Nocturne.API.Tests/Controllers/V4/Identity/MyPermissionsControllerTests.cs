@@ -151,7 +151,7 @@ public class MyPermissionsControllerTests
         var httpContext = controller.ControllerContext.HttpContext;
         httpContext.RequestServices = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
-            .AddSingleton<ISubjectRepository>(new SubjectRepository(factory.Object.AsNocturneFactory()))
+            .AddSingleton<ISubjectRepository>(new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
             .BuildServiceProvider();
         httpContext.Items["AuthContext"] = new AuthContext
         {

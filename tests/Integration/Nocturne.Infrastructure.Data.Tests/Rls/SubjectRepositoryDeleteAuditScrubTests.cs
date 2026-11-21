@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Services;
@@ -157,7 +158,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         if (fromTheMemberTenant)
             TenantReaderData.Resolve(scope.ServiceProvider, _memberTenant);
 
-        var repository = new SubjectRepository(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>());
+        var repository = new SubjectRepository(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off);
         (await repository.DeleteAsync(_leaver, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
     }
 

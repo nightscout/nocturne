@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Multitenancy;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -34,13 +35,10 @@ public sealed record AccountLinkMessage(
 
 /// <summary>
 /// Delivers account links to an address. Nocturne mints and verifies every link; a delivery only
-/// carries it. While <see cref="IsConfigured"/> is false the flows that send links do not exist.
+/// carries it. While <see cref="IAccountLinkRoute.IsConfigured"/> is false the flows that send links do not exist.
 /// </summary>
-public interface IAccountLinkDelivery
+public interface IAccountLinkDelivery : IAccountLinkRoute
 {
-    /// <summary>Whether a route to deliver links is configured.</summary>
-    bool IsConfigured { get; }
-
     /// <summary>
     /// Delivers <paramref name="message"/> and returns whether the route accepted it. A failure is
     /// reported, never thrown, and logged without the address or the link.
@@ -55,6 +53,7 @@ public interface IAccountLinkDelivery
 public sealed class OperatorWebhookLinkDelivery(
     IHttpClientFactory httpClientFactory,
     IOptions<OperatorConfiguration> config,
+    IOptions<BaseDomainOptions> baseDomain,
     ILogger<OperatorWebhookLinkDelivery> logger) : IAccountLinkDelivery
 {
     /// <summary>The named client the webhook is called with.</summary>
@@ -66,7 +65,8 @@ public sealed class OperatorWebhookLinkDelivery(
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(config.Value.AccountLinkWebhookUrl);
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(config.Value.AccountLinkWebhookUrl) && baseDomain.Value.PublicOrigin is not null;
 
     /// <inheritdoc />
     public async Task<bool> DeliverAsync(AccountLinkMessage message, CancellationToken ct)

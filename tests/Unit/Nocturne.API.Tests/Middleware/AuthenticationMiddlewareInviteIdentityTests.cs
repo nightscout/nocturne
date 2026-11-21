@@ -100,6 +100,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
         services.AddSingleton(inviteService.Object);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext($"invite_identity_{Guid.NewGuid()}").AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddSingleton(AccountLinkRoutes.Off);
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

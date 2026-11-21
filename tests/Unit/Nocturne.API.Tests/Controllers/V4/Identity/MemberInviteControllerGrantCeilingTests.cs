@@ -135,10 +135,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             Mock.Of<ITenantService>(),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            new TenantMembershipRepository(_dbContext.AsFactory()))
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
@@ -376,7 +376,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        ShouldRefuse(result, StatusCodes.Status400BadRequest, "Cannot remove the last owner of a tenant");
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, "Cannot remove the only owner, or the last owner who can sign in");
 
         (await _dbContext.TenantMemberRoles.Where(mr => mr.TenantMemberId == _targetMemberId)
             .Select(mr => mr.TenantRoleId).ToListAsync()).Should().BeEquivalentTo([_ownerRoleId]);
@@ -409,6 +409,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             SubjectId = secondSubjectId,
         };
         _dbContext.Subjects.Add(new SubjectEntity { Id = secondSubjectId, Name = "Second owner" });
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = secondSubjectId, CredentialId = secondSubjectId.ToByteArray(), PublicKey = [1],
+        });
         _dbContext.TenantMembers.Add(secondMember);
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();

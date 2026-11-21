@@ -501,7 +501,7 @@ public class PasskeyServiceTests
         var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
         var contexts = _dbContext.AsFactory();
         return new PasskeyService(
-            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(new TenantMembershipRepository(contexts)),
+            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off)),
             fido2, dataProtectionProvider, fido2Options, logger, environment);
     }
 

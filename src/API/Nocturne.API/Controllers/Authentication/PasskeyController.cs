@@ -293,7 +293,7 @@ public class PasskeyController : ControllerBase
     /// The lookup, the code and the delivery run after the response
     /// (<see cref="RecoveryLinkRequests"/>), so neither the answer nor its timing tells a caller
     /// whether an address is known, confirmed, or was sent anything. The flow exists only while a
-    /// delivery route does (<see cref="IAccountLinkDelivery.IsConfigured"/>), hence the 404.
+    /// delivery route does (<see cref="IAccountLinkRoute.IsConfigured"/>), hence the 404.
     /// </remarks>
     [HttpPost("recovery-link")]
     [AllowAnonymous]
@@ -773,28 +773,25 @@ public class PasskeyController : ControllerBase
 
     /// <summary>
     /// Returns tenant auth status: whether setup is required, whether recovery mode is active, and whether recovery by email is offered.
-    /// Queries the database for passkey credentials and orphaned subjects.
     /// </summary>
+    /// <remarks>Both states are the setup gate's (<see cref="ITenantMembershipRepository.ReadSetupGateAsync"/>).</remarks>
     [HttpGet("status")]
     [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(AuthStatusResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuthStatus([FromServices] IAccountLinkDelivery delivery)
     {
-        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
 
-        // System-pinned reads: this action is anonymous and reachable on a share host.
-        var hasCredentials = await _subjects.TenantHasCredentialedMemberAsync(tenantId, HttpContext.RequestAborted);
-        var setupRequired = !hasCredentials;
-        var recoveryMode = hasCredentials && await _subjects.HasOrphanedMemberAsync(tenantId, HttpContext.RequestAborted);
+        // System-pinned read: this action is anonymous and reachable on a share host.
+        var gate = await _members.ReadSetupGateAsync(tenantId, HttpContext.RequestAborted);
 
         var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 
         return Ok(new AuthStatusResponse
         {
-            SetupRequired = setupRequired,
-            RecoveryMode = recoveryMode,
+            SetupRequired = gate is not { HasCredentials: true },
+            RecoveryMode = gate?.RecoveryMode == true,
             AllowAccessRequests = tenant?.AllowAccessRequests ?? false,
             OnboardingCompleted = tenant?.OnboardingCompletedAt != null,
             EmailRecoveryOffered = delivery.IsConfigured,
@@ -1508,8 +1505,8 @@ public class AuthStatusResponse
     public bool OnboardingCompleted { get; set; }
 
     /// <summary>
-    /// Whether a member can ask for a recovery link by email: this instance has a delivery route
-    /// (<see cref="IAccountLinkDelivery.IsConfigured"/>).
+    /// Whether a member can ask for a recovery link by email: this instance can mint and send one
+    /// (<see cref="IAccountLinkRoute.IsConfigured"/>).
     /// </summary>
     public bool EmailRecoveryOffered { get; set; }
 }

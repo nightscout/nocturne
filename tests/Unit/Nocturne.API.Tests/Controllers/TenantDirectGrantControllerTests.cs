@@ -93,10 +93,10 @@ public class TenantDirectGrantControllerTests : IDisposable
             new GrantRevocationService(
                 new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
-        var tenantMemberService = new TenantMemberService(new TenantMembershipRepository(factory.Object.AsNocturneFactory()));
+        var tenantMemberService = new TenantMemberService(new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off));
 
         _controller = new TenantDirectGrantController(
-            tenantMemberService, directGrantService, new SubjectRepository(factory.Object.AsNocturneFactory()))
+            tenantMemberService, directGrantService, new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

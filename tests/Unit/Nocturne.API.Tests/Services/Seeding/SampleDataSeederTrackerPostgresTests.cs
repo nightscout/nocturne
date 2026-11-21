@@ -121,7 +121,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
         return new SampleDataSeeder(
             tenant.Object,
             contexts,
-            new SubjectRepository(contexts),
+            new SubjectRepository(contexts, AccountLinkRoutes.Off),
             entries.Object,
             treatments.Object,
             sleep.Object,

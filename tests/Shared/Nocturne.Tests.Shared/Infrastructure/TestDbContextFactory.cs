@@ -124,10 +124,12 @@ public sealed class SqliteTestDatabase : IDisposable
     /// <summary>
     /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>
     /// as the context pool and behind <c>INocturneDbContextFactory</c>, every context over the same
-    /// connection, and the subject repository the authentication pipeline reads through.
+    /// connection, and the subject repository the authentication pipeline reads through, with no
+    /// account link route (<see cref="AccountLinkRoutes.Off"/>).
     /// </summary>
     public IServiceCollection AddToServices(IServiceCollection services)
     {
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddSingleton(ContextFactory);
         services.AddSingleton(ContextFactory.AsNocturneFactory());
         services.AddTransient<ISubjectRepository, SubjectRepository>();

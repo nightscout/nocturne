@@ -150,7 +150,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             TimeProvider.System,
-            NullLogger<TrackerAlertRuleSyncService>.Instance);
+            NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);
         await sync.SyncDefinitionAsync(definition.Id);
 
         Guid rule;

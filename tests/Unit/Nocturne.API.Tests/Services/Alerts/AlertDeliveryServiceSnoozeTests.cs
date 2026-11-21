@@ -80,7 +80,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
 
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
-            new TenantMembershipRepository(_factory.AsNocturneFactory()),
+            new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
             _alarmRelay.Object,

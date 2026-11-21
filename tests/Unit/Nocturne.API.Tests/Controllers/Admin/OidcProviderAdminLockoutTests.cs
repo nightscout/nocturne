@@ -47,7 +47,7 @@ public sealed class OidcProviderAdminLockoutTests : IDisposable
             .ReturnsAsync((OidcProvider p) => p);
 
         _controller = new OidcProviderAdminController(
-            _providers.Object, new SubjectRepository(_context.AsFactory()), Mock.Of<IHttpClientFactory>())
+            _providers.Object, new SubjectRepository(_context.AsFactory(), AccountLinkRoutes.Off), Mock.Of<IHttpClientFactory>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

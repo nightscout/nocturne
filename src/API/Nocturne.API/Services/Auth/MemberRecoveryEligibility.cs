@@ -9,7 +9,10 @@ namespace Nocturne.API.Services.Auth;
 /// <summary>Who may restore access for a member with no sign-in method left.</summary>
 public enum RecoveryEligibility
 {
-    /// <summary>The member can still sign in, or is not a member of the tenant.</summary>
+    /// <summary>
+    /// The member can still sign in, a recovery link by email can reach them, or they are not a
+    /// member of the tenant (<see cref="OrphanedSubjectFilter"/>).
+    /// </summary>
     NotLockedOut,
 
     /// <summary>
@@ -30,7 +33,7 @@ public enum RecoveryEligibility
 /// A member administrator's authority is checked against this tenant's permissions, while the
 /// account a passkey is enrolled onto is global, hence <see cref="RecoveryEligibility.OperatorOnly"/>.
 /// </remarks>
-public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers)
+public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers, IAccountLinkRoute linkRoute)
 {
     /// <param name="db">A context on <paramref name="tenantId"/> that is not share-flagged
     /// (<see cref="OrphanedSubjectFilter.OrphanedSubjectsOf"/>).</param>
@@ -40,7 +43,7 @@ public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers
     public async Task<RecoveryEligibility> CheckAsync(
         NocturneDbContext db, Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
-        var orphan = await db.OrphanedSubjectsOf(tenantId)
+        var orphan = await db.OrphanedSubjectsOf(tenantId, linkRoute)
             .Where(s => s.Id == subjectId)
             .Select(s => new { s.IsPlatformAdmin })
             .FirstOrDefaultAsync(ct);
@@ -52,6 +55,17 @@ public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers
             ? RecoveryEligibility.OperatorOnly
             : RecoveryEligibility.Eligible;
     }
+
+    /// <summary>The members of <paramref name="tenantId"/> who cannot sign in (<see cref="OrphanedSubjectFilter"/>), by name.</summary>
+    /// <param name="db">A context on <paramref name="tenantId"/> that is not share-flagged.</param>
+    /// <param name="tenantId">The tenant whose members are considered.</param>
+    /// <param name="ct">Cancels the read.</param>
+    public async Task<IReadOnlyList<LockedOutSubject>> ListLockedOutAsync(
+        NocturneDbContext db, Guid tenantId, CancellationToken ct = default) =>
+        await db.OrphanedSubjectsOf(tenantId, linkRoute)
+            .OrderBy(s => s.Name)
+            .Select(s => new LockedOutSubject(s.Id, s.Name, s.Username, s.IsPlatformAdmin))
+            .ToListAsync(ct);
 
     /// <summary>
     /// Whether a code of <paramref name="purpose"/> may still be spent on a member in
@@ -68,3 +82,6 @@ public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers
         isPlatformAdmin
         || (await tenantMembers.GetTenantIdsForSubjectAsync(subjectId, ct)).Any(t => t != tenantId);
 }
+
+/// <summary>A member who cannot sign in, as <see cref="MemberRecoveryEligibility.ListLockedOutAsync"/> lists them.</summary>
+public sealed record LockedOutSubject(Guid Id, string Name, string? Username, bool IsPlatformAdmin);

@@ -415,7 +415,7 @@ public class TenantController : ControllerBase
 
         if (eligibility is not null
             && await eligibility.CheckAsync(dbContext, id, subjectId, ct) == RecoveryEligibility.NotLockedOut)
-            return Problem(detail: "This member can still sign in", statusCode: 409, title: "Conflict");
+            return Problem(detail: "This member can still sign in or recover by email", statusCode: 409, title: "Conflict");
 
         var issued = await loginCodeService.IssueAsync(
             dbContext, subjectId, purpose,

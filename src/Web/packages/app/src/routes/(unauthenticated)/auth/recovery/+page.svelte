@@ -13,7 +13,7 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import RecoveryNextStep from "#lib/components/auth/RecoveryNextStep.svelte";
-  import LockedOutMembers from "./LockedOutMembers.svelte";
+  import LockedOutMembers from "#lib/components/members/LockedOutMembers.svelte";
 
   // A link an administrator or an email sends carries the code, so the member lands here and goes
   // straight on to adding a sign-in method.

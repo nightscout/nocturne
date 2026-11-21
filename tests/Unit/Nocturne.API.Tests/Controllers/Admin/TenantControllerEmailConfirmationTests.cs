@@ -41,7 +41,7 @@ public class TenantControllerEmailConfirmationTests : IDisposable
         seed.SaveChanges();
 
         _subjectService = new SubjectService(
-            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
             NullLogger<SubjectService>.Instance,

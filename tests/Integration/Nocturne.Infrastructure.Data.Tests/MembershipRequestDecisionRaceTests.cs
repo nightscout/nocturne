@@ -35,7 +35,7 @@ public class MembershipRequestDecisionRaceTests
         await using var approving = await ContextAsync(provider, seed.Tenant);
         await using var denying = await ContextAsync(provider, seed.Tenant);
         var approvingUnit = DbUnitOfWork.Own(approving);
-        var members = new TenantMembershipRepository(approvingUnit);
+        var members = new TenantMembershipRepository(approvingUnit, AccountLinkRoutes.Off);
         var locked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -49,7 +49,7 @@ public class MembershipRequestDecisionRaceTests
         });
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-        var deny = new TenantMembershipRepository(DbUnitOfWork.Own(denying))
+        var deny = new TenantMembershipRepository(DbUnitOfWork.Own(denying), AccountLinkRoutes.Off)
             .DecideRequestAsync(seed.Tenant, seed.Request, Decision(MembershipRequestRecord.Denied, null), CancellationToken.None);
         await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, deny);
 
@@ -76,14 +76,14 @@ public class MembershipRequestDecisionRaceTests
 
         var deny = denyingUnit.CommitAsync(async token =>
         {
-            (await new TenantMembershipRepository(denyingUnit)
+            (await new TenantMembershipRepository(denyingUnit, AccountLinkRoutes.Off)
                 .DecideRequestAsync(seed.Tenant, seed.Request, Decision(MembershipRequestRecord.Denied, null), token)).Should().BeTrue();
             locked.SetResult();
             await release.Task;
         });
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-        var members = new TenantMembershipRepository(approvingUnit);
+        var members = new TenantMembershipRepository(approvingUnit, AccountLinkRoutes.Off);
         var approval = approvingUnit.CommitAsync(async token =>
         {
             if (!await members.AddMemberAsync(new NewTenantMember(seed.Tenant, seed.Subject, [seed.Role]), token))

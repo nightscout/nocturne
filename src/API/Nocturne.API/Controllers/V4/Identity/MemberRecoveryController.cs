@@ -21,8 +21,9 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// each such member a single-use code that the member uses to regain access.
 /// </summary>
 /// <remarks>
-/// Allowed during setup because these members are what put the tenant into recovery mode, where
-/// every other tenant endpoint answers 503.
+/// Allowed during setup because a site where these members are stuck and no member administrator
+/// can sign in is in recovery mode, where every other tenant endpoint answers 503. On a site an
+/// administrator can still reach, the same endpoints serve the administrator who recovers them.
 /// The member spends the code at <see cref="PasskeyController.RecoveryModeRedeem"/>.
 /// </remarks>
 [ApiController]
@@ -73,10 +74,7 @@ public class MemberRecoveryController : ControllerBase
     public async Task<IActionResult> GetLockedOutMembers(CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var subjects = await db.OrphanedSubjectsOf(_tenantAccessor.TenantId)
-            .OrderBy(s => s.Name)
-            .Select(s => new { s.Id, s.Name, s.Username, s.IsPlatformAdmin })
-            .ToListAsync(ct);
+        var subjects = await _eligibility.ListLockedOutAsync(db, _tenantAccessor.TenantId, ct);
 
         var members = new List<LockedOutMember>(subjects.Count);
         foreach (var s in subjects)

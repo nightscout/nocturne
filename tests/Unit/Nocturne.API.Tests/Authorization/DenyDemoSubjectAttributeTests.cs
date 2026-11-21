@@ -105,7 +105,7 @@ public class DenyDemoSubjectAttributeTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(dbFactory.Object.AsNocturneFactory());
-        services.AddSingleton<ISubjectRepository>(new SubjectRepository(dbFactory.Object.AsNocturneFactory()));
+        services.AddSingleton<ISubjectRepository>(new SubjectRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off));
 
         var httpContext = new DefaultHttpContext
         {

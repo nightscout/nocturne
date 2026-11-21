@@ -128,6 +128,7 @@ public class MigrationSubjectGrantTests
         return new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory, StubHttpClientFactory>()
@@ -278,9 +279,9 @@ public class MigrationSubjectGrantTests
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         // The regression this whole shape exists to prevent. A device imported as an account is a
-        // member with no passkey and no provider, which takes the tenant into recovery mode for
-        // every request and cannot be recovered from the UI.
-        (await db.OrphanedSubjectsOf(tenantId).ToListAsync()).Should().BeEmpty();
+        // member with no passkey and no provider, which reads as a locked-out account that no
+        // recovery code can help.
+        (await db.OrphanedSubjectsOf(tenantId, AccountLinkRoutes.Off).ToListAsync()).Should().BeEmpty();
 
         // The only accounts are the owner and the device holder, which is a system subject.
         db.Subjects.Should().HaveCount(2);

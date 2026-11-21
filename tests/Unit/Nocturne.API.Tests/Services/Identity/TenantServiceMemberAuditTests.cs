@@ -64,15 +64,15 @@ public sealed class TenantServiceMemberAuditTests : IDisposable
         return new TenantService(
             factory,
             new TenantRepository(factory),
-            new TenantMembershipRepository(factory),
-            new SubjectRepository(factory),
+            new TenantMembershipRepository(factory, AccountLinkRoutes.Off),
+            new SubjectRepository(factory, AccountLinkRoutes.Off),
             new MemoryCache(new MemoryCacheOptions()),
             Options.Create(new OperatorConfiguration()),
             Mock.Of<IHttpClientFactory>(),
             Mock.Of<ITenantRoleService>(),
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             TimeProvider.System,
-            Mock.Of<ILogger<TenantService>>());
+            Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
     }
 
     [Fact]

@@ -43,8 +43,8 @@ public sealed class AccessRequestControllerTests : IDisposable
         _dbContext = _db.CreateContext(_tenantId);
 
         _controller = new AccessRequestController(
-            new TenantMembershipRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _subjectService.Object,
             _accessRequests.Object,
             MockTenantAccessor.Create(_tenantId).Object,

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -36,10 +37,12 @@ public class TenantMembershipRepositoryTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private TenantMembershipRepository Members(Guid? tenant = null) =>
-        new(new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? _tenant)));
+    private TenantMembershipRepository Members(Guid? tenant = null) => Members(AccountLinkRoutes.Off, tenant);
 
-    private SubjectRepository Subjects() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)));
+    private TenantMembershipRepository Members(IAccountLinkRoute linkRoute, Guid? tenant = null) =>
+        new(new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? _tenant)), linkRoute);
+
+    private SubjectRepository Subjects() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off);
 
     private Task<Guid> SubjectAsync(string name, bool system = false, bool active = true, bool demo = false) =>
         Subjects().CreateAsync(new NewSubject(name, IsSystemSubject: system, IsActive: active, IsDemoSubject: demo), CancellationToken.None);
@@ -172,6 +175,8 @@ public class TenantMembershipRepositoryTests : IDisposable
         SetJoinedAt(first.Id, Now);
         SetJoinedAt(second.Id, Now.AddMinutes(1));
         SetJoinedAt(caretaker.Id, Now.AddMinutes(2));
+        AddPasskey(first.SubjectId);
+        AddPasskey(second.SubjectId);
 
         (await Members().ListPeopleAsync(_tenant, CancellationToken.None)).Select(m => m.SubjectName).Should().Equal("First", "Second", "Care");
         (await Members().ListOwnersAsync(_tenant, CancellationToken.None)).Select(m => m.SubjectName).Should().Equal("First", "Second");
@@ -329,13 +334,14 @@ public class TenantMembershipRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task TheSetupGateReadsCredentialsAndOrphansFromTheMembers()
+    public async Task TheSetupGateReadsCredentialsAndRecoveryModeFromTheMembers()
     {
         (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None)).Should().BeNull("no member yet");
         (await Members().CountSetupCredentialsAsync(_tenant, CancellationToken.None)).Should().Be(new SetupCredentialCounts(0, 0, 0));
 
         var orphan = await JoinAsync(await SubjectAsync("Orphan"), _ownerRole);
-        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None)).Should().Be(new SetupGate(false, true));
+        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None))
+            .Should().Be(new SetupGate(HasCredentials: false, RecoveryMode: false), "a site nobody can sign in to is in first-run setup");
         (await Members().ListOrphanedMembersAsync(_tenant, CancellationToken.None)).Should().ContainSingle()
             .Which.Should().BeEquivalentTo(new { SubjectId = orphan.SubjectId, Name = "Orphan" });
 
@@ -347,6 +353,170 @@ public class TenantMembershipRepositoryTests : IDisposable
         AddPasskey(orphan.SubjectId);
         (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None)).Should().Be(new SetupGate(true, false));
         (await Members().ListOrphanedMembersAsync(_tenant, CancellationToken.None)).Should().BeEmpty();
+    }
+
+    public enum Site
+    {
+        StuckFollowerOwnerFine,
+        StuckOwnerAnotherAdministratorFine,
+        OnlyAdministratorStuck,
+        EveryAdministratorStuck,
+        NobodyStuck,
+        StuckAdministratorWithConfirmedEmail,
+        NoAdministratorAndNobodyStuck,
+    }
+
+    private async Task<Guid> SeedAsync(
+        string name, bool signsIn, Guid[] roles, IReadOnlyList<string>? direct = null, bool confirmedEmail = false)
+    {
+        var subject = await SubjectAsync(name);
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, roles, direct), CancellationToken.None)).Should().BeTrue();
+        if (signsIn)
+            AddPasskey(subject);
+        if (confirmedEmail)
+        {
+            using var db = _db.CreateContext();
+            var row = db.Subjects.Single(x => x.Id == subject);
+            row.SetEmail($"{subject:N}@example.test");
+            row.ConfirmEmail(row.Email, Now);
+            db.SaveChanges();
+        }
+        return subject;
+    }
+
+    [Theory]
+    [InlineData(Site.StuckFollowerOwnerFine, true, false)]
+    [InlineData(Site.StuckFollowerOwnerFine, false, false)]
+    [InlineData(Site.StuckOwnerAnotherAdministratorFine, true, false)]
+    [InlineData(Site.StuckOwnerAnotherAdministratorFine, false, false)]
+    [InlineData(Site.OnlyAdministratorStuck, true, true)]
+    [InlineData(Site.OnlyAdministratorStuck, false, true)]
+    [InlineData(Site.EveryAdministratorStuck, true, true)]
+    [InlineData(Site.EveryAdministratorStuck, false, true)]
+    [InlineData(Site.NobodyStuck, true, false)]
+    [InlineData(Site.NobodyStuck, false, false)]
+    [InlineData(Site.StuckAdministratorWithConfirmedEmail, true, false)]
+    [InlineData(Site.StuckAdministratorWithConfirmedEmail, false, true)]
+    [InlineData(Site.NoAdministratorAndNobodyStuck, true, false)]
+    [InlineData(Site.NoAdministratorAndNobodyStuck, false, false)]
+    public async Task ASiteIsInRecoveryModeOnlyWhenSomebodyIsStuckAndNoMemberAdministratorCanSignIn(
+        Site site, bool delivery, bool recoveryMode)
+    {
+        var adminRole = (await Members().FindRoleIdBySlugAsync(_tenant, RoleSeeds.Admin, CancellationToken.None))!.Value;
+        switch (site)
+        {
+            case Site.StuckFollowerOwnerFine:
+                await SeedAsync("Owner", signsIn: true, [_ownerRole]);
+                await SeedAsync("Follower", signsIn: false, [_caretakerRole]);
+                break;
+            case Site.StuckOwnerAnotherAdministratorFine:
+                await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+                await SeedAsync("Admin", signsIn: true, [adminRole]);
+                break;
+            case Site.OnlyAdministratorStuck:
+                await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+                await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
+                break;
+            case Site.EveryAdministratorStuck:
+                await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+                await SeedAsync("Admin", signsIn: false, [adminRole]);
+                await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
+                break;
+            case Site.NobodyStuck:
+                await SeedAsync("Owner", signsIn: true, [_ownerRole]);
+                await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
+                break;
+            case Site.StuckAdministratorWithConfirmedEmail:
+                await SeedAsync("Owner", signsIn: false, [_ownerRole], confirmedEmail: true);
+                await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
+                break;
+            case Site.NoAdministratorAndNobodyStuck:
+                await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
+                break;
+        }
+
+        (await Members(AccountLinkRoutes.Of(delivery)).ReadSetupGateAsync(_tenant, CancellationToken.None))
+            .Should().Be(new SetupGate(HasCredentials: true, RecoveryMode: recoveryMode));
+    }
+
+    public static TheoryData<string, string[], bool, bool> Administrators => new()
+    {
+        { "the owner role", [RoleSeeds.Owner], false, true },
+        { "the admin role", [RoleSeeds.Admin], false, true },
+        { "a direct grant of members.manage", [Scope.MembersManage], true, true },
+        { "a direct grant that satisfies members.manage without naming it", [Scope.FullAccess], true, true },
+        { "members.invite alone", [Scope.MembersInvite], true, false },
+        { "the caretaker role", [RoleSeeds.Caretaker], false, false },
+    };
+
+    [Theory]
+    [MemberData(nameof(Administrators))]
+    public async Task AMemberAdministratorIsWhoeverSatisfiesMembersManage(
+        string grantKind, string[] grant, bool direct, bool isAdministrator)
+    {
+        _ = grantKind;
+        await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+        var roles = new List<Guid>();
+        if (!direct)
+        {
+            foreach (var slug in grant)
+                roles.Add((await Members().FindRoleIdBySlugAsync(_tenant, slug, CancellationToken.None))!.Value);
+        }
+        await SeedAsync("Other", signsIn: true, [.. roles], direct ? grant : null);
+
+        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None))!
+            .RecoveryMode.Should().Be(!isAdministrator);
+    }
+
+    [Fact]
+    public async Task NeitherASystemSubjectNorADeactivatedAdministratorCountsAsAWayIn()
+    {
+        await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+        var devices = await SubjectAsync("Devices", system: true);
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, devices, [], [Scope.FullAccess]), CancellationToken.None)).Should().BeTrue();
+        AddPasskey(devices);
+        var retired = await SubjectAsync("Retired", active: false);
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, retired, [_ownerRole]), CancellationToken.None)).Should().BeTrue();
+        AddPasskey(retired);
+
+        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None)).Should().Be(new SetupGate(true, true));
+    }
+
+    [Fact]
+    public async Task ADemoVisitorHoldingMembersManageIsNoWayIn()
+    {
+        await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+        var visitor = await SubjectAsync("Visitor", demo: true);
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, visitor, [], [Scope.MembersManage]), CancellationToken.None)).Should().BeTrue();
+        AddPasskey(visitor);
+
+        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None)).Should().Be(new SetupGate(true, true));
+    }
+
+    [Fact]
+    public async Task AnAdministratorOfAnotherTenantIsNoWayInToThisOne()
+    {
+        await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+        await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
+        var elsewhere = await SubjectAsync("Elsewhere");
+        (await Members(_otherTenant).AddMemberAsync(
+            new NewTenantMember(_otherTenant, elsewhere, [], [Scope.FullAccess]), CancellationToken.None)).Should().BeTrue();
+        AddPasskey(elsewhere);
+
+        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None)).Should().Be(new SetupGate(true, true));
+    }
+
+    [Fact]
+    public async Task AHistoryClampedMembersManageHolderIsAWayIn()
+    {
+        await SeedAsync("Owner", signsIn: false, [_ownerRole]);
+        var clamped = await SubjectAsync("Clamped");
+        (await Members().AddMemberAsync(
+            new NewTenantMember(_tenant, clamped, [], [Scope.MembersManage], LimitTo24Hours: true), CancellationToken.None)).Should().BeTrue();
+        AddPasskey(clamped);
+
+        (await Members().ReadSetupGateAsync(_tenant, CancellationToken.None))
+            .Should().Be(new SetupGate(true, false), "the history clamp narrows reads, not members.manage");
     }
 
     [Fact]
@@ -443,7 +613,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         var id = await Members().CreateRequestAsync(new NewMembershipRequest(_tenant, subject, "please", Now), CancellationToken.None);
         await using var owned = _db.CreateContext(_tenant);
         await using var unit = DbUnitOfWork.Own(owned);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         (await members.AnyPendingRequestAsync(_otherTenant, subject, CancellationToken.None)).Should().BeFalse();
         (await members.FindLatestRequestAsync(_otherTenant, subject, CancellationToken.None)).Should().BeNull();
@@ -460,7 +630,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         var subject = await SubjectAsync("Staged");
         await using var owned = _db.CreateContext(_tenant);
         await using var unit = DbUnitOfWork.Own(owned);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         (await members.AddMemberAsync(new NewTenantMember(_tenant, subject, [_ownerRole]), CancellationToken.None)).Should().BeTrue();
         (await Members().IsMemberAsync(_tenant, subject, CancellationToken.None)).Should().BeFalse("the unit has not been saved");

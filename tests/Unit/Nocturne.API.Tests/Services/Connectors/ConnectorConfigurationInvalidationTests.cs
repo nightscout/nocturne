@@ -66,7 +66,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
         _configurations = new ConnectorConfigurationRepository(_dbContext.AsFactory());
         _service = new ConnectorConfigurationService(
             _configurations,
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),

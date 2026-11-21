@@ -93,7 +93,7 @@ public class AuthHandlerPriorityTests
 
         var publicAccessCacheService = new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()),
-            new TenantMembershipRepository(Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>().AsNocturneFactory()),
+            new TenantMembershipRepository(Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>().AsNocturneFactory(), AccountLinkRoutes.Off),
             NullLogger<PublicAccessCacheService>.Instance);
 
         using var db = TestDbContextFactory.CreateSqlite();
@@ -142,7 +142,7 @@ public class AuthHandlerPriorityTests
 
         var publicAccessCacheService = new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()),
-            new TenantMembershipRepository(Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>().AsNocturneFactory()),
+            new TenantMembershipRepository(Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>().AsNocturneFactory(), AccountLinkRoutes.Off),
             NullLogger<PublicAccessCacheService>.Instance);
 
         var middleware = new AuthenticationMiddleware(
@@ -187,7 +187,7 @@ public class AuthHandlerPriorityTests
 
         var publicAccessCacheService = new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()),
-            new TenantMembershipRepository(Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>().AsNocturneFactory()),
+            new TenantMembershipRepository(Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>().AsNocturneFactory(), AccountLinkRoutes.Off),
             NullLogger<PublicAccessCacheService>.Instance);
 
         var middleware = new AuthenticationMiddleware(

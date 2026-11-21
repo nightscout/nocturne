@@ -28,7 +28,7 @@ public class SubjectServiceEmailConfirmationTests : IDisposable
     public SubjectServiceEmailConfirmationTests()
     {
         _service = new SubjectService(
-            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             Mock.Of<IAuthAuditService>(),
             Mock.Of<IRecoveryCodeService>(),
             NullLogger<SubjectService>.Instance,

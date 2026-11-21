@@ -183,7 +183,7 @@ public class UserPreferencesControllerTests
         }
 
         var dbContext = new NocturneDbContext(options);
-        var controller = new UserPreferencesController(new SubjectRepository(dbContext.AsFactory()), NullLogger<UserPreferencesController>.Instance)
+        var controller = new UserPreferencesController(new SubjectRepository(dbContext.AsFactory(), AccountLinkRoutes.Off), NullLogger<UserPreferencesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = HttpContextWith(authenticated) },
         };

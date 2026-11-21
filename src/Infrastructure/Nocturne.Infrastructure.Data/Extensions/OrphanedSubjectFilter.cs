@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -7,11 +9,15 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// The one predicate for "an account on this tenant that cannot sign in".
 /// </summary>
 /// <remarks>
-/// A member holding neither a passkey nor a linked provider has no way back in, so the instance
-/// opens the recovery flow rather than serving it API traffic. Every caller must agree on what
-/// qualifies: a tenant answers 503 for as long as one of these exists, so a predicate that is wider
-/// in one place than another either strands a tenant in recovery mode or lets a locked-out account
-/// go unnoticed.
+/// A member holding neither a passkey nor a working provider identity has no way back in on their
+/// own, unless a recovery link can reach them: that takes a delivery route on the instance
+/// (<see cref="IAccountLinkRoute"/>) and an address on the account that has been confirmed
+/// (<see cref="HoldsConfirmedEmail"/>). Without a route an address does not count, because the link
+/// could never arrive. Every caller must agree on what qualifies: this set decides whether the site
+/// is in recovery mode, which members an administrator is shown and may issue a recovery code for,
+/// and whether such a code may still be redeemed, so a predicate that is wider in one place than
+/// another either strands an account or lets a locked-out one go unnoticed. That is why the route is
+/// a parameter taken from the container rather than a flag a caller could forget or get wrong.
 /// <para>
 /// Deliberately not a definition of "has no credential at all". A device or service token is a
 /// direct grant on <c>oauth_grants</c> issued to somebody else's subject, so it never reaches this
@@ -23,7 +29,18 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 public static class OrphanedSubjectFilter
 {
     /// <summary>
-    /// The subjects on <paramref name="tenantId"/> that hold a membership but no primary auth factor.
+    /// Whether the account holds an address it has confirmed. The recovery-link lookup reads the
+    /// same expression, so an account this predicate leaves to email is one that would be sent a link.
+    /// </summary>
+    public static readonly Expression<Func<SubjectEntity, bool>> HoldsConfirmedEmail =
+        s => s.Email != null && s.EmailConfirmedAt != null;
+
+    private static readonly Expression<Func<SubjectEntity, bool>> LacksConfirmedEmail =
+        Expression.Lambda<Func<SubjectEntity, bool>>(
+            Expression.Not(HoldsConfirmedEmail.Body), HoldsConfirmedEmail.Parameters);
+
+    /// <summary>
+    /// The subjects on <paramref name="tenantId"/> that hold a membership but cannot sign in.
     /// </summary>
     /// <param name="db">
     /// The context to read on. Must not be a share-flagged context: membership is not share-visible
@@ -31,14 +48,39 @@ public static class OrphanedSubjectFilter
     /// tenant as having no members at all.
     /// </param>
     /// <param name="tenantId">The tenant whose members are considered.</param>
+    /// <param name="linkRoute">Whether a recovery link can be delivered on this instance.</param>
     public static IQueryable<SubjectEntity> OrphanedSubjectsOf(
-        this NocturneDbContext db, Guid tenantId) =>
+        this NocturneDbContext db, Guid tenantId, IAccountLinkRoute linkRoute) =>
         db.TenantMembers
             .Where(m => m.TenantId == tenantId)
             .Select(m => m.Subject!)
+            .WhoCannotSignIn(db, linkRoute);
+
+    /// <summary>
+    /// Those of <paramref name="subjects"/> that cannot sign in, by the rule this class states.
+    /// </summary>
+    /// <param name="subjects">The subjects considered.</param>
+    /// <param name="db">The context <paramref name="subjects"/> is read on.</param>
+    /// <param name="linkRoute">Whether a recovery link can be delivered on this instance.</param>
+    /// <param name="withoutProvider">
+    /// A provider whose identities do not count, to ask who would be stranded if it went away.
+    /// </param>
+    public static IQueryable<SubjectEntity> WhoCannotSignIn(
+        this IQueryable<SubjectEntity> subjects,
+        NocturneDbContext db,
+        IAccountLinkRoute linkRoute,
+        Guid? withoutProvider = null)
+    {
+        var identities = withoutProvider is { } excluded
+            ? db.WorkingOidcIdentities().Where(i => i.ProviderId != excluded)
+            : db.WorkingOidcIdentities();
+        var withoutFactor = subjects
             .Where(s => s.IsActive
                 && !s.IsSystemSubject
                 && !s.IsDemoSubject
                 && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
-                && !db.WorkingOidcIdentities().Any(i => i.SubjectId == s.Id));
+                && !identities.Any(i => i.SubjectId == s.Id));
+
+        return linkRoute.IsConfigured ? withoutFactor.Where(LacksConfirmedEmail) : withoutFactor;
+    }
 }

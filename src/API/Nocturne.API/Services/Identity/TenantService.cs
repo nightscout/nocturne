@@ -44,6 +44,7 @@ public partial class TenantService : ITenantService
     private readonly GrantRevocationService _grantRevocation;
     private readonly TimeProvider _time;
     private readonly ILogger<TenantService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     private static readonly HashSet<string> ReservedSlugs =
     [
@@ -95,7 +96,8 @@ public partial class TenantService : ITenantService
         ITenantRoleService roleService,
         GrantRevocationService grantRevocation,
         TimeProvider timeProvider,
-        ILogger<TenantService> logger)
+        ILogger<TenantService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _factory = factory;
         _tenants = tenants;
@@ -108,6 +110,7 @@ public partial class TenantService : ITenantService
         _grantRevocation = grantRevocation;
         _time = timeProvider;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     public async Task<TenantCreatedDto> CreateAsync(
@@ -128,7 +131,7 @@ public partial class TenantService : ITenantService
     {
         await using var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct);
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
         var tenantId = await unit.CommitAsync(async token =>
         {
             var id = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
@@ -325,7 +328,7 @@ public partial class TenantService : ITenantService
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var context = unit.Context;
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
         var member = await members.FindMemberAsync(tenantId, subjectId, ct);
 
         // Already absent is the caller's desired end state, not a refusal.
@@ -431,9 +434,9 @@ public partial class TenantService : ITenantService
         await using var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct);
         var context = unit.Context;
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
         var providers = new OidcProviderRepository(unit);
-        var subjects = new SubjectRepository(unit);
+        var subjects = new SubjectRepository(unit, _linkRoute);
         var passkeys = new PasskeyCredentialRepository(unit);
         var provisioned = await unit.CommitAsync(async token =>
         {

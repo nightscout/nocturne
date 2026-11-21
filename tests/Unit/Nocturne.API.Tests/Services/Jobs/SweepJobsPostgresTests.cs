@@ -250,6 +250,7 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddSingleton<TimeProvider>(clock);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();

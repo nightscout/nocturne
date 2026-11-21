@@ -79,7 +79,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             _mockDirectGrantService.Object,
             new OAuthGrantRepository(_dbContext.AsFactory()),
             _mockJwtService.Object,
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _categoryReadContext,
             TimeProvider.System
         );

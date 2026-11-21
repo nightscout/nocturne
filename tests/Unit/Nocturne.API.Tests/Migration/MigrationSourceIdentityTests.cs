@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -39,6 +40,7 @@ public class MigrationSourceIdentityTests
         var provider = new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .AddScoped<ITenantAccessor, HttpContextTenantAccessor>()
             .AddActiveTenantSnapshot()
             .AddScoped<INotificationV1Service>(sp => RecordingNotifications(

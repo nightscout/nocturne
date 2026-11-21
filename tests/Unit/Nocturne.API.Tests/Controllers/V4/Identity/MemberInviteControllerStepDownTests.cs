@@ -73,6 +73,10 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
     {
         var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _recipientSubjectId };
         _db.TenantMembers.Add(member);
+        _db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = _recipientSubjectId, CredentialId = _recipientSubjectId.ToByteArray(), PublicKey = [1],
+        });
         _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
         {
             Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = _owner.Id,
@@ -96,10 +100,10 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITenantService>(),
-            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory()), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            new TenantMembershipRepository(_db.AsFactory()))
+            new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

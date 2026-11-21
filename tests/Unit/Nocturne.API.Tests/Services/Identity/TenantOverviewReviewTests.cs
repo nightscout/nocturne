@@ -364,7 +364,7 @@ public class TenantOverviewReviewTests
             var provider = services.BuildServiceProvider();
 
             Service = new TenantOverviewService(
-                new TenantMembershipRepository(new InMemoryContextFactory(options).AsNocturneFactory()),
+                new TenantMembershipRepository(new InMemoryContextFactory(options).AsNocturneFactory(), AccountLinkRoutes.Off),
                 provider.CreateScope().ServiceProvider,
                 new GlucoseStatusClassifier(
                     new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

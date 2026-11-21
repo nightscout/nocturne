@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +32,7 @@ public class SubjectEmailConfirmationPostgresTests
         await using var provider = BuildProvider();
         var id = await SeedAsync(provider, "a@example.test");
         await using var db = await ContextAsync(provider);
-        var repository = new SubjectRepository(DbUnitOfWork.Own(db));
+        var repository = new SubjectRepository(DbUnitOfWork.Own(db), AccountLinkRoutes.Off);
         var withTicks = First.AddTicks(1234567);
 
         var first = (await repository.ConfirmEmailAsync(id, " A@Example.TEST", withTicks, CancellationToken.None))
@@ -53,7 +54,7 @@ public class SubjectEmailConfirmationPostgresTests
         await using var provider = BuildProvider();
         var id = await SeedAsync(provider, stored);
         await using var db = await ContextAsync(provider);
-        var repository = new SubjectRepository(DbUnitOfWork.Own(db));
+        var repository = new SubjectRepository(DbUnitOfWork.Own(db), AccountLinkRoutes.Off);
 
         (await repository.ConfirmEmailAsync(id, named, First, CancellationToken.None))
             .Should().BeOfType<EmailConfirmation.AddressMismatch>();
@@ -67,7 +68,7 @@ public class SubjectEmailConfirmationPostgresTests
         await using var provider = BuildProvider();
         var id = await SeedAsync(provider, "a@example.test");
         await using var db = await ContextAsync(provider);
-        var repository = new SubjectRepository(DbUnitOfWork.Own(db));
+        var repository = new SubjectRepository(DbUnitOfWork.Own(db), AccountLinkRoutes.Off);
 
         (await repository.ConfirmEmailAsync(id, "b@example.test", First, CancellationToken.None))
             .Should().BeOfType<EmailConfirmation.AddressMismatch>();
@@ -82,10 +83,10 @@ public class SubjectEmailConfirmationPostgresTests
         var id = await SeedAsync(provider, "a@example.test");
         await using var admin = await ContextAsync(provider);
         await using var confirming = await ContextAsync(provider);
-        await new SubjectRepository(DbUnitOfWork.Own(admin)).UpdateProfileAsync(
+        await new SubjectRepository(DbUnitOfWork.Own(admin), AccountLinkRoutes.Off).UpdateProfileAsync(
             id, new SubjectProfile("Person", "z@example.test", null), CancellationToken.None);
 
-        (await new SubjectRepository(DbUnitOfWork.Own(confirming)).ConfirmEmailAsync(
+        (await new SubjectRepository(DbUnitOfWork.Own(confirming), AccountLinkRoutes.Off).ConfirmEmailAsync(
                 id, "a@example.test", First, CancellationToken.None))
             .Should().BeOfType<EmailConfirmation.Confirmed>();
         await admin.SaveChangesAsync();

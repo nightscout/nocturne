@@ -114,7 +114,7 @@ public class AccessRequestController(
         if (await subjectService.DeleteSubjectAsync(subjectId) is SubjectChange.LastOwnerOf lastOwnerOf)
         {
             return Problem(
-                detail: $"The subject is the last owner of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
+                detail: $"The subject is the only owner, or the last owner who can sign in, of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Conflict");
         }

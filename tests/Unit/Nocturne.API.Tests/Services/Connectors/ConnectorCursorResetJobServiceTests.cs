@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,6 +62,7 @@ public class ConnectorCursorResetJobServiceTests
             .AddScoped<ITenantAccessor, HttpContextTenantAccessor>()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .BuildServiceProvider();
 
         if (existingProvider is null)

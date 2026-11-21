@@ -33,8 +33,8 @@ public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolution
     private TenantService Provisioner() => new(
         Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(),
         new TenantRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
-        new TenantMembershipRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
-        new SubjectRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
+        new TenantMembershipRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(), AccountLinkRoutes.Off),
         Root.GetRequiredService<IMemoryCache>(),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -42,7 +42,7 @@ public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolution
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        NullLogger<TenantService>.Instance);
+        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off);
 
     [Fact]
     public async Task Provisioning_a_second_tenant_stops_the_apex_serving_the_first()

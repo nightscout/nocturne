@@ -36,14 +36,16 @@ public static class AuthTestHelpers
     private const int GuestCodeLength = 7;
 
     /// <summary>
-    /// Creates a subject with a passkey credential, tenant membership, and admin role, and issues
-    /// it a direct grant carrying the returned token. The grant is what makes that token
+    /// Creates a subject with a passkey credential, tenant membership (full access unless
+    /// <paramref name="permissions"/> says otherwise), and admin role, and issues it a direct grant
+    /// carrying the returned token. The grant is what makes that token
     /// authenticate, since a subject holds no credential of its own.
     /// </summary>
     public static async Task<(Guid SubjectId, string AccessToken)> SeedAuthenticatedSubjectAsync(
         NpgsqlConnection conn,
         Guid tenantId,
-        string name)
+        string name,
+        IReadOnlyList<string>? permissions = null)
     {
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
@@ -76,9 +78,10 @@ public static class AuthTestHelpers
         {
             cmd.CommandText = """
                 INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, '["*"]'::jsonb, now(), now(), false);
+                VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
+            cmd.Parameters.AddWithValue("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess]));
             cmd.Parameters.AddWithValue("tenantId", tenantId);
             cmd.Parameters.AddWithValue("subjectId", subjectId);
             await cmd.ExecuteNonQueryAsync();
@@ -191,13 +194,15 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
-    /// Creates a subject with tenant membership and admin role but WITHOUT a passkey credential.
+    /// Creates a subject with tenant membership (full access unless <paramref name="permissions"/>
+    /// says otherwise) and admin role but WITHOUT a passkey credential.
     /// Used for testing tenant setup guard scenarios where passkey enrollment is required.
     /// </summary>
     public static async Task<(Guid SubjectId, string AccessToken)> SeedSubjectWithoutPasskeyAsync(
         NpgsqlConnection conn,
         Guid tenantId,
-        string name)
+        string name,
+        IReadOnlyList<string>? permissions = null)
     {
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
@@ -217,9 +222,10 @@ public static class AuthTestHelpers
         {
             cmd.CommandText = """
                 INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, '["*"]'::jsonb, now(), now(), false);
+                VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
+            cmd.Parameters.AddWithValue("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess]));
             cmd.Parameters.AddWithValue("tenantId", tenantId);
             cmd.Parameters.AddWithValue("subjectId", subjectId);
             await cmd.ExecuteNonQueryAsync();

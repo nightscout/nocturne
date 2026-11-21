@@ -60,6 +60,7 @@ public sealed class DemoTenantService
     private readonly ITenantCache _cache;
     private readonly TimeProvider _time;
     private readonly ILogger<DemoTenantService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="tenants">Finds the demo tenant and reads its row.</param>
@@ -81,7 +82,8 @@ public sealed class DemoTenantService
         PublicAccessCacheService publicAccessCache,
         ITenantCache cache,
         TimeProvider time,
-        ILogger<DemoTenantService> logger)
+        ILogger<DemoTenantService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _factory = factory;
         _tenants = tenants;
@@ -93,6 +95,7 @@ public sealed class DemoTenantService
         _cache = cache;
         _time = time;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     /// <summary>
@@ -138,8 +141,8 @@ public sealed class DemoTenantService
         // subject, land together.
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
-        var subjects = new SubjectRepository(unit, _time);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
+        var subjects = new SubjectRepository(unit, _linkRoute, _time);
 
         await unit.CommitAsync(async t =>
         {

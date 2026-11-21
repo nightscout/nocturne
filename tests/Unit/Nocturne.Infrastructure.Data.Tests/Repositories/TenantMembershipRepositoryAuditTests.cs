@@ -54,7 +54,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     }
 
     private TenantMembershipRepository Repository(IAuditContext? actor) =>
-        new(new TestNocturneDbContextFactory(Context(actor)));
+        new(new TestNocturneDbContextFactory(Context(actor)), AccountLinkRoutes.Off);
 
     private async Task SeedMemberAsync()
     {
@@ -289,7 +289,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(
             new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
-        var repository = new TenantMembershipRepository(unit);
+        var repository = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         var act = () => unit.CommitAsync(async token =>
         {
@@ -367,7 +367,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
         await SeedMemberAsync();
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(
             new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
-        var repository = new TenantMembershipRepository(unit);
+        var repository = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         await unit.CommitAsync(async token =>
         {
@@ -385,7 +385,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
         await SeedMemberAsync();
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(
             new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
-        var repository = new TenantMembershipRepository(unit);
+        var repository = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         var act = () => unit.CommitAsync(async token =>
         {

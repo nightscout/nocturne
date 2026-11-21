@@ -73,8 +73,8 @@ public interface ITenantMembershipRepository
     Task<IReadOnlyList<TenantMemberRecord>> ListMembersAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
-    /// The tenant's memberships held by a person who can sign in, not a system subject and not
-    /// deactivated, in the order they joined.
+    /// The tenant's memberships held by a person, active and not a system subject, in the order they
+    /// joined.
     /// </summary>
     Task<IReadOnlyList<TenantMemberRecord>> ListPeopleAsync(Guid tenantId, CancellationToken ct);
 
@@ -92,7 +92,7 @@ public interface ITenantMembershipRepository
 
     /// <summary>
     /// Removes the membership and its roles, refused with <see cref="OwnerGuardedChange.LastOwner"/>
-    /// when it holds the owner role and no other owner who can sign in would remain.
+    /// when <c>TenantOwnerFilter.IsLastOwnerAsync</c> says it is the last owner.
     /// </summary>
     /// <remarks>
     /// The check and the removal hold the tenant's owner lock. Over a unit, call it inside the
@@ -102,7 +102,7 @@ public interface ITenantMembershipRepository
 
     /// <summary>
     /// Removes every membership <paramref name="subjectId"/> holds, in any tenant, and returns how
-    /// many, with the tenants that are left with no owner who can sign in.
+    /// many, with the tenants whose last owner it was by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.
     /// </summary>
     /// <remarks>
     /// On a platform context: the demo reset retires its visitor from every tenant it joined. It does
@@ -133,7 +133,7 @@ public interface ITenantMembershipRepository
 
     /// <summary>
     /// <see cref="ReplaceRolesAsync"/>, refused with <see cref="OwnerGuardedChange.LastOwner"/> when
-    /// it removes the owner role from the membership and no other owner who can sign in would remain.
+    /// it removes the owner role from a membership <c>TenantOwnerFilter.IsLastOwnerAsync</c> says is the last owner.
     /// </summary>
     /// <remarks>Holds the tenant's owner lock as <see cref="RemoveMemberUnlessLastOwnerAsync"/> does.</remarks>
     Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
@@ -173,10 +173,11 @@ public interface ITenantMembershipRepository
 
     /// <summary>
     /// Whether any member of <paramref name="tenantId"/> holds a passkey or a working OIDC identity,
-    /// and whether any member can sign in with nothing, in one statement; null when the tenant has
+    /// and whether the site is in recovery mode (<see cref="SetupGate"/>); null when the tenant has
     /// no member, so no member can hold a credential.
     /// </summary>
     /// <remarks>
+    /// One statement for a site with no stuck member; a second only when one is stuck.
     /// System-pinned: the setup gate runs on every API request, public-share requests included,
     /// which read as a share and are hidden every table no category governs. The callers are
     /// pinned by <c>SystemPinnedAllowlistTests</c>.
@@ -187,7 +188,7 @@ public interface ITenantMembershipRepository
     /// <remarks>System-pinned, as <see cref="ReadSetupGateAsync"/> is.</remarks>
     Task<SetupCredentialCounts> CountSetupCredentialsAsync(Guid tenantId, CancellationToken ct);
 
-    /// <summary>The members of <paramref name="tenantId"/> who can sign in with nothing: active, not a system subject, not the demo visitor.</summary>
+    /// <summary>The members of <paramref name="tenantId"/> who cannot sign in (<c>OrphanedSubjectFilter</c>).</summary>
     /// <remarks>System-pinned, as <see cref="ReadSetupGateAsync"/> is.</remarks>
     Task<IReadOnlyList<OrphanedMember>> ListOrphanedMembersAsync(Guid tenantId, CancellationToken ct);
 

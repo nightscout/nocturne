@@ -68,7 +68,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
 
         _service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             _encryptionService.Object,
             broadcastService,

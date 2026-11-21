@@ -24,8 +24,8 @@ public sealed class TenantServiceValidateSlugTests : IDisposable
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
         new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
-        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
-        new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -33,7 +33,7 @@ public sealed class TenantServiceValidateSlugTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>());
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
 
     [Theory]
     [InlineData(3)]

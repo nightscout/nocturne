@@ -96,10 +96,10 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITenantService>(),
-            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory()), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            new TenantMembershipRepository(_db.AsFactory()))
+            new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

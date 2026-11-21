@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -23,11 +24,15 @@ public class TenantMembershipRepository : ITenantMembershipRepository
 {
     private readonly INocturneDbContextFactory? _contexts;
     private readonly DbUnitOfWork? _unit;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <summary>A repository whose calls each open their own context and save what they write.</summary>
-    public TenantMembershipRepository(INocturneDbContextFactory contexts)
+    /// <param name="contexts">Opens the context of each call.</param>
+    /// <param name="linkRoute">Decides who cannot sign in (<see cref="OrphanedSubjectFilter"/>).</param>
+    public TenantMembershipRepository(INocturneDbContextFactory contexts, IAccountLinkRoute linkRoute)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _linkRoute = linkRoute ?? throw new ArgumentNullException(nameof(linkRoute));
     }
 
     /// <summary>
@@ -35,9 +40,12 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     /// pinned. A write is staged on the unit and not saved: the owner saves it, so a membership
     /// lands in one transaction with the tenant, roles or grants beside it.
     /// </summary>
-    public TenantMembershipRepository(DbUnitOfWork unit)
+    /// <param name="unit">The caller's unit of work.</param>
+    /// <param name="linkRoute">Decides who cannot sign in (<see cref="OrphanedSubjectFilter"/>).</param>
+    public TenantMembershipRepository(DbUnitOfWork unit, IAccountLinkRoute linkRoute)
     {
         _unit = unit ?? throw new ArgumentNullException(nameof(unit));
+        _linkRoute = linkRoute ?? throw new ArgumentNullException(nameof(linkRoute));
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
@@ -286,7 +294,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     public virtual Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(Guid tenantId, Guid memberId, CancellationToken ct) =>
         UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
-            if (await Members(db).IsLastOwnerAsync(tenantId, memberId, token))
+            if (await db.IsLastOwnerAsync(tenantId, memberId, _linkRoute, token))
                 return OwnerGuardedChange.LastOwner;
 
             var member = await db.TenantMembers
@@ -305,13 +313,13 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     public virtual async Task<SubjectMembershipsRemoval> RemoveMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct)
     {
         if (_unit is not null)
-            return await RemoveMembershipsUnderOwnerLocksAsync(_unit.Context, subjectId, ct);
+            return await RemoveMembershipsUnderOwnerLocksAsync(_unit.Context, subjectId, _linkRoute, ct);
 
         await using var unit = await DbUnitOfWork.OpenPlatformAsync(Pinnable, ct);
         return await unit.CommitAsync(
             async token =>
             {
-                var removal = await RemoveMembershipsUnderOwnerLocksAsync(unit.Context, subjectId, token);
+                var removal = await RemoveMembershipsUnderOwnerLocksAsync(unit.Context, subjectId, _linkRoute, token);
                 await unit.Context.SaveChangesAsync(token);
                 return removal;
             },
@@ -319,9 +327,9 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     private static async Task<SubjectMembershipsRemoval> RemoveMembershipsUnderOwnerLocksAsync(
-        NocturneDbContext db, Guid subjectId, CancellationToken ct)
+        NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
     {
-        var leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, ct);
+        var leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, linkRoute, ct);
         var memberships = await db.TenantMembers
             .Include(m => m.MemberRoles)
             .Where(m => m.SubjectId == subjectId)
@@ -410,7 +418,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
             if (await Roles(db).AnyAsync(r => r.TenantId == tenantId && r.Slug == RoleSeeds.Owner && removedRoleIds.Contains(r.Id), token)
-                && await Members(db).IsLastOwnerAsync(tenantId, memberId, token))
+                && await db.IsLastOwnerAsync(tenantId, memberId, _linkRoute, token))
                 return OwnerGuardedChange.LastOwner;
 
             return await StageRoleReplacementAsync(db, tenantId, memberId, removedRoleIds, addedRoleIds, now, token)
@@ -575,7 +583,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         // One statement on every API request: no member row means no member can hold a credential.
         // Credentials and OIDC identities are subject-scoped, so both checks join through the members.
         var members = db.TenantMembers.Where(m => m.TenantId == tenantId);
-        var orphans = db.OrphanedSubjectsOf(tenantId);
+        var stuck = db.OrphanedSubjectsOf(tenantId, _linkRoute);
         var gate = await members
             .Take(1)
             .Select(_ => new
@@ -583,10 +591,50 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 HasCredentials = members.Any(m =>
                     db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
                     db.WorkingOidcIdentities().Any(i => i.SubjectId == m.SubjectId)),
-                HasOrphans = orphans.Any(),
+                HasStuckMember = stuck.Any(),
             })
             .FirstOrDefaultAsync(ct);
-        return gate is null ? null : new SetupGate(gate.HasCredentials, gate.HasOrphans);
+        if (gate is null)
+            return null;
+        if (!gate.HasCredentials || !gate.HasStuckMember)
+            return new SetupGate(gate.HasCredentials, RecoveryMode: false);
+
+        return new SetupGate(HasCredentials: true, RecoveryMode: !await AnAdministratorCanSignInAsync(db, tenantId, stuck, ct));
+    }
+
+    /// <summary>
+    /// Whether a person on the tenant who is not in <paramref name="stuck"/> holds
+    /// <see cref="Scope.MembersManage"/>, read only for a site with a stuck member.
+    /// </summary>
+    /// <remarks>
+    /// The permission evaluation stays in .NET (<see cref="TenantMemberEntity.Holds"/>), and is asked
+    /// of each role and of each set of direct permissions apart: normalising expands each atom on its
+    /// own and a requirement is met by a single atom, so a membership holds a scope exactly when one
+    /// of its roles or its direct permissions does. The roles are a few rows; the members are asked
+    /// for only through those that hold it, and only those with direct permissions are loaded.
+    /// </remarks>
+    private static async Task<bool> AnAdministratorCanSignInAsync(
+        NocturneDbContext db, Guid tenantId, IQueryable<SubjectEntity> stuck, CancellationToken ct)
+    {
+        var reachable = db.TenantMembers.AsNoTracking()
+            .PeopleOf(tenantId)
+            .Where(m => !m.Subject!.IsDemoSubject && !stuck.Any(s => s.Id == m.SubjectId));
+
+        var roles = await db.TenantRoles.AsNoTracking().Where(r => r.TenantId == tenantId).ToListAsync(ct);
+        var administratorRoles = roles
+            .Where(role => new TenantMemberEntity { MemberRoles = [new TenantMemberRoleEntity { TenantRole = role }] }
+                .Holds(Scope.MembersManage))
+            .Select(role => role.Id)
+            .ToList();
+        if (administratorRoles.Count > 0
+            && await reachable.AnyAsync(m => m.MemberRoles.Any(mr => administratorRoles.Contains(mr.TenantRoleId)), ct))
+            return true;
+
+        var directGrants = await reachable
+            .Where(m => m.DirectPermissions != null)
+            .Select(m => m.DirectPermissions)
+            .ToListAsync(ct);
+        return directGrants.Any(direct => new TenantMemberEntity { DirectPermissions = direct }.Holds(Scope.MembersManage));
     }
 
     /// <inheritdoc/>
@@ -611,7 +659,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     public virtual async Task<IReadOnlyList<OrphanedMember>> ListOrphanedMembersAsync(Guid tenantId, CancellationToken ct)
     {
         await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
-        return await db.OrphanedSubjectsOf(tenantId)
+        return await db.OrphanedSubjectsOf(tenantId, _linkRoute)
             .Select(s => new OrphanedMember(s.Id, s.Name, s.Username))
             .ToListAsync(ct);
     }

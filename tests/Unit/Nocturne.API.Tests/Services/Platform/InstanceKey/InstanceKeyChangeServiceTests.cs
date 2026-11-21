@@ -369,7 +369,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new InstanceKeyCheck(root, _key),
             new OwnerNoticeLedger(root),
             new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            new TenantMembershipRepository(root),
+            new TenantMembershipRepository(root, AccountLinkRoutes.Off),
             _clock,
             _log);
     }
