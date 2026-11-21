@@ -20513,6 +20513,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Could not save. Check your connection and try again."
 msgstr ""
@@ -45131,4 +45132,12 @@ msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "No alert is on for low glucose. Nocturne will not tell you when glucose is low."
+msgstr ""
+
+#: src/lib/forms/submit-messages.svelte.ts
+msgid "You do not have permission to do this."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Only members who can manage this site's settings can change glucose processing."
 msgstr ""
