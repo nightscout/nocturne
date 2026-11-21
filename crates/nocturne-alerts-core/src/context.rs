@@ -301,7 +301,10 @@ pub fn check_timestamp(at: DateTime<Utc>, field: &str) -> Result<DateTime<Utc>, 
     }
 }
 
-fn opt_ts(at: Option<DateTime<Utc>>, field: &str) -> Result<Option<DateTime<Utc>>, String> {
+pub(crate) fn opt_ts(
+    at: Option<DateTime<Utc>>,
+    field: &str,
+) -> Result<Option<DateTime<Utc>>, String> {
     at.map(|at| check_timestamp(at, field)).transpose()
 }
 

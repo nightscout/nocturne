@@ -85,7 +85,8 @@ internal static class EngineTestHarness
             rule.AutoResolveEnabled,
             rule.AutoResolveParams?.GetRawText(),
             OnUnknown: rule.OnUnknown ?? AlertRuleOnUnknown.Hold,
-            GlucoseFreshnessMinutes: rule.GlucoseFreshnessMinutes);
+            GlucoseFreshnessMinutes: rule.GlucoseFreshnessMinutes,
+            EnabledAt: rule.EnabledAt);
     }
 
     /// <summary>

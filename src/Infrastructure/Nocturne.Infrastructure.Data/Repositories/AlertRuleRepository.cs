@@ -72,7 +72,9 @@ public class AlertRuleRepository : IAlertRuleRepository
         if (entity is null)
             return false;
 
+        var wasEnabled = entity.IsEnabled;
         Apply(entity, rule);
+        StampEnabled(entity, wasEnabled, Now);
         entity.UpdatedAt = Now;
         await SaveAsync(db, ct);
         return true;
@@ -162,6 +164,7 @@ public class AlertRuleRepository : IAlertRuleRepository
 
         var wasEnabled = entity.IsEnabled;
         entity.IsEnabled = !wasEnabled;
+        StampEnabled(entity, wasEnabled, Now);
         entity.UpdatedAt = Now;
         await SaveAsync(db, ct);
         return wasEnabled;
@@ -335,11 +338,22 @@ public class AlertRuleRepository : IAlertRuleRepository
             UpdatedAt = now,
         };
         Apply(entity, rule.Rule);
+        StampEnabled(entity, wasEnabled: false, now);
 
         var sortOrder = 0;
         foreach (var channel in rule.Channels)
             entity.Channels.Add(NewChannel(entity, channel, sortOrder++, NoRetainedSecrets, now));
         return entity;
+    }
+
+    /// <summary>
+    /// Every write of <see cref="AlertRuleEntity.IsEnabled"/> passes here. A rule turned on is
+    /// stamped with the instant; a rule left on, or turned off, keeps the stamp it has.
+    /// </summary>
+    private static void StampEnabled(AlertRuleEntity entity, bool wasEnabled, DateTime now)
+    {
+        if (entity.IsEnabled && !wasEnabled)
+            entity.EnabledAt = now;
     }
 
     private static void Apply(AlertRuleEntity entity, AlertRuleWrite rule)

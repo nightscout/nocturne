@@ -56,6 +56,12 @@ fn anchor(now: DateTime<Utc>, seconds: Option<i64>) -> Option<Value> {
     seconds.map(|s| Value::from((now - TimeDelta::seconds(s)).to_rfc3339()))
 }
 
+/// When a rule was enabled, at an age around `now`, or not recorded half the
+/// time.
+pub(crate) fn enabled_at(now: DateTime<Utc>) -> BoxedStrategy<Option<Value>> {
+    prop_oneof![1 => Just(None), 1 => age().prop_map(move |s| anchor(now, s))].boxed()
+}
+
 /// Ages in seconds, up to nine days back and an hour ahead.
 fn age() -> BoxedStrategy<Option<i64>> {
     option::of(prop_oneof![-3600..=3600i64, -3600..=777_600i64]).boxed()

@@ -121,6 +121,10 @@ public sealed record ScenarioRule
     /// <summary>A whole number of minutes from 1 to 1440; absent is the engine's default.</summary>
     [JsonPropertyName("glucose_freshness_minutes")]
     public int? GlucoseFreshnessMinutes { get; init; }
+
+    /// <summary>When the rule was last enabled; absent is not recorded.</summary>
+    [JsonPropertyName("enabled_at")]
+    public DateTime? EnabledAt { get; init; }
 }
 
 public sealed record ScenarioTick

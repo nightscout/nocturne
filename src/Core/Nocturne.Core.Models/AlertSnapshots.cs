@@ -10,7 +10,7 @@ public record AlertRuleSnapshot(Guid Id, Guid TenantId, string Name, AlertCondit
     string ConditionParams, AlertRuleSeverity Severity, string ClientConfiguration, int SortOrder,
     bool AutoResolveEnabled, string? AutoResolveParams, bool AllowThroughDnd = false,
     RuleScopeClass ScopeClass = RuleScopeClass.Undirected, string OnUnknown = AlertRuleOnUnknown.Hold,
-    int? GlucoseFreshnessMinutes = null);
+    int? GlucoseFreshnessMinutes = null, DateTime? EnabledAt = null);
 
 /// <summary>
 /// Immutable snapshot of a single delivery channel attached to an <see cref="AlertRule"/>.

@@ -36,7 +36,8 @@ public class StaleRuleDecisionSeamTests
 
     private static AlertRuleSnapshot Snapshot(AlertRule rule) => new(
         rule.Id, EngineTestHarness.TenantId, rule.Name, rule.ConditionType, rule.ConditionParams,
-        AlertRuleSeverity.Warning, "{}", 0, rule.AutoResolveEnabled, rule.AutoResolveParams);
+        AlertRuleSeverity.Warning, "{}", 0, rule.AutoResolveEnabled, rule.AutoResolveParams,
+        EnabledAt: rule.EnabledAt);
 
     private static SensorContext Glucose(decimal value) => new()
     {
@@ -135,6 +136,21 @@ public class StaleRuleDecisionSeamTests
         var rule = Rule();
         var preEdit = Snapshot(rule);
         var fixture = await BuildAsync(rule, r => r.IsEnabled = false);
+
+        var resolved = await fixture.Engine.EvaluateAutoResolveAsync(preEdit, Glucose(60), CancellationToken.None);
+
+        resolved.Type.Should().Be(ExcursionTransitionType.None);
+        await ShouldStayActiveAsync(fixture);
+    }
+
+    /// <summary>A rule turned off and on again is a new enablement, which a decision made before it does not hold.</summary>
+    [NativeFact]
+    public async Task A_close_before_a_re_enable_is_dropped()
+    {
+        var rule = Rule();
+        rule.EnabledAt = T0.AddHours(-1);
+        var preEdit = Snapshot(rule);
+        var fixture = await BuildAsync(rule, r => r.EnabledAt = T0);
 
         var resolved = await fixture.Engine.EvaluateAutoResolveAsync(preEdit, Glucose(60), CancellationToken.None);
 

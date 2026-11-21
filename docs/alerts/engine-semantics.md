@@ -213,7 +213,7 @@ as false or true.
 |---|---|---|---|---|
 | `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null, or the reading stale ⇒ **unknown** |
 | `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null, or the reading stale ⇒ **unknown** |
-| `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null (no reading history) ⇒ **unknown**; only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
+| `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, the rule's `enabled_at`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | no reading history ⇒ measured from `enabled_at`, and **unknown** without it (below); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ **unknown**; with points present but none within the horizon or satisfying ⇒ false |
 | `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC; never unknown |
@@ -284,6 +284,25 @@ leaves read unknown. Under `hold` that changes nothing (§5.1), but a rule whose
 and closes it, once per reading interval, and `met` opens one on data with no fault. Such a rule
 on a source slower than 5 minutes needs its own `glucose_freshness_minutes`, at least the
 interval between readings plus the delay a reading can arrive with.
+
+**No reading ever.** `staleness` and `signal_loss` measure the time since data stopped. With
+no reading history at all (both `LastReadingAt` and `LatestTimestamp` null), data stopped when
+the rule was last enabled: the rule's `enabled_at`, an instant the host sends beside
+`on_unknown`. The leaf then measures `now - enabled_at` as it measures a reading's age:
+`signal_loss` is true once `now - enabled_at >= timeout_minutes`, and `staleness` compares
+`now - enabled_at` with its operator and value. So a sensor that never sends a reading is noticed
+one bound after the rule is enabled. The leaf is known from `enabled_at` on, and a comparison that
+holds while the elapsed time is short holds from the start: `staleness` `<` and `<=` are true from
+`enabled_at` until the bound, as is `not(signal_loss)`. An `enabled_at` after `now` is a negative
+elapsed time, as a reading timestamped after `now` is: `signal_loss` and `staleness` `>`, `>=`
+and `==` are false, `<` and `<=` true, and the bound is still reached at `enabled_at` plus the
+bound. With no `enabled_at` either (a host that does not send it, a rule stored before the host
+recorded it) the leaf is **unknown**. Any reading history decides as it always has, and
+`enabled_at` is not read. An evaluation with no rule has no `enabled_at`, so these leaves read
+unknown there without a reading: `evaluate_node`, which the backend uses for the snooze and for
+the sweep's periodic auto-resolve (§6.1, §7 step 5), unlike the auto-resolve inside `evaluate`,
+which reads the rule's `enabled_at`. The leaves stay ordinary leaves: under `not`, `sustained`
+and composites they follow from this with no special case.
 
 `staleness` and `signal_loss` are not judged: they say that data stopped, so they read an old
 reading as they always have. So `or(signal_loss, threshold below 70)` stays true through an
@@ -415,7 +434,7 @@ in §3 plus:
 
 | Payload | Inputs | Semantics | Null / guard behaviour |
 |---|---|---|---|
-| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | both `LastReadingAt` and `LatestTimestamp` null (no reading history) ⇒ **unknown**; only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
+| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, the rule's `enabled_at`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | no reading history ⇒ `now - enabled_at >= timeout_minutes`, and **unknown** without `enabled_at` (§3, "No reading ever"); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
 
 It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare.
 
@@ -430,7 +449,7 @@ still: it measures elapsed time against an anchor that a reading does not move.
 
 | Wall-clock | Anchor |
 |---|---|
-| `signal_loss`, `staleness` | newest reading |
+| `signal_loss`, `staleness` | newest reading; with no reading history, the rule's `enabled_at` (§3) |
 | `loop_stale`, `loop_enaction_stale` | last loop cycle / enactment |
 | `site_age`, `sensor_age`, `tracker_age` | site change, sensor start, tracker start or schedule |
 | `time_since_last_carb`, `time_since_last_bolus` | last treatment |
@@ -576,8 +595,11 @@ even when the root does not. Containers contribute only through their children, 
 | Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. Nothing after an evaluation the rule held: the next one, with the same facts, holds too until another node's contribution changes the root. |
 | Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the forecast's start, not to `now` (§3). |
 
-A leaf without an anchor, or whose guard holds it constant (a `has_ever_*` flag false, a
-`tracker_age` threshold held back at recording), contributes nothing, so an unknown leaf
+A `signal_loss` or `staleness` leaf with no reading history measures from the rule's
+`enabled_at` (§3), so it contributes `enabled_at` plus its bound like any anchor, and a host can
+pre-arm that instant for a sensor that has never sent a reading. A leaf without an anchor, or
+whose guard holds it constant (a `has_ever_*` flag false, a `tracker_age` threshold held back at
+recording), contributes nothing, so an unknown leaf
 contributes nothing (a fact arriving is not a clock event; an unknown leaf whose anchor is
 known contributes as a known one: `pump_state` with `is_active` and `for_minutes` over an
 unrecognised mode, §3, moves from false to unknown there), as does a
@@ -821,6 +843,11 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 - **No reading.** A tick context with neither `LatestTimestamp` nor `LastReadingAt` reads
   `LastReadingAt = tick`, so a tick before the window's first reading reads as zero
   staleness and `signal_loss` cannot fire on an outage that began before the window.
+  Replay does not read a rule's `enabled_at` (§3), and the backend does not send it: it is the
+  rule's current value, not a history, so a window before the rule was last enabled would
+  measure from an instant that did not hold then. So replay and live differ for a tenant that
+  has never had a reading: live opens a `signal_loss` rule one timeout after it was enabled,
+  and replay never fires it.
 - **Active alerts.** One map for the whole call replaces each tick context's
   `ActiveAlerts`. A rule enters it as `ActiveAlertSnapshot("firing", tick, null)` when it
   fires and leaves it when it clears or auto-resolves, so a parent's change is visible to

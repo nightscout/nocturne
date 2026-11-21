@@ -95,6 +95,51 @@ fn include_leaves_false_omits_only_the_leaf_log() {
 }
 
 #[test]
+fn signal_loss_with_no_reading_ever_measures_from_the_rule_enablement() {
+    let request = |enabled_at: Option<&str>, now: &str| {
+        json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": "signal_loss",
+                "condition_params": { "timeout_minutes": 20 },
+                "enabled_at": enabled_at
+            },
+            "context": {},
+            "now": now
+        })
+    };
+
+    let waiting = evaluate(&request(
+        Some("2026-01-05T12:00:00Z"),
+        "2026-01-05T12:05:00Z",
+    ));
+    assert_eq!(waiting["ok"], json!(true), "{waiting}");
+    assert_eq!(waiting["result"]["root"], json!(false));
+    assert!(waiting["result"].get("unknown").is_none());
+    assert_eq!(
+        waiting["result"]["next_change_at"],
+        json!("2026-01-05T12:20:00Z")
+    );
+
+    let lost = evaluate(&request(
+        Some("2026-01-05T12:00:00Z"),
+        "2026-01-05T12:20:00Z",
+    ));
+    assert_eq!(lost["result"]["root"], json!(true), "{lost}");
+    assert_eq!(lost["result"]["transition"], json!("opened"));
+
+    let unrecorded = evaluate(&request(None, "2026-01-05T12:20:00Z"));
+    assert_eq!(unrecorded["result"]["unknown"], json!(true), "{unrecorded}");
+    assert!(unrecorded["result"].get("next_change_at").is_none());
+
+    assert_error(
+        &evaluate(&request(Some("12:00"), "2026-01-05T12:20:00Z")),
+        "invalid request envelope",
+    );
+}
+
+#[test]
 fn evaluate_reports_the_next_change_and_omits_none() {
     let request = |condition_type: &str, params: Value| {
         json!({

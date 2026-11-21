@@ -621,7 +621,7 @@ mod tests {
     fn the_clock_leaves_are_the_wall_clock_kinds() {
         for &kind in ConditionKind::ALL {
             assert_eq!(
-                clock_leaf(&sample(kind), &context(&[])).is_some(),
+                clock_leaf(&sample(kind), &context(&[]), None).is_some(),
                 is_wall_clock(kind),
                 "{kind:?}"
             );

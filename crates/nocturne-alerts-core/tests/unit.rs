@@ -448,6 +448,7 @@ fn held_rule(condition_type: ConditionKind, condition_params: Value) -> Rule {
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
         glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
+        enabled_at: None,
     }
 }
 
@@ -611,6 +612,35 @@ fn staleness_cold_start_is_unknown_before_infinity() {
             &json!({"operator": ">", "value": 15}),
             &ctx
         )
+    );
+}
+
+/// §3: an `enabled_at` after `now` is a negative elapsed time, as a reading
+/// from the future is.
+#[test]
+fn an_enablement_after_now_reads_as_a_negative_elapsed_time() {
+    let ctx = SensorContext::default();
+    let leaf = |kind: ConditionKind, payload: Value| {
+        let parsed = parse_payload(kind, &payload).expect("payload parses");
+        let mut timers = TimerStore::new();
+        let mut env = Env::new(base(), Uuid::nil(), &ctx, &mut timers)
+            .with_enabled_at(Some(base() + TimeDelta::minutes(10)));
+        eval_parsed(&parsed, kind.name(), &mut env)
+    };
+    let staleness = |op: &str| {
+        leaf(
+            ConditionKind::Staleness,
+            json!({"operator": op, "value": 0}),
+        )
+    };
+
+    assert_eq!(
+        False,
+        leaf(ConditionKind::SignalLoss, json!({"timeout_minutes": 1}))
+    );
+    assert_eq!(
+        [False, False, False, True, True],
+        [">", ">=", "==", "<", "<="].map(staleness)
     );
 }
 
@@ -1141,6 +1171,7 @@ fn relapsing_low_rule() -> Rule {
         })),
         on_unknown: OnUnknown::Hold,
         glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
+        enabled_at: None,
     }
 }
 

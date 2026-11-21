@@ -105,6 +105,10 @@ public sealed record RustAlertRule
     /// </summary>
     [JsonPropertyName("glucose_freshness_minutes")]
     public int? GlucoseFreshnessMinutes { get; init; }
+
+    /// <summary>When the rule was last enabled (docs/alerts/engine-semantics.md §3).</summary>
+    [JsonPropertyName("enabled_at")]
+    public DateTime? EnabledAt { get; init; }
 }
 
 /// <summary>
